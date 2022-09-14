@@ -91,6 +91,11 @@ func InterceptError(r *connector.InterceptResult) error {
 		msg = r.ErrorText
 	case common.InterceptError_ALREADY_EXISTS:
 		msg = fmt.Sprintf("Intercept with name %q already exists", r.ErrorText)
+	case common.InterceptError_NAMESPACE_AMBIGUITY:
+		nss := strings.Split(r.ErrorText, ",")
+		msg = fmt.Sprintf(
+			"A workstation cannot have simultaneous intercepts in different namespaces. Leave all intercepts in %q before creting new ones in %q",
+			nss[0], nss[1])
 	case common.InterceptError_LOCAL_TARGET_IN_USE:
 		spec := r.InterceptInfo.Spec
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",

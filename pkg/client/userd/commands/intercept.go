@@ -34,6 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
 type interceptCommand struct {
@@ -454,6 +455,11 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = r.ErrorText
 	case common.InterceptError_ALREADY_EXISTS:
 		msg = fmt.Sprintf("Intercept with name %q already exists", r.ErrorText)
+	case common.InterceptError_NAMESPACE_AMBIGUITY:
+		nss := strings.Split(r.ErrorText, ",")
+		msg = fmt.Sprintf(
+			"A workstation cannot have simultaneous intercepts in different namespaces. Leave all intercepts in %q before creting new ones in %q",
+			nss[0], nss[1])
 	case common.InterceptError_LOCAL_TARGET_IN_USE:
 		spec := r.InterceptInfo.Spec
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
@@ -982,11 +988,13 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	cmd := proc.CommandContext(ctx, "docker", append(ourArgs, args...)...)
+	args = append(ourArgs, args...)
+	cmd := proc.CommandContext(ctx, "docker", args...)
 	cmd.DisableLogging = true
 	cmd.Stdout = is.cmd.OutOrStdout()
 	cmd.Stderr = is.cmd.ErrOrStderr()
 	cmd.Stdin = is.cmd.InOrStdin()
+	dlog.Debugf(ctx, shellquote.ShellString("docker", args))
 	err := cmd.Start()
 	if err != nil {
 		return nil, err

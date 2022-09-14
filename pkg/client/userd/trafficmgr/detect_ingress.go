@@ -10,17 +10,17 @@ import (
 )
 
 func (tm *TrafficManager) IngressInfos(c context.Context) ([]*manager.IngressInfo, error) {
-	tm.insLock.Lock()
-	defer tm.insLock.Unlock()
+	tm.currentInterceptsLock.Lock()
+	defer tm.currentInterceptsLock.Unlock()
 
 	ingressInfo := tm.ingressInfo
 	if ingressInfo == nil {
-		tm.insLock.Unlock()
+		tm.currentInterceptsLock.Unlock()
 		ingressInfo, err := tm.detectIngressBehavior(c)
 		if err != nil {
 			return nil, err
 		}
-		tm.insLock.Lock()
+		tm.currentInterceptsLock.Lock()
 		tm.ingressInfo = ingressInfo
 	}
 	is := make([]*manager.IngressInfo, len(tm.ingressInfo))

@@ -268,7 +268,11 @@ func (tm *TrafficManager) watchInterceptsLoop(ctx context.Context) error {
 func (tm *TrafficManager) handleInterceptSnapshot(ctx context.Context, podIcepts *podIntercepts, intercepts []*manager.InterceptInfo) {
 	tm.setCurrentIntercepts(ctx, intercepts)
 	podIcepts.initSnapshot()
-	namespaces := make(map[string]struct{})
+	tm.currentInterceptsLock.Lock()
+	active := len(tm.localIntercepts)
+	ins := tm.interceptedNamespace
+	tm.currentInterceptsLock.Unlock()
+
 	for _, ii := range intercepts {
 		if ii.Disposition == manager.InterceptDispositionType_WAITING {
 			continue
@@ -283,9 +287,18 @@ func (tm *TrafficManager) handleInterceptSnapshot(ctx context.Context, podIcepts
 		tm.currentInterceptsLock.Unlock()
 
 		var err error
-		if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
+		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
+			active++
+			ns := ii.Spec.Namespace
+			if ins == "" {
+				ins = ns
+			} else if ins != ns {
+				err = fmt.Errorf("active intercepts in both namespace %s and %s", ns, ins)
+			}
+		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
 		}
+
 		// Notify waiters for active intercepts
 		if aw != nil {
 			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
@@ -302,7 +315,6 @@ func (tm *TrafficManager) handleInterceptSnapshot(ctx context.Context, podIcepts
 			continue
 		}
 
-		namespaces[ii.Spec.Namespace] = struct{}{}
 		if tm.isPodDaemon {
 			// disable mount point logic
 			ic.FtpPort = 0
@@ -310,10 +322,11 @@ func (tm *TrafficManager) handleInterceptSnapshot(ctx context.Context, podIcepts
 		}
 		podIcepts.start(ctx, ic, tm.fuseFtp)
 	}
-	podIcepts.cancelUnwanted(ctx)
-	if ctx.Err() == nil && !tm.isPodDaemon {
-		tm.setInterceptedNamespaces(ctx, namespaces)
+	if active == 0 {
+		ins = ""
 	}
+	tm.setInterceptedNamespace(ctx, ins)
+	podIcepts.cancelUnwanted(ctx)
 }
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot
@@ -456,10 +469,13 @@ func (tm *TrafficManager) ensureNoInterceptConflict(ir *rpc.CreateInterceptReque
 	tm.currentInterceptsLock.Lock()
 	defer tm.currentInterceptsLock.Unlock()
 	spec := ir.Spec
+	if tm.interceptedNamespace != "" && tm.interceptedNamespace != spec.Namespace {
+		return interceptError(common.InterceptError_NAMESPACE_AMBIGUITY, errcat.User.Newf("%s,%s", tm.interceptedNamespace, spec.Namespace))
+	}
 	for _, iCept := range tm.currentIntercepts {
 		switch {
 		case iCept.Spec.Name == spec.Name:
-			return interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
+			return interceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.New(spec.Name))
 		case iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost:
 			return &rpc.InterceptResult{
 				Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
@@ -618,7 +634,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	spec := ir.Spec
 	if svcProps == nil {
-		return tm.AddLocalOnlyIntercept(c, spec)
+		return tm.addLocalOnlyIntercept(c, spec), nil
 	}
 
 	spec.Client = tm.userAndHost
@@ -776,8 +792,8 @@ func waitForDNS(c context.Context, host string) bool {
 func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error {
 	dlog.Debugf(c, "Removing intercept %s", name)
 
-	if ns, ok := tm.localIntercepts[name]; ok {
-		return tm.RemoveLocalOnlyIntercept(c, name, ns)
+	if _, ok := tm.localIntercepts[name]; ok {
+		return tm.RemoveLocalOnlyIntercept(c, name)
 	}
 
 	ii := tm.getInterceptByName(name)
@@ -830,7 +846,10 @@ func (tm *TrafficManager) RemoveInterceptor(s string) error {
 
 // GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists
 func (tm *TrafficManager) GetInterceptSpec(name string) *manager.InterceptSpec {
-	if ns, ok := tm.localIntercepts[name]; ok {
+	if _, ok := tm.localIntercepts[name]; ok {
+		tm.currentInterceptsLock.Lock()
+		ns := tm.interceptedNamespace
+		tm.currentInterceptsLock.Unlock()
 		return &manager.InterceptSpec{Name: name, Namespace: ns, WorkloadKind: "local"}
 	}
 	if ic := tm.getInterceptByName(name); ic != nil {
@@ -975,20 +994,16 @@ func (tm *TrafficManager) InterceptInfo(ctx context.Context, callerID, path stri
 	return r, nil
 }
 
-// AddLocalOnlyIntercept adds a local-only intercept
-func (tm *TrafficManager) AddLocalOnlyIntercept(c context.Context, spec *manager.InterceptSpec) (*rpc.InterceptResult, error) {
-	tm.insLock.Lock()
-	if tm.localInterceptedNamespaces == nil {
-		tm.localInterceptedNamespaces = map[string]struct{}{}
+func (tm *TrafficManager) addLocalOnlyIntercept(c context.Context, spec *manager.InterceptSpec) *rpc.InterceptResult {
+	tm.currentInterceptsLock.Lock()
+	update := false
+	tm.localIntercepts[spec.Name] = struct{}{}
+	if tm.interceptedNamespace == "" {
+		tm.interceptedNamespace = spec.Namespace
+		update = true
 	}
-	tm.localIntercepts[spec.Name] = spec.Namespace
-	_, found := tm.interceptedNamespaces[spec.Namespace]
-	if !found {
-		_, found = tm.localInterceptedNamespaces[spec.Namespace]
-	}
-	tm.localInterceptedNamespaces[spec.Namespace] = struct{}{}
-	tm.insLock.Unlock()
-	if !found {
+	tm.currentInterceptsLock.Unlock()
+	if update {
 		tm.updateDaemonNamespaces(c)
 	}
 	return &rpc.InterceptResult{
@@ -998,23 +1013,20 @@ func (tm *TrafficManager) AddLocalOnlyIntercept(c context.Context, spec *manager
 			MechanismArgsDesc: "as local-only",
 			ClientSession:     tm.sessionInfo,
 		},
-	}, nil
+	}
 }
 
-func (tm *TrafficManager) RemoveLocalOnlyIntercept(c context.Context, name, namespace string) error {
+func (tm *TrafficManager) RemoveLocalOnlyIntercept(c context.Context, name string) error {
 	dlog.Debugf(c, "removing local-only intercept %s", name)
-	delete(tm.localIntercepts, name)
-	for _, otherNs := range tm.localIntercepts {
-		if otherNs == namespace {
-			return nil
-		}
-	}
 
 	// Ensure that namespace is removed from localInterceptedNamespaces if this was the last local intercept
 	// for the given namespace.
-	tm.insLock.Lock()
-	delete(tm.localInterceptedNamespaces, namespace)
-	tm.insLock.Unlock()
+	tm.currentInterceptsLock.Lock()
+	delete(tm.localIntercepts, name)
+	if len(tm.localIntercepts) == 0 && len(tm.currentIntercepts) == 0 {
+		tm.interceptedNamespace = ""
+	}
+	tm.currentInterceptsLock.Unlock()
 	tm.updateDaemonNamespaces(c)
 	return nil
 }

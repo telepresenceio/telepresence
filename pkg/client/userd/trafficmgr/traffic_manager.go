@@ -118,8 +118,6 @@ type TrafficManager struct {
 
 	getCloudAPIKey func(context.Context, string, bool) (string, error)
 
-	ingressInfo []*manager.IngressInfo
-
 	// manager client
 	managerClient manager.ManagerClient
 
@@ -136,18 +134,8 @@ type TrafficManager struct {
 
 	wlWatcher *workloadsAndServicesWatcher
 
-	insLock sync.Mutex
-
-	// Currently intercepted namespaces by remote intercepts
-	interceptedNamespaces map[string]struct{}
-
-	// Currently intercepted namespaces by local intercepts
-	localInterceptedNamespaces map[string]struct{}
-
-	localIntercepts map[string]string
-
 	// currentInterceptsLock ensures that all accesses to currentIntercepts, currentMatchers,
-	// currentAPIServers, and interceptWaiters are synchronized
+	// currentAPIServers, interceptWaiters, localIntercepts, interceptedNamespace, and ingressInfo are synchronized
 	//
 	currentInterceptsLock sync.Mutex
 
@@ -166,6 +154,14 @@ type TrafficManager struct {
 	// is filled in prior to the intercept being created. Entries are short lived. They
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
+
+	// Names of local intercepts
+	localIntercepts map[string]struct{}
+
+	// Name of currently intercepted namespace
+	interceptedNamespace string
+
+	ingressInfo []*manager.IngressInfo
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo
@@ -527,7 +523,7 @@ func connectMgr(
 		managerVersion:   managerVersion,
 		sessionInfo:      si,
 		rootDaemon:       rootDaemon,
-		localIntercepts:  make(map[string]string),
+		localIntercepts:  make(map[string]struct{}),
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      isPodDaemon,
@@ -545,11 +541,16 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 	}
 }
 
-func (tm *TrafficManager) setInterceptedNamespaces(c context.Context, interceptedNamespaces map[string]struct{}) {
-	tm.insLock.Lock()
-	tm.interceptedNamespaces = interceptedNamespaces
-	tm.insLock.Unlock()
-	tm.updateDaemonNamespaces(c)
+func (tm *TrafficManager) setInterceptedNamespace(c context.Context, ns string) {
+	tm.currentInterceptsLock.Lock()
+	diff := tm.interceptedNamespace != ns
+	if diff {
+		tm.interceptedNamespace = ns
+	}
+	tm.currentInterceptsLock.Unlock()
+	if diff {
+		tm.updateDaemonNamespaces(c)
+	}
 }
 
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
@@ -557,19 +558,13 @@ func (tm *TrafficManager) setInterceptedNamespaces(c context.Context, intercepte
 func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 	tm.wlWatcher.setNamespacesToWatch(c, tm.GetCurrentNamespaces(true))
 
-	tm.insLock.Lock()
-	namespaces := make([]string, 0, len(tm.interceptedNamespaces)+len(tm.localIntercepts))
-	for ns := range tm.interceptedNamespaces {
-		namespaces = append(namespaces, ns)
+	var namespaces []string
+	tm.currentInterceptsLock.Lock()
+	if tm.interceptedNamespace != "" {
+		namespaces = []string{tm.interceptedNamespace}
 	}
-	for ns := range tm.localInterceptedNamespaces {
-		if _, found := tm.interceptedNamespaces[ns]; !found {
-			namespaces = append(namespaces, ns)
-		}
-	}
+	tm.currentInterceptsLock.Unlock()
 	// Avoid being locked for the remainder of this function.
-	tm.insLock.Unlock()
-	sort.Strings(namespaces)
 
 	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
 	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
@@ -768,22 +763,16 @@ func (tm *TrafficManager) workloadInfoSnapshot(
 
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {
-		// Special case, we don't care about namespaces. Instead, we use the namespaces of all
-		// intercepts.
-		nsMap := make(map[string]struct{})
-		for _, i := range is {
-			nsMap[i.Spec.Namespace] = struct{}{}
+		// Special case, we don't care about namespaces in general. Instead, we use the intercepted namespaces
+		tm.currentInterceptsLock.Lock()
+		if tm.interceptedNamespace != "" {
+			nss = []string{tm.interceptedNamespace}
 		}
-		for _, ns := range tm.localIntercepts {
-			nsMap[ns] = struct{}{}
+		tm.currentInterceptsLock.Unlock()
+		if len(nss) == 0 {
+			// No active intercepts
+			return &rpc.WorkloadInfoSnapshot{}, nil
 		}
-		nss = make([]string, len(nsMap))
-		i := 0
-		for ns := range nsMap {
-			nss[i] = ns
-			i++
-		}
-		sort.Strings(nss) // sort them so that the result is predictable
 	} else {
 		nss = make([]string, 0, len(namespaces))
 		for _, ns := range namespaces {
@@ -820,19 +809,15 @@ nextIs:
 	}
 
 	if includeLocalIntercepts {
-	nextLocalNs:
-		for localIntercept, localNs := range tm.localIntercepts {
-			for _, ns := range nss {
-				if localNs == ns {
-					workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
-						Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
-						Disposition:       manager.InterceptDispositionType_ACTIVE,
-						MechanismArgsDesc: "as local-only",
-					}}})
-					continue nextLocalNs
-				}
-			}
+		tm.currentInterceptsLock.Lock()
+		for localIntercept := range tm.localIntercepts {
+			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
+				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: tm.interceptedNamespace},
+				Disposition:       manager.InterceptDispositionType_ACTIVE,
+				MechanismArgsDesc: "as local-only",
+			}}})
 		}
+		tm.currentInterceptsLock.Unlock()
 	}
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
@@ -904,9 +889,9 @@ func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest
 	}
 
 	if tm.SetMappedNamespaces(c, cr.MappedNamespaces) {
-		tm.insLock.Lock()
+		tm.currentInterceptsLock.Lock()
 		tm.ingressInfo = nil
-		tm.insLock.Unlock()
+		tm.currentInterceptsLock.Unlock()
 	}
 	return tm.Status(c)
 }
