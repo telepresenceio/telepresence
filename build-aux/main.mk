@@ -85,7 +85,7 @@ clean:
 	rm -f ./pkg/client/userd/fuseftp.bits
 
 .PHONY: generate-clean
-generate-clean: clean ## (Generate) Delete generated files
+generate-clean: ## (Generate) Delete generated files
 	rm -rf ./rpc/vendor
 	find ./rpc -name '*.go' -delete
 
