@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.7.5 (TBD)
+
+- Bugfix: Fix an issue preventing the CLI from launching on arm64 builds
+
 ### 2.7.4 (September 14, 2022)
 
 - Feature: The `resources` for the traffic-agent container and the optional init container can
