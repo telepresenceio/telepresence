@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.7.4 (TBD)
+### 2.7.4 (September 14, 2022)
 
 - Feature: The `resources` for the traffic-agent container and the optional init container can
   be specified in the Helm chart using the `resource` and `initResource` fields of the
