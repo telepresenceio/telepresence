@@ -145,29 +145,25 @@ func newSessionState(ctx context.Context, now time.Time) sessionState {
 
 type clientSessionState struct {
 	sessionState
-	name string
 	pool *tunnel.Pool
 }
 
-func newClientSessionState(ctx context.Context, name string, ts time.Time) *clientSessionState {
+func newClientSessionState(ctx context.Context, ts time.Time) *clientSessionState {
 	return &clientSessionState{
 		sessionState: newSessionState(ctx, ts),
-		name:         name,
 		pool:         tunnel.NewPool(),
 	}
 }
 
 type agentSessionState struct {
 	sessionState
-	agent        *rpc.AgentInfo
 	dnsRequests  chan *rpc.DNSRequest
 	dnsResponses map[string]chan *rpc.DNSResponse
 }
 
-func newAgentSessionState(ctx context.Context, agent *rpc.AgentInfo, ts time.Time) *agentSessionState {
+func newAgentSessionState(ctx context.Context, ts time.Time) *agentSessionState {
 	return &agentSessionState{
 		sessionState: newSessionState(ctx, ts),
-		agent:        agent,
 		dnsRequests:  make(chan *rpc.DNSRequest),
 		dnsResponses: make(map[string]chan *rpc.DNSResponse),
 	}

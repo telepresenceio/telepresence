@@ -271,7 +271,7 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	if oldClient, hasConflict := s.clients.LoadOrStore(sessionID, client); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
-	s.sessions[sessionID] = newClientSessionState(s.ctx, client.Name, now)
+	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
 	return sessionID
 }
 
@@ -314,7 +314,7 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
 	}
 	s.agentsByName[agent.Name][sessionID] = agent
-	s.sessions[sessionID] = newAgentSessionState(s.ctx, agent, now)
+	s.sessions[sessionID] = newAgentSessionState(s.ctx, now)
 
 	for interceptID, intercept := range s.intercepts.LoadAll() {
 		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
