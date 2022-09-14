@@ -409,7 +409,7 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 		return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
 	}
 
-	state := newInterceptState(sess.ctx, s.ctx, cept.Id)
+	state := newInterceptState(cept.Id)
 	s.interceptStates[interceptID] = state
 
 	return cept, nil
@@ -492,7 +492,7 @@ func (s *State) unlockedRemoveIntercept(interceptID string) bool {
 	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
 	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
 		delete(s.interceptStates, interceptID)
-		state.terminate(intercept)
+		state.terminate(s.ctx, intercept)
 	}
 
 	return didDelete

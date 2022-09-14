@@ -32,7 +32,7 @@ type awaitingBidiPipe struct {
 
 type sessionState struct {
 	sync.Mutex
-	ctx                 context.Context
+	doneCh              <-chan struct{}
 	cancel              context.CancelFunc
 	lastMarked          time.Time
 	awaitingBidiPipeMap map[tunnel.ConnID]*awaitingBidiPipe
@@ -122,7 +122,7 @@ func (ss *sessionState) Dials() <-chan *rpc.DialRequest {
 }
 
 func (ss *sessionState) Done() <-chan struct{} {
-	return ss.ctx.Done()
+	return ss.doneCh
 }
 
 func (ss *sessionState) LastMarked() time.Time {
@@ -136,7 +136,7 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 func newSessionState(ctx context.Context, now time.Time) sessionState {
 	ctx, cancel := context.WithCancel(ctx)
 	return sessionState{
-		ctx:        ctx,
+		doneCh:     ctx.Done(),
 		cancel:     cancel,
 		lastMarked: now,
 		dials:      make(chan *rpc.DialRequest),
