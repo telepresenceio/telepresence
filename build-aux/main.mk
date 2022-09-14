@@ -80,16 +80,18 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 
 	rm -rf vendor
 
+.PHONY: clean
+clean:
+	rm -f ./pkg/client/userd/fuseftp.bits
 
 .PHONY: generate-clean
-generate-clean: ## (Generate) Delete generated files
+generate-clean: clean ## (Generate) Delete generated files
 	rm -rf ./rpc/vendor
 	find ./rpc -name '*.go' -delete
 
 	rm -rf ./vendor
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
-	rm -f ./pkg/client/userd/fuseftp.bits
 
 PKG_VERSION = $(shell go list ./pkg/version)
 

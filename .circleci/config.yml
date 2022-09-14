@@ -70,10 +70,10 @@ jobs:
           command: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images
       - run:
           name: "Publish linux (arch amd64)"
-          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make push-executable
+          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make clean push-executable
       - run:
           name: "Publish linux (arch arm64)"
-          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 CC=aarch64-linux-gnu-gcc make push-executable
+          command: TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 CC=aarch64-linux-gnu-gcc make clean push-executable
       - run:
           name: "Promote linux (arch amd64)"
           command: |
@@ -107,11 +107,11 @@ jobs:
       - run:
           name: "Publish macos (arch amd64)"
           command: |
-            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make push-executable
+            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=amd64 make clean push-executable
       - run:
           name: "Publish macos (arch arm64)"
           command: |
-            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make push-executable
+            TELEPRESENCE_VERSION=$CIRCLE_TAG GOARCH=arm64 make clean push-executable
       - run:
           name: "Promote macos (arch amd64)"
           command: |
