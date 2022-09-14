@@ -192,10 +192,10 @@ github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1 h1:u/41zrBxTiE9jmR
 github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1/go.mod h1:NiGDmetmbkBvtznpWSx6C0vA0s0LK9aHna3LJDqjruk=
 github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f h1:Yz+xVYWkSARvfJ0e3LWwF1N5F+zJI9pCZ9R41OtkrKE=
 github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f/go.mod h1:D/jb71PHlfUjfNSUVpXQAscXsXy3x+CY+c52lPnW2qU=
-github.com/datawire/go-fuseftp v0.1.8 h1:Qe5M37Pxzr+aeokQINOC15tEQTrb+CxbXBbFbN6TbOA=
-github.com/datawire/go-fuseftp v0.1.8/go.mod h1:iB+LGxoqFFfTtVWzXKFmOTIUkd4Ge4bJ7rn603AcHo8=
-github.com/datawire/go-fuseftp/rpc v0.1.8 h1:LPC78IbKKHMyHQ1rIS8WZiZNxvgZsvdfUFF+vO7IkOc=
-github.com/datawire/go-fuseftp/rpc v0.1.8/go.mod h1:Qk+XkTKLm/lSHkdziS/0a+4UYhtm2lUrDHNdfYUkXYY=
+github.com/datawire/go-fuseftp v0.1.9 h1:15/VnzG1UIIz/CONOhHZdXAKLl3z+SaAqWJolvWG9EY=
+github.com/datawire/go-fuseftp v0.1.9/go.mod h1:6Sc2+4ABuXIZaSGQTqc+5e05/ciD0+OnSRrSFtrbrGY=
+github.com/datawire/go-fuseftp/rpc v0.1.9 h1:Nc8WjlvlrqmtbJOKwD5WYqIvBxwSOe4aPs0t1QD3/ls=
+github.com/datawire/go-fuseftp/rpc v0.1.9/go.mod h1:Qk+XkTKLm/lSHkdziS/0a+4UYhtm2lUrDHNdfYUkXYY=
 github.com/datawire/metriton-go-client v0.1.1 h1:T+gFOmIWBg4Cc8B5OTst0lllflaT1Pdh/LaxA1YouTQ=
 github.com/datawire/metriton-go-client v0.1.1/go.mod h1:OVLUaTDnGNk58GluwoaFKaWTo0IYU03b9qiN14cdwkw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
