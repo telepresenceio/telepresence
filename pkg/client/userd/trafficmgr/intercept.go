@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"reflect"
@@ -747,10 +748,26 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
+			if !waitForDNS(c, spec.ServiceName) {
+				dlog.Warningf(c, "DNS cannot resolve name of intercepted %q service", spec.ServiceName)
+			}
 			success = true
 			return result, nil
 		}
 	}
+}
+
+func waitForDNS(c context.Context, host string) bool {
+	c, cancel := context.WithTimeout(c, 3*time.Second)
+	defer cancel()
+	for c.Err() == nil {
+		_, err := net.DefaultResolver.LookupIPAddr(c, host)
+		if err == nil {
+			return true
+		}
+		dtime.SleepWithContext(c, 5*time.Millisecond)
+	}
+	return false
 }
 
 // RemoveIntercept removes one intercept by name
