@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
@@ -118,12 +118,17 @@ func GetFlagAutocompletionFuncFor(ctx context.Context, cmd *cobra.Command, flagN
 
 type connectorKey struct{}
 
-func WithConnectorServer(ctx context.Context, cs connector.ConnectorServer) context.Context {
+type ConnectorServer interface {
+	rpc.ConnectorServer
+	FuseFTPError() error
+}
+
+func WithConnectorServer(ctx context.Context, cs ConnectorServer) context.Context {
 	return context.WithValue(ctx, connectorKey{}, cs)
 }
 
-func GetConnectorServer(ctx context.Context) connector.ConnectorServer {
-	cs, _ := ctx.Value(connectorKey{}).(connector.ConnectorServer)
+func GetConnectorServer(ctx context.Context) ConnectorServer {
+	cs, _ := ctx.Value(connectorKey{}).(ConnectorServer)
 	return cs
 }
 

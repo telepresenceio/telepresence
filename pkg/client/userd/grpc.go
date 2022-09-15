@@ -80,6 +80,10 @@ func (s *Service) logCall(c context.Context, callName string, f func(context.Con
 	f(c)
 }
 
+func (s *Service) FuseFTPError() error {
+	return s.fuseFTPError
+}
+
 func (s *Service) withSession(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error) {
 	s.logCall(c, callName, func(_ context.Context) {
 		if atomic.LoadInt32(&s.sessionQuitting) != 0 {
