@@ -32,12 +32,20 @@ export DOCKER_BUILDKIT := 1
 .PHONY: FORCE
 FORCE:
 
+# Build with CGO_ENABLED=0 on all platforms to ensure that the binary is as
+# portable as possible, but we must make an exception for darwin, because
+# the Go implementation of the DNS resolver doesn't work properly there unless
+# it's using clib
+ifeq ($(GOOS),darwin)
+CGO_ENABLED=1
+else
+CGO_ENABLED=0
+endif
+
 # Build using CGO_ENABLED=1 on all platforms except windows.
 ifeq ($(GOOS),windows)
-CGO_ENABLED=0
 BEXE=.exe
 else
-CGO_ENABLED=1
 BEXE=
 endif
 
