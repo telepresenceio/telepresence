@@ -122,6 +122,7 @@ pkg/client/userd/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORC
 	cp $< $@
 
 $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
+	mkdir -p $(BUILDDIR)
 	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
 
 build-deps: pkg/client/userd/fuseftp.bits
