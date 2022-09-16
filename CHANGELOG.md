@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.7.6 (TBD)
+### 2.7.6 (September 16, 2022)
 
 - Reintroduce everything from 2.7.4 with fix for issue preventing the CLI from launching on arm64 builds
 
