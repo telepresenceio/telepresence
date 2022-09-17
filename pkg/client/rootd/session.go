@@ -85,6 +85,9 @@ type session struct {
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient manager.ManagerClient
 
+	// managerVersion is the version of the connected traffic-manager
+	managerVersion semver.Version
+
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
 	handlers *tunnel.Pool
@@ -138,7 +141,7 @@ type session struct {
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible
-func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClient, error) {
+func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
 	// First check. Establish connection
 	clientConfig := client.GetConfig(c)
 	tos := &clientConfig.Timeouts
@@ -150,35 +153,36 @@ func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClien
 		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 	)
+	var mgrVer semver.Version
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// The connector called us, and then it died which means we will die too. This is
 			// a race, but it's not an error.
-			return nil, nil, nil
+			return nil, nil, mgrVer, nil
 		}
-		return nil, nil, client.CheckTimeout(tc, err)
+		return nil, nil, mgrVer, client.CheckTimeout(tc, err)
 	}
 
 	mc := manager.NewManagerClient(conn)
 	ver, err := mc.Version(c, &empty.Empty{})
 	if err != nil {
 		conn.Close()
-		return nil, nil, fmt.Errorf("failed to retrieve manager version: %w", err)
+		return nil, nil, mgrVer, fmt.Errorf("failed to retrieve manager version: %w", err)
 	}
 
 	verStr := strings.TrimPrefix(ver.Version, "v")
 	dlog.Infof(c, "Connected to Manager %s", verStr)
-	mgrVer, err := semver.Parse(verStr)
+	mgrVer, err = semver.Parse(verStr)
 	if err != nil {
 		conn.Close()
-		return nil, nil, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+		return nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
 
 	if mgrVer.LE(semver.MustParse("2.4.4")) {
 		conn.Close()
-		return nil, nil, errcat.User.Newf("unsupported traffic-manager version %s. Minimum supported version is 2.4.5", mgrVer)
+		return nil, nil, mgrVer, errcat.User.Newf("unsupported traffic-manager version %s. Minimum supported version is 2.4.5", mgrVer)
 	}
-	return conn, mc, nil
+	return conn, mc, mgrVer, nil
 }
 
 func convertAlsoProxySubnets(c context.Context, ms []*manager.IPNet) []*net.IPNet {
@@ -212,7 +216,7 @@ func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []*routing
 // newSession returns a new properly initialized session object.
 func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*session, error) {
 	dlog.Info(c, "-- Starting new session")
-	conn, mc, err := connectToManager(c)
+	conn, mc, ver, err := connectToManager(c)
 	if mc == nil || err != nil {
 		return nil, err
 	}
@@ -224,6 +228,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		rndSource:         rand.NewSource(time.Now().UnixNano()),
 		session:           mi.Session,
 		managerClient:     mc,
+		managerVersion:    ver,
 		clientConn:        conn,
 		alsoProxySubnets:  convertAlsoProxySubnets(c, mi.AlsoProxySubnets),
 		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
