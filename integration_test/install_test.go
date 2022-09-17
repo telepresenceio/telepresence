@@ -283,7 +283,7 @@ func (is *installSuite) Test_No_Upgrade() {
 	/*
 		require.Error(ensureTrafficManager(ctx, kc))
 		// using --upgrade and --values replaces TM with values
-		helmValues := filepath.Join("integration_test", "testdata", "dns-values.yaml")
+		helmValues := filepath.Join("integration_test", "testdata", "routing-values.yaml")
 		require.NoError(helm.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &connector.HelmRequest{
 			Type:       connector.HelmRequest_UPGRADE,
 			ValuePaths: []string{helmValues},

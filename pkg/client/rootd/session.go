@@ -116,7 +116,7 @@ type session struct {
 	alsoProxySubnets []*net.IPNet
 
 	// Subnets configured not to be proxied
-	neverProxySubnets []*routing.Route
+	neverProxyRoutes []*routing.Route
 	// Subnets that the router is currently configured with. Managed, and only used in
 	// the refreshSubnets() method.
 	curSubnets      []*net.IPNet
@@ -187,7 +187,7 @@ func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClien
 	return conn, mc, mgrVer, nil
 }
 
-func convertAlsoProxySubnets(c context.Context, ms []*manager.IPNet) []*net.IPNet {
+func convertSubnets(c context.Context, ms []*manager.IPNet) []*net.IPNet {
 	ns := make([]*net.IPNet, len(ms))
 	for i, m := range ms {
 		n := iputil.IPNetFromRPC(m)
@@ -195,24 +195,6 @@ func convertAlsoProxySubnets(c context.Context, ms []*manager.IPNet) []*net.IPNe
 		ns[i] = n
 	}
 	return ns
-}
-
-func convertNeverProxySubnets(c context.Context, ms []*manager.IPNet) []*routing.Route {
-	rs := make([]*routing.Route, 0, len(ms))
-	for _, m := range ms {
-		n := iputil.IPNetFromRPC(m)
-		r, err := routing.GetRoute(c, n)
-		if err != nil {
-			dlog.Errorf(c, "unable to get route for never-proxied subnet %s. "+
-				"If this is your kubernetes API server you may want to open an issue, since telepresence may "+
-				"not work if it falls within the CIDR for pods/services. Error: %v",
-				n, err)
-			continue
-		}
-		dlog.Infof(c, "Adding never-proxy subnet %s", n)
-		rs = append(rs, r)
-	}
-	return rs
 }
 
 // newSession returns a new properly initialized session object.
@@ -224,17 +206,17 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	}
 
 	s := &session{
-		scout:             scout,
-		handlers:          tunnel.NewPool(),
-		fragmentMap:       make(map[uint16][]*buffer.Data),
-		rndSource:         rand.NewSource(time.Now().UnixNano()),
-		session:           mi.Session,
-		managerClient:     mc,
-		managerVersion:    ver,
-		clientConn:        conn,
-		alsoProxySubnets:  convertAlsoProxySubnets(c, mi.AlsoProxySubnets),
-		neverProxySubnets: convertNeverProxySubnets(c, mi.NeverProxySubnets),
-		proxyCluster:      true,
+		scout:            scout,
+		handlers:         tunnel.NewPool(),
+		fragmentMap:      make(map[uint16][]*buffer.Data),
+		rndSource:        rand.NewSource(time.Now().UnixNano()),
+		session:          mi.Session,
+		managerClient:    mc,
+		managerVersion:   ver,
+		clientConn:       conn,
+		alsoProxySubnets: convertSubnets(c, mi.AlsoProxySubnets),
+		neverProxyRoutes: routing.Routes(c, convertSubnets(c, mi.NeverProxySubnets)),
+		proxyCluster:     true,
 	}
 
 	s.dev, err = vif.OpenTun(c, &s.closing)
@@ -318,9 +300,9 @@ func (s *session) getInfo() *rpc.OutboundInfo {
 		}
 	}
 
-	if len(s.neverProxySubnets) > 0 {
-		info.NeverProxySubnets = make([]*manager.IPNet, len(s.neverProxySubnets))
-		for i, np := range s.neverProxySubnets {
+	if len(s.neverProxyRoutes) > 0 {
+		info.NeverProxySubnets = make([]*manager.IPNet, len(s.neverProxyRoutes))
+		for i, np := range s.neverProxyRoutes {
 			info.NeverProxySubnets[i] = iputil.IPNetToRPC(np.RoutedNet)
 		}
 	}
@@ -340,7 +322,7 @@ func (s *session) reconcileStaticRoutes(ctx context.Context) (err error) {
 
 	// We're not going to add static routes unless they're actually needed
 	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
-	for _, r := range s.neverProxySubnets {
+	for _, r := range s.neverProxyRoutes {
 		for _, s := range s.curSubnets {
 			if s.Contains(r.RoutedNet.IP) || r.Routes(s.IP) {
 				desired = append(desired, r)
@@ -470,13 +452,12 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 					return
 				}
 
-				// Applying DNS config
-				// seg fault guard
-				dnsConfig := mgrInfo.GetDnsConfig()
-				if dnsConfig != nil {
-					s.alsoProxySubnets = append(s.alsoProxySubnets, convertAlsoProxySubnets(ctx, dnsConfig.AlsoProxySubnets)...)
-					s.neverProxySubnets = append(s.neverProxySubnets, convertNeverProxySubnets(ctx, dnsConfig.NeverProxySubnets)...)
+				if r := mgrInfo.Routing; r != nil {
+					s.alsoProxySubnets = subnet.Unique(append(s.alsoProxySubnets, convertSubnets(ctx, r.AlsoProxySubnets)...))
+					nps := subnet.Unique(append(routing.Subnets(s.neverProxyRoutes), convertSubnets(ctx, r.NeverProxySubnets)...))
+					s.neverProxyRoutes = routing.Routes(ctx, nps)
 				}
+
 				close(cfgComplete)
 				cfgComplete = nil
 				span.SetAttributes(

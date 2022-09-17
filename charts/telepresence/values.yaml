@@ -99,10 +99,11 @@ dnsServiceNamespace: "kube-system"
 # dnsServiceIP specifies a fallback clusterIP for Telepresence to use should auto DNS discovery fail, this value is ignored if Telepresence finds a valid clusterIP
 dnsServiceIP: ""
 
+# dnsConfig is deprecated, use client.routing instead.
 dnsConfig:
-  # add the following subnets to the dns server
-  # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
+  # [[DEPRECATED]] Use client.routing.alsoProxySubnets instead
   alsoProxySubnets:  []
+  # [[DEPRECATED]] Use client.routing.neverProxySubnets instead
   neverProxySubnets: []
 
 # systemaHost is used by the traffic-manager when using an extension
@@ -313,3 +314,13 @@ hooks:
     registry: docker.io
     image: "curlimages/curl"
     tag: latest
+
+client:
+  routing:
+    # add the following subnets to the client's virtual network interface
+    # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
+    alsoProxySubnets:  []
+
+    # remove the following subnets from the client's virtual network interface
+    # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
+    neverProxySubnets: []

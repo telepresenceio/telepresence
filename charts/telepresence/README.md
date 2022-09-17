@@ -84,8 +84,8 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | hooks.podSecurityContext                       | The Kubernetes SecurityContext for the chart hooks `Pod`                                                                  | `{}`                                                                        |
 | hooks.securityContext                          | The Kubernetes SecurityContext for the chart hooks `Container`                                                            | securityContext                                                             |
 | hooks.resources                                | Define resource requests and limits for the chart hooks                                                                   | `{}`                                                                        |
-| dnsConfig.alsoProxySubnets                     | Telepresence daemons connected to this manager will also proxy these subnets                                              | `[]`                                                                        |
-| dnsConfig.neverProxySubnets                    | Telepresence daemons connected to this manager will never proxy these subnets                                             | `[]`                                                                        |
+| client.routing.alsoProxySubnets                | The virtual network interface of connected clients will also proxy these subnets                                          | `[]`                                                                        |
+| client.routing.neverProxySubnets               | The virtual network interface of connected clients never proxy these subnets                                              | `[]`                                                                        |
 
 ## License Key
 

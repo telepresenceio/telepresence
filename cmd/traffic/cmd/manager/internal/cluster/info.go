@@ -213,21 +213,26 @@ func NewInfo(ctx context.Context) Info {
 		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
 	}
 
-	oi.DnsConfig = &rpc.DNSConfig{}
-	oi.DnsConfig.AlsoProxySubnets, err = env.GetAlsoProxySubnets()
+	alsoProxy, err := env.GetAlsoProxySubnets()
 	if err != nil {
 		dlog.Errorf(ctx, "AlsoProxySubnets not parsed: %v", err)
 	}
-	for _, subnet := range oi.DnsConfig.AlsoProxySubnets {
-		dlog.Infof(ctx, "Using AlsoProxySubnet: %+v", subnet)
-	}
-
-	oi.DnsConfig.NeverProxySubnets, err = env.GetNeverProxySubnets()
+	neverProxy, err := env.GetNeverProxySubnets()
 	if err != nil {
 		dlog.Errorf(ctx, "NeverProxySubnets not parsed: %v", err)
 	}
-	for _, subnet := range oi.DnsConfig.NeverProxySubnets {
-		dlog.Infof(ctx, "Using NeverProxySubnet: %+v", subnet)
+	dlog.Infof(ctx, "Using AlsoProxy: %v", alsoProxy)
+	dlog.Infof(ctx, "Using NeverProxy: %v", neverProxy)
+
+	oi.Routing = &rpc.Routing{
+		AlsoProxySubnets:  make([]*rpc.IPNet, len(alsoProxy)),
+		NeverProxySubnets: make([]*rpc.IPNet, len(neverProxy)),
+	}
+	for i, subnet := range alsoProxy {
+		oi.Routing.AlsoProxySubnets[i] = iputil.IPNetToRPC(subnet)
+	}
+	for i, subnet := range neverProxy {
+		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(subnet)
 	}
 
 	return &oi
@@ -341,7 +346,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		PodSubnets:    make([]*rpc.IPNet, len(oi.PodSubnets)),
 		ClusterDomain: oi.ClusterDomain,
 		ManagerPodIp:  oi.ManagerPodIp,
-		DnsConfig:     oi.GetDnsConfig(),
+		Routing:       oi.Routing,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci

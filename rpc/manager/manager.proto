@@ -501,10 +501,11 @@ message ClusterInfo {
   // manager_pod_ip is the ip address of the traffic manager
   bytes manager_pod_ip = 5;
 
-  DNSConfig dns_config = 6;
+  // Router configuration
+  Routing routing = 6;
 }
 
-message DNSConfig {
+message Routing {
   repeated IPNet also_proxy_subnets = 1;
   repeated IPNet never_proxy_subnets = 2;
 }

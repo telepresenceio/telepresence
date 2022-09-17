@@ -35,6 +35,31 @@ func DefaultRoute(ctx context.Context) (*Route, error) {
 	return nil, errors.New("unable to find a default route")
 }
 
+func Subnets(routes []*Route) []*net.IPNet {
+	ns := make([]*net.IPNet, len(routes))
+	for i, r := range routes {
+		ns[i] = r.RoutedNet
+	}
+	return ns
+}
+
+func Routes(c context.Context, ms []*net.IPNet) []*Route {
+	rs := make([]*Route, 0, len(ms))
+	for _, n := range ms {
+		r, err := GetRoute(c, n)
+		if err != nil {
+			dlog.Errorf(c, "unable to get route for never-proxied subnet %s. "+
+				"If this is your kubernetes API server you may want to open an issue, since telepresence may "+
+				"not work if it falls within the CIDR for pods/services. Error: %v",
+				n, err)
+			continue
+		}
+		dlog.Infof(c, "Adding never-proxy subnet %s", n)
+		rs = append(rs, r)
+	}
+	return rs
+}
+
 func (r *Route) Routes(ip net.IP) bool {
 	return r.RoutedNet.Contains(ip)
 }
