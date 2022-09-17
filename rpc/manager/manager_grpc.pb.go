@@ -97,11 +97,21 @@ type ManagerClient interface {
 	AgentTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_AgentTunnelClient, error)
 	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
+	// Deprecated: Retained for backward compatibility. Replaced by LookupDNS
 	LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error)
 	// AgentLookupHostResponse lets an agent respond for lookup requests
+	// Deprecated: Retained for backward compatibility. Replaced by AgentLookupDNSResponse
 	AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
+	// Deprecated: Retained for backward compatibility. Replaced by WatchLookupDNS
 	WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error)
+	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+	// active, the lookup will be performed from the intercepted pods.
+	LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error)
+	// AgentLookupHostResponse lets an agent respond for lookup requests
+	AgentLookupDNSResponse(ctx context.Context, in *DNSAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// WatchLookupHost lets an agent receive lookup requests
+	WatchLookupDNS(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupDNSClient, error)
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error)
 	// A Tunnel represents one single connection where the client or
@@ -523,8 +533,58 @@ func (x *managerWatchLookupHostClient) Recv() (*LookupHostRequest, error) {
 	return m, nil
 }
 
+func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error) {
+	out := new(DNSResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/LookupDNS", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) AgentLookupDNSResponse(ctx context.Context, in *DNSAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/AgentLookupDNSResponse", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) WatchLookupDNS(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupDNSClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], "/telepresence.manager.Manager/WatchLookupDNS", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerWatchLookupDNSClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Manager_WatchLookupDNSClient interface {
+	Recv() (*DNSRequest, error)
+	grpc.ClientStream
+}
+
+type managerWatchLookupDNSClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerWatchLookupDNSClient) Recv() (*DNSRequest, error) {
+	m := new(DNSRequest)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], "/telepresence.manager.Manager/WatchLogLevel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], "/telepresence.manager.Manager/WatchLogLevel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -556,7 +616,7 @@ func (x *managerWatchLogLevelClient) Recv() (*LogLevelRequest, error) {
 }
 
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_TunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], "/telepresence.manager.Manager/Tunnel", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], "/telepresence.manager.Manager/Tunnel", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -587,7 +647,7 @@ func (x *managerTunnelClient) Recv() (*TunnelMessage, error) {
 }
 
 func (c *managerClient) WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchDialClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], "/telepresence.manager.Manager/WatchDial", opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[10], "/telepresence.manager.Manager/WatchDial", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -696,11 +756,21 @@ type ManagerServer interface {
 	AgentTunnel(Manager_AgentTunnelServer) error
 	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
+	// Deprecated: Retained for backward compatibility. Replaced by LookupDNS
 	LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error)
 	// AgentLookupHostResponse lets an agent respond for lookup requests
+	// Deprecated: Retained for backward compatibility. Replaced by AgentLookupDNSResponse
 	AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error)
 	// WatchLookupHost lets an agent receive lookup requests
+	// Deprecated: Retained for backward compatibility. Replaced by WatchLookupDNS
 	WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error
+	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+	// active, the lookup will be performed from the intercepted pods.
+	LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error)
+	// AgentLookupHostResponse lets an agent respond for lookup requests
+	AgentLookupDNSResponse(context.Context, *DNSAgentResponse) (*emptypb.Empty, error)
+	// WatchLookupHost lets an agent receive lookup requests
+	WatchLookupDNS(*SessionInfo, Manager_WatchLookupDNSServer) error
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(*emptypb.Empty, Manager_WatchLogLevelServer) error
 	// A Tunnel represents one single connection where the client or
@@ -803,6 +873,15 @@ func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *Look
 }
 func (UnimplementedManagerServer) WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLookupHost not implemented")
+}
+func (UnimplementedManagerServer) LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
+}
+func (UnimplementedManagerServer) AgentLookupDNSResponse(context.Context, *DNSAgentResponse) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupDNSResponse not implemented")
+}
+func (UnimplementedManagerServer) WatchLookupDNS(*SessionInfo, Manager_WatchLookupDNSServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchLookupDNS not implemented")
 }
 func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, Manager_WatchLogLevelServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLogLevel not implemented")
@@ -1325,6 +1404,63 @@ func (x *managerWatchLookupHostServer) Send(m *LookupHostRequest) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Manager_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DNSRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).LookupDNS(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/LookupDNS",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).LookupDNS(ctx, req.(*DNSRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_AgentLookupDNSResponse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DNSAgentResponse)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).AgentLookupDNSResponse(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/AgentLookupDNSResponse",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).AgentLookupDNSResponse(ctx, req.(*DNSAgentResponse))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_WatchLookupDNS_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SessionInfo)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchLookupDNS(m, &managerWatchLookupDNSServer{stream})
+}
+
+type Manager_WatchLookupDNSServer interface {
+	Send(*DNSRequest) error
+	grpc.ServerStream
+}
+
+type managerWatchLookupDNSServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerWatchLookupDNSServer) Send(m *DNSRequest) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 func _Manager_WatchLogLevel_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1476,6 +1612,14 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "AgentLookupHostResponse",
 			Handler:    _Manager_AgentLookupHostResponse_Handler,
 		},
+		{
+			MethodName: "LookupDNS",
+			Handler:    _Manager_LookupDNS_Handler,
+		},
+		{
+			MethodName: "AgentLookupDNSResponse",
+			Handler:    _Manager_AgentLookupDNSResponse_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1513,6 +1657,11 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchLookupHost",
 			Handler:       _Manager_WatchLookupHost_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchLookupDNS",
+			Handler:       _Manager_WatchLookupDNS_Handler,
 			ServerStreams: true,
 		},
 		{

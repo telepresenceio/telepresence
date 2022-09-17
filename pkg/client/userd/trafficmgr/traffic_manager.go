@@ -184,7 +184,7 @@ type TrafficManager struct {
 
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap
 // TODO: Change to released version
-var firstAgentConfigMapVersion = semver.MustParse("2.6.0-alpha.64")
+var firstAgentConfigMapVersion = semver.MustParse("2.6.0")
 
 func NewSession(
 	ctx context.Context,

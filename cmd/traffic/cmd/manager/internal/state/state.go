@@ -160,14 +160,15 @@ type clientSessionState struct {
 
 type agentSessionState struct {
 	sessionState
-	agent           *rpc.AgentInfo
-	lookups         chan *rpc.LookupHostRequest
-	lookupResponses map[string]chan *rpc.LookupHostResponse
+	agent        *rpc.AgentInfo
+	dnsRequests  chan *rpc.DNSRequest
+	dnsResponses map[string]chan *rpc.DNSResponse
 }
 
 func (ss *agentSessionState) Cancel() {
-	close(ss.lookups)
-	for _, lr := range ss.lookupResponses {
+	close(ss.dnsRequests)
+	for k, lr := range ss.dnsResponses {
+		delete(ss.dnsResponses, k)
 		close(lr)
 	}
 	ss.sessionState.Cancel()
@@ -470,10 +471,10 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.agentsByName[agent.Name][sessionID] = agent
 
 	s.sessions[sessionID] = &agentSessionState{
-		sessionState:    s.newSessionState(now),
-		lookups:         make(chan *rpc.LookupHostRequest),
-		lookupResponses: make(map[string]chan *rpc.LookupHostResponse),
-		agent:           agent,
+		sessionState: s.newSessionState(now),
+		dnsRequests:  make(chan *rpc.DNSRequest),
+		dnsResponses: make(map[string]chan *rpc.DNSResponse),
+		agent:        agent,
 	}
 
 	for interceptID, intercept := range s.intercepts.LoadAll() {

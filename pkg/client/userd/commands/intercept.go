@@ -947,9 +947,15 @@ func validateDockerArgs(args []string) error {
 func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
 	ourArgs := []string{
 		"run",
-		"--dns-search", "tel2-search",
 		"--env-file", envFile,
 	}
+
+	if runtime.GOOS == "linux" {
+		ourArgs = append(ourArgs, "--network", "host")
+	} else {
+		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
+	}
+
 	getArg := func(s string) (string, bool) {
 		for i, arg := range args {
 			if strings.Contains(arg, s) {

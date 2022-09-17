@@ -3,12 +3,15 @@ package rootd
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
+
+const dnsConnTTL = 5 * time.Second
 
 func (s *session) isForDNS(ip net.IP, port uint16) bool {
 	return s.remoteDnsIP != nil && port == 53 && s.remoteDnsIP.Equal(ip)
@@ -19,9 +22,9 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 		p := id.Protocol()
 		if p == ipproto.UDP && s.isForDNS(id.Destination(), id.DestinationPort()) {
 			pipeId := tunnel.NewConnID(p, id.Source(), s.dnsLocalAddr.IP, id.SourcePort(), uint16(s.dnsLocalAddr.Port))
-			dlog.Debugf(c, "Intercept DNS %s to %s", id, pipeId.DestinationAddr())
+			dlog.Tracef(c, "Intercept DNS %s to %s", id, pipeId.DestinationAddr())
 			from, to := tunnel.NewPipe(pipeId, s.session.SessionId)
-			tunnel.NewDialer(to, func() {}).Start(c)
+			tunnel.NewDialerTTL(to, func() {}, dnsConnTTL).Start(c)
 			return from, nil
 		}
 		dlog.Debugf(c, "Opening tunnel for id %s", id)

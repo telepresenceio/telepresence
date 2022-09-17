@@ -102,16 +102,15 @@ type udpStream struct {
 	stream Stream
 }
 
-func (h *udpStream) handleControl(ctx context.Context, cm Message) {
-	switch cm.Code() {
-	case Disconnect: // Peer responded to our disconnect or wants to hard-close. No more messages will arrive
-		h.Stop(ctx)
-	case KeepAlive:
-		h.ResetIdle()
-	case DialOK:
-	default:
-		dlog.Errorf(ctx, "!! LIS %s: unhandled connection control message: %s", h.stream.ID(), cm)
-	}
+func (p *udpStream) getStream() Stream {
+	return p.stream
+}
+
+func (p *udpStream) getConn() net.Conn {
+	return p.conn
+}
+
+func (p *udpStream) startDisconnect(ctx context.Context, s string) {
 }
 
 func (p *udpStream) Stop(ctx context.Context) {
@@ -120,59 +119,7 @@ func (p *udpStream) Stop(ctx context.Context) {
 
 func (p *udpStream) Start(ctx context.Context) {
 	p.TimedHandler.Start(ctx)
-	go p.readLoop(ctx)
-}
-
-func (p *udpStream) readLoop(ctx context.Context) {
-	id := p.stream.ID()
-	var endReason string
-	endLevel := dlog.LogLevelDebug
-	defer func() {
-		dlog.Logf(ctx, endLevel, "   LIS %s stream-to-conn loop ended because %s", id, endReason)
-	}()
-	msgCh, errCh := ReadLoop(ctx, p.stream)
-	dlog.Debugf(ctx, "   LIS %s stream-to-conn loop started", id)
-	for {
-		select {
-		case <-ctx.Done():
-			endReason = ctx.Err().Error()
-			return
-		case <-p.Idle():
-			endReason = "it was idle for too long"
-			return
-		case err, ok := <-errCh:
-			if ok {
-				dlog.Error(ctx, err)
-			}
-		case dg, ok := <-msgCh:
-			if !ok {
-				// h.incoming was closed by the reader and is now drained.
-				endReason = "there was no more input"
-				return
-			}
-			if !p.ResetIdle() {
-				endReason = "it was idle for too long"
-				return
-			}
-			if dg.Code() != Normal {
-				p.handleControl(ctx, dg)
-				continue
-			}
-			payload := dg.Payload()
-			pn := len(payload)
-			for n := 0; n < pn; {
-				wn, err := p.conn.WriteTo(payload[n:], id.SourceAddr())
-				if err != nil {
-					dlog.Errorf(ctx, "!! LIS %s write error %v", id, wn)
-					endReason = "a write error occurred"
-					endLevel = dlog.LogLevelError
-					return
-				}
-				dlog.Tracef(ctx, "-> LIS %s, len %d", id, wn)
-				n += wn
-			}
-		}
-	}
+	go readLoop(ctx, p)
 }
 
 type UdpReadResult struct {
@@ -192,7 +139,7 @@ func IsTimeout(err error) bool {
 func UdpReader(ctx context.Context, conn net.PacketConn, ch chan<- UdpReadResult) {
 	defer close(ch)
 	var endReason string
-	endLevel := dlog.LogLevelDebug
+	endLevel := dlog.LogLevelTrace
 	defer func() {
 		dlog.Logf(ctx, endLevel, "   LIS %s UDP read loop ended because %s", conn.LocalAddr(), endReason)
 	}()

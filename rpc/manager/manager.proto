@@ -426,16 +426,19 @@ message DialRequest {
 }
 
 // LookupHost request sent from a client
+// Deprecated: Retained for backward compatibility. Replaced by DNSRequest
 message LookupHostRequest {
   // Client session
   SessionInfo session = 1;
-  string host = 2;
+  string name = 2;
 }
 
+// Deprecated: Retained for backward compatibility. Replaced by DNSResponse
 message LookupHostResponse {
   repeated bytes ips = 1;
 }
 
+// Deprecated: Retained for backward compatibility. Replaced by DNSAgentResponse
 message LookupHostAgentResponse {
   // Agent session
   SessionInfo session = 1;
@@ -445,6 +448,33 @@ message LookupHostAgentResponse {
 
   // The response, which might be nil in case no address was found
   LookupHostResponse response = 3;
+}
+
+// LookupHost request sent from a client
+message DNSRequest {
+  // Client session
+  SessionInfo session = 1;
+  string name = 2;
+  uint32 type = 3;
+}
+
+message DNSResponse {
+  // DNS return code
+  int32 r_code = 1;
+
+  // rrs is an array of packed RR records
+  bytes rrs = 2;
+}
+
+message DNSAgentResponse {
+  // Agent session
+  SessionInfo session = 1;
+
+  // DNSRequest is the request that this is a response to
+  DNSRequest request = 2;
+
+  // The response, which might be nil in case no address was found
+  DNSResponse response = 3;
 }
 
 // IPNet is a subnet. e.g. 10.43.0.0/16
@@ -584,13 +614,26 @@ service Manager {
 
   // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.
+  // Deprecated: Retained for backward compatibility. Replaced by LookupDNS
   rpc LookupHost(LookupHostRequest) returns (LookupHostResponse);
 
   // AgentLookupHostResponse lets an agent respond for lookup requests
+  // Deprecated: Retained for backward compatibility. Replaced by AgentLookupDNSResponse
   rpc AgentLookupHostResponse(LookupHostAgentResponse) returns (google.protobuf.Empty);
 
   // WatchLookupHost lets an agent receive lookup requests
+  // Deprecated: Retained for backward compatibility. Replaced by WatchLookupDNS
   rpc WatchLookupHost(SessionInfo) returns (stream LookupHostRequest);
+
+  // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+  // active, the lookup will be performed from the intercepted pods.
+  rpc LookupDNS(DNSRequest) returns (DNSResponse);
+
+  // AgentLookupHostResponse lets an agent respond for lookup requests
+  rpc AgentLookupDNSResponse(DNSAgentResponse) returns (google.protobuf.Empty);
+
+  // WatchLookupHost lets an agent receive lookup requests
+  rpc WatchLookupDNS(SessionInfo) returns (stream DNSRequest);
 
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);

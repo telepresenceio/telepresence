@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miekg/dns"
+
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -76,22 +78,23 @@ func (s *Server) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (s *Server) resolveInSearch(c context.Context, query string) ([]net.IP, error) {
-	query = strings.ToLower(query)
+func (s *Server) resolveInSearch(c context.Context, q *dns.Question) ([]dns.RR, int, error) {
+	query := strings.ToLower(q.Name)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
 	if !s.shouldDoClusterLookup(query) {
-		return nil, nil
+		return nil, dns.RcodeNameError, nil
 	}
 
 	if s.shouldApplySearch(query) {
 		for _, sp := range s.search {
-			if ips, err := s.resolveInCluster(c, query+sp); err != nil || len(ips) > 0 {
-				return ips, err
+			q.Name = query + sp
+			if rrs, rCode, err := s.resolveInCluster(c, q); err != nil || len(rrs) > 0 {
+				return rrs, rCode, err
 			}
 		}
 	}
-	return s.resolveInCluster(c, query)
+	return s.resolveInCluster(c, q)
 }
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {

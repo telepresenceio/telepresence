@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	dns2 "github.com/miekg/dns"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -34,6 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -240,25 +242,65 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		return nil, err
 	}
 
-	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
+	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
+		s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
+	} else {
+		s.dnsServer = dns.NewServer(mi.Dns, s.legacyClusterLookup, true)
+	}
 	return s, nil
 }
 
-// clusterLookup sends a LookupHost request to the traffic-manager and returns the result
-func (s *session) clusterLookup(ctx context.Context, key string) ([][]byte, error) {
-	dlog.Debugf(ctx, "LookupHost %q", key)
+// clusterLookup sends a LookupDNS request to the traffic-manager and returns the result
+func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) ([]dns2.RR, int, error) {
+	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
 	s.dnsLookups++
+
+	r, err := s.managerClient.LookupDNS(ctx, &manager.DNSRequest{
+		Session: s.session,
+		Name:    q.Name,
+		Type:    uint32(q.Qtype),
+	})
+	if err != nil {
+		s.dnsFailures++
+		return nil, dns2.RcodeServerFailure, err
+	}
+	return dnsproxy.FromRPC(r)
+}
+
+// clusterLookup sends a LookupHost request to the traffic-manager and returns the result
+func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) ([]dns2.RR, int, error) {
+	qType := q.Qtype
+	if !(qType == dns2.TypeA || qType == dns2.TypeAAAA) {
+		return nil, dns2.RcodeNotImplemented, nil
+	}
+	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
+	s.dnsLookups++
+
 	r, err := s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{
 		Session: s.session,
-		Host:    key,
+		Name:    q.Name[:len(q.Name)-1],
 	})
-	if err != nil || len(r.Ips) == 0 {
-		s.dnsFailures++
-	}
 	if err != nil {
-		return nil, err
+		s.dnsFailures++
+		return nil, dns2.RcodeServerFailure, err
 	}
-	return r.Ips, nil
+	ips := iputil.IPsFromBytesSlice(r.Ips)
+	if len(ips) == 0 {
+		return nil, dns2.RcodeNameError, nil
+	}
+	rrHeader := func() dns2.RR_Header {
+		return dns2.RR_Header{Name: q.Name, Rrtype: qType, Class: dns2.ClassINET, Ttl: 4}
+	}
+	var rrs []dns2.RR
+	for _, ip := range ips {
+		if ip4 := ip.To4(); ip4 != nil {
+			rrs = append(rrs, &dns2.A{
+				Hdr: rrHeader(),
+				A:   ip4,
+			})
+		}
+	}
+	return rrs, dns2.RcodeSuccess, nil
 }
 
 func (s *session) getInfo() *rpc.OutboundInfo {
