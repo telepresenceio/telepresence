@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -104,10 +106,14 @@ func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
 			case errors.Is(err, net.ErrClosed):
 				endReason = "stream closed"
 			default:
-				endReason = err.Error()
-				select {
-				case errCh <- fmt.Errorf("!! %s %s, read from grpc.ClientStream failed: %w", s.Tag(), s.ID(), err):
-				default:
+				if status.Code(err) == codes.Canceled {
+					endReason = "stream closed"
+				} else {
+					endReason = err.Error()
+					select {
+					case errCh <- fmt.Errorf("!! %s %s, read from grpc.ClientStream failed: %w", s.Tag(), s.ID(), err):
+					default:
+					}
 				}
 			}
 			break
