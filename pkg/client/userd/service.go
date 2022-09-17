@@ -74,8 +74,8 @@ type Service struct {
 	loginExecutor     auth.LoginExecutor
 	userNotifications func(context.Context) <-chan string
 	ucn               int64
-
-	scout *scout.Reporter
+	fuseFTPError      error
+	scout             *scout.Reporter
 
 	quit func()
 
@@ -321,7 +321,8 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 	fuseFtpCh := make(chan rpc2.FuseFTPClient)
 	if cfg.Intercept.UseFtp {
 		g.Go("fuseftp-server", func(c context.Context) error {
-			return runFuseFTPServer(c, fuseFtpCh)
+			s.fuseFTPError = runFuseFTPServer(c, fuseFtpCh)
+			return nil
 		})
 	} else {
 		close(fuseFtpCh)

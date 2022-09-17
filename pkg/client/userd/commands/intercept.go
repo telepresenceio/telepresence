@@ -406,7 +406,7 @@ type interceptState struct {
 
 	scout *scout.Reporter
 
-	connectorServer connector.ConnectorServer
+	connectorServer ConnectorServer
 	managerClient   manager.ManagerClient
 
 	// set later ///////////////////////////////////////////////////////////
@@ -422,7 +422,7 @@ func newInterceptState(
 	ctx context.Context,
 	cmd safeCobraCommand,
 	args interceptArgs,
-	cs connector.ConnectorServer,
+	cs ConnectorServer,
 	managerClient manager.ManagerClient,
 ) *interceptState {
 	is := &interceptState{
@@ -499,7 +499,11 @@ func interceptMessage(r *connector.InterceptResult) error {
 	return errCat.Newf(msg)
 }
 
-func checkMountCapability(ctx context.Context) error {
+func (is *interceptState) checkMountCapability(ctx context.Context) error {
+	if client.GetConfig(ctx).Intercept.UseFtp {
+		return is.connectorServer.FuseFTPError()
+	}
+
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
 	var cmd *dexec.Cmd
@@ -602,7 +606,7 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	spec.TargetPort = int32(is.localPort)
 
 	doMount := false
-	if err = checkMountCapability(ctx); err == nil {
+	if err = is.checkMountCapability(ctx); err == nil {
 		if ir.MountPoint, doMount, err = is.getMountPoint(ctx); err != nil {
 			return nil, err
 		}
@@ -903,7 +907,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	var volumeMountProblem error
 	doMount, err := strconv.ParseBool(args.mount)
 	if doMount || err != nil {
-		volumeMountProblem = checkMountCapability(ctx)
+		volumeMountProblem = is.checkMountCapability(ctx)
 	}
 	fmt.Fprintln(is.cmd.OutOrStdout(), cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil

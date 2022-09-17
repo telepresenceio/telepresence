@@ -32,12 +32,20 @@ export DOCKER_BUILDKIT := 1
 .PHONY: FORCE
 FORCE:
 
+# Build with CGO_ENABLED=0 on all platforms to ensure that the binary is as
+# portable as possible, but we must make an exception for darwin, because
+# the Go implementation of the DNS resolver doesn't work properly there unless
+# it's using clib
+ifeq ($(GOOS),darwin)
+CGO_ENABLED=1
+else
+CGO_ENABLED=0
+endif
+
 # Build using CGO_ENABLED=1 on all platforms except windows.
 ifeq ($(GOOS),windows)
-CGO_ENABLED=0
 BEXE=.exe
 else
-CGO_ENABLED=1
 BEXE=
 endif
 
@@ -80,7 +88,6 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 
 	rm -rf vendor
 
-
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files
 	rm -rf ./rpc/vendor
@@ -89,7 +96,6 @@ generate-clean: ## (Generate) Delete generated files
 	rm -rf ./vendor
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
-	rm -f ./pkg/client/userd/fuseftp.bits
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
@@ -110,9 +116,13 @@ else
 	sdkroot=
 endif
 
-FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp)
+FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
 
-pkg/client/userd/fuseftp.bits:
+pkg/client/userd/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
+	cp $< $@
+
+$(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
+	mkdir -p $(BUILDDIR)
 	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
 
 build-deps: pkg/client/userd/fuseftp.bits

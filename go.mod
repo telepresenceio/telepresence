@@ -9,7 +9,8 @@ require (
 	github.com/creack/pty v1.1.18
 	github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
-	github.com/datawire/go-fuseftp v0.1.9
+	github.com/datawire/go-ftpserver v0.1.1
+	github.com/datawire/go-fuseftp/rpc v0.1.9
 	github.com/datawire/metriton-go-client v0.1.1
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/godbus/dbus/v5 v5.1.0
@@ -29,7 +30,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.0
-	github.com/telepresenceio/telepresence/rpc/v2 v2.7.4
+	github.com/telepresenceio/telepresence/rpc/v2 v2.7.6
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.32.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.33.0
 	go.opentelemetry.io/otel v1.8.0
@@ -187,7 +188,5 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.13.6 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 )
-
-require github.com/datawire/go-fuseftp/rpc v0.1.9
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
