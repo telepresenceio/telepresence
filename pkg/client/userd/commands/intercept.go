@@ -948,12 +948,7 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 	ourArgs := []string{
 		"run",
 		"--env-file", envFile,
-	}
-
-	if runtime.GOOS == "linux" {
-		ourArgs = append(ourArgs, "--network", "host")
-	} else {
-		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
+		"--dns-search", "tel2-search",
 	}
 
 	getArg := func(s string) (string, bool) {

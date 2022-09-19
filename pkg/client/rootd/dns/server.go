@@ -127,17 +127,20 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 	return s
 }
 
-// tel2SubDomain aims to fix a search-path problem when using Docker on non-linux systems where
-// Docker uses its own search-path for single label names. This means that the search path that
-// is declared in the macOS resolver is ignored although the rest of the DNS-resolution works OK.
-// Since the search-path is likely to change during a session, a stable fake domain is needed to
-// emulate the search-path. That fake-domain can then be used in the search path declared in the
+// tel2SubDomain fixes a search-path problem when using Docker.
+//
+// Docker uses its own search-path for single label names. This means that the search path that is
+// declared in Telepresence DNS resolver is ignored, although the rest of the DNS-resolution works
+// OK. Since the search-path is likely to change during a session, a stable fake domain is needed
+// to emulate the search-path. That fake-domain can then be used in the search path declared in the
 // Docker config.
 //
-// The "tel2-search" domain fills this purpose and a request for "<single label name>.tel2-search."
-// will be resolved as "<single label name>." using the search path of this resolver.
+// The tel2SubDomain fills this purpose and a request for "<single label name>.<tel2SubDomain>"
+// will be resolved as "<single label name>.<currently intercepted namespace>".
 const tel2SubDomain = "tel2-search"
 const tel2SubDomainDot = tel2SubDomain + "."
+
+// wpadDot is used when rejecting all WPAD (Wep Proxy Auto-Discovery) queries
 const wpadDot = "wpad."
 
 var localhostIPv4 = net.IP{127, 0, 0, 1}
@@ -259,10 +262,14 @@ func (s *Server) SetClusterDNS(dns *manager.DNS) {
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) {
-	// Provide direct access to intercepted namespaces
-	for _, ns := range namespaces {
-		paths = append(paths, ns+".svc."+s.clusterDomain)
+	if len(namespaces) > 0 {
+		// Provide direct access to intercepted namespaces
+		for _, ns := range namespaces {
+			paths = append(paths, ns+".svc."+s.clusterDomain)
+		}
+		paths = append(paths, tel2SubDomain)
 	}
+
 	select {
 	case <-ctx.Done():
 	case s.searchPathCh <- paths:
