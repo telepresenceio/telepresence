@@ -316,6 +316,10 @@ hooks:
     tag: latest
 
 client:
+  # Max time that the traffic-manager will keep a client connection alive when it doesn't receive
+  # any calls to Remain.
+  connectionTTL: 24h
+
   routing:
     # add the following subnets to the client's virtual network interface
     # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]

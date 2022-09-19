@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/sethvargo/go-envconfig"
 	core "k8s.io/api/core/v1"
@@ -46,10 +47,11 @@ type Env struct {
 	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
 	DNSServiceIP        string `env:"DNS_SERVICE_IP,default="`
 
-	ClientRoutingAlsoProxySubnets  []string `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,default="`
-	ClientRoutingNeverProxySubnets []string `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS,default="`
-	ClientDnsExcludeSuffixes       []string `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,default=.com,.io,.net,.org,.ru"`
-	ClientDnsIncludeSuffixes       []string `env:"CLIENT_DNS_INCLUDE_SUFFIXES,default="`
+	ClientRoutingAlsoProxySubnets  []string      `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,default="`
+	ClientRoutingNeverProxySubnets []string      `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS,default="`
+	ClientDnsExcludeSuffixes       []string      `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,default=.com,.io,.net,.org,.ru"`
+	ClientDnsIncludeSuffixes       []string      `env:"CLIENT_DNS_INCLUDE_SUFFIXES,default="`
+	ClientConnectionTTL            time.Duration `env:"CLIENT_CONNECTION_TTL,default=24h"`
 }
 
 type envKey struct{}

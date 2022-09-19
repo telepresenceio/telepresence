@@ -115,6 +115,8 @@ spec:
         Client configuration
         */}}
           {{- with .Values.client }}
+          - name: CLIENT_CONNECTION_TTL
+            value: "{{ .connectionTTL }}"
           {{- /* replaced by client.routing. Retained for backward compatibility */}}
           {{- with $.Values.dnsConfig }}
           {{- if .alsoProxySubnets }}

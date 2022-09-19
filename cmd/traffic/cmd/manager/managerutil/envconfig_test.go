@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,6 +42,7 @@ func TestEnvconfig(t *testing.T) {
 		DNSServiceName:           "coredns",
 		DNSServiceNamespace:      "kube-system",
 		LogLevel:                 "info",
+		ClientConnectionTTL:      24 * time.Hour,
 		ClientDnsExcludeSuffixes: []string{".com", ".io", ".net", ".org", ".ru"},
 	}
 

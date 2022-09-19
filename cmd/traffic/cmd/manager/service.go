@@ -959,11 +959,10 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 	return m.clusterInfo.Watch(ctx, stream)
 }
 
-const clientSessionTTL = 24 * time.Hour
 const agentSessionTTL = 15 * time.Second
 
 // expire removes stale sessions.
 func (m *Manager) expire(ctx context.Context) {
 	now := m.clock.Now()
-	m.state.ExpireSessions(ctx, now.Add(-clientSessionTTL), now.Add(-agentSessionTTL))
+	m.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
 }
