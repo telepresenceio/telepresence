@@ -273,12 +273,7 @@ format: build-deps $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatical
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check-all
-check-all: build-deps ## (QA) Run the test suite
-	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
-	# is only used for extensions. Therefore, we want to validate that our tests, and
-	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=29m ./integration_test/...
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -timeout=20m ./cmd/... ./pkg/...
+check-all: check-integration check-unit ## (QA) Run the test suite
 
 .PHONY: check-unit
 check-unit: build-deps ## (QA) Run the test suite
@@ -292,7 +287,7 @@ check-integration: build-deps $(tools/helm) ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=39m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -timeout=39m ./integration_test/...
 
 .PHONY: _login
 _login:
