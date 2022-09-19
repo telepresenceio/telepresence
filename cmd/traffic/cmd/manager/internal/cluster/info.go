@@ -110,34 +110,37 @@ func NewInfo(ctx context.Context) Info {
 			Namespace: env.DNSServiceNamespace,
 		},
 	}
+
+	var kubeDnsIp net.IP
 	for _, svc := range dnsServices {
 		if ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc.Name+"."+svc.Namespace); err == nil && len(ips) > 0 {
 			dlog.Infof(ctx, "Using DNS IP from %s.%s", svc.Name, svc.Namespace)
-			oi.KubeDnsIp = ips[0]
+			kubeDnsIp = ips[0]
 			break
 		}
 	}
 
-	if oi.KubeDnsIp == nil && env.DNSServiceIP != "" {
+	if kubeDnsIp == nil && env.DNSServiceIP != "" {
 		dlog.Infof(ctx, "Unable to determine DNS IP, using user supplied IP %s", env.DNSServiceIP)
-		oi.KubeDnsIp = net.ParseIP(env.DNSServiceIP)
-		if oi.KubeDnsIp == nil {
+		kubeDnsIp = net.ParseIP(env.DNSServiceIP)
+		if kubeDnsIp == nil {
 			dlog.Warn(ctx, "The user supplied IP is not a valid IP address")
 		}
 	}
 
-	if oi.KubeDnsIp == nil {
+	if kubeDnsIp == nil {
 		dlog.Warn(ctx, "Could not determine DNS ClusterIP")
 	}
 
 	apiSvc := "kubernetes.default.svc"
+	var clusterDomain string
 	if cn, err := net.LookupCNAME(apiSvc); err != nil {
 		dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s: %v"`, err, apiSvc)
-		oi.ClusterDomain = "cluster.local."
+		clusterDomain = "cluster.local."
 	} else {
-		oi.ClusterDomain = cn[len(apiSvc)+1:]
+		clusterDomain = cn[len(apiSvc)+1:]
 	}
-	dlog.Infof(ctx, "Using cluster domain %q", oi.ClusterDomain)
+	dlog.Infof(ctx, "Using cluster domain %q", clusterDomain)
 
 	// make an attempt to create a service with ClusterIP that is out of range and then
 	// check the error message for the correct range as suggested tin the second answer here:
@@ -235,6 +238,18 @@ func NewInfo(ctx context.Context) Info {
 		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(subnet)
 	}
 
+	oi.Dns = &rpc.DNS{
+		IncludeSuffixes: env.ClientDnsIncludeSuffixes,
+		ExcludeSuffixes: env.ClientDnsExcludeSuffixes,
+		KubeIp:          kubeDnsIp,
+		ClusterDomain:   clusterDomain,
+	}
+	// For backward compatibility
+	oi.ClusterDomain = clusterDomain
+	oi.KubeDnsIp = kubeDnsIp
+
+	dlog.Infof(ctx, "ExcludeSuffixes: %+v", oi.Dns.ExcludeSuffixes)
+	dlog.Infof(ctx, "IncludeSuffixes: %+v", oi.Dns.IncludeSuffixes)
 	return &oi
 }
 
@@ -347,6 +362,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		ClusterDomain: oi.ClusterDomain,
 		ManagerPodIp:  oi.ManagerPodIp,
 		Routing:       oi.Routing,
+		Dns:           oi.Dns,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci

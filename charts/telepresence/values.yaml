@@ -324,3 +324,10 @@ client:
     # remove the following subnets from the client's virtual network interface
     # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
     neverProxySubnets: []
+
+  dns:
+    # Tell client's DNS resolver to never send names with these suffixes to the cluster side resolver
+    excludeSuffixes: [".com", ".io", ".net", ".org", ".ru"]
+
+    # Tell client's DNS resolver to always send names with these suffixes to the cluster side resolver
+    includeSuffixes: []

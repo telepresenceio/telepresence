@@ -48,6 +48,8 @@ type Env struct {
 
 	ClientRoutingAlsoProxySubnets  []string `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,default="`
 	ClientRoutingNeverProxySubnets []string `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS,default="`
+	ClientDnsExcludeSuffixes       []string `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,default=.com,.io,.net,.org,.ru"`
+	ClientDnsIncludeSuffixes       []string `env:"CLIENT_DNS_INCLUDE_SUFFIXES,default="`
 }
 
 type envKey struct{}

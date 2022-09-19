@@ -486,23 +486,28 @@ message IPNet {
 // ClusterInfo contains information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
 message ClusterInfo {
-  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
-  bytes kube_dns_ip = 1;
-
   // service_subnet is the Kubernetes service subnet
   IPNet service_subnet = 2;
 
   // pod_subnets are the subnets used for Kubenetes pods.
   repeated IPNet pod_subnets = 3;
 
-  // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
-  string cluster_domain = 4;
-
   // manager_pod_ip is the ip address of the traffic manager
   bytes manager_pod_ip = 5;
 
   // Router configuration
   Routing routing = 6;
+
+  // DNS configuration
+  DNS dns = 7;
+
+  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
+  // Deprecated: Use dns.kube_ip
+  bytes kube_dns_ip = 1;
+
+  // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
+  // Deprecated: Use dns.cluster_domain
+  string cluster_domain = 4;
 }
 
 message Routing {
@@ -510,6 +515,16 @@ message Routing {
   repeated IPNet never_proxy_subnets = 2;
 }
 
+message DNS {
+  repeated string include_suffixes = 1;
+  repeated string exclude_suffixes = 2;
+
+  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
+  bytes kube_ip = 3;
+
+  // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
+  string cluster_domain = 4;
+}
 
 service Manager {
   // Version returns the version information of the Manager.

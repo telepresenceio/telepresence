@@ -18,6 +18,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -244,14 +245,16 @@ func (s *Server) GetConfig() *rpc.DNSConfig {
 	return dnsConfig
 }
 
-func (s *Server) SetClusterDomainAndDNS(domain string, dnsIP net.IP) {
-	s.clusterDomain = domain
+func (s *Server) SetClusterDNS(dns *manager.DNS) {
+	s.clusterDomain = dns.ClusterDomain
 	if s.config == nil {
 		s.config = &rpc.DNSConfig{}
 	}
 	if s.config.RemoteIp == nil {
-		s.config.RemoteIp = dnsIP
+		s.config.RemoteIp = dns.KubeIp
 	}
+	s.config.ExcludeSuffixes = append(s.config.ExcludeSuffixes, dns.ExcludeSuffixes...)
+	s.config.IncludeSuffixes = append(s.config.IncludeSuffixes, dns.IncludeSuffixes...)
 }
 
 // SetSearchPath updates the DNS search path used by the resolver

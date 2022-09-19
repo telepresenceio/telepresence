@@ -442,10 +442,18 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 					span.End()
 					return
 				}
-				remoteIp := net.IP(mgrInfo.KubeDnsIp)
+				dns := mgrInfo.Dns
+				if dns == nil {
+					// Older traffic-manager. Use deprecated mgrInfo fields for DNS
+					dns = &manager.DNS{
+						KubeIp:        mgrInfo.KubeDnsIp,
+						ClusterDomain: mgrInfo.ClusterDomain,
+					}
+				}
+				remoteIp := net.IP(dns.KubeIp)
 				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
-				dlog.Infof(ctx, "Setting cluster domain to %q", mgrInfo.ClusterDomain)
-				s.dnsServer.SetClusterDomainAndDNS(mgrInfo.ClusterDomain, remoteIp)
+				dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
+				s.dnsServer.SetClusterDNS(dns)
 				s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator())
 				if err != nil {
 					dlog.Errorf(ctx, "NewStack: %v", err)
@@ -464,7 +472,7 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 					attribute.Bool("tel2.proxy-cluster", s.proxyCluster),
 					attribute.Bool("tel2.cfg-complete", false),
 					attribute.Stringer("tel2.cluster-dns", remoteIp),
-					attribute.String("tel2.cluster-domain", mgrInfo.ClusterDomain),
+					attribute.String("tel2.cluster-domain", dns.ClusterDomain),
 				)
 			} else {
 				span.SetAttributes(

@@ -136,6 +136,16 @@ spec:
             value: "{{ join " " .neverProxySubnets }}"
           {{- end }}
           {{- end }}
+          {{- with .dns }}
+          {{- with .excludeSuffixes }}
+          - name: CLIENT_DNS_EXCLUDE_SUFFIXES
+            value: "{{ join " " . }}"
+          {{- end }}
+          {{- with .includeSuffixes }}
+          - name: CLIENT_DNS_INCLUDE_SUFFIXES
+            value: "{{ join " " . }}"
+          {{- end }}
+          {{- end }}
           {{- end }}
           {{- end }}
           ports:
