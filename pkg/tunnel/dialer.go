@@ -37,7 +37,7 @@ type streamReader interface {
 	ResetIdle() bool
 	Stop(context.Context)
 	getStream() Stream
-	getConn() net.Conn
+	reply([]byte) (int, error)
 	startDisconnect(context.Context, string)
 }
 
@@ -224,12 +224,12 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	}
 }
 
-func (h *dialer) getConn() net.Conn {
-	return h.conn
-}
-
 func (h *dialer) getStream() Stream {
 	return h.stream
+}
+
+func (h *dialer) reply(data []byte) (int, error) {
+	return h.conn.Write(data)
 }
 
 func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
@@ -268,7 +268,6 @@ func readLoop(ctx context.Context, h streamReader) {
 	}()
 
 	incoming, errCh := ReadLoop(ctx, h.getStream())
-
 	dlog.Tracef(ctx, "   CONN %s stream-to-conn loop started", id)
 	for {
 		select {
@@ -299,7 +298,7 @@ func readLoop(ctx context.Context, h streamReader) {
 			payload := dg.Payload()
 			pn := len(payload)
 			for n := 0; n < pn; {
-				wn, err := h.getConn().Write(payload[n:])
+				wn, err := h.reply(payload[n:])
 				if err != nil {
 					endReason = fmt.Sprintf("a write error occurred: %v", err)
 					endLevel = dlog.LogLevelError

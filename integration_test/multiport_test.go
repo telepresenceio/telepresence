@@ -163,7 +163,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 
 		interact := func(i int, wg *sync.WaitGroup) {
 			defer wg.Done()
-			conn, err := net.Dial("udp", fmt.Sprintf("%s.%s:80", "echo-udp", s.AppNamespace()))
+			conn, err := net.Dial("udp", fmt.Sprintf("%s:80", "echo-udp"))
 			require.NoError(err)
 			defer conn.Close()
 
