@@ -329,6 +329,23 @@ Events:
   Normal  Started    13m   kubelet            Started container traffic-agent
 ```
 
+#### The Ambassador Agent
+The Ambassador Agent is an optional component of telepresence that gets installed into your cluster by default.
+By creating an account on the Ambassador Cloud, you can then get an actionable view of your cluster for you and your team.
+Users who connect their telepresence installation to the Ambassador Developer Control Plane can create, share and stop intercepts in their clusters, all from the cloud.
+
+##### (Optional) Enable Ambassador Cloud Features
+If the Ambassador Agent has already been setup either standalone or through an Ambassador Edge Stack installation, this step can be skipped.
+
+To enable these features, pass in your Ambassador Cloud Token by running:
+```shell
+kubectl -n ambassador create secret generic ambassador-agent-cloud-token --from-literal=CLOUD_CONNECT_TOKEN=<YOUR AMBASSADOR CLOUD TOKEN>
+```
+In about a minute or two, the Developer Control Plane will be populated with your workloads.
+
+##### Disabling installation of the Ambassador Agent
+If you do not wish to have the Ambassador Agent installed along with the Telepresence Traffic Manager in your cluster, simply set `ambassador-agent.enabled=false` during the installation of the Traffic Manager.
+
 ### Uninstalling
 
 You can uninstall the traffic-agent from specific deployments or from all deployments. Or you can choose to uninstall everything in which

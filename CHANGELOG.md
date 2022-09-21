@@ -2,7 +2,8 @@
 
 ## 2.8.0 (TDB)
 
-- Feature: Include the optional Ambassador Agent
+- Feature: Include the optional Ambassador Agent which enables an actionable view of your cluster
+  in the Ambassador Cloud Developer Control Plane and team features.
 
 ### 2.7.6 (September 16, 2022)
 
