@@ -446,6 +446,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		return err
 	}
 	settings := []string{
+		"--set", "logLevel=debug",
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
@@ -460,7 +461,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		settings = append(settings, "--set", k+"="+v)
 	}
 
-	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
+	helmValues := filepath.Join("integration_test", "testdata", "namespaced-values.yaml")
 	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)

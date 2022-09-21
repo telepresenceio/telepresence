@@ -2,6 +2,7 @@ package itest
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,7 @@ func (ch *connected) setup(ctx context.Context) bool {
 	t := getT(ctx)
 	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
 	// Start once with default user to ensure that the auto-installer can run OK.
-	TelepresenceOk(WithUser(ctx, "default"), "helm", "install")
+	TelepresenceOk(WithUser(ctx, "default"), "helm", "install", "--values", filepath.Join("testdata", "connect-values.yaml"))
 	stdout := TelepresenceOk(WithUser(ctx, "default"), "connect")
 	require.Contains(t, stdout, "Connected to context default")
 	TelepresenceQuitOk(ctx)
