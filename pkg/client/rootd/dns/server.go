@@ -481,23 +481,32 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}()
 
 	q := &r.Question[0]
+	qts := dns.TypeToString[q.Qtype]
+	dlog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
+
 	atomic.AddInt64(&s.requestCount, 1)
 
 	var err error
 	var rCode int
 	var answer dnsproxy.RRs
 	if s.onlyNames {
-		qt := q.Qtype
-		if qt != dns.TypeA && qt != dns.TypeAAAA {
-			rCode = dns.RcodeNameError
-		} else {
+		switch q.Qtype {
+		case dns.TypeA:
+			answer, rCode, err = s.cacheResolve(q)
+		case dns.TypeAAAA:
+			if atomic.LoadInt32(&s.recursive) == recursionDetected || q.Name == recursionCheck {
+				rCode = dns.RcodeNameError
+				break
+			}
 			q.Qtype = dns.TypeA
 			answer, rCode, err = s.cacheResolve(q)
-			q.Qtype = qt
-			if rCode == dns.RcodeSuccess && qt == dns.TypeAAAA {
+			q.Qtype = dns.TypeAAAA
+			if rCode == dns.RcodeSuccess {
 				// return EMPTY to indicate that dns.TypeA exists
 				answer = nil
 			}
+		default:
+			rCode = dns.RcodeNameError
 		}
 	} else {
 		answer, rCode, err = s.cacheResolve(q)
@@ -508,9 +517,8 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	var msg *dns.Msg
 
-	qts := dns.TypeToString[q.Qtype]
 	defer func() {
-		dlog.Debugf(c, "%s%-6s %s -> %s %s", pfx, qts, q.Name, rct, txt)
+		dlog.Debugf(c, "%s%5d %-6s %s -> %s %s", pfx, r.Id, qts, q.Name, rct, txt)
 		_ = w.WriteMsg(msg)
 	}()
 

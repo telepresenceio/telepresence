@@ -258,11 +258,8 @@ func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rr
 	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
 	s.dnsLookups++
 
-	r, err := s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{
-		Session: s.session,
-		Name:    q.Name[:len(q.Name)-1],
-	})
-	if err != nil {
+	var r *manager.LookupHostResponse
+	if r, err = s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{Session: s.session, Name: q.Name[:len(q.Name)-1]}); err != nil {
 		s.dnsFailures++
 		return nil, dns2.RcodeServerFailure, err
 	}
