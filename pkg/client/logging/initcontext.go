@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,22 +20,6 @@ import (
 
 // loggerForTest exposes internals to initcontext_test.go
 var loggerForTest *logrus.Logger
-
-func dupStdX(name string, dupFd func(*os.File) error, logger *logrus.Logger) error {
-	r, w, err := os.Pipe()
-	if err != nil {
-		return err
-	}
-	if err = dupFd(w); err != nil {
-		return err
-	}
-	go func() {
-		if _, err := io.Copy(logger.WithField("THREAD", name).Writer(), r); err != nil {
-			logger.Errorf("%s copy failed: %v", name, err)
-		}
-	}()
-	return nil
-}
 
 // InitContext sets up standard Telepresence logging for a background process
 func InitContext(ctx context.Context, name string, strategy RotationStrategy, captureStd bool) (context.Context, error) {
@@ -70,10 +53,10 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 		logger.SetOutput(rf)
 
 		if captureStd {
-			if err := dupStdX("stdout", dupToStdOut, logger); err != nil {
+			if err := dupToStdOut(rf.file); err != nil {
 				return ctx, err
 			}
-			if err := dupStdX("stderr", dupToStdErr, logger); err != nil {
+			if err := dupToStdErr(rf.file); err != nil {
 				return ctx, err
 			}
 		}
