@@ -1,0 +1,6 @@
+dependencies:
+- name: ambassador-agent
+  repository: https://getambassador.io/
+  version: 0.0.9
+digest: sha256:316bd3bb3e6c4075c94a2c356c32c60b5c56ad6befa98f0ac2018c02943e5b0f
+generated: "2022-09-20T14:36:52.565549-07:00"

@@ -2,14 +2,23 @@ package charts
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"embed"
+	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
+	"os"
+	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/repo"
 	"sigs.k8s.io/yaml"
 )
 
@@ -31,7 +40,7 @@ func filePriority(filename string) int {
 	return prio
 }
 
-func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content []byte) error {
+func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content io.Reader) error {
 	// Build the tar.Header.
 	fi, err := fs.Stat(vfs, filename)
 	if err != nil {
@@ -43,7 +52,11 @@ func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content []byte) 
 	}
 	header.Name = filename
 	header.Mode = 0644
-	header.Size = int64(len(content))
+	header.Size = fi.Size()
+
+	if br, ok := content.(*bytes.Reader); ok {
+		header.Size = br.Size()
+	}
 
 	// Write the tar.Header.
 	if err := tarWriter.WriteHeader(header); err != nil {
@@ -51,7 +64,7 @@ func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content []byte) 
 	}
 
 	// Write the content.
-	if _, err := tarWriter.Write(content); err != nil {
+	if _, err := io.Copy(tarWriter, content); err != nil {
 		return err
 	}
 
@@ -66,6 +79,9 @@ func WriteChart(out io.Writer, version string) error {
 	if err := fs.WalkDir(helmDir, ".", func(filename string, dirent fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if dirent.Type().IsDir() && dirent.Name() == "charts" {
+			return filepath.SkipDir
 		}
 		if dirent.Type().IsRegular() {
 			filenames = append(filenames, filename)
@@ -95,6 +111,7 @@ func WriteChart(out io.Writer, version string) error {
 
 	tarWriter := tar.NewWriter(zipper)
 
+	agentVersion := ""
 	for _, filename := range filenames {
 		switch filename {
 		case "telepresence/Chart.yaml":
@@ -108,11 +125,19 @@ func WriteChart(out io.Writer, version string) error {
 			}
 			dat.Version = version
 			dat.AppVersion = version
+
+			for _, dep := range dat.Dependencies {
+				if dep.Name == "ambassador-agent" {
+					agentVersion = dep.Version
+					break
+				}
+			}
+
 			content, err = yaml.Marshal(dat)
 			if err != nil {
 				return err
 			}
-			if err := addFile(tarWriter, helmDir, filename, content); err != nil {
+			if err := addFile(tarWriter, helmDir, filename, bytes.NewReader(content)); err != nil {
 				return err
 			}
 		default:
@@ -120,10 +145,38 @@ func WriteChart(out io.Writer, version string) error {
 			if err != nil {
 				return err
 			}
-			if err := addFile(tarWriter, helmDir, filename, content); err != nil {
+			if err := addFile(tarWriter, helmDir, filename, bytes.NewReader(content)); err != nil {
 				return err
 			}
 		}
+	}
+
+	a8rAgentCacheDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return err
+	}
+	aacu := ambassadadorAgentChartUpdate{
+		chartName: "ambassador-agent",
+		repoName:  "datawire",
+		repoURL:   "https://getambassador.io",
+		cacheDir:  a8rAgentCacheDir,
+		chartDir:  filepath.Join(a8rAgentCacheDir, "telepresence/charts"),
+		version:   agentVersion,
+	}
+	a8rAgentChartName, err := aacu.execute()
+	if err != nil {
+		return err
+	}
+
+	agentChartFile, err := os.Open(filepath.Join(aacu.chartDir, a8rAgentChartName))
+	if err != nil {
+		return err
+	}
+	defer agentChartFile.Close()
+	a8rAgentChartPath := filepath.Join("telepresence/charts", a8rAgentChartName)
+	err = addFile(tarWriter, os.DirFS(aacu.cacheDir), a8rAgentChartPath, agentChartFile)
+	if err != nil {
+		return err
 	}
 
 	if err := tarWriter.Close(); err != nil {
@@ -134,4 +187,98 @@ func WriteChart(out io.Writer, version string) error {
 	}
 
 	return nil
+}
+
+type ambassadadorAgentChartUpdate struct {
+	cacheDir  string
+	repoName  string
+	chartName string
+	chartDir  string
+	repoURL   string
+	version   string
+}
+
+func (aacu ambassadadorAgentChartUpdate) execute() (string, error) {
+	settings := cli.New()
+	entry := repo.Entry{
+		Name: aacu.repoName,
+		URL:  aacu.repoURL,
+	}
+
+	chartRepo, err := repo.NewChartRepository(&entry, getter.All(settings))
+	if err != nil {
+		return "", err
+	}
+	chartRepo.CachePath = aacu.cacheDir
+
+	indexFilePath, err := chartRepo.DownloadIndexFile()
+	if err != nil {
+		return "", err
+	}
+
+	indexFile, err := repo.LoadIndexFile(indexFilePath)
+	if err != nil {
+		return "", err
+	}
+
+	var a8rAgentCharts repo.ChartVersions
+	for name, charts := range indexFile.Entries {
+		if name == aacu.chartName {
+			a8rAgentCharts = charts
+			break
+		}
+	}
+
+	if len(a8rAgentCharts) == 0 {
+		return "", fmt.Errorf("no charts versions found for %s", aacu.chartName)
+	}
+
+	var chart *repo.ChartVersion
+	switch aacu.version {
+	case "": // get latest version
+		sort.Sort(a8rAgentCharts)
+		chart = a8rAgentCharts[len(a8rAgentCharts)-1]
+	default:
+		chartVersion := strings.TrimPrefix(aacu.version, "v")
+		for _, c := range a8rAgentCharts {
+			if c.Version == chartVersion {
+				chart = c
+			}
+		}
+	}
+
+	if chart == nil {
+		return "", fmt.Errorf("unable to obtain chart")
+	}
+
+	chartURL := chart.URLs[0]
+	response, err := http.Get(chartURL)
+	if err != nil {
+		return "", err
+	}
+
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("received non 200 status code: %d", response.StatusCode)
+	}
+
+	defer response.Body.Close()
+
+	if err := os.MkdirAll(aacu.chartDir, 0700); err != nil {
+		return "", err
+	}
+
+	chartFileName := path.Base(chartURL)
+	chartFilePath := filepath.Join(aacu.chartDir, chartFileName)
+	file, err := os.Create(chartFilePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, response.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return chartFileName, nil
 }

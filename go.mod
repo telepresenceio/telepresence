@@ -177,6 +177,7 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220712132514-bdd2acd4974d // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	helm.sh/helm v2.17.0+incompatible
 	k8s.io/apiextensions-apiserver v0.24.2 // indirect
 	k8s.io/apiserver v0.24.2 // indirect
 	k8s.io/component-base v0.24.2 // indirect
@@ -187,6 +188,12 @@ require (
 	sigs.k8s.io/kustomize/api v0.11.4 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.13.6 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
+)
+
+require (
+	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/ghodss/yaml v1.0.0 // indirect
+	k8s.io/helm v2.17.0+incompatible // indirect
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
