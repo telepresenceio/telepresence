@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/miekg/dns"
-
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
@@ -21,7 +19,7 @@ const RcodeNoAgents = 3841
 
 // AgentsLookupDNS will send the given request to all agents currently intercepted by the client identified with
 // the clientSessionID, it will then wait for results to arrive, collect those results, and return the result.
-func (s *State) AgentsLookupDNS(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) ([]dns.RR, int, error) {
+func (s *State) AgentsLookupDNS(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) (dnsproxy.RRs, int, error) {
 	rs, err := s.agentsLookup(ctx, clientSessionID, request)
 	if err != nil {
 		return nil, 0, err
@@ -29,10 +27,10 @@ func (s *State) AgentsLookupDNS(ctx context.Context, clientSessionID string, req
 	if len(rs) == 0 {
 		return nil, RcodeNoAgents, nil
 	}
-	var bestRRs []dns.RR
+	var bestRRs dnsproxy.RRs
 	bestRcode := math.MaxInt
 	for _, r := range rs {
-		rrs, rCode, err := dnsproxy.FromRPC(r.(*rpc.DNSResponse))
+		rrs, rCode, err := dnsproxy.FromRPC(r)
 		if err != nil {
 			return nil, rCode, err
 		}
@@ -79,14 +77,14 @@ func (s *State) WatchLookupDNS(agentSessionID string) <-chan *rpc.DNSRequest {
 	return ss.(*agentSessionState).dnsRequests
 }
 
-func (s *State) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) ([]fmt.Stringer, error) {
+func (s *State) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) ([]*rpc.DNSResponse, error) {
 	aIDs := s.getAgentsInterceptedByClient(clientSessionID)
 	aCount := len(aIDs)
 	if aCount == 0 {
 		return nil, nil
 	}
 
-	rsBuf := make(chan fmt.Stringer, aCount)
+	rsBuf := make(chan *rpc.DNSResponse, aCount)
 
 	timout, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -116,7 +114,7 @@ func (s *State) agentsLookup(ctx context.Context, clientSessionID string, reques
 	}
 	wg.Wait() // wait for timeout or that all agents have responded
 	bz := len(rsBuf)
-	rs := make([]fmt.Stringer, bz)
+	rs := make([]*rpc.DNSResponse, bz)
 	for i := 0; i < bz; i++ {
 		rs[i] = <-rsBuf
 	}

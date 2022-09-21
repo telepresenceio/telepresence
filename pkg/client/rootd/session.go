@@ -233,7 +233,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 }
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result
-func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) ([]dns2.RR, int, error) {
+func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
 	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
 	s.dnsLookups++
 
@@ -250,7 +250,7 @@ func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) ([]dns2.R
 }
 
 // clusterLookup sends a LookupHost request to the traffic-manager and returns the result
-func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) ([]dns2.RR, int, error) {
+func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rrs dnsproxy.RRs, rCode int, err error) {
 	qType := q.Qtype
 	if !(qType == dns2.TypeA || qType == dns2.TypeAAAA) {
 		return nil, dns2.RcodeNotImplemented, nil
@@ -273,7 +273,6 @@ func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) ([]
 	rrHeader := func() dns2.RR_Header {
 		return dns2.RR_Header{Name: q.Name, Rrtype: qType, Class: dns2.ClassINET, Ttl: 4}
 	}
-	var rrs []dns2.RR
 	for _, ip := range ips {
 		if ip4 := ip.To4(); ip4 != nil {
 			rrs = append(rrs, &dns2.A{

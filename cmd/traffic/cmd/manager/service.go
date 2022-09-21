@@ -828,10 +828,10 @@ func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.Loo
 	request := response.Request
 	dlog.Debugf(ctx, "AgentLookupHostResponse called %s -> %s", request.Name, ips)
 	rcode := dns2.RcodeNameError
-	var rrs []dns2.RR
+	var rrs dnsproxy.RRs
 	if len(ips) > 0 {
 		rcode = dns2.RcodeSuccess
-		rrs = make([]dns2.RR, len(ips))
+		rrs = make(dnsproxy.RRs, len(ips))
 		for i, ip := range ips {
 			rrs[i] = &dns2.A{Hdr: dnsproxy.NewHeader(request.Name, dns2.TypeA), A: ip}
 		}
@@ -887,7 +887,7 @@ func (m *Manager) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.
 		if len(rrs) == 0 {
 			dlog.Debugf(ctx, "LookupDNS on agents: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
 		} else {
-			dlog.Debugf(ctx, "LookupDNS on agents: %s %s -> %v", request.Name, qtn, rrs)
+			dlog.Debugf(ctx, "LookupDNS on agents: %s %s -> %s", request.Name, qtn, rrs)
 		}
 	}
 	if rCode == state.RcodeNoAgents {
@@ -899,7 +899,7 @@ func (m *Manager) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.
 		if len(rrs) == 0 {
 			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
 		} else {
-			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %v", request.Name, qtn, rrs)
+			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s", request.Name, qtn, rrs)
 		}
 	}
 	return dnsproxy.ToRPC(rrs, rCode)

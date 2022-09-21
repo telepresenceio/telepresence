@@ -20,11 +20,12 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-type Resolver func(context.Context, *dns.Question) ([]dns.RR, int, error)
+type Resolver func(context.Context, *dns.Question) (dnsproxy.RRs, int, error)
 
 // recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
 // is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
@@ -55,7 +56,7 @@ type Server struct {
 	requestCount int64
 	cache        sync.Map
 	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
-	cacheResolve func(*dns.Question) ([]dns.RR, int, error)
+	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
@@ -84,7 +85,7 @@ type Server struct {
 type cacheEntry struct {
 	created      time.Time
 	currentQType int32 // will be set to the current qType during call to cluster
-	answer       []dns.RR
+	answer       dnsproxy.RRs
 	rCode        int
 	wait         chan struct{}
 }
@@ -186,7 +187,7 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	return true
 }
 
-func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result []dns.RR, rCode int, err error) {
+func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
 	query := q.Name
 	query = strings.ToLower(query)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
@@ -202,12 +203,12 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result []
 		// root-cause this, because it's weird.
 		switch q.Qtype {
 		case dns.TypeA:
-			return []dns.RR{&dns.A{
+			return dnsproxy.RRs{&dns.A{
 				Hdr: dns.RR_Header{},
 				A:   localhostIPv4,
 			}}, dns.RcodeSuccess, nil
 		case dns.TypeAAAA:
-			return []dns.RR{&dns.AAAA{
+			return dnsproxy.RRs{&dns.AAAA{
 				Hdr:  dns.RR_Header{},
 				AAAA: localhostIPv6,
 			}}, dns.RcodeSuccess, nil
@@ -350,11 +351,11 @@ func (s *Server) RequestCount() int {
 	return int(atomic.LoadInt64(&s.requestCount))
 }
 
-func copyRRs(rrs []dns.RR, qType uint16) []dns.RR {
+func copyRRs(rrs dnsproxy.RRs, qType uint16) dnsproxy.RRs {
 	if len(rrs) == 0 {
 		return rrs
 	}
-	cp := make([]dns.RR, 0, len(rrs))
+	cp := make(dnsproxy.RRs, 0, len(rrs))
 	for _, rr := range rrs {
 		if rr.Header().Rrtype == qType {
 			cp = append(cp, dns.Copy(rr))
@@ -371,7 +372,7 @@ type cacheKey struct {
 // resolveThruCache resolves the given query by first performing a cache lookup. If a cached
 // entry is found that hasn't expired, it's returned. If not, this function will call
 // resolveQuery() to resolve and store in the case.
-func (s *Server) resolveThruCache(q *dns.Question) ([]dns.RR, int, error) {
+func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
@@ -392,7 +393,7 @@ func (s *Server) resolveThruCache(q *dns.Question) ([]dns.RR, int, error) {
 // resolveWithRecursionCheck is a special version of resolveThruCache which is only used until the
 // recursionCheck query has completed, and it has been determined whether a query that is propagated
 // to the cluster will recurse back to this resolver or not.
-func (s *Server) resolveWithRecursionCheck(q *dns.Question) ([]dns.RR, int, error) {
+func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
@@ -482,23 +483,9 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	q := &r.Question[0]
 	atomic.AddInt64(&s.requestCount, 1)
 
-	answerString := func(a []dns.RR) string {
-		if a == nil {
-			return ""
-		}
-		switch len(a) {
-		case 0:
-			return "EMPTY"
-		case 1:
-			return a[0].String()
-		default:
-			return fmt.Sprintf("%v", a)
-		}
-	}
-
 	var err error
 	var rCode int
-	var answer []dns.RR
+	var answer dnsproxy.RRs
 	if s.onlyNames {
 		qt := q.Qtype
 		if qt != dns.TypeA && qt != dns.TypeAAAA {
@@ -537,7 +524,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		// single dns server, this will prevent us
 		// from intercepting all queries
 		msg.RecursionAvailable = true
-		txt = func() string { return answerString(msg.Answer) }
+		txt = func() string { return answer.String() }
 		return
 	}
 
@@ -578,7 +565,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		msg.SetRcode(r, rCode)
 	} else {
 		rCode = msg.Rcode
-		txt = func() string { return answerString(msg.Answer) }
+		txt = func() string { return dnsproxy.RRs(msg.Answer).String() }
 	}
 }
 
@@ -586,7 +573,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 // keep this low to avoid such caching.
 const dnsTTL = 4
 
-func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) ([]dns.RR, int, error) {
+func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, int, error) {
 	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
 	defer func() {
 		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))

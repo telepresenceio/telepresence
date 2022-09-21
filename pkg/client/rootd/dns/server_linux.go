@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -78,7 +79,7 @@ func (s *Server) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (s *Server) resolveInSearch(c context.Context, q *dns.Question) ([]dns.RR, int, error) {
+func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.RRs, int, error) {
 	query := strings.ToLower(q.Name)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 

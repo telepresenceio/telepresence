@@ -13,7 +13,7 @@ func ManagerCanDoDNSQueryTypes(v semver.Version) bool {
 	return v.Major > 2 || v.Major == 2 && v.Minor > 7
 }
 
-func ToRPC(rrs []dns.RR, rCode int) (*manager.DNSResponse, error) {
+func ToRPC(rrs RRs, rCode int) (*manager.DNSResponse, error) {
 	l := 0
 	for _, rr := range rrs {
 		l += dns.Len(rr)
@@ -31,9 +31,9 @@ func ToRPC(rrs []dns.RR, rCode int) (*manager.DNSResponse, error) {
 	return rsp, nil
 }
 
-func FromRPC(r *manager.DNSResponse) ([]dns.RR, int, error) {
+func FromRPC(r *manager.DNSResponse) (RRs, int, error) {
 	rrb := r.Rrs
-	var rrs []dns.RR
+	var rrs RRs
 	off := 0
 	for len(rrb) > off {
 		var rr dns.RR
