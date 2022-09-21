@@ -61,10 +61,12 @@ type connectorStatus struct {
 }
 
 type connectorStatusAmbassadorCloud struct {
-	Status    string `json:"status,omitempty"`
-	UserID    string `json:"user_id,omitempty"`
-	AccountID string `json:"account_id,omitempty"`
-	Email     string `json:"email,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Username    string `json:"username,omitempty"`
+	UserID      string `json:"user_id,omitempty"`
+	AccountID   string `json:"account_id,omitempty"`
+	AccountName string `json:"account_name,omitempty"`
+	Email       string `json:"email,omitempty"`
 }
 
 type connectStatusIntercept struct {
@@ -177,8 +179,10 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*connectorStatus, err
 				cs.AmbassadorCloud.Status = "Login expired (or otherwise no-longer-operational)"
 			} else {
 				cs.AmbassadorCloud.Status = "Logged in"
+				cs.AmbassadorCloud.Username = userInfo.Name
 				cs.AmbassadorCloud.UserID = userInfo.Id
 				cs.AmbassadorCloud.AccountID = userInfo.AccountId
+				cs.AmbassadorCloud.AccountName = userInfo.AccountName
 				cs.AmbassadorCloud.Email = userInfo.Email
 			}
 		}
@@ -275,10 +279,12 @@ func (s *statusInfo) printConnectorText(cs *connectorStatus) {
 		s.printf("  Executable      : %s\n", cs.Executable)
 		s.printf("  Install ID      : %s\n", cs.InstallID)
 		s.printf("  Ambassador Cloud:\n")
-		s.printf("    Status    : %s\n", cs.AmbassadorCloud.Status)
-		s.printf("    User ID   : %s\n", cs.AmbassadorCloud.UserID)
-		s.printf("    Account ID: %s\n", cs.AmbassadorCloud.AccountID)
-		s.printf("    Email     : %s\n", cs.AmbassadorCloud.Email)
+		s.printf("    Status      : %s\n", cs.AmbassadorCloud.Status)
+		s.printf("    User ID     : %s\n", cs.AmbassadorCloud.UserID)
+		s.printf("    Account ID  : %s\n", cs.AmbassadorCloud.AccountID)
+		s.printf("    User Name   : %s\n", cs.AmbassadorCloud.Username)
+		s.printf("    Email       : %s\n", cs.AmbassadorCloud.Email)
+		s.printf("    Account Name: %s\n", cs.AmbassadorCloud.AccountName)
 		s.printf("  Status            : %s\n", cs.Status)
 		if cs.Error != "" {
 			s.printf("  Error             : %s\n", cs.Error)
