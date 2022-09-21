@@ -14,3 +14,4 @@ dependencies:
   - name: ambassador-agent
     version: "v0.0.9"
     repository: https://getambassador.io/
+    condition: ambassador-agent.enabled
