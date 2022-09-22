@@ -117,12 +117,9 @@ func withNetwork(ctx context.Context, maybeStart bool, fn func(context.Context, 
 	return fn(ctx, daemonClient)
 }
 
-type quitting struct{}
-
 // Disconnect shuts down a session in the root daemon. When it shuts down, it will tell the connector to shut down.
 func Disconnect(ctx context.Context, quitUserDaemon, quitRootDaemon bool) (err error) {
 	stdout, stderr := output.Structured(ctx)
-	ctx = context.WithValue(ctx, quitting{}, true)
 	defer func() {
 		// Ensure the connector is killed even if daemon isn't running.  If the daemon already
 		// shut down the connector, then this is a no-op.

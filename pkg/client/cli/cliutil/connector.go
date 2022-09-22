@@ -176,13 +176,6 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 		if quitUserDaemon {
 			fmt.Fprint(stdout, "quitting...")
 		} else {
-			var ci *connector.ConnectInfo
-			if ci, err = connectorClient.Status(ctx, &empty.Empty{}); err != nil {
-				return err
-			}
-			if ci.Error == connector.ConnectInfo_DISCONNECTED {
-				return ErrNoUserDaemon
-			}
 			fmt.Fprint(stdout, "disconnecting...")
 			if _, err = connectorClient.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
 				// nil or not unimplemented

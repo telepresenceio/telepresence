@@ -92,9 +92,9 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Returns true if the string is encountered before a '--' or end of list. This
+// IsCommand returns true if the string is encountered before a '--' or end of list. This
 // is a best effort, and it might give us false positives.
-func isCommand(s string) bool {
+func IsCommand(s string) bool {
 	prev := ""
 	for _, arg := range os.Args[1:] {
 		if arg == "--" {
@@ -153,7 +153,7 @@ func Command(ctx context.Context) *cobra.Command {
 	}
 
 	var groups = make(cliutil.CommandGroups)
-	if !isCommand("quit") && !userWantsRootLevelHelp() {
+	if !IsCommand("quit") && !userWantsRootLevelHelp() {
 		// These are commands that known to always exist in the user daemon. If the daemon
 		// isn't running, it will be started just to retrieve the command spec.
 		wellknownRemoteCommands := []string{
@@ -165,7 +165,7 @@ func Command(ctx context.Context) *cobra.Command {
 		var err error
 		wellKnown := false
 		for _, w := range wellknownRemoteCommands {
-			if isCommand(w) {
+			if IsCommand(w) {
 				wellKnown = true
 				break
 			}
@@ -175,7 +175,7 @@ func Command(ctx context.Context) *cobra.Command {
 				// This is not a problem if the command is known to the CLI
 				for _, g := range static {
 					for _, c := range g {
-						if isCommand(c.Name()) {
+						if IsCommand(c.Name()) {
 							err = nil
 						}
 					}

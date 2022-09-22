@@ -17,7 +17,7 @@ type daemonClient interface {
 }
 
 func versionCheck(ctx context.Context, daemonType string, daemonBinary string, configuredDaemon bool, daemon daemonClient) error {
-	if ctx.Value(quitting{}) != nil {
+	if IsQuitting(ctx) {
 		return nil
 	}
 	var quitFlag string
