@@ -8,12 +8,14 @@ package daemon
 
 import (
 	context "context"
-	common "github.com/telepresenceio/telepresence/rpc/v2/common"
-	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
+
+	common "github.com/telepresenceio/telepresence/rpc/v2/common"
+	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -41,6 +43,8 @@ type DaemonClient interface {
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
 	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// WaitForNetwork waits for the network of the currently connected session to become ready.
+	WaitForNetwork(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type daemonClient struct {
@@ -123,6 +127,15 @@ func (c *daemonClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequ
 	return out, nil
 }
 
+func (c *daemonClient) WaitForNetwork(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/WaitForNetwork", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility
@@ -143,6 +156,8 @@ type DaemonServer interface {
 	SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
 	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
+	// WaitForNetwork waits for the network of the currently connected session to become ready.
+	WaitForNetwork(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -173,6 +188,9 @@ func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*emp
 }
 func (UnimplementedDaemonServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
+}
+func (UnimplementedDaemonServer) WaitForNetwork(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WaitForNetwork not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 
@@ -331,6 +349,24 @@ func _Daemon_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_WaitForNetwork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).WaitForNetwork(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.daemon.Daemon/WaitForNetwork",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).WaitForNetwork(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -369,6 +405,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetLogLevel",
 			Handler:    _Daemon_SetLogLevel_Handler,
+		},
+		{
+			MethodName: "WaitForNetwork",
+			Handler:    _Daemon_WaitForNetwork_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

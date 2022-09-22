@@ -141,6 +141,16 @@ func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty,
 	return &empty.Empty{}, nil
 }
 
+func (d *service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Empty, error) {
+	err := d.withSession(ctx, func(ctx context.Context, session *session) error {
+		if err, ok := <-session.networkReady(ctx); ok {
+			return status.Error(codes.Unavailable, err.Error())
+		}
+		return nil
+	})
+	return &empty.Empty{}, err
+}
+
 func (d *service) cancelSession() {
 	if !atomic.CompareAndSwapInt32(&d.sessionQuitting, 0, 1) {
 		return
@@ -274,7 +284,12 @@ nextSession:
 		// the session is running. The d.session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer func() {
+				d.sessionLock.Lock()
+				d.session = nil
+				d.sessionLock.Unlock()
+				wg.Done()
+			}()
 			if err := d.session.run(d.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}

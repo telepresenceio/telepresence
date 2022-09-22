@@ -42,7 +42,7 @@ type FallbackPool interface {
 }
 
 const (
-	recursionUnknown = int32(iota)
+	_ = int32(iota)
 	recursionNotDetected
 	recursionDetected
 	recursionTestInProgress
@@ -80,6 +80,9 @@ type Server struct {
 	// onlyNames is set to true when using a legacy traffic-manager incapable of
 	// using query types
 	onlyNames bool
+
+	// ready is closed when the DNS server is fully configured
+	ready chan error
 }
 
 type cacheEntry struct {
@@ -123,6 +126,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 		clusterDomain: defaultClusterDomain,
 		clusterLookup: clusterLookup,
 		onlyNames:     onlyNames,
+		ready:         make(chan error, 2),
 	}
 	s.cacheResolve = s.resolveWithRecursionCheck
 	return s
@@ -249,6 +253,19 @@ func (s *Server) GetConfig() *rpc.DNSConfig {
 	return dnsConfig
 }
 
+func (s *Server) Ready() <-chan error {
+	return s.ready
+}
+
+func (s *Server) Stop() {
+	// Close s.ready unless it's already closed
+	select {
+	case <-s.ready:
+	default:
+		close(s.ready)
+	}
+}
+
 func (s *Server) SetClusterDNS(dns *manager.DNS) {
 	s.clusterDomain = dns.ClusterDomain
 	if s.config == nil {
@@ -257,8 +274,24 @@ func (s *Server) SetClusterDNS(dns *manager.DNS) {
 	if s.config.RemoteIp == nil {
 		s.config.RemoteIp = dns.KubeIp
 	}
-	s.config.ExcludeSuffixes = append(s.config.ExcludeSuffixes, dns.ExcludeSuffixes...)
-	s.config.IncludeSuffixes = append(s.config.IncludeSuffixes, dns.IncludeSuffixes...)
+	contains := func(s []string, a string) bool {
+		for _, x := range s {
+			if x == a {
+				return true
+			}
+		}
+		return false
+	}
+	appendUnique := func(a, b []string) []string {
+		for _, x := range b {
+			if !contains(a, x) {
+				a = append(a, x)
+			}
+		}
+		return a
+	}
+	s.config.ExcludeSuffixes = appendUnique(s.config.ExcludeSuffixes, dns.ExcludeSuffixes)
+	s.config.IncludeSuffixes = appendUnique(s.config.IncludeSuffixes, dns.IncludeSuffixes)
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
@@ -283,6 +316,8 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 }
 
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
+	g.Go("RecursionCheck", s.performRecursionCheck)
+
 	g.Go("SearchPaths", func(c context.Context) error {
 		var prevPaths []string
 		unchanged := func(paths []string) bool {
@@ -312,16 +347,6 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 					copy(prevPaths, paths)
 					if err := processor(c, paths, dev); err != nil {
 						return err
-					}
-					if atomic.LoadInt32(&s.recursive) == recursionUnknown {
-						for _, p := range prevPaths {
-							if p == "kube-system" {
-								if atomic.CompareAndSwapInt32(&s.recursive, recursionUnknown, recursionTestInProgress) {
-									go s.performRecursionCheck(c)
-								}
-								break
-							}
-						}
 					}
 				}
 			}
@@ -435,7 +460,8 @@ func (d dfs) String() string {
 	return d()
 }
 
-func (s *Server) performRecursionCheck(c context.Context) {
+func (s *Server) performRecursionCheck(c context.Context) error {
+	defer close(s.ready)
 	const maxRetry = 10
 	defer dlog.Debug(c, "Recursion check finished")
 	rc := strings.TrimSuffix(recursionCheck, ".")
@@ -452,7 +478,7 @@ func (s *Server) performRecursionCheck(c context.Context) {
 			dlog.Errorf(c, "recursion check ended with %v", err)
 		}
 		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
-			return
+			return nil
 		}
 		// Check didn't hit our resolver. Try again after a second
 		dtime.SleepWithContext(c, time.Second)
@@ -461,13 +487,16 @@ func (s *Server) performRecursionCheck(c context.Context) {
 		// to retry if it did, because that will give the false impression that
 		// the resolver is recursive.
 		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
-			return
+			return nil
 		}
 		dlog.Debug(c, "retrying recursion check")
 	}
 	if i == maxRetry {
-		dlog.Errorf(c, "recursion check failed. The DNS isn't working properly")
+		err := errors.New("recursion check failed. The DNS isn't working properly")
+		s.ready <- err
+		return err
 	}
+	return nil
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.

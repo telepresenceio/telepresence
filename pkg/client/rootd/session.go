@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -140,6 +141,9 @@ type session struct {
 
 	// Whether pods and services should be proxied by the TUN-device
 	proxyCluster bool
+
+	// vifReady is closed when the virtual network interface has been configured.
+	vifReady chan error
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible
@@ -217,6 +221,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		alsoProxySubnets: convertSubnets(c, mi.AlsoProxySubnets),
 		neverProxyRoutes: routing.Routes(c, convertSubnets(c, mi.NeverProxySubnets)),
 		proxyCluster:     true,
+		vifReady:         make(chan error, 2),
 	}
 
 	s.dev, err = vif.OpenTun(c, &s.closing)
@@ -403,7 +408,31 @@ func (s *session) refreshSubnets(ctx context.Context) (err error) {
 	return s.reconcileStaticRoutes(ctx)
 }
 
-func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struct{}) {
+// networkReady returns a channel that is close when both the VIF and DNS are ready
+func (s *session) networkReady(ctx context.Context) <-chan error {
+	rdy := make(chan error, 2)
+	go func() {
+		defer close(rdy)
+		select {
+		case <-ctx.Done():
+		case err, ok := <-s.vifReady:
+			if ok {
+				rdy <- err
+			} else {
+				select {
+				case <-ctx.Done():
+				case err, ok = <-s.dnsServer.Ready():
+					if ok {
+						rdy <- err
+					}
+				}
+			}
+		}
+	}()
+	return rdy
+}
+
+func (s *session) watchClusterInfo(ctx context.Context) {
 	backoff := 100 * time.Millisecond
 
 	for ctx.Err() == nil {
@@ -432,50 +461,17 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 				break
 			}
 			ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "ClusterInfoUpdate")
-			if cfgComplete != nil {
-				s.checkConnectivity(ctx, mgrInfo)
-				if ctx.Err() != nil {
-					span.End()
-					return
-				}
-				dns := mgrInfo.Dns
-				if dns == nil {
-					// Older traffic-manager. Use deprecated mgrInfo fields for DNS
-					dns = &manager.DNS{
-						KubeIp:        mgrInfo.KubeDnsIp,
-						ClusterDomain: mgrInfo.ClusterDomain,
+			select {
+			case <-s.vifReady:
+				s.onClusterInfo(ctx, mgrInfo, span)
+			default:
+				if err = s.onFirstClusterInfo(ctx, mgrInfo, span); err != nil {
+					if !errors.Is(err, context.Canceled) {
+						dlog.Error(ctx, err)
 					}
-				}
-				remoteIp := net.IP(dns.KubeIp)
-				dlog.Infof(ctx, "Setting cluster DNS to %s", remoteIp)
-				dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
-				s.dnsServer.SetClusterDNS(dns)
-				s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator())
-				if err != nil {
-					dlog.Errorf(ctx, "NewStack: %v", err)
 					return
 				}
-
-				if r := mgrInfo.Routing; r != nil {
-					s.alsoProxySubnets = subnet.Unique(append(s.alsoProxySubnets, convertSubnets(ctx, r.AlsoProxySubnets)...))
-					nps := subnet.Unique(append(routing.Subnets(s.neverProxyRoutes), convertSubnets(ctx, r.NeverProxySubnets)...))
-					s.neverProxyRoutes = routing.Routes(ctx, nps)
-				}
-
-				close(cfgComplete)
-				cfgComplete = nil
-				span.SetAttributes(
-					attribute.Bool("tel2.proxy-cluster", s.proxyCluster),
-					attribute.Bool("tel2.cfg-complete", false),
-					attribute.Stringer("tel2.cluster-dns", remoteIp),
-					attribute.String("tel2.cluster-domain", dns.ClusterDomain),
-				)
-			} else {
-				span.SetAttributes(
-					attribute.Bool("cfgComplete", false),
-				)
 			}
-			s.onClusterInfo(ctx, mgrInfo)
 			span.End()
 		}
 		dtime.SleepWithContext(ctx, backoff)
@@ -486,8 +482,39 @@ func (s *session) watchClusterInfo(ctx context.Context, cfgComplete chan<- struc
 	}
 }
 
-func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+func (s *session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
+	defer close(s.vifReady)
+	s.checkConnectivity(ctx, mgrInfo)
+	err := ctx.Err()
+	if err != nil {
+		return err
+	}
+	if s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator()); err != nil {
+		return fmt.Errorf("NewStack: %v", err)
+	}
+	s.onClusterInfo(ctx, mgrInfo, span)
+	return nil
+}
+
+func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) {
 	dlog.Debugf(ctx, "WatchClusterInfo update")
+	dns := mgrInfo.Dns
+	if dns == nil {
+		// Older traffic-manager. Use deprecated mgrInfo fields for DNS
+		dns = &manager.DNS{
+			KubeIp:        mgrInfo.KubeDnsIp,
+			ClusterDomain: mgrInfo.ClusterDomain,
+		}
+	}
+	dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(dns.KubeIp))
+	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
+	s.dnsServer.SetClusterDNS(dns)
+
+	if r := mgrInfo.Routing; r != nil {
+		s.alsoProxySubnets = subnet.Unique(append(s.alsoProxySubnets, convertSubnets(ctx, r.AlsoProxySubnets)...))
+		nps := subnet.Unique(append(routing.Subnets(s.neverProxyRoutes), convertSubnets(ctx, r.NeverProxySubnets)...))
+		s.neverProxyRoutes = routing.Routes(ctx, nps)
+	}
 
 	subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
 	if s.proxyCluster {
@@ -508,6 +535,12 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	if err := s.refreshSubnets(ctx); err != nil {
 		dlog.Error(ctx, err)
 	}
+
+	span.SetAttributes(
+		attribute.Bool("tel2.proxy-cluster", s.proxyCluster),
+		attribute.Stringer("tel2.cluster-dns", net.IP(dns.KubeIp)),
+		attribute.String("tel2.cluster-domain", dns.ClusterDomain),
+	)
 }
 
 func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterInfo) {
@@ -541,21 +574,31 @@ func (s *session) run(c context.Context) error {
 	cancelDNSLock := sync.Mutex{}
 	cancelDNS := func() {}
 
-	cfgComplete := make(chan struct{})
+	c, cancelGroup := context.WithCancel(c)
+	defer cancelGroup()
 	g.Go("watch-cluster-info", func(ctx context.Context) error {
 		defer func() {
 			cancelDNSLock.Lock()
 			cancelDNS()
 			cancelDNSLock.Unlock()
 		}()
-		s.watchClusterInfo(ctx, cfgComplete)
+		s.watchClusterInfo(ctx)
 		return nil
 	})
 
+	// At this point, we wait until the VIF is ready. It will be, shortly after
+	// the first ClusterInfo is received from the traffic-manager. A timeout
+	// is needed so that we don't wait forever on a traffic-manager that has
+	// been terminated for some reason.
+	wc, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerConnect)
+	defer cancel()
 	select {
-	case <-c.Done():
-		return nil
-	case <-cfgComplete:
+	case <-wc.Done():
+		s.vifReady <- wc.Err()
+		close(s.vifReady)
+		s.dnsServer.Stop()
+		return wc.Err()
+	case <-s.vifReady:
 	}
 
 	// Start the router and the DNS service and wait for the context
@@ -570,6 +613,7 @@ func (s *session) run(c context.Context) error {
 		cancelDNSLock.Unlock()
 		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
 	})
+
 	g.Go("stack", func(_ context.Context) error {
 		s.stack.Wait()
 		return nil

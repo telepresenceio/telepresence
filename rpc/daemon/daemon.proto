@@ -34,6 +34,9 @@ service Daemon {
 
   // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
   rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
+
+  // WaitForNetwork waits for the network of the currently connected session to become ready.
+  rpc WaitForNetwork(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 message DaemonStatus {

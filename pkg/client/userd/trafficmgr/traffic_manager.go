@@ -276,6 +276,15 @@ func NewSession(
 		}
 		dlog.Debug(ctx, "Connected to root daemon")
 		tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)
+
+		tmgr.updateDaemonNamespaces(ctx)
+		if _, err = rootDaemon.WaitForNetwork(ctx, &empty.Empty{}); err != nil {
+			if se, ok := status.FromError(err); ok {
+				err = se.Err()
+			}
+			dlog.Errorf(ctx, "failed to connect to root daemon: %v", err)
+			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
 	}
 
 	// Collect data on how long connection time took
