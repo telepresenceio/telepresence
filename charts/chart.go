@@ -40,13 +40,9 @@ func filePriority(filename string) int {
 	return prio
 }
 
-func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content io.Reader) error {
-	fmt.Printf("adding file to helm chart from %s: %s\n", vfs, filename)
+func addFile(tarWriter *tar.Writer, fi fs.FileInfo, filename string, content io.Reader) error {
+	fmt.Printf("adding file to helm chart: %s\n", filename)
 	// Build the tar.Header.
-	fi, err := fs.Stat(vfs, filename)
-	if err != nil {
-		return err
-	}
 	header, err := tar.FileInfoHeader(fi, "")
 	if err != nil {
 		return err
@@ -144,7 +140,13 @@ func WriteChart(out io.Writer, version string) error {
 			if err != nil {
 				return err
 			}
-			if err := addFile(tarWriter, helmDir, filename, bytes.NewReader(content)); err != nil {
+
+			info, err := fs.Stat(helmDir, filename)
+			if err != nil {
+				return err
+			}
+
+			if err := addFile(tarWriter, info, filename, bytes.NewReader(content)); err != nil {
 				return err
 			}
 		default:
@@ -152,7 +154,13 @@ func WriteChart(out io.Writer, version string) error {
 			if err != nil {
 				return err
 			}
-			if err := addFile(tarWriter, helmDir, filename, bytes.NewReader(content)); err != nil {
+
+			info, err := fs.Stat(helmDir, filename)
+			if err != nil {
+				return err
+			}
+
+			if err := addFile(tarWriter, info, filename, bytes.NewReader(content)); err != nil {
 				return err
 			}
 		}
@@ -180,8 +188,14 @@ func WriteChart(out io.Writer, version string) error {
 		return err
 	}
 	defer agentChartFile.Close()
+
+	fi, err := agentChartFile.Stat()
+	if err != nil {
+		return err
+	}
+
 	packagedA8rAgentChartPath := filepath.Join("telepresence/charts", filepath.Base(a8rAgentChartPath))
-	err = addFile(tarWriter, os.DirFS(aacu.cacheDir), packagedA8rAgentChartPath, agentChartFile)
+	err = addFile(tarWriter, fi, packagedA8rAgentChartPath, agentChartFile)
 	if err != nil {
 		return err
 	}
