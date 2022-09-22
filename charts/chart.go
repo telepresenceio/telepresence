@@ -77,7 +77,7 @@ func WriteChart(out io.Writer, version string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("rwriting chart from :%s\n", cwd)
+	fmt.Printf("writing chart from %s\n", cwd)
 
 	version = strings.TrimPrefix(version, "v")
 
@@ -169,18 +169,18 @@ func WriteChart(out io.Writer, version string) error {
 		chartDir:  filepath.Join(a8rAgentCacheDir, "telepresence/charts"),
 		version:   agentVersion,
 	}
-	a8rAgentChartName, err := aacu.execute()
+	a8rAgentChartPath, err := aacu.execute()
 	if err != nil {
 		return err
 	}
 
-	agentChartFile, err := os.Open(filepath.Join(aacu.chartDir, a8rAgentChartName))
+	agentChartFile, err := os.Open(a8rAgentChartPath)
 	if err != nil {
 		return err
 	}
 	defer agentChartFile.Close()
-	a8rAgentChartPath := filepath.Join("telepresence/charts", a8rAgentChartName)
-	err = addFile(tarWriter, os.DirFS(aacu.cacheDir), a8rAgentChartPath, agentChartFile)
+	packagedA8rAgentChartPath := filepath.Join("telepresence/charts", filepath.Base(a8rAgentChartPath))
+	err = addFile(tarWriter, os.DirFS(aacu.cacheDir), packagedA8rAgentChartPath, agentChartFile)
 	if err != nil {
 		return err
 	}
@@ -288,5 +288,5 @@ func (aacu ambassadadorAgentChartUpdate) execute() (string, error) {
 
 	fmt.Printf("downloaded chart dep to: %s\n", chartFilePath)
 
-	return chartFileName, nil
+	return chartFilePath, nil
 }
