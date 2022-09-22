@@ -107,8 +107,8 @@ func TestInitContext(t *testing.T) {
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
 		s := string(bs)
-		check.Contains(s, fmt.Sprintf("info    stdout : %s\n", infoMsg))
-		check.Contains(s, fmt.Sprintf("info    stderr : %s\n", errMsg))
+		check.Contains(s, infoMsg)
+		check.Contains(s, errMsg)
 	})
 
 	t.Run("captures output of builtin functions", func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestInitContext(t *testing.T) {
 		time.Sleep(30 * time.Millisecond)
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
-		check.Contains(string(bs), fmt.Sprintf("info    stderr : %s\n", msg))
+		check.Contains(string(bs), msg)
 	})
 
 	t.Run("captures output of standard logger", func(t *testing.T) {
