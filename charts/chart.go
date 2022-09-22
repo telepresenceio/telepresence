@@ -41,6 +41,7 @@ func filePriority(filename string) int {
 }
 
 func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content io.Reader) error {
+	fmt.Printf("adding file to helm chart from %s: %s\n", vfs, filename)
 	// Build the tar.Header.
 	fi, err := fs.Stat(vfs, filename)
 	if err != nil {
