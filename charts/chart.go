@@ -280,5 +280,7 @@ func (aacu ambassadadorAgentChartUpdate) execute() (string, error) {
 		return "", err
 	}
 
+	fmt.Printf("downloaded chart dep to: %s\n", chartFilePath)
+
 	return chartFileName, nil
 }
