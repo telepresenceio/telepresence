@@ -73,6 +73,12 @@ func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content io.Reade
 
 // WriteChart is a minimal `helm package`.
 func WriteChart(out io.Writer, version string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("rwriting chart from :%s\n", cwd)
+
 	version = strings.TrimPrefix(version, "v")
 
 	var filenames []string
