@@ -12,6 +12,6 @@ icon: https://www.getambassador.io/images/logo.png
 appVersion: "BOGUS--gets-overridden-by-charts.go"
 dependencies:
   - name: ambassador-agent
-    version: "v0.0.9"
+    version: v0.1.0-rc.3
     repository: https://getambassador.io/
     condition: ambassador-agent.enabled
