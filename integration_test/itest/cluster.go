@@ -234,6 +234,7 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.
 	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,clusterrole,clusterrolebinding", "-l", "app=traffic-manager")
+	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,clusterrole,clusterrolebinding", "-l", "app.kubernetes.io/instance=traffic-manager")
 
 	err := Run(ctx, "kubectl", "apply", "-f", filepath.Join("k8s", "client_rbac.yaml"))
 	require.NoError(t, err, "failed to create %s service account", TestUser)
@@ -452,6 +453,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
+		"--set", fmt.Sprintf("ambassador-agent.rbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
 		"--set", "systemaHost=127.0.0.1",
 	}

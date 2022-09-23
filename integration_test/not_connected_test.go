@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/datawire/dlib/dlog"
+
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -27,6 +29,15 @@ func (s *notConnectedSuite) SetupSuite() {
 	s.Contains(stdout, "Connected to context")
 	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
+}
+
+func (s *notConnectedSuite) TearDownSuite() {
+	ctx := itest.WithUser(s.Context(), "default")
+	dlog.Infof(ctx, "Tearing Down not connected suite")
+	_, _, err := itest.Telepresence(ctx, "helm", "uninstall")
+	if err != nil {
+		dlog.Warnf(ctx, "Error uninstalling telelpresence: %v", err)
+	}
 }
 
 func (s *notConnectedSuite) Test_ConnectWithCommand() {

@@ -3,6 +3,7 @@ package integration_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/stretchr/testify/suite"
 
@@ -22,6 +23,8 @@ func init() {
 
 func (s *connectedSuite) Test_ListExcludesTM() {
 	stdout := itest.TelepresenceOk(s.Context(), "list", "-n", s.ManagerNamespace())
+	// Drop the ambassador-agent which will include the word "traffic-manager"
+	stdout = strings.Replace(stdout, "traffic-manager-ambassador-agent", "", 1)
 	s.NotContains(stdout, "traffic-manager")
 }
 
