@@ -58,7 +58,7 @@ func NewInfo(ctx context.Context) Info {
 	env := managerutil.GetEnv(ctx)
 	managedNamespaces := env.GetManagedNamespaces()
 	namespaced := len(managedNamespaces) > 0
-	oi := info{ciSubs: newClusterInfoSubscribers()}
+	oi := info{}
 	ki := k8sapi.GetK8sInterface(ctx)
 
 	// Validate that the kubernetes server version is supported
@@ -175,41 +175,20 @@ func NewInfo(ctx context.Context) Info {
 		}
 	}
 
-	if oi.ServiceSubnet == nil && oi.KubeDnsIp != nil {
+	if oi.ServiceSubnet == nil && kubeDnsIp != nil {
 		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
 		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
 		// from the kubeDNS IP. This is cheating but a cluster may only have one service subnet and the mask is
 		// unlikely to cover less than half the bits.
-		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", net.IP(oi.KubeDnsIp))
-		bits := len(oi.KubeDnsIp) * 8
+		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", kubeDnsIp)
+		bits := len(kubeDnsIp) * 8
 		ones := bits / 2
 		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
-		oi.ServiceSubnet = &rpc.IPNet{Ip: net.IP(oi.KubeDnsIp).Mask(mask), Mask: int32(ones)}
+		oi.ServiceSubnet = &rpc.IPNet{Ip: kubeDnsIp.Mask(mask), Mask: int32(ones)}
 	}
 
 	podCIDRStrategy := env.PodCIDRStrategy
 	dlog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
-
-	switch {
-	case strings.EqualFold("auto", podCIDRStrategy):
-		go func() {
-			if namespaced || !oi.watchNodeSubnets(ctx, false) {
-				oi.watchPodSubnets(ctx, managedNamespaces)
-			}
-		}()
-	case strings.EqualFold("nodePodCIDRs", podCIDRStrategy):
-		if namespaced {
-			dlog.Errorf(ctx, "cannot use POD_CIDR_STRATEGY %q with a namespaced traffic-manager", podCIDRStrategy)
-		} else {
-			go oi.watchNodeSubnets(ctx, true)
-		}
-	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
-		go oi.watchPodSubnets(ctx, managedNamespaces)
-	case strings.EqualFold("environment", podCIDRStrategy):
-		oi.setSubnetsFromEnv(ctx)
-	default:
-		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
-	}
 
 	oi.ManagerPodIp = iputil.Parse(env.PodIP)
 	if oi.ManagerPodIp == nil {
@@ -231,11 +210,11 @@ func NewInfo(ctx context.Context) Info {
 		AlsoProxySubnets:  make([]*rpc.IPNet, len(alsoProxy)),
 		NeverProxySubnets: make([]*rpc.IPNet, len(neverProxy)),
 	}
-	for i, subnet := range alsoProxy {
-		oi.Routing.AlsoProxySubnets[i] = iputil.IPNetToRPC(subnet)
+	for i, sn := range alsoProxy {
+		oi.Routing.AlsoProxySubnets[i] = iputil.IPNetToRPC(sn)
 	}
-	for i, subnet := range neverProxy {
-		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(subnet)
+	for i, sn := range neverProxy {
+		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(sn)
 	}
 
 	oi.Dns = &rpc.DNS{
@@ -244,12 +223,32 @@ func NewInfo(ctx context.Context) Info {
 		KubeIp:          kubeDnsIp,
 		ClusterDomain:   clusterDomain,
 	}
-	// For backward compatibility
-	oi.ClusterDomain = clusterDomain
-	oi.KubeDnsIp = kubeDnsIp
 
 	dlog.Infof(ctx, "ExcludeSuffixes: %+v", oi.Dns.ExcludeSuffixes)
 	dlog.Infof(ctx, "IncludeSuffixes: %+v", oi.Dns.IncludeSuffixes)
+
+	oi.ciSubs = newClusterInfoSubscribers(oi.clusterInfo())
+
+	switch {
+	case strings.EqualFold("auto", podCIDRStrategy):
+		go func() {
+			if namespaced || !oi.watchNodeSubnets(ctx, false) {
+				oi.watchPodSubnets(ctx, managedNamespaces)
+			}
+		}()
+	case strings.EqualFold("nodePodCIDRs", podCIDRStrategy):
+		if namespaced {
+			dlog.Errorf(ctx, "cannot use POD_CIDR_STRATEGY %q with a namespaced traffic-manager", podCIDRStrategy)
+		} else {
+			go oi.watchNodeSubnets(ctx, true)
+		}
+	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
+		go oi.watchPodSubnets(ctx, managedNamespaces)
+	case strings.EqualFold("environment", podCIDRStrategy):
+		oi.setSubnetsFromEnv(ctx)
+	default:
+		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
+	}
 	return &oi
 }
 
@@ -356,13 +355,13 @@ func (oi *info) GetClusterID() string {
 
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	ci := &rpc.ClusterInfo{
-		KubeDnsIp:     oi.KubeDnsIp,
 		ServiceSubnet: oi.ServiceSubnet,
 		PodSubnets:    make([]*rpc.IPNet, len(oi.PodSubnets)),
-		ClusterDomain: oi.ClusterDomain,
 		ManagerPodIp:  oi.ManagerPodIp,
 		Routing:       oi.Routing,
 		Dns:           oi.Dns,
+		KubeDnsIp:     oi.Dns.KubeIp,
+		ClusterDomain: oi.Dns.ClusterDomain,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci
