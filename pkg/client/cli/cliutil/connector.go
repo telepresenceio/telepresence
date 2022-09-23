@@ -122,7 +122,7 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 	connectorClient := connector.NewConnectorClient(conn)
 
 	// Ensure that the already running daemon has the correct version
-	if err = versionCheck(ctx, "User", connectorDaemon, configuredDaemon, connectorClient); err != nil {
+	if err = versionCheck(ctx, connectorDaemon, configuredDaemon, connectorClient); err != nil {
 		return err
 	}
 	// The connection might have been swapped at this point, due to an upgrade of the user daemon
@@ -164,16 +164,16 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 	return grp.Wait()
 }
 
-func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
+func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) error {
 	stdout, _ := output.Structured(ctx)
-	fmt.Fprint(stdout, "Telepresence Traffic Manager ")
+	fmt.Fprint(stdout, "Telepresence Daemons ")
 	err := WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
 		defer func() {
 			if err == nil {
 				fmt.Fprintln(stdout, "done")
 			}
 		}()
-		if quitUserDaemon {
+		if quitDaemons {
 			fmt.Fprint(stdout, "quitting...")
 		} else {
 			fmt.Fprint(stdout, "disconnecting...")
@@ -189,10 +189,10 @@ func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
 		return err
 	})
 	if err != nil && (errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable) {
-		if quitUserDaemon {
-			fmt.Fprintln(stdout, "had already quit")
+		if quitDaemons {
+			fmt.Fprintln(stdout, "have already quit")
 		} else {
-			fmt.Fprintln(stdout, "is already disconnected")
+			fmt.Fprintln(stdout, "are already disconnected")
 		}
 		err = nil
 	}

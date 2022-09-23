@@ -153,7 +153,7 @@ func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that no telepresence is running when the tests start
-	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
+	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that the daemon-socket is non-existent.
 	_ = rmAsRoot(client.DaemonSocketName)
@@ -587,10 +587,8 @@ func TelepresenceDisconnectOk(ctx context.Context) {
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Network disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Network is already disconnected"))
-	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Traffic Manager is already disconnected"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Daemons disconnecting...done") ||
+		strings.Contains(stdout, "Telepresence Daemons are already disconnected"))
 	if t.Failed() {
 		t.Logf("Disconnect output was %q", stdout)
 	}
@@ -598,16 +596,14 @@ func AssertDisconnectOutput(ctx context.Context, stdout string) {
 
 // TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output
 func TelepresenceQuitOk(ctx context.Context) {
-	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-ur"))
+	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-s"))
 }
 
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command
 func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Network quitting...done") ||
-		strings.Contains(stdout, "Telepresence Network had already quit"))
-	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager quitting...done") ||
-		strings.Contains(stdout, "Telepresence Traffic Manager had already quit"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Daemons quitting...done") ||
+		strings.Contains(stdout, "Telepresence Daemons have already quit"))
 	if t.Failed() {
 		t.Logf("Quit output was %q", stdout)
 	}

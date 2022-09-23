@@ -40,8 +40,9 @@ service Daemon {
 }
 
 message DaemonStatus {
-  reserved 1, 2, 3;
   OutboundInfo outbound_config = 4;
+  telepresence.common.VersionInfo version = 5;
+  reserved 1, 2, 3;
 }
 
 message Paths {

@@ -25,7 +25,7 @@ func WithConnection(np NamespacePair, f func(ctx context.Context, ch NamespacePa
 
 func (ch *connected) setup(ctx context.Context) bool {
 	t := getT(ctx)
-	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
+	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 	// Start once with default user to ensure that the auto-installer can run OK.
 	TelepresenceOk(WithUser(ctx, "default"), "helm", "install", "--values", filepath.Join("testdata", "connect-values.yaml"))
 	stdout := TelepresenceOk(WithUser(ctx, "default"), "connect")

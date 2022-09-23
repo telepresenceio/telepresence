@@ -90,7 +90,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	sc.Start(ctx)
 	defer sc.Close()
 
-	err = cliutil.Disconnect(ctx, false, false)
+	err = cliutil.Disconnect(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		// this could happen for all kinds of reasons, but it makes no sense to go on if it does.
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		clusterSubnets, err := cs.rootD.GetClusterSubnets(ctx, &empty.Empty{})
+		clusterSubnets, err := cs.userD.GetClusterSubnets(ctx, &empty.Empty{})
 		if err != nil {
 			return err
 		}

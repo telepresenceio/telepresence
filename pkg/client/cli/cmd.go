@@ -203,7 +203,9 @@ func Command(ctx context.Context) *cobra.Command {
 				// Ensure that args errors don't advice the user to look in log files
 				command.Args = argsCheck(ac)
 			}
-			initDeprecatedPersistentFlags(command)
+			if command.Use != "quit" {
+				initDeprecatedPersistentFlags(command)
+			}
 		}
 	}
 	for _, group := range globalFlagGroups {

@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -70,14 +69,6 @@ func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) er
 		rq := &manager.LogLevelRequest{LogLevel: args[0], Duration: durationpb.New(lls.duration)}
 		if !lls.remoteOnly {
 			_, err := cs.userD.SetLogLevel(ctx, rq)
-			if err != nil {
-				return err
-			}
-
-			err = cliutil.WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
-				_, err := daemonClient.SetLogLevel(ctx, rq)
-				return err
-			})
 			if err != nil {
 				return err
 			}

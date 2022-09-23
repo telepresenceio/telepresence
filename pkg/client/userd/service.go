@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
@@ -65,12 +67,13 @@ type CommandFactory func(context.Context) cliutil.CommandGroups
 // Service represents the long-running state of the Telepresence User Daemon
 type Service struct {
 	rpc.UnsafeConnectorServer
+	daemonClientLock sync.Mutex
+	daemonClient     daemon.DaemonClient
 
 	svc               *grpc.Server
 	ManagerProxy      trafficmgr.ManagerProxy
 	procName          string
 	timedLogLevel     log.TimedLevel
-	daemonClient      daemon.DaemonClient
 	loginExecutor     auth.LoginExecutor
 	userNotifications func(context.Context) <-chan string
 	ucn               int64
@@ -97,10 +100,16 @@ func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOpti
 	s.ManagerProxy.SetClient(managerClient, callOptions...)
 }
 
-func (s *Service) RootDaemonClient(c context.Context) (daemon.DaemonClient, error) {
+func (s *Service) RootDaemonClient(c context.Context, create bool) (daemon.DaemonClient, error) {
+	s.daemonClientLock.Lock()
+	defer s.daemonClientLock.Unlock()
 	if s.daemonClient != nil {
 		return s.daemonClient, nil
 	}
+	if !create {
+		return nil, status.Error(codes.Unavailable, "root daemon has not been started")
+	}
+
 	// establish a connection to the root daemon gRPC grpcService
 	dlog.Info(c, "Connecting to root daemon...")
 	conn, err := client.DialSocket(c, client.DaemonSocketName,

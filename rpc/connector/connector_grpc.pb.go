@@ -9,6 +9,7 @@ package connector
 import (
 	context "context"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
+	daemon "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	userdaemon "github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	grpc "google.golang.org/grpc"
@@ -28,6 +29,8 @@ const _ = grpc.SupportPackageIsVersion7
 type ConnectorClient interface {
 	// Returns version information from the Connector
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
+	// Returns version information from the Root Daemon
+	RootDaemonVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
 	// the daemon process) to the cluster's network.  A result code of
 	// UNSPECIFIED indicates that the connection was successfully
@@ -37,6 +40,8 @@ type ConnectorClient interface {
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Disconnects the cluster
 	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// GetClusterSubnets gets the outbound info that has been set on daemon
+	GetClusterSubnets(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*daemon.ClusterSubnets, error)
 	// Status returns the status of the current connection or DISCONNECTED
 	// if no connection has been established.
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ConnectInfo, error)
@@ -110,6 +115,15 @@ func (c *connectorClient) Version(ctx context.Context, in *emptypb.Empty, opts .
 	return out, nil
 }
 
+func (c *connectorClient) RootDaemonVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
+	out := new(common.VersionInfo)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RootDaemonVersion", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error) {
 	out := new(ConnectInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Connect", in, out, opts...)
@@ -122,6 +136,15 @@ func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts 
 func (c *connectorClient) Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Disconnect", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) GetClusterSubnets(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*daemon.ClusterSubnets, error) {
+	out := new(daemon.ClusterSubnets)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetClusterSubnets", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -427,6 +450,8 @@ func (c *connectorClient) GetNamespaces(ctx context.Context, in *GetNamespacesRe
 type ConnectorServer interface {
 	// Returns version information from the Connector
 	Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
+	// Returns version information from the Root Daemon
+	RootDaemonVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
 	// the daemon process) to the cluster's network.  A result code of
 	// UNSPECIFIED indicates that the connection was successfully
@@ -436,6 +461,8 @@ type ConnectorServer interface {
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
 	// Disconnects the cluster
 	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	// GetClusterSubnets gets the outbound info that has been set on daemon
+	GetClusterSubnets(context.Context, *emptypb.Empty) (*daemon.ClusterSubnets, error)
 	// Status returns the status of the current connection or DISCONNECTED
 	// if no connection has been established.
 	Status(context.Context, *emptypb.Empty) (*ConnectInfo, error)
@@ -500,11 +527,17 @@ type UnimplementedConnectorServer struct {
 func (UnimplementedConnectorServer) Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
+func (UnimplementedConnectorServer) RootDaemonVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RootDaemonVersion not implemented")
+}
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
 func (UnimplementedConnectorServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
+}
+func (UnimplementedConnectorServer) GetClusterSubnets(context.Context, *emptypb.Empty) (*daemon.ClusterSubnets, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetClusterSubnets not implemented")
 }
 func (UnimplementedConnectorServer) Status(context.Context, *emptypb.Empty) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
@@ -612,6 +645,24 @@ func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_RootDaemonVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RootDaemonVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/RootDaemonVersion",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RootDaemonVersion(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Connector_Connect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ConnectRequest)
 	if err := dec(in); err != nil {
@@ -644,6 +695,24 @@ func _Connector_Disconnect_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Disconnect(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_GetClusterSubnets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GetClusterSubnets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GetClusterSubnets",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GetClusterSubnets(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1124,12 +1193,20 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_Version_Handler,
 		},
 		{
+			MethodName: "RootDaemonVersion",
+			Handler:    _Connector_RootDaemonVersion_Handler,
+		},
+		{
 			MethodName: "Connect",
 			Handler:    _Connector_Connect_Handler,
 		},
 		{
 			MethodName: "Disconnect",
 			Handler:    _Connector_Disconnect_Handler,
+		},
+		{
+			MethodName: "GetClusterSubnets",
+			Handler:    _Connector_GetClusterSubnets_Handler,
 		},
 		{
 			MethodName: "Status",

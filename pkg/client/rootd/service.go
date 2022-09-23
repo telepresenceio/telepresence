@@ -96,7 +96,12 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	d.sessionLock.RLock()
 	defer d.sessionLock.RUnlock()
-	r := &rpc.DaemonStatus{}
+	r := &rpc.DaemonStatus{
+		Version: &common.VersionInfo{
+			ApiVersion: client.APIVersion,
+			Version:    client.Version(),
+		},
+	}
 	if d.session != nil {
 		r.OutboundConfig = d.session.getInfo()
 	}
@@ -249,8 +254,14 @@ nextSession:
 		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
 			// Respond by setting the session and returning the error (or nil
 			// if everything is ok)
+			reply.status = &rpc.DaemonStatus{
+				Version: &common.VersionInfo{
+					ApiVersion: client.APIVersion,
+					Version:    client.Version(),
+				},
+			}
 			if d.session != nil {
-				reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+				reply.status.OutboundConfig = d.session.getInfo()
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
 				session, reply.err = newSession(sCtx, d.scout, oi)
@@ -258,7 +269,7 @@ nextSession:
 					d.session = session
 					d.sessionContext = sCtx
 					d.sessionCancel = sCancel
-					reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+					reply.status.OutboundConfig = d.session.getInfo()
 				} else {
 					sCancel()
 				}

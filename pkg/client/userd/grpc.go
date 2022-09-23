@@ -29,6 +29,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
@@ -149,7 +150,7 @@ func (s *Service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, e
 	return &empty.Empty{}, nil
 }
 
-func (s *Service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectInfo, err error) {
+func (s *Service) Status(c context.Context, ex *empty.Empty) (result *rpc.ConnectInfo, err error) {
 	s.logCall(c, "Status", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
@@ -157,6 +158,10 @@ func (s *Service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 			result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
 		} else {
 			result = s.session.Status(s.sessionContext)
+		}
+		var rd daemon.DaemonClient
+		if rd, err = s.RootDaemonClient(c, false); err == nil {
+			result.DaemonStatus, err = rd.Status(c, ex)
 		}
 	})
 	return
@@ -490,14 +495,21 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	return
 }
 
-func (s *Service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
+	var err error
 	s.logCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		s.cancelSessionReadLocked()
 		s.quit()
+		var rd daemon.DaemonClient
+		if rd, err = s.RootDaemonClient(ctx, false); err == nil {
+			ex, err = rd.Quit(ctx, ex)
+		} else {
+			ex = &empty.Empty{}
+		}
 	})
-	return &empty.Empty{}, nil
+	return ex, err
 }
 
 func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
@@ -950,4 +962,20 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	}
 
 	return &resp, nil
+}
+
+func (s *Service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (*common.VersionInfo, error) {
+	rd, err := s.RootDaemonClient(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	return rd.Version(ctx, empty)
+}
+
+func (s *Service) GetClusterSubnets(ctx context.Context, empty *empty.Empty) (*daemon.ClusterSubnets, error) {
+	rd, err := s.RootDaemonClient(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	return rd.GetClusterSubnets(ctx, empty)
 }

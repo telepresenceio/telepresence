@@ -94,7 +94,7 @@ type Session interface {
 }
 
 type Service interface {
-	RootDaemonClient(context.Context) (daemon.DaemonClient, error)
+	RootDaemonClient(context.Context, bool) (daemon.DaemonClient, error)
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 	LoginExecutor() auth.LoginExecutor
 }
@@ -200,7 +200,7 @@ func NewSession(
 	var rootDaemon daemon.DaemonClient
 	if !cr.IsPodDaemon {
 		var err error
-		rootDaemon, err = svc.RootDaemonClient(ctx)
+		rootDaemon, err = svc.RootDaemonClient(ctx, true)
 		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
@@ -566,6 +566,9 @@ func (tm *TrafficManager) setInterceptedNamespace(c context.Context, ns string) 
 // send it to the DNS-resolver in the daemon.
 func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 	tm.wlWatcher.setNamespacesToWatch(c, tm.GetCurrentNamespaces(true))
+	if tm.rootDaemon == nil {
+		return
+	}
 
 	var namespaces []string
 	tm.currentInterceptsLock.Lock()
@@ -594,7 +597,12 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 //     Services, and
 //   - (4) mount the appropriate remote volumes.
 func (tm *TrafficManager) Run(c context.Context) error {
-	defer dlog.Info(c, "-- Session ended")
+	defer func() {
+		if tm.rootDaemon != nil {
+			_, _ = tm.rootDaemon.Disconnect(c, &empty.Empty{})
+		}
+		defer dlog.Info(c, "-- Session ended")
+	}()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)

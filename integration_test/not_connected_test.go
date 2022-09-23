@@ -40,7 +40,7 @@ func (s *notConnectedSuite) Test_ConnectWithCommand() {
 
 func (s *notConnectedSuite) Test_InvalidKubeconfig() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "quit", "-ur")
+	itest.TelepresenceOk(ctx, "quit", "-s")
 	path := "/dev/null"
 	if runtime.GOOS == "windows" {
 		path = "C:\\NUL"

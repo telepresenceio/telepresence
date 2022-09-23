@@ -13,7 +13,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -93,12 +92,7 @@ func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
 	s.out = cmd.OutOrStdout()
 	ctx := cmd.Context()
 
-	ds, err := s.daemonStatus(ctx)
-	if err != nil {
-		return err
-	}
-
-	cs, err := s.connectorStatus(ctx)
+	ds, cs, err := s.connectorStatus(ctx)
 	if err != nil {
 		return err
 	}
@@ -110,55 +104,9 @@ func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (s *statusInfo) daemonStatus(ctx context.Context) (*daemonStatus, error) {
-	ds := &daemonStatus{}
-	err := cliutil.WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
-		ds.Running = true
-		var err error
-		status, err := daemonClient.Status(ctx, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-		version, err := daemonClient.Version(ctx, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-
-		ds.Running = true
-		ds.Version = version.Version
-		ds.APIVersion = version.ApiVersion
-		if obc := status.OutboundConfig; obc != nil {
-			ds.DNS = &daemonStatusDNS{}
-			dns := obc.Dns
-			if dns.LocalIp != nil {
-				// Local IP is only set when the overriding resolver is used
-				ds.DNS.LocalIP = dns.LocalIp
-			}
-			ds.DNS.RemoteIP = dns.RemoteIp
-			ds.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
-			ds.DNS.IncludeSuffixes = dns.IncludeSuffixes
-			ds.DNS.LookupTimeout = dns.LookupTimeout.AsDuration()
-			for _, subnet := range obc.AlsoProxySubnets {
-				ds.AlsoProxySubnets = append(ds.AlsoProxySubnets, iputil.IPNetFromRPC(subnet).String())
-			}
-			for _, subnet := range obc.NeverProxySubnets {
-				ds.NeverProxySubnets = append(ds.NeverProxySubnets, iputil.IPNetFromRPC(subnet).String())
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, cliutil.ErrNoNetwork) {
-			ds.Running = false
-			return ds, nil
-		}
-		return ds, err
-	}
-	return ds, nil
-}
-
-func (s *statusInfo) connectorStatus(ctx context.Context) (*connectorStatus, error) {
+func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *connectorStatus, error) {
 	cs := &connectorStatus{}
+	ds := &daemonStatus{}
 	err := cliutil.WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		cs.Running = true
 		version, err := connectorClient.Version(ctx, &empty.Empty{})
@@ -216,16 +164,45 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*connectorStatus, err
 				Client: icept.Spec.Client,
 			})
 		}
+
+		rStatus := status.DaemonStatus
+		if rStatus == nil {
+			// Root daemon is not running
+			return nil
+		}
+
+		ds.Running = true
+		ds.Version = rStatus.Version.Version
+		ds.APIVersion = rStatus.Version.ApiVersion
+
+		if obc := rStatus.OutboundConfig; obc != nil {
+			ds.DNS = &daemonStatusDNS{}
+			dns := obc.Dns
+			if dns.LocalIp != nil {
+				// Local IP is only set when the overriding resolver is used
+				ds.DNS.LocalIP = dns.LocalIp
+			}
+			ds.DNS.RemoteIP = dns.RemoteIp
+			ds.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
+			ds.DNS.IncludeSuffixes = dns.IncludeSuffixes
+			ds.DNS.LookupTimeout = dns.LookupTimeout.AsDuration()
+			for _, subnet := range obc.AlsoProxySubnets {
+				ds.AlsoProxySubnets = append(ds.AlsoProxySubnets, iputil.IPNetFromRPC(subnet).String())
+			}
+			for _, subnet := range obc.NeverProxySubnets {
+				ds.NeverProxySubnets = append(ds.NeverProxySubnets, iputil.IPNetFromRPC(subnet).String())
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		if errors.Is(err, cliutil.ErrNoUserDaemon) {
 			cs.Running = false
-			return cs, nil
+			return ds, cs, nil
 		}
-		return cs, err
+		return ds, cs, err
 	}
-	return cs, nil
+	return ds, cs, nil
 }
 
 func (s *statusInfo) printJSON(ds *daemonStatus, cs *connectorStatus) error {

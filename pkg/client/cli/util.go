@@ -12,7 +12,6 @@ import (
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -30,33 +29,26 @@ func kubeFlagMap(kubeFlags *pflag.FlagSet) map[string]string {
 type connectorState struct {
 	*connector.ConnectInfo
 	userD connector.ConnectorClient
-	rootD daemon.DaemonClient
 }
 
 // withConnector is like cliutil.WithConnector, but also
 //
 //   - Ensures that the damon is running too
 //
-//   - Cleans up after itself unless retain is true (If it launches the daemon or connector, then it will shut
-//     them down when it's done.  If they were already running, it will leave them running.)
-//
 //   - Makes the connector.Connect gRPC call to set up networking
 func withConnector(cmd *cobra.Command, retain bool, request *connector.ConnectRequest, f func(context.Context, *connectorState) error) error {
-	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+	return cliutil.WithRootDaemon(cmd.Context(), func(ctx context.Context) error {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 			didConnect, connInfo, err := connect(ctx, connectorClient, cmd.OutOrStdout(), request)
 			if err != nil {
 				return err
 			}
-			if didConnect {
-				// The daemon will shut down the connector for us.
+			if didConnect && !retain {
 				defer func() {
-					if err != nil || !retain {
-						_ = cliutil.Disconnect(dcontext.WithoutCancel(ctx), false, false)
-					}
+					_ = cliutil.Disconnect(dcontext.WithoutCancel(ctx), false)
 				}()
 			}
-			return f(ctx, &connectorState{ConnectInfo: connInfo, userD: connectorClient, rootD: daemonClient})
+			return f(ctx, &connectorState{ConnectInfo: connInfo, userD: connectorClient})
 		})
 	})
 }

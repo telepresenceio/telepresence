@@ -29,7 +29,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -195,7 +194,6 @@ func convertSubnets(c context.Context, ms []*manager.IPNet) []*net.IPNet {
 	ns := make([]*net.IPNet, len(ms))
 	for i, m := range ms {
 		n := iputil.IPNetFromRPC(m)
-		dlog.Infof(c, "Adding also-proxy subnet %s", n)
 		ns[i] = n
 	}
 	return ns
@@ -209,6 +207,8 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		return nil, err
 	}
 
+	as := convertSubnets(c, mi.AlsoProxySubnets)
+	ns := convertSubnets(c, mi.NeverProxySubnets)
 	s := &session{
 		scout:            scout,
 		handlers:         tunnel.NewPool(),
@@ -218,8 +218,8 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		managerClient:    mc,
 		managerVersion:   ver,
 		clientConn:       conn,
-		alsoProxySubnets: convertSubnets(c, mi.AlsoProxySubnets),
-		neverProxyRoutes: routing.Routes(c, convertSubnets(c, mi.NeverProxySubnets)),
+		alsoProxySubnets: as,
+		neverProxyRoutes: routing.Routes(c, ns),
 		proxyCluster:     true,
 		vifReady:         make(chan error, 2),
 	}
@@ -234,6 +234,8 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	} else {
 		s.dnsServer = dns.NewServer(mi.Dns, s.legacyClusterLookup, true)
 	}
+	dlog.Infof(c, "also-proxy subnets %v", as)
+	dlog.Infof(c, "never-proxy subnets %v", ns)
 	return s, nil
 }
 
@@ -506,14 +508,34 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			ClusterDomain: mgrInfo.ClusterDomain,
 		}
 	}
-	dlog.Infof(ctx, "Setting cluster DNS to %s", net.IP(dns.KubeIp))
+	kubeIP := net.IP(dns.KubeIp)
+	dlog.Infof(ctx, "Setting cluster DNS to %s", kubeIP)
 	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
 	s.dnsServer.SetClusterDNS(dns)
 
 	if r := mgrInfo.Routing; r != nil {
-		s.alsoProxySubnets = subnet.Unique(append(s.alsoProxySubnets, convertSubnets(ctx, r.AlsoProxySubnets)...))
-		nps := subnet.Unique(append(routing.Subnets(s.neverProxyRoutes), convertSubnets(ctx, r.NeverProxySubnets)...))
-		s.neverProxyRoutes = routing.Routes(ctx, nps)
+		as := subnet.Unique(append(s.alsoProxySubnets, convertSubnets(ctx, r.AlsoProxySubnets)...))
+		dlog.Infof(ctx, "also-proxy subnets %v", as)
+		s.alsoProxySubnets = as
+
+		hasRoute := func(n *net.IPNet) bool {
+			for _, r := range s.neverProxyRoutes {
+				if subnet.Equal(r.RoutedNet, n) {
+					return true
+				}
+			}
+			return false
+		}
+		for _, n := range convertSubnets(ctx, r.NeverProxySubnets) {
+			if !hasRoute(n) {
+				r, err := routing.GetRoute(ctx, n)
+				if err != nil {
+					dlog.Error(ctx, err)
+				}
+				s.neverProxyRoutes = append(s.neverProxyRoutes, r)
+			}
+		}
+		dlog.Infof(ctx, "never-proxy subnets %v", routing.Subnets(s.neverProxyRoutes))
 	}
 
 	subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
@@ -529,11 +551,11 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
 			subnets = append(subnets, cidr)
 		}
-	}
 
-	s.clusterSubnets = subnets
-	if err := s.refreshSubnets(ctx); err != nil {
-		dlog.Error(ctx, err)
+		s.clusterSubnets = subnet.Unique(subnets)
+		if err := s.refreshSubnets(ctx); err != nil {
+			dlog.Error(ctx, err)
+		}
 	}
 
 	span.SetAttributes(
@@ -594,6 +616,7 @@ func (s *session) run(c context.Context) error {
 	defer cancel()
 	select {
 	case <-wc.Done():
+		// Time out when waiting for the cluster info to arrive
 		s.vifReady <- wc.Err()
 		close(s.vifReady)
 		s.dnsServer.Stop()
@@ -653,11 +676,6 @@ func (s *session) stop(c context.Context) {
 	if err := s.dev.Close(); err != nil {
 		dlog.Errorf(c, "unable to close %s: %v", s.dev.Name(), err)
 	}
-
-	dlog.Debug(c, "Sending disconnect message to connector")
-	_, _ = connector.NewConnectorClient(s.clientConn).Disconnect(c, &empty.Empty{})
-	s.clientConn.Close()
-	dlog.Debug(c, "Connector disconnect complete")
 }
 
 func (s *session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {

@@ -14,7 +14,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -57,16 +56,13 @@ func validArgsFuncRemote(cmd *cobra.Command, args []string, toComplete string) (
 		err  error
 	)
 
-	err = cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, _ daemon.DaemonClient) error {
-		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-			resp, err = connectorClient.ValidArgsForCommand(ctx, &connector.ValidArgsForCommandRequest{
-				CmdName:    cmd.Name(),
-				OsArgs:     args,
-				ToComplete: toComplete,
-			})
-
-			return err
+	err = cliutil.WithConnector(cmd.Context(), func(ctx context.Context, connectorClient connector.ConnectorClient) error {
+		resp, err = connectorClient.ValidArgsForCommand(ctx, &connector.ValidArgsForCommandRequest{
+			CmdName:    cmd.Name(),
+			OsArgs:     args,
+			ToComplete: toComplete,
 		})
+		return err
 	})
 
 	if err != nil {
@@ -172,7 +168,7 @@ func runRemote(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, _ daemon.DaemonClient) error {
+	return cliutil.WithRootDaemon(cmd.Context(), func(ctx context.Context) error {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 			// Use a graceful termination period
 			ctx, cancel := context.WithCancel(ctx)

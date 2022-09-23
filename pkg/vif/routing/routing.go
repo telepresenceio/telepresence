@@ -48,13 +48,12 @@ func Routes(c context.Context, ms []*net.IPNet) []*Route {
 	for _, n := range ms {
 		r, err := GetRoute(c, n)
 		if err != nil {
-			dlog.Errorf(c, "unable to get route for never-proxied subnet %s. "+
+			dlog.Errorf(c, "unable to get route for subnet %s. "+
 				"If this is your kubernetes API server you may want to open an issue, since telepresence may "+
 				"not work if it falls within the CIDR for pods/services. Error: %v",
 				n, err)
 			continue
 		}
-		dlog.Infof(c, "Adding never-proxy subnet %s", n)
 		rs = append(rs, r)
 	}
 	return rs

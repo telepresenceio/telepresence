@@ -781,7 +781,7 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	args := &is.args
 
-	status, err := is.connectorServer.Status(ctx, nil)
+	status, err := is.connectorServer.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
 	}
@@ -863,7 +863,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			}
 		}
 
-		status, err := is.connectorServer.Status(ctx, nil)
+		status, err := is.connectorServer.Status(ctx, &empty.Empty{})
 		if err != nil {
 			return true, err
 		}

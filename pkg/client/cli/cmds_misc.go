@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
@@ -124,6 +125,7 @@ func dashboardCommand() *cobra.Command {
 }
 
 func quitCommand() *cobra.Command {
+	quitDaemons := false
 	quitRootDaemon := false
 	quitUserDaemon := false
 	cmd := &cobra.Command{
@@ -132,11 +134,22 @@ func quitCommand() *cobra.Command {
 
 		Short: "Tell telepresence daemon to quit",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return cliutil.Disconnect(cmd.Context(), quitUserDaemon, quitRootDaemon)
+			if quitUserDaemon {
+				fmt.Fprintln(os.Stderr, "--user-daemon (-u) is deprecated, please use --stop-daemons (-s)")
+			}
+			if quitRootDaemon {
+				fmt.Fprintln(os.Stderr, "--root-daemon (-r) is deprecated, please use --stop-daemons (-s)")
+			}
+			return cliutil.Disconnect(cmd.Context(), quitDaemons || quitUserDaemon || quitRootDaemon)
 		},
 	}
 	flags := cmd.Flags()
-	flags.BoolVarP(&quitRootDaemon, "root-daemon", "r", false, "stop root daemon")
-	flags.BoolVarP(&quitUserDaemon, "user-daemon", "u", false, "stop user daemon")
+	flags.BoolVarP(&quitDaemons, "stop-daemons", "s", false, "stop the traffic-manager and network daemons")
+	flags.BoolVarP(&quitRootDaemon, "root-daemon", "r", false, "stop daemons")
+	flags.BoolVarP(&quitUserDaemon, "user-daemon", "u", false, "stop daemons")
+
+	// retained for backward compatibility but hidden from now on
+	flags.Lookup("root-daemon").Hidden = true
+	flags.Lookup("user-daemon").Hidden = true
 	return cmd
 }

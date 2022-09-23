@@ -9,7 +9,6 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
@@ -32,19 +31,24 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 
 	var retErr error
 
-	version, err := daemonVersion(cmd.Context())
+	ctx := cmd.Context()
+	running, err := cliutil.IsRootDaemonRunning(ctx)
+	var version *common.VersionInfo
+	if running {
+		version, err = daemonVersion(ctx)
+	}
 	switch {
-	case err == nil:
-		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: %s (api v%d)\n",
-			version.Version, version.ApiVersion)
-	case err == cliutil.ErrNoNetwork:
-		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: not running\n")
-	default:
+	case err != nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: error: %v\n", err)
 		retErr = err
+	case !running:
+		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: not running\n")
+	default:
+		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: %s (api v%d)\n",
+			version.Version, version.ApiVersion)
 	}
 
-	version, err = connectorVersion(cmd.Context())
+	version, err = connectorVersion(ctx)
 	switch {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: %s (api v%d)\n",
@@ -61,9 +65,9 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 
 func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 	var version *common.VersionInfo
-	err := cliutil.WithStartedNetwork(ctx, func(ctx context.Context, daemonClient daemon.DaemonClient) error {
+	err := cliutil.WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
 		var err error
-		version, err = daemonClient.Version(ctx, &empty.Empty{})
+		version, err = connectorClient.RootDaemonVersion(ctx, &empty.Empty{})
 		if err != nil {
 			return err
 		}
