@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -52,6 +53,10 @@ func loglevelCommand() *cobra.Command {
 		Short:     "Temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons",
 		RunE:      lls.setTempLogLevel,
 		ValidArgs: lvStrs,
+		Annotations: map[string]string{
+			ann.RootDaemon: ann.Required,
+			ann.Session:    ann.Required,
+		},
 	}
 	flags := cmd.Flags()
 	flags.DurationVarP(&lls.duration, "duration", "d", defaultDuration, "The time that the log-level will be in effect (0s means indefinitely)")
@@ -61,26 +66,28 @@ func loglevelCommand() *cobra.Command {
 }
 
 func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) error {
+	if err := cliutil.InitCommand(cmd); err != nil {
+		return err
+	}
 	if lls.localOnly && lls.remoteOnly {
 		return errcat.User.New("the local-only and remote-only options are mutually exclusive")
 	}
-
-	return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
-		rq := &manager.LogLevelRequest{LogLevel: args[0], Duration: durationpb.New(lls.duration)}
-		if !lls.remoteOnly {
-			_, err := cs.userD.SetLogLevel(ctx, rq)
-			if err != nil {
-				return err
-			}
-		}
-
-		if !lls.localOnly {
-			err := cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-				_, err := managerClient.SetLogLevel(ctx, rq)
-				return err
-			})
+	ctx := cmd.Context()
+	userD := cliutil.GetUserDaemon(ctx)
+	rq := &manager.LogLevelRequest{LogLevel: args[0], Duration: durationpb.New(lls.duration)}
+	if !lls.remoteOnly {
+		_, err := userD.SetLogLevel(ctx, rq)
+		if err != nil {
 			return err
 		}
-		return nil
-	})
+	}
+
+	if !lls.localOnly {
+		err := cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+			_, err := managerClient.SetLogLevel(ctx, rq)
+			return err
+		})
+		return err
+	}
+	return nil
 }

@@ -170,7 +170,7 @@ func Command(ctx context.Context) *cobra.Command {
 				break
 			}
 		}
-		if groups, err = getRemoteCommands(ctx, rootCmd, wellKnown); err != nil {
+		if groups, err = getRemoteCommands(rootCmd, wellKnown); err != nil {
 			if err == cliutil.ErrNoUserDaemon {
 				// This is not a problem if the command is known to the CLI
 				for _, g := range static {

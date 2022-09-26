@@ -13,8 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
@@ -22,7 +20,6 @@ import (
 	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -67,9 +64,6 @@ type CommandFactory func(context.Context) cliutil.CommandGroups
 // Service represents the long-running state of the Telepresence User Daemon
 type Service struct {
 	rpc.UnsafeConnectorServer
-	daemonClientLock sync.Mutex
-	daemonClient     daemon.DaemonClient
-
 	svc               *grpc.Server
 	ManagerProxy      trafficmgr.ManagerProxy
 	procName          string
@@ -98,30 +92,6 @@ type Service struct {
 
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
 	s.ManagerProxy.SetClient(managerClient, callOptions...)
-}
-
-func (s *Service) RootDaemonClient(c context.Context, create bool) (daemon.DaemonClient, error) {
-	s.daemonClientLock.Lock()
-	defer s.daemonClientLock.Unlock()
-	if s.daemonClient != nil {
-		return s.daemonClient, nil
-	}
-	if !create {
-		return nil, status.Error(codes.Unavailable, "root daemon has not been started")
-	}
-
-	// establish a connection to the root daemon gRPC grpcService
-	dlog.Info(c, "Connecting to root daemon...")
-	conn, err := client.DialSocket(c, client.DaemonSocketName,
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	if err != nil {
-		dlog.Errorf(c, "unable to connect to root daemon: %+v", err)
-		return nil, err
-	}
-	s.daemonClient = daemon.NewDaemonClient(conn)
-	return s.daemonClient, nil
 }
 
 func (s *Service) LoginExecutor() auth.LoginExecutor {

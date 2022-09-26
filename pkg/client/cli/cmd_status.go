@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +12,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -81,6 +81,10 @@ func statusCommand() *cobra.Command {
 
 		Short: "Show connectivity status",
 		RunE:  s.status,
+		Annotations: map[string]string{
+			ann.RootDaemon: ann.Optional,
+			ann.UserDaemon: ann.Optional,
+		},
 	}
 	flags := cmd.Flags()
 	flags.BoolVarP(&s.json, "json", "j", false, "output as json object")
@@ -89,6 +93,9 @@ func statusCommand() *cobra.Command {
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
 func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
+	if err := cliutil.InitCommand(cmd); err != nil {
+		return err
+	}
 	s.out = cmd.OutOrStdout()
 	ctx := cmd.Context()
 
@@ -107,55 +114,43 @@ func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
 func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *connectorStatus, error) {
 	cs := &connectorStatus{}
 	ds := &daemonStatus{}
-	err := cliutil.WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		cs.Running = true
-		version, err := connectorClient.Version(ctx, &empty.Empty{})
+	userD := cliutil.GetUserDaemon(ctx)
+	if userD == nil {
+		return ds, cs, nil
+	}
+	reporter := scout.NewReporter(ctx, "cli")
+	cs.InstallID = reporter.InstallID()
+	cs.Running = true
+	version, err := userD.Version(ctx, &empty.Empty{})
+	if err != nil {
+		return nil, nil, err
+	}
+	cs.Version = version.Version
+	cs.APIVersion = version.ApiVersion
+	cs.Executable = version.Executable
+	if !cliutil.HasLoggedIn(ctx) {
+		cs.AmbassadorCloud.Status = "Logged out"
+	} else {
+		userInfo, err := cliutil.GetCloudUserInfo(ctx, false, true)
 		if err != nil {
-			return err
-		}
-		cs.Version = version.Version
-		cs.APIVersion = version.ApiVersion
-		cs.Executable = version.Executable
-		reporter := scout.NewReporter(ctx, "cli")
-		cs.InstallID = reporter.InstallID()
-
-		if !cliutil.HasLoggedIn(ctx) {
-			cs.AmbassadorCloud.Status = "Logged out"
+			cs.AmbassadorCloud.Status = "Login expired (or otherwise no-longer-operational)"
 		} else {
-			userInfo, err := cliutil.GetCloudUserInfo(ctx, false, true)
-			if err != nil {
-				cs.AmbassadorCloud.Status = "Login expired (or otherwise no-longer-operational)"
-			} else {
-				cs.AmbassadorCloud.Status = "Logged in"
-				cs.AmbassadorCloud.Username = userInfo.Name
-				cs.AmbassadorCloud.UserID = userInfo.Id
-				cs.AmbassadorCloud.AccountID = userInfo.AccountId
-				cs.AmbassadorCloud.AccountName = userInfo.AccountName
-				cs.AmbassadorCloud.Email = userInfo.Email
-			}
+			cs.AmbassadorCloud.Status = "Logged in"
+			cs.AmbassadorCloud.Username = userInfo.Name
+			cs.AmbassadorCloud.UserID = userInfo.Id
+			cs.AmbassadorCloud.AccountID = userInfo.AccountId
+			cs.AmbassadorCloud.AccountName = userInfo.AccountName
+			cs.AmbassadorCloud.Email = userInfo.Email
 		}
+	}
 
-		status, err := connectorClient.Status(ctx, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-		switch status.Error {
-		case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
-			cs.Status = "Connected"
-		case connector.ConnectInfo_MUST_RESTART:
-			cs.Status = "Connected, but must restart"
-		case connector.ConnectInfo_DISCONNECTED:
-			cs.Status = "Not connected"
-			return nil
-		case connector.ConnectInfo_CLUSTER_FAILED:
-			cs.Status = "Not connected, error talking to cluster"
-			cs.Error = status.ErrorText
-			return nil
-		case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED:
-			cs.Status = "Not connected, error talking to in-cluster Telepresence traffic-manager"
-			cs.Error = status.ErrorText
-			return nil
-		}
+	status, err := userD.Status(ctx, &empty.Empty{})
+	if err != nil {
+		return nil, nil, err
+	}
+	switch status.Error {
+	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
+		cs.Status = "Connected"
 		cs.KubernetesServer = status.ClusterServer
 		cs.KubernetesContext = status.ClusterContext
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
@@ -164,17 +159,23 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *conne
 				Client: icept.Spec.Client,
 			})
 		}
+	case connector.ConnectInfo_MUST_RESTART:
+		cs.Status = "Connected, but must restart"
+	case connector.ConnectInfo_DISCONNECTED:
+		cs.Status = "Not connected"
+	case connector.ConnectInfo_CLUSTER_FAILED:
+		cs.Status = "Not connected, error talking to cluster"
+		cs.Error = status.ErrorText
+	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED:
+		cs.Status = "Not connected, error talking to in-cluster Telepresence traffic-manager"
+		cs.Error = status.ErrorText
+	}
 
-		rStatus := status.DaemonStatus
-		if rStatus == nil {
-			// Root daemon is not running
-			return nil
-		}
-
+	rStatus := status.DaemonStatus
+	if rStatus != nil {
 		ds.Running = true
 		ds.Version = rStatus.Version.Version
 		ds.APIVersion = rStatus.Version.ApiVersion
-
 		if obc := rStatus.OutboundConfig; obc != nil {
 			ds.DNS = &daemonStatusDNS{}
 			dns := obc.Dns
@@ -193,14 +194,6 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *conne
 				ds.NeverProxySubnets = append(ds.NeverProxySubnets, iputil.IPNetFromRPC(subnet).String())
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		if errors.Is(err, cliutil.ErrNoUserDaemon) {
-			cs.Running = false
-			return ds, cs, nil
-		}
-		return ds, cs, err
 	}
 	return ds, cs, nil
 }

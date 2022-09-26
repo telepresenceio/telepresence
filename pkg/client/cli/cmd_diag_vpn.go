@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -26,6 +27,10 @@ func vpnDiagCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Short: "Test VPN configuration for compatibility with telepresence",
 		RunE:  di.run,
+		Annotations: map[string]string{
+			ann.RootDaemon: ann.Required,
+			ann.Session:    ann.Required,
+		},
 	}
 	return cmd
 }
@@ -146,27 +151,26 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		return fmt.Errorf("failed to get routing table: %w", err)
 	}
 	subnets := map[string][]*net.IPNet{podType: {}, svcType: {}}
-	err = withConnector(cmd, false, nil, func(ctx context.Context, cs *connectorState) error {
-		// If this times out, it's likely to be because the traffic manager never gave us the subnets;
-		// this could happen for all kinds of reasons, but it makes no sense to go on if it does.
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		clusterSubnets, err := cs.userD.GetClusterSubnets(ctx, &empty.Empty{})
-		if err != nil {
-			return err
-		}
-		for _, sn := range clusterSubnets.GetPodSubnets() {
-			ipsn := iputil.IPNetFromRPC(sn)
-			subnets[podType] = append(subnets[podType], ipsn)
-		}
-		for _, sn := range clusterSubnets.GetSvcSubnets() {
-			ipsn := iputil.IPNetFromRPC(sn)
-			subnets[svcType] = append(subnets[svcType], ipsn)
-		}
-		return nil
-	})
+	err = cliutil.InitCommand(cmd)
+	ctx = cmd.Context()
+
+	// If this times out, it's likely to be because the traffic manager never gave us the subnets;
+	// this could happen for all kinds of reasons, but it makes no sense to go on if it does.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	userd := cliutil.GetUserDaemon(ctx)
+	clusterSubnets, err := userd.GetClusterSubnets(ctx, &empty.Empty{})
 	if err != nil {
 		return err
+	}
+	for _, sn := range clusterSubnets.GetPodSubnets() {
+		ipsn := iputil.IPNetFromRPC(sn)
+		subnets[podType] = append(subnets[podType], ipsn)
+	}
+	for _, sn := range clusterSubnets.GetSvcSubnets() {
+		ipsn := iputil.IPNetFromRPC(sn)
+		subnets[svcType] = append(subnets[svcType], ipsn)
 	}
 
 	instructions := []string{}

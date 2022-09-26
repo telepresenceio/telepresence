@@ -518,7 +518,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		return nil, nil
 	}
 
-	apiKey, err := tm.getCloudAPIKey(c, a8rcloud.KeyDescAgent(spec), false)
+	apiKey, err := auth.GetCloudAPIKey(c, tm.loginExecutor, a8rcloud.KeyDescAgent(spec), false)
 	if err != nil {
 		if !errors.Is(err, auth.ErrNotLoggedIn) {
 			dlog.Errorf(c, "error getting apiKey for agent: %s", err)

@@ -1,13 +1,14 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -26,6 +27,9 @@ func uninstallCommand() *cobra.Command {
 
 		Short: "Uninstall telepresence agents",
 		RunE:  ui.run,
+		Annotations: map[string]string{
+			ann.Session: ann.Required,
+		},
 	}
 	flags := cmd.Flags()
 
@@ -65,22 +69,24 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 
 // uninstall
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
-	return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
-		ur := &connector.UninstallRequest{
-			UninstallType: 0,
-			Namespace:     u.namespace,
-		}
-		switch {
-		case u.agent:
-			ur.UninstallType = connector.UninstallRequest_NAMED_AGENTS
-			ur.Agents = args
-		default:
-			ur.UninstallType = connector.UninstallRequest_ALL_AGENTS
-		}
-		r, err := cs.userD.Uninstall(ctx, ur)
-		if err != nil {
-			return err
-		}
-		return errcat.FromResult(r)
-	})
+	if err := cliutil.InitCommand(cmd); err != nil {
+		return err
+	}
+	ur := &connector.UninstallRequest{
+		UninstallType: 0,
+		Namespace:     u.namespace,
+	}
+	switch {
+	case u.agent:
+		ur.UninstallType = connector.UninstallRequest_NAMED_AGENTS
+		ur.Agents = args
+	default:
+		ur.UninstallType = connector.UninstallRequest_ALL_AGENTS
+	}
+	ctx := cmd.Context()
+	r, err := cliutil.GetUserDaemon(ctx).Uninstall(ctx, ur)
+	if err != nil {
+		return err
+	}
+	return errcat.FromResult(r)
 }

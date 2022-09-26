@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/blang/semver"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	grpcCodes "google.golang.org/grpc/codes"
@@ -32,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -69,6 +69,9 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 	cmd.args = interceptArgs{}
 	flags := cmd.command.Flags()
 
+	_, err := authdata.LoadUserInfoFromUserCache(ctx)
+	hasLoggedIn := err == nil
+
 	flags.StringVarP(&cmd.args.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
 	flags.StringVarP(&cmd.args.port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
@@ -81,7 +84,7 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 	flags.BoolVarP(&cmd.args.localOnly, "local-only", "l", false, ``+
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
 
-	flags.BoolVarP(&cmd.args.previewEnabled, "preview-url", "u", cliutil.HasLoggedIn(ctx), ``+
+	flags.BoolVarP(&cmd.args.previewEnabled, "preview-url", "u", hasLoggedIn, ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
@@ -136,7 +139,20 @@ func (c *interceptCommand) init(ctx context.Context) {
 	}
 
 	c.command.PreRunE = cliutil.UpdateCheckIfDue
-	c.command.PostRunE = cliutil.RaiseCloudMessage
+	c.command.PostRunE = func(cmd *cobra.Command, args []string) error {
+		// Currently, we only have messages that should be served when a user
+		// isn't logged in, so we check that here
+		if _, err := authdata.LoadUserInfoFromUserCache(ctx); err == nil {
+			_, err := GetConnectorServer(ctx).GetCloudUserInfo(ctx, &connector.UserInfoRequest{
+				AutoLogin: false,
+				Refresh:   false,
+			})
+			if err == nil {
+				return nil
+			}
+		}
+		return cliutil.RaiseCloudMessage(cmd, args)
+	}
 	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {
 		if c.extErr != nil {
 			return c.extErr
@@ -756,22 +772,6 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 	}
 	if needLogin {
 		if err := is.canInterceptAndLogIn(ctx, ir, needLogin); err != nil {
-			return nil, err
-		}
-	}
-
-	// The agentImage is only needed if we're dealing with a traffic-manager older than 2.6.0
-	vi, err := is.managerClient.Version(ctx, &empty.Empty{})
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
-	}
-	mv, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
-	}
-	if mv.Major == 2 && mv.Minor < 6 {
-		ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-		if err != nil {
 			return nil, err
 		}
 	}

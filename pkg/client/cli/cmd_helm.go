@@ -11,6 +11,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -45,6 +46,9 @@ func helmInstallCommand() *cobra.Command {
 			}
 			return ha.run(cmd, args)
 		},
+		Annotations: map[string]string{
+			ann.UserDaemon: ann.Required,
+		},
 	}
 
 	flags := cmd.Flags()
@@ -64,12 +68,18 @@ func helmUninstallCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Short: "Uninstall telepresence traffic manager",
 		RunE:  ha.run,
+		Annotations: map[string]string{
+			ann.UserDaemon: ann.Required,
+		},
 	}
 	ha.request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd
 }
 
-func (ha *helmArgs) run(cmd *cobra.Command, args []string) error {
+func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
+	if err := cliutil.InitCommand(cmd); err != nil {
+		return err
+	}
 	ha.request.KubeFlags = kubeFlagMap(ha.kubeFlags)
 	for i, path := range ha.values {
 		absPath, err := filepath.Abs(path)
@@ -78,46 +88,45 @@ func (ha *helmArgs) run(cmd *cobra.Command, args []string) error {
 		}
 		ha.values[i] = absPath
 	}
-	request := &connector.HelmRequest{
-		Type:           ha.cmdType,
-		ValuePaths:     ha.values,
-		ConnectRequest: ha.request,
-	}
-	addKubeconfigEnv(request.ConnectRequest)
 
 	// always disconnect to ensure that there are no running intercepts etc.
 	ctx := cmd.Context()
 	_ = cliutil.Disconnect(ctx, false)
 
 	doQuit := false
-	err := cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		status, _ := connectorClient.Status(ctx, &empty.Empty{})
-		resp, err := connectorClient.Helm(ctx, request)
-		if err != nil {
-			return err
-		}
-		if err = errcat.FromResult(resp); err != nil {
-			return err
-		}
+	userD := cliutil.GetUserDaemon(ctx)
+	status, _ := userD.Status(ctx, &empty.Empty{})
 
-		var msg string
-		switch ha.cmdType {
-		case connector.HelmRequest_INSTALL:
-			msg = "installed"
-		case connector.HelmRequest_UPGRADE:
-			msg = "upgraded"
-		case connector.HelmRequest_UNINSTALL:
-			if status != nil {
-				if err = removeClusterFromUserCache(ctx, status); err != nil {
-					return err
-				}
+	request := &connector.HelmRequest{
+		Type:           ha.cmdType,
+		ValuePaths:     ha.values,
+		ConnectRequest: ha.request,
+	}
+	cliutil.AddKubeconfigEnv(request.ConnectRequest)
+	resp, err := userD.Helm(ctx, request)
+	if err != nil {
+		return err
+	}
+	if err = errcat.FromResult(resp); err != nil {
+		return err
+	}
+
+	var msg string
+	switch ha.cmdType {
+	case connector.HelmRequest_INSTALL:
+		msg = "installed"
+	case connector.HelmRequest_UPGRADE:
+		msg = "upgraded"
+	case connector.HelmRequest_UNINSTALL:
+		if status != nil {
+			if err = removeClusterFromUserCache(ctx, status); err != nil {
+				return err
 			}
-			doQuit = true
-			msg = "uninstalled"
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "\nTraffic Manager %s successfully\n", msg)
-		return nil
-	})
+		doQuit = true
+		msg = "uninstalled"
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "\nTraffic Manager %s successfully\n", msg)
 	if err == nil && doQuit {
 		err = cliutil.Disconnect(cmd.Context(), true)
 	}

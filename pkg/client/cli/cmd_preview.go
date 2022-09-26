@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
@@ -63,6 +64,9 @@ func previewCommand() *cobra.Command {
 
 		Short: "Create or remove preview domains for existing intercepts",
 		RunE:  RunSubcommands,
+		Annotations: map[string]string{
+			ann.Session: ann.Required,
+		},
 	}
 
 	var createSpec manager.PreviewSpec
@@ -72,41 +76,44 @@ func previewCommand() *cobra.Command {
 
 		Short: "Create a preview domain for an existing intercept",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
-				if _, err := cliutil.ClientEnsureLoggedIn(cmd.Context(), "", cs.userD); err != nil {
-					return err
-				}
-				reporter := scout.NewReporter(ctx, "cli")
-				reporter.Start(ctx)
-				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-					if createSpec.Ingress == nil {
-						request := manager.GetInterceptRequest{Session: cs.SessionInfo, Name: args[0]}
-						// Throws rpc "not found" error if intercept has not yet been created
-						interceptInfo, err := managerClient.GetIntercept(ctx, &request)
-						if err != nil {
-							return err
-						}
-						iis, err := cs.userD.GetIngressInfos(ctx, &empty.Empty{})
-						if err != nil {
-							return err
-						}
-						ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), cs.ConnectInfo, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace, iis.IngressInfos)
-						if err != nil {
-							return err
-						}
-						createSpec.Ingress = ingress
-					}
-					intercept, err := AddPreviewDomain(ctx, reporter,
-						clientUpdateInterceptFn(managerClient),
-						cs.SessionInfo,
-						args[0], // intercept name
-						&createSpec)
+			if err := cliutil.InitCommand(cmd); err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			if _, err := cliutil.EnsureLoggedIn(ctx, ""); err != nil {
+				return err
+			}
+			reporter := scout.NewReporter(ctx, "cli")
+			reporter.Start(ctx)
+			session := cliutil.GetSession(ctx)
+			return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+				if createSpec.Ingress == nil {
+					request := manager.GetInterceptRequest{Session: session.Info.SessionInfo, Name: args[0]}
+					// Throws rpc "not found" error if intercept has not yet been created
+					interceptInfo, err := managerClient.GetIntercept(ctx, &request)
 					if err != nil {
 						return err
 					}
-					fmt.Println(cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, nil, false))
-					return nil
-				})
+					iis, err := session.GetIngressInfos(ctx, &empty.Empty{})
+					if err != nil {
+						return err
+					}
+					ingress, err := selectIngress(ctx, cmd.InOrStdin(), cmd.OutOrStdout(), session.Info, interceptInfo.Spec.Agent, interceptInfo.Spec.Namespace, iis.IngressInfos)
+					if err != nil {
+						return err
+					}
+					createSpec.Ingress = ingress
+				}
+				intercept, err := AddPreviewDomain(ctx, reporter,
+					clientUpdateInterceptFn(managerClient),
+					session.Info.SessionInfo,
+					args[0], // intercept name
+					&createSpec)
+				if err != nil {
+					return err
+				}
+				fmt.Println(cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, nil, false))
+				return nil
 			})
 		},
 	}
@@ -117,22 +124,26 @@ func previewCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 
 		Short: "Remove a preview domain from an intercept",
+		Annotations: map[string]string{
+			ann.Session: ann.Required,
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
-				return cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
-					intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
-						Session: cs.SessionInfo,
-						Name:    args[0],
-						PreviewDomainAction: &manager.UpdateInterceptRequest_RemovePreviewDomain{
-							RemovePreviewDomain: true,
-						},
-					})
-					if err != nil {
-						return err
-					}
-					fmt.Println(cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, nil, false))
-					return nil
+			if err := cliutil.InitCommand(cmd); err != nil {
+				return err
+			}
+			return cliutil.WithManager(cmd.Context(), func(ctx context.Context, managerClient manager.ManagerClient) error {
+				intercept, err := managerClient.UpdateIntercept(ctx, &manager.UpdateInterceptRequest{
+					Session: cliutil.GetSession(ctx).Info.SessionInfo,
+					Name:    args[0],
+					PreviewDomainAction: &manager.UpdateInterceptRequest_RemovePreviewDomain{
+						RemovePreviewDomain: true,
+					},
 				})
+				if err != nil {
+					return err
+				}
+				fmt.Println(cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, nil, false))
+				return nil
 			})
 		},
 	}

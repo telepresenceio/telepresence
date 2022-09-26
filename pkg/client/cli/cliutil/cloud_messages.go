@@ -74,10 +74,9 @@ func (cmc *cloudMessageCache) updateCacheMessages(ctx context.Context, resp *sys
 	cmc.MessagesDelivered = make(map[string]struct{})
 }
 
-func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed string) string {
+func (cmc *cloudMessageCache) getMessageFromCache(_ context.Context, cmdUsed string) string {
 	// Ensure that the message hasn't already been delivered to the user
-	// if it has, then we don't want to print any output so as to not
-	// annoy the user.
+	// if it has, then we don't want to print any output.
 	var msg string
 	if _, ok := cmc.MessagesDelivered[cmdUsed]; ok {
 		return msg
@@ -95,17 +94,10 @@ func (cmc *cloudMessageCache) getMessageFromCache(ctx context.Context, cmdUsed s
 	return msg
 }
 
-// raiseCloudMessage is what is called from `PostRunE` in a command and is responsible
+// RaiseCloudMessage is what is called from `PostRunE` in a command and is responsible
 // for raising the message for the command used.
 func RaiseCloudMessage(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	// Currently, we only have messages that should be served when a user
-	// isn't logged in, so we check that here
-	if HasLoggedIn(cmd.Context()) {
-		if _, err := GetCloudUserInfo(ctx, false, true); err == nil {
-			return nil
-		}
-	}
 
 	// If the user has specified they are in an air-gapped cluster,
 	// we shouldn't try to get messages

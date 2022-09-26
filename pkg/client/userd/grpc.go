@@ -156,12 +156,12 @@ func (s *Service) Status(c context.Context, ex *empty.Empty) (result *rpc.Connec
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
 			result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
+			_ = s.withRootDaemon(c, func(c context.Context, dc daemon.DaemonClient) error {
+				result.DaemonStatus, err = dc.Status(c, ex)
+				return nil
+			})
 		} else {
 			result = s.session.Status(s.sessionContext)
-		}
-		var rd daemon.DaemonClient
-		if rd, err = s.RootDaemonClient(c, false); err == nil {
-			result.DaemonStatus, err = rd.Status(c, ex)
 		}
 	})
 	return
@@ -496,20 +496,17 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 }
 
 func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
-	var err error
 	s.logCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		s.cancelSessionReadLocked()
 		s.quit()
-		var rd daemon.DaemonClient
-		if rd, err = s.RootDaemonClient(ctx, false); err == nil {
-			ex, err = rd.Quit(ctx, ex)
-		} else {
-			ex = &empty.Empty{}
-		}
+		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+			_, err := rd.Quit(ctx, ex)
+			return err
+		})
 	})
-	return ex, err
+	return ex, nil
 }
 
 func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
@@ -964,18 +961,27 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	return &resp, nil
 }
 
-func (s *Service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (*common.VersionInfo, error) {
-	rd, err := s.RootDaemonClient(ctx, false)
-	if err != nil {
-		return nil, err
-	}
-	return rd.Version(ctx, empty)
+func (s *Service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi *common.VersionInfo, err error) {
+	err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+		vi, err = rd.Version(ctx, empty)
+		return err
+	})
+	return vi, err
 }
 
-func (s *Service) GetClusterSubnets(ctx context.Context, empty *empty.Empty) (*daemon.ClusterSubnets, error) {
-	rd, err := s.RootDaemonClient(ctx, false)
+func (s *Service) GetClusterSubnets(ctx context.Context, empty *empty.Empty) (cs *daemon.ClusterSubnets, err error) {
+	err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+		cs, err = rd.GetClusterSubnets(ctx, empty)
+		return err
+	})
+	return cs, err
+}
+
+func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
+	conn, err := client.DialSocket(ctx, client.DaemonSocketName)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return rd.GetClusterSubnets(ctx, empty)
+	defer conn.Close()
+	return f(ctx, daemon.NewDaemonClient(conn))
 }

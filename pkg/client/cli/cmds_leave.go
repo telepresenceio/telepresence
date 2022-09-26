@@ -9,10 +9,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -23,43 +23,35 @@ func leaveCommand() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 
 		Short: "Remove existing intercept",
+		Annotations: map[string]string{
+			ann.Session: ann.Required,
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := cliutil.InitCommand(cmd); err != nil {
+				return err
+			}
 			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
 		},
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			var (
-				completions  = []string{}
-				intercepts   = []*connector.WorkloadInfo{}
-				shellCompDir = cobra.ShellCompDirectiveNoFileComp
-			)
-
+			shellCompDir := cobra.ShellCompDirectiveNoFileComp
 			if len(args) != 0 {
-				return completions, shellCompDir
+				return nil, shellCompDir
 			}
-
-			err := cliutil.WithStartedConnector(cmd.Context(), true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-				resp, err := connectorClient.List(ctx, &connector.ListRequest{
-					Filter:    connector.ListRequest_INTERCEPTS,
-					Namespace: "",
-				})
-				if err != nil {
-					return err
-				}
-
-				intercepts = resp.Workloads
-
-				return nil
-			})
+			if err := cliutil.InitCommand(cmd); err != nil {
+				return nil, shellCompDir | cobra.ShellCompDirectiveError
+			}
+			ctx := cmd.Context()
+			userD := cliutil.GetUserDaemon(ctx)
+			resp, err := userD.List(ctx, &connector.ListRequest{Filter: connector.ListRequest_INTERCEPTS})
 			if err != nil {
-				dlog.Debugf(cmd.Context(), "error getting intercepts: %v", err)
-				shellCompDir |= cobra.ShellCompDirectiveError
+				return nil, shellCompDir | cobra.ShellCompDirectiveError
+			}
+			if len(resp.Workloads) == 0 {
+				return nil, shellCompDir
 			}
 
-			if len(intercepts) == 0 {
-				return completions, shellCompDir
-			}
-
-			for _, intercept := range intercepts {
+			var completions []string
+			for _, intercept := range resp.Workloads {
 				for _, ii := range intercept.InterceptInfos {
 					name := ii.Spec.Name
 					if strings.HasPrefix(name, toComplete) {
@@ -67,7 +59,6 @@ func leaveCommand() *cobra.Command {
 					}
 				}
 			}
-
 			return completions, shellCompDir
 		},
 	}
@@ -142,16 +133,13 @@ func InterceptError(r *connector.InterceptResult) error {
 }
 
 func removeIntercept(ctx context.Context, name string) error {
-	return cliutil.WithStartedConnector(ctx, true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		var r *connector.InterceptResult
-		var err error
-		r, err = connectorClient.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name})
-		if err != nil {
-			return err
-		}
-		if r.Error != common.InterceptError_UNSPECIFIED {
-			return InterceptError(r)
-		}
-		return nil
-	})
+	userD := cliutil.GetUserDaemon(ctx)
+	r, err := userD.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name})
+	if err != nil {
+		return err
+	}
+	if r.Error != common.InterceptError_UNSPECIFIED {
+		return InterceptError(r)
+	}
+	return nil
 }
