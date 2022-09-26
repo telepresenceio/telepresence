@@ -392,6 +392,11 @@ func (s *State) waitForAgent(ctx context.Context, name, namespace string, failed
 				case "Unhealthy":
 					// Let readiness probe continue, this isn't fatal
 					continue
+				case "FailedMount":
+					// Let mount failure due sync of config map continue, it's likely to fix itself.
+					if strings.Contains(msg, "sync configmap cache") {
+						continue
+					}
 				case "BackOff":
 					// The traffic-agent container was injected, but it fails to start
 					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
