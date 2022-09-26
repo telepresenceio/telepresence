@@ -179,7 +179,7 @@ nextSession:
 				sCtx, sCancel := context.WithCancel(c)
 				s.sessionCancel = sCancel
 				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices, fuseFtp)
-				sCtx = a8rcloud.WithSystemAPool[*SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
+				sCtx = a8rcloud.WithSystemAPool[a8rcloud.SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.session = session

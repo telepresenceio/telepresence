@@ -558,7 +558,14 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 // install a version that is more recent than the traffic-manager currently
 // in use (it's legacy too, or we wouldn't end up here)
 // Deprecated
-func (tm *TrafficManager) legacyImage(image string) string {
+func (tm *TrafficManager) legacyImage(ctx context.Context, image string) (string, error) {
+	if image == "" {
+		var err error
+		image, err = agentImageFromSystemA(ctx, tm.managerVersion)
+		if err != nil {
+			return "", err
+		}
+	}
 	if lc := strings.LastIndexByte(image, ':'); lc > 0 {
 		lc++
 		img := image[:lc]
@@ -574,12 +581,15 @@ func (tm *TrafficManager) legacyImage(image string) string {
 			}
 		}
 	}
-	return image
+	return image, nil
 }
 
 // Deprecated
 func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInterceptRequest, apiKey string) (*serviceProps, *rpc.InterceptResult) {
-	ir.AgentImage = tm.legacyImage(ir.AgentImage)
+	var err error
+	if ir.AgentImage, err = tm.legacyImage(c, ir.AgentImage); err != nil {
+		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
+	}
 	spec := ir.Spec
 	wl, err := k8sapi.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {

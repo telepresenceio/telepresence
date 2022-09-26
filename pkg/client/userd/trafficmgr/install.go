@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/pkg/errors"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
@@ -20,7 +21,9 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
@@ -32,6 +35,28 @@ const annTelepresenceActions = install.DomainPrefix + "actions"
 
 func managerImageName(ctx context.Context) string {
 	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry(ctx), strings.TrimPrefix(client.Version(), "v"))
+}
+
+// agentImageFromSystemA returns the systemA preferred agent
+// Deprecated: not used with traffic-manager versions >= 2.6.0
+func agentImageFromSystemA(ctx context.Context, v semver.Version) (string, error) {
+	// This is currently the only use case for the unauthenticated pool, but it's very important that we be able to get the image name
+	systemaPool := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
+	systemaClient, err := systemaPool.Get(ctx)
+	if err != nil {
+		return "", err
+	}
+	resp, err := systemaClient.PreferredAgent(ctx, &common.VersionInfo{
+		ApiVersion: client.APIVersion,
+		Version:    v.String(),
+	})
+	if err != nil {
+		return "", err
+	}
+	if err = systemaPool.Done(ctx); err != nil {
+		return "", err
+	}
+	return resp.GetImageName(), nil
 }
 
 // legacyRemoveAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,

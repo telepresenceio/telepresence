@@ -744,8 +744,8 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 				}()
 
 				// Copy the SystemAPoolProvider over
-				if pool := a8rcloud.GetSystemAPoolProvider[*SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
-					ctx = a8rcloud.WithSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName, pool)
+				if pool := a8rcloud.GetSystemAPoolProvider[a8rcloud.SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
+					ctx = a8rcloud.WithSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName, pool)
 				}
 				if ki := k8sapi.GetK8sInterface(sessionCtx); ki != nil {
 					ctx = k8sapi.WithK8sInterface(ctx, ki)
@@ -762,7 +762,7 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
 	err = s.withSession(ctx, "ResolveIngressInfo", func(ctx context.Context, session trafficmgr.Session) error {
-		pool := a8rcloud.GetSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName)
+		pool := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
 		systemacli, err := pool.Get(ctx)
 		if err != nil {
 			return err
