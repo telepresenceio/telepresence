@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.8.0 (TBD)
+
+- Feature: The Telepresence DNS resolver is now capable of resolving queries of type A, AAAA, CNAME, MX, NS, PTR, SRV, and TXT.
+
+- 
+
 ### 2.7.6 (September 16, 2022)
 
 - Reintroduce everything from 2.7.4 with fix for issue preventing the CLI from launching on arm64 builds
