@@ -661,6 +661,7 @@ func (is *interceptState) getMountPoint(ctx context.Context) (string, bool, erro
 	if doMount {
 		mountPoint, err = cliutil.PrepareMount(GetCwd(ctx), mountPoint)
 	}
+	dlog.Infof(ctx, "Mount is %s, mount point is %s", is.args.mount, mountPoint)
 
 	return mountPoint, doMount, err
 }

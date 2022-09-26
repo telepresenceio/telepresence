@@ -292,7 +292,7 @@ check-integration: build-deps $(tools/helm) ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -run='Test_Integration/Test_Namespaces.*' -timeout=39m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -run='Test_Integration/Test_Namespaces_.*' -failfast -timeout=39m ./integration_test/...
 
 .PHONY: _login
 _login:
