@@ -224,7 +224,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		vifReady:         make(chan error, 2),
 	}
 
-	s.dev, err = vif.OpenTun(c, &s.closing)
+	s.dev, err = vif.OpenTun(c)
 	if err != nil {
 		return nil, err
 	}
