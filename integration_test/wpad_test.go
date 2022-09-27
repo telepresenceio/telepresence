@@ -96,7 +96,7 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 				txt := scn.Text()
 				if strings.Contains(txt, "wpad") {
 					if !hasLookup {
-						hasLookup = strings.Contains(txt, "LookupHost ")
+						hasLookup = strings.Contains(txt, "Lookup A ")
 					}
 					if !hasNX {
 						hasNX = strings.Contains(txt, "-> NXDOMAIN")
@@ -110,9 +110,9 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 				return
 			}
 			if tt.forward {
-				require.Truef(hasLookup, "Missing expected LookupHost log for %s", tt.qn)
+				require.Truef(hasLookup, "Missing expected Lookup A log for %s", tt.qn)
 			} else {
-				require.Falsef(hasLookup, "Found unexpected LookupHost log for %s", tt.qn)
+				require.Falsef(hasLookup, "Found unexpected Lookup A log for %s", tt.qn)
 				require.Truef(hasNX, "No NXDOMAIN record found for %s", tt.qn)
 			}
 		})
