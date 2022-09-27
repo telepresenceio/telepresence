@@ -152,6 +152,10 @@ var localhostIPv4 = net.IP{127, 0, 0, 1}
 var localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 
 func (s *Server) shouldDoClusterLookup(query string) bool {
+	if strings.HasPrefix(query, wpadDot) {
+		// Reject "wpad.<namespace>."
+		return false
+	}
 	n := strings.Count(query, ".")
 	if strings.HasSuffix(query, "."+s.clusterDomain) {
 		switch {
@@ -160,15 +164,6 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 			return false
 		case (n == 4 || n == 5) && strings.HasPrefix(query, wpadDot) && strings.Contains(query, ".svc."):
 			// Reject "wpad.svc.cluster.local." and "wpad.<namespace>.svc.cluster.local."
-			return false
-		}
-	} else {
-		switch {
-		case n == 1 && query == wpadDot:
-			// Reject "wpad."
-			return false
-		case n == 2 && strings.HasPrefix(query, wpadDot):
-			// Reject "wpad.<namespace>."
 			return false
 		}
 	}
