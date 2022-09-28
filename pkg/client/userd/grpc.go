@@ -675,6 +675,7 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
+		cmd.SetContext(ctx)
 		wg := sync.WaitGroup{}
 
 		// Start the stdout/stderr pump
