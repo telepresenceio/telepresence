@@ -153,19 +153,12 @@ var localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 
 func (s *Server) shouldDoClusterLookup(query string) bool {
 	if strings.HasPrefix(query, wpadDot) {
-		// Reject "wpad.<namespace>."
+		// Reject "wpad.*"
 		return false
 	}
-	n := strings.Count(query, ".")
-	if strings.HasSuffix(query, "."+s.clusterDomain) {
-		switch {
-		case n < 4:
-			// Reject "<label>.cluster.local."
-			return false
-		case (n == 4 || n == 5) && strings.HasPrefix(query, wpadDot) && strings.Contains(query, ".svc."):
-			// Reject "wpad.svc.cluster.local." and "wpad.<namespace>.svc.cluster.local."
-			return false
-		}
+	if strings.HasSuffix(query, "."+s.clusterDomain) && strings.Count(query, ".") < 4 {
+		// Reject "<label>.cluster.local."
+		return false
 	}
 
 	query = query[:len(query)-1] // skip last dot
