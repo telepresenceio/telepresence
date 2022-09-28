@@ -383,20 +383,18 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 
 func (s *State) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
 	snapshotCh := s.WatchAgents(ctx, nil)
+
+	// fes collects events from the failedCreatedCh and is included in the error message in case
+	// the waitForAgent call times out.
+	var fes []*events.Event
 	for {
 		select {
 		case fe, ok := <-failedCreateCh:
 			if ok {
 				msg := fe.Note
+				// Terminate directly on known fatal events. No need for the user to wait for a timeout
+				// when one of these are encountered.
 				switch fe.Reason {
-				case "Unhealthy":
-					// Let readiness probe continue, this isn't fatal
-					continue
-				case "FailedMount":
-					// Let mount failure due sync of config map continue, it's likely to fix itself.
-					if strings.Contains(msg, "sync configmap cache") {
-						continue
-					}
 				case "BackOff":
 					// The traffic-agent container was injected, but it fails to start
 					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
@@ -405,6 +403,11 @@ func (s *State) waitForAgent(ctx context.Context, name, namespace string, failed
 					msg = fmt.Sprintf(
 						"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
 						msg)
+				default:
+					// Something went wrong, but it might not be fatal. There are several events logged that are just
+					// warnings where the action will be retried and eventually succeed.
+					fes = append(fes, fe)
+					continue
 				}
 				return errcat.User.New(msg)
 			}
@@ -420,13 +423,51 @@ func (s *State) waitForAgent(ctx context.Context, name, namespace string, failed
 			}
 		case <-ctx.Done():
 			v := "canceled"
-			c := codes.Canceled
 			if ctx.Err() == context.DeadlineExceeded {
 				v = "timed out"
-				c = codes.DeadlineExceeded
 			}
-			return status.Error(c, fmt.Sprintf("request %s while waiting for agent %s.%s to arrive", v, name, namespace))
+			bf := &strings.Builder{}
+			fmt.Fprintf(bf, "request %s while waiting for agent %s.%s to arrive", v, name, namespace)
+			if len(fes) > 0 {
+				bf.WriteString(": Events that may be relevant:\n")
+				writeEventList(bf, fes)
+			}
+			return errcat.User.New(bf.String())
 		}
+	}
+}
+
+func writeEventList(bf *strings.Builder, es []*events.Event) {
+	now := time.Now()
+	age := func(e *events.Event) string {
+		return now.Sub(e.CreationTimestamp.Time).Truncate(time.Second).String()
+	}
+	object := func(e *events.Event) string {
+		or := e.Regarding
+		return strings.ToLower(or.Kind) + "/" + or.Name
+	}
+	ageLen, typeLen, reasonLen, objectLen := len("AGE"), len("TYPE"), len("REASON"), len("OBJECT")
+	for _, e := range es {
+		if l := len(age(e)); l > ageLen {
+			ageLen = l
+		}
+		if l := len(e.Type); l > typeLen {
+			typeLen = l
+		}
+		if l := len(e.Reason); l > reasonLen {
+			reasonLen = l
+		}
+		if l := len(object(e)); l > objectLen {
+			objectLen = l
+		}
+	}
+	ageLen += 3
+	typeLen += 3
+	reasonLen += 3
+	objectLen += 3
+	fmt.Fprintf(bf, "%-*s%-*s%-*s%-*s%s\n", ageLen, "AGE", typeLen, "TYPE", reasonLen, "REASON", objectLen, "OBJECT", "MESSAGE")
+	for _, e := range es {
+		fmt.Fprintf(bf, "%-*s%-*s%-*s%-*s%s\n", ageLen, age(e), typeLen, e.Type, reasonLen, e.Reason, objectLen, object(e), e.Note)
 	}
 }
 
