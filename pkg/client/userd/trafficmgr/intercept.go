@@ -561,7 +561,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 func (tm *TrafficManager) legacyImage(ctx context.Context, image string) (string, error) {
 	if image == "" {
 		var err error
-		image, err = agentImageFromSystemA(ctx, tm.managerVersion)
+		image, err = AgentImageFromSystemA(ctx, tm.managerVersion)
 		if err != nil {
 			return "", err
 		}

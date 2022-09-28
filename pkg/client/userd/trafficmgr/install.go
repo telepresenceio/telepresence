@@ -37,10 +37,9 @@ func managerImageName(ctx context.Context) string {
 	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry(ctx), strings.TrimPrefix(client.Version(), "v"))
 }
 
-// agentImageFromSystemA returns the systemA preferred agent
+// AgentImageFromSystemA returns the systemA preferred agent
 // Deprecated: not used with traffic-manager versions >= 2.6.0
-func agentImageFromSystemA(ctx context.Context, v semver.Version) (string, error) {
-	// This is currently the only use case for the unauthenticated pool, but it's very important that we be able to get the image name
+func AgentImageFromSystemA(ctx context.Context, v semver.Version) (string, error) {
 	systemaPool := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {
