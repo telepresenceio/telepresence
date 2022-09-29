@@ -353,6 +353,7 @@ func (g *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 
 	podTpl := wl.GetPodTemplate()
 	agentContainer := agentconfig.AgentContainer(
+		ctx,
 		&core.Pod{
 			TypeMeta: meta.TypeMeta{
 				Kind:       "pod",

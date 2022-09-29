@@ -14,6 +14,9 @@
 - Change: The Helm chart `dnsConfig` was deprecated but retained for backward compatibility. The fields
   `alwaysProxySubnets` and `neverProxySubnets` can now be found under `routing` in the `client` struct.
 
+- Bugfix: Environment variable interpolation now works for all definitions that are copied from pod containers
+  into the injected traffic-agent container.
+
 - Bugfix: An attempt to create simultaneous intercepts that span multiple namespace on the same workstation
   is detected early and prohibited instead of resulting in failing DNS lookups later on.
 

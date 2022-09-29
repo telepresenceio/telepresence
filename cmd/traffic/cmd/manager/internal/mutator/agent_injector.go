@@ -357,7 +357,7 @@ func addAgentContainer(
 	config *agentconfig.Sidecar,
 	patches patchOps,
 ) patchOps {
-	acn := agentconfig.AgentContainer(pod, config)
+	acn := agentconfig.AgentContainer(ctx, pod, config)
 	if acn == nil {
 		return patches
 	}

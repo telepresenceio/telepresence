@@ -1512,19 +1512,29 @@ func TestTrafficAgentInjector(t *testing.T) {
 					Containers: []core.Container{{
 						Name:  "some-container",
 						Image: "some-app-image",
+						Env: []core.EnvVar{
+							{
+								Name:  "TOKEN_VOLUME",
+								Value: "default-token-vol",
+							},
+							{
+								Name:  "SECRET_NAME",
+								Value: "default-secret-name",
+							},
+						},
 						Ports: []core.ContainerPort{{
 							Name: "http", ContainerPort: 8888},
 						},
 						VolumeMounts: []core.VolumeMount{
-							{Name: "default-token-nkspp", ReadOnly: true, MountPath: serviceAccountMountPath},
+							{Name: "$(TOKEN_VOLUME)", ReadOnly: true, MountPath: serviceAccountMountPath},
 						}},
 					},
 					Volumes: []core.Volume{
 						{
-							Name: "default-token-nkspp",
+							Name: "default-token-vol",
 							VolumeSource: core.VolumeSource{
 								Secret: &core.SecretVolumeSource{
-									SecretName:  "default-token-nkspp",
+									SecretName:  "default-secret-name",
 									DefaultMode: &secretMode,
 								},
 							},
@@ -1539,6 +1549,10 @@ func TestTrafficAgentInjector(t *testing.T) {
     args:
     - agent
     env:
+    - name: _TEL_APP_A_TOKEN_VOLUME
+      value: default-token-vol
+    - name: _TEL_APP_A_SECRET_NAME
+      value: default-secret-name
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1563,7 +1577,7 @@ func TestTrafficAgentInjector(t *testing.T) {
     resources: {}
     volumeMounts:
     - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-      name: default-token-nkspp
+      name: $(_TEL_APP_A_TOKEN_VOLUME)
       readOnly: true
     - mountPath: /tel_pod_info
       name: traffic-annotations
