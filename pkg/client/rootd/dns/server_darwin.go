@@ -126,7 +126,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //
 // For more information about /etc/resolver files, please view the man pages available at
 //
-//   man 5 resolver
+//	man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
 func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
