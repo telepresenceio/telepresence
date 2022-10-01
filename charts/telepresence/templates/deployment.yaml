@@ -51,8 +51,6 @@ spec:
             value: {{ .Values.systemaHost }}
           - name: SYSTEMA_PORT
             value: {{ .Values.systemaPort | quote }}
-          - name: TELEPRESENCE_REGISTRY
-            value: {{ .Values.agentInjector.agentImage.registry }}
           {{- with .Values.tracing }}
           {{ if .grpcPort }}
           - name: TELEPRESENCE_GRPC_TRACE_PORT
@@ -71,18 +69,32 @@ spec:
             value: {{ .Values.grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
-          {{ if .Values.agentInjector.agentImage.name }}
+          {{- with .Values.agentInjector }}
+          {{- with .agentImage }}
+          {{ if .name }}
           - name: TELEPRESENCE_AGENT_IMAGE
-            value: "{{ .Values.agentInjector.agentImage.name }}:{{ .Values.agentInjector.agentImage.tag | default .Chart.AppVersion }}"
+            value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+          {{- end }}
+          {{- with .resources }}
+          - name: AGENT_RESOURCES
+            value: '{{ toJson . }}'
+          {{- end }}
+          {{- with .initResources }}
+          - name: AGENT_INIT_RESOURCES
+            value: '{{ toJson . }}'
+          {{- end }}
+          - name: TELEPRESENCE_REGISTRY
+            value: {{ .registry }}
+          {{- end }}
+          - name: TELEPRESENCE_APP_PROTO_STRATEGY
+            value: {{ .appProtocolStrategy }}
+          - name: AGENT_INJECT_POLICY
+            value: {{ .injectPolicy }}
           {{- end }}
           {{- if .Values.prometheus.port }}  # 0 is false
           - name: PROMETHEUS_PORT
             value: "{{ .Values.prometheus.port }}"
           {{- end }}
-          - name: TELEPRESENCE_APP_PROTO_STRATEGY
-            value: {{ .Values.agentInjector.appProtocolStrategy }}
-          - name: AGENT_INJECT_POLICY
-            value: {{ .Values.agentInjector.injectPolicy }}
           - name: MANAGER_NAMESPACE
             valueFrom:
               fieldRef:

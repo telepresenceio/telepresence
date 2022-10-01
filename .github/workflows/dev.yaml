@@ -18,7 +18,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - name: Build dev image
         run: |
           make tel2-image
@@ -42,20 +42,20 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - uses: azure/setup-kubectl@v1
         if: steps.get_last_run.outputs.passed != 'success'
         with:
           version: 'v1.19.3'
         id: kubectl
-      - run: make build
-        if: steps.get_last_run.outputs.passed != 'success'
       - run: |
           brew update
           brew install --cask macfuse
           brew install gromgit/fuse/sshfs-mac
           brew link --overwrite sshfs-mac
         name: install dependencies
+        if: steps.get_last_run.outputs.passed != 'success'
+      - run: make build
         if: steps.get_last_run.outputs.passed != 'success'
       - uses: actions/download-artifact@v2
         if: steps.get_last_run.outputs.passed != 'success'
@@ -106,7 +106,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - uses: azure/setup-kubectl@v1
         if: steps.get_last_run.outputs.passed != 'success'
         with:
@@ -119,7 +119,7 @@ jobs:
       - name: "Download sshfs"
         if: steps.get_last_run.outputs.passed != 'success'
         run: |
-          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.10/winfsp-1.10.22006.msi
+          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
           curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
         shell: bash
       - name: "Install sshfs"
@@ -186,7 +186,7 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - uses: azure/setup-kubectl@v1
         if: steps.get_last_run.outputs.passed != 'success'
         with:

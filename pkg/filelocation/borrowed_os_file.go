@@ -21,11 +21,11 @@ import (
 
 // UserHomeDir returns the current user's home directory.
 //
-//  - On Unix, including macOS, it returns the $HOME environment variable.
+//   - On Unix, including macOS, it returns the $HOME environment variable.
 //
-//  - On Windows, it returns the "%USERPROFILE%" environment variable.
+//   - On Windows, it returns the "%USERPROFILE%" environment variable.
 //
-//  - On Plan 9, it returns the "$home" environment variable.
+//   - On Plan 9, it returns the "$home" environment variable.
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
@@ -60,17 +60,17 @@ func UserHomeDir(ctx context.Context) (string, error) {
 // subdirectory within this one and use that (for example, using
 // AppUserCacheDir).
 //
-//  - On non-Darwin Unix systems, it returns "$XDG_CACHE_HOME" if non-empty, or
-//    else "$HOME/.cache".  Specified by:
-//    https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+//   - On non-Darwin Unix systems, it returns "$XDG_CACHE_HOME" if non-empty, or
+//     else "$HOME/.cache".  Specified by:
+//     https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 //
-//  - On Darwin, it returns "$HOME/Library/Caches".  Specified by:
-//    https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
+//   - On Darwin, it returns "$HOME/Library/Caches".  Specified by:
+//     https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
 //
-//  - On Windows, it returns "%LocalAppData%" (usually
-//    "C:\Users\%USERNAME%\AppData\Local").
+//   - On Windows, it returns "%LocalAppData%" (usually
+//     "C:\Users\%USERNAME%\AppData\Local").
 //
-//  - On Plan 9, it returns "$home/lib/cache".
+//   - On Plan 9, it returns "$home/lib/cache".
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
@@ -124,17 +124,17 @@ func userCacheDir(ctx context.Context) (string, error) {
 // subdirectory within this one and use that (for example, using
 // AppUserConfigDir).
 //
-//  - On non-Darwin Unix systems, it returns "$XDG_CONFIG_HOME" if non-empty, or
-//    else "$HOME/.config".  Specified by:
-//    https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+//   - On non-Darwin Unix systems, it returns "$XDG_CONFIG_HOME" if non-empty, or
+//     else "$HOME/.config".  Specified by:
+//     https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 //
-//  - On Darwin, it returns "$HOME/Library/Application Support".  Specified by:
-//    https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
-//    See also: https://github.com/golang/go/commit/b33652642286cf4c3fc8b10cdda97bd58059ba3e
+//   - On Darwin, it returns "$HOME/Library/Application Support".  Specified by:
+//     https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
+//     See also: https://github.com/golang/go/commit/b33652642286cf4c3fc8b10cdda97bd58059ba3e
 //
-//  - On Windows, it returns "%AppData%" (usually "C:\Users\UserName\AppData\Roaming").
+//   - On Windows, it returns "%AppData%" (usually "C:\Users\UserName\AppData\Roaming").
 //
-//  - On Plan 9, it returns "$home/lib".
+//   - On Plan 9, it returns "$home/lib".
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.

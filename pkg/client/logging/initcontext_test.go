@@ -3,9 +3,9 @@ package logging
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -102,17 +102,16 @@ func TestInitContext(t *testing.T) {
 		ft.Step(time.Second)
 		errMsg := "error"
 		fmt.Fprintln(os.Stderr, errMsg)
+		time.Sleep(30 * time.Millisecond)
 
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
-		check.Contains(string(bs), fmt.Sprintf("%s\n%s\n", infoMsg, errMsg))
+		s := string(bs)
+		check.Contains(s, infoMsg)
+		check.Contains(s, errMsg)
 	})
 
-	// This will fail on Windows
 	t.Run("captures output of builtin functions", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.SkipNow()
-		}
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
@@ -125,10 +124,30 @@ func TestInitContext(t *testing.T) {
 		msg := "some message"
 		println(msg)
 		check.FileExists(logFile)
+		time.Sleep(30 * time.Millisecond)
+		bs, err := os.ReadFile(logFile)
+		check.NoError(err)
+		check.Contains(string(bs), msg)
+	})
+
+	t.Run("captures output of standard logger", func(t *testing.T) {
+		ctx, _, logFile := testSetup(t)
+		check := require.New(t)
+
+		c, err := InitContext(ctx, logName, NewRotateOnce(), true)
+		loggerForTest.AddHook(&dtimeHook{})
+		check.NoError(err)
+		check.NotNil(c)
+		defer closeLog(t)
+
+		msg := "some message"
+		log.Print(msg)
+		time.Sleep(30 * time.Millisecond)
+		check.FileExists(logFile)
 
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
-		check.Contains(string(bs), fmt.Sprintln(msg))
+		check.Contains(string(bs), fmt.Sprintf("info    stdlog : %s\n", msg))
 	})
 
 	t.Run("next session rotates on write", func(t *testing.T) {

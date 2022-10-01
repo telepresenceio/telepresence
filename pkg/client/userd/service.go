@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -72,15 +74,16 @@ type Service struct {
 	loginExecutor     auth.LoginExecutor
 	userNotifications func(context.Context) <-chan string
 	ucn               int64
-
-	scout *scout.Reporter
+	fuseFTPError      error
+	scout             *scout.Reporter
 
 	quit func()
 
-	session        trafficmgr.Session
-	sessionCancel  context.CancelFunc
-	sessionContext context.Context
-	sessionLock    sync.RWMutex
+	session         trafficmgr.Session
+	sessionCancel   context.CancelFunc
+	sessionContext  context.Context
+	sessionQuitting int32 // atomic boolean. True if non-zero.
+	sessionLock     sync.RWMutex
 
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
@@ -140,7 +143,7 @@ func (s *Service) configReload(c context.Context) error {
 // ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func (s *Service) ManageSessions(c context.Context, sessionServices []trafficmgr.SessionService) error {
+func (s *Service) ManageSessions(c context.Context, sessionServices []trafficmgr.SessionService, fuseFtp rpc2.FuseFTPClient) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
@@ -165,7 +168,7 @@ nextSession:
 				rsp = s.session.UpdateStatus(s.sessionContext, cr)
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
-				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices)
+				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices, fuseFtp)
 				sCtx = a8rcloud.WithSystemAPool[*SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
@@ -227,6 +230,9 @@ func (s *Service) cancelSessionReadLocked() {
 }
 
 func (s *Service) cancelSession() {
+	if !atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
+		return
+	}
 	s.sessionLock.RLock()
 	s.cancelSessionReadLocked()
 	s.sessionLock.RUnlock()
@@ -236,6 +242,7 @@ func (s *Service) cancelSession() {
 	s.sessionLock.Lock()
 	s.session = nil
 	s.sessionCancel = nil
+	atomic.StoreInt32(&s.sessionQuitting, 0)
 	s.sessionLock.Unlock()
 }
 
@@ -311,12 +318,21 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		ShutdownOnNonError:   true,
 	})
 
+	fuseFtpCh := make(chan rpc2.FuseFTPClient)
+	if cfg.Intercept.UseFtp {
+		g.Go("fuseftp-server", func(c context.Context) error {
+			s.fuseFTPError = runFuseFTPServer(c, fuseFtpCh)
+			return nil
+		})
+	} else {
+		close(fuseFtpCh)
+	}
+
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		opts := []grpc.ServerOption{
 			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
 			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
 		}
-		cfg := client.GetConfig(c)
 		if !cfg.Grpc.MaxReceiveSize.IsZero() {
 			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
 				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
@@ -348,7 +364,7 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
-		err := s.ManageSessions(c, sessionServices)
+		err := s.ManageSessions(c, sessionServices, <-fuseFtpCh)
 		cliio.Close()
 		return err
 	})

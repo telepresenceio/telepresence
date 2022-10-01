@@ -63,10 +63,10 @@ type Cluster interface {
 
 // The cluster is created once and then reused by all tests. It ensures that:
 //
-//  - executable and the images are built once
-//  - a docker repository is available
-//  - built images are pushed to the docker repository
-//  - a cluster is available
+//   - executable and the images are built once
+//   - a docker repository is available
+//   - built images are pushed to the docker repository
+//   - a cluster is available
 type cluster struct {
 	suffix           string
 	isCI             bool
@@ -167,6 +167,7 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 
 	exe := "telepresence"
 	if runtime.GOOS == "windows" {
+		ctx = WithEnv(ctx, map[string]string{"CGO_ENABLED": "0"})
 		exe += ".exe"
 	}
 	err := Run(ctx, "go", "build", "-ldflags",
@@ -274,6 +275,8 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"
+
+	config.Intercept.UseFtp = true
 
 	configYaml, err := yaml.Marshal(&config)
 	require.NoError(t, err)

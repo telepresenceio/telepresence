@@ -1,10 +1,49 @@
 # Changelog
 
-### 2.7.3 (TBD)
+### 2.7.6 (September 16, 2022)
+
+- Reintroduce everything from 2.7.4 with fix for issue preventing the CLI from launching on arm64 builds
+
+### 2.7.5 (September 14, 2022)
+
+- Revert of release 2.7.5 (so essentially the same as 2.7.3)
+
+### 2.7.4 (September 14, 2022)
+
+- Feature: The `resources` for the traffic-agent container and the optional init container can
+  be specified in the Helm chart using the `resource` and `initResource` fields of the
+  `agentInjector.agentImage`.
+
+- Feature: When the traffic-manager fails to inject a traffic-agent, the cause for the failure is
+  detected by reading the cluster events, and propagated to the user.
+
+- Feature: Telepresence can now use an embedded FTP client and load an existing FUSE library
+  instead of running an external `sshfs` or `sshfs-win` binary. This feature is experimental
+  in 2.7.x and enabled by setting `intercept.useFtp` to `true` in the `config.yml`.
+
+- Change: Telepresence on Windows upgraded winfsp from version 1.10 to 1.11
+
+- Bugfix: Running CLI commands on Apple M1 machines will no longer throw warnings about `/proc/cpuinfo`
+  and `/proc/self/auxv`.
+
+### 2.7.3 (September 7, 2022)
+
+- Bugfix: CLI commands that are executed by the user daemon now use a pseudo TTY. This enables
+  `docker run -it` to allocate a TTY and will also give other commands like `bash read` the
+  same behavior as when executed directly in a terminal.
+
+- Bugfix: The traffic-manager will no longer log numerous warnings saying: "Issuing a
+  systema request without ApiKey or InstallID may result in an error".
+
+- Bugfix: The traffic-manager will no longer log an error saying: "Unable to derive subnets
+  from nodes" when the `podCIDRStrategy` is `auto` and it chooses to instead derive the
+  subnets from the pod IPs.
+
+### 2.7.2 (August 25, 2022)
+
+- Bugfix: Standard I/O is restored when using `telepresence intercept <opts> -- <command>`.
 
 - Bugfix: Graciously handle nil intercept environment from the traffic-manager.
-
-### 2.7.2 (TBD)
 
 - Feature: The timeout for the initial connectivity check that Telepresence performs
   in order to determine if the cluster's subnets are proxied or not can now be configured

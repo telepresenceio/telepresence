@@ -73,8 +73,6 @@ func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 // run, because otherwise cobra will treat that as "success", and it shouldn't be "success" if the
 // user typos a command and types something invalid.
 func RunSubcommands(cmd *cobra.Command, args []string) error {
-	cmd.SetOut(cmd.ErrOrStderr())
-
 	// determine if --help was explicitly asked for
 	var usedHelpFlag bool
 	for _, arg := range args {
@@ -98,9 +96,6 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 // is a best effort, and it might give us false positives.
 func isCommand(s string) bool {
 	prev := ""
-	if len(os.Args) == 1 && s == "" {
-		return true
-	}
 	for _, arg := range os.Args[1:] {
 		if arg == "--" {
 			break
@@ -127,15 +122,11 @@ func isCommand(s string) bool {
 }
 
 func userWantsRootLevelHelp() bool {
-	if isCommand("help") || isCommand("") {
+	if len(os.Args) <= 1 {
 		return true
 	}
-	if 1 < len(os.Args) {
-		if arg := os.Args[1]; arg == "--help" || arg == "-h" {
-			return true
-		}
-	}
-	return false
+	arg := os.Args[1]
+	return arg == "help" || arg == "--help" || arg == "-h"
 }
 
 // Command returns the top level "telepresence" CLI command

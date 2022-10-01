@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"runtime"
 	"sort"
@@ -22,7 +21,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
@@ -34,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -63,6 +62,8 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 			ValidArgsFuncRequiresConnectorServer:  "",
 			FlagAutocompletionFuncRequiresSession: "namespace",
 		},
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 	cmd.args = interceptArgs{}
 	flags := cmd.command.Flags()
@@ -133,8 +134,6 @@ func (c *interceptCommand) init(ctx context.Context) {
 		_ = c.cobraCommand(ctx)
 	}
 
-	c.command.SilenceUsage = true
-	c.command.SilenceErrors = true
 	c.command.PreRunE = cliutil.UpdateCheckIfDue
 	c.command.PostRunE = cliutil.RaiseCloudMessage
 	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {
@@ -142,8 +141,7 @@ func (c *interceptCommand) init(ctx context.Context) {
 			return c.extErr
 		}
 		if 1 < len(positional) && ccmd.Flags().ArgsLenAtDash() != 1 {
-			err := fmt.Errorf("commands to be run with intercept must come after options")
-			return err
+			return fmt.Errorf("commands to be run with intercept must come after options")
 		}
 		// arg-parsing
 		var (
@@ -259,7 +257,7 @@ func (c *interceptCommand) flagAutocompletionFunc(flagName string) Autocompletio
 func (c *interceptCommand) flagAutocompletion_namespace() AutocompletionFunc {
 	return func(ctx context.Context, cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		completions := make([]string, 0)
-		session := GetSession(ctx)
+		session := trafficmgr.GetSession(ctx)
 		if session == nil {
 			dlog.Debugf(ctx, "no session found")
 			return completions, cobra.ShellCompDirectiveError
@@ -277,7 +275,7 @@ func (c *interceptCommand) flagAutocompletion_namespace() AutocompletionFunc {
 }
 
 func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) error {
-	session := GetSession(ctx)
+	session := trafficmgr.GetSession(ctx)
 	if session == nil {
 		return errors.New("no session found")
 	}
@@ -298,13 +296,8 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 
 	return client.WithEnsuredState(ctx, is, false, func() (err error) {
 		// start the interceptor process
-		var (
-			cmd           *dexec.Cmd
-			containerName string
-		)
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
 
+		var cmd *dexec.Cmd
 		if args.dockerRun {
 			envFile := is.args.envFile
 			if envFile == "" {
@@ -319,91 +312,36 @@ func (c *interceptCommand) intercept(ctx context.Context, args interceptArgs) er
 				}
 				envFile = file.Name()
 			}
-			cmd, containerName, err = is.startInDocker(ctx, envFile, args.cmdline)
+			cmd, err = is.startInDocker(ctx, envFile, args.cmdline)
 		} else {
-			cmd, err = proc.Start(ctx, is.env, args.cmdline[0], args.cmdline[1:]...)
+			cmd, err = proc.Start(ctx, is.env, c.command, args.cmdline[0], args.cmdline[1:]...)
 		}
 		if err != nil {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
-			return err
-		}
-
-		// setup cleanup for the interceptor process
-		var (
-			interceptID    = is.env["TELEPRESENCE_INTERCEPT_ID"]
-			interceptorPID = int32(cmd.Process.Pid)
-
-			ior = connector.Interceptor{
-				InterceptId: interceptID,
-				Pid:         interceptorPID,
-			}
-		)
-		// Send info about the pid and intercept id to the traffic-manager so that it kills
-		// the process if it receives a leave of quit call.
-		if _, err = is.connectorServer.AddInterceptor(ctx, &ior); err != nil {
-			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", interceptorPID, err)
-			_ = cmd.Process.Kill()
-			return err
-		}
-		defer func() {
-			if ctx.Err() != nil {
-				// context cancelled; this is handled elsewhere so this step is no longer needed
-				return
-			}
-			if _, err := is.connectorServer.RemoveInterceptor(ctx, &ior); err != nil {
-				dlog.Errorf(ctx, "error removing interceptor: %v", err)
-			}
-		}()
-
-		SetCtxCancellationHandlerFunc(ctx, func() {
-			// Handles context cancellation
-			var (
-				interceptName string
-				sessionStatus = session.Status(ctx)
-			)
-
-			for _, i := range sessionStatus.Intercepts.Intercepts {
-				if i.Id == interceptID {
-					interceptName = i.Spec.Name
-				}
-			}
-
-			_, err := mc.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{
-				Session: sessionStatus.SessionInfo,
-				Name:    interceptName,
-			})
-			if err != nil {
-				dlog.Errorf(ctx, "unable to remove intercept: %v", err)
-			}
-
-			if containerName == "" {
-				if err = cmd.Process.Kill(); err != nil {
-					dlog.Errorf(ctx, "error killing interceptor process: %v", err)
-				}
-			} else {
-				dockerStopCmd, err := proc.Start(ctx, nil, "docker", "stop", containerName)
-				if err != nil {
-					dlog.Errorf(ctx, "error stopping docker container %s: %v", containerName, err)
-				} else {
-					if err := proc.Wait(ctx, cancel, dockerStopCmd); err != nil {
-						dlog.Errorf(ctx, "error wating for docker container %s to stop: %v", containerName, err)
-					}
-				}
-			}
-
-			_, err = is.connectorServer.RemoveInterceptor(ctx, &ior)
-			if err != nil {
-				dlog.Errorf(ctx, "error removing interceptor: %v", err)
-			}
-		})
-
-		// The external command will not output anything to the logs. An error here
-		// is likely caused by the user hitting <ctrl>-C to terminate the process.
-		if err = proc.Wait(ctx, cancel, cmd); err != nil {
 			return errcat.NoDaemonLogs.New(err)
 		}
 
-		return nil
+		// setup cleanup for the interceptor process
+		ior := connector.Interceptor{
+			InterceptId: is.env["TELEPRESENCE_INTERCEPT_ID"],
+			Pid:         int32(cmd.Process.Pid),
+		}
+
+		// Send info about the pid and intercept id to the traffic-manager so that it kills
+		// the process if it receives a leave of quit call.
+		if _, err = is.connectorServer.AddInterceptor(ctx, &ior); err != nil {
+			if grpcStatus.Code(err) == grpcCodes.Canceled {
+				// Deactivation was caused by a disconnect
+				err = nil
+			}
+			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
+			_ = cmd.Process.Kill()
+			return err
+		}
+
+		// The external command will not output anything to the logs. An error here
+		// is likely caused by the user hitting <ctrl>-C to terminate the process.
+		return errcat.NoDaemonLogs.New(proc.Wait(ctx, nil, cmd))
 	})
 }
 
@@ -442,9 +380,7 @@ type interceptArgs struct {
 // safeCobraCommand is more-or-less a subset of *cobra.Command, with less stuff exposed so I don't
 // have to worry about things using it in ways they shouldn't.
 type safeCobraCommand interface {
-	InOrStdin() io.Reader
-	OutOrStdout() io.Writer
-	ErrOrStderr() io.Writer
+	proc.Stdio
 	FlagError(error) error
 }
 
@@ -470,7 +406,7 @@ type interceptState struct {
 
 	scout *scout.Reporter
 
-	connectorServer connector.ConnectorServer
+	connectorServer ConnectorServer
 	managerClient   manager.ManagerClient
 
 	// set later ///////////////////////////////////////////////////////////
@@ -486,7 +422,7 @@ func newInterceptState(
 	ctx context.Context,
 	cmd safeCobraCommand,
 	args interceptArgs,
-	cs connector.ConnectorServer,
+	cs ConnectorServer,
 	managerClient manager.ManagerClient,
 ) *interceptState {
 	is := &interceptState{
@@ -563,7 +499,11 @@ func interceptMessage(r *connector.InterceptResult) error {
 	return errCat.Newf(msg)
 }
 
-func checkMountCapability(ctx context.Context) error {
+func (is *interceptState) checkMountCapability(ctx context.Context) error {
+	if client.GetConfig(ctx).Intercept.UseFtp {
+		return is.connectorServer.FuseFTPError()
+	}
+
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
 	var cmd *dexec.Cmd
@@ -666,7 +606,7 @@ func (is *interceptState) createRequest(ctx context.Context) (*connector.CreateI
 	spec.TargetPort = int32(is.localPort)
 
 	doMount := false
-	if err = checkMountCapability(ctx); err == nil {
+	if err = is.checkMountCapability(ctx); err == nil {
 		if ir.MountPoint, doMount, err = is.getMountPoint(ctx); err != nil {
 			return nil, err
 		}
@@ -967,29 +907,26 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 	var volumeMountProblem error
 	doMount, err := strconv.ParseBool(args.mount)
 	if doMount || err != nil {
-		volumeMountProblem = checkMountCapability(ctx)
+		volumeMountProblem = is.checkMountCapability(ctx)
 	}
 	fmt.Fprintln(is.cmd.OutOrStdout(), cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
 }
 
 func (is *interceptState) DeactivateState(ctx context.Context) error {
-	return removeIntercept(ctx, strings.TrimSpace(is.args.name))
-}
-
-func removeIntercept(ctx context.Context, name string) error {
-	return cliutil.WithStartedConnector(ctx, true, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		var r *connector.InterceptResult
-		var err error
-		r, err = connectorClient.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name})
-		if err != nil {
-			return err
+	r, err := is.connectorServer.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(is.args.name)})
+	if err != nil {
+		dlog.Errorf(ctx, "RemoveIntercept failed %T %v", err, err)
+		if grpcStatus.Code(err) == grpcCodes.Canceled {
+			// Deactivation was caused by a disconnect
+			err = nil
 		}
-		if r.Error != common.InterceptError_UNSPECIFIED {
-			return interceptMessage(r)
-		}
-		return nil
-	})
+		return err
+	}
+	if r.Error != common.InterceptError_UNSPECIFIED {
+		return interceptMessage(r)
+	}
+	return nil
 }
 
 func validateDockerArgs(args []string) error {
@@ -1001,7 +938,7 @@ func validateDockerArgs(args []string) error {
 	return nil
 }
 
-func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, string, error) {
+func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
 	ourArgs := []string{
 		"run",
 		"--dns-search", "tel2-search",
@@ -1025,7 +962,7 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 
 	name, hasName := getArg("--name")
 	if hasName && name == "" {
-		return nil, "", errors.New("no value found for docker flag `--name`")
+		return nil, errors.New("no value found for docker flag `--name`")
 	}
 	if !hasName {
 		name = fmt.Sprintf("intercept-%s-%d", is.args.name, is.localPort)
@@ -1052,9 +989,9 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 	cmd.Stdin = is.cmd.InOrStdin()
 	err := cmd.Start()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return cmd, name, err
+	return cmd, err
 }
 
 func (is *interceptState) writeEnvFile() error {

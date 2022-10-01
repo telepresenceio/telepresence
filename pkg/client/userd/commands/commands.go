@@ -6,9 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
 const (
@@ -117,50 +116,20 @@ func GetFlagAutocompletionFuncFor(ctx context.Context, cmd *cobra.Command, flagN
 	return nil
 }
 
-type sessKey struct{}
-
-func WithSession(ctx context.Context, s trafficmgr.Session) context.Context {
-	return context.WithValue(ctx, sessKey{}, s)
-}
-
-func GetSession(ctx context.Context) trafficmgr.Session {
-	s, _ := ctx.Value(sessKey{}).(trafficmgr.Session)
-	return s
-}
-
 type connectorKey struct{}
 
-func WithConnectorServer(ctx context.Context, cs connector.ConnectorServer) context.Context {
+type ConnectorServer interface {
+	rpc.ConnectorServer
+	FuseFTPError() error
+}
+
+func WithConnectorServer(ctx context.Context, cs ConnectorServer) context.Context {
 	return context.WithValue(ctx, connectorKey{}, cs)
 }
 
-func GetConnectorServer(ctx context.Context) connector.ConnectorServer {
-	cs, _ := ctx.Value(connectorKey{}).(connector.ConnectorServer)
+func GetConnectorServer(ctx context.Context) ConnectorServer {
+	cs, _ := ctx.Value(connectorKey{}).(ConnectorServer)
 	return cs
-}
-
-type ctxCancellationHandlerFuncKey struct{}
-
-func WithCtxCancellationHandlerFunc(ctx context.Context) context.Context {
-	var f func()
-	return context.WithValue(ctx, ctxCancellationHandlerFuncKey{}, &f)
-}
-
-func SetCtxCancellationHandlerFunc(ctx context.Context, f func()) {
-	fp, ok := ctx.Value(ctxCancellationHandlerFuncKey{}).(*func())
-	if !ok {
-		return
-	}
-	*fp = f
-}
-
-func GetCtxCancellationHandlerFunc(ctx context.Context) func() {
-	fp, ok := ctx.Value(ctxCancellationHandlerFuncKey{}).(*func())
-	if !ok {
-		return nil
-	}
-
-	return *fp
 }
 
 type cwdKey struct{}

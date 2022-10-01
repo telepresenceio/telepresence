@@ -68,7 +68,7 @@ func connectCommand() *cobra.Command {
 			}
 
 			return withConnector(cmd, false, request, func(ctx context.Context, _ *connectorState) error {
-				return proc.Run(ctx, nil, args[0], args[1:]...)
+				return proc.Run(ctx, nil, cmd, args[0], args[1:]...)
 			})
 		},
 	}

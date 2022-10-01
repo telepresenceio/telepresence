@@ -66,6 +66,13 @@ rules:
   - list
   - patch
   - update # Only needed for upgrade of older versions
+- apiGroups:
+    - "events.k8s.io"
+  resources:
+    - events
+  verbs:
+    - get
+    - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

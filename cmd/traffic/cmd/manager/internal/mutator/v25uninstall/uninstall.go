@@ -13,7 +13,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -96,7 +95,7 @@ func waitForApply(ctx context.Context, wl k8sapi.Workload) error {
 		}
 
 		if err = wl.Refresh(ctx); err != nil {
-			return client.CheckTimeout(ctx, err)
+			return err
 		}
 		if wl.Updated(origGeneration) {
 			dlog.Debugf(ctx, "%s %s.%s successfully applied", wl.GetKind(), wl.GetName(), wl.GetNamespace())

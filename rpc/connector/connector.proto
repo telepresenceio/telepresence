@@ -82,7 +82,7 @@ service Connector {
   rpc ListCommands(google.protobuf.Empty) returns (CommandGroups);
 
   // RunCommand executes a CLI command.
-  rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
+  rpc RunCommand(stream RunCommandRequest) returns (stream StreamResult);
 
   // ValidArgsForCommand handles autocompletion
   rpc ValidArgsForCommand(ValidArgsForCommandRequest) returns (ValidArgsForCommandResponse);
@@ -128,9 +128,19 @@ message CommandGroups {
   map<string, Commands> command_groups = 1;
 }
 
+// RunCommandRequest is the message that is streamed to RunCommand. The
+// first message contains the actual command and its parameters. Subsequent
+// messages will only contain data.
 message RunCommandRequest {
-  repeated string os_args = 1;
-  string cwd = 2;
+  message Command {
+    repeated string os_args = 1;
+    string cwd = 2;
+  }
+  oneof c_or_d{
+    Command command = 1;
+    bytes data = 2;
+    bool soft_cancel = 3;
+  }
 }
 
 message ValidArgsForCommandRequest {
@@ -152,10 +162,28 @@ message Interceptor {
   int32  pid = 2;
 }
 
-message RunCommandResponse {
-  bytes stdout = 1;
-  bytes stderr = 2;
-  Result result = 3;
+message Result {
+  enum ErrorCategory {
+    UNSPECIFIED = 0; // No error
+    USER = 1;
+    CONFIG = 2;
+    NO_DAEMON_LOGS = 3;
+    UNKNOWN = 4;
+  }
+
+  bytes data = 1;
+  ErrorCategory error_category = 2;
+}
+
+// StreamResult is like Result, but with a boolean final to indicate
+// that a message is the last one on a stream. The stream can be closed
+// by either actually closing it (receiver gets an EOF) or by sending
+// a StreamResult with final = true. The latter method should be used when
+// the called method ends with an error (non-gRPC related) that must be
+// propagated to the caller.
+message StreamResult {
+  Result data = 1;
+  bool final = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
@@ -224,11 +252,6 @@ message HelmRequest {
   ConnectRequest connect_request = 1;
   Type type = 2;
   repeated string value_paths = 3;
-}
-
-message Result {
-  string error_text = 1;
-  int32 error_category = 2;
 }
 
 message UninstallRequest {

@@ -16,8 +16,9 @@ import (
 )
 
 // Version
-//   0 which didn't report versions and didn't do synchronization
-//   1 used MuxTunnel instead of one tunnel per connection.
+//
+//	0 which didn't report versions and didn't do synchronization
+//	1 used MuxTunnel instead of one tunnel per connection.
 const Version = uint16(2)
 
 // Endpoint is an endpoint for a Stream such as a Dialer or a bidirectional pipe.
@@ -38,12 +39,12 @@ type GRPCStream interface {
 //
 // A Stream is closed by one of six things happening at either end (or at both ends).
 //
-//   1. Read from local connection fails (typically EOF)
-//   2. Write to local connection fails (connection peer closed)
-//   3. Idle timer timed out.
-//   4. Context is cancelled.
-//   5. closeSend request received from Tunnel peer.
-//   6. Disconnect received from Tunnel peer.
+//  1. Read from local connection fails (typically EOF)
+//  2. Write to local connection fails (connection peer closed)
+//  3. Idle timer timed out.
+//  4. Context is cancelled.
+//  5. closeSend request received from Tunnel peer.
+//  6. Disconnect received from Tunnel peer.
 //
 // When #1 or #2 happens, the Stream will either call CloseSend() (if it's a client Stream)
 // or send a closeSend request (if it's a StreamServer) to its Stream peer, shorten the

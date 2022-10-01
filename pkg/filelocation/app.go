@@ -10,11 +10,11 @@ const appName = "telepresence"
 // AppUserLogDir returns the directory to use for application-specific
 // user-specific log files.
 //
-//  - On Darwin, it returns "$HOME/Library/Logs/telepresence".  Specified by:
-//    https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
+//   - On Darwin, it returns "$HOME/Library/Logs/telepresence".  Specified by:
+//     https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/MacOSXDirectories/MacOSXDirectories.html
 //
-//  - On everything else, it returns "{{AppUserCacheDir}}/logs" (using the
-//    appropriate path separator, if not "/").
+//   - On everything else, it returns "{{AppUserCacheDir}}/logs" (using the
+//     appropriate path separator, if not "/").
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.

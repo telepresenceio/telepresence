@@ -31,11 +31,11 @@ type Snapshot[V Message] struct {
 // Map is a wrapper around map[string]VALTYPE that is very similar to sync.Map, and that
 // provides the additional features that:
 //
-// 1. it is thread-safe (compared to a bare map)
-// 2. it provides type safety (compared to a sync.Map)
-// 3. it provides a compare-and-swap operation
-// 4. you can Subscribe to either the whole map or just a subset of the map to watch for updates.
-//    This gives you complete snapshots, deltas, and coalescing of rapid updates.
+//  1. it is thread-safe (compared to a bare map)
+//  2. it provides type safety (compared to a sync.Map)
+//  3. it provides a compare-and-swap operation
+//  4. you can Subscribe to either the whole map or just a subset of the map to watch for updates.
+//     This gives you complete snapshots, deltas, and coalescing of rapid updates.
 type Map[V Message] struct {
 	lock sync.RWMutex
 	// things guarded by 'lock'
@@ -138,11 +138,11 @@ func (tm *Map[V]) LoadOrStore(key string, val V) (value V, loaded bool) {
 
 // CompareAndSwap is the atomic equivalent of:
 //
-//     if loadedVal, loadedOK := m.Load(key); loadedOK && proto.Equal(loadedVal, old) {
-//         m.Store(key, new)
-//         return true
-//     }
-//     return false
+//	if loadedVal, loadedOK := m.Load(key); loadedOK && proto.Equal(loadedVal, old) {
+//	    m.Store(key, new)
+//	    return true
+//	}
+//	return false
 func (tm *Map[V]) CompareAndSwap(key string, old, new V) bool {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()

@@ -35,12 +35,12 @@ type connectorState struct {
 
 // withConnector is like cliutil.WithConnector, but also
 //
-//  - Ensures that the damon is running too
+//   - Ensures that the damon is running too
 //
-//  - Cleans up after itself unless retain is true (If it launches the daemon or connector, then it will shut
-//    them down when it's done.  If they were already running, it will leave them running.)
+//   - Cleans up after itself unless retain is true (If it launches the daemon or connector, then it will shut
+//     them down when it's done.  If they were already running, it will leave them running.)
 //
-//  - Makes the connector.Connect gRPC call to set up networking
+//   - Makes the connector.Connect gRPC call to set up networking
 func withConnector(cmd *cobra.Command, retain bool, request *connector.ConnectRequest, f func(context.Context, *connectorState) error) error {
 	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, daemonClient daemon.DaemonClient) error {
 		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {

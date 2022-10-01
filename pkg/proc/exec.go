@@ -3,6 +3,7 @@ package proc
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 
@@ -10,15 +11,21 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
+type Stdio interface {
+	InOrStdin() io.Reader
+	OutOrStdout() io.Writer
+	ErrOrStderr() io.Writer
+}
+
 // Start will start the given executable with given args and env,, and return the command. The signals are
 // dispatched as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
-func Start(ctx context.Context, env map[string]string, exe string, args ...string) (*dexec.Cmd, error) {
+func Start(ctx context.Context, env map[string]string, io Stdio, exe string, args ...string) (*dexec.Cmd, error) {
 	cmd := CommandContext(ctx, exe, args...)
 	cmd.DisableLogging = true
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	cmd.Stdout = io.OutOrStdout()
+	cmd.Stderr = io.ErrOrStderr()
+	cmd.Stdin = io.InOrStdin()
 	cmd.Env = os.Environ()
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
@@ -74,11 +81,11 @@ func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error 
 // Run will run the given executable with given args and env, wait for it to terminate, and return
 // the result. The run will dispatch signals as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
-func Run(ctx context.Context, env map[string]string, exe string, args ...string) error {
+func Run(ctx context.Context, env map[string]string, io Stdio, exe string, args ...string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	cmd, err := Start(ctx, env, exe, args...)
+	cmd, err := Start(ctx, env, io, exe, args...)
 	if err != nil {
 		return err
 	}
@@ -95,4 +102,8 @@ func StartInBackgroundAsRoot(ctx context.Context, args ...string) error {
 
 func IsAdmin() bool {
 	return isAdmin()
+}
+
+func Terminate(p *os.Process) error {
+	return terminate(p)
 }

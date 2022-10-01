@@ -59,6 +59,13 @@ func GetSystemAPool[T Closeable](ctx context.Context, poolName string) SystemAPo
 	return nil
 }
 
+func GetSystemAPoolProvider[T Closeable](ctx context.Context, poolName string) ClientProvider[T] {
+	if p, ok := ctx.Value(systemaPoolKey(poolName)).(*systemAPool[T]); ok {
+		return p.Provider
+	}
+	return nil
+}
+
 type SystemAPool[T Closeable] interface {
 	Get(ctx context.Context) (T, error)
 	Done(ctx context.Context) error
@@ -156,8 +163,6 @@ func (c *systemACredentials) GetRequestMetadata(ctx context.Context, _ ...string
 		return nil, err
 	} else if installID != "" {
 		headers[InstallIDHeader] = installID
-	} else if _, ok := headers[ApiKeyHeader]; !ok {
-		dlog.Warnf(ctx, "Issuing a systema request without ApiKey or InstallID may result in an error")
 	}
 	if extra, err := c.headers.GetExtraHeaders(ctx); err != nil {
 		return nil, err

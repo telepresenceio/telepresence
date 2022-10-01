@@ -62,3 +62,7 @@ func isAdmin() bool {
 	adm, err := windows.GetCurrentProcessToken().IsMember(sid)
 	return err == nil && adm
 }
+
+func terminate(p *os.Process) error {
+	return p.Kill()
+}

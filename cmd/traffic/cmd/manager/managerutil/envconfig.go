@@ -2,10 +2,12 @@ package managerutil
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"strings"
 
 	"github.com/sethvargo/go-envconfig"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -30,6 +32,8 @@ type Env struct {
 	AgentRegistry       string                     `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
 	AgentImage          string                     `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 	AgentPort           int32                      `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
+	AgentResources      string                     `env:"AGENT_RESOURCES,default="`
+	AgentInitResources  string                     `env:"AGENT_INIT_RESOURCES,default="`
 	APIPort             int32                      `env:"TELEPRESENCE_API_PORT,default="`
 	TracingPort         int32                      `env:"TELEPRESENCE_GRPC_TRACE_PORT,default="`
 	MaxReceiveSize      resource.Quantity          `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
@@ -49,8 +53,8 @@ type Env struct {
 
 type envKey struct{}
 
-func (e *Env) GeneratorConfig(qualifiedAgentImage string) *agentmap.GeneratorConfig {
-	return &agentmap.GeneratorConfig{
+func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
+	gc := &agentmap.GeneratorConfig{
 		AgentPort:           uint16(e.AgentPort),
 		APIPort:             uint16(e.APIPort),
 		TracingPort:         uint16(e.TracingPort),
@@ -58,6 +62,24 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) *agentmap.GeneratorCon
 		ManagerNamespace:    e.ManagerNamespace,
 		LogLevel:            e.LogLevel,
 	}
+	parseResources := func(js string) (*core.ResourceRequirements, error) {
+		if js == "" {
+			return nil, nil
+		}
+		var rr *core.ResourceRequirements
+		if err := json.Unmarshal([]byte(js), &rr); err != nil {
+			return nil, err
+		}
+		return rr, nil
+	}
+	var err error
+	if gc.InitResources, err = parseResources(e.AgentInitResources); err != nil {
+		return nil, err
+	}
+	if gc.Resources, err = parseResources(e.AgentResources); err != nil {
+		return nil, err
+	}
+	return gc, nil
 }
 
 func (e *Env) QualifiedAgentImage() string {

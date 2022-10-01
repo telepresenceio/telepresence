@@ -16,12 +16,20 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.18'
+          go-version: '1.19'
             #- uses: azure/setup-kubectl@v1
             #if: steps.get_last_run.outputs.passed != 'success'
             #with:
             #version: 'v1.19.3'
             #id: kubectl
+      - name: "Install dependencies"
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: |
+          brew update
+          brew install --cask macfuse
+      - name: Lint
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: make lint
       - name: "Test arm64 build"
         if: steps.get_last_run.outputs.passed != 'success'
         run: GOARCH=arm64 make build
@@ -56,19 +64,33 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.18'
-      - run: |
-          choco install make
+          go-version: '1.19'
+      - name: "Download winfsp"
         if: steps.get_last_run.outputs.passed != 'success'
-        name: install dependencies
-      - run: make build
+        shell: bash
+        run: |
+          curl -L -o winfsp.msi https://github.com/winfsp/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
+      - name: "Install winfsp"
         if: steps.get_last_run.outputs.passed != 'success'
-      - run: |
+        shell: powershell
+        run: |
+          Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
+          [Environment]::SetEnvironmentVariable("Path", "C:\\Program Files (x86)\\WinFsp\\inc\\fuse;$ENV:Path", "Machine")
+      - name: install make
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: choco install make
+      - name: Build
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: make build
+      - name: Update etc\hosts
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: |
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
           echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
+      - name: Lint
         if: steps.get_last_run.outputs.passed != 'success'
-        name: Update etc\hosts
+        run: make lint
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry/@v2.4.0
@@ -78,7 +100,6 @@ jobs:
           command: |
             $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
             $ENV:DTEST_REGISTRY = "docker.io/datawire"
-            $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
             make check-unit
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
@@ -96,14 +117,17 @@ jobs:
 
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.18'
+          go-version: '1.19'
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
-          sudo apt-get install -y socat
+          sudo apt-get install -y socat gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+      - name: Lint
+        if: steps.get_last_run.outputs.passed != 'success'
+        run: make lint
       - name: "Test arm64 build"
         if: steps.get_last_run.outputs.passed != 'success'
-        run: GOARCH=arm64 make build
+        run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
       - name: "Test amd64 build"
         run: make build
         if: steps.get_last_run.outputs.passed != 'success'
@@ -120,20 +144,3 @@ jobs:
             make check-unit
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
-  "lint":
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-          ref: "${{ github.event.pull_request.head.sha }}"
-
-      - uses: actions/setup-go@v2
-        with:
-          go-version: '1.18'
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y socat
-      - name: Lint
-        run: make lint
