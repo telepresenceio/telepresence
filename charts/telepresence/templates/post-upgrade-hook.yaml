@@ -43,9 +43,11 @@ spec:
               value: /secret/ca.crt
           resources:
             {{- toYaml .Values.hooks.resources | nindent 12 }}
-          # Helm considers applying a deployment a success. It doesn't wait for readinessProbes
-          # unless explicitly told to do so by passing --wait and there's no guarantee that's
-          # been done. Therefore, a retry is needed here to ensure proper upgrade.
+          {{- /*
+          Helm considers applying a deployment a success. It doesn't wait for readinessProbes
+          unless explicitly told to do so by passing --wait and there's no guarantee that's
+          been done. Therefore, a retry is needed here to ensure proper upgrade.
+          */}}
           args:
             - '--retry'
             - '5'
