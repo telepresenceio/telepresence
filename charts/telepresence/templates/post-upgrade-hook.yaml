@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: upgrade-legacy
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
     app.kubernetes.io/instance: {{ .Release.Name | quote }}
@@ -59,7 +59,7 @@ spec:
             - '--fail'
             - '--request'
             - POST
-            - 'https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/upgrade-legacy'
+            - 'https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" . }}/upgrade-legacy'
       volumes:
         - name: secret-volume
           secret:

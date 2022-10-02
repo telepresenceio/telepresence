@@ -20,7 +20,7 @@ Expand the name of the chart.
 {{- /*
 Traffic Manager Namespace
 */}}
-{{- define "telepresence.namespace" -}}
+{{- define "traffic-manager.namespace" -}}
 {{- if .Values.isCI }}
 {{- print "ambassador" }}
 {{- else }}
@@ -65,7 +65,7 @@ telepresence: manager
 Client RBAC name suffix
 */}}
 {{- define "telepresence.clientRbacName" -}}
-{{ printf "%s-%s" (default (include "telepresence.name" .) .Values.rbac.nameOverride) (include "telepresence.namespace" .) }}
+{{ printf "%s-%s" (default (include "telepresence.name" .) .Values.rbac.nameOverride) (include "traffic-manager.namespace" .) }}
 {{- end -}}
 
 {{- /*

@@ -51,7 +51,7 @@ kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name:  traffic-manager-connect
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 rules:
@@ -68,7 +68,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: traffic-manager-connect
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 subjects:

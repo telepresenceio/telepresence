@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: uninstall-agents
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
     app.kubernetes.io/instance: {{ .Release.Name | quote }}
@@ -49,7 +49,7 @@ spec:
             - sh
             - -c
           args:
-            - 'curl --fail --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/uninstall || exit 0'
+            - 'curl --fail --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" . }}/uninstall || exit 0'
       volumes:
         - name: secret-volume
           secret:

@@ -10,7 +10,7 @@ require less permissions in clientRbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: traffic-manager-{{ include "telepresence.namespace" . }}
+  name: traffic-manager-{{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 rules:
@@ -78,16 +78,16 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: traffic-manager-{{ include "telepresence.namespace" . }}
+  name: traffic-manager-{{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: traffic-manager-{{ include "telepresence.namespace" . }}
+  name: traffic-manager-{{ include "traffic-manager.namespace" . }}
 subjects:
 - kind: ServiceAccount
   name: traffic-manager
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
 {{- end }}
 {{- end }}

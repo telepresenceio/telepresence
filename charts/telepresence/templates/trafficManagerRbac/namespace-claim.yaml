@@ -15,7 +15,7 @@ metadata:
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 data:
-  owned-by: {{ include "telepresence.namespace" $ }}
+  owned-by: {{ include "traffic-manager.namespace" $ }}
 
 {{- end }}
 

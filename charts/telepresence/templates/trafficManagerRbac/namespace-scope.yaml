@@ -7,8 +7,8 @@ require less permissions in clientRbac.yaml
 */}}
 {{- if .Values.managerRbac.namespaced }}
 
-{{- if not (has (include "telepresence.namespace" .) .Values.managerRbac.namespaces) }}
-{{- fail (printf "Namespace %s must be included in managerRbac.namespaces (managerRbac.namespaces contains: %s)" (include "telepresence.namespace" .) (join "," .Values.managerRbac.namespaces)) }}
+{{- if not (has (include "traffic-manager.namespace" .) .Values.managerRbac.namespaces) }}
+{{- fail (printf "Namespace %s must be included in managerRbac.namespaces (managerRbac.namespaces contains: %s)" (include "traffic-manager.namespace" .) (join "," .Values.managerRbac.namespaces)) }}
 {{- end }}
 
 {{- range .Values.managerRbac.namespaces }}
@@ -72,7 +72,7 @@ rules:
   verbs:
     - get
     - watch
-{{- if eq . (include "telepresence.namespace" $) }}
+{{- if eq . (include "traffic-manager.namespace" $) }}
 {{- /* Must be able to get the manager namespace in order to get the cluster-id */}}
 - apiGroups:
   - ""
@@ -108,7 +108,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: traffic-manager
-  namespace: {{ include "telepresence.namespace" $ }}
+  namespace: {{ include "traffic-manager.namespace" $ }}
 {{- end }}
 
 {{- else }}
@@ -117,7 +117,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   name: traffic-manager
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
@@ -134,7 +134,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: traffic-manager
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 roleRef:
@@ -144,6 +144,6 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: traffic-manager
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
 {{- end }}
 {{- end }}
