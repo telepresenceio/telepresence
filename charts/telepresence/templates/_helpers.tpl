@@ -5,7 +5,7 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "telepresence.fullname" -}}
+{{- define "traffic-manager.name" -}}
 {{- $name := default "traffic-manager" }}
 {{- if .Values.isCI }}
 {{- print $name }}

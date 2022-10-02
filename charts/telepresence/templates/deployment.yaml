@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "telepresence.fullname" . }}
+  name: {{ include "traffic-manager.name" . }}
   namespace: {{ include "telepresence.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
@@ -27,7 +27,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ include "telepresence.fullname" . }}
+        - name: {{ include "traffic-manager.name" . }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
