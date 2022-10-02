@@ -42,7 +42,7 @@ func Main(ctx context.Context, _ ...string) error {
 	env := managerutil.GetEnv(ctx)
 	var tracer *tracing.TraceServer
 
-	if env.TracingPort != 0 {
+	if env.TracingGrpcPort != 0 {
 		tracer, err = tracing.NewTraceServer(ctx, "traffic-manager",
 			attribute.String("tel2.agent-image", env.AgentRegistry+"/"+env.AgentImage),
 			attribute.String("tel2.managed-namespaces", env.ManagedNamespaces),
@@ -90,7 +90,7 @@ func Main(ctx context.Context, _ ...string) error {
 
 	if tracer != nil {
 		g.Go("tracer-grpc", func(c context.Context) error {
-			return tracer.ServeGrpc(c, uint16(env.TracingPort))
+			return tracer.ServeGrpc(c, uint16(env.TracingGrpcPort))
 		})
 	}
 

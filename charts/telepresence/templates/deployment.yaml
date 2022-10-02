@@ -61,27 +61,27 @@ spec:
           - name: SYSTEMA_PORT
             value: {{ .systemaPort | quote }}
           {{- with .tracing }}
-          {{ if .grpcPort }}
-          - name: TELEPRESENCE_GRPC_TRACE_PORT
+          {{- if .grpcPort }}
+          - name: TRACING_GRPC_PORT
             value: {{ .grpcPort | quote }}
           {{- end }}
           {{- end }}
           {{- with .telepresenceAPI }}
           {{- if .port }}
-          - name: TELEPRESENCE_API_PORT
+          - name: AGENT_REST_API_PORT
             value: {{ .port | quote }}
           {{- end }}
           {{- end }}
           {{- if .grpc }}
           {{- if .grpc.maxReceiveSize }}
-          - name: TELEPRESENCE_MAX_RECEIVE_SIZE
+          - name: GRPC_MAX_RECEIVE_SIZE
             value: {{ .grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
           {{- with .agentInjector }}
           {{- with .agentImage }}
           {{ if .name }}
-          - name: TELEPRESENCE_AGENT_IMAGE
+          - name: AGENT_IMAGE
             value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
           {{- end }}
           {{- with .resources }}
@@ -92,10 +92,10 @@ spec:
           - name: AGENT_INIT_RESOURCES
             value: '{{ toJson . }}'
           {{- end }}
-          - name: TELEPRESENCE_REGISTRY
+          - name: AGENT_REGISTRY
             value: {{ .registry }}
           {{- end }}
-          - name: TELEPRESENCE_APP_PROTO_STRATEGY
+          - name: AGENT_APP_PROTO_STRATEGY
             value: {{ .appProtocolStrategy }}
           - name: AGENT_INJECT_POLICY
             value: {{ .injectPolicy }}
@@ -109,7 +109,7 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
-          - name: TELEPRESENCE_MANAGER_POD_IP
+          - name: POD_IP
             valueFrom:
               fieldRef:
                 apiVersion : v1

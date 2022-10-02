@@ -28,20 +28,20 @@ type Env struct {
 
 	ManagerNamespace    string                     `env:"MANAGER_NAMESPACE,default="`
 	ManagedNamespaces   string                     `env:"MANAGED_NAMESPACES,default="`
-	AgentRegistry       string                     `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
-	AgentImage          string                     `env:"TELEPRESENCE_AGENT_IMAGE,default="`
-	AgentPort           int32                      `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
+	AgentRegistry       string                     `env:"AGENT_REGISTRY,default=docker.io/datawire"`
+	AgentImage          string                     `env:"AGENT_IMAGE,default="`
+	AgentPort           int32                      `env:"AGENT_PORT,default=9900"`
 	AgentResources      string                     `env:"AGENT_RESOURCES,default="`
 	AgentInitResources  string                     `env:"AGENT_INIT_RESOURCES,default="`
-	APIPort             int32                      `env:"TELEPRESENCE_API_PORT,default="`
-	TracingPort         int32                      `env:"TELEPRESENCE_GRPC_TRACE_PORT,default="`
-	MaxReceiveSize      resource.Quantity          `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
-	AppProtocolStrategy k8sapi.AppProtocolStrategy `env:"TELEPRESENCE_APP_PROTO_STRATEGY,default="`
+	APIPort             int32                      `env:"AGENT_REST_API_PORT,default="`
+	TracingGrpcPort     int32                      `env:"TRACING_GRPC_PORT,default="`
+	MaxReceiveSize      resource.Quantity          `env:"GRPC_MAX_RECEIVE_SIZE,default=4Mi"`
+	AppProtocolStrategy k8sapi.AppProtocolStrategy `env:"AGENT_APP_PROTO_STRATEGY,default="`
 	AgentInjectPolicy   agentconfig.InjectPolicy   `env:"AGENT_INJECT_POLICY,default="`
 
 	PodCIDRStrategy string `env:"POD_CIDR_STRATEGY,default=auto"`
 	PodCIDRs        string `env:"POD_CIDRS,default="`
-	PodIP           string `env:"TELEPRESENCE_MANAGER_POD_IP,default="`
+	PodIP           string `env:"POD_IP,default="`
 
 	DNSServiceName      string `env:"DNS_SERVICE_NAME,default="`
 	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default="`
@@ -60,7 +60,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 	gc := &agentmap.GeneratorConfig{
 		AgentPort:           uint16(e.AgentPort),
 		APIPort:             uint16(e.APIPort),
-		TracingPort:         uint16(e.TracingPort),
+		TracingPort:         uint16(e.TracingGrpcPort),
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
 		LogLevel:            e.LogLevel,
