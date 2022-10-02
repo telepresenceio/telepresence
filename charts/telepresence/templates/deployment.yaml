@@ -31,19 +31,27 @@ spec:
         - name: {{ include "traffic-manager.name" $ }}
           securityContext:
             {{- toYaml .securityContext | nindent 12 }}
-          image: "{{ .image.registry }}/{{ .image.name }}:{{ .image.tag | default $.Chart.AppVersion }}"
-          imagePullPolicy: {{ .image.pullPolicy }}
+          {{- with .image }}
+          image: "{{ .registry }}/{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
           env:
           - name: LOG_LEVEL
             value: {{ .logLevel }}
           - name: POD_CIDR_STRATEGY
             value: {{ .podCIDRStrategy }}
+          {{- if .dnsServiceName }}
           - name: DNS_SERVICE_NAME
             value: {{ .dnsServiceName }}
+          {{- end }}
+          {{- if .dnsServiceNamespace }}
           - name: DNS_SERVICE_NAMESPACE
             value: {{ .dnsServiceNamespace }}
+          {{- end }}
+          {{- if .dnsServiceIP }}
           - name: DNS_SERVICE_IP
             value: {{ .dnsServiceIP }}
+          {{- end }}
           {{- with .podCIDRs }}
           - name: POD_CIDRS
             value: "{{ join " " . }}"

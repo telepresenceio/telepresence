@@ -105,10 +105,12 @@ func NewInfo(ctx context.Context) Info {
 			Name:      "dns-default",
 			Namespace: "openshift-dns",
 		},
-		{
+	}
+	if env.DNSServiceName != "" && env.DNSServiceNamespace != "" {
+		dnsServices = append(dnsServices, metav1.ObjectMeta{
 			Name:      env.DNSServiceName,
 			Namespace: env.DNSServiceNamespace,
-		},
+		})
 	}
 
 	var kubeDnsIp net.IP

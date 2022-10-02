@@ -43,8 +43,8 @@ type Env struct {
 	PodCIDRs        string `env:"POD_CIDRS,default="`
 	PodIP           string `env:"TELEPRESENCE_MANAGER_POD_IP,default="`
 
-	DNSServiceName      string `env:"DNS_SERVICE_NAME,default=coredns"`
-	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
+	DNSServiceName      string `env:"DNS_SERVICE_NAME,default="`
+	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default="`
 	DNSServiceIP        string `env:"DNS_SERVICE_IP,default="`
 
 	ClientRoutingAlsoProxySubnets  []string      `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,default="`
