@@ -575,10 +575,14 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 		return
 	}
 	ip := net.IP(info.ManagerPodIp).String()
+	port := info.ManagerPodPort
+	if port == 0 {
+		port = 8081 // Traffic managers before 2.8.0 didn't include the port because it was hardcoded at 8081
+	}
 	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
 	dlog.Debugf(ctx, "Performing connectivity check with timeout %s", ct)
-	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:8081", ip), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
 		return

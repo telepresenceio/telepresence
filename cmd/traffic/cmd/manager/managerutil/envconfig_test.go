@@ -31,7 +31,7 @@ func TestEnvconfig(t *testing.T) {
 	}()
 
 	defaults := managerutil.Env{
-		ServerPort:               "8081",
+		ServerPort:               8081,
 		PrometheusPort:           "0",
 		SystemAHost:              "app.getambassador.io",
 		SystemAPort:              "443",

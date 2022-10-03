@@ -23,6 +23,8 @@ image:
 
   imagePullSecrets: []
 
+apiPort: 8081
+
 podAnnotations: {}
 
 podSecurityContext: {}

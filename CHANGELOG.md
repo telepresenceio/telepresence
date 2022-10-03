@@ -11,6 +11,9 @@
 - Feature: A `dns` struct container the fields `includeSuffixes` and `excludeSuffixes` was added to the Helm 
   chart `client` struct, making those values configurable per cluster.
 
+- Feature: The API port used by the traffic-manager is now configurable using the Helm chart value `apiPort`.
+  The default port is 8081.
+
 - Change: The Helm chart `dnsConfig` was deprecated but retained for backward compatibility. The fields
   `alwaysProxySubnets` and `neverProxySubnets` can now be found under `routing` in the `client` struct.
 

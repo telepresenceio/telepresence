@@ -495,6 +495,9 @@ message ClusterInfo {
   // manager_pod_ip is the ip address of the traffic manager
   bytes manager_pod_ip = 5;
 
+  // manager_pod_port is the port of the traffic manager
+  int32 manager_pod_port = 8;
+
   // Router configuration
   Routing routing = 6;
 

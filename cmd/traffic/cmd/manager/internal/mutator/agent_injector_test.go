@@ -45,7 +45,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	env := &managerutil.Env{
 		User:        "",
 		ServerHost:  "tel-example",
-		ServerPort:  "80",
+		ServerPort:  8081,
 		SystemAHost: "",
 		SystemAPort: "",
 
@@ -743,7 +743,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 	env := &managerutil.Env{
 		User:        "",
 		ServerHost:  "tel-example",
-		ServerPort:  "80",
+		ServerPort:  8081,
 		SystemAHost: "",
 		SystemAPort: "",
 

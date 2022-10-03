@@ -263,6 +263,8 @@ func genConfigMapSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		"The port number you wish the agent to listen on.")
 	flags.StringVar(&info.QualifiedAgentImage, "agent-image", "docker.io/datawire/tel2:"+strings.TrimPrefix(client.Version(), "v"),
 		`The qualified name of the agent image`)
+	flags.Uint16Var(&info.ManagerPort, "manager-port", 8081,
+		`The traffic-manager API port`)
 	flags.StringVar(&info.ManagerNamespace, "manager-namespace", "ambassador",
 		`The traffic-manager namespace`)
 	flags.StringVar(&info.LogLevel, "loglevel", "info",

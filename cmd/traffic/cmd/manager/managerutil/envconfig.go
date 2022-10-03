@@ -21,7 +21,7 @@ type Env struct {
 	LogLevel       string `env:"LOG_LEVEL,default=info"`
 	User           string `env:"USER,default="`
 	ServerHost     string `env:"SERVER_HOST,default="`
-	ServerPort     string `env:"SERVER_PORT,default=8081"`
+	ServerPort     int32  `env:"SERVER_PORT,default=8081"`
 	PrometheusPort string `env:"PROMETHEUS_PORT,default=0"`
 	SystemAHost    string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
 	SystemAPort    string `env:"SYSTEMA_PORT,default=443"`
@@ -61,6 +61,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		AgentPort:           uint16(e.AgentPort),
 		APIPort:             uint16(e.APIPort),
 		TracingPort:         uint16(e.TracingGrpcPort),
+		ManagerPort:         uint16(e.ServerPort),
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
 		LogLevel:            e.LogLevel,

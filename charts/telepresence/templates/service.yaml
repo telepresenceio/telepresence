@@ -11,7 +11,7 @@ spec:
   clusterIP: None
   ports:
   - name: api
-    port: 8081
+    port: {{ .Values.apiPort }}
     targetPort: api
   {{- with .Values.tracing }}
   {{- if .grpcPort }}

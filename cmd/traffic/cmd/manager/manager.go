@@ -149,7 +149,7 @@ func (m *Manager) serveHTTP(ctx context.Context) error {
 	rpc.RegisterManagerServer(grpcHandler, m)
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 
-	return sc.ListenAndServe(ctx, host+":"+port)
+	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
 func (m *Manager) runSessionGCLoop(ctx context.Context) error {

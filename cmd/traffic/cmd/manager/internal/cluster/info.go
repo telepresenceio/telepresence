@@ -196,6 +196,7 @@ func NewInfo(ctx context.Context) Info {
 	if oi.ManagerPodIp == nil {
 		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
 	}
+	oi.ManagerPodPort = env.ServerPort
 
 	alsoProxy, err := env.GetAlsoProxySubnets()
 	if err != nil {
@@ -357,13 +358,14 @@ func (oi *info) GetClusterID() string {
 
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	ci := &rpc.ClusterInfo{
-		ServiceSubnet: oi.ServiceSubnet,
-		PodSubnets:    make([]*rpc.IPNet, len(oi.PodSubnets)),
-		ManagerPodIp:  oi.ManagerPodIp,
-		Routing:       oi.Routing,
-		Dns:           oi.Dns,
-		KubeDnsIp:     oi.Dns.KubeIp,
-		ClusterDomain: oi.Dns.ClusterDomain,
+		ServiceSubnet:  oi.ServiceSubnet,
+		PodSubnets:     make([]*rpc.IPNet, len(oi.PodSubnets)),
+		ManagerPodIp:   oi.ManagerPodIp,
+		ManagerPodPort: oi.ManagerPodPort,
+		Routing:        oi.Routing,
+		Dns:            oi.Dns,
+		KubeDnsIp:      oi.Dns.KubeIp,
+		ClusterDomain:  oi.Dns.ClusterDomain,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci

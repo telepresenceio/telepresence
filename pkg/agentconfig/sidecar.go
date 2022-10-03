@@ -125,7 +125,7 @@ type Sidecar struct {
 	ManagerHost string `json:"managerHost,omitempty"`
 
 	// The port used when connecting to the traffic manager
-	ManagerPort int32 `json:"managerPort,omitempty"`
+	ManagerPort uint16 `json:"managerPort,omitempty"`
 
 	// The port used by the agents restFUL API server
 	APIPort uint16 `json:"apiPort,omitempty"`

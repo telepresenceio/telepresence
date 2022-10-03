@@ -38,6 +38,8 @@ spec:
           env:
           - name: LOG_LEVEL
             value: {{ .logLevel }}
+          - name: SERVER_PORT
+            value: {{ .apiPort | quote }}
           - name: POD_CIDR_STRATEGY
             value: {{ .podCIDRStrategy }}
           {{- if .dnsServiceName }}
@@ -211,7 +213,7 @@ spec:
           {{- end }}
           ports:
           - name: api
-            containerPort: 8081
+            containerPort: {{ .apiPort }}
           - name: https
             containerPort: 8443
           {{- if .prometheus.port }}  # 0 is false

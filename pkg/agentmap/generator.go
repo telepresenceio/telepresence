@@ -18,11 +18,10 @@ const (
 	ServicePortAnnotation = agentconfig.DomainPrefix + "inject-service-port"
 	ServiceNameAnnotation = agentconfig.DomainPrefix + "inject-service-name"
 	ManagerAppName        = "traffic-manager"
-	ManagerPortHTTP       = 8081
-	AgentInjectorName     = "agent-injector"
 )
 
 type GeneratorConfig struct {
+	ManagerPort         uint16
 	AgentPort           uint16
 	APIPort             uint16
 	TracingPort         uint16
@@ -31,14 +30,6 @@ type GeneratorConfig struct {
 	LogLevel            string
 	InitResources       *core.ResourceRequirements
 	Resources           *core.ResourceRequirements
-}
-
-func GenerateForPod(ctx context.Context, pod *core.Pod, env *GeneratorConfig) (*agentconfig.Sidecar, error) {
-	wl, err := FindOwnerWorkload(ctx, k8sapi.Pod(pod))
-	if err != nil {
-		return nil, err
-	}
-	return Generate(ctx, wl, env)
 }
 
 func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc *agentconfig.Sidecar, err error) {
@@ -98,7 +89,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc
 		WorkloadName:  wl.GetName(),
 		WorkloadKind:  wl.GetKind(),
 		ManagerHost:   ManagerAppName + "." + cfg.ManagerNamespace,
-		ManagerPort:   ManagerPortHTTP,
+		ManagerPort:   cfg.ManagerPort,
 		APIPort:       cfg.APIPort,
 		TracingPort:   cfg.TracingPort,
 		Containers:    ccs,
