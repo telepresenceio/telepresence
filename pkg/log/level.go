@@ -8,6 +8,14 @@ import (
 
 type setLogLevelContextKey struct{}
 
+var DlogLevelNames = [5]string{
+	"error",
+	"warning",
+	"info",
+	"debug",
+	"trace",
+}
+
 // SetLevel sets the log-level for the logger of the given context
 func SetLevel(ctx context.Context, logLevelStr string) {
 	if setter, ok := ctx.Value(setLogLevelContextKey{}).(func(string)); ok {

@@ -23,7 +23,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -330,18 +329,8 @@ func lookupDNSAndRespond(ctx context.Context, manager rpc.ManagerClient, session
 	}
 }
 
-// GetLogLevel will return the log level that this agent should use
-func GetLogLevel(ctx context.Context) string {
-	level, ok := dos.LookupEnv(ctx, install.EnvPrefix+"LOG_LEVEL")
-	if !ok {
-		level = dos.Getenv(ctx, "LOG_LEVEL")
-	}
-	return level
-}
-
 func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) error {
-	level := GetLogLevel(ctx)
-	timedLevel := log.NewTimedLevel(level, log.SetLevel)
+	timedLevel := log.NewTimedLevel(log.DlogLevelNames[dlog.MaxLogLevel(ctx)], log.SetLevel)
 	for ctx.Err() == nil {
 		ll, err := logLevelStream.Recv()
 		if err != nil {
