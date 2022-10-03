@@ -60,6 +60,9 @@ type Env struct {
 	AgentPort                uint16                     `env:"AGENT_PORT,               parser=port-number"`
 	AgentResources           *core.ResourceRequirements `env:"AGENT_RESOURCES,          parser=json-resources, default="`
 	AgentInitResources       *core.ResourceRequirements `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
+	AgentEnvoyLogLevel       string                     `env:"AGENT_ENVOY_LOG_LEVEL,    parser=logLevel,       defaultFrom=AgentLogLevel"`
+	AgentEnvoyServerPort     uint16                     `env:"AGENT_ENVOY_SERVER_PORT,  parser=port-number"`
+	AgentEnvoyAdminPort      uint16                     `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
 
 	ClientRoutingAlsoProxySubnets  []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, parser=split-ipnet, default="`
@@ -81,6 +84,9 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		LogLevel:            e.AgentLogLevel,
 		InitResources:       e.AgentInitResources,
 		Resources:           e.AgentResources,
+		EnvoyServerPort:     e.AgentEnvoyServerPort,
+		EnvoyAdminPort:      e.AgentEnvoyAdminPort,
+		EnvoyLogLevel:       e.AgentEnvoyLogLevel,
 	}, nil
 }
 

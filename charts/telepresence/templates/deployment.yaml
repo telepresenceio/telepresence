@@ -155,6 +155,20 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+          {{- with .envoy }}
+          {{- if .logLevel }}
+          - name: AGENT_ENVOY_LOGLEVEL
+            value: {{ .logLevel }}
+          {{- end }}
+          {{- if .serverPort }}
+          - name: AGENT_ENVOY_SERVER_PORT
+            value: {{ .serverPort | quote }}
+          {{- end }}
+          {{- if .adminPort }}
+          - name: AGENT_ENVOY_ADMIN_PORT
+            value: {{ .adminPort | quote }}
+          {{- end }}
+          {{- end }}
           {{- end }}
           {{- if .prometheus.port }}  # 0 is false
           - name: PROMETHEUS_PORT

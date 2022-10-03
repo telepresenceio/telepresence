@@ -22,6 +22,8 @@ func TestEnvconfig(t *testing.T) {
 	// Default environment, providing what's necessary for the traffic-manager
 	env := map[string]string{
 		"AGENT_APP_PROTO_STRATEGY":    k8sapi.Http2Probe.String(),
+		"AGENT_ENVOY_ADMIN_PORT":      "19000",
+		"AGENT_ENVOY_SERVER_PORT":     "18000",
 		"AGENT_INJECT_POLICY":         agentconfig.OnDemand.String(),
 		"AGENT_PORT":                  "9900",
 		"AGENT_REGISTRY":              "docker.io/datawire",
@@ -36,6 +38,9 @@ func TestEnvconfig(t *testing.T) {
 
 	defaults := managerutil.Env{
 		AgentAppProtocolStrategy: k8sapi.Http2Probe,
+		AgentEnvoyAdminPort:      19000,
+		AgentEnvoyLogLevel:       "info",
+		AgentEnvoyServerPort:     18000,
 		AgentLogLevel:            "info",
 		AgentPort:                9900,
 		AgentRegistry:            "docker.io/datawire",

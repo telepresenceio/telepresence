@@ -30,6 +30,9 @@ type GeneratorConfig struct {
 	LogLevel            string
 	InitResources       *core.ResourceRequirements
 	Resources           *core.ResourceRequirements
+	EnvoyLogLevel       string
+	EnvoyServerPort     uint16
+	EnvoyAdminPort      uint16
 }
 
 func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc *agentconfig.Sidecar, err error) {
@@ -82,19 +85,22 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc
 	}
 
 	ag := &agentconfig.Sidecar{
-		AgentImage:    cfg.QualifiedAgentImage,
-		AgentName:     wl.GetName(),
-		LogLevel:      cfg.LogLevel,
-		Namespace:     wl.GetNamespace(),
-		WorkloadName:  wl.GetName(),
-		WorkloadKind:  wl.GetKind(),
-		ManagerHost:   ManagerAppName + "." + cfg.ManagerNamespace,
-		ManagerPort:   cfg.ManagerPort,
-		APIPort:       cfg.APIPort,
-		TracingPort:   cfg.TracingPort,
-		Containers:    ccs,
-		InitResources: cfg.InitResources,
-		Resources:     cfg.Resources,
+		AgentImage:      cfg.QualifiedAgentImage,
+		AgentName:       wl.GetName(),
+		LogLevel:        cfg.LogLevel,
+		Namespace:       wl.GetNamespace(),
+		WorkloadName:    wl.GetName(),
+		WorkloadKind:    wl.GetKind(),
+		ManagerHost:     ManagerAppName + "." + cfg.ManagerNamespace,
+		ManagerPort:     cfg.ManagerPort,
+		APIPort:         cfg.APIPort,
+		TracingPort:     cfg.TracingPort,
+		EnvoyLogLevel:   cfg.EnvoyLogLevel,
+		EnvoyServerPort: cfg.EnvoyServerPort,
+		EnvoyAdminPort:  cfg.EnvoyAdminPort,
+		Containers:      ccs,
+		InitResources:   cfg.InitResources,
+		Resources:       cfg.Resources,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil

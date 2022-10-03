@@ -204,6 +204,10 @@ agent:
     registry: docker.io/datawire
     name:
     tag:
+  envoy:
+    logLevel: warning
+    serverPort: 18000
+    adminPort: 19000
 
 ################################################################################
 ## Telepresence API Server Configuration

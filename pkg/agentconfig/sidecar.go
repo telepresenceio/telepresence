@@ -133,6 +133,15 @@ type Sidecar struct {
 	// The port used by the agent's GRPC tracing server
 	TracingPort uint16 `json:"tracingPort,omitempty"`
 
+	// LogLevel used by the envoy instance
+	EnvoyLogLevel string
+
+	// The port used by the Envoy server
+	EnvoyServerPort uint16
+
+	// The port used for Envoy administration
+	EnvoyAdminPort uint16
+
 	// Resources for the sidecar
 	Resources *core.ResourceRequirements `json:"resources,omitempty"`
 
