@@ -23,7 +23,7 @@ func main() {
 }
 
 func generateKeys(mgrNamespace, dir string) error {
-	err := os.MkdirAll(dir, 0777)
+	err := os.MkdirAll(dir, 0o777)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %q: %w", dir, err)
 	}

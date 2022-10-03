@@ -184,7 +184,8 @@ func (c *traceCommand) trafficManagerTraces(ctx context.Context, tCh chan<- []by
 	tc, tCancel := context.WithTimeout(ctx, 20*time.Second)
 	defer tCancel()
 
-	opts := []grpc.DialOption{grpc.WithContextDialer(kpf),
+	opts := []grpc.DialOption{
+		grpc.WithContextDialer(kpf),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
@@ -216,7 +217,8 @@ func (c *traceCommand) agentTraces(ctx context.Context, cmd *cobra.Command, tCh 
 		tc, tCancel := context.WithTimeout(ctx, 20*time.Second)
 		defer tCancel()
 
-		opts := []grpc.DialOption{grpc.WithContextDialer(kpf),
+		opts := []grpc.DialOption{
+			grpc.WithContextDialer(kpf),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),

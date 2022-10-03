@@ -9,8 +9,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
-const EnvPrefix = "_TEL_AGENT_"
-const InitContainerName = "tel-agent-init"
+const (
+	EnvPrefix         = "_TEL_AGENT_"
+	InitContainerName = "tel-agent-init"
+)
 
 // AgentContainer will return a configured traffic agent.
 func AgentContainer(
@@ -81,7 +83,8 @@ func agentEnvironment(
 	appProto string,
 	apiPort int,
 	managerNamespace string,
-	port core.ContainerPort) []core.EnvVar {
+	port core.ContainerPort,
+) []core.EnvVar {
 	appEnv := appEnvironment(appContainer, apiPort)
 	env := make([]core.EnvVar, len(appEnv), len(appEnv)+7)
 	copy(env, appEnv)

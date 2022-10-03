@@ -132,7 +132,8 @@ func dashboardCommand() *cobra.Command {
 			}
 
 			return nil
-		}}
+		},
+	}
 }
 
 func quitCommand() *cobra.Command {

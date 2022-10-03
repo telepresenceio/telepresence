@@ -96,6 +96,7 @@ linters:
     - gocyclo
     - godot
     - gofmt
+    - gofumpt
     - goheader
     - goimports
     - gomodguard
@@ -136,7 +137,6 @@ linters:
     - gochecknoinits
     - goconst
     - goerr113
-    - gofumpt
     - godox
     - gomnd
     - gomoddirectives

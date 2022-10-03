@@ -367,7 +367,7 @@ func (a *anonymizer) anonymizeFileNames(lr *connector.LogsResponse, exportDir st
 		qn := filepath.Join(exportDir, n)
 		if v != "ok" {
 			// Write the error to retrieve the log as the log content. It's better than nothing
-			_ = os.WriteFile(qn, []byte(v), 0666)
+			_ = os.WriteFile(qn, []byte(v), 0o666)
 		}
 		anonQn := filepath.Join(exportDir, a.getPodName(n))
 		if err := os.Rename(qn, anonQn); err != nil {

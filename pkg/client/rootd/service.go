@@ -37,8 +37,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-const ProcessName = "daemon"
-const titleName = "Daemon"
+const (
+	ProcessName = "daemon"
+	titleName   = "Daemon"
+)
 
 var help = `The Telepresence ` + titleName + ` is a long-lived background component that manages
 connections and network state.

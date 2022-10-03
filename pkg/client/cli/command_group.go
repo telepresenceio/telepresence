@@ -13,10 +13,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-var userDaemonRunning = false
-var globalFlagGroups []cliutil.FlagGroup
-var deprecatedGlobalFlags *pflag.FlagSet
-var kubeFlags *pflag.FlagSet
+var (
+	userDaemonRunning     = false
+	globalFlagGroups      []cliutil.FlagGroup
+	deprecatedGlobalFlags *pflag.FlagSet
+	kubeFlags             *pflag.FlagSet
+)
 
 type commandGroupMapKey struct{}
 

@@ -45,7 +45,6 @@ func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*rel
 			return nil
 		}
 	})
-
 	if err != nil {
 		return nil, err
 	}

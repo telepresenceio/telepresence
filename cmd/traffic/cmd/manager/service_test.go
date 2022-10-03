@@ -713,7 +713,7 @@ func (m *mockA8rCloudClientProvider[T]) _addExpectation(e *mockExpectation) {
 }
 
 func (m *mockA8rCloudClientProvider[T]) GetAPIKey(ctx context.Context) (string, error) {
-	var expectations = m.expectations["GetAPIKey"]
+	expectations := m.expectations["GetAPIKey"]
 	if len(expectations) == 0 {
 		err := errors.New("unexpected call to GetAPIKey")
 		m.t.Error(err)
@@ -739,12 +739,12 @@ func (m *mockA8rCloudClientProvider[T]) GetAPIKey(ctx context.Context) (string, 
 		}
 	}
 
-	var ret = e.ret
+	ret := e.ret
 	return ret[0].(string), castErr(ret[1])
 }
 
 func (m *mockA8rCloudClientProvider[T]) GetInstallID(ctx context.Context) (string, error) {
-	var expectations = m.expectations["GetInstallID"]
+	expectations := m.expectations["GetInstallID"]
 	if len(expectations) == 0 {
 		err := errors.New("unexpected call to GetInstallID")
 		m.t.Error(err)
@@ -770,12 +770,12 @@ func (m *mockA8rCloudClientProvider[T]) GetInstallID(ctx context.Context) (strin
 		}
 	}
 
-	var ret = e.ret
+	ret := e.ret
 	return ret[0].(string), castErr(ret[1])
 }
 
 func (m *mockA8rCloudClientProvider[T]) GetExtraHeaders(ctx context.Context) (map[string]string, error) {
-	var expectations = m.expectations["GetExtraHeaders"]
+	expectations := m.expectations["GetExtraHeaders"]
 	if len(expectations) == 0 {
 		err := errors.New("unexpected call to GetExtraHeaders")
 		m.t.Error(err)
@@ -801,12 +801,12 @@ func (m *mockA8rCloudClientProvider[T]) GetExtraHeaders(ctx context.Context) (ma
 		}
 	}
 
-	var ret = e.ret
+	ret := e.ret
 	return ret[0].(map[string]string), castErr(ret[1])
 }
 
 func (m *mockA8rCloudClientProvider[T]) GetCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
-	var expectations = m.expectations["GetCloudConfig"]
+	expectations := m.expectations["GetCloudConfig"]
 	if len(expectations) == 0 {
 		err := errors.New("unexpected call to GetCloudConfig")
 		m.t.Error(err)
@@ -832,12 +832,12 @@ func (m *mockA8rCloudClientProvider[T]) GetCloudConfig(ctx context.Context) (*rp
 		}
 	}
 
-	var ret = e.ret
+	ret := e.ret
 	return ret[0].(*rpc.AmbassadorCloudConfig), castErr(ret[1])
 }
 
 func (m *mockA8rCloudClientProvider[T]) BuildClient(ctx context.Context, conn *grpc.ClientConn) (managerutil.SystemaCRUDClient, error) {
-	var expectations = m.expectations["BuildClient"]
+	expectations := m.expectations["BuildClient"]
 	if len(expectations) == 0 {
 		err := errors.New("unexpected call to BuildClient")
 		m.t.Error(err)
@@ -863,7 +863,7 @@ func (m *mockA8rCloudClientProvider[T]) BuildClient(ctx context.Context, conn *g
 		}
 	}
 
-	var ret = e.ret
+	ret := e.ret
 	return ret[0].(managerutil.SystemaCRUDClient), castErr(ret[1])
 }
 
@@ -872,7 +872,7 @@ type mockA8rCloudClientProviderExpectationHandler[T a8rcloud.Closeable] struct {
 }
 
 func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetAPIKey(args ...any) *mockExpectation {
-	var e = mockExpectation{
+	e := mockExpectation{
 		name: "GetAPIKey",
 		args: args,
 	}
@@ -881,7 +881,7 @@ func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetAPIKey(args ...any)
 }
 
 func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetInstallID(args ...any) *mockExpectation {
-	var e = mockExpectation{
+	e := mockExpectation{
 		name: "GetInstallID",
 		args: args,
 	}
@@ -890,7 +890,7 @@ func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetInstallID(args ...a
 }
 
 func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetExtraHeaders(args ...any) *mockExpectation {
-	var e = mockExpectation{
+	e := mockExpectation{
 		name: "GetExtraHeaders",
 		args: args,
 	}
@@ -899,7 +899,7 @@ func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetExtraHeaders(args .
 }
 
 func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetCloudConfig(args ...any) *mockExpectation {
-	var e = mockExpectation{
+	e := mockExpectation{
 		name: "GetCloudConfig",
 		args: args,
 	}
@@ -908,7 +908,7 @@ func (m *mockA8rCloudClientProviderExpectationHandler[T]) GetCloudConfig(args ..
 }
 
 func (m *mockA8rCloudClientProviderExpectationHandler[T]) BuildClient(args ...any) *mockExpectation {
-	var e = mockExpectation{
+	e := mockExpectation{
 		name: "BuildClient",
 		args: args,
 	}

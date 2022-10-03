@@ -232,7 +232,7 @@ func installTelepresencePro(ctx context.Context, telProLocation string, userD co
 func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, telProLocation string) (err error) {
 	stdout, _ := output.Structured(ctx)
 	dir := filepath.Dir(telProLocation)
-	if err = os.MkdirAll(dir, 0777); err != nil {
+	if err = os.MkdirAll(dir, 0o777); err != nil {
 		return errcat.NoDaemonLogs.Newf("error creating directory %q: %w", dir, err)
 	}
 
@@ -258,7 +258,7 @@ func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, 
 		return errcat.NoDaemonLogs.Newf("unable to download the enhanced free client: %w", err)
 	}
 	fmt.Fprintln(stdout, "done")
-	if err = os.Chmod(tmpName, 0755); err != nil {
+	if err = os.Chmod(tmpName, 0o755); err != nil {
 		return errcat.NoDaemonLogs.Newf("unable to set permissions of %q to 755: %w", telProLocation, err)
 	}
 	if err = os.Remove(telProLocation); err != nil && !os.IsNotExist(err) {
@@ -294,7 +294,7 @@ func updateConfig(ctx context.Context, telProLocation string) error {
 		_ = os.Rename(cfgFile, cfgFile+".bak")
 	}
 
-	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("error opening config file: %w", err)
 	}

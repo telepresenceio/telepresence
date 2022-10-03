@@ -34,8 +34,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-const ProcessName = "connector"
-const titleName = "Connector"
+const (
+	ProcessName = "connector"
+	titleName   = "Connector"
+)
 
 var help = `The Telepresence ` + titleName + ` is a background component that manages a connection. It
 requires that a daemon is already running.

@@ -64,7 +64,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 			result.Store(podYaml, err.Error())
 			return
 		}
-		if err = os.WriteFile(filepath.Join(exportDir, podYaml), b, 0666); err != nil {
+		if err = os.WriteFile(filepath.Join(exportDir, podYaml), b, 0o666); err != nil {
 			result.Store(podYaml, err.Error())
 			return
 		}

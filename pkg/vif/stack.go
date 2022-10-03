@@ -80,8 +80,10 @@ func NewStack(ctx context.Context, dev stack.LinkEndpoint, streamCreator tunnel.
 	return s, nil
 }
 
-const myWindowScale = 6
-const maxReceiveWindow = 1 << (myWindowScale + 14) // 1MiB
+const (
+	myWindowScale    = 6
+	maxReceiveWindow = 1 << (myWindowScale + 14) // 1MiB
+)
 
 // maxInFlight specifies the max number of in-flight connection attempts.
 const maxInFlight = 512

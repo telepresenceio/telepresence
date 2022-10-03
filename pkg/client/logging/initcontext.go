@@ -46,7 +46,7 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 				maxFiles = uint16(mx)
 			}
 		}
-		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, 0600, strategy, maxFiles)
+		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, 0o600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
 		}

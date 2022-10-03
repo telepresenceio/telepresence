@@ -128,10 +128,10 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	}
 
 	if allIDs["telepresence-2"] != retID {
-		if err := os.MkdirAll(filepath.Dir(idFilename), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(idFilename), 0o755); err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(idFilename, []byte(retID), 0644); err != nil {
+		if err := os.WriteFile(idFilename, []byte(retID), 0o644); err != nil {
 			return "", err
 		}
 	}

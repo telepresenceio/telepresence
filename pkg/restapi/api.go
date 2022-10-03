@@ -12,10 +12,12 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-const HeaderCallerInterceptID = "x-telepresence-caller-intercept-id"
-const HeaderInterceptID = "x-telepresence-intercept-id"
-const EndPointConsumeHere = "/consume-here"
-const EndPointInterceptInfo = "/intercept-info"
+const (
+	HeaderCallerInterceptID = "x-telepresence-caller-intercept-id"
+	HeaderInterceptID       = "x-telepresence-intercept-id"
+	EndPointConsumeHere     = "/consume-here"
+	EndPointInterceptInfo   = "/intercept-info"
+)
 
 type InterceptInfo struct {
 	// True if the service is being intercepted

@@ -191,6 +191,7 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 	}
 	return fhs
 }
+
 func LoadEnv(ctx context.Context, lookupFunc func(string) (string, bool)) (context.Context, error) {
 	env := Env{}
 	parser, err := envconfig.GenerateParser(reflect.TypeOf(env), fieldTypeHandlers())

@@ -132,7 +132,6 @@ func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
 		Session:    tm.session(),
 		Namespaces: nss,
 	}, opts...)
-
 	if err != nil {
 		if ctx.Err() == nil {
 			err = fmt.Errorf("manager.WatchAgentsNS dial: %w", err)

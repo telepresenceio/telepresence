@@ -114,7 +114,7 @@ func OpenRotatingFile(
 	logfileDir, logfileBase := filepath.Split(logfilePath)
 
 	var err error
-	if err = os.MkdirAll(logfileDir, 0755); err != nil {
+	if err = os.MkdirAll(logfileDir, 0o755); err != nil {
 		return nil, err
 	}
 

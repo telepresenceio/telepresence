@@ -148,8 +148,10 @@ const tel2SubDomainDot = tel2SubDomain + "."
 // wpadDot is used when rejecting all WPAD (Wep Proxy Auto-Discovery) queries.
 const wpadDot = "wpad."
 
-var localhostIPv4 = net.IP{127, 0, 0, 1}
-var localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+var (
+	localhostIPv4 = net.IP{127, 0, 0, 1}
+	localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+)
 
 func (s *Server) shouldDoClusterLookup(query string) bool {
 	if strings.HasPrefix(query, wpadDot) {

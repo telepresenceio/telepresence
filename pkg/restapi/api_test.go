@@ -16,8 +16,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
-type yesNoClient bool
-type yesNoCluster bool
+type (
+	yesNoClient  bool
+	yesNoCluster bool
+)
 
 func (yn yesNoClient) InterceptInfo(_ context.Context, _, _ string, _ uint16, _ http.Header) (*restapi.InterceptInfo, error) {
 	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: true}, nil
@@ -27,9 +29,11 @@ func (yn yesNoCluster) InterceptInfo(_ context.Context, _, _ string, _ uint16, _
 	return &restapi.InterceptInfo{Intercepted: bool(yn), ClientSide: false}, nil
 }
 
-type textMatcher map[string]string
-type textMatcherClient textMatcher
-type textMatcherCluster textMatcher
+type (
+	textMatcher        map[string]string
+	textMatcherClient  textMatcher
+	textMatcherCluster textMatcher
+)
 
 func (t textMatcher) intercepted(header http.Header) bool {
 	for k, v := range t {

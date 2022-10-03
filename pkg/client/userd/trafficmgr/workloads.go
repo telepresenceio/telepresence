@@ -26,9 +26,11 @@ type workloadsAndServicesWatcher struct {
 	cond        sync.Cond
 }
 
-const deployments = 0
-const replicasets = 1
-const statefulsets = 2
+const (
+	deployments  = 0
+	replicasets  = 1
+	statefulsets = 2
+)
 
 // namespacedWASWatcher is watches Workloads And Services (WAS) for a namespace.
 type namespacedWASWatcher struct {

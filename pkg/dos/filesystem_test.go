@@ -22,9 +22,9 @@ func TestWithFS(t *testing.T) {
 	appFS := afero.NewMemMapFs()
 	cData := []byte("file c\n")
 	dData := []byte("file d\n")
-	require.NoError(t, appFS.MkdirAll("a/b", 0755))
-	require.NoError(t, afero.WriteFile(appFS, "/a/b/c.txt", cData, 0644))
-	require.NoError(t, afero.WriteFile(appFS, "/a/d.txt", dData, 0644))
+	require.NoError(t, appFS.MkdirAll("a/b", 0o755))
+	require.NoError(t, afero.WriteFile(appFS, "/a/b/c.txt", cData, 0o644))
+	require.NoError(t, afero.WriteFile(appFS, "/a/d.txt", dData, 0o644))
 
 	ctx := dos.WithFS(dlog.NewTestContext(t, false), dos.WorkingDirWrapper(aferofs.Wrap(appFS)))
 
@@ -47,7 +47,7 @@ func ExampleWithFS() {
 	appFS := afero.NewCopyOnWriteFs(afero.NewOsFs(), afero.NewMemMapFs())
 	ctx := dos.WithFS(context.Background(), aferofs.Wrap(appFS))
 
-	if err := dos.MkdirAll(ctx, "/etc", 0700); err != nil {
+	if err := dos.MkdirAll(ctx, "/etc", 0o700); err != nil {
 		log.Fatal(err)
 	}
 	hosts, err := dos.Create(ctx, "/etc/example.conf")

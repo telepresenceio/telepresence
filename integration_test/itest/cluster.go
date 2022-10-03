@@ -43,8 +43,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-const TestUser = "telepresence-test-developer"
-const TestUserAccount = "system:serviceaccount:default:" + TestUser
+const (
+	TestUser        = "telepresence-test-developer"
+	TestUserAccount = "system:serviceaccount:default:" + TestUser
+)
 
 type Cluster interface {
 	AgentImageName() string
@@ -230,7 +232,7 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	t := getT(ctx)
 	s.kubeConfig = dtest.Kubeconfig(log.WithDiscardingLogger(ctx))
-	require.NoError(t, os.Chmod(s.kubeConfig, 0600), "failed to chmod 0600 %q", s.kubeConfig)
+	require.NoError(t, os.Chmod(s.kubeConfig, 0o600), "failed to chmod 0600 %q", s.kubeConfig)
 
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.
 	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,clusterrole,clusterrolebinding", "-l", "app=traffic-manager")
@@ -429,7 +431,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
 	chartFilename, err := func() (string, error) {
 		filename := filepath.Join(getT(ctx).TempDir(), "telepresence-chart.tgz")
-		fh, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
+		fh, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0o666)
 		if err != nil {
 			return "", err
 		}

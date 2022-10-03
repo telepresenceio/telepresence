@@ -16,7 +16,8 @@ import (
 func muxExchangeVersion(origin string, version uint16, server interface {
 	Recv() (*manager.ConnMessage, error)
 	Send(*manager.ConnMessage) error
-}) error {
+},
+) error {
 	const versionCtl = 9 // Mux tunnel control code for version
 	cm, err := server.Recv()
 	if err != nil {

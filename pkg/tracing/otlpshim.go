@@ -24,9 +24,11 @@ func (ts *otlpShim) Start(ctx context.Context) error {
 	ts.pw = NewProtoWriter(&ts.buf1)
 	return nil
 }
+
 func (ts *otlpShim) Stop(ctx context.Context) error {
 	return nil
 }
+
 func (ts *otlpShim) UploadTraces(ctx context.Context, protoSpans []*tracepb.ResourceSpans) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()

@@ -152,7 +152,7 @@ func Command(ctx context.Context) *cobra.Command {
 		"Other Commands":   []*cobra.Command{versionCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
 	}
 
-	var groups = make(cliutil.CommandGroups)
+	groups := make(cliutil.CommandGroups)
 	if !IsCommand("quit") && !userWantsRootLevelHelp() {
 		// These are commands that known to always exist in the user daemon. If the daemon
 		// isn't running, it will be started just to retrieve the command spec.

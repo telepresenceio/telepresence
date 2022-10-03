@@ -96,7 +96,7 @@ func OtelResources(ctx context.Context, c Config) []attribute.KeyValue {
 func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
 	dlog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
-	if err := dos.Mkdir(ctx, cnMountPoint, 0700); err != nil {
+	if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
 		if !os.IsExist(err) {
 			return err
 		}
@@ -104,7 +104,7 @@ func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
 		if err = dos.RemoveAll(ctx, cnMountPoint); err != nil {
 			return err
 		}
-		if err = dos.Mkdir(ctx, cnMountPoint, 0700); err != nil {
+		if err = dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
 			return err
 		}
 	}
@@ -180,7 +180,7 @@ func addSecretsMounts(ctx context.Context, ag *agentconfig.Container) error {
 		}
 		dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
 		// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
-		err = dos.MkdirAll(ctx, filepath.Dir(appMountsPath), 0700)
+		err = dos.MkdirAll(ctx, filepath.Dir(appMountsPath), 0o700)
 		if err != nil {
 			return err
 		}

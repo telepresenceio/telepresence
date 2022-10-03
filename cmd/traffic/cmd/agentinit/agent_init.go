@@ -23,8 +23,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-const nat = "nat"
-const inboundChain = "TEL_INBOUND"
+const (
+	nat          = "nat"
+	inboundChain = "TEL_INBOUND"
+)
 
 type config struct {
 	agentconfig.Sidecar

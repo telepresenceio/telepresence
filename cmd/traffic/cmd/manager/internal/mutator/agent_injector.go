@@ -374,14 +374,16 @@ func addAgentContainer(
 			return append(patches, patchOperation{
 				Op:    "replace",
 				Path:  "/spec/containers/" + strconv.Itoa(i),
-				Value: acn})
+				Value: acn,
+			})
 		}
 	}
 
 	return append(patches, patchOperation{
 		Op:    "add",
 		Path:  "/spec/containers/-",
-		Value: acn})
+		Value: acn,
+	})
 }
 
 // addTPEnv adds telepresence specific environment variables to all interceptable app containers.

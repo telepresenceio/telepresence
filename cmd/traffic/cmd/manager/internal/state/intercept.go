@@ -338,7 +338,8 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 
 	ei := k8sapi.GetK8sInterface(ctx).EventsV1().Events(namespace)
 	w, err := ei.Watch(ctx, meta.ListOptions{
-		FieldSelector: fields.OneTermNotEqualSelector("type", "Normal").String()})
+		FieldSelector: fields.OneTermNotEqualSelector("type", "Normal").String(),
+	})
 	if err != nil {
 		return nil, err
 	}

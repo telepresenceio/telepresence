@@ -39,7 +39,8 @@ func clientUpdateInterceptFn(client manager.ManagerClient, opts ...grpc.CallOpti
 }
 
 func AddPreviewDomain(ctx context.Context, reporter *scout.Reporter, updateInterceptFn UpdateInterceptFn, sess *manager.SessionInfo, iceptName string,
-	previewSpec *manager.PreviewSpec) (*manager.InterceptInfo, error) {
+	previewSpec *manager.PreviewSpec,
+) (*manager.InterceptInfo, error) {
 	intercept, err := updateInterceptFn(ctx, &manager.UpdateInterceptRequest{
 		Session: sess,
 		Name:    iceptName,

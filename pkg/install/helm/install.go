@@ -20,8 +20,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-const helmDriver = "secrets"
-const releaseName = "traffic-manager"
+const (
+	helmDriver  = "secrets"
+	releaseName = "traffic-manager"
+)
 
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}

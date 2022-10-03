@@ -35,7 +35,7 @@ func Main(dstdir, verStr string) (err error) {
 	}
 	verStr = strings.TrimPrefix(verStr, "v")
 
-	fh, err := os.OpenFile(filepath.Join(dstdir, "telepresence-"+verStr+".tgz"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0666)
+	fh, err := os.OpenFile(filepath.Join(dstdir, "telepresence-"+verStr+".tgz"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o666)
 	if err != nil {
 		return err
 	}

@@ -172,7 +172,7 @@ func (c *interceptCommand) init(ctx context.Context) {
 		args.name = positional[0]
 		args.cmdline = positional[1:]
 
-		var cmd = c.command
+		cmd := c.command
 		switch args.localOnly { // a switch instead of an if/else to get gocritic to not suggest "else if"
 		case true:
 			// Not actually intercepting anything -- check that the flags make sense for that
@@ -1046,5 +1046,5 @@ func (is *interceptState) writeEnvJSON() error {
 		// Creating JSON from a map[string]string should never fail
 		panic(err)
 	}
-	return os.WriteFile(is.args.envJSON, data, 0644)
+	return os.WriteFile(is.args.envJSON, data, 0o644)
 }

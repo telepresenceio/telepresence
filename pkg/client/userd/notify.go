@@ -9,9 +9,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-var (
-	notifyEnabled = false
-)
+var notifyEnabled = false
 
 // Notify displays a desktop banner notification to the user.
 func Notify(c context.Context, message string) {

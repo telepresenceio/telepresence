@@ -34,9 +34,11 @@ const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 func int32P(i int32) *int32 {
 	return &i
 }
+
 func boolP(b bool) *bool {
 	return &b
 }
+
 func stringP(s string) *string {
 	return &s
 }
@@ -84,7 +86,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		}
 	}
 
-	secretMode := int32(0644)
+	secretMode := int32(0o644)
 	yes := true
 	no := false
 	podNamedPort := core.Pod{
@@ -412,7 +414,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 						Port:        8001,
 						AppProtocol: stringP("grpc"),
 						TargetPort:  intstr.FromString("grpc"),
-					}},
+					},
+				},
 				Selector: map[string]string{
 					"service": "multi-port",
 				},
@@ -458,7 +461,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 						{
 							Ports: []core.ContainerPort{
 								{Name: "http", ContainerPort: int32(env.AgentPort)},
-							}},
+							},
+						},
 					},
 				},
 			},
@@ -753,7 +757,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 	podName := func(name string) string {
 		return name + podSuffix
 	}
-	secretMode := int32(0644)
+	secretMode := int32(0o644)
 
 	wlName := func(podName string) string {
 		return strings.TrimSuffix(podName, podSuffix)
@@ -936,18 +940,22 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Env: []core.EnvVar{
-							{
-								Name:  "SOME_NAME",
-								Value: "some value",
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Env: []core.EnvVar{
+								{
+									Name:  "SOME_NAME",
+									Value: "some value",
+								},
+							},
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
 							},
 						},
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
 					},
 				},
 			},
@@ -1023,12 +1031,16 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1123,12 +1135,16 @@ func TestTrafficAgentInjector(t *testing.T) {
 					OwnerReferences: podOwner("named-port"),
 				},
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1151,12 +1167,16 @@ func TestTrafficAgentInjector(t *testing.T) {
 					OwnerReferences: podOwner("named-port"),
 				},
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1230,10 +1250,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("numeric-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{{ContainerPort: 8888}},
+						},
 					},
 				},
 			},
@@ -1322,10 +1344,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 						Name:  "some-init-container",
 						Image: "some-init-image",
 					}},
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{{ContainerPort: 8888}},
+						},
 					},
 				},
 			},
@@ -1503,25 +1527,29 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Env: []core.EnvVar{
-							{
-								Name:  "TOKEN_VOLUME",
-								Value: "default-token-vol",
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Env: []core.EnvVar{
+								{
+									Name:  "TOKEN_VOLUME",
+									Value: "default-token-vol",
+								},
+								{
+									Name:  "SECRET_NAME",
+									Value: "default-secret-name",
+								},
 							},
-							{
-								Name:  "SECRET_NAME",
-								Value: "default-secret-name",
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+							VolumeMounts: []core.VolumeMount{
+								{Name: "$(TOKEN_VOLUME)", ReadOnly: true, MountPath: serviceAccountMountPath},
 							},
 						},
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						},
-						VolumeMounts: []core.VolumeMount{
-							{Name: "$(TOKEN_VOLUME)", ReadOnly: true, MountPath: serviceAccountMountPath},
-						}},
 					},
 					Volumes: []core.Volume{
 						{

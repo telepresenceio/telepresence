@@ -492,7 +492,6 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 			_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
 				InterceptId: interceptInfo.Id,
 			})
-
 			if err != nil {
 				return err
 			}

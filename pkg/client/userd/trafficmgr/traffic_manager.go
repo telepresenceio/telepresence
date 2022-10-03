@@ -250,7 +250,8 @@ func NewSession(
 	// Collect data on how long connection time took
 	dlog.Debug(ctx, "Finished connecting to traffic manager")
 	sr.Report(ctx, "finished_connecting_traffic_manager", scout.Entry{
-		Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
+		Key: "connect_duration", Value: time.Since(connectStart).Seconds(),
+	})
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
 	ret := &rpc.ConnectInfo{
@@ -404,7 +405,8 @@ func connectMgr(
 	tc, tCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 	defer tCancel()
 
-	opts := []grpc.DialOption{grpc.WithContextDialer(grpcDialer),
+	opts := []grpc.DialOption{
+		grpc.WithContextDialer(grpcDialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
@@ -691,7 +693,8 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 }
 
 func (tm *TrafficManager) ensureWatchers(ctx context.Context,
-	namespaces []string) {
+	namespaces []string,
+) {
 	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
 	waitCh := make(chan struct{}, 1)
 	tm.currentAgentsLock.Lock()

@@ -804,7 +804,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 }
 
 func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
-	var resp = rpc.ValidArgsForCommandResponse{
+	resp := rpc.ValidArgsForCommandResponse{
 		Completions: make([]string, 0),
 	}
 	var (
@@ -953,7 +953,7 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	}
 
 	if p := req.Prefix; p != "" {
-		var namespaces = []string{}
+		namespaces := []string{}
 		for _, namespace := range resp.Namespaces {
 			if strings.HasPrefix(namespace, p) {
 				namespaces = append(namespaces, namespace)

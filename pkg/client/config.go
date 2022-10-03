@@ -371,17 +371,19 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-const defaultTimeoutsAgentInstall = 120 * time.Second
-const defaultTimeoutsApply = 1 * time.Minute
-const defaultTimeoutsClusterConnect = 20 * time.Second
-const defaultTimeoutsConnectivityCheck = 500 * time.Millisecond
-const defaultTimeoutsEndpointDial = 3 * time.Second
-const defaultTimeoutsHelm = 30 * time.Second
-const defaultTimeoutsIntercept = 5 * time.Second
-const defaultTimeoutsProxyDial = 5 * time.Second
-const defaultTimeoutsRoundtripLatency = 2 * time.Second
-const defaultTimeoutsTrafficManagerAPI = 15 * time.Second
-const defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+const (
+	defaultTimeoutsAgentInstall          = 120 * time.Second
+	defaultTimeoutsApply                 = 1 * time.Minute
+	defaultTimeoutsClusterConnect        = 20 * time.Second
+	defaultTimeoutsConnectivityCheck     = 500 * time.Millisecond
+	defaultTimeoutsEndpointDial          = 3 * time.Second
+	defaultTimeoutsHelm                  = 30 * time.Second
+	defaultTimeoutsIntercept             = 5 * time.Second
+	defaultTimeoutsProxyDial             = 5 * time.Second
+	defaultTimeoutsRoundtripLatency      = 2 * time.Second
+	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
+	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+)
 
 var defaultTimeouts = Timeouts{
 	PrivateAgentInstall:          defaultTimeoutsAgentInstall,
@@ -478,8 +480,10 @@ func (t *Timeouts) merge(o *Timeouts) {
 	}
 }
 
-const defaultLogLevelsUserDaemon = logrus.InfoLevel
-const defaultLogLevelsRootDaemon = logrus.InfoLevel
+const (
+	defaultLogLevelsUserDaemon = logrus.InfoLevel
+	defaultLogLevelsRootDaemon = logrus.InfoLevel
+)
 
 var defaultLogLevels = LogLevels{
 	UserDaemon: defaultLogLevelsUserDaemon,
@@ -658,9 +662,11 @@ func (c *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-const defaultCloudSystemAHost = "app.getambassador.io"
-const defaultCloudSystemAPort = "443"
-const defaultCloudRefreshMessages = 24 * 7 * time.Hour
+const (
+	defaultCloudSystemAHost     = "app.getambassador.io"
+	defaultCloudSystemAPort     = "443"
+	defaultCloudRefreshMessages = 24 * 7 * time.Hour
+)
 
 var defaultCloud = Cloud{
 	SkipLogin:       false,

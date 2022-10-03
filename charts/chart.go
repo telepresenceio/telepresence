@@ -42,7 +42,7 @@ func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content []byte) 
 		return err
 	}
 	header.Name = filename
-	header.Mode = 0644
+	header.Mode = 0o644
 	header.Size = int64(len(content))
 
 	// Write the tar.Header.
