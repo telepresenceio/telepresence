@@ -2,11 +2,11 @@ apiVersion: v2
 name: telepresence
 description: A chart for deploying the server-side components of Telepresence
 type: application
-version: "BOGUS--gets-overridden-by-charts.go"
+version: "1.1.1-bogus.overwritten.by.charts.go"
 icon: https://www.getambassador.io/images/logo.png
 
 # Note: This is the version of the Traffic Manager that will be installed by
 # this chart. The telepresence CLI will always attempt to update the Traffic
 # Manager if it is not the same version as the CLI so ensure you are keeping
 # these in sync.
-appVersion: "BOGUS--gets-overridden-by-charts.go"
+appVersion: "1.1.1-bogus.overwritten.by.charts.go"
