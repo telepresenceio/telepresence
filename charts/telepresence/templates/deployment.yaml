@@ -78,27 +78,77 @@ spec:
             value: {{ .grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
+        {{- /*
+        Traffic agent injector configuration
+        */}}
           {{- with .agentInjector }}
-          {{- with .agentImage }}
-          {{ if .name }}
+          - name: AGENT_INJECT_POLICY
+            value: {{ .injectPolicy }}
+          {{- end }}
+        {{- /*
+        Traffic agent configuration
+        */}}
+          {{- with .agent }}
+          {{- if .logLevel }}
+          - name: AGENT_LOGLEVEL
+            value: {{ .logLevel }}
+          {{- end }}
+          {{- if .port }}
+          - name: AGENT_PORT
+            value: {{ .port | quote }}
+          {{- end }}
+          {{- /* replaced by agent.appProtocolStrategy. Retained for backward compatibility */}}
+          {{- with $.Values.agentInjector.appProtocolStrategy }}
+          - name: AGENT_APP_PROTO_STRATEGY
+            value: {{ . }}
+          {{- else }}
+          {{- if .appProtocolStrategy }}
+          - name: AGENT_APP_PROTO_STRATEGY
+            value: {{ .appProtocolStrategy }}
+          {{- end }}
+          {{- end }}
+          {{- /* replaced by agent (.resources and .initResoruces). Retained for backward compatibility */}}
+          {{- with $.Values.agentInjector.agentImage }}
+          {{- if .resources }}
+          - name: AGENT_RESOURCES
+            value: '{{ toJson .resources }}'
+          {{- end }}
+          {{- if .initResources }}
+          - name: AGENT_INIT_RESOURCES
+            value: '{{ toJson .initResources }}'
+          {{- end }}
+          {{- else }}
+          {{- if .resources }}
+          - name: AGENT_RESOURCES
+            value: '{{ toJson .resources }}'
+          {{- end }}
+          {{- if .initResources }}
+          - name: AGENT_INIT_RESOURCES
+            value: '{{ toJson .initResources }}'
+          {{- end }}
+          {{- end }}
+          {{- /* replaced by agent.image. Retained for backward compatibility */}}
+          {{- with $.Values.agentInjector.agentImage }}
+          {{- if .name }}
           - name: AGENT_IMAGE
             value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
           {{- end }}
-          {{- with .resources }}
-          - name: AGENT_RESOURCES
-            value: '{{ toJson . }}'
-          {{- end }}
-          {{- with .initResources }}
-          - name: AGENT_INIT_RESOURCES
-            value: '{{ toJson . }}'
-          {{- end }}
+          {{- if .registry }}
           - name: AGENT_REGISTRY
             value: {{ .registry }}
           {{- end }}
-          - name: AGENT_APP_PROTO_STRATEGY
-            value: {{ .appProtocolStrategy }}
-          - name: AGENT_INJECT_POLICY
-            value: {{ .injectPolicy }}
+          {{- else }}
+          {{- with .image }}
+          {{- if .name }}
+          - name: AGENT_IMAGE
+            value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+          {{- end }}
+          {{- if .registry }}
+          - name: AGENT_REGISTRY
+            value: {{ .registry }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
           {{- end }}
           {{- if .prometheus.port }}  # 0 is false
           - name: PROMETHEUS_PORT

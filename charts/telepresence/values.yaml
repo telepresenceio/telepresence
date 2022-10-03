@@ -64,16 +64,15 @@ service:
 ################################################################################
 
 # The log level of the Traffic Manager.
-#
-# Default: info
 logLevel: info
 
 # GRPC configuration for the Traffic Manager.
 # This is identical to the grpc configuration for local clients.
 # See https://www.telepresence.io/docs/latest/reference/config/#grpc for more info
-grpc: {}
-  # maxReceiveSize configures the maximum message size that the traffic manager will service.
-  # maxReceiveSize: 4Mi
+grpc:
+  # maxReceiveSize is a quantity that configures the maximum message size that the traffic
+  # manager will service.
+  maxReceiveSize: 4Mi
 
 # podCIDRs is the verbatim list of CIDRs used when the podCIDRStrategy is set to environment
 podCIDRs: []
@@ -177,12 +176,6 @@ managerRbac:
 ################################################################################
 agentInjector:
   name: agent-injector
-  agentImage:
-    registry: docker.io/datawire
-    name: ""
-    tag: ""
-    resources: {}
-    initResources: {}
   service:
     type: ClusterIP
     ports:
@@ -203,7 +196,21 @@ agentInjector:
     reinvocationPolicy: Never
     sideEffects: None
     timeoutSeconds: 5
+  agentImage: {}
+
+################################################################################
+## Telepresence traffic-agent configuration
+################################################################################
+agent:
+  logLevel:
+  resources: {}
+  initResources: {}
   appProtocolStrategy: http2Probe
+  port: 9900
+  image:
+    registry: docker.io/datawire
+    name:
+    tag:
 
 ################################################################################
 ## Telepresence API Server Configuration
