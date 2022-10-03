@@ -23,8 +23,8 @@ type Env struct {
 	ServerHost     string `env:"SERVER_HOST,default="`
 	ServerPort     int32  `env:"SERVER_PORT,default=8081"`
 	PrometheusPort string `env:"PROMETHEUS_PORT,default=0"`
-	SystemAHost    string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
-	SystemAPort    string `env:"SYSTEMA_PORT,default=443"`
+	SystemAHost    string `env:"SYSTEMA_HOST,default="`
+	SystemAPort    int32  `env:"SYSTEMA_PORT,default=0"`
 
 	ManagerNamespace    string                     `env:"MANAGER_NAMESPACE,default="`
 	ManagedNamespaces   string                     `env:"MANAGED_NAMESPACES,default="`

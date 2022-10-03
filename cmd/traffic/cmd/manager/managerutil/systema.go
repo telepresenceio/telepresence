@@ -53,7 +53,10 @@ func (p *UnauthdConnProvider) BuildClient(ctx context.Context, conn *grpc.Client
 
 func AgentImageFromSystemA(ctx context.Context) (string, error) {
 	// This is currently the only use case for the unauthenticated pool, but it's very important that we be able to get the image name
-	systemaPool := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName)
+	systemaPool, err := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName)
+	if err != nil {
+		return "", err
+	}
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {
 		return "", err

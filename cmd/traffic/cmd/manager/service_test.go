@@ -648,6 +648,8 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
+		SystemAHost:     "localhost",
+		SystemAPort:     1234,
 		MaxReceiveSize:  resource.Quantity{},
 		PodCIDRStrategy: "environment",
 		PodCIDRs:        "192.168.0.0/16",

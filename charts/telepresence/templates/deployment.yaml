@@ -1,5 +1,9 @@
 {{- with .Values }}
 {{- if not .rbac.only }}
+{{- /* verify that we either have access to Ambassador Cloud or have a agent.image defined */}}
+{{- if not (or (and .systemaHost .systemaPort) (and .agent.image.name .agent.image.tag) (and .agentInjector.agentImage.name .agentInjector.agentImage.tag)) }}
+{{- fail "Either systemaHost and systemaPort or agent.image.name and agent.image.tag must be defined" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

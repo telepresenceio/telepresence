@@ -43,11 +43,8 @@ func stringP(s string) *string {
 
 func TestTrafficAgentConfigGenerator(t *testing.T) {
 	env := &managerutil.Env{
-		User:        "",
-		ServerHost:  "tel-example",
-		ServerPort:  8081,
-		SystemAHost: "",
-		SystemAPort: "",
+		ServerHost: "tel-example",
+		ServerPort: 8081,
 
 		ManagerNamespace: "default",
 		AgentRegistry:    "docker.io/datawire",
@@ -741,11 +738,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 func TestTrafficAgentInjector(t *testing.T) {
 	env := &managerutil.Env{
-		User:        "",
-		ServerHost:  "tel-example",
-		ServerPort:  8081,
-		SystemAHost: "",
-		SystemAPort: "",
+		ServerHost: "tel-example",
+		ServerPort: 8081,
 
 		ManagerNamespace:  "default",
 		AgentRegistry:     "docker.io/datawire",

@@ -760,7 +760,10 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
 	err = s.withSession(ctx, "ResolveIngressInfo", func(ctx context.Context, session trafficmgr.Session) error {
-		pool := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
+		pool, err := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
+		if err != nil {
+			return err
+		}
 		systemacli, err := pool.Get(ctx)
 		if err != nil {
 			return err

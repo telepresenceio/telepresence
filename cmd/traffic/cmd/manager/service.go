@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,7 +63,10 @@ func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
 	const proxyCertsPath = "/var/run/secrets/proxy_tls"
 
 	env := managerutil.GetEnv(ctx)
-	ret := &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: env.SystemAPort}
+	if env.SystemAHost == "" || env.SystemAPort == 0 {
+		return nil, nil
+	}
+	ret := &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: strconv.Itoa(int(env.SystemAPort))} // Why is the port a string?
 	if _, err := os.Stat(proxyCertsPath); err != nil {
 		if os.IsNotExist(err) {
 			return ret, nil
@@ -92,9 +96,11 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	ret.cloudConfig = cloudConfig
-	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
-	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
+	if cloudConfig != nil {
+		ret.cloudConfig = cloudConfig
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
+	}
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
@@ -130,8 +136,11 @@ func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License,
 // from within a cluster
 func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
 	env := managerutil.GetEnv(ctx)
+	if env.SystemAHost == "" || env.SystemAPort == 0 {
+		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
+	}
 	timeout := 2 * time.Second
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", env.SystemAHost, env.SystemAPort), timeout)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", env.SystemAHost, env.SystemAPort), timeout)
 	if err != nil {
 		dlog.Debugf(ctx, "Failed to connect so assuming in air-gapped environment %s", err)
 		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
@@ -464,11 +473,17 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	if interceptInfo != nil {
 		tracing.RecordInterceptInfo(span, interceptInfo)
 	}
+	if m.cloudConfig == nil {
+		return interceptInfo, nil
+	}
 	err = m.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 		if interceptInfo.ApiKey == "" {
 			return nil
 		}
-		sysa := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+		sysa, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+		if err != nil {
+			return err
+		}
 		if sa, err := sysa.Get(ctx); err != nil {
 			dlog.Errorln(ctx, "systema: acquire connection:", err)
 			return err
@@ -551,7 +566,10 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string) (*rpc.InterceptInfo, error) {
 	var domain string
-	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if err != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	}
 
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain == "" {
@@ -587,8 +605,10 @@ func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string)
 func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
 	var domain string
 	var sa systema.SystemACRUDClient
-	var err error
-	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if err != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	}
 
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain != "" {
