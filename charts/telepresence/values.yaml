@@ -2,10 +2,12 @@
 ## Deployment Configuration
 ################################################################################
 
+isCI: false
+
 # The Traffic Manager only support running with one replica at the moment.
 # Configuring the replicaCount will be added in future versions of Telepresence
 
-# replicaCount: 1
+replicaCount: 1
 
 # The Telepresence client will try to ensure that the Traffic Manager image is
 # up to date and from the right registry. If you are changing the value below,

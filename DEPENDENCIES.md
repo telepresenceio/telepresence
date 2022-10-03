@@ -31,6 +31,7 @@ following Free and Open Source software:
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
+    github.com/datawire/envconfig                                                v0.0.0-20220930131253-8fce0ece6e92        Apache License 2.0
     github.com/datawire/go-ftpserver                                             v0.1.1                                    Apache License 2.0
     github.com/datawire/go-fuseftp/rpc                                           v0.2.0                                    Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                    Apache License 2.0

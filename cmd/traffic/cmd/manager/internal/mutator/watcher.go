@@ -52,7 +52,7 @@ func Load(ctx context.Context) (m Map, err error) {
 	}()
 
 	env := managerutil.GetEnv(ctx)
-	ns := env.GetManagedNamespaces()
+	ns := env.ManagedNamespaces
 	dlog.Infof(ctx, "Loading ConfigMaps from %v", ns)
 	return NewWatcher(agentconfig.ConfigMap, ns...), nil
 }
@@ -154,7 +154,7 @@ func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
 	if err != nil {
 		return err
 	}
-	nss := env.GetManagedNamespaces()
+	nss := env.ManagedNamespaces
 	if len(nss) == 0 {
 		return regenerateAgentMaps(ctx, "", gc)
 	}

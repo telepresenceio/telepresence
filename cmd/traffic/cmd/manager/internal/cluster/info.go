@@ -56,7 +56,7 @@ type info struct {
 
 func NewInfo(ctx context.Context) Info {
 	env := managerutil.GetEnv(ctx)
-	managedNamespaces := env.GetManagedNamespaces()
+	managedNamespaces := env.ManagedNamespaces
 	namespaced := len(managedNamespaces) > 0
 	oi := info{}
 	ki := k8sapi.GetK8sInterface(ctx)
@@ -192,20 +192,14 @@ func NewInfo(ctx context.Context) Info {
 	podCIDRStrategy := env.PodCIDRStrategy
 	dlog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
 
-	oi.ManagerPodIp = iputil.Parse(env.PodIP)
+	oi.ManagerPodIp = env.PodIP
 	if oi.ManagerPodIp == nil {
 		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
 	}
-	oi.ManagerPodPort = env.ServerPort
+	oi.ManagerPodPort = int32(env.ServerPort)
 
-	alsoProxy, err := env.GetAlsoProxySubnets()
-	if err != nil {
-		dlog.Errorf(ctx, "AlsoProxySubnets not parsed: %v", err)
-	}
-	neverProxy, err := env.GetNeverProxySubnets()
-	if err != nil {
-		dlog.Errorf(ctx, "NeverProxySubnets not parsed: %v", err)
-	}
+	alsoProxy := env.ClientRoutingAlsoProxySubnets
+	neverProxy := env.ClientRoutingNeverProxySubnets
 	dlog.Infof(ctx, "Using AlsoProxy: %v", alsoProxy)
 	dlog.Infof(ctx, "Using NeverProxy: %v", neverProxy)
 
@@ -320,30 +314,13 @@ func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) bool {
 }
 
 func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
-	pcEnv := managerutil.GetEnv(ctx).PodCIDRs
-	cidrStrs := strings.Split(pcEnv, " ")
-	allOK := len(cidrStrs) > 0
-	subnets := make(subnet.Set, len(cidrStrs))
-	if allOK {
-		for _, s := range cidrStrs {
-			_, cidr, err := net.ParseCIDR(s)
-			if err != nil {
-				dlog.Errorf(ctx, "unable to parse CIDR %q from environment variable POD_CIDRS: %v", s, err)
-				allOK = false
-				break
-			}
-			subnets.Add(cidr)
-		}
-	}
-	if allOK {
+	subnets := managerutil.GetEnv(ctx).PodCIDRs
+	if len(subnets) > 0 {
+		oi.PodSubnets = subnetsToRPC(subnets)
 		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
-		oi.PodSubnets = toRPCSubnets(subnets)
-
-		oi.ciSubs.notify(ctx, oi.clusterInfo())
-	} else {
-		dlog.Errorf(ctx, "unable to parse subnets from POD_CIDRS value %q", pcEnv)
+		return true
 	}
-	return allOK
+	return false
 }
 
 // Watch will start by sending an initial snapshot of the ClusterInfo on the given stream
@@ -373,13 +350,16 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 
 func (oi *info) watchSubnets(ctx context.Context, retriever subnetRetriever) {
 	retriever.changeNotifier(ctx, func(subnets subnet.Set) {
-		oi.PodSubnets = toRPCSubnets(subnets)
+		oi.PodSubnets = subnetSetToRPC(subnets)
 		oi.ciSubs.notify(ctx, oi.clusterInfo())
 	})
 }
 
-func toRPCSubnets(cidrMap subnet.Set) []*rpc.IPNet {
-	subnets := cidrMap.AppendSortedTo(nil)
+func subnetSetToRPC(cidrMap subnet.Set) []*rpc.IPNet {
+	return subnetsToRPC(cidrMap.AppendSortedTo(nil))
+}
+
+func subnetsToRPC(subnets []*net.IPNet) []*rpc.IPNet {
 	rpcSubnets := make([]*rpc.IPNet, len(subnets))
 	for i, s := range subnets {
 		rpcSubnets[i] = iputil.IPNetToRPC(s)

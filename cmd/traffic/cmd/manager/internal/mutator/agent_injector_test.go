@@ -48,7 +48,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 		ManagerNamespace: "default",
 		AgentRegistry:    "docker.io/datawire",
-		AgentImage:       "tel2:2.6.0",
+		AgentImage:       "tel2:2.8.0",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)
@@ -457,7 +457,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 					Containers: []core.Container{
 						{
 							Ports: []core.ContainerPort{
-								{Name: "http", ContainerPort: env.AgentPort},
+								{Name: "http", ContainerPort: int32(env.AgentPort)},
 							}},
 					},
 				},
@@ -1633,7 +1633,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ae := reflect.ValueOf(test.envAdditions).Elem()
 				for i := ae.NumField() - 1; i >= 0; i-- {
 					ef := ae.Field(i)
-					if (ef.Kind() == reflect.String || ef.Kind() == reflect.Int32) && !ef.IsZero() {
+					if (ef.Kind() == reflect.String || ef.Kind() == reflect.Uint16) && !ef.IsZero() {
 						ne.Field(i).Set(ef)
 					}
 				}
