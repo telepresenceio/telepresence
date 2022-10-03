@@ -12,7 +12,7 @@ import (
 const EnvPrefix = "_TEL_AGENT_"
 const InitContainerName = "tel-agent-init"
 
-// AgentContainer will return a configured traffic agent
+// AgentContainer will return a configured traffic agent.
 func AgentContainer(
 	name string,
 	imageName string,

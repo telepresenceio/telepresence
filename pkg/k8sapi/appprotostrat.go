@@ -13,17 +13,17 @@ type AppProtocolStrategy int
 var apsNames = [...]string{"http2Probe", "portName", "http", "http2"}
 
 const (
-	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior)
+	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior).
 	Http2Probe AppProtocolStrategy = iota
 
 	// PortName means trust educated guess based on port name when appProtocol is missing and perform a http2 probe
 	// if no such guess can be made.
 	PortName
 
-	// Http means just assume HTTP/1.1
+	// Http means just assume HTTP/1.1.
 	Http
 
-	// Http2 means just assume HTTP/2
+	// Http2 means just assume HTTP/2.
 	Http2
 )
 

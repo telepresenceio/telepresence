@@ -145,7 +145,7 @@ type session struct {
 	vifReady chan error
 }
 
-// connectToManager connects to the traffic-manager and asserts that its version is compatible
+// connectToManager connects to the traffic-manager and asserts that its version is compatible.
 func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
 	// First check. Establish connection
 	clientConfig := client.GetConfig(c)
@@ -190,7 +190,7 @@ func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClien
 	return conn, mc, mgrVer, nil
 }
 
-func convertSubnets(c context.Context, ms []*manager.IPNet) []*net.IPNet {
+func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
 	ns := make([]*net.IPNet, len(ms))
 	for i, m := range ms {
 		n := iputil.IPNetFromRPC(m)
@@ -207,8 +207,8 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		return nil, err
 	}
 
-	as := convertSubnets(c, mi.AlsoProxySubnets)
-	ns := convertSubnets(c, mi.NeverProxySubnets)
+	as := convertSubnets(mi.AlsoProxySubnets)
+	ns := convertSubnets(mi.NeverProxySubnets)
 	s := &session{
 		scout:            scout,
 		handlers:         tunnel.NewPool(),
@@ -239,7 +239,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	return s, nil
 }
 
-// clusterLookup sends a LookupDNS request to the traffic-manager and returns the result
+// clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
 func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
 	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
 	s.dnsLookups++
@@ -256,7 +256,7 @@ func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 	return dnsproxy.FromRPC(r)
 }
 
-// clusterLookup sends a LookupHost request to the traffic-manager and returns the result
+// clusterLookup sends a LookupHost request to the traffic-manager and returns the result.
 func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rrs dnsproxy.RRs, rCode int, err error) {
 	qType := q.Qtype
 	if !(qType == dns2.TypeA || qType == dns2.TypeAAAA) {
@@ -410,7 +410,7 @@ func (s *session) refreshSubnets(ctx context.Context) (err error) {
 	return s.reconcileStaticRoutes(ctx)
 }
 
-// networkReady returns a channel that is close when both the VIF and DNS are ready
+// networkReady returns a channel that is close when both the VIF and DNS are ready.
 func (s *session) networkReady(ctx context.Context) <-chan error {
 	rdy := make(chan error, 2)
 	go func() {
@@ -519,7 +519,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	s.dnsServer.SetClusterDNS(dns)
 
 	if r := mgrInfo.Routing; r != nil {
-		as := subnet.Unique(append(s.alsoProxySubnets, convertSubnets(ctx, r.AlsoProxySubnets)...))
+		as := subnet.Unique(append(s.alsoProxySubnets, convertSubnets(r.AlsoProxySubnets)...))
 		dlog.Infof(ctx, "also-proxy subnets %v", as)
 		s.alsoProxySubnets = as
 
@@ -531,7 +531,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			}
 			return false
 		}
-		for _, n := range convertSubnets(ctx, r.NeverProxySubnets) {
+		for _, n := range convertSubnets(r.NeverProxySubnets) {
 			if !hasRoute(n) {
 				r, err := routing.GetRoute(ctx, n)
 				if err != nil {

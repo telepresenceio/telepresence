@@ -53,7 +53,7 @@ type server struct {
 	agent AgentState
 }
 
-// ListenAndServe is like Serve but creates a TCP listener on "localhost:<apiPort>"
+// ListenAndServe is like Serve but creates a TCP listener on "localhost:<apiPort>".
 func (s *server) ListenAndServe(c context.Context, apiPort int) error {
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(apiPort))
 	if err != nil {

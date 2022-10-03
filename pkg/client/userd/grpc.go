@@ -169,7 +169,7 @@ func (s *Service) Status(c context.Context, ex *empty.Empty) (result *rpc.Connec
 
 // isMultiPortIntercept checks if the intercept is one of several active intercepts on the same workload.
 // If it is, then the first returned value will be true and the second will indicate if those intercepts are
-// on different services. Otherwise, this function returns false, false
+// on different services. Otherwise, this function returns false, false.
 func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
 	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
 

@@ -85,10 +85,7 @@ func AppSystemConfigDirs(ctx context.Context) ([]string, error) {
 	if untyped := ctx.Value(sysConfigsCtxKey{}); untyped != nil {
 		return untyped.([]string), nil
 	}
-	dirs, err := systemConfigDirs(ctx)
-	if err != nil {
-		return nil, err
-	}
+	dirs := systemConfigDirs()
 	ret := make([]string, 0, len(dirs))
 	for _, dir := range dirs {
 		ret = append(ret, filepath.Join(dir, appName))

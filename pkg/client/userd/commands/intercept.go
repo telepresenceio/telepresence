@@ -552,7 +552,7 @@ func (is *interceptState) checkMountCapability(ctx context.Context) error {
 	return nil
 }
 
-// parsePort parses portSpec based on how it's formatted
+// parsePort parses portSpec based on how it's formatted.
 func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, svcPortId string, err error) {
 	portMapping := strings.Split(portSpec, ":")
 	portError := func() (uint16, uint16, string, error) {

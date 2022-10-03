@@ -13,7 +13,7 @@ type bidiPipe struct {
 	done chan struct{}
 }
 
-// NewBidiPipe creates a bidirectional pipe between the two given streams
+// NewBidiPipe creates a bidirectional pipe between the two given streams.
 func NewBidiPipe(a, b Stream) Endpoint {
 	return &bidiPipe{
 		a:    a,

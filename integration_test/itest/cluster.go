@@ -494,7 +494,7 @@ func KubeConfig(ctx context.Context) string {
 
 // Command creates and returns a dexec.Cmd  initialized with the global environment
 // from the cluster harness and any other environment that has been added using the
-// WithEnv() function
+// WithEnv() function.
 func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd {
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
@@ -522,7 +522,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	return cmd
 }
 
-// TelepresenceOk executes the CLI command in a new process and requires the result to be OK
+// TelepresenceOk executes the CLI command in a new process and requires the result to be OK.
 func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
@@ -532,7 +532,7 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	return stdout
 }
 
-// Telepresence executes the CLI command in a new process
+// Telepresence executes the CLI command in a new process.
 func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 	t := getT(ctx)
 	t.Helper()
@@ -549,7 +549,7 @@ func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 
 // TelepresenceCmd creates a dexec.Cmd using the Command function. Before the command is created,
 // the environment is extended with DEV_TELEPRESENCE_CONFIG_DIR from filelocation.AppUserConfigDir
-// and DEV_TELEPRESENCE_LOG_DIR from filelocation.AppUserLogDir
+// and DEV_TELEPRESENCE_LOG_DIR from filelocation.AppUserLogDir.
 func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	t := getT(ctx)
 	t.Helper()
@@ -579,12 +579,12 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	return cmd
 }
 
-// TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output
+// TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output.
 func TelepresenceDisconnectOk(ctx context.Context) {
 	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, "quit"))
 }
 
-// AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command
+// AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
 	assert.True(t, strings.Contains(stdout, "Telepresence Daemons disconnecting...done") ||
@@ -594,12 +594,12 @@ func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	}
 }
 
-// TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output
+// TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output.
 func TelepresenceQuitOk(ctx context.Context) {
 	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-s"))
 }
 
-// AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command
+// AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
 	assert.True(t, strings.Contains(stdout, "Telepresence Daemons quitting...done") ||
@@ -646,7 +646,7 @@ func Output(ctx context.Context, exe string, args ...string) (string, error) {
 }
 
 // Kubectl runs kubectl with the default context and the given namespace, or in the default namespace if the given
-// namespace is an empty string
+// namespace is an empty string.
 func Kubectl(ctx context.Context, namespace string, args ...string) error {
 	getT(ctx).Helper()
 	var ks []string
@@ -659,7 +659,7 @@ func Kubectl(ctx context.Context, namespace string, args ...string) error {
 	return Run(ctx, "kubectl", ks...)
 }
 
-// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output
+// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output.
 func KubectlOut(ctx context.Context, namespace string, args ...string) (string, error) {
 	getT(ctx).Helper()
 	var ks []string
@@ -798,7 +798,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 		}
 
 		hc := http.Client{Timeout: 2 * time.Second}
-		resp, err := hc.Get(fmt.Sprintf("http://%s:%s", ips[0], svcPort))
+		resp, err := hc.Get(fmt.Sprintf("http://%s", net.JoinHostPort(ips[0].String(), svcPort)))
 		if err != nil {
 			dlog.Info(ctx, err)
 			return false

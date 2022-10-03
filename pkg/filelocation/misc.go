@@ -1,7 +1,6 @@
 package filelocation
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 )
@@ -18,10 +17,10 @@ import (
 // FIXME(lukeshu): Consider having SystemConfigDirs do something different on darwin/windows/plan9.
 //
 // FIXME(lukeshu): Consider having SystemConfigDirs vary depending on the installation prefix.
-func systemConfigDirs(_ context.Context) ([]string, error) {
+func systemConfigDirs() []string {
 	str := os.Getenv("XDG_CONFIG_DIRS")
 	if str == "" {
 		str = "/etc/xdg"
 	}
-	return filepath.SplitList(str), nil
+	return filepath.SplitList(str)
 }

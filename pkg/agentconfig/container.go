@@ -12,7 +12,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-// AgentContainer will return a configured traffic-agent
+// AgentContainer will return a configured traffic-agent.
 func AgentContainer(
 	ctx context.Context,
 	pod *core.Pod,

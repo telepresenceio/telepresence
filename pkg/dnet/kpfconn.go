@@ -74,7 +74,7 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net
 		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
 		return nil, err
 	}
-	inner, err := pf.dial(ctx, pod, podPortNumber)
+	inner, err := pf.dial(pod, podPortNumber)
 	if err != nil {
 		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
 		return nil, err
@@ -207,7 +207,7 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *core.Pod) (httpstream.Connection
 	return spdyStream, nil
 }
 
-func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *core.Pod, port uint16) (conn *kpfConn, err error) {
+func (pf *k8sPortForwardDialer) dial(pod *core.Pod, port uint16) (conn *kpfConn, err error) {
 	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, Pod./%s.%s, %d)",
 		pod.Name,
 		pod.Namespace,

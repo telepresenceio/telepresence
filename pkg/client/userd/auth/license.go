@@ -18,7 +18,7 @@ type LicenseInfo struct {
 	Limits         any      `json:"limits"`         // Map of limits determining bound to the license
 }
 
-// getLicenseJWT does the REST call to system and returns the jwt formatted license on success
+// getLicenseJWT does the REST call to system and returns the jwt formatted license on success.
 func getLicenseJWT(ctx context.Context, accessToken, licenseID string) (string, string, error) {
 	// Build the request.
 	env := client.GetEnv(ctx)
@@ -57,18 +57,18 @@ func getLicenseJWT(ctx context.Context, accessToken, licenseID string) (string, 
 	// Output is different depending on the status code so we return custom errors depending
 	// on the status of the request
 	switch resp.StatusCode {
-	case 404:
+	case http.StatusNotFound:
 		return "", env.LoginDomain, fmt.Errorf("license JWT not found")
-	case 500:
+	case http.StatusInternalServerError:
 		return "", env.LoginDomain, fmt.Errorf("server error getting license jwt for %q: body %s, status %s",
 			licenseID, string(bodyBytes), resp.Status)
-	case 200:
+	case http.StatusOK:
 	}
 	return string(bodyBytes), env.LoginDomain, nil
 }
 
 // GetLicense is added as part of the loginExecutor so it can utilize the
-// access token to talk to systemA in getLicenseJWT
+// access token to talk to systemA in getLicenseJWT.
 func (l *loginExecutor) GetLicense(ctx context.Context, id string) (string, string, error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()

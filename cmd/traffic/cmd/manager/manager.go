@@ -30,7 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-// Main starts up the traffic manager and blocks until it ends
+// Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
 	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
@@ -97,7 +97,7 @@ func Main(ctx context.Context, _ ...string) error {
 	return g.Wait()
 }
 
-// Serve Prometheus metrics if env.PrometheusPort != 0
+// Serve Prometheus metrics if env.PrometheusPort != 0.
 func (m *Manager) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	port := env.PrometheusPort

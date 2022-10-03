@@ -115,7 +115,7 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 
 // GetLicense returns the license for the cluster. This directory is mounted
 // via the connector if it detects the presence of a systema license secret
-// when installing the traffic-manager
+// when installing the traffic-manager.
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
 	resp := rpc.License{
 		ClusterId: m.clusterInfo.GetClusterID(),
@@ -133,7 +133,7 @@ func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License,
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
-// from within a cluster
+// from within a cluster.
 func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
 	env := managerutil.GetEnv(ctx)
 	if env.SystemAHost == "" || env.SystemAPort == 0 {
@@ -150,12 +150,12 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 }
 
 // GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
-// the agents)
+// the agents).
 func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
 	return proto.Clone(m.cloudConfig).(*rpc.AmbassadorCloudConfig), nil
 }
 
-// GetTelepresenceAPI returns information about the TelepresenceAPI server
+// GetTelepresenceAPI returns information about the TelepresenceAPI server.
 func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.TelepresenceAPIInfo, error) {
 	env := managerutil.GetEnv(ctx)
 	return &rpc.TelepresenceAPIInfo{Port: int32(env.APIPort)}, nil
@@ -510,7 +510,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return interceptInfo, nil
 }
 
-func (m *Manager) makeinterceptID(ctx context.Context, sessionID string, name string) (string, error) {
+func (m *Manager) makeinterceptID(_ context.Context, sessionID string, name string) (string, error) {
 	// When something without a session ID (e.g. System A) calls this function,
 	// it is sending the intercept ID as the name, so we use that.
 	//
@@ -719,7 +719,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	return &empty.Empty{}, nil
 }
 
-// GetIntercept gets an intercept info from intercept name
+// GetIntercept gets an intercept info from intercept name.
 func (m *Manager) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
 	interceptID, err := m.makeinterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
 	if err != nil {
@@ -873,7 +873,7 @@ func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.Loo
 }
 
 // WatchLookupHost
-// Deprecated: retained for backward compatibility. More recent clients will use LookupDNS
+// Deprecated: retained for backward compatibility. More recent clients will use LookupDNS.
 func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_WatchLookupHostServer) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	dlog.Debugf(ctx, "WatchLookupHost called")
@@ -954,7 +954,7 @@ func (m *Manager) WatchLookupDNS(session *rpc.SessionInfo, stream rpc.Manager_Wa
 
 // GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // GetLogsRequest and returns them to the caller
-// Deprecated: Clients should use the user daemon's GatherLogs method
+// Deprecated: Clients should use the user daemon's GatherLogs method.
 func (m *Manager) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
 	return &rpc.LogsResponse{
 		PodLogs: make(map[string]string),

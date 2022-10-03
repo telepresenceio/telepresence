@@ -35,10 +35,10 @@ func (p *Pool) release(ctx context.Context, id ConnID) {
 	dlog.Debugf(ctx, "-- POOL %s, count now is %d", id, count)
 }
 
-// HandlerCreator describes the function signature for the function that creates a handler
+// HandlerCreator describes the function signature for the function that creates a handler.
 type HandlerCreator func(ctx context.Context, release func()) (Handler, error)
 
-// Get finds a handler for the given id from the pool and returns it. Nil is returned if no such handler exists
+// Get finds a handler for the given id from the pool and returns it. Nil is returned if no such handler exists.
 func (p *Pool) Get(id ConnID) Handler {
 	p.lock.RLock()
 	handler := p.handlers[id]

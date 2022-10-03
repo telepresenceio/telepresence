@@ -37,7 +37,7 @@ type Args struct {
 }
 
 // PodNamespace is borrowed from
-// "k8s.io/client-go/tools/clientcmd".inClusterConfig.Namespace()
+// "k8s.io/client-go/tools/clientcmd".inClusterConfig.Namespace().
 func PodNamespace() string {
 	// This way assumes you've set the POD_NAMESPACE environment variable using the downward API.
 	// This check has to be done first for backwards compatibility with the way InClusterConfig was originally set up

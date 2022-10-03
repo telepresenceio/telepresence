@@ -198,7 +198,7 @@ func (w *nodeWatcher) dropLocked(subnets []*net.IPNet) bool {
 
 // getSubnetsDelta returns the difference between the old and new subnet slices.
 //
-// NOTE! The array of the old slice is modified and used for the dropped return
+// NOTE! The array of the old slice is modified and used for the dropped return.
 func getSubnetsDelta(oldSubnets, newSubnets []*net.IPNet) (added, dropped []*net.IPNet) {
 	lastOI := len(oldSubnets) - 1
 	if lastOI < 0 {

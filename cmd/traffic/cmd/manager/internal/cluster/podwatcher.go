@@ -212,7 +212,7 @@ func (w *podWatcher) dropLocked(ips []iputil.IPKey) bool {
 
 // getIPsDelta returns the difference between the old and new IPs.
 //
-// NOTE! The array of the old slice is modified and used for the dropped return
+// NOTE! The array of the old slice is modified and used for the dropped return.
 func getIPsDelta(oldIPs, newIPs []iputil.IPKey) (added, dropped []iputil.IPKey) {
 	lastOI := len(oldIPs) - 1
 	if lastOI < 0 {

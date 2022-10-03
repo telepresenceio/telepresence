@@ -270,7 +270,7 @@ func lookupDNSWaitLoop(ctx context.Context, manager rpc.ManagerClient, session *
 	return nil
 }
 
-// Deprecated: retained for backward compatibility
+// Deprecated: retained for backward compatibility.
 func lookupHostAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.LookupHostRequest) {
 	dlog.Debugf(ctx, "LookupRequest for %s", lr.Name)
 	response := rpc.LookupHostAgentResponse{

@@ -11,7 +11,7 @@ import (
 
 const MaxTraceSize = 10 * 1024 * 1024 // 10 MB
 
-// An otlpShim is a pretend client that just collects spans without exporting them
+// An otlpShim is a pretend client that just collects spans without exporting them.
 type otlpShim struct {
 	mu         sync.Mutex
 	buf1       bytes.Buffer
@@ -64,12 +64,12 @@ func (ts *otlpShim) activeInactiveBufs() (*bytes.Buffer, *bytes.Buffer) {
 	return &ts.buf1, &ts.buf2
 }
 
-func (ts *otlpShim) dumpTraces(ctx context.Context) ([]byte, error) {
+func (ts *otlpShim) dumpTraces() []byte {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	active, inactive := ts.activeInactiveBufs()
 	// inactive is older, so:
 	return bytes.Join([][]byte{
 		inactive.Bytes(), active.Bytes(),
-	}, nil), nil
+	}, nil)
 }

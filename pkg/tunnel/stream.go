@@ -69,7 +69,7 @@ type Stream interface {
 	RoundtripLatency() time.Duration
 }
 
-// StreamCreator is a function that creats a Stream
+// StreamCreator is a function that creats a Stream.
 type StreamCreator func(context.Context, ConnID) (Stream, error)
 
 // ReadLoop reads from the Stream and dispatches messages and error to the give channels. There

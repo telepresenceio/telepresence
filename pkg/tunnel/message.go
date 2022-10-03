@@ -40,19 +40,19 @@ const (
 
 	// DialOK is sent when a Dialer successfully dialed its connection.
 	//
-	// A TCP client that receives a DialOK must transit from state SYN_RECEIVED to ESTABLISHED
+	// A TCP client that receives a DialOK must transit from state SYN_RECEIVED to ESTABLISHED.
 	DialOK
 
 	// DialReject is sent when a Dialer fails to dial its connection.
 	//
-	// A TCP client that receives a DialReject must send an RST and transit from state SYN_RECEIVED to CLOSED
+	// A TCP client that receives a DialReject must send an RST and transit from state SYN_RECEIVED to CLOSED.
 	DialReject
 
 	// Disconnect is sent when
 	//
 	// - A TCP client receives a RST, after it has changed its state to CLOSED
 	//
-	// - A Dialer or Listener Endpoint has been made unavailable for other reasons than a proper close or EOF
+	// - A Dialer or Listener Endpoint has been made unavailable for other reasons than a proper close or EOF.
 	Disconnect
 
 	KeepAlive
@@ -165,7 +165,7 @@ func makeMessage(code MessageCode, payloadLength int) msg {
 	return m
 }
 
-// getVersion returns the version that this Message represents
+// getVersion returns the version that this Message represents.
 func getVersion(m Message) uint16 {
 	v, _ := binary.Uvarint(m.Payload())
 	return uint16(v)
@@ -173,7 +173,7 @@ func getVersion(m Message) uint16 {
 
 var errMalformedConnect = errors.New("malformed Connect message")
 
-// connectInfo returns the connectInfo that this Message represents
+// connectInfo returns the connectInfo that this Message represents.
 func setConnectInfo(m Message, s *stream) error {
 	pl := m.Payload()
 

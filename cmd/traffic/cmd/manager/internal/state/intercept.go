@@ -164,16 +164,15 @@ func (s *State) loadAgentConfig(
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
-	manuallyManaged, enabled, err := checkInterceptAnnotations(wl)
+	enabled, err := checkInterceptAnnotations(wl)
 	if err != nil {
 		return nil, err
 	}
 	span.SetAttributes(
-		attribute.Bool("tel2.manually-managed", manuallyManaged),
 		attribute.Bool("tel2.enabled", enabled),
 		attribute.Bool("tel2.extended", extended),
 	)
-	if !(manuallyManaged || enabled) {
+	if !enabled {
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
 
@@ -228,11 +227,6 @@ func (s *State) loadAgentConfig(
 			}
 		}
 	} else {
-		if manuallyManaged {
-			return nil, errcat.User.Newf(
-				"annotation %s.%s/%s=true but workload has no corresponding entry in the %s ConfigMap",
-				wl.GetName(), wl.GetNamespace(), install.ManualInjectAnnotation, agentconfig.ConfigMap)
-		}
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
@@ -250,11 +244,11 @@ func (s *State) loadAgentConfig(
 	return ac, nil
 }
 
-func checkInterceptAnnotations(wl k8sapi.Workload) (bool, bool, error) {
+func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 	pod := wl.GetPodTemplate()
 	a := pod.Annotations
 	if a == nil {
-		return false, true, nil
+		return true, nil
 	}
 
 	webhookEnabled := true
@@ -264,21 +258,16 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, bool, error) {
 	case "":
 		webhookEnabled = !manuallyManaged
 	case "enabled":
-		if manuallyManaged {
-			return false, false, errcat.User.Newf(
-				"annotation %s.%s/%s=enabled cannot be combined with %s=true",
-				wl.GetName(), wl.GetNamespace(), install.InjectAnnotation, install.ManualInjectAnnotation)
-		}
 	case "false", "disabled":
 		webhookEnabled = false
 	default:
-		return false, false, errcat.User.Newf(
+		return false, errcat.User.Newf(
 			"%s is not a valid value for the %s.%s/%s annotation",
 			ia, wl.GetName(), wl.GetNamespace(), install.ManualInjectAnnotation)
 	}
 
 	if !manuallyManaged {
-		return false, webhookEnabled, nil
+		return webhookEnabled, nil
 	}
 	cns := pod.Spec.Containers
 	var an *core.Container
@@ -290,11 +279,11 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, bool, error) {
 		}
 	}
 	if an == nil {
-		return false, false, errcat.User.Newf(
+		return false, errcat.User.Newf(
 			"annotation %s.%s/%s=true but pod has no traffic-agent container",
 			wl.GetName(), wl.GetNamespace(), install.ManualInjectAnnotation)
 	}
-	return false, true, nil
+	return true, nil
 }
 
 // Wait for the cluster's mutating webhook injector to do its magic. It will update the
@@ -479,7 +468,7 @@ func unmarshalConfigMapEntry(y string, name, namespace string) (*agentconfig.Sid
 	return &conf, nil
 }
 
-// findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port
+// findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port.
 func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
 	spi := agentconfig.PortIdentifier(spec.ServicePortIdentifier)
 	for _, cn := range ac.Containers {

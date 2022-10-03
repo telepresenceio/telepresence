@@ -30,7 +30,7 @@ type dlogEmitter struct {
 	context.Context
 }
 
-func (l dlogEmitter) Emit(_ int, level log.Level, _ time.Time, format string, v ...interface{}) {
+func (l dlogEmitter) Emit(_ int, level log.Level, _ time.Time, format string, v ...interface{}) { //nolint:goprintffuncname // not our API
 	switch level {
 	case log.Debug:
 		dlog.Debugf(l, format, v...)

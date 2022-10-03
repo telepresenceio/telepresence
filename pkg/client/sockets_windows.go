@@ -18,14 +18,14 @@ import (
 // See https://docs.microsoft.com/en-us/windows/win32/ipc/pipe-names for more info
 // about pipe names.
 const (
-	// ConnectorSocketName is the name used when communicating to the connector process
+	// ConnectorSocketName is the name used when communicating to the connector process.
 	ConnectorSocketName = `\\.\pipe\telepresence-connector`
 
-	// DaemonSocketName is the name used when communicating to the daemon process
+	// DaemonSocketName is the name used when communicating to the daemon process.
 	DaemonSocketName = `\\.\pipe\telepresence-daemon`
 )
 
-// dialSocket dials the given named pipe and returns the resulting connection
+// dialSocket dials the given named pipe and returns the resulting connection.
 func dialSocket(c context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	conn, err := grpc.DialContext(c, socketName, append([]grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -51,7 +51,7 @@ func dialSocket(c context.Context, socketName string, opts ...grpc.DialOption) (
 // https://docs.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 const allowEveryone = "S:(ML;;NW;;;LW)D:(A;;0x12019f;;;WD)"
 
-// listenSocket returns a listener for the given named pipe and returns the resulting connection
+// listenSocket returns a listener for the given named pipe and returns the resulting connection.
 func listenSocket(_ context.Context, processName, socketName string) (net.Listener, error) {
 	var config *winio.PipeConfig
 	if proc.IsAdmin() {
@@ -61,12 +61,12 @@ func listenSocket(_ context.Context, processName, socketName string) (net.Listen
 }
 
 // removeSocket does nothing because a named pipe has no representation in the file system that
-// needs to be removed
+// needs to be removed.
 func removeSocket(listener net.Listener) error {
 	return nil
 }
 
-// socketExists returns true if a socket exists with the given name
+// socketExists returns true if a socket exists with the given name.
 func socketExists(name string) (bool, error) {
 	uPath, err := windows.UTF16PtrFromString(name)
 	if err != nil {

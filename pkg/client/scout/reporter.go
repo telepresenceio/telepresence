@@ -18,7 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-// Environment variable prefix for additional metadata to be reported
+// Environment variable prefix for additional metadata to be reported.
 const environmentMetadataPrefix = "TELEPRESENCE_REPORT_"
 
 type bufEntry struct {
@@ -26,7 +26,7 @@ type bufEntry struct {
 	entries []Entry
 }
 
-// Reporter is a Metriton reported
+// Reporter is a Metriton reported.
 type Reporter struct {
 	index    int
 	buffer   chan bufEntry
@@ -34,7 +34,7 @@ type Reporter struct {
 	reporter *metriton.Reporter
 }
 
-// Entry is a key/value association used when reporting
+// Entry is a key/value association used when reporting.
 type Entry struct {
 	Key   string
 	Value any
@@ -188,12 +188,12 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 }
 
 // NewReporter creates a new initialized Reporter instance that can be used to
-// send telepresence reports to Metriton
+// send telepresence reports to Metriton.
 func NewReporter(ctx context.Context, mode string) *Reporter {
 	return NewReporterForInstallType(ctx, mode, CLI)
 }
 
-// initialization broken out or constructor for the benefit of testing
+// initialization broken out or constructor for the benefit of testing.
 func (r *Reporter) initialize(ctx context.Context, mode, goos, goarch string) {
 	r.buffer = make(chan bufEntry, bufferSize)
 	r.done = make(chan struct{})
@@ -229,7 +229,7 @@ func (r *Reporter) SetMetadatum(ctx context.Context, key string, value any) {
 	r.Report(ctx, setMetadatumAction, Entry{Key: key, Value: value})
 }
 
-// Start starts the instance in a goroutine
+// Start starts the instance in a goroutine.
 func (r *Reporter) Start(ctx context.Context) {
 	go func() {
 		if err := r.Run(ctx); err != nil {
@@ -254,7 +254,7 @@ func (r *Reporter) Close() {
 	}
 }
 
-// Run ensures that all reports on the send queue are sent to the endpoint
+// Run ensures that all reports on the send queue are sent to the endpoint.
 func (r *Reporter) Run(ctx context.Context) error {
 	go func() {
 		// Close buffer and let it drain when ctx is done.
@@ -323,7 +323,7 @@ func (r *Reporter) doReport(ctx context.Context, be *bufEntry) {
 	}
 }
 
-// Returns a metadata map containing all the additional environment variables to be reported
+// Returns a metadata map containing all the additional environment variables to be reported.
 func getDefaultEnvironmentMetadata() map[string]string {
 	metadata := map[string]string{}
 	for _, e := range os.Environ() {

@@ -18,10 +18,10 @@ import (
 	tlog "github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
-// loggerForTest exposes internals to initcontext_test.go
+// loggerForTest exposes internals to initcontext_test.go.
 var loggerForTest *logrus.Logger
 
-// InitContext sets up standard Telepresence logging for a background process
+// InitContext sets up standard Telepresence logging for a background process.
 func InitContext(ctx context.Context, name string, strategy RotationStrategy, captureStd bool) (context.Context, error) {
 	logger := logrus.New()
 	loggerForTest = logger

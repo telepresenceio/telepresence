@@ -30,7 +30,7 @@ const deployments = 0
 const replicasets = 1
 const statefulsets = 2
 
-// namespacedWASWatcher is watches Workloads And Services (WAS) for a namespace
+// namespacedWASWatcher is watches Workloads And Services (WAS) for a namespace.
 type namespacedWASWatcher struct {
 	svcWatcher *k8sapi.Watcher
 	wlWatchers [3]*k8sapi.Watcher
@@ -230,7 +230,7 @@ func (w *workloadsAndServicesWatcher) waitForSync(c context.Context) {
 }
 
 // subscribe writes to the given channel whenever relevant information has changed
-// in the current snapshot
+// in the current snapshot.
 func (w *workloadsAndServicesWatcher) subscribe(c context.Context) <-chan struct{} {
 	ch := make(chan struct{})
 	go func() {
@@ -250,7 +250,7 @@ func (w *workloadsAndServicesWatcher) subscribe(c context.Context) <-chan struct
 }
 
 // setNamespacesToWatch starts new watchers or kills old ones to make the current
-// set of watchers reflect the nss argument
+// set of watchers reflect the nss argument.
 func (w *workloadsAndServicesWatcher) setNamespacesToWatch(c context.Context, nss []string) {
 	var adds []string
 	desired := make(map[string]struct{})
@@ -331,7 +331,7 @@ func (w *workloadsAndServicesWatcher) findMatchingWorkloads(c context.Context, s
 
 func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *core.Service) ([]k8sapi.Workload, error) {
 	ps := svc.Spec.Ports
-	targetPortNames := make([]string, len(ps))
+	targetPortNames := make([]string, 0, len(ps))
 	for i := range ps {
 		tp := ps[i].TargetPort
 		if tp.Type == intstr.String {

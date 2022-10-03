@@ -54,7 +54,7 @@ func (ce *categorized) Unwrap() error {
 }
 
 // GetCategory returns the error category for a categorized error, OK for nil, and
-// Unknown for other errors
+// Unknown for other errors.
 func GetCategory(err error) Category {
 	if err == nil {
 		return OK

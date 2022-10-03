@@ -50,7 +50,7 @@ type mounter interface {
 }
 
 // intercept tracks the life-cycle of an intercept, dictated by the intercepts
-// arrival and departure in the watchInterceptsLoop
+// arrival and departure in the watchInterceptsLoop.
 type intercept struct {
 	sync.Mutex
 	*manager.InterceptInfo
@@ -167,7 +167,7 @@ func newPodIntercepts() *podIntercepts {
 	return &podIntercepts{alivePods: make(map[podInterceptKey]*podIntercept)}
 }
 
-// start a port forward for the given intercept and remembers that it's alive
+// start a port forward for the given intercept and remembers that it's alive.
 func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, fuseftp rpc2.FuseFTPClient) {
 	if !ic.shouldForward() && !ic.shouldMount() {
 		return
@@ -204,12 +204,12 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, fuseftp rpc2
 	lpf.alivePods[fk] = lp
 }
 
-// initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted
+// initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted.
 func (lpf *podIntercepts) initSnapshot() {
 	lpf.snapshot = make(map[podInterceptKey]struct{})
 }
 
-// cancelUnwanted cancels all port forwards that hasn't been started since initSnapshot
+// cancelUnwanted cancels all port forwards that hasn't been started since initSnapshot.
 func (lpf *podIntercepts) cancelUnwanted(ctx context.Context) {
 	for fk, lp := range lpf.alivePods {
 		if _, isWanted := lpf.snapshot[fk]; !isWanted {
@@ -329,7 +329,7 @@ func (tm *TrafficManager) handleInterceptSnapshot(ctx context.Context, podIcepts
 	podIcepts.cancelUnwanted(ctx)
 }
 
-// getCurrentIntercepts returns a copy of the current intercept snapshot
+// getCurrentIntercepts returns a copy of the current intercept snapshot.
 func (tm *TrafficManager) getCurrentIntercepts() []*intercept {
 	// Copy the current snapshot
 	tm.currentInterceptsLock.Lock()
@@ -349,7 +349,7 @@ func (tm *TrafficManager) getCurrentIntercepts() []*intercept {
 	return intercepts
 }
 
-// getCurrentInterceptInfos returns the InterceptInfos of the current intercept snapshot
+// getCurrentInterceptInfos returns the InterceptInfos of the current intercept snapshot.
 func (tm *TrafficManager) getCurrentInterceptInfos() []*manager.InterceptInfo {
 	// Copy the current snapshot
 	ics := tm.getCurrentIntercepts()
@@ -557,7 +557,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 // legacyImage ensures that the installer never modifies a workload to
 // install a version that is more recent than the traffic-manager currently
 // in use (it's legacy too, or we wouldn't end up here)
-// Deprecated
+// Deprecated.
 func (tm *TrafficManager) legacyImage(ctx context.Context, image string) (string, error) {
 	if image == "" {
 		var err error
@@ -584,7 +584,7 @@ func (tm *TrafficManager) legacyImage(ctx context.Context, image string) (string
 	return image, nil
 }
 
-// Deprecated
+// Deprecated.
 func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInterceptRequest, apiKey string) (*serviceProps, *rpc.InterceptResult) {
 	var err error
 	if ir.AgentImage, err = tm.legacyImage(c, ir.AgentImage); err != nil {
@@ -634,7 +634,7 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 	return svcProps, svcProps.interceptResult()
 }
 
-// AddIntercept adds one intercept
+// AddIntercept adds one intercept.
 func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) { //nolint:gocognit // bugger off
 	var svcProps *serviceProps
 	svcProps, result = tm.CanIntercept(c, ir)
@@ -798,7 +798,7 @@ func waitForDNS(c context.Context, host string) bool {
 	return false
 }
 
-// RemoveIntercept removes one intercept by name
+// RemoveIntercept removes one intercept by name.
 func (tm *TrafficManager) RemoveIntercept(c context.Context, name string) error {
 	dlog.Debugf(c, "Removing intercept %s", name)
 
@@ -835,7 +835,7 @@ func (tm *TrafficManager) removeIntercept(c context.Context, ic *intercept) erro
 }
 
 // AddInterceptor associates the given interceptId with a pid of a running process. This ensures that
-// the running process will be signalled when the intercept is removed
+// the running process will be signalled when the intercept is removed.
 func (tm *TrafficManager) AddInterceptor(s string, i int) error {
 	tm.currentInterceptsLock.Lock()
 	if ci, ok := tm.currentIntercepts[s]; ok {
@@ -854,7 +854,7 @@ func (tm *TrafficManager) RemoveInterceptor(s string) error {
 	return nil
 }
 
-// GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists
+// GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists.
 func (tm *TrafficManager) GetInterceptSpec(name string) *manager.InterceptSpec {
 	if _, ok := tm.localIntercepts[name]; ok {
 		tm.currentInterceptsLock.Lock()
@@ -868,7 +868,7 @@ func (tm *TrafficManager) GetInterceptSpec(name string) *manager.InterceptSpec {
 	return nil
 }
 
-// GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists
+// GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists.
 func (tm *TrafficManager) getInterceptByName(name string) (found *intercept) {
 	tm.currentInterceptsLock.Lock()
 	for _, ic := range tm.currentIntercepts {
@@ -881,7 +881,7 @@ func (tm *TrafficManager) getInterceptByName(name string) (found *intercept) {
 	return found
 }
 
-// InterceptsForWorkload returns the client's current intercepts on the given namespace and workload combination
+// InterceptsForWorkload returns the client's current intercepts on the given namespace and workload combination.
 func (tm *TrafficManager) InterceptsForWorkload(workloadName, namespace string) []*manager.InterceptSpec {
 	wlis := make([]*manager.InterceptSpec, 0)
 	for _, ic := range tm.getCurrentIntercepts() {
@@ -892,7 +892,7 @@ func (tm *TrafficManager) InterceptsForWorkload(workloadName, namespace string) 
 	return wlis
 }
 
-// ClearIntercepts removes all intercepts
+// ClearIntercepts removes all intercepts.
 func (tm *TrafficManager) ClearIntercepts(c context.Context) error {
 	for _, ic := range tm.getCurrentIntercepts() {
 		dlog.Debugf(c, "Clearing intercept %s", ic.Spec.Name)

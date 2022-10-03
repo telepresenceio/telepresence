@@ -56,7 +56,7 @@ func WithEnv(ctx context.Context, env Env) context.Context {
 }
 
 // EnvAPI returns the Env that has been registered with the given context, or
-// the instance that delegates to the env functions in the os package
+// the instance that delegates to the env functions in the os package.
 func EnvAPI(ctx context.Context) Env {
 	if e, ok := ctx.Value(envKey{}).(Env); ok {
 		return e

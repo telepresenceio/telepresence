@@ -173,7 +173,7 @@ func (c *bufferedConn) Read(b []byte) (int, error) {
 	return c.readBuff.Read(b)
 }
 
-// must hold c.readCond.Mu to call readReset
+// must hold c.readCond.Mu to call readReset.
 func (c *bufferedConn) readReset() {
 	c.readBuff.Reset()
 	// This isn't so much to notify readers of the readBuff.Reset(), but of *whatever caused it*.
@@ -203,7 +203,7 @@ func (c *bufferedConn) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// must hold c.writeCond.Mu to call writeReset
+// must hold c.writeCond.Mu to call writeReset.
 func (c *bufferedConn) writeReset() {
 	c.writeBuff.Reset()
 	// Don't bother with c.writeCond.Broadcast() because this will only ever make the condition
@@ -319,7 +319,7 @@ func (c *bufferedConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// Wait implements dnet.Conn
+// Wait implements dnet.Conn.
 func (c *bufferedConn) Wait() error {
 	<-c.readDone
 	if c.readErr != nil {

@@ -42,7 +42,7 @@ func TestWithFS(t *testing.T) {
 	require.Equal(t, dData, data)
 }
 
-// Example using afero.MemMapFs
+// Example using afero.MemMapFs.
 func ExampleWithFS() {
 	appFS := afero.NewCopyOnWriteFs(afero.NewOsFs(), afero.NewMemMapFs())
 	ctx := dos.WithFS(context.Background(), aferofs.Wrap(appFS))

@@ -67,7 +67,7 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// uninstall
+// uninstall.
 func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 	if err := cliutil.InitCommand(cmd); err != nil {
 		return err

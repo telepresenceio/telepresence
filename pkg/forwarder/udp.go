@@ -85,13 +85,11 @@ func (f *udp) Serve(ctx context.Context, initCh chan<- net.Addr) error {
 
 func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager.InterceptInfo) error {
 	defer conn.Close()
-	var err error
 	if intercept != nil {
-		err = f.interceptConn(ctx, conn, intercept)
-	} else {
-		err = f.forwardConn(ctx, conn)
+		f.interceptConn(ctx, conn, intercept)
+		return nil
 	}
-	return err
+	return f.forwardConn(ctx, conn)
 }
 
 // forwardConn reads packets from the given connection and writes the packages to the
@@ -202,7 +200,7 @@ func (u *udpHandler) forward(ctx context.Context) {
 	}
 }
 
-func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manager.InterceptInfo) error {
+func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manager.InterceptInfo) {
 	ctx, span := otel.Tracer("").Start(ctx, "interceptConn")
 	defer span.End()
 	tracing.RecordInterceptInfo(span, iCept)
@@ -228,5 +226,4 @@ func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manag
 	})
 	d.Start(ctx)
 	<-d.Done()
-	return nil
 }

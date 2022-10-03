@@ -12,7 +12,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-// The dialer takes care of dispatching messages between gRPC and UDP connections
+// The dialer takes care of dispatching messages between gRPC and UDP connections.
 type udpListener struct {
 	TimedHandler
 	conn       *net.UDPConn
@@ -127,7 +127,7 @@ type UdpReadResult struct {
 	Addr    *net.UDPAddr
 }
 
-// IsTimeout returns true if the given error is a network timeout error
+// IsTimeout returns true if the given error is a network timeout error.
 func IsTimeout(err error) bool {
 	var opErr *net.OpError
 	return errors.As(err, &opErr) && opErr.Timeout()
