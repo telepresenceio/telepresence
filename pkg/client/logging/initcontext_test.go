@@ -38,7 +38,7 @@ func TestInitContext(t *testing.T) {
 	testSetup := func(t *testing.T) (ctx context.Context, logDir, logFile string) {
 		t.Helper()
 		ctx = dlog.NewTestContext(t, false)
-		env, err := client.LoadEnv(ctx)
+		env, err := client.LoadEnv()
 		if err != nil {
 			t.Fatal(err)
 		}

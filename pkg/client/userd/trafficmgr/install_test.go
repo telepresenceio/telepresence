@@ -89,7 +89,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 	// Part 2: Run the testcases in "install" mode /////////////////////////
 	ctx := dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelWarn))
-	env, err := client.LoadEnv(ctx)
+	env, err := client.LoadEnv()
 	if err != nil {
 		t.Fatal(err)
 	}

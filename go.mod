@@ -9,7 +9,7 @@ require (
 	github.com/creack/pty v1.1.18
 	github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
-	github.com/datawire/envconfig v0.0.0-20220930131253-8fce0ece6e92
+	github.com/datawire/envconfig v0.0.0-20221005101338-acca084843b3
 	github.com/datawire/go-ftpserver v0.1.1
 	github.com/datawire/go-fuseftp/rpc v0.2.0
 	github.com/datawire/metriton-go-client v0.1.1
@@ -25,7 +25,6 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/sftp v1.13.5
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
-	github.com/sethvargo/go-envconfig v0.8.2
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/afero v1.9.2
 	github.com/spf13/cobra v1.5.0

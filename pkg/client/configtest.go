@@ -42,7 +42,7 @@ func SetConfig(ctx context.Context, configDir, configYml string) (context.Contex
 	// Load env if it isn't loaded already
 	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
 	if env := GetEnv(ctx); env == nil {
-		env, err = LoadEnv(ctx)
+		env, err = LoadEnv()
 		if err != nil {
 			return ctx, err
 		}

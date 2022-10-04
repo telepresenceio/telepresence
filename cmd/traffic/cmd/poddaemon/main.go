@@ -128,7 +128,7 @@ func main(ctx context.Context, args *Args) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	ctx = client.WithConfig(ctx, cfg)
-	env, err := client.LoadEnv(ctx)
+	env, err := client.LoadEnv()
 	if err != nil {
 		return fmt.Errorf("failed to load env: %w", err)
 	}

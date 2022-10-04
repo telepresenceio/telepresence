@@ -29,7 +29,7 @@ func main() {
 		ctx = filelocation.WithAppUserLogDir(ctx, dir)
 	}
 
-	env, err := client.LoadEnv(ctx)
+	env, err := client.LoadEnv()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load environment: %v", err)
 		os.Exit(1)
