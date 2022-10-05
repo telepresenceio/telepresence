@@ -48,10 +48,6 @@ type Env struct {
 	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
 	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
 
-	DNSServiceName      string `env:"DNS_SERVICE_NAME,      parser=string, default="`
-	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE, parser=string, default="`
-	DNSServiceIP        string `env:"DNS_SERVICE_IP,        parser=string, default="`
-
 	AgentRegistry            string                     `env:"AGENT_REGISTRY,           parser=nonempty-string"`
 	AgentImage               string                     `env:"AGENT_IMAGE,              parser=string,         default="`
 	AgentInjectPolicy        agentconfig.InjectPolicy   `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`

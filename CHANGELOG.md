@@ -23,6 +23,10 @@
 - Change: The Helm chart `agentInjector.appProtocolStrategy` was moved to `agent.appProtocolStrategy`. The old 
   value is deprecated but retained for backward compatibility.
 
+- Change: The Helm chart `dnsServiceName`, `dnsServiceNamespace`, and `dnsServiceIP` has been removed, because
+  they are no longer needed. The TUN-device will use the traffic-manager pod-IP on platforms where it needs to
+  dedicate an IP for its local resolver.
+
 - Bugfix: Environment variable interpolation now works for all definitions that are copied from pod containers
   into the injected traffic-agent container.
 

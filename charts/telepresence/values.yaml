@@ -92,16 +92,6 @@ podCIDRs: []
 # Default: auto
 podCIDRStrategy: auto
 
-# dnsServiceName adds a user supplied service to the list of services Telepresence tries to resolve in order to detect the
-# clusterIP DNS is using
-dnsServiceName: ""
-
-# dnsServiceNamespace specifies what namespace Telepresence should look for when using the user supplied dnsServiceName
-dnsServiceNamespace: ""
-
-# dnsServiceIP specifies a fallback clusterIP for Telepresence to use should auto DNS discovery fail, this value is ignored if Telepresence finds a valid clusterIP
-dnsServiceIP: ""
-
 # systemaHost is used by the traffic-manager when using an extension
 # or features that require a specific extension.
 systemaHost: app.getambassador.io

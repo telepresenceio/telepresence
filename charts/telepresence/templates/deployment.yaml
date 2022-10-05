@@ -46,18 +46,6 @@ spec:
             value: {{ .apiPort | quote }}
           - name: POD_CIDR_STRATEGY
             value: {{ .podCIDRStrategy }}
-          {{- if .dnsServiceName }}
-          - name: DNS_SERVICE_NAME
-            value: {{ .dnsServiceName }}
-          {{- end }}
-          {{- if .dnsServiceNamespace }}
-          - name: DNS_SERVICE_NAMESPACE
-            value: {{ .dnsServiceNamespace }}
-          {{- end }}
-          {{- if .dnsServiceIP }}
-          - name: DNS_SERVICE_IP
-            value: {{ .dnsServiceIP }}
-          {{- end }}
           {{- with .podCIDRs }}
           - name: POD_CIDRS
             value: "{{ join " " . }}"

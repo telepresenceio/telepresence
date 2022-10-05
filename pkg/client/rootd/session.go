@@ -508,8 +508,13 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			ClusterDomain: mgrInfo.ClusterDomain,
 		}
 	}
-	kubeIP := net.IP(dns.KubeIp)
-	dlog.Infof(ctx, "Setting cluster DNS to %s", kubeIP)
+
+	// We use the ManagerPodIp as the dnsIP. The reason for this is that no one should ever
+	// talk to the traffic-manager directly using the TUN device, so it's safe to use its
+	// IP to impersonate the DNS server. All traffic sent to that IP, will be routed to
+	// the local DNS server.
+	dnsIP := net.IP(mgrInfo.ManagerPodIp)
+	dlog.Infof(ctx, "Setting cluster DNS to %s", dnsIP)
 	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
 	s.dnsServer.SetClusterDNS(dns)
 

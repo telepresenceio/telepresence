@@ -2897,6 +2897,7 @@ type DNS struct {
 	IncludeSuffixes []string `protobuf:"bytes,1,rep,name=include_suffixes,json=includeSuffixes,proto3" json:"include_suffixes,omitempty"`
 	ExcludeSuffixes []string `protobuf:"bytes,2,rep,name=exclude_suffixes,json=excludeSuffixes,proto3" json:"exclude_suffixes,omitempty"`
 	// kube_dns_ip is the IP address of the kube-dns.kube-system service,
+	// Deprecated: No longer used by clients >= 2.8.0
 	KubeIp []byte `protobuf:"bytes,3,opt,name=kube_ip,json=kubeIp,proto3" json:"kube_ip,omitempty"`
 	// cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
 	ClusterDomain string `protobuf:"bytes,4,opt,name=cluster_domain,json=clusterDomain,proto3" json:"cluster_domain,omitempty"`

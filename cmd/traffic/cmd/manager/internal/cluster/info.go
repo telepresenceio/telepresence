@@ -91,49 +91,6 @@ func NewInfo(ctx context.Context) Info {
 			oi.clusterID, err)
 	}
 
-	// places to look for the cluster's DNS service
-	dnsServices := []metav1.ObjectMeta{
-		{
-			Name:      "kube-dns",
-			Namespace: "kube-system",
-		},
-		{
-			Name:      "coredns",
-			Namespace: "kube-system",
-		},
-		{
-			Name:      "dns-default",
-			Namespace: "openshift-dns",
-		},
-	}
-	if env.DNSServiceName != "" && env.DNSServiceNamespace != "" {
-		dnsServices = append(dnsServices, metav1.ObjectMeta{
-			Name:      env.DNSServiceName,
-			Namespace: env.DNSServiceNamespace,
-		})
-	}
-
-	var kubeDnsIp net.IP
-	for _, svc := range dnsServices {
-		if ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc.Name+"."+svc.Namespace); err == nil && len(ips) > 0 {
-			dlog.Infof(ctx, "Using DNS IP from %s.%s", svc.Name, svc.Namespace)
-			kubeDnsIp = ips[0]
-			break
-		}
-	}
-
-	if kubeDnsIp == nil && env.DNSServiceIP != "" {
-		dlog.Infof(ctx, "Unable to determine DNS IP, using user supplied IP %s", env.DNSServiceIP)
-		kubeDnsIp = net.ParseIP(env.DNSServiceIP)
-		if kubeDnsIp == nil {
-			dlog.Warn(ctx, "The user supplied IP is not a valid IP address")
-		}
-	}
-
-	if kubeDnsIp == nil {
-		dlog.Warn(ctx, "Could not determine DNS ClusterIP")
-	}
-
 	apiSvc := "kubernetes.default.svc"
 	var clusterDomain string
 	if cn, err := net.LookupCNAME(apiSvc); err != nil {
@@ -177,25 +134,31 @@ func NewInfo(ctx context.Context) Info {
 		}
 	}
 
-	if oi.ServiceSubnet == nil && kubeDnsIp != nil {
+	if err != nil {
+		dlog.Warn(ctx, err)
+	}
+	if oi.ServiceSubnet == nil {
 		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
 		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
-		// from the kubeDNS IP. This is cheating but a cluster may only have one service subnet and the mask is
-		// unlikely to cover less than half the bits.
-		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", kubeDnsIp)
-		bits := len(kubeDnsIp) * 8
-		ones := bits / 2
-		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
-		oi.ServiceSubnet = &rpc.IPNet{Ip: kubeDnsIp.Mask(mask), Mask: int32(ones)}
+		// from the traffic-manager service IP. This is cheating but a cluster may only have one service subnet
+		// and the mask is unlikely to cover less than half the bits.
+		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", "traffic-manager")
+		if err != nil || len(ips) == 0 {
+			dlog.Warn(ctx, "traffic manager is not able to resolve the IP of its own service")
+		} else {
+			ip := ips[0]
+			dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of traffic-manager.%s)", ip, env.ManagerNamespace)
+			bits := len(ip) * 8
+			ones := bits / 2
+			mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
+			oi.ServiceSubnet = &rpc.IPNet{Ip: ip.Mask(mask), Mask: int32(ones)}
+		}
 	}
 
 	podCIDRStrategy := env.PodCIDRStrategy
 	dlog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
 
 	oi.ManagerPodIp = env.PodIP
-	if oi.ManagerPodIp == nil {
-		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
-	}
 	oi.ManagerPodPort = int32(env.ServerPort)
 
 	alsoProxy := env.ClientRoutingAlsoProxySubnets
@@ -217,7 +180,7 @@ func NewInfo(ctx context.Context) Info {
 	oi.Dns = &rpc.DNS{
 		IncludeSuffixes: env.ClientDnsIncludeSuffixes,
 		ExcludeSuffixes: env.ClientDnsExcludeSuffixes,
-		KubeIp:          kubeDnsIp,
+		KubeIp:          env.PodIP,
 		ClusterDomain:   clusterDomain,
 	}
 

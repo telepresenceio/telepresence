@@ -523,6 +523,7 @@ message DNS {
   repeated string exclude_suffixes = 2;
 
   // kube_dns_ip is the IP address of the kube-dns.kube-system service,
+  // Deprecated: No longer used by clients >= 2.8.0
   bytes kube_ip = 3;
 
   // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
