@@ -5,45 +5,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/creack/pty"
-	"github.com/docker/docker/pkg/ioutils"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/commands"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -221,9 +207,6 @@ func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc
 	var msg string
 	if result != nil {
 		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
-		if result.ServiceProps != nil {
-			entries = append(entries, scout.Entry{Key: "service_uid", Value: result.ServiceProps.ServiceUid})
-		}
 		if result.Error != common.InterceptError_UNSPECIFIED {
 			msg = result.Error.String()
 		}
@@ -370,106 +353,24 @@ func (s *Service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 	return nil
 }
 
-func (s *Service) Login(ctx context.Context, req *rpc.LoginRequest) (result *rpc.LoginResult, err error) {
-	s.logCall(ctx, "Login", func(c context.Context) {
-		defer func() {
-			if err == nil && result.Code == rpc.LoginResult_NEW_LOGIN_SUCCEEDED {
-				s.sessionLock.RLock()
-				defer s.sessionLock.RUnlock()
-				if s.session != nil {
-					dlog.Debug(ctx, "Calling remain with new api key")
-					err := s.session.RemainWithToken(ctx)
-					if err != nil {
-						dlog.Warnf(ctx, "Failed to call remain after login: %v", err)
-					}
-				}
-			}
-		}()
-		if apikey := req.GetApiKey(); apikey != "" {
-			var newLogin bool
-			if newLogin, err = s.loginExecutor.LoginAPIKey(ctx, apikey); err != nil {
-				if errors.Is(err, os.ErrPermission) {
-					err = status.Error(codes.PermissionDenied, err.Error())
-				}
-				return
-			}
-			dlog.Infof(ctx, "LoginAPIKey => %t", newLogin)
-			if newLogin {
-				result = &rpc.LoginResult{Code: rpc.LoginResult_NEW_LOGIN_SUCCEEDED}
-			} else {
-				result = &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}
-			}
-			return
-		}
-
-		// We should refresh here because the user is explicitly logging in so
-		// even if we have cache'd user info, if they are unable to get new
-		// user info, then it should trigger the login function
-		if _, err := s.loginExecutor.GetUserInfo(ctx, true); err == nil {
-			result = &rpc.LoginResult{Code: rpc.LoginResult_OLD_LOGIN_REUSED}
-		} else if err = s.loginExecutor.Login(ctx); err == nil {
-			result = &rpc.LoginResult{Code: rpc.LoginResult_NEW_LOGIN_SUCCEEDED}
-		}
-	})
-	return result, err
+func (s *Service) Login(context.Context, *rpc.LoginRequest) (result *rpc.LoginResult, err error) {
+	return nil, status.Error(codes.Unimplemented, "Login")
 }
 
-func (s *Service) Logout(ctx context.Context, _ *empty.Empty) (result *empty.Empty, err error) {
-	s.logCall(ctx, "Logout", func(c context.Context) {
-		if err = s.loginExecutor.Logout(ctx); err != nil {
-			if errors.Is(err, auth.ErrNotLoggedIn) {
-				err = status.Error(codes.NotFound, err.Error())
-			}
-		} else {
-			result = &empty.Empty{}
-		}
-	})
-	return
+func (s *Service) Logout(context.Context, *empty.Empty) (result *empty.Empty, err error) {
+	return nil, status.Error(codes.Unimplemented, "Logout")
 }
 
-func (s *Service) GetCloudUserInfo(ctx context.Context, req *rpc.UserInfoRequest) (result *rpc.UserInfo, err error) {
-	s.logCall(ctx, "GetCloudUserInfo", func(c context.Context) {
-		result, err = auth.GetCloudUserInfo(ctx, s.loginExecutor, req.GetRefresh(), req.GetAutoLogin())
-	})
-	return
+func (s *Service) GetCloudUserInfo(context.Context, *rpc.UserInfoRequest) (result *rpc.UserInfo, err error) {
+	return nil, status.Error(codes.Unimplemented, "GetCloudUserInfo")
 }
 
-func (s *Service) GetCloudAPIKey(ctx context.Context, req *rpc.KeyRequest) (result *rpc.KeyData, err error) {
-	s.logCall(ctx, "GetCloudAPIKey", func(c context.Context) {
-		var key string
-		if key, err = auth.GetCloudAPIKey(ctx, s.loginExecutor, req.GetDescription(), req.GetAutoLogin()); err == nil {
-			result = &rpc.KeyData{ApiKey: key}
-		}
-	})
-	return
+func (s *Service) GetCloudAPIKey(context.Context, *rpc.KeyRequest) (result *rpc.KeyData, err error) {
+	return nil, status.Error(codes.Unimplemented, "GetCloudAPIKey")
 }
 
 func (s *Service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (result *rpc.LicenseData, err error) {
-	s.logCall(ctx, "GetCloudLicense", func(c context.Context) {
-		var license, hostDomain string
-		if license, hostDomain, err = s.loginExecutor.GetLicense(ctx, req.GetId()); err != nil {
-			// login is required to get the license from system a so
-			// we try to login before retrying the request
-			if _err := s.loginExecutor.Login(ctx); _err == nil {
-				license, hostDomain, err = s.loginExecutor.GetLicense(ctx, req.GetId())
-			}
-		}
-		if err == nil {
-			result = &rpc.LicenseData{License: license, HostDomain: hostDomain}
-		}
-	})
-	return
-}
-
-func (s *Service) GetIngressInfos(c context.Context, _ *empty.Empty) (result *rpc.IngressInfos, err error) {
-	err = s.withSession(c, "GetIngressInfos", func(c context.Context, session trafficmgr.Session) error {
-		var iis []*manager.IngressInfo
-		if iis, err = session.IngressInfos(c); err == nil {
-			result = &rpc.IngressInfos{IngressInfos: iis}
-		}
-		return err
-	})
-	return
+	return nil, status.Error(codes.Unimplemented, "GetCloudLicense")
 }
 
 func (s *Service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {
@@ -509,275 +410,6 @@ func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, erro
 	return ex, nil
 }
 
-func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
-	s.logCall(ctx, "ListCommands", func(ctx context.Context) {
-		groups, err = cliutil.CommandsToRPC(s.getCommands(ctx)), nil
-	})
-	return
-}
-
-func needsPTY(cmd *cobra.Command) bool {
-	if runtime.GOOS == "windows" || cmd.Name() != "intercept" {
-		// intercept is the only known command that might need a PTY, and never on Windows
-		return false
-	}
-	flags := cmd.Flags()
-	args := flags.Args()
-	if len(args) <= 1 {
-		// No extra args, so no external command will be executed
-		return false
-	}
-	args = args[1:]
-	if dr := flags.Lookup("docker-run"); dr == nil || dr.Value.String() == "false" {
-		// Don't know what type of command this is, so assume that a PTY is needed
-		return true
-	}
-
-	// This is a docker run. It needs a PTY if used with both --interactive (-i) and --tty (-t), but only then.
-	// Docker can allocate its PTY without actually running in one when it doesn't need to attach
-	// stdin. So:
-	//
-	// -i  No PTY needed. Input is simply streamed to the docker process. We terminate with signal.
-	// -t  No PTY needed because stdin is not attached. Passing a <ctrl>-c is pointless. We terminate with signal.
-	// -it Must have a PTY, because Docker requires it and signalling doesn't work properly. We terminate by
-	//     sending a <ctrl>-c to the PTY (which eventually gets translated to a signal).
-	hasI := false
-	hasT := false
-	for _, arg := range args {
-		if len(arg) >= 2 && arg[0] == '-' {
-			if arg[1] == '-' {
-				// long form
-				if !hasI {
-					hasI = arg == "--interactive"
-				}
-				if !hasT {
-					hasT = arg == "--tty"
-				}
-			} else {
-				arg = arg[1:]
-				if !hasI {
-					hasI = strings.ContainsRune(arg, 'i')
-				}
-				if !hasT {
-					hasT = strings.ContainsRune(arg, 't')
-				}
-			}
-			if hasI && hasT {
-				// found -i and -t
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, withPTY bool) (context.Context, io.Reader, error) {
-	var wr io.WriteCloser
-	var rd io.Reader
-	if withPTY {
-		var err error
-		if wr, rd, err = pty.Open(); err != nil {
-			return ctx, nil, err
-		}
-	} else {
-		pi := ioutils.NewBytesPipe()
-		wr = pi
-		rd = pi
-	}
-	ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
-	go func() {
-		defer func() {
-			cancel()
-			wr.Close()
-		}()
-		for ctx.Err() == nil {
-			cr, err := cmdStream.Recv()
-			if err != nil {
-				if err != io.EOF && ctx.Err() == nil {
-					dlog.Errorf(ctx, "command failed to read stdin: %v", err)
-				}
-				break
-			}
-			if cr.GetSoftCancel() {
-				dlog.Debug(ctx, "Soft cancel")
-				if withPTY {
-					// Write a CTRL-C to the PTY. This should trigger a graceful shutdown
-					if _, err = wr.Write([]byte{0x03}); err != nil {
-						dlog.Errorf(ctx, "failed to forward <CTRL>-C stdin: %v", err)
-					}
-				} else {
-					cancel()
-				}
-			}
-			if data := cr.GetData(); data != nil {
-				if _, err = wr.Write(data); err != nil {
-					dlog.Errorf(ctx, "failed to forward to stdin: %v", err)
-					break
-				}
-			}
-		}
-	}()
-	return ctx, rd, nil
-}
-
-func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult, wg *sync.WaitGroup) {
-	defer wg.Done()
-	for {
-		select {
-		case <-ctx.Done():
-			// Drain the channel. Sends may fail depending on why the context is cancelled
-			for {
-				select {
-				case sm := <-ch:
-					_ = cmdStream.Send(sm)
-				default:
-					return
-				}
-			}
-		case sm, ok := <-ch:
-			if !ok {
-				return
-			}
-			if err := cmdStream.Send(sm); err != nil {
-				if ctx.Err() == nil {
-					dlog.Errorf(ctx, "Send on stdout/stderr stream failed: %v", err)
-				}
-				return
-			}
-		}
-	}
-}
-
-func (s *Service) executeCmd(ctx context.Context, cmd *cobra.Command, wd string) error {
-	// the context within this scope is not derived from the context of the outer scope
-	ctx = output.WithStructure(ctx, cmd)
-	if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-		ctx = commands.WithConnectorServer(ctx, s)
-	}
-	return cmd.ExecuteContext(commands.WithCwd(ctx, wd))
-}
-
-func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err error) {
-	s.logCall(cmdStream.Context(), "RunCommand", func(ctx context.Context) {
-		var cr *rpc.RunCommandRequest
-		cr, err = cmdStream.Recv()
-		if err != nil {
-			err = status.Errorf(codes.Aborted, "RunCommand failed to read initial stream message: %v", err)
-			return
-		}
-		req := cr.GetCommand()
-		if req == nil {
-			err = status.Error(codes.InvalidArgument, "RunCommand got incorrect initial stream message")
-			return
-		}
-
-		var cmdErr error
-		cmd := &cobra.Command{
-			Use: "telepresence",
-		}
-		cmd.SetContext(ctx)
-		wg := sync.WaitGroup{}
-
-		// Start the stdout/stderr pump
-		so := client.NewStdOutput()
-		wg.Add(1)
-		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel(), &wg)
-		defer func() {
-			if cmdErr == pflag.ErrHelp {
-				cmdErr = nil
-				_ = cmd.Usage()
-			}
-			so.Finish(cmdErr)
-			wg.Wait()
-		}()
-
-		cmd.SetIn(bytes.NewReader(nil))
-		cmd.SetOut(so.Stdout())
-		cmd.SetErr(so.Stderr())
-		cmd.SetFlagErrorFunc(func(_ *cobra.Command, e error) error {
-			return errcat.User.New(e)
-		})
-
-		cli.AddCommandGroups(cmd, s.getCommands(ctx))
-
-		args := req.GetOsArgs()
-		cmd.SetArgs(args)
-		cmd, _, cmdErr = cmd.Find(args)
-
-		if cmdErr != nil {
-			cmdErr = errcat.User.New(cmdErr)
-			return
-		}
-
-		cmd.SetOut(so.Stdout())
-		cmd.SetErr(so.Stderr())
-		cmd.SilenceUsage = true
-
-		for _, group := range cli.GlobalFlagGroups() {
-			cmd.PersistentFlags().AddFlagSet(group.Flags)
-		}
-
-		var rd io.Reader
-		if ctx, rd, cmdErr = stdinPump(ctx, cmdStream, needsPTY(cmd)); cmdErr != nil {
-			return
-		}
-		cmd.SetContext(ctx)
-		cmd.SetIn(rd)
-
-		if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-			err = s.withSession(ctx, "cmd-"+cmd.Name(), func(sessionCtx context.Context, ts trafficmgr.Session) error {
-				// NOTE: For command termination to work properly, the command must execute using the stream
-				// context, not the session context. The fact that the command needs a session here, is just
-				// to get hold of the managerClient. For the actions where it truly needs a long-running session
-				// scoped context that survives the command invocation, it will call methods on the connectorServer.
-
-				// Let the session context cancel the stream context in case the user quits
-				ctx, cancel := context.WithCancel(ctx)
-				go func() {
-					select {
-					case <-ctx.Done():
-					case <-sessionCtx.Done():
-						cancel()
-					}
-				}()
-
-				// Copy the SystemAPoolProvider over
-				if pool := a8rcloud.GetSystemAPoolProvider[a8rcloud.SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
-					ctx = a8rcloud.WithSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName, pool)
-				}
-				if ki := k8sapi.GetK8sInterface(sessionCtx); ki != nil {
-					ctx = k8sapi.WithK8sInterface(ctx, ki)
-				}
-				cmdErr = s.executeCmd(trafficmgr.WithSession(ctx, ts), cmd, req.GetCwd())
-				return nil
-			})
-		} else {
-			cmdErr = s.executeCmd(ctx, cmd, req.GetCwd())
-		}
-	})
-	return nil
-}
-
-func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
-	err = s.withSession(ctx, "ResolveIngressInfo", func(ctx context.Context, session trafficmgr.Session) error {
-		pool, err := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
-		if err != nil {
-			return err
-		}
-		systemacli, err := pool.Get(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			err := pool.Done(ctx)
-			dlog.Warnf(ctx, "Unexpected error tearing down systema connection: %v", err)
-		}()
-		resp, err = systemacli.ResolveIngressInfo(ctx, req)
-		return err
-	})
-	return
-}
-
 func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, error) {
 	result := &rpc.Result{}
 	s.logCall(ctx, "Helm", func(c context.Context) {
@@ -803,143 +435,35 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 	return result, nil
 }
 
-func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
-	resp := rpc.ValidArgsForCommandResponse{
-		Completions: make([]string, 0),
-	}
-	var (
-		name = req.GetCmdName()
-		cmd  = commands.GetCommandByName(ctx, name)
-	)
-
-	if cmd == nil {
-		return &resp, fmt.Errorf("command %s not found", name)
+func (s *Service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (*rpc.Result, error) {
+	if client.GetConfig(ctx).Intercept.UseFtp {
+		return errcat.ToResult(s.FuseFTPError()), nil
 	}
 
-	if l := len(req.OsArgs); l != 0 {
-		if lastArg := req.OsArgs[l-1]; strings.HasPrefix(lastArg, "--") && !strings.Contains(lastArg, "=") {
-			// user wants autocompletion on flag value and is using --flag value
-			var (
-				flagName            = strings.TrimPrefix(lastArg, "--")
-				flagValueToComplete = req.ToComplete
-			)
-
-			var shellCompDir cobra.ShellCompDirective
-			resp.Completions, shellCompDir = s.autocompleteFlag(ctx, cmd, req.OsArgs, flagName, flagValueToComplete)
-			resp.ShellCompDirective = int32(shellCompDir)
-			return &resp, nil
-		}
-	}
-	if strings.HasPrefix(req.ToComplete, "--") {
-		if !strings.Contains(req.ToComplete, "=") {
-			// user wants autocompletion on flag name
-			return &resp, nil
-		}
-
-		// user wants autocompletion on flag value and is using --flag=value
-		var (
-			flagParts           = strings.Split(req.ToComplete, "=")
-			flagName            = strings.TrimPrefix(flagParts[0], "--")
-			flagValueToComplete = flagParts[1]
-		)
-
-		var shellCompDir cobra.ShellCompDirective
-		resp.Completions, shellCompDir = s.autocompleteFlag(ctx, cmd, req.OsArgs, flagName, flagValueToComplete)
-		resp.ShellCompDirective = int32(shellCompDir)
-
-		return &resp, nil
-	}
-
-	// user wants autocompletion on argument
-	vaf := commands.GetValidArgsFunctionFor(ctx, cmd)
-	if vaf == nil {
-		return &resp, nil
-	}
-
-	var (
-		shellCompDir cobra.ShellCompDirective
-		err          error
-	)
-	if _, ok := cmd.Annotations[commands.CommandRequiresSession]; ok {
-		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-ValidArgsFunction", func(ctx context.Context, ts trafficmgr.Session) error {
-			// the context within this scope is not derived from the context of the outer scope
-			if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-				ctx = commands.WithConnectorServer(ctx, s)
-			}
-			resp.Completions, shellCompDir = vaf(trafficmgr.WithSession(ctx, ts), cmd, req.OsArgs, req.ToComplete)
-			return nil
-		})
+	// Use CombinedOutput to include stderr which has information about whether they
+	// need to upgrade to a newer version of macFUSE or not
+	var cmd *dexec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = proc.CommandContext(ctx, "sshfs-win", "cmd", "-V")
 	} else {
-		if _, ok := cmd.Annotations[commands.CommandRequiresConnectorServer]; ok {
-			ctx = commands.WithConnectorServer(ctx, s)
-		}
-		resp.Completions, shellCompDir = vaf(ctx, cmd, req.OsArgs, req.ToComplete)
+		cmd = proc.CommandContext(ctx, "sshfs", "-V")
 	}
+	cmd.DisableLogging = true
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return &resp, err
+		dlog.Errorf(ctx, "sshfs not installed: %v", err)
+		return errcat.ToResult(errors.New("sshfs is not installed on your local machine")), nil
 	}
 
-	resp.ShellCompDirective = int32(shellCompDir)
-	return &resp, nil
-}
-
-func (s *Service) autocompleteFlag(ctx context.Context, cmd *cobra.Command, args []string, flagName, toComplete string) ([]string, cobra.ShellCompDirective) {
-	faf := commands.GetFlagAutocompletionFuncFor(ctx, cmd, flagName)
-	if faf == nil {
-		// theres no autocompletion for this flag
-		return []string{}, 0
+	// OSXFUSE changed to macFUSE, and we've noticed that older versions of OSXFUSE
+	// can cause browsers to hang + kernel crashes, so we add an error to prevent
+	// our users from running into this problem.
+	// OSXFUSE isn't included in the output of sshfs -V in versions of 4.0.0 so
+	// we check for that as a proxy for if they have the right version or not.
+	if bytes.Contains(out, []byte("OSXFUSE")) {
+		return errcat.ToResult(errors.New(`macFUSE 4.0.5 or higher is required on your local machine`)), nil
 	}
-
-	var (
-		requiresCS      bool
-		requiresSession bool
-		err             error
-
-		completions     = []string{}
-		shellCompDir    cobra.ShellCompDirective
-		csAnnotation, _ = cmd.Annotations[commands.FlagAutocompletionFuncRequiresConnectorServer]
-		sAnnotation, _  = cmd.Annotations[commands.FlagAutocompletionFuncRequiresSession]
-	)
-
-	for _, annotationFlagName := range strings.Split(csAnnotation, ",") {
-		if annotationFlagName == flagName {
-			requiresCS = true
-			break
-		}
-	}
-
-	for _, annotationFlagName := range strings.Split(sAnnotation, ",") {
-		if annotationFlagName == flagName {
-			requiresSession = true
-			break
-		}
-	}
-
-	if requiresSession {
-		err = s.withSession(ctx, "cmd-"+cmd.Name()+"-autoCompleteFlag", func(cmdCtx context.Context, ts trafficmgr.Session) error {
-			// the context within this scope is not derived from the context of the outer scope
-			cmdCtx = trafficmgr.WithSession(cmdCtx, ts)
-			if requiresCS {
-				cmdCtx = commands.WithConnectorServer(cmdCtx, s)
-			}
-
-			completions, shellCompDir = faf(cmdCtx, cmd, args, toComplete)
-			return nil
-		})
-	} else {
-		cmdCtx := ctx
-		if requiresCS {
-			cmdCtx = commands.WithConnectorServer(ctx, s)
-		}
-
-		completions, shellCompDir = faf(cmdCtx, cmd, args, toComplete)
-	}
-
-	if err != nil {
-		return completions, cobra.ShellCompDirectiveError
-	}
-
-	return completions, shellCompDir
+	return errcat.ToResult(nil), nil
 }
 
 func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesRequest) (*rpc.GetNamespacesResponse, error) {
@@ -953,7 +477,7 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	}
 
 	if p := req.Prefix; p != "" {
-		namespaces := []string{}
+		var namespaces []string
 		for _, namespace := range resp.Namespaces {
 			if strings.HasPrefix(namespace, p) {
 				namespaces = append(namespaces, namespace)
@@ -963,6 +487,14 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	}
 
 	return &resp, nil
+}
+
+func (s *Service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) (result *rpc.Result, err error) {
+	err = s.withSession(ctx, "GatherTraces", func(ctx context.Context, session trafficmgr.Session) error {
+		result = session.GatherTraces(ctx, request)
+		return nil
+	})
+	return
 }
 
 func (s *Service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi *common.VersionInfo, err error) {

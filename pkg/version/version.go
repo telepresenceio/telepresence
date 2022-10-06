@@ -11,7 +11,7 @@ import (
 
 // Version is a "vSEMVER" string, and is either populated at build-time using `--ldflags -X`, or at
 // init()-time by inspecting the binary's own debug info.
-var Version string
+var Version string //nolint:gochecknoglobals // constant
 
 func init() {
 	// Prefer version number inserted at build using --ldflags, but if it's not set...
@@ -39,37 +39,24 @@ func init() {
 	}
 }
 
-var (
-	structuredInput  string
-	structuredOutput semver.Version
-)
-
 // Structured is a structured semver.Version value, and is based on Version.
 //
 // The reason that this parsed dynamically instead of once at init()-time is so that some
-// unit tests can adjust string Version and see theat reflected in Structured.
+// unit tests can adjust string Version and see that reflected in Structured.
 func Structured() semver.Version {
-	// Cache the result to avoid re-doing work.
-	if structuredInput == Version {
-		return structuredOutput
-	}
-	var structured semver.Version
-	switch Version {
+	vs := Version
+	switch vs {
 	case "(devel)":
-		structured = semver.MustParse("0.0.0-devel")
+		vs = "0.0.0-devel"
 	case "(unknown version)":
-		structured = semver.MustParse("0.0.0-unknownversion")
-	default:
-		var err error
-		structured, err = semver.ParseTolerant(Version)
-		if err != nil {
-			// init() should not have let this happen
-			panic(fmt.Errorf("this binary's version is unparsable: %w", err))
-		}
+		vs = "0.0.0-unknownversion"
 	}
-	structuredInput = Version
-	structuredOutput = structured
-	return structuredOutput
+	v, err := semver.ParseTolerant(vs)
+	if err != nil {
+		// init() should not have let this happen
+		panic(fmt.Errorf("this binary's version is unparsable: %w", err))
+	}
+	return v
 }
 
 func GetExecutable() (string, error) {

@@ -11,7 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func versionCheck(ctx context.Context, daemonBinary string, configuredDaemon bool, userD connector.ConnectorClient) error {
+func versionCheck(ctx context.Context, daemonBinary string, userD connector.ConnectorClient) error {
 	// Ensure that the already running daemons have the correct version
 	vu, err := userD.Version(ctx, &empty.Empty{})
 	if err != nil {
@@ -19,14 +19,10 @@ func versionCheck(ctx context.Context, daemonBinary string, configuredDaemon boo
 	}
 	if version.Version != vu.Version {
 		// OSS Version mismatch. We never allow this
-		if !configuredDaemon {
-			return errcat.User.Newf("version mismatch. Client %s != User Daemon %s, please run 'telepresence quit -s' and reconnect",
-				version.Version, vu.Version)
-		}
-		if err = getTelepresencePro(ctx, userD); err != nil {
-			return err
-		}
-	} else if daemonBinary != "" && vu.Executable != daemonBinary {
+		return errcat.User.Newf("version mismatch. Client %s != User Daemon %s, please run 'telepresence quit -s' and reconnect",
+			version.Version, vu.Version)
+	}
+	if daemonBinary != "" && vu.Executable != daemonBinary {
 		return errcat.User.Newf("executable mismatch. Connector using %s, configured to use %s, please run 'telepresence quit -s' and reconnect",
 			vu.Executable, daemonBinary)
 	}

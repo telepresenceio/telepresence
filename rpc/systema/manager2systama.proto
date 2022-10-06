@@ -2,7 +2,7 @@ syntax = "proto3";
 
 // The "systema" package describes the server implemented by the
 // SystemA cloud service, which is called to by the in-cluster
-// Telepsresence manager and the in-cluster Ambassador Telepresence
+// Telepresence manager and the in-cluster Ambassador Telepresence
 // agent sidecars.
 package telepresence.systema;
 
@@ -49,12 +49,6 @@ service SystemAProxy {
   // to send gRPC requests back to the manager.  This requires that
   // the manager authenticate itself, but does not require an
   // end-user's token.
-  rpc ReverseConnection(stream Chunk) returns (stream Chunk);
-}
-
-// UserDaemonSystemAProxy is a copy of SystemAProxy for userdaemon connections
-// on the same server as SystemAProxy on SystemA
-service UserDaemonSystemAProxy {
   rpc ReverseConnection(stream Chunk) returns (stream Chunk);
 }
 

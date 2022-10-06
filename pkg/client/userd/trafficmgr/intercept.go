@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,16 +28,11 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -433,25 +427,11 @@ func (s *serviceProps) interceptResult() *rpc.InterceptResult {
 		return &rpc.InterceptResult{
 			ServiceUid:   pi.ServiceUid,
 			WorkloadKind: pi.WorkloadKind,
-			ServiceProps: &userdaemon.IngressInfoRequest{
-				ServiceUid:            pi.ServiceUid,
-				ServiceName:           pi.ServiceName,
-				ServicePortIdentifier: pi.ServicePortName,
-				ServicePort:           pi.ServicePort,
-				Namespace:             pi.Namespace,
-			},
 		}
 	}
 	return &rpc.InterceptResult{
 		ServiceUid:   string(s.service.UID),
 		WorkloadKind: s.workload.GetKind(),
-		ServiceProps: &userdaemon.IngressInfoRequest{
-			ServiceUid:            string(s.service.UID),
-			ServiceName:           s.service.Name,
-			ServicePortIdentifier: s.servicePort.Name,
-			ServicePort:           s.servicePort.Port,
-			Namespace:             s.service.Namespace,
-		},
 	}
 }
 
@@ -518,22 +498,14 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		return nil, nil
 	}
 
-	apiKey, err := auth.GetCloudAPIKey(c, tm.loginExecutor, a8rcloud.KeyDescAgent(spec), false)
-	if err != nil {
-		if !errors.Is(err, auth.ErrNotLoggedIn) {
-			dlog.Errorf(c, "error getting apiKey for agent: %s", err)
-		}
-	}
-
 	if tm.managerVersion.LT(firstAgentConfigMapVersion) {
 		// fall back traffic-manager behaviour prior to 2.6
-		return tm.legacyCanInterceptEpilog(c, ir, apiKey)
+		return tm.legacyCanInterceptEpilog(c, ir)
 	}
 
 	pi, err := tm.managerClient.PrepareIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
-		ApiKey:        apiKey,
 	})
 	if err != nil {
 		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
@@ -542,15 +514,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.Category(pi.ErrorCategory).Newf(pi.Error))
 	}
 
-	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
-	if newMechanismArgs, err := extensions.MakeArgsCompatible(c, spec.Mechanism, pi.AgentImage, spec.MechanismArgs); err != nil {
-		return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
-	} else if !reflect.DeepEqual(spec.MechanismArgs, newMechanismArgs) {
-		dlog.Infof(c, "Rewriting MechanismArgs from %q to %q", spec.MechanismArgs, newMechanismArgs)
-		spec.MechanismArgs = newMechanismArgs
-	}
-
-	svcProps := &serviceProps{preparedIntercept: pi, apiKey: apiKey}
+	svcProps := &serviceProps{preparedIntercept: pi}
 	return svcProps, svcProps.interceptResult()
 }
 
@@ -585,7 +549,7 @@ func (tm *TrafficManager) legacyImage(ctx context.Context, image string) (string
 }
 
 // Deprecated.
-func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInterceptRequest, apiKey string) (*serviceProps, *rpc.InterceptResult) {
+func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult) {
 	var err error
 	if ir.AgentImage, err = tm.legacyImage(c, ir.AgentImage); err != nil {
 		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
@@ -601,36 +565,10 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 		return nil, interceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
 	}
 
-	// Verify that the receiving agent can handle the mechanism arguments that are passed to it.
-	podTpl := wl.GetPodTemplate()
-	autoInstall, err := useAutoInstall(podTpl)
-	if err != nil {
-		// useAutoInstall also verifies annotation consistency
-		return nil, interceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, errcat.User.New(err))
-	}
-	var image string
-	if autoInstall {
-		image = ir.AgentImage
-	} else {
-		for _, container := range podTpl.Spec.Containers {
-			if container.Name == install.AgentContainerName {
-				image = container.Image
-				break
-			}
-		}
-	}
-	if newMechanismArgs, err := extensions.MakeArgsCompatible(c, spec.Mechanism, image, spec.MechanismArgs); err != nil {
-		return nil, interceptError(common.InterceptError_UNKNOWN_FLAG, err)
-	} else if !reflect.DeepEqual(spec.MechanismArgs, newMechanismArgs) {
-		dlog.Infof(c, "Rewriting MechanismArgs from %q to %q", spec.MechanismArgs, newMechanismArgs)
-		spec.MechanismArgs = newMechanismArgs
-	}
-
 	svcProps, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, wl)
 	if err != nil {
 		return nil, interceptError(common.InterceptError_FAILED_TO_ESTABLISH, err)
 	}
-	svcProps.apiKey = apiKey
 	return svcProps, svcProps.interceptResult()
 }
 
@@ -827,6 +765,8 @@ func (tm *TrafficManager) removeIntercept(c context.Context, ic *intercept) erro
 	}
 
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
+	c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
+	defer cancel()
 	_, err := tm.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
 		Name:    name,

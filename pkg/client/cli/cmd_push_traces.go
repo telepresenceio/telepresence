@@ -1,4 +1,4 @@
-package commands
+package cli
 
 import (
 	"compress/gzip"
@@ -18,36 +18,20 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 )
 
-type pushTracesCommand struct {
-	cmd *cobra.Command
-}
-
-func (*pushTracesCommand) group() string {
-	return "Tracing"
-}
-
-func (c *pushTracesCommand) cobraCommand(ctx context.Context) *cobra.Command {
-	if c.cmd != nil {
-		return c.cmd
-	}
-
-	c.cmd = &cobra.Command{
-		Use:  "upload-traces",
+func PushTracesCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:  "upload-traces <zipFile> <jaeger target>",
 		Args: cobra.ExactArgs(2),
 
 		Short:         "Upload Traces",
 		Long:          "Upload Traces to a Jaeger instance",
-		RunE:          c.pushTraces,
+		RunE:          pushTraces,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-
-	return c.cmd
 }
 
-func (*pushTracesCommand) init(_ context.Context) {}
-
-func (c *pushTracesCommand) traceClient(url string) otlptrace.Client {
+func traceClient(url string) otlptrace.Client {
 	client := otlptracegrpc.NewClient(
 		otlptracegrpc.WithEndpoint(url),
 		otlptracegrpc.WithInsecure(),
@@ -55,14 +39,16 @@ func (c *pushTracesCommand) traceClient(url string) otlptrace.Client {
 	return client
 }
 
-func (c *pushTracesCommand) pushTraces(cmd *cobra.Command, args []string) error {
+func pushTraces(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
-	zipFile, jaegerTarget := args[0], args[1]
-	if !filepath.IsAbs(zipFile) {
-		zipFile = filepath.Join(GetCwd(ctx), zipFile)
+	zipFile, err := filepath.Abs(args[0])
+	if err != nil {
+		return err
 	}
+	jaegerTarget := args[1]
+
 	f, err := os.Open(zipFile)
 	if err != nil {
 		return fmt.Errorf("failed to open %s: %w", zipFile, err)
@@ -73,7 +59,8 @@ func (c *pushTracesCommand) pushTraces(cmd *cobra.Command, args []string) error 
 		return fmt.Errorf("failed to unzip %s: %w", zipFile, err)
 	}
 	defer zipR.Close()
-	client := c.traceClient(jaegerTarget)
+
+	client := traceClient(jaegerTarget)
 	pr := tracing.NewProtoReader(zipR, func() *tracepb.ResourceSpans { return &tracepb.ResourceSpans{} })
 	spans, err := pr.ReadAll(ctx)
 	if err != nil {

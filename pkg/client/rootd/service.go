@@ -42,7 +42,8 @@ const (
 	titleName   = "Daemon"
 )
 
-var help = `The Telepresence ` + titleName + ` is a long-lived background component that manages
+func help() string {
+	return `The Telepresence ` + titleName + ` is a long-lived background component that manages
 connections and network state.
 
 Launch the Telepresence ` + titleName + `:
@@ -52,6 +53,7 @@ Examine the ` + titleName + `'s log output in
     ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
 to troubleshoot problems.
 `
+}
 
 type sessionReply struct {
 	status *rpc.DaemonStatus
@@ -81,7 +83,7 @@ func Command() *cobra.Command {
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
-		Long:   help,
+		Long:   help(),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return run(cmd.Context(), args[0], args[1])
 		},

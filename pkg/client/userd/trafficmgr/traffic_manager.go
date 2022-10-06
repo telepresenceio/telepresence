@@ -37,12 +37,10 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
@@ -74,7 +72,6 @@ type Session interface {
 	GetInterceptSpec(string) *manager.InterceptSpec
 	InterceptsForWorkload(string, string) []*manager.InterceptSpec
 	Status(context.Context) *rpc.ConnectInfo
-	IngressInfos(c context.Context) ([]*manager.IngressInfo, error)
 	ClearIntercepts(context.Context) error
 	RemoveIntercept(context.Context, string) error
 	Run(context.Context) error
@@ -87,16 +84,14 @@ type Session interface {
 	ManagerConn() *grpc.ClientConn
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
-	RemainWithToken(context.Context) error
 	AddNamespaceListener(context.Context, k8s.NamespaceListener)
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
-	LoginExecutor() auth.LoginExecutor
+	GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result
 }
 
 type Service interface {
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
-	LoginExecutor() auth.LoginExecutor
 }
 
 type apiServer struct {
@@ -112,8 +107,6 @@ type apiMatcher struct {
 type TrafficManager struct {
 	*k8s.Cluster
 	rootDaemon daemon.DaemonClient
-
-	loginExecutor auth.LoginExecutor
 
 	// local information
 	installID   string // telepresence's install ID
@@ -172,24 +165,21 @@ type TrafficManager struct {
 	// and the slice is cleared when an agent snapshot arrives.
 	agentInitWaiters []chan<- struct{}
 
-	sessionServices []SessionService
-	sr              *scout.Reporter
+	sr *scout.Reporter
 
 	isPodDaemon bool
 
 	fuseFtp rpc2.FuseFTPClient
 }
 
-// firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap
-// TODO: Change to released version.
-var firstAgentConfigMapVersion = semver.MustParse("2.6.0")
+// firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap.
+var firstAgentConfigMapVersion = semver.MustParse("2.6.0") //nolint:gochecknoglobals // constant
 
 func NewSession(
 	ctx context.Context,
 	sr *scout.Reporter,
 	cr *rpc.ConnectRequest,
 	svc Service,
-	extraServices []SessionService,
 	fuseFtp rpc2.FuseFTPClient,
 ) (context.Context, Session, *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
@@ -216,7 +206,7 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), svc, cr.IsPodDaemon, extraServices, fuseFtp)
+	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon, fuseFtp)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to TrafficManager: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -263,26 +253,7 @@ func NewSession(
 		SessionInfo:    tmgr.session(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 	}
-	return WithSession(ctx, tmgr), tmgr, ret
-}
-
-func (tm *TrafficManager) RemainWithToken(ctx context.Context) error {
-	tok, err := auth.GetCloudAPIKey(ctx, tm.loginExecutor, a8rcloud.KeyDescTrafficManager, false)
-	if err != nil {
-		return fmt.Errorf("failed to get api key: %w", err)
-	}
-	_, err = tm.managerClient.Remain(ctx, &manager.RemainRequest{
-		Session: tm.session(),
-		ApiKey:  tok,
-	})
-	if err != nil {
-		return fmt.Errorf("error calling Remain: %w", err)
-	}
-	return nil
-}
-
-func (tm *TrafficManager) LoginExecutor() auth.LoginExecutor {
-	return tm.loginExecutor
+	return ctx, tmgr, ret
 }
 
 func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
@@ -360,9 +331,7 @@ func connectMgr(
 	sr *scout.Reporter,
 	cluster *k8s.Cluster,
 	installID string,
-	svc Service,
 	isPodDaemon bool,
-	sessionServices []SessionService,
 	fuseFtp rpc2.FuseFTPClient,
 ) (*TrafficManager, error) {
 	clientConfig := client.GetConfig(ctx)
@@ -380,11 +349,6 @@ func connectMgr(
 		return nil, stacktrace.Wrap(err, "os.Hostname()")
 	}
 
-	apiKey, err := svc.LoginExecutor().GetAPIKey(ctx, a8rcloud.KeyDescTrafficManager)
-	if err != nil {
-		dlog.Errorf(ctx, "unable to get APIKey: %v", err)
-	}
-
 	err = CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
 	if err != nil {
 		return nil, err
@@ -398,9 +362,6 @@ func connectMgr(
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+cluster.GetManagerNamespace(), "api")
 
 	// First check. Establish connection
-	tc, tCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
-	defer tCancel()
-
 	opts := []grpc.DialOption{
 		grpc.WithContextDialer(grpcDialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -412,8 +373,8 @@ func connectMgr(
 	}
 
 	var conn *grpc.ClientConn
-	if conn, err = grpc.DialContext(tc, grpcAddr, opts...); err != nil {
-		return nil, client.CheckTimeout(tc, fmt.Errorf("dial manager: %w", err))
+	if conn, err = grpc.DialContext(ctx, grpcAddr, opts...); err != nil {
+		return nil, client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
 	}
 	defer func() {
 		if err != nil {
@@ -424,13 +385,17 @@ func connectMgr(
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
 	mClient := manager.NewManagerClient(conn)
 
-	vi, err := mClient.Version(tc, &empty.Empty{})
+	// At this point, we are connected to the traffic-manager. We use the shorter API timeout
+	ctx, cancelAPI := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
+	defer cancelAPI()
+
+	vi, err := mClient.Version(ctx, &empty.Empty{})
 	if err != nil {
-		return nil, client.CheckTimeout(tc, fmt.Errorf("manager.Version: %w", err))
+		return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.Version: %w", err))
 	}
 	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
 	if err != nil {
-		return nil, client.CheckTimeout(tc, fmt.Errorf("unable to parse manager.Version: %w", err))
+		return nil, client.CheckTimeout(ctx, fmt.Errorf("unable to parse manager.Version: %w", err))
 	}
 
 	clusterHost := cluster.Config.RestConfig.Host
@@ -443,14 +408,12 @@ func connectMgr(
 		// Check if the session is still valid in the traffic-manager by calling Remain
 		_, err = mClient.Remain(ctx, &manager.RemainRequest{
 			Session: si,
-			ApiKey: func() string {
-				// Discard any errors; including an apikey with this request
-				// is optional.  We might not even be logged in.
-				tok, _ := auth.GetCloudAPIKey(ctx, svc.LoginExecutor(), a8rcloud.KeyDescTrafficManager, false)
-				return tok
-			}(),
 		})
 		if err == nil {
+			if ctx.Err() != nil {
+				// Call timed out, so the traffic-manager isn't responding at all
+				return nil, ctx.Err()
+			}
 			dlog.Debugf(ctx, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", userAndHost)
 		} else {
 			si = nil
@@ -459,15 +422,14 @@ func connectMgr(
 
 	if si == nil {
 		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
-		si, err = mClient.ArriveAsClient(tc, &manager.ClientInfo{
+		si, err = mClient.ArriveAsClient(ctx, &manager.ClientInfo{
 			Name:      userAndHost,
 			InstallId: installID,
 			Product:   "telepresence",
 			Version:   client.Version(),
-			ApiKey:    apiKey,
 		})
 		if err != nil {
-			return nil, client.CheckTimeout(tc, fmt.Errorf("manager.ArriveAsClient: %w", err))
+			return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
 		}
 		if err = SaveSessionToUserCache(ctx, clusterHost, si); err != nil {
 			return nil, err
@@ -478,7 +440,6 @@ func connectMgr(
 		Cluster:          cluster,
 		installID:        installID,
 		userAndHost:      userAndHost,
-		loginExecutor:    svc.LoginExecutor(),
 		managerClient:    mClient,
 		managerConn:      conn,
 		managerVersion:   managerVersion,
@@ -487,7 +448,6 @@ func connectMgr(
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      isPodDaemon,
-		sessionServices:  sessionServices,
 		fuseFtp:          fuseFtp,
 		sr:               sr,
 	}, nil
@@ -575,14 +535,6 @@ func (tm *TrafficManager) Run(c context.Context) error {
 	g.Go("intercept-port-forward", tm.watchInterceptsHandler)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
 	g.Go("dial-request-watcher", tm.dialRequestWatcher)
-	for _, svc := range tm.sessionServices {
-		func(svc SessionService) {
-			dlog.Infof(c, "Starting additional session service %s", svc.Name())
-			g.Go(svc.Name(), func(c context.Context) error {
-				return svc.Run(c, tm.sr, tm)
-			})
-		}(svc)
-	}
 	return g.Wait()
 }
 
@@ -829,12 +781,6 @@ func (tm *TrafficManager) remain(c context.Context) error {
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session: tm.session(),
-				ApiKey: func() string {
-					// Discard any errors; including an apikey with this request
-					// is optional.  We might not even be logged in.
-					tok, _ := auth.GetCloudAPIKey(c, tm.loginExecutor, a8rcloud.KeyDescTrafficManager, false)
-					return tok
-				}(),
 			})
 			if err != nil && c.Err() == nil {
 				dlog.Error(c, err)

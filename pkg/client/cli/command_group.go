@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"os"
 	"strconv"
 
@@ -13,17 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-var (
-	userDaemonRunning     = false
-	globalFlagGroups      []cliutil.FlagGroup
-	deprecatedGlobalFlags *pflag.FlagSet
-	kubeFlags             *pflag.FlagSet
-)
-
-type commandGroupMapKey struct{}
-
 func init() {
-	kubeFlags = pflag.NewFlagSet("Kubernetes flags", 0)
+	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
 	kubeConfig.AddFlags(kubeFlags)
@@ -38,22 +28,12 @@ func init() {
 		return a.Name == b.Name && a.Usage == b.Usage && a.Hidden == b.Hidden
 	}
 
-	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) cliutil.CommandGroups {
-		if cgs, ok := cmd.Context().Value(commandGroupMapKey{}).(cliutil.CommandGroups); ok {
-			return cgs
-		}
-		return nil
-	})
-	cobra.AddTemplateFunc("globalFlagGroups", func() []cliutil.FlagGroup {
-		return globalFlagGroups
-	})
-	cobra.AddTemplateFunc("userDaemonRunning", func() bool {
-		return userDaemonRunning
-	})
+	cobra.AddTemplateFunc("commandGroups", cliutil.GetCommandGroups)
+	cobra.AddTemplateFunc("globalFlagGroups", GlobalFlagGroups)
 	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet {
 		ngFlags := pflag.NewFlagSet("local", pflag.ContinueOnError)
 		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-			for _, g := range globalFlagGroups {
+			for _, g := range GlobalFlagGroups() {
 				if flagEqual(flag, g.Flags.Lookup(flag.Name)) {
 					return
 				}
@@ -113,11 +93,10 @@ func init() {
 
 // AddCommandGroups adds all the groups in the given CommandGroups to the command,  replaces
 // the its standard usage template with a template that groups the commands according to that group.
-func AddCommandGroups(cmd *cobra.Command, groups cliutil.CommandGroups) {
-	for _, commands := range groups {
+func AddCommandGroups(cmd *cobra.Command) {
+	for _, commands := range cliutil.GetCommandGroups(cmd) {
 		cmd.AddCommand(commands...)
 	}
-	cmd.SetContext(context.WithValue(cmd.Context(), commandGroupMapKey{}, groups))
 
 	// Set a usage template that is derived from the default but replaces the "Available Commands"
 	// section with the commandGroups() from the given command
@@ -131,7 +110,7 @@ Aliases:
 Examples:
 {{.Example}}{{end}}{{if .HasAvailableSubCommands}}
 
-Available Commands{{- if not userDaemonRunning }} (list may be incomplete because the User Daemon isn't running){{- end}}:
+Available Commands:
 {{- if commandGroups .}}
 {{- range $name, $commands := commandGroups .}}
   {{$name}}:{{range $commands}}

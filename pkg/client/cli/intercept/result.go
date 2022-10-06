@@ -1,72 +1,20 @@
-package cli
+package intercept
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/spf13/cobra"
-
-	"github.com/datawire/dlib/dcontext"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
-func leaveCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "leave [flags] <intercept_name>",
-		Args: cobra.ExactArgs(1),
-
-		Short: "Remove existing intercept",
-		Annotations: map[string]string{
-			ann.Session: ann.Required,
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cliutil.InitCommand(cmd); err != nil {
-				return err
-			}
-			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
-		},
-		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			shellCompDir := cobra.ShellCompDirectiveNoFileComp
-			if len(args) != 0 {
-				return nil, shellCompDir
-			}
-			if err := cliutil.InitCommand(cmd); err != nil {
-				return nil, shellCompDir | cobra.ShellCompDirectiveError
-			}
-			ctx := cmd.Context()
-			userD := cliutil.GetUserDaemon(ctx)
-			resp, err := userD.List(ctx, &connector.ListRequest{Filter: connector.ListRequest_INTERCEPTS})
-			if err != nil {
-				return nil, shellCompDir | cobra.ShellCompDirectiveError
-			}
-			if len(resp.Workloads) == 0 {
-				return nil, shellCompDir
-			}
-
-			var completions []string
-			for _, intercept := range resp.Workloads {
-				for _, ii := range intercept.InterceptInfos {
-					name := ii.Spec.Name
-					if strings.HasPrefix(name, toComplete) {
-						completions = append(completions, name)
-					}
-				}
-			}
-			return completions, shellCompDir
-		},
+func Result(r *connector.InterceptResult, err error) error {
+	if err != nil {
+		return err
 	}
-}
-
-// InterceptError inspects the .Error and .ErrorText fields in an InterceptResult and returns an
-// appropriate error object, or nil if the InterceptResult doesn't represent an error.
-func InterceptError(r *connector.InterceptResult) error {
 	msg := ""
 	errCat := errcat.Unknown
 	switch r.Error {
@@ -130,16 +78,4 @@ func InterceptError(r *connector.InterceptResult) error {
 		msg = fmt.Sprintf("%s: id = %q", msg, id)
 	}
 	return errCat.Newf(msg)
-}
-
-func removeIntercept(ctx context.Context, name string) error {
-	userD := cliutil.GetUserDaemon(ctx)
-	r, err := userD.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name})
-	if err != nil {
-		return err
-	}
-	if r.Error != common.InterceptError_UNSPECIFIED {
-		return InterceptError(r)
-	}
-	return nil
 }

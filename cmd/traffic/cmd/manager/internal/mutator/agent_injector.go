@@ -29,7 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"}
+var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"} //nolint:gochecknoglobals // constant
 
 type agentInjector struct {
 	sync.Mutex

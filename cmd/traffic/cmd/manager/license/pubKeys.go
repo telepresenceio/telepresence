@@ -1,6 +1,6 @@
 package license
 
-var pubKeys = map[string]string{
+var pubKeys = map[string]string{ //nolint:gochecknoglobals // constant
 	"beta-auth.datawire.io": `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA15qWmyHoAE2Voqg91Ugh
 hVUfQPYofd3eYOqpatWsILnNy68DtOSO/JWAao0YE63aBUHnSe08gGaVEZuWaQH3

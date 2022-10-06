@@ -17,10 +17,10 @@ import (
 const findInterfaceRegex = `^[0-9.]+(\s+via\s+(?P<gw>[0-9.]+))?\s+dev\s+(?P<dev>[a-z0-9-]+)\s+src\s+(?P<src>[0-9.]+)`
 
 var (
-	findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
-	gwidx           = findInterfaceRe.SubexpIndex("gw")
-	devIdx          = findInterfaceRe.SubexpIndex("dev")
-	srcIdx          = findInterfaceRe.SubexpIndex("src")
+	findInterfaceRe = regexp.MustCompile(findInterfaceRegex) //nolint:gochecknoglobals // constant
+	gwidx           = findInterfaceRe.SubexpIndex("gw")      //nolint:gochecknoglobals // constant
+	devIdx          = findInterfaceRe.SubexpIndex("dev")     //nolint:gochecknoglobals // constant
+	srcIdx          = findInterfaceRe.SubexpIndex("src")     //nolint:gochecknoglobals // constant
 )
 
 type rtmsg struct {

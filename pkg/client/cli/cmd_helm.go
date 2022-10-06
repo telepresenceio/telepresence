@@ -1,16 +1,13 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -95,7 +92,6 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 
 	doQuit := false
 	userD := cliutil.GetUserDaemon(ctx)
-	status, _ := userD.Status(ctx, &empty.Empty{})
 
 	request := &connector.HelmRequest{
 		Type:           ha.cmdType,
@@ -118,11 +114,6 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 	case connector.HelmRequest_UPGRADE:
 		msg = "upgraded"
 	case connector.HelmRequest_UNINSTALL:
-		if status != nil {
-			if err = removeClusterFromUserCache(ctx, status); err != nil {
-				return err
-			}
-		}
 		doQuit = true
 		msg = "uninstalled"
 	}
@@ -131,28 +122,4 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 		err = cliutil.Disconnect(cmd.Context(), true)
 	}
 	return err
-}
-
-func removeClusterFromUserCache(ctx context.Context, connInfo *connector.ConnectInfo) (err error) {
-	// Login token is affined to the traffic-manager that just got removed. The user-info
-	// in turn, is info obtained using that token so both are removed here as a
-	// consequence of removing the manager.
-	if err := cliutil.EnsureLoggedOut(ctx); err != nil {
-		return err
-	}
-
-	// Delete the ingress info for the cluster if it exists.
-	ingresses, err := cache.LoadIngressesFromUserCache(ctx)
-	if err != nil {
-		return err
-	}
-
-	key := connInfo.ClusterServer + "/" + connInfo.ClusterContext
-	if _, ok := ingresses[key]; ok {
-		delete(ingresses, key)
-		if err = cache.SaveIngressesToUserCache(ctx, ingresses); err != nil {
-			return err
-		}
-	}
-	return nil
 }

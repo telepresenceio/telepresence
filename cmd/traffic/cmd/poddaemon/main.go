@@ -16,10 +16,9 @@ import (
 	rpc_userd "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc_manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
 const processName = "pod-daemon"
@@ -115,7 +114,6 @@ func Main(ctx context.Context, argStrs ...string) error {
 
 	cmd.Flags().StringVar(&args.PreviewSpec.PullRequestUrl, "pull-request", "",
 		"GitHub Pull Request URL to link and notify when generating a preview domain for this intercept")
-	cli.AddPreviewFlags("preview-url-", cmd.Flags(), &args.PreviewSpec)
 
 	cmd.SetArgs(argStrs)
 	return cmd.ExecuteContext(ctx)
@@ -134,10 +132,8 @@ func main(ctx context.Context, args *Args) error {
 	}
 	ctx = client.WithEnv(ctx, env)
 
-	loginExecutor := loginExecutor{key: args.CloudAPIKey}
-
 	scoutReporter := scout.NewReporter(ctx, processName)
-	userdCoreImpl := userd.GetPoddService(scoutReporter, *cfg, loginExecutor)
+	userdCoreImpl := userd.GetPoddService(scoutReporter, *cfg)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -151,7 +147,7 @@ func main(ctx context.Context, args *Args) error {
 		// TODO: perhaps provide the real thing if we decide to embed the fuseftp binary
 		fuseftpCh := make(chan rpc.FuseFTPClient)
 		close(fuseftpCh)
-		return userdCoreImpl.ManageSessions(ctx, []trafficmgr.SessionService{}, <-fuseftpCh)
+		return userdCoreImpl.ManageSessions(ctx, <-fuseftpCh)
 	})
 	grp.Go("main", func(ctx context.Context) error {
 		dlog.Infof(ctx, "Connecting to traffic manager...")
@@ -190,21 +186,10 @@ func main(ctx context.Context, args *Args) error {
 		if err != nil {
 			return err
 		}
-		if err := cli.InterceptError(iResp); err != nil {
+		if err := intercept.Result(iResp, err); err != nil {
 			return err
 		}
 		dlog.Infof(ctx, "Created intercept")
-
-		dlog.Infof(ctx, "Creating preview URL...")
-		uResp, err := cli.AddPreviewDomain(ctx, scoutReporter,
-			userdCoreImpl.ManagerProxy.UpdateIntercept,
-			session,
-			args.WorkloadName, // intercept name
-			&args.PreviewSpec)
-		if err != nil {
-			return err
-		}
-		dlog.Infof(ctx, "Created preview URL: %q", "https://"+uResp.PreviewDomain)
 
 		// Watch the intercept so that we can report errors.
 		var prevSummary string

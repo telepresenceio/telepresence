@@ -27,7 +27,6 @@ following Free and Open Source software:
     github.com/chai2010/gettext-go                                               v1.0.2                                    3-clause BSD license
     github.com/containerd/containerd                                             v1.6.8                                    Apache License 2.0
     github.com/coreos/go-iptables                                                v0.6.0                                    Apache License 2.0
-    github.com/creack/pty                                                        v1.1.18                                   MIT license
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
@@ -110,7 +109,6 @@ following Free and Open Source software:
     github.com/opencontainers/go-digest                                          v1.0.0                                    Apache License 2.0
     github.com/opencontainers/image-spec                                         v1.1.0-rc1                                Apache License 2.0
     github.com/peterbourgon/diskv                                                v2.0.1+incompatible                       MIT license
-    github.com/pkg/browser                                                       v0.0.0-20210911075715-681adbf594b8        2-clause BSD license
     github.com/pkg/errors                                                        v0.9.1                                    2-clause BSD license
     github.com/pkg/sftp                                                          v1.13.5                                   2-clause BSD license
     github.com/pmezard/go-difflib                                                v1.0.0                                    3-clause BSD license

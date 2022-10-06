@@ -18,9 +18,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-var CommandContext = dexec.CommandContext
+var CommandContext = dexec.CommandContext //nolint:gochecknoglobals // OS-specific function replacement
 
-var SignalsToForward = []os.Signal{unix.SIGINT, unix.SIGTERM}
+var SignalsToForward = []os.Signal{unix.SIGINT, unix.SIGTERM} //nolint:gochecknoglobals // OS-specific constant list
 
 func isAdmin() bool {
 	return os.Geteuid() == 0

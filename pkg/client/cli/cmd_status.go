@@ -46,26 +46,16 @@ type daemonStatusDNS struct {
 }
 
 type connectorStatus struct {
-	Running           bool                           `json:"running,omitempty"`
-	Version           string                         `json:"version,omitempty"`
-	APIVersion        int32                          `json:"api_version,omitempty"`
-	Executable        string                         `json:"executable,omitempty"`
-	InstallID         string                         `json:"install_id,omitempty"`
-	AmbassadorCloud   connectorStatusAmbassadorCloud `json:"ambassador_cloud"`
-	Status            string                         `json:"status,omitempty"`
-	Error             string                         `json:"error,omitempty"`
-	KubernetesServer  string                         `json:"kubernetes_server,omitempty"`
-	KubernetesContext string                         `json:"kubernetes_context,omitempty"`
-	Intercepts        []connectStatusIntercept       `json:"intercepts,omitempty"`
-}
-
-type connectorStatusAmbassadorCloud struct {
-	Status      string `json:"status,omitempty"`
-	Username    string `json:"username,omitempty"`
-	UserID      string `json:"user_id,omitempty"`
-	AccountID   string `json:"account_id,omitempty"`
-	AccountName string `json:"account_name,omitempty"`
-	Email       string `json:"email,omitempty"`
+	Running           bool                     `json:"running,omitempty"`
+	Version           string                   `json:"version,omitempty"`
+	APIVersion        int32                    `json:"api_version,omitempty"`
+	Executable        string                   `json:"executable,omitempty"`
+	InstallID         string                   `json:"install_id,omitempty"`
+	Status            string                   `json:"status,omitempty"`
+	Error             string                   `json:"error,omitempty"`
+	KubernetesServer  string                   `json:"kubernetes_server,omitempty"`
+	KubernetesContext string                   `json:"kubernetes_context,omitempty"`
+	Intercepts        []connectStatusIntercept `json:"intercepts,omitempty"`
 }
 
 type connectStatusIntercept struct {
@@ -128,21 +118,6 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *conne
 	cs.Version = version.Version
 	cs.APIVersion = version.ApiVersion
 	cs.Executable = version.Executable
-	if !cliutil.HasLoggedIn(ctx) {
-		cs.AmbassadorCloud.Status = "Logged out"
-	} else {
-		userInfo, err := cliutil.GetCloudUserInfo(ctx, false, true)
-		if err != nil {
-			cs.AmbassadorCloud.Status = "Login expired (or otherwise no-longer-operational)"
-		} else {
-			cs.AmbassadorCloud.Status = "Logged in"
-			cs.AmbassadorCloud.Username = userInfo.Name
-			cs.AmbassadorCloud.UserID = userInfo.Id
-			cs.AmbassadorCloud.AccountID = userInfo.AccountId
-			cs.AmbassadorCloud.AccountName = userInfo.AccountName
-			cs.AmbassadorCloud.Email = userInfo.Email
-		}
-	}
 
 	status, err := userD.Status(ctx, &empty.Empty{})
 	if err != nil {
@@ -248,13 +223,6 @@ func (s *statusInfo) printConnectorText(cs *connectorStatus) {
 		s.printf("  Version         : %s (api %d)\n", cs.Version, cs.APIVersion)
 		s.printf("  Executable      : %s\n", cs.Executable)
 		s.printf("  Install ID      : %s\n", cs.InstallID)
-		s.printf("  Ambassador Cloud:\n")
-		s.printf("    Status      : %s\n", cs.AmbassadorCloud.Status)
-		s.printf("    User ID     : %s\n", cs.AmbassadorCloud.UserID)
-		s.printf("    Account ID  : %s\n", cs.AmbassadorCloud.AccountID)
-		s.printf("    User Name   : %s\n", cs.AmbassadorCloud.Username)
-		s.printf("    Email       : %s\n", cs.AmbassadorCloud.Email)
-		s.printf("    Account Name: %s\n", cs.AmbassadorCloud.AccountName)
 		s.printf("  Status            : %s\n", cs.Status)
 		if cs.Error != "" {
 			s.printf("  Error             : %s\n", cs.Error)

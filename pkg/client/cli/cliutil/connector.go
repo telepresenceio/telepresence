@@ -202,25 +202,11 @@ type Session struct {
 	Started bool
 }
 
-func replaceUserDaemon(ctx context.Context, conn *grpc.ClientConn) {
-	if uc, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
-		uc.Conn = conn
-		uc.ConnectorClient = connector.NewConnectorClient(conn)
-	}
-}
-
 func ensureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
 	if _, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
 		return ctx, nil
 	}
-	// If the UserDaemonBinary isn't set, use the same executable as the
-	// CLI binary
-	connectorDaemon := client.GetConfig(ctx).Daemons.UserDaemonBinary
-	configuredDaemon := connectorDaemon != ""
-	if !configuredDaemon {
-		connectorDaemon = client.GetExe()
-	}
-	conn, err := launchConnectorDaemon(ctx, connectorDaemon, required)
+	conn, err := launchConnectorDaemon(ctx, client.GetExe(), required)
 	if err != nil {
 		return ctx, err
 	}
@@ -231,17 +217,8 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 }
 
 func ensureDaemonVersion(ctx context.Context) error {
-	// If the UserDaemonBinary isn't set, use the same executable as the
-	// CLI binary
-	connectorDaemon := client.GetConfig(ctx).Daemons.UserDaemonBinary
-	configuredDaemon := connectorDaemon != ""
-	if !configuredDaemon {
-		connectorDaemon = client.GetExe()
-	}
-	cc := GetUserDaemon(ctx)
-
 	// Ensure that the already running daemon has the correct version
-	return versionCheck(ctx, connectorDaemon, configuredDaemon, cc)
+	return versionCheck(ctx, client.GetExe(), GetUserDaemon(ctx))
 }
 
 func ensureNotifications(ctx context.Context) error {

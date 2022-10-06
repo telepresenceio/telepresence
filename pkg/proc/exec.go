@@ -61,6 +61,7 @@ func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error 
 				if sig == nil {
 					return
 				}
+				_ = Terminate(p)
 				cancel()
 			}
 		}()

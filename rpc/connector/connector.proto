@@ -6,7 +6,6 @@ import "rpc/common/errors.proto";
 import "rpc/common/version.proto";
 import "rpc/daemon/daemon.proto";
 import "rpc/manager/manager.proto";
-import "rpc/userdaemon/userdaemon.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/connector";
 
@@ -77,31 +76,19 @@ service Connector {
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
-  rpc GetIngressInfos(google.protobuf.Empty) returns (IngressInfos);
-
   // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
   rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  // ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
-  rpc ListCommands(google.protobuf.Empty) returns (CommandGroups);
-
-  // RunCommand executes a CLI command.
-  rpc RunCommand(stream RunCommandRequest) returns (stream StreamResult);
-
-  // ValidArgsForCommand handles autocompletion
-  rpc ValidArgsForCommand(ValidArgsForCommandRequest) returns (ValidArgsForCommandResponse);
-
-  // ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
-  // the cloud for default ingress values
-  rpc ResolveIngressInfo(telepresence.userdaemon.IngressInfoRequest)
-      returns(telepresence.userdaemon.IngressInfoResponse);
-
   // GatherLogs will acquire logs for the various Telepresence components in kubernetes
   // (pending the request) and return them to the caller
   rpc GatherLogs(LogsRequest) returns (LogsResponse);
+
+  // GatherTraces will acquire traces for the various Telepresence components in kubernetes
+  // (pending the request) and save them in a file.
+  rpc GatherTraces(TracesRequest) returns (Result);
 
   // AddInterceptor tells the connector that a given process is serving a specific
   // intercept. The connector must kill this process when the intercept ends
@@ -112,53 +99,10 @@ service Connector {
 
   // GetNamespaces gets the mapped namespaces with an optional prefix
   rpc GetNamespaces(GetNamespacesRequest) returns (GetNamespacesResponse);
-}
 
-message CommandGroups {
-  message Flag {
-    string type = 1;
-    string flag = 2;
-    string help = 3;
-    string shorthand = 4;
-    string default_value = 5;
-  }
-  message Command {
-    string name = 1;
-    string short_help = 2;
-    string long_help = 3;
-    repeated Flag flags = 4;
-  }
-  message Commands {
-    repeated Command commands = 1;
-  }
-
-  map<string, Commands> command_groups = 1;
-}
-
-// RunCommandRequest is the message that is streamed to RunCommand. The
-// first message contains the actual command and its parameters. Subsequent
-// messages will only contain data.
-message RunCommandRequest {
-  message Command {
-    repeated string os_args = 1;
-    string cwd = 2;
-  }
-  oneof c_or_d{
-    Command command = 1;
-    bytes data = 2;
-    bool soft_cancel = 3;
-  }
-}
-
-message ValidArgsForCommandRequest {
-  string cmd_name = 1;
-  repeated string os_args = 2;
-  string to_complete = 3;
-}
-
-message ValidArgsForCommandResponse {
-  repeated string completions = 1;
-  int32 shell_comp_directive = 2;
+  // RemoteMountAvailability checks if remote mounts are possible using the given
+  // mount type and returns an error if its not.
+  rpc RemoteMountAvailability(google.protobuf.Empty) returns (Result);
 }
 
 message Interceptor {
@@ -180,17 +124,6 @@ message Result {
 
   bytes data = 1;
   ErrorCategory error_category = 2;
-}
-
-// StreamResult is like Result, but with a boolean final to indicate
-// that a message is the last one on a stream. The stream can be closed
-// by either actually closing it (receiver gets an EOF) or by sending
-// a StreamResult with final = true. The latter method should be used when
-// the called method ends with an error (non-gRPC related) that must be
-// propagated to the caller.
-message StreamResult {
-  Result data = 1;
-  bool final = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
@@ -245,10 +178,6 @@ message ConnectInfo {
   reserved 6;
   reserved 7;
   reserved 9;
-}
-
-message IngressInfos {
-  repeated manager.IngressInfo ingress_infos = 1;
 }
 
 message HelmRequest {
@@ -365,10 +294,6 @@ message InterceptResult {
 
   // The kind of workload in this intercept
   string workload_kind = 6;
-
-  // The port number that service_port_identifier resolved into is
-  // used as the default port for the ingress for pro intercepts
-  telepresence.userdaemon.IngressInfoRequest service_props = 8;
 }
 
 message Notification {
@@ -443,6 +368,14 @@ message LogsRequest {
 
   // Directory that the logs will be exported to
   string export_dir = 4;
+}
+
+message TracesRequest {
+  // remote_port is the port to connect to on the targets that traces are collected from.
+  int32 remote_port = 1;
+
+  // tracing_file is the file where the traces are stored.
+  string tracing_file = 2;
 }
 
 message LogsResponse {

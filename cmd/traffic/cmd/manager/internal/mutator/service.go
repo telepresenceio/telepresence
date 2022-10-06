@@ -33,7 +33,7 @@ const (
 	jsonContentType = `application/json`
 )
 
-var universalDeserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer()
+var universalDeserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer() //nolint:gochecknoglobals // constant
 
 // JSON patch, see https://tools.ietf.org/html/rfc6902 .
 type patchOperation struct {

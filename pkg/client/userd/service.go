@@ -21,12 +21,10 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -39,7 +37,8 @@ const (
 	titleName   = "Connector"
 )
 
-var help = `The Telepresence ` + titleName + ` is a background component that manages a connection. It
+func help() string {
+	return `The Telepresence ` + titleName + ` is a background component that manages a connection. It
 requires that a daemon is already running.
 
 Launch the Telepresence ` + titleName + `:
@@ -49,6 +48,7 @@ Examine the ` + titleName + `'s log output in
     ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
 to troubleshoot problems.
 `
+}
 
 type WithSession func(c context.Context, callName string, f func(context.Context, trafficmgr.Session) error) (err error)
 
@@ -70,7 +70,6 @@ type Service struct {
 	ManagerProxy      trafficmgr.ManagerProxy
 	procName          string
 	timedLogLevel     log.TimedLevel
-	loginExecutor     auth.LoginExecutor
 	userNotifications func(context.Context) <-chan string
 	ucn               int64
 	fuseFTPError      error
@@ -87,30 +86,21 @@ type Service struct {
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
-
-	// This is used for the service to know which CLI commands it supports
-	getCommands CommandFactory
 }
 
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
 	s.ManagerProxy.SetClient(managerClient, callOptions...)
 }
 
-func (s *Service) LoginExecutor() auth.LoginExecutor {
-	return s.loginExecutor
-}
-
 // Command returns the CLI sub-command for "connector-foreground".
-func Command(getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) *cobra.Command {
+func Command() *cobra.Command {
 	c := &cobra.Command{
 		Use:    ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
-		Long:   help,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), getCommands, daemonServices, sessionServices)
-		},
+		Long:   help(),
+		RunE:   run,
 	}
 	return c
 }
@@ -124,7 +114,7 @@ func (s *Service) configReload(c context.Context) error {
 // ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func (s *Service) ManageSessions(c context.Context, sessionServices []trafficmgr.SessionService, fuseFtp rpc2.FuseFTPClient) error {
+func (s *Service) ManageSessions(c context.Context, fuseFtp rpc2.FuseFTPClient) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
@@ -150,8 +140,7 @@ nextSession:
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
 				s.sessionCancel = sCancel
-				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices, fuseFtp)
-				sCtx = a8rcloud.WithSystemAPool[a8rcloud.SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
+				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, fuseFtp)
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.session = session
@@ -228,19 +217,19 @@ func (s *Service) cancelSession() {
 	s.sessionLock.Unlock()
 }
 
-func GetPoddService(sc *scout.Reporter, cfg client.Config, login auth.LoginExecutor) Service {
+func GetPoddService(sc *scout.Reporter, cfg client.Config) Service {
 	return Service{
 		scout:           sc,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		ManagerProxy:    trafficmgr.NewManagerProxy(),
-		loginExecutor:   login,
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 }
 
 // run is the main function when executing as the connector.
-func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) error {
+func run(cmd *cobra.Command, _ []string) error {
+	c := cmd.Context()
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -285,10 +274,8 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		connectRequest:    make(chan *rpc.ConnectRequest),
 		connectResponse:   make(chan *rpc.ConnectInfo),
 		ManagerProxy:      trafficmgr.NewManagerProxy(),
-		loginExecutor:     auth.NewStandardLoginExecutor(cliio, sr),
 		userNotifications: cliio.Subscribe,
 		timedLogLevel:     log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
-		getCommands:       getCommands,
 	}
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err
@@ -324,12 +311,6 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 		rpc.RegisterConnectorServer(s.svc, s)
 		manager.RegisterManagerServer(s.svc, s.ManagerProxy)
 		common.RegisterTracingServer(s.svc, tracer)
-		for _, ds := range daemonServices {
-			dlog.Infof(c, "Starting additional daemon service %s", ds.Name())
-			if err := ds.Start(c, sr, s.svc, s.withSession); err != nil {
-				return err
-			}
-		}
 
 		sc := &dhttp.ServerConfig{Handler: s.svc}
 		dlog.Info(c, "gRPC server started")
@@ -346,14 +327,10 @@ func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonS
 
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
-		err := s.ManageSessions(c, sessionServices, <-fuseFtpCh)
+		err := s.ManageSessions(c, <-fuseFtpCh)
 		cliio.Close()
 		return err
 	})
-
-	// background-systema runs a localhost HTTP server for handling callbacks from the
-	// Ambassador Cloud login flow.
-	g.Go("background-systema", s.loginExecutor.Worker)
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.

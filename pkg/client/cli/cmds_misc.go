@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -105,39 +104,6 @@ func initConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.F
 	kubeConfig.AddFlags(kubeFlags)
 	flags.AddFlagSet(kubeFlags)
 	return &cr, kubeFlags
-}
-
-func dashboardCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "dashboard",
-		Args: cobra.NoArgs,
-
-		Short: "Open the dashboard in a web page",
-		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
-			ann.Session:    ann.Required,
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cloudCfg := client.GetConfig(cmd.Context()).Cloud
-
-			// Ensure we're logged in
-			resultCode, err := cliutil.EnsureLoggedIn(cmd.Context(), "")
-			if err != nil {
-				return err
-			}
-
-			if resultCode == connector.LoginResult_OLD_LOGIN_REUSED {
-				// The LoginFlow takes the user to the dashboard, so we only need to
-				// explicitly take the user to the dashboard if they were already
-				// logged in.
-				if err := browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", cloudCfg.SystemaHost)); err != nil {
-					return err
-				}
-			}
-
-			return nil
-		},
-	}
 }
 
 func quitCommand() *cobra.Command {

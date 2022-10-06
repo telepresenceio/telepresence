@@ -14,13 +14,11 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
-	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 )
 
 const (
-	ApiKeyHeader           = "X-Ambassador-Api-Key"
-	InstallIDHeader        = "X-Ambassador-Install-ID"
-	TrafficManagerIDHeader = "X-Telepresence-ManagerID"
+	ApiKeyHeader    = "X-Ambassador-Api-Key"
+	InstallIDHeader = "X-Ambassador-Install-ID"
 )
 
 const (
@@ -46,9 +44,7 @@ type ClientProvider[T Closeable] interface {
 }
 
 type SessionClient interface {
-	userdaemon.SystemAClient
 	systema.SystemACRUDClient
-	systema.UserDaemonSystemAProxyClient
 	Closeable
 }
 
@@ -67,13 +63,6 @@ func GetSystemAPool[T Closeable](ctx context.Context, poolName string) (SystemAP
 		return p, nil
 	}
 	return nil, errors.New("access to Ambassador Cloud is not configured")
-}
-
-func GetSystemAPoolProvider[T Closeable](ctx context.Context, poolName string) ClientProvider[T] {
-	if p, ok := ctx.Value(systemaPoolKey(poolName)).(*systemAPool[T]); ok {
-		return p.Provider
-	}
-	return nil
 }
 
 type SystemAPool[T Closeable] interface {
