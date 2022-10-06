@@ -1,10 +1,10 @@
 package client
 
 import (
-	"context"
 	"io"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
 // StdOutput sends everything written to its Stdout and Stderr to its
@@ -14,6 +14,7 @@ type StdOutput interface {
 	Stdout() io.Writer
 	Stderr() io.Writer
 	ResultChannel() <-chan *connector.StreamResult
+	Finish(error)
 }
 
 type dispatchToCh struct {
@@ -50,6 +51,18 @@ func (d dispatchToCh) Write(p []byte) (n int, err error) {
 
 type stdioHandler chan *connector.StreamResult
 
+func (h stdioHandler) Finish(err error) {
+	r := connector.StreamResult{Final: true}
+	if err != nil {
+		r.Data = &connector.Result{
+			Data:          []byte(err.Error()),
+			ErrorCategory: connector.Result_ErrorCategory(errcat.GetCategory(err)),
+		}
+	}
+	h <- &r
+	close(h)
+}
+
 func (h stdioHandler) Stdout() io.Writer {
 	return dispatchToCh{
 		out:    h,
@@ -68,13 +81,7 @@ func (h stdioHandler) ResultChannel() <-chan *connector.StreamResult {
 	return h
 }
 
-// NewStdOutput returns a new instance of StdOutput which is closed when the
-// given context is done.
-func NewStdOutput(ctx context.Context) StdOutput {
-	so := make(stdioHandler)
-	go func() {
-		<-ctx.Done()
-		close(so)
-	}()
-	return so
+// NewStdOutput returns a new instance of StdOutput
+func NewStdOutput() StdOutput {
+	return make(stdioHandler)
 }

@@ -131,6 +131,7 @@ func interruptPump(ctx context.Context, cmdStream connector.Connector_RunCommand
 func stdoutAndStderrPump(ctx context.Context, cmdStream connector.Connector_RunCommandClient, cmd *cobra.Command) error {
 	// We don't use structured output here because that's being taking care of remotely.
 	stdout, stderr := cmd.OutOrStdout(), cmd.ErrOrStderr()
+	defer cmdStream.CloseSend()
 	for ctx.Err() == nil {
 		sr, err := cmdStream.Recv()
 		if err != nil {
@@ -143,7 +144,10 @@ func stdoutAndStderrPump(ctx context.Context, cmdStream connector.Connector_RunC
 		r := sr.Data
 		if sr.Final {
 			// Command execution ended with an error
-			return errcat.FromResult(r)
+			if r != nil {
+				err = errcat.FromResult(r)
+			}
+			return err
 		}
 
 		// Normal output from the command

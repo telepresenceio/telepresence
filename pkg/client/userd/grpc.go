@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -610,11 +611,20 @@ func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, wi
 	return ctx, rd, nil
 }
 
-func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult) {
+func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			// Drain the channel. Sends may fail depending on why the context is cancelled
+			for {
+				select {
+				case sm := <-ch:
+					_ = cmdStream.Send(sm)
+				default:
+					return
+				}
+			}
 		case sm, ok := <-ch:
 			if !ok {
 				return
@@ -656,28 +666,20 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
-		defer func() {
-			if cmdErr != nil {
-				if cmdErr == pflag.ErrHelp {
-					cmdErr = nil
-					_ = cmd.Usage()
-				}
-				// Propagate command error as a normal error response. We use SilenceErrors = true, so
-				// it will not have appeared on stderr
-				_ = cmdStream.Send(
-					&rpc.StreamResult{
-						Final: true,
-						Data: &rpc.Result{
-							Data:          []byte(cmdErr.Error()),
-							ErrorCategory: rpc.Result_ErrorCategory(errcat.GetCategory(cmdErr)),
-						},
-					})
-			}
-		}()
+		wg := sync.WaitGroup{}
 
 		// Start the stdout/stderr pump
-		so := client.NewStdOutput(ctx)
-		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel())
+		so := client.NewStdOutput()
+		wg.Add(1)
+		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel(), &wg)
+		defer func() {
+			if cmdErr == pflag.ErrHelp {
+				cmdErr = nil
+				_ = cmd.Usage()
+			}
+			so.Finish(cmdErr)
+			wg.Wait()
+		}()
 
 		cmd.SetIn(bytes.NewReader(nil))
 		cmd.SetOut(so.Stdout())
