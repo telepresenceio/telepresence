@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"reflect"
@@ -37,6 +36,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -758,14 +758,16 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 }
 
 func waitForDNS(c context.Context, host string) bool {
-	c, cancel := context.WithTimeout(c, 3*time.Second)
+	c, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
 	for c.Err() == nil {
-		_, err := net.DefaultResolver.LookupIPAddr(c, host)
-		if err == nil {
+		dtime.SleepWithContext(c, 200*time.Millisecond)
+		dlog.Debugf(c, "Attempting to resolve DNS for %s", host)
+		ips := dnsproxy.TimedExternalLookup(c, host, 3*time.Second)
+		if len(ips) > 0 {
+			dlog.Debugf(c, "Attempt succeeded, DNS for %s is %v", host, ips)
 			return true
 		}
-		dtime.SleepWithContext(c, 5*time.Millisecond)
 	}
 	return false
 }
