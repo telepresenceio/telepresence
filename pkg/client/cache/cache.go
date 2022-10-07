@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -39,12 +40,13 @@ func LoadFromUserCache(ctx context.Context, dest any, file string) error {
 	if err != nil {
 		return err
 	}
-	jsonContent, err := os.ReadFile(filepath.Join(dir, file))
+	path := filepath.Join(dir, file)
+	jsonContent, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	if err := json.Unmarshal(jsonContent, &dest); err != nil {
-		return err
+		return fmt.Errorf("failed to parse JSON from file %s: %w", path, err)
 	}
 	return nil
 }
