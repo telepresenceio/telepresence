@@ -62,6 +62,7 @@ generate: generate-clean
 generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	$(tools/protoc) \
+	  -I rpc \
 	  \
 	  --go_out=./rpc \
 	  --go_opt=module=github.com/telepresenceio/telepresence/rpc/v2 \

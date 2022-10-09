@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.5
-// source: rpc/common/tracing.proto
+// source: common/tracing.proto
 
 package common
 
@@ -102,5 +102,5 @@ var Tracing_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/common/tracing.proto",
+	Metadata: "common/tracing.proto",
 }

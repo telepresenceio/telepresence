@@ -1,11 +1,11 @@
 syntax = "proto3";
 package telepresence.connector;
 
+import "common/errors.proto";
+import "common/version.proto";
+import "daemon/daemon.proto";
 import "google/protobuf/empty.proto";
-import "rpc/common/errors.proto";
-import "rpc/common/version.proto";
-import "rpc/daemon/daemon.proto";
-import "rpc/manager/manager.proto";
+import "manager/manager.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/connector";
 

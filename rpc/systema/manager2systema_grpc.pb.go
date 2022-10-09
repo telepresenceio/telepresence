@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.5
-// source: rpc/systema/manager2systema.proto
+// source: systema/manager2systema.proto
 
 package systema
 
@@ -235,7 +235,7 @@ var SystemACRUD_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/systema/manager2systema.proto",
+	Metadata: "systema/manager2systema.proto",
 }
 
 // SystemAProxyClient is the client API for SystemAProxy service.
@@ -361,5 +361,5 @@ var SystemAProxy_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "rpc/systema/manager2systema.proto",
+	Metadata: "systema/manager2systema.proto",
 }
