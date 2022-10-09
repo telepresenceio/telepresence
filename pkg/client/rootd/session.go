@@ -136,6 +136,21 @@ type Session struct {
 	vifReady chan error
 }
 
+type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.OutboundInfo) (*Session, error)
+
+type newSessionKey struct{}
+
+func WithNewSessionFunc(ctx context.Context, f NewSessionFunc) context.Context {
+	return context.WithValue(ctx, newSessionKey{}, f)
+}
+
+func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
+	if f, ok := ctx.Value(newSessionKey{}).(NewSessionFunc); ok {
+		return f
+	}
+	panic("No User daemon Session creator has been registered")
+}
+
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
 func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
 	// First check. Establish connection
@@ -190,9 +205,9 @@ func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
 	return ns
 }
 
-// newSession returns a new properly initialized Session object.
-func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
-	dlog.Info(c, "-- Starting new Session")
+// NewSession returns a new properly initialized session object.
+func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
+	dlog.Info(c, "-- Starting new session")
 	conn, mc, ver, err := connectToManager(c)
 	if mc == nil || err != nil {
 		return nil, err

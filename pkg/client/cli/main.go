@@ -33,7 +33,7 @@ func Main(ctx context.Context) {
 	ctx = client.WithEnv(ctx, env)
 
 	var cmd *cobra.Command
-	if isDaemon() {
+	if IsDaemon() {
 		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
 		// avoids checks for legacy commands.
 		cmd = &cobra.Command{
@@ -85,7 +85,7 @@ func Main(ctx context.Context) {
 	}
 }
 
-func isDaemon() bool {
+func IsDaemon() bool {
 	const fg = "-foreground"
 	a := os.Args
 	return len(a) > 1 && strings.HasSuffix(a[1], fg) || len(a) > 2 && strings.HasSuffix(a[2], fg) && a[1] == "help"

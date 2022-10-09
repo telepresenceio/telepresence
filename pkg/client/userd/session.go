@@ -8,10 +8,12 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 
+	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -59,4 +61,19 @@ type Session interface {
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
 	GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result
+}
+
+type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest, Service, rpc2.FuseFTPClient) (context.Context, Session, *connector.ConnectInfo)
+
+type newSessionKey struct{}
+
+func WithNewSessionFunc(ctx context.Context, f NewSessionFunc) context.Context {
+	return context.WithValue(ctx, newSessionKey{}, f)
+}
+
+func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
+	if f, ok := ctx.Value(newSessionKey{}).(NewSessionFunc); ok {
+		return f
+	}
+	panic("No User daemon Session creator has been registered")
 }

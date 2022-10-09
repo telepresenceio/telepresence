@@ -73,12 +73,33 @@ type Service struct {
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
 }
 
-func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
-	s.managerProxy.setClient(managerClient, callOptions...)
+func NewService(sr *scout.Reporter, cfg *client.Config) userd.Service {
+	return &Service{
+		scout:           sr,
+		connectRequest:  make(chan *rpc.ConnectRequest),
+		connectResponse: make(chan *rpc.ConnectInfo),
+		managerProxy:    &mgrProxy{},
+		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+	}
 }
 
-func (s *Service) GetManagerProxy() manager.ManagerServer {
-	return s.managerProxy
+func (s *Service) As(ptr any) {
+	switch ptr := ptr.(type) {
+	case **Service:
+		*ptr = s
+	case *manager.ManagerServer:
+		*ptr = s.managerProxy
+	default:
+		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
+	}
+}
+
+func (s *Service) GetServer() *Service {
+	return s
+}
+
+func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
+	s.managerProxy.setClient(managerClient, callOptions...)
 }
 
 // Command returns the CLI sub-command for "connector-foreground".
@@ -103,11 +124,12 @@ func (s *Service) configReload(c context.Context) error {
 // ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func (s *Service) ManageSessions(c context.Context, fuseFtp rpc2.FuseFTPClient) error {
+func ManageSessions(c context.Context, si userd.Service, fuseFtp rpc2.FuseFTPClient) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
-	c, s.quit = context.WithCancel(c)
+	var s *Service
+	si.As(&s)
 nextSession:
 	for {
 		// Wait for a connection request
@@ -129,7 +151,7 @@ nextSession:
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
 				s.sessionCancel = sCancel
-				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, fuseFtp)
+				sCtx, session, rsp = userd.GetNewSessionFunc(c)(sCtx, s.scout, cr, si, fuseFtp)
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.session = session
@@ -206,16 +228,6 @@ func (s *Service) cancelSession() {
 	s.sessionLock.Unlock()
 }
 
-func GetPoddService(sc *scout.Reporter, cfg client.Config) Service {
-	return Service{
-		scout:           sc,
-		connectRequest:  make(chan *rpc.ConnectRequest),
-		connectResponse: make(chan *rpc.ConnectInfo),
-		managerProxy:    &mgrProxy{},
-		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
-	}
-}
-
 // run is the main function when executing as the connector.
 func run(cmd *cobra.Command, _ []string) error {
 	c := cmd.Context()
@@ -256,13 +268,9 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	s := &Service{
-		scout:           sr,
-		connectRequest:  make(chan *rpc.ConnectRequest),
-		connectResponse: make(chan *rpc.ConnectInfo),
-		managerProxy:    &mgrProxy{},
-		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
-	}
+	si := userd.GetNewServiceFunc(c)(sr, cfg)
+	var s *Service
+	si.As(&s)
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err
 	}
@@ -313,8 +321,8 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
-		err := s.ManageSessions(c, <-fuseFtpCh)
-		return err
+		c, s.quit = context.WithCancel(c)
+		return ManageSessions(c, si, <-fuseFtpCh)
 	})
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to

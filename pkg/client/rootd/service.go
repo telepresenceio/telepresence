@@ -37,6 +37,21 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
+type NewServiceFunc func(*scout.Reporter, *client.Config) *Service
+
+type newServiceKey struct{}
+
+func WithNewServiceFunc(ctx context.Context, f NewServiceFunc) context.Context {
+	return context.WithValue(ctx, newServiceKey{}, f)
+}
+
+func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
+	if f, ok := ctx.Value(newServiceKey{}).(NewServiceFunc); ok {
+		return f
+	}
+	panic("No User daemon Service creator has been registered")
+}
+
 const (
 	ProcessName = "daemon"
 	titleName   = "Daemon"
@@ -74,6 +89,23 @@ type Service struct {
 	timedLogLevel   log.TimedLevel
 
 	scout *scout.Reporter
+}
+
+func NewService(sr *scout.Reporter, cfg *client.Config) *Service {
+	return &Service{
+		scout:          sr,
+		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
+		connectCh:      make(chan *rpc.OutboundInfo),
+		connectReplyCh: make(chan sessionReply),
+	}
+}
+
+func (s *Service) As(ptr any) {
+	if sp, ok := ptr.(**Service); ok {
+		*sp = s
+	} else {
+		panic(fmt.Sprintf("%T does not implement %T", s, *sp))
+	}
 }
 
 // Command returns the telepresence sub-command "daemon-foreground".
@@ -268,7 +300,7 @@ nextSession:
 				reply.status.OutboundConfig = s.session.getInfo()
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
-				session, reply.err = newSession(sCtx, s.scout, oi)
+				session, reply.err = GetNewSessionFunc(c)(sCtx, s.scout, oi)
 				if reply.err == nil {
 					s.session = session
 					s.sessionContext = sCtx
@@ -397,12 +429,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 	}()
 	dlog.Debug(c, "Listener opened")
 
-	d := &Service{
-		scout:          scout.NewReporter(c, "daemon"),
-		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
-		connectCh:      make(chan *rpc.OutboundInfo),
-		connectReplyCh: make(chan sessionReply),
-	}
+	d := GetNewServiceFunc(c)(scout.NewReporter(c, "daemon"), cfg)
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
 		return err
 	}

@@ -133,7 +133,9 @@ func main(ctx context.Context, args *Args) error {
 	ctx = client.WithEnv(ctx, env)
 
 	scoutReporter := scout.NewReporter(ctx, processName)
-	userdCoreImpl := user_daemon.GetPoddService(scoutReporter, *cfg)
+	userdService := user_daemon.NewService(scoutReporter, cfg)
+	var userdCoreImpl *user_daemon.Service
+	userdService.As(&userdCoreImpl)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -147,7 +149,7 @@ func main(ctx context.Context, args *Args) error {
 		// TODO: perhaps provide the real thing if we decide to embed the fuseftp binary
 		fuseftpCh := make(chan rpc.FuseFTPClient)
 		close(fuseftpCh)
-		return userdCoreImpl.ManageSessions(ctx, <-fuseftpCh)
+		return user_daemon.ManageSessions(ctx, userdService, <-fuseftpCh)
 	})
 	grp.Go("main", func(ctx context.Context) error {
 		dlog.Infof(ctx, "Connecting to traffic manager...")
@@ -193,7 +195,9 @@ func main(ctx context.Context, args *Args) error {
 
 		// Watch the intercept so that we can report errors.
 		var prevSummary string
-		return userdCoreImpl.GetManagerProxy().WatchIntercepts(session, &interceptWatcher{
+		var mgrProxy rpc_manager.ManagerServer
+		userdService.As(&mgrProxy)
+		return mgrProxy.WatchIntercepts(session, &interceptWatcher{
 			ctx: ctx,
 			handler: func(snapshot *rpc_manager.InterceptInfoSnapshot) error {
 				switch len(snapshot.Intercepts) {
