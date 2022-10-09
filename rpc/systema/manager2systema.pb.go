@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.28.1
 // 	protoc        v3.21.5
-// source: rpc/systema/manager2systama.proto
+// source: rpc/systema/manager2systema.proto
 
 // The "systema" package describes the server implemented by the
 // SystemA cloud service, which is called to by the in-cluster
@@ -39,7 +39,7 @@ type Chunk struct {
 func (x *Chunk) Reset() {
 	*x = Chunk{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_systema_manager2systama_proto_msgTypes[0]
+		mi := &file_rpc_systema_manager2systema_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -52,7 +52,7 @@ func (x *Chunk) String() string {
 func (*Chunk) ProtoMessage() {}
 
 func (x *Chunk) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_systema_manager2systama_proto_msgTypes[0]
+	mi := &file_rpc_systema_manager2systema_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -65,7 +65,7 @@ func (x *Chunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return file_rpc_systema_manager2systama_proto_rawDescGZIP(), []int{0}
+	return file_rpc_systema_manager2systema_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Chunk) GetContent() []byte {
@@ -91,7 +91,7 @@ type CreateDomainRequest struct {
 func (x *CreateDomainRequest) Reset() {
 	*x = CreateDomainRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_systema_manager2systama_proto_msgTypes[1]
+		mi := &file_rpc_systema_manager2systema_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -104,7 +104,7 @@ func (x *CreateDomainRequest) String() string {
 func (*CreateDomainRequest) ProtoMessage() {}
 
 func (x *CreateDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_systema_manager2systama_proto_msgTypes[1]
+	mi := &file_rpc_systema_manager2systema_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -117,7 +117,7 @@ func (x *CreateDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDomainRequest.ProtoReflect.Descriptor instead.
 func (*CreateDomainRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_systema_manager2systama_proto_rawDescGZIP(), []int{1}
+	return file_rpc_systema_manager2systema_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateDomainRequest) GetInterceptId() string {
@@ -173,7 +173,7 @@ type CreateDomainResponse struct {
 func (x *CreateDomainResponse) Reset() {
 	*x = CreateDomainResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_systema_manager2systama_proto_msgTypes[2]
+		mi := &file_rpc_systema_manager2systema_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -186,7 +186,7 @@ func (x *CreateDomainResponse) String() string {
 func (*CreateDomainResponse) ProtoMessage() {}
 
 func (x *CreateDomainResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_systema_manager2systama_proto_msgTypes[2]
+	mi := &file_rpc_systema_manager2systema_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -199,7 +199,7 @@ func (x *CreateDomainResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDomainResponse.ProtoReflect.Descriptor instead.
 func (*CreateDomainResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_systema_manager2systama_proto_rawDescGZIP(), []int{2}
+	return file_rpc_systema_manager2systema_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateDomainResponse) GetDomain() string {
@@ -220,7 +220,7 @@ type RemoveDomainRequest struct {
 func (x *RemoveDomainRequest) Reset() {
 	*x = RemoveDomainRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_systema_manager2systama_proto_msgTypes[3]
+		mi := &file_rpc_systema_manager2systema_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -233,7 +233,7 @@ func (x *RemoveDomainRequest) String() string {
 func (*RemoveDomainRequest) ProtoMessage() {}
 
 func (x *RemoveDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_systema_manager2systama_proto_msgTypes[3]
+	mi := &file_rpc_systema_manager2systema_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -246,7 +246,7 @@ func (x *RemoveDomainRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveDomainRequest.ProtoReflect.Descriptor instead.
 func (*RemoveDomainRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_systema_manager2systama_proto_rawDescGZIP(), []int{3}
+	return file_rpc_systema_manager2systema_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RemoveDomainRequest) GetDomain() string {
@@ -267,7 +267,7 @@ type InterceptRemoval struct {
 func (x *InterceptRemoval) Reset() {
 	*x = InterceptRemoval{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_systema_manager2systama_proto_msgTypes[4]
+		mi := &file_rpc_systema_manager2systema_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -280,7 +280,7 @@ func (x *InterceptRemoval) String() string {
 func (*InterceptRemoval) ProtoMessage() {}
 
 func (x *InterceptRemoval) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_systema_manager2systama_proto_msgTypes[4]
+	mi := &file_rpc_systema_manager2systema_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +293,7 @@ func (x *InterceptRemoval) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InterceptRemoval.ProtoReflect.Descriptor instead.
 func (*InterceptRemoval) Descriptor() ([]byte, []int) {
-	return file_rpc_systema_manager2systama_proto_rawDescGZIP(), []int{4}
+	return file_rpc_systema_manager2systema_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *InterceptRemoval) GetInterceptId() string {
@@ -314,7 +314,7 @@ type PreferredAgentResponse struct {
 func (x *PreferredAgentResponse) Reset() {
 	*x = PreferredAgentResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_rpc_systema_manager2systama_proto_msgTypes[5]
+		mi := &file_rpc_systema_manager2systema_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -327,7 +327,7 @@ func (x *PreferredAgentResponse) String() string {
 func (*PreferredAgentResponse) ProtoMessage() {}
 
 func (x *PreferredAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_systema_manager2systama_proto_msgTypes[5]
+	mi := &file_rpc_systema_manager2systema_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -340,7 +340,7 @@ func (x *PreferredAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreferredAgentResponse.ProtoReflect.Descriptor instead.
 func (*PreferredAgentResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_systema_manager2systama_proto_rawDescGZIP(), []int{5}
+	return file_rpc_systema_manager2systema_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *PreferredAgentResponse) GetImageName() string {
@@ -350,11 +350,11 @@ func (x *PreferredAgentResponse) GetImageName() string {
 	return ""
 }
 
-var File_rpc_systema_manager2systama_proto protoreflect.FileDescriptor
+var File_rpc_systema_manager2systema_proto protoreflect.FileDescriptor
 
-var file_rpc_systema_manager2systama_proto_rawDesc = []byte{
+var file_rpc_systema_manager2systema_proto_rawDesc = []byte{
 	0x0a, 0x21, 0x72, 0x70, 0x63, 0x2f, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x61, 0x2f, 0x6d, 0x61,
-	0x6e, 0x61, 0x67, 0x65, 0x72, 0x32, 0x73, 0x79, 0x73, 0x74, 0x61, 0x6d, 0x61, 0x2e, 0x70, 0x72,
+	0x6e, 0x61, 0x67, 0x65, 0x72, 0x32, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x61, 0x2e, 0x70, 0x72,
 	0x6f, 0x74, 0x6f, 0x12, 0x14, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63,
 	0x65, 0x2e, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x61, 0x1a, 0x1b, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
 	0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x65, 0x6d, 0x70, 0x74, 0x79,
@@ -441,19 +441,19 @@ var file_rpc_systema_manager2systama_proto_rawDesc = []byte{
 }
 
 var (
-	file_rpc_systema_manager2systama_proto_rawDescOnce sync.Once
-	file_rpc_systema_manager2systama_proto_rawDescData = file_rpc_systema_manager2systama_proto_rawDesc
+	file_rpc_systema_manager2systema_proto_rawDescOnce sync.Once
+	file_rpc_systema_manager2systema_proto_rawDescData = file_rpc_systema_manager2systema_proto_rawDesc
 )
 
-func file_rpc_systema_manager2systama_proto_rawDescGZIP() []byte {
-	file_rpc_systema_manager2systama_proto_rawDescOnce.Do(func() {
-		file_rpc_systema_manager2systama_proto_rawDescData = protoimpl.X.CompressGZIP(file_rpc_systema_manager2systama_proto_rawDescData)
+func file_rpc_systema_manager2systema_proto_rawDescGZIP() []byte {
+	file_rpc_systema_manager2systema_proto_rawDescOnce.Do(func() {
+		file_rpc_systema_manager2systema_proto_rawDescData = protoimpl.X.CompressGZIP(file_rpc_systema_manager2systema_proto_rawDescData)
 	})
-	return file_rpc_systema_manager2systama_proto_rawDescData
+	return file_rpc_systema_manager2systema_proto_rawDescData
 }
 
-var file_rpc_systema_manager2systama_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_rpc_systema_manager2systama_proto_goTypes = []interface{}{
+var file_rpc_systema_manager2systema_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_rpc_systema_manager2systema_proto_goTypes = []interface{}{
 	(*Chunk)(nil),                  // 0: telepresence.systema.Chunk
 	(*CreateDomainRequest)(nil),    // 1: telepresence.systema.CreateDomainRequest
 	(*CreateDomainResponse)(nil),   // 2: telepresence.systema.CreateDomainResponse
@@ -465,7 +465,7 @@ var file_rpc_systema_manager2systama_proto_goTypes = []interface{}{
 	(*common.VersionInfo)(nil),     // 8: telepresence.common.VersionInfo
 	(*emptypb.Empty)(nil),          // 9: google.protobuf.Empty
 }
-var file_rpc_systema_manager2systama_proto_depIdxs = []int32{
+var file_rpc_systema_manager2systema_proto_depIdxs = []int32{
 	7, // 0: telepresence.systema.CreateDomainRequest.intercept_spec:type_name -> telepresence.manager.InterceptSpec
 	6, // 1: telepresence.systema.CreateDomainRequest.add_request_headers:type_name -> telepresence.systema.CreateDomainRequest.AddRequestHeadersEntry
 	1, // 2: telepresence.systema.SystemACRUD.CreateDomain:input_type -> telepresence.systema.CreateDomainRequest
@@ -485,13 +485,13 @@ var file_rpc_systema_manager2systama_proto_depIdxs = []int32{
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_rpc_systema_manager2systama_proto_init() }
-func file_rpc_systema_manager2systama_proto_init() {
-	if File_rpc_systema_manager2systama_proto != nil {
+func init() { file_rpc_systema_manager2systema_proto_init() }
+func file_rpc_systema_manager2systema_proto_init() {
+	if File_rpc_systema_manager2systema_proto != nil {
 		return
 	}
 	if !protoimpl.UnsafeEnabled {
-		file_rpc_systema_manager2systama_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+		file_rpc_systema_manager2systema_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Chunk); i {
 			case 0:
 				return &v.state
@@ -503,7 +503,7 @@ func file_rpc_systema_manager2systama_proto_init() {
 				return nil
 			}
 		}
-		file_rpc_systema_manager2systama_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+		file_rpc_systema_manager2systema_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CreateDomainRequest); i {
 			case 0:
 				return &v.state
@@ -515,7 +515,7 @@ func file_rpc_systema_manager2systama_proto_init() {
 				return nil
 			}
 		}
-		file_rpc_systema_manager2systama_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+		file_rpc_systema_manager2systema_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CreateDomainResponse); i {
 			case 0:
 				return &v.state
@@ -527,7 +527,7 @@ func file_rpc_systema_manager2systama_proto_init() {
 				return nil
 			}
 		}
-		file_rpc_systema_manager2systama_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+		file_rpc_systema_manager2systema_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*RemoveDomainRequest); i {
 			case 0:
 				return &v.state
@@ -539,7 +539,7 @@ func file_rpc_systema_manager2systama_proto_init() {
 				return nil
 			}
 		}
-		file_rpc_systema_manager2systama_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+		file_rpc_systema_manager2systema_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*InterceptRemoval); i {
 			case 0:
 				return &v.state
@@ -551,7 +551,7 @@ func file_rpc_systema_manager2systama_proto_init() {
 				return nil
 			}
 		}
-		file_rpc_systema_manager2systama_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+		file_rpc_systema_manager2systema_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PreferredAgentResponse); i {
 			case 0:
 				return &v.state
@@ -568,18 +568,18 @@ func file_rpc_systema_manager2systama_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_rpc_systema_manager2systama_proto_rawDesc,
+			RawDescriptor: file_rpc_systema_manager2systema_proto_rawDesc,
 			NumEnums:      0,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
-		GoTypes:           file_rpc_systema_manager2systama_proto_goTypes,
-		DependencyIndexes: file_rpc_systema_manager2systama_proto_depIdxs,
-		MessageInfos:      file_rpc_systema_manager2systama_proto_msgTypes,
+		GoTypes:           file_rpc_systema_manager2systema_proto_goTypes,
+		DependencyIndexes: file_rpc_systema_manager2systema_proto_depIdxs,
+		MessageInfos:      file_rpc_systema_manager2systema_proto_msgTypes,
 	}.Build()
-	File_rpc_systema_manager2systama_proto = out.File
-	file_rpc_systema_manager2systama_proto_rawDesc = nil
-	file_rpc_systema_manager2systama_proto_goTypes = nil
-	file_rpc_systema_manager2systama_proto_depIdxs = nil
+	File_rpc_systema_manager2systema_proto = out.File
+	file_rpc_systema_manager2systema_proto_rawDesc = nil
+	file_rpc_systema_manager2systema_proto_goTypes = nil
+	file_rpc_systema_manager2systema_proto_depIdxs = nil
 }
