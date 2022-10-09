@@ -27,7 +27,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -41,6 +40,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
@@ -49,50 +49,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
-
-// A SessionService represents a service that should be started together with each daemon session.
-// Can be used when passing in custom commands to start up any resources needed for the commands.
-type SessionService interface {
-	Name() string
-	// Run should run the Session service. Run will be launched in its own goroutine and it's expected that it blocks until the context is finished.
-	Run(ctx context.Context, scout *scout.Reporter, session Session) error
-}
-
-type WatchWorkloadsStream interface {
-	Send(*rpc.WorkloadInfoSnapshot) error
-}
-
-type Session interface {
-	restapi.AgentState
-	k8s.KubeConfig
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult)
-	AddInterceptor(string, int) error
-	RemoveInterceptor(string) error
-	GetInterceptSpec(string) *manager.InterceptSpec
-	InterceptsForWorkload(string, string) []*manager.InterceptSpec
-	Status(context.Context) *rpc.ConnectInfo
-	ClearIntercepts(context.Context) error
-	RemoveIntercept(context.Context, string) error
-	Run(context.Context) error
-	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.Result, error)
-	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
-	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
-	WithK8sInterface(context.Context) context.Context
-	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
-	ManagerClient() manager.ManagerClient
-	ManagerConn() *grpc.ClientConn
-	GetCurrentNamespaces(forClientAccess bool) []string
-	ActualNamespace(string) string
-	AddNamespaceListener(context.Context, k8s.NamespaceListener)
-	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
-	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
-	GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result
-}
-
-type Service interface {
-	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
-}
 
 type apiServer struct {
 	restapi.Server
@@ -179,9 +135,9 @@ func NewSession(
 	ctx context.Context,
 	sr *scout.Reporter,
 	cr *rpc.ConnectRequest,
-	svc Service,
+	svc userd.Service,
 	fuseFtp rpc2.FuseFTPClient,
-) (context.Context, Session, *connector.ConnectInfo) {
+) (context.Context, userd.Session, *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 	sr.Report(ctx, "connect")
 
@@ -616,7 +572,7 @@ func (tm *TrafficManager) addActiveNamespaceListener(l func()) {
 	tm.wlWatcher.addActiveNamespaceListener(l)
 }
 
-func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream WatchWorkloadsStream) error {
+func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
 	tm.waitForSync(c)
 	tm.ensureWatchers(c, wr.Namespaces)
 	sCtx, sCancel := context.WithCancel(c)

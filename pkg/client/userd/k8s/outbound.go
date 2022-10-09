@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -117,7 +118,7 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) b
 	return !equal
 }
 
-func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener NamespaceListener) {
+func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.NamespaceListener) {
 	kc.nsLock.Lock()
 	kc.namespaceListeners = append(kc.namespaceListeners, nsListener)
 	kc.nsLock.Unlock()

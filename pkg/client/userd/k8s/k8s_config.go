@@ -55,11 +55,6 @@ type kubeconfigExtension struct {
 	Manager    *managerConfig   `json:"manager,omitempty"`
 }
 
-type KubeConfig interface {
-	GetRestConfig() *rest.Config
-	GetManagerNamespace() string
-}
-
 type Config struct {
 	kubeconfigExtension
 	Namespace   string // default cluster namespace.

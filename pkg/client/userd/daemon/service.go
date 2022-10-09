@@ -24,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -61,7 +62,7 @@ type Service struct {
 
 	quit func()
 
-	session         trafficmgr.Session
+	session         userd.Session
 	sessionCancel   context.CancelFunc
 	sessionContext  context.Context
 	sessionQuitting int32 // atomic boolean. True if non-zero.
@@ -113,7 +114,7 @@ nextSession:
 		case cr = <-s.connectRequest:
 		}
 
-		var session trafficmgr.Session
+		var session userd.Session
 		var rsp *rpc.ConnectInfo
 
 		s.sessionLock.Lock() // Locked during creation

@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -422,7 +423,11 @@ type serviceProps struct {
 	containerPortIndex int
 }
 
-func (s *serviceProps) interceptResult() *rpc.InterceptResult {
+func (s *serviceProps) APIKey() string {
+	return s.apiKey
+}
+
+func (s *serviceProps) InterceptResult() *rpc.InterceptResult {
 	if pi := s.preparedIntercept; pi != nil {
 		return &rpc.InterceptResult{
 			ServiceUid:   pi.ServiceUid,
@@ -435,7 +440,7 @@ func (s *serviceProps) interceptResult() *rpc.InterceptResult {
 	}
 }
 
-func (s *serviceProps) portIdentifier() (agentconfig.PortIdentifier, error) {
+func (s *serviceProps) PortIdentifier() (agentconfig.PortIdentifier, error) {
 	var spi string
 	if s.preparedIntercept.ServicePortName == "" {
 		spi = strconv.Itoa(int(s.preparedIntercept.ServicePort))
@@ -443,6 +448,10 @@ func (s *serviceProps) portIdentifier() (agentconfig.PortIdentifier, error) {
 		spi = s.preparedIntercept.ServicePortName
 	}
 	return agentconfig.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
+}
+
+func (s *serviceProps) PreparedIntercept() *manager.PreparedIntercept {
+	return s.preparedIntercept
 }
 
 func (tm *TrafficManager) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc.InterceptResult {
@@ -478,7 +487,7 @@ func (tm *TrafficManager) ensureNoInterceptConflict(ir *rpc.CreateInterceptReque
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*serviceProps, *rpc.InterceptResult) {
+func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (userd.ServiceProps, *rpc.InterceptResult) {
 	tm.waitForSync(c)
 	spec := ir.Spec
 	spec.Namespace = tm.ActualNamespace(spec.Namespace)
@@ -515,7 +524,7 @@ func (tm *TrafficManager) CanIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	svcProps := &serviceProps{preparedIntercept: pi}
-	return svcProps, svcProps.interceptResult()
+	return svcProps, svcProps.InterceptResult()
 }
 
 // legacyImage ensures that the installer never modifies a workload to
@@ -569,12 +578,12 @@ func (tm *TrafficManager) legacyCanInterceptEpilog(c context.Context, ir *rpc.Cr
 	if err != nil {
 		return nil, interceptError(common.InterceptError_FAILED_TO_ESTABLISH, err)
 	}
-	return svcProps, svcProps.interceptResult()
+	return svcProps, svcProps.InterceptResult()
 }
 
 // AddIntercept adds one intercept.
 func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) { //nolint:gocognit // bugger off
-	var svcProps *serviceProps
+	var svcProps userd.ServiceProps
 	svcProps, result = tm.CanIntercept(c, ir)
 	if result != nil && result.Error != common.InterceptError_UNSPECIFIED {
 		return result, nil
@@ -606,17 +615,17 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	var agentEnv map[string]string
 	// svcProps.preparedIntercept == nil means that we're using an older traffic-manager, incapable
 	// of using PrepareIntercept.
-	if svcProps.preparedIntercept == nil {
+	if pi := svcProps.PreparedIntercept(); pi == nil {
 		// It's OK to just call addAgent every time; if the agent is already installed then it's a
 		// no-op.
-		agentEnv, result = tm.addAgent(c, svcProps, ir.AgentImage, apiPort)
+		agentEnv, result = tm.addAgent(c, svcProps.(*serviceProps), ir.AgentImage, apiPort)
 		if result.Error != common.InterceptError_UNSPECIFIED {
 			return result, nil
 		}
 	} else {
 		// Make spec port identifier unambiguous.
-		spec.ServiceName = svcProps.preparedIntercept.ServiceName
-		pi, err := svcProps.portIdentifier()
+		spec.ServiceName = pi.ServiceName
+		pi, err := svcProps.PortIdentifier()
 		if err != nil {
 			return nil, err
 		}
@@ -655,7 +664,7 @@ func (tm *TrafficManager) AddIntercept(c context.Context, ir *rpc.CreateIntercep
 	ii, err = tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
-		ApiKey:        svcProps.apiKey,
+		ApiKey:        svcProps.APIKey(),
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
