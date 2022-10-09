@@ -342,17 +342,6 @@ func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result
 	return
 }
 
-func (s *Service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) (err error) {
-	s.logCall(stream.Context(), "UserNotifications", func(c context.Context) {
-		for msg := range s.userNotifications(c) {
-			if err = stream.Send(&rpc.Notification{Message: msg}); err != nil {
-				return
-			}
-		}
-	})
-	return nil
-}
-
 func (s *Service) Login(context.Context, *rpc.LoginRequest) (result *rpc.LoginResult, err error) {
 	return nil, status.Error(codes.Unimplemented, "Login")
 }

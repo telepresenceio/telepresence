@@ -62,9 +62,6 @@ type ConnectorClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(ctx context.Context, in *WatchWorkloadsRequest, opts ...grpc.CallOption) (Connector_WatchWorkloadsClient, error)
-	// Returns a stream of messages to display to the user.  Does NOT
-	// require having called anything else first.
-	UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -241,38 +238,6 @@ func (x *connectorWatchWorkloadsClient) Recv() (*WorkloadInfoSnapshot, error) {
 	return m, nil
 }
 
-func (c *connectorClient) UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[1], "/telepresence.connector.Connector/UserNotifications", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &connectorUserNotificationsClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type Connector_UserNotificationsClient interface {
-	Recv() (*Notification, error)
-	grpc.ClientStream
-}
-
-type connectorUserNotificationsClient struct {
-	grpc.ClientStream
-}
-
-func (x *connectorUserNotificationsClient) Recv() (*Notification, error) {
-	m := new(Notification)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (c *connectorClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error) {
 	out := new(LoginResult)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Login", in, out, opts...)
@@ -430,9 +395,6 @@ type ConnectorServer interface {
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error
-	// Returns a stream of messages to display to the user.  Does NOT
-	// require having called anything else first.
-	UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error
 	Login(context.Context, *LoginRequest) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
@@ -504,9 +466,6 @@ func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*Worklo
 }
 func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
-}
-func (UnimplementedConnectorServer) UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error {
-	return status.Errorf(codes.Unimplemented, "method UserNotifications not implemented")
 }
 func (UnimplementedConnectorServer) Login(context.Context, *LoginRequest) (*LoginResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
@@ -794,27 +753,6 @@ type connectorWatchWorkloadsServer struct {
 }
 
 func (x *connectorWatchWorkloadsServer) Send(m *WorkloadInfoSnapshot) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func _Connector_UserNotifications_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(emptypb.Empty)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ConnectorServer).UserNotifications(m, &connectorUserNotificationsServer{stream})
-}
-
-type Connector_UserNotificationsServer interface {
-	Send(*Notification) error
-	grpc.ServerStream
-}
-
-type connectorUserNotificationsServer struct {
-	grpc.ServerStream
-}
-
-func (x *connectorUserNotificationsServer) Send(m *Notification) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -1164,11 +1102,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchWorkloads",
 			Handler:       _Connector_WatchWorkloads_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "UserNotifications",
-			Handler:       _Connector_UserNotifications_Handler,
 			ServerStreams: true,
 		},
 	},

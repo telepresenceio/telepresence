@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -262,7 +261,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	// prefer to let the OS close it when we exit.
 
 	sr := scout.NewReporter(c, "connector")
-	cliio := &broadcastqueue.BroadcastQueue{}
 
 	tracer, err := tracing.NewTraceServer(c, "user-daemon")
 	if err != nil {
@@ -270,12 +268,11 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	s := &Service{
-		scout:             sr,
-		connectRequest:    make(chan *rpc.ConnectRequest),
-		connectResponse:   make(chan *rpc.ConnectInfo),
-		ManagerProxy:      trafficmgr.NewManagerProxy(),
-		userNotifications: cliio.Subscribe,
-		timedLogLevel:     log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+		scout:           sr,
+		connectRequest:  make(chan *rpc.ConnectRequest),
+		connectResponse: make(chan *rpc.ConnectInfo),
+		ManagerProxy:    trafficmgr.NewManagerProxy(),
+		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err
@@ -328,7 +325,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
 		err := s.ManageSessions(c, <-fuseFtpCh)
-		cliio.Close()
 		return err
 	})
 

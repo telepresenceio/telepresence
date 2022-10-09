@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -69,9 +68,6 @@ func InitCommand(cmd *cobra.Command) (err error) {
 		as[ann.UserDaemon] = v
 		as[ann.VersionCheck] = ann.Required
 	}
-	if _, ok := as[ann.Notifications]; ok {
-		as[ann.VersionCheck] = ann.Required
-	}
 
 	if as[ann.RootDaemon] == ann.Required {
 		if err = EnsureRootDaemonRunning(ctx); err != nil {
@@ -106,11 +102,6 @@ func InitCommand(cmd *cobra.Command) (err error) {
 
 	if v := as[ann.Session]; v == ann.Optional || v == ann.Required {
 		if ctx, err = ensureSession(ctx, v == ann.Required); err != nil {
-			return err
-		}
-	}
-	if as[ann.Notifications] == ann.Required {
-		if err = ensureNotifications(ctx); err != nil {
 			return err
 		}
 	}
@@ -219,25 +210,6 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 func ensureDaemonVersion(ctx context.Context) error {
 	// Ensure that the already running daemon has the correct version
 	return versionCheck(ctx, client.GetExe(), GetUserDaemon(ctx))
-}
-
-func ensureNotifications(ctx context.Context) error {
-	cc := GetUserDaemon(ctx)
-	stdout, _ := output.Structured(ctx)
-	stream, err := cc.UserNotifications(ctx, &empty.Empty{})
-	if err != nil {
-		return err
-	}
-	go func() {
-		for {
-			msg, err := stream.Recv()
-			if err != nil {
-				return
-			}
-			fmt.Fprintln(stdout, strings.TrimRight(msg.Message, "\n"))
-		}
-	}()
-	return nil
 }
 
 func ensureSession(ctx context.Context, required bool) (context.Context, error) {

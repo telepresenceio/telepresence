@@ -61,10 +61,6 @@ service Connector {
   // Watch all workloads in the mapped namespaces
   rpc WatchWorkloads(WatchWorkloadsRequest) returns (stream WorkloadInfoSnapshot);
 
-  // Returns a stream of messages to display to the user.  Does NOT
-  // require having called anything else first.
-  rpc UserNotifications(google.protobuf.Empty) returns (stream Notification);
-
   rpc Login(LoginRequest) returns (LoginResult);
 
   // Returns an error with code=NotFound if not currently logged in.
@@ -294,10 +290,6 @@ message InterceptResult {
 
   // The kind of workload in this intercept
   string workload_kind = 6;
-}
-
-message Notification {
-  string message = 1;
 }
 
 message LoginRequest {
