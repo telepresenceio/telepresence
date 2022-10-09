@@ -73,7 +73,7 @@ func (s *Service) FuseFTPError() error {
 	return s.fuseFTPError
 }
 
-func (s *Service) withSession(c context.Context, callName string, f func(context.Context, userd.Session) error) (err error) {
+func (s *Service) WithSession(c context.Context, callName string, f func(context.Context, userd.Session) error) (err error) {
 	s.logCall(c, callName, func(_ context.Context) {
 		if atomic.LoadInt32(&s.sessionQuitting) != 0 {
 			err = status.Error(codes.Canceled, "session cancelled")
@@ -234,7 +234,7 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		}
 		s.scout.Report(c, action, entries...)
 	}()
-	err = s.withSession(c, "CanIntercept", func(c context.Context, session userd.Session) error {
+	err = s.WithSession(c, "CanIntercept", func(c context.Context, session userd.Session) error {
 		span := trace.SpanFromContext(c)
 		tracing.RecordInterceptSpec(span, ir.Spec)
 		_, result = session.CanIntercept(c, ir)
@@ -259,7 +259,7 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		}
 		s.scout.Report(c, action, entries...)
 	}()
-	err = s.withSession(c, "CreateIntercept", func(c context.Context, session userd.Session) error {
+	err = s.WithSession(c, "CreateIntercept", func(c context.Context, session userd.Session) error {
 		span := trace.SpanFromContext(c)
 		tracing.RecordInterceptSpec(span, ir.Spec)
 		result, err = session.AddIntercept(c, ir)
@@ -285,7 +285,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 		}
 		s.scout.Report(c, action, entries...)
 	}()
-	err = s.withSession(c, "RemoveIntercept", func(c context.Context, session userd.Session) error {
+	err = s.WithSession(c, "RemoveIntercept", func(c context.Context, session userd.Session) error {
 		result = &rpc.InterceptResult{}
 		spec = session.GetInterceptSpec(rr.Name)
 		if spec != nil {
@@ -310,19 +310,19 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 }
 
 func (s *Service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
-	return &empty.Empty{}, s.withSession(ctx, "AddInterceptor", func(_ context.Context, session userd.Session) error {
+	return &empty.Empty{}, s.WithSession(ctx, "AddInterceptor", func(_ context.Context, session userd.Session) error {
 		return session.AddInterceptor(interceptor.InterceptId, int(interceptor.Pid))
 	})
 }
 
 func (s *Service) RemoveInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
-	return &empty.Empty{}, s.withSession(ctx, "RemoveInterceptor", func(_ context.Context, session userd.Session) error {
+	return &empty.Empty{}, s.WithSession(ctx, "RemoveInterceptor", func(_ context.Context, session userd.Session) error {
 		return session.RemoveInterceptor(interceptor.InterceptId)
 	})
 }
 
 func (s *Service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
-	err = s.withSession(c, "List", func(c context.Context, session userd.Session) error {
+	err = s.WithSession(c, "List", func(c context.Context, session userd.Session) error {
 		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, true)
 		return err
 	})
@@ -330,13 +330,13 @@ func (s *Service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 }
 
 func (s *Service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Connector_WatchWorkloadsServer) error {
-	return s.withSession(server.Context(), "WatchWorkloads", func(c context.Context, session userd.Session) error {
+	return s.WithSession(server.Context(), "WatchWorkloads", func(c context.Context, session userd.Session) error {
 		return session.WatchWorkloads(c, wr, server)
 	})
 }
 
 func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.Result, err error) {
-	err = s.withSession(c, "Uninstall", func(c context.Context, session userd.Session) error {
+	err = s.WithSession(c, "Uninstall", func(c context.Context, session userd.Session) error {
 		result, err = session.Uninstall(c, ur)
 		return err
 	})
@@ -364,7 +364,7 @@ func (s *Service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) 
 }
 
 func (s *Service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {
-	err = s.withSession(ctx, "GatherLogs", func(c context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "GatherLogs", func(c context.Context, session userd.Session) error {
 		result, err = session.GatherLogs(c, request)
 		return err
 	})
@@ -458,7 +458,7 @@ func (s *Service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (
 
 func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesRequest) (*rpc.GetNamespacesResponse, error) {
 	var resp rpc.GetNamespacesResponse
-	err := s.withSession(ctx, "GetNamespaces", func(ctx context.Context, session userd.Session) error {
+	err := s.WithSession(ctx, "GetNamespaces", func(ctx context.Context, session userd.Session) error {
 		resp.Namespaces = session.GetCurrentNamespaces(req.ForClientAccess)
 		return nil
 	})
@@ -480,7 +480,7 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 }
 
 func (s *Service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) (result *rpc.Result, err error) {
-	err = s.withSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
 		result = session.GatherTraces(ctx, request)
 		return nil
 	})
