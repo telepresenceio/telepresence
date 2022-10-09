@@ -177,12 +177,12 @@ func (s *Service) cancelSession() {
 
 func (s *Service) WithSession(f func(context.Context, *Session) error) error {
 	if atomic.LoadInt32(&s.sessionQuitting) != 0 {
-		return status.Error(codes.Canceled, "Session cancelled")
+		return status.Error(codes.Canceled, "session cancelled")
 	}
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
 	if s.session == nil {
-		return status.Error(codes.Unavailable, "no active Session")
+		return status.Error(codes.Unavailable, "no active session")
 	}
 	return f(s.sessionContext, s.session)
 }
@@ -234,7 +234,7 @@ func (s *Service) configReload(c context.Context) error {
 }
 
 // manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
-// a Session and writes a reply to the connectErrCh. The Session is then started if it was
+// a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
 func (s *Service) manageSessions(c context.Context) error {
 	// The d.quit is called when we receive a Quit. Since it
@@ -255,8 +255,8 @@ nextSession:
 		reply := sessionReply{}
 
 		s.sessionLock.Lock() // Locked during creation
-		if c.Err() == nil {  // If by the time we've got the Session lock we're cancelled, then don't create the Session and just leave by way of the select below
-			// Respond by setting the Session and returning the error (or nil
+		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
+			// Respond by setting the session and returning the error (or nil
 			// if everything is ok)
 			reply.status = &rpc.DaemonStatus{
 				Version: &common.VersionInfo{
@@ -287,7 +287,7 @@ nextSession:
 		case s.connectReplyCh <- reply:
 		default:
 			// Nobody left to read the response? That's fine really. Just means that
-			// whoever wanted to start the Session terminated early.
+			// whoever wanted to start the session terminated early.
 			s.cancelSession()
 			continue
 		}
@@ -295,8 +295,8 @@ nextSession:
 			continue
 		}
 
-		// Run the Session asynchronously. We must be able to respond to connect (with getInfo) while
-		// the Session is running. The d.Session.cancel is called from Disconnect
+		// Run the session asynchronously. We must be able to respond to connect (with getInfo) while
+		// the session is running. The d.session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {
 			defer func() {
@@ -416,7 +416,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
-	g.Go("Session", d.manageSessions)
+	g.Go("session", d.manageSessions)
 	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener, tracer) })
 	g.Go("metriton", d.scout.Run)
 	err = g.Wait()

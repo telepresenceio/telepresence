@@ -251,7 +251,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	// prefer to let the OS close it when we exit.
 
 	sr := scout.NewReporter(c, "connector")
-
 	tracer, err := tracing.NewTraceServer(c, "user-daemon")
 	if err != nil {
 		return err

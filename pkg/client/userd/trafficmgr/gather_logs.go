@@ -72,7 +72,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 	}
 }
 
-func (tm *TrafficManager) ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error {
+func (tm *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error {
 	hasContainer := func(pod *core.Pod) bool {
 		if filter == nil || filter(pod) {
 			cns := pod.Spec.Containers
@@ -116,7 +116,7 @@ func (tm *TrafficManager) ForeachAgentPod(ctx context.Context, fn func(context.C
 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // connector.LogsRequest and returns them to the caller.
-func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
+func (tm *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	exportDir := request.ExportDir
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
 	resp := &connector.LogsResponse{}

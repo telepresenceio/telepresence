@@ -60,7 +60,7 @@ type apiMatcher struct {
 	metadata       map[string]string
 }
 
-type TrafficManager struct {
+type session struct {
 	*k8s.Cluster
 	rootDaemon daemon.DaemonClient
 
@@ -164,7 +164,7 @@ func NewSession(
 	dlog.Info(ctx, "Connecting to traffic manager...")
 	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon, fuseFtp)
 	if err != nil {
-		dlog.Errorf(ctx, "Unable to connect to TrafficManager: %s", err)
+		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 
@@ -212,11 +212,11 @@ func NewSession(
 	return ctx, tmgr, ret
 }
 
-func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
+func (tm *session) ManagerClient() manager.ManagerClient {
 	return tm.managerClient
 }
 
-func (tm *TrafficManager) ManagerConn() *grpc.ClientConn {
+func (tm *session) ManagerConn() *grpc.ClientConn {
 	return tm.managerConn
 }
 
@@ -289,7 +289,7 @@ func connectMgr(
 	installID string,
 	isPodDaemon bool,
 	fuseFtp rpc2.FuseFTPClient,
-) (*TrafficManager, error) {
+) (*session, error) {
 	clientConfig := client.GetConfig(ctx)
 	tos := &clientConfig.Timeouts
 
@@ -355,7 +355,7 @@ func connectMgr(
 	}
 
 	clusterHost := cluster.Config.RestConfig.Host
-	si, err := LoadSessionFromUserCache(ctx, clusterHost)
+	si, err := LoadSessionInfoFromUserCache(ctx, clusterHost)
 	if err != nil {
 		return nil, err
 	}
@@ -387,12 +387,12 @@ func connectMgr(
 		if err != nil {
 			return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
 		}
-		if err = SaveSessionToUserCache(ctx, clusterHost, si); err != nil {
+		if err = SaveSessionInfoToUserCache(ctx, clusterHost, si); err != nil {
 			return nil, err
 		}
 	}
 
-	return &TrafficManager{
+	return &session{
 		Cluster:          cluster,
 		installID:        installID,
 		userAndHost:      userAndHost,
@@ -433,7 +433,7 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 	}
 }
 
-func (tm *TrafficManager) setInterceptedNamespace(c context.Context, ns string) {
+func (tm *session) setInterceptedNamespace(c context.Context, ns string) {
 	tm.currentInterceptsLock.Lock()
 	diff := tm.interceptedNamespace != ns
 	if diff {
@@ -447,7 +447,7 @@ func (tm *TrafficManager) setInterceptedNamespace(c context.Context, ns string) 
 
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
-func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
+func (tm *session) updateDaemonNamespaces(c context.Context) {
 	tm.wlWatcher.setNamespacesToWatch(c, tm.GetCurrentNamespaces(true))
 	if tm.rootDaemon == nil {
 		return
@@ -478,7 +478,7 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 //   - (3) listen on the appropriate local ports and forward them to the intercepted
 //     Services, and
 //   - (4) mount the appropriate remote volumes.
-func (tm *TrafficManager) Run(c context.Context) error {
+func (tm *session) Run(c context.Context) error {
 	defer func() {
 		if tm.rootDaemon != nil {
 			_, _ = tm.rootDaemon.Disconnect(c, &empty.Empty{})
@@ -494,12 +494,12 @@ func (tm *TrafficManager) Run(c context.Context) error {
 	return g.Wait()
 }
 
-func (tm *TrafficManager) session() *manager.SessionInfo {
+func (tm *session) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
 // getInfosForWorkloads returns a list of workloads found in the given namespace that fulfils the given filter criteria.
-func (tm *TrafficManager) getInfosForWorkloads(
+func (tm *session) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
 	iMap map[string][]*manager.InterceptInfo,
@@ -557,22 +557,22 @@ func (tm *TrafficManager) getInfosForWorkloads(
 	return wiz
 }
 
-func (tm *TrafficManager) waitForSync(ctx context.Context) {
+func (tm *session) waitForSync(ctx context.Context) {
 	tm.WaitForNSSync(ctx)
 	tm.wlWatcher.setNamespacesToWatch(ctx, tm.GetCurrentNamespaces(true))
 	tm.wlWatcher.waitForSync(ctx)
 }
 
-func (tm *TrafficManager) getActiveNamespaces(ctx context.Context) []string {
+func (tm *session) getActiveNamespaces(ctx context.Context) []string {
 	tm.waitForSync(ctx)
 	return tm.wlWatcher.getActiveNamespaces()
 }
 
-func (tm *TrafficManager) addActiveNamespaceListener(l func()) {
+func (tm *session) addActiveNamespaceListener(l func()) {
 	tm.wlWatcher.addActiveNamespaceListener(l)
 }
 
-func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
+func (tm *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
 	tm.waitForSync(c)
 	tm.ensureWatchers(c, wr.Namespaces)
 	sCtx, sCancel := context.WithCancel(c)
@@ -597,7 +597,7 @@ func (tm *TrafficManager) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloa
 	}
 }
 
-func (tm *TrafficManager) WorkloadInfoSnapshot(
+func (tm *session) WorkloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
@@ -607,7 +607,7 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 	return tm.workloadInfoSnapshot(ctx, namespaces, filter, includeLocalIntercepts)
 }
 
-func (tm *TrafficManager) ensureWatchers(ctx context.Context,
+func (tm *session) ensureWatchers(ctx context.Context,
 	namespaces []string,
 ) {
 	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
@@ -643,7 +643,7 @@ func (tm *TrafficManager) ensureWatchers(ctx context.Context,
 	}
 }
 
-func (tm *TrafficManager) workloadInfoSnapshot(
+func (tm *session) workloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
@@ -712,7 +712,7 @@ nextIs:
 
 var ErrSessionExpired = errors.New("session expired")
 
-func (tm *TrafficManager) remain(c context.Context) error {
+func (tm *session) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer func() {
 		ticker.Stop()
@@ -723,7 +723,7 @@ func (tm *TrafficManager) remain(c context.Context) error {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded so the traffic-manager has dropped the session. We should too
-			if err = DeleteSessionFromUserCache(c); err != nil {
+			if err = DeleteSessionInfoFromUserCache(c); err != nil {
 				dlog.Errorf(c, "failed to delete session from user cache: %v", err)
 			}
 		}
@@ -749,7 +749,7 @@ func (tm *TrafficManager) remain(c context.Context) error {
 	}
 }
 
-func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (tm *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 	var config *k8s.Config
 	var err error
 	if cr.IsPodDaemon {
@@ -778,7 +778,7 @@ func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest
 	return tm.Status(c)
 }
 
-func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
+func (tm *session) Status(c context.Context) *rpc.ConnectInfo {
 	cfg := tm.Config
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
@@ -818,7 +818,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 }
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
-func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
+func (tm *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
 	result := &rpc.Result{}
 	agents := tm.getCurrentAgents()
 
@@ -868,7 +868,7 @@ func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRe
 // a `helm uninstall traffic-manager`.
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
-func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
+func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
 	if tm.managerVersion.LT(firstAgentConfigMapVersion) {
 		// fall back traffic-manager behaviour prior to 2.6
 		return tm.legacyUninstall(ctx, ur)
@@ -976,7 +976,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster.
-func (tm *TrafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
+func (tm *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
 	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from

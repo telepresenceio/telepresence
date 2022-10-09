@@ -23,7 +23,7 @@ import (
 
 // getCurrentAgents returns a copy of the current agent snapshot
 // Deprecated.
-func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
+func (tm *session) getCurrentAgents() []*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
 	agents := make([]*manager.AgentInfo, len(tm.currentAgents))
@@ -37,7 +37,7 @@ func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 // getCurrentAgentsInNamespace returns a map of agents matching the given namespace from the current agent snapshot.
 // The map contains the first agent for each name found. Agents from replicas of the same workload are ignored.
 // Deprecated.
-func (tm *TrafficManager) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
+func (tm *session) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
 	agents := make(map[string]*manager.AgentInfo)
@@ -70,14 +70,14 @@ func (as agentsStringer) String() string {
 	return sb.String()
 }
 
-func (tm *TrafficManager) setCurrentAgents(ctx context.Context, agents []*manager.AgentInfo) {
+func (tm *session) setCurrentAgents(ctx context.Context, agents []*manager.AgentInfo) {
 	tm.currentAgentsLock.Lock()
 	tm.currentAgents = agents
 	dlog.Debugf(ctx, "setCurrentAgents %s", agentsStringer(agents))
 	tm.currentAgentsLock.Unlock()
 }
 
-func (tm *TrafficManager) notifyAgentWatchers(ctx context.Context, agents []*manager.AgentInfo) {
+func (tm *session) notifyAgentWatchers(ctx context.Context, agents []*manager.AgentInfo) {
 	tm.currentAgentsLock.Lock()
 	aiws := tm.agentInitWaiters
 	tm.agentInitWaiters = nil
@@ -99,7 +99,7 @@ func (tm *TrafficManager) notifyAgentWatchers(ctx context.Context, agents []*man
 	}
 }
 
-func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
+func (tm *session) watchAgentsNS(ctx context.Context) error {
 	// Cancel this watcher whenever the set of active namespaces change
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -164,7 +164,7 @@ func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
 	return nil
 }
 
-func (tm *TrafficManager) watchAgents(ctx context.Context, opts []grpc.CallOption) error {
+func (tm *session) watchAgents(ctx context.Context, opts []grpc.CallOption) error {
 	stream, err := tm.managerClient.WatchAgents(ctx, tm.session(), opts...)
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func (tm *TrafficManager) watchAgents(ctx context.Context, opts []grpc.CallOptio
 	return nil
 }
 
-func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
+func (tm *session) agentInfoWatcher(ctx context.Context) error {
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
 		if err := tm.watchAgentsNS(ctx); err != nil {
@@ -197,7 +197,7 @@ func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 }
 
 // Deprecated.
-func (tm *TrafficManager) addAgent(
+func (tm *session) addAgent(
 	c context.Context,
 	svcProps *serviceProps,
 	agentImageName string,
@@ -235,7 +235,7 @@ func (tm *TrafficManager) addAgent(
 }
 
 // Deprecated.
-func (tm *TrafficManager) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
+func (tm *session) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
 	fullName := name + "." + namespace
 	waitCh := make(chan *manager.AgentInfo)
 	tm.agentWaiters.Store(fullName, waitCh)

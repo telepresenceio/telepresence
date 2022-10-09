@@ -442,10 +442,10 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 					switch gErr.Code() {
 					case codes.Canceled:
 						// The connector, which is routing this connection, cancelled it, which means that the client
-						// Session is dead.
+						// session is dead.
 						return
 					case codes.Unavailable:
-						// Abrupt shutdown. This is nothing that the Session should survive
+						// Abrupt shutdown. This is nothing that the session should survive
 						dlog.Errorf(ctx, "WatchClusterInfo recv: Unavailable: %v", gErr.Message())
 					}
 				} else {

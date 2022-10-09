@@ -129,7 +129,7 @@ func (c *traceCollector) rootdTraces(ctx context.Context, tCh chan<- []byte) err
 	return c.tracesFor(ctx, dConn, tCh, "root-daemon")
 }
 
-func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *TrafficManager, tCh chan<- []byte, remotePort string) error {
+func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session, tCh chan<- []byte, remotePort string) error {
 	span := trace.SpanFromContext(ctx)
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
 	if err != nil {
@@ -157,7 +157,7 @@ func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *Traffic
 	return c.tracesFor(ctx, conn, tCh, "traffic-manager")
 }
 
-func (c *traceCollector) agentTraces(ctx context.Context, sess *TrafficManager, tCh chan<- []byte, remotePort string) error {
+func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh chan<- []byte, remotePort string) error {
 	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
 	if err != nil {
 		return err
@@ -202,11 +202,11 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *TrafficManager, 
 	}, nil)
 }
 
-func (tm *TrafficManager) GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result {
+func (tm *session) GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result {
 	return errcat.ToResult((&traceCollector{tr}).gatherTraces(ctx, tm))
 }
 
-func (c *traceCollector) gatherTraces(ctx context.Context, sess *TrafficManager) error {
+func (c *traceCollector) gatherTraces(ctx context.Context, sess *session) error {
 	// Since we want this trace to show up in the gather traces output file, we'll declare it as a root trace and end it right after awaiting the wait group
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "gather-traces", trace.WithNewRoot())
 	port := strconv.FormatUint(uint64(c.RemotePort), 10)
