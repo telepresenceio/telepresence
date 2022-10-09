@@ -47,7 +47,7 @@ func help() string {
 connections and network state.
 
 Launch the Telepresence ` + titleName + `:
-    sudo telepresence service
+    sudo telepresence Service
 
 Examine the ` + titleName + `'s log output in
     ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
@@ -60,8 +60,8 @@ type sessionReply struct {
 	err    error
 }
 
-// service represents the state of the Telepresence Daemon.
-type service struct {
+// Service represents the state of the Telepresence Daemon.
+type Service struct {
 	rpc.UnsafeDaemonServer
 	quit            context.CancelFunc
 	connectCh       chan *rpc.OutboundInfo
@@ -70,7 +70,7 @@ type service struct {
 	sessionCancel   context.CancelFunc
 	sessionContext  context.Context
 	sessionQuitting int32 // atomic boolean. True if non-zero.
-	session         *session
+	session         *Session
 	timedLogLevel   log.TimedLevel
 
 	scout *scout.Reporter
@@ -90,68 +90,68 @@ func Command() *cobra.Command {
 	}
 }
 
-func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+func (s *Service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	}, nil
 }
 
-func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
-	d.sessionLock.RLock()
-	defer d.sessionLock.RUnlock()
+func (s *Service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
+	s.sessionLock.RLock()
+	defer s.sessionLock.RUnlock()
 	r := &rpc.DaemonStatus{
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
 		},
 	}
-	if d.session != nil {
-		r.OutboundConfig = d.session.getInfo()
+	if s.session != nil {
+		r.OutboundConfig = s.session.getInfo()
 	}
 	return r, nil
 }
 
-func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
-	d.quit()
-	d.sessionLock.Lock()
-	defer d.sessionLock.Unlock()
-	d.session = nil
+	s.quit()
+	s.sessionLock.Lock()
+	defer s.sessionLock.Unlock()
+	s.session = nil
 	return &empty.Empty{}, nil
 }
 
-func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	err := d.withSession(func(ctx context.Context, session *session) error {
+func (s *Service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
+	err := s.WithSession(func(ctx context.Context, session *Session) error {
 		session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
 		return nil
 	})
 	return &empty.Empty{}, err
 }
 
-func (d *service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.DaemonStatus, error) {
+func (s *Service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.DaemonStatus, error) {
 	dlog.Debug(ctx, "Received gRPC Connect")
 	select {
 	case <-ctx.Done():
 		return nil, status.Error(codes.Canceled, ctx.Err().Error())
-	case d.connectCh <- info:
+	case s.connectCh <- info:
 	}
 	select {
 	case <-ctx.Done():
 		return nil, status.Error(codes.Canceled, ctx.Err().Error())
-	case reply := <-d.connectReplyCh:
+	case reply := <-s.connectReplyCh:
 		return reply.status, reply.err
 	}
 }
 
-func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Disconnect")
-	d.cancelSession()
+	s.cancelSession()
 	return &empty.Empty{}, nil
 }
 
-func (d *service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Empty, error) {
-	err := d.withSession(func(ctx context.Context, session *session) error {
+func (s *Service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Empty, error) {
+	err := s.WithSession(func(ctx context.Context, session *Session) error {
 		if err, ok := <-session.networkReady(ctx); ok {
 			return status.Error(codes.Unavailable, err.Error())
 		}
@@ -160,37 +160,37 @@ func (d *service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Em
 	return &empty.Empty{}, err
 }
 
-func (d *service) cancelSession() {
-	if !atomic.CompareAndSwapInt32(&d.sessionQuitting, 0, 1) {
+func (s *Service) cancelSession() {
+	if !atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
 		return
 	}
-	d.sessionLock.RLock()
-	d.sessionCancel()
-	d.sessionLock.RUnlock()
+	s.sessionLock.RLock()
+	s.sessionCancel()
+	s.sessionLock.RUnlock()
 
-	d.sessionLock.Lock()
-	d.session = nil
-	d.sessionCancel()
-	atomic.StoreInt32(&d.sessionQuitting, 0)
-	d.sessionLock.Unlock()
+	s.sessionLock.Lock()
+	s.session = nil
+	s.sessionCancel()
+	atomic.StoreInt32(&s.sessionQuitting, 0)
+	s.sessionLock.Unlock()
 }
 
-func (d *service) withSession(f func(context.Context, *session) error) error {
-	if atomic.LoadInt32(&d.sessionQuitting) != 0 {
-		return status.Error(codes.Canceled, "session cancelled")
+func (s *Service) WithSession(f func(context.Context, *Session) error) error {
+	if atomic.LoadInt32(&s.sessionQuitting) != 0 {
+		return status.Error(codes.Canceled, "Session cancelled")
 	}
-	d.sessionLock.RLock()
-	defer d.sessionLock.RUnlock()
-	if d.session == nil {
-		return status.Error(codes.Unavailable, "no active session")
+	s.sessionLock.RLock()
+	defer s.sessionLock.RUnlock()
+	if s.session == nil {
+		return status.Error(codes.Unavailable, "no active Session")
 	}
-	return f(d.sessionContext, d.session)
+	return f(s.sessionContext, s.session)
 }
 
-func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
+func (s *Service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}
-	err := d.withSession(func(ctx context.Context, session *session) error {
+	err := s.WithSession(func(ctx context.Context, session *Session) error {
 		// The manager can sometimes send the different subnets in different Sends,
 		// but after 5 seconds of listening to it, we should expect to have everything
 		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
@@ -219,28 +219,28 @@ func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.C
 	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
 }
 
-func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
+func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
 	duration := time.Duration(0)
 	if request.Duration != nil {
 		duration = request.Duration.AsDuration()
 	}
-	return &empty.Empty{}, logging.SetAndStoreTimedLevel(ctx, d.timedLogLevel, request.LogLevel, duration, ProcessName)
+	return &empty.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, ProcessName)
 }
 
-func (d *service) configReload(c context.Context) error {
+func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(c context.Context) error {
 		return logging.ReloadDaemonConfig(c, true)
 	})
 }
 
 // manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
-// a session and writes a reply to the connectErrCh. The session is then started if it was
+// a Session and writes a reply to the connectErrCh. The Session is then started if it was
 // successfully created.
-func (d *service) manageSessions(c context.Context) error {
+func (s *Service) manageSessions(c context.Context) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
-	c, d.quit = context.WithCancel(c)
+	c, s.quit = context.WithCancel(c)
 nextSession:
 	for {
 		// Wait for a connection request
@@ -248,15 +248,15 @@ nextSession:
 		select {
 		case <-c.Done():
 			break nextSession
-		case oi = <-d.connectCh:
+		case oi = <-s.connectCh:
 		}
 
-		var session *session
+		var session *Session
 		reply := sessionReply{}
 
-		d.sessionLock.Lock() // Locked during creation
-		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
-			// Respond by setting the session and returning the error (or nil
+		s.sessionLock.Lock() // Locked during creation
+		if c.Err() == nil {  // If by the time we've got the Session lock we're cancelled, then don't create the Session and just leave by way of the select below
+			// Respond by setting the Session and returning the error (or nil
 			// if everything is ok)
 			reply.status = &rpc.DaemonStatus{
 				Version: &common.VersionInfo{
@@ -264,48 +264,48 @@ nextSession:
 					Version:    client.Version(),
 				},
 			}
-			if d.session != nil {
-				reply.status.OutboundConfig = d.session.getInfo()
+			if s.session != nil {
+				reply.status.OutboundConfig = s.session.getInfo()
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
-				session, reply.err = newSession(sCtx, d.scout, oi)
+				session, reply.err = newSession(sCtx, s.scout, oi)
 				if reply.err == nil {
-					d.session = session
-					d.sessionContext = sCtx
-					d.sessionCancel = sCancel
-					reply.status.OutboundConfig = d.session.getInfo()
+					s.session = session
+					s.sessionContext = sCtx
+					s.sessionCancel = sCancel
+					reply.status.OutboundConfig = s.session.getInfo()
 				} else {
 					sCancel()
 				}
 			}
 		}
-		d.sessionLock.Unlock()
+		s.sessionLock.Unlock()
 
 		select {
 		case <-c.Done():
 			break nextSession
-		case d.connectReplyCh <- reply:
+		case s.connectReplyCh <- reply:
 		default:
 			// Nobody left to read the response? That's fine really. Just means that
-			// whoever wanted to start the session terminated early.
-			d.cancelSession()
+			// whoever wanted to start the Session terminated early.
+			s.cancelSession()
 			continue
 		}
 		if reply.err != nil {
 			continue
 		}
 
-		// Run the session asynchronously. We must be able to respond to connect (with getInfo) while
-		// the session is running. The d.session.cancel is called from Disconnect
+		// Run the Session asynchronously. We must be able to respond to connect (with getInfo) while
+		// the Session is running. The d.Session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {
 			defer func() {
-				d.sessionLock.Lock()
-				d.session = nil
-				d.sessionLock.Unlock()
+				s.sessionLock.Lock()
+				s.session = nil
+				s.sessionLock.Unlock()
 				wg.Done()
 			}()
-			if err := d.session.run(d.sessionContext); err != nil {
+			if err := s.session.run(s.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}
 		}()
@@ -314,7 +314,7 @@ nextSession:
 	return nil
 }
 
-func (d *service) serveGrpc(c context.Context, l net.Listener, tracer common.TracingServer) error {
+func (s *Service) serveGrpc(c context.Context, l net.Listener, tracer common.TracingServer) error {
 	defer func() {
 		// Error recovery.
 		if perr := derror.PanicToError(recover()); perr != nil {
@@ -333,7 +333,7 @@ func (d *service) serveGrpc(c context.Context, l net.Listener, tracer common.Tra
 		}
 	}
 	svc := grpc.NewServer(opts...)
-	rpc.RegisterDaemonServer(svc, d)
+	rpc.RegisterDaemonServer(svc, s)
 	common.RegisterTracingServer(svc, tracer)
 
 	sc := &dhttp.ServerConfig{
@@ -397,7 +397,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 	}()
 	dlog.Debug(c, "Listener opened")
 
-	d := &service{
+	d := &Service{
 		scout:          scout.NewReporter(c, "daemon"),
 		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
 		connectCh:      make(chan *rpc.OutboundInfo),
@@ -416,7 +416,7 @@ func run(c context.Context, loggingDir, configDir string) error {
 
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
-	g.Go("session", d.manageSessions)
+	g.Go("Session", d.manageSessions)
 	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener, tracer) })
 	g.Go("metriton", d.scout.Run)
 	err = g.Wait()
