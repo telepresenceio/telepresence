@@ -1,4 +1,4 @@
-package userd
+package daemon
 
 import (
 	"context"

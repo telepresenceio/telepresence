@@ -18,7 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	user_daemon "github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 )
 
 const processName = "pod-daemon"
@@ -133,7 +133,7 @@ func main(ctx context.Context, args *Args) error {
 	ctx = client.WithEnv(ctx, env)
 
 	scoutReporter := scout.NewReporter(ctx, processName)
-	userdCoreImpl := userd.GetPoddService(scoutReporter, *cfg)
+	userdCoreImpl := user_daemon.GetPoddService(scoutReporter, *cfg)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
