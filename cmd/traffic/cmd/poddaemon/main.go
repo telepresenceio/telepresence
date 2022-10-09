@@ -193,7 +193,7 @@ func main(ctx context.Context, args *Args) error {
 
 		// Watch the intercept so that we can report errors.
 		var prevSummary string
-		return userdCoreImpl.ManagerProxy.WatchIntercepts(session, &interceptWatcher{
+		return userdCoreImpl.GetManagerProxy().WatchIntercepts(session, &interceptWatcher{
 			ctx: ctx,
 			handler: func(snapshot *rpc_manager.InterceptInfoSnapshot) error {
 				switch len(snapshot.Intercepts) {

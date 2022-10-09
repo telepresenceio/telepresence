@@ -231,8 +231,7 @@ func (tm *TrafficManager) addAgent(
 		}
 	}
 	dlog.Infof(c, "Agent found or created for %s %s.%s", kind, agentName, namespace)
-	result := svcProps.InterceptResult()
-	return ai.Environment, result
+	return ai.Environment, svcProps.InterceptResult()
 }
 
 // Deprecated.

@@ -1,4 +1,4 @@
-package trafficmgr
+package daemon
 
 import (
 	"context"
@@ -25,19 +25,9 @@ type mgrProxy struct {
 	managerrpc.UnsafeManagerServer
 }
 
-type ManagerProxy interface {
-	managerrpc.ManagerServer
+var _ managerrpc.ManagerServer = &mgrProxy{}
 
-	// SetClient replaces the client of this proxy
-	SetClient(client managerrpc.ManagerClient, callOptions ...grpc.CallOption)
-}
-
-// NewManagerProxy returns a rpc.ManagerServer that just proxies all requests through the given rpc.ManagerClient.
-func NewManagerProxy() ManagerProxy {
-	return &mgrProxy{}
-}
-
-func (p *mgrProxy) SetClient(client managerrpc.ManagerClient, callOptions ...grpc.CallOption) {
+func (p *mgrProxy) setClient(client managerrpc.ManagerClient, callOptions ...grpc.CallOption) {
 	p.Lock()
 	p.clientX = client
 	p.callOptionsX = callOptions

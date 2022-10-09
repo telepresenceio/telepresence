@@ -53,7 +53,7 @@ to troubleshoot problems.
 type Service struct {
 	rpc.UnsafeConnectorServer
 	svc           *grpc.Server
-	ManagerProxy      trafficmgr.ManagerProxy
+	managerProxy  *mgrProxy
 	procName      string
 	timedLogLevel log.TimedLevel
 	ucn           int64
@@ -74,7 +74,11 @@ type Service struct {
 }
 
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
-	s.ManagerProxy.SetClient(managerClient, callOptions...)
+	s.managerProxy.setClient(managerClient, callOptions...)
+}
+
+func (s *Service) GetManagerProxy() manager.ManagerServer {
+	return s.managerProxy
 }
 
 // Command returns the CLI sub-command for "connector-foreground".
@@ -207,7 +211,7 @@ func GetPoddService(sc *scout.Reporter, cfg client.Config) Service {
 		scout:           sc,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
-		ManagerProxy:    trafficmgr.NewManagerProxy(),
+		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 }
@@ -257,7 +261,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		scout:           sr,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
-		ManagerProxy:    trafficmgr.NewManagerProxy(),
+		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
@@ -292,7 +296,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		}
 		s.svc = grpc.NewServer(opts...)
 		rpc.RegisterConnectorServer(s.svc, s)
-		manager.RegisterManagerServer(s.svc, s.ManagerProxy)
+		manager.RegisterManagerServer(s.svc, s.managerProxy)
 		common.RegisterTracingServer(s.svc, tracer)
 
 		sc := &dhttp.ServerConfig{Handler: s.svc}
