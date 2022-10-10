@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/textproto"
 	"strings"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 // The Request matcher uses a Value matcher and a Headers matcher to match the path and headers of a http request.
@@ -87,9 +89,7 @@ func (r *request) Map() map[string]string {
 		case rxValue:
 			pm[":path-regex:"] = p.String()
 		}
-		for k, v := range m {
-			pm[k] = v
-		}
+		maps.Merge(pm, m)
 		m = pm
 	}
 	return m

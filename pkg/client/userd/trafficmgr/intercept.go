@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
@@ -328,18 +328,7 @@ func (tm *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podIn
 func (tm *session) getCurrentIntercepts() []*intercept {
 	// Copy the current snapshot
 	tm.currentInterceptsLock.Lock()
-	sz := len(tm.currentIntercepts)
-	intercepts := make([]*intercept, sz)
-	ids := make([]string, sz)
-	idx := 0
-	for id := range tm.currentIntercepts {
-		ids[idx] = id
-		idx++
-	}
-	sort.Strings(ids)
-	for idx, id := range ids {
-		intercepts[idx] = tm.currentIntercepts[id]
-	}
+	intercepts := maps.ToSortedSlice(tm.currentIntercepts)
 	tm.currentInterceptsLock.Unlock()
 	return intercepts
 }

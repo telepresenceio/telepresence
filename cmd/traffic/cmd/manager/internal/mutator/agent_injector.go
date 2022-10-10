@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -510,11 +511,7 @@ func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patch
 		op = "add"
 		am = make(map[string]string)
 	} else {
-		cm := make(map[string]string, len(am))
-		for k, v := range am {
-			cm[k] = v
-		}
-		am = cm
+		am = maps.Copy(am)
 	}
 
 	if _, ok := pod.Annotations[agentconfig.InjectAnnotation]; !ok {

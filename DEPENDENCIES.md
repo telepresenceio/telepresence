@@ -144,6 +144,7 @@ following Free and Open Source software:
     go.opentelemetry.io/proto/otlp                                               v0.19.0                                   Apache License 2.0
     go.starlark.net                                                              v0.0.0-20220817180228-f738f5508c12        3-clause BSD license
     golang.org/x/crypto                                                          v0.0.0-20220924013350-4ba4fb4dd9e7        3-clause BSD license
+    golang.org/x/exp                                                             v0.0.0-20221006183845-316c7553db56        3-clause BSD license
     golang.org/x/mod                                                             v0.6.0-dev.0.20220419223038-86c51ed26bb4  3-clause BSD license
     golang.org/x/net                                                             v0.0.0-20220923203811-8be639271d50        3-clause BSD license
     golang.org/x/oauth2                                                          v0.0.0-20220909003341-f21342109be1        3-clause BSD license

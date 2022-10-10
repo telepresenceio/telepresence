@@ -188,4 +188,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
 
+require golang.org/x/exp v0.0.0-20221006183845-316c7553db56
+
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
