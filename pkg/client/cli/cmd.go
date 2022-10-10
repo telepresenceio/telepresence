@@ -3,17 +3,22 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
+	"github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
-const help = `Telepresence can connect to a cluster and route all outbound traffic from your
+const (
+	help = `Telepresence can connect to a cluster and route all outbound traffic from your
 workstation to that cluster so that software running locally can communicate
 as if it executed remotely, inside the cluster. This is achieved using the
 command:
@@ -30,6 +35,110 @@ the processes runs with superuser privileges because it modifies the network.
 Unless the daemons are already started, an attempt will be made to start them.
 This will involve a call to sudo unless this command is run as root (not
 recommended) which in turn may result in a password prompt.`
+
+	usage = `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}
+
+Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+{{flags . | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}
+{{- if hasKubeFlags .}}
+
+Kubernetes flags:
+{{kubeFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}
+
+Global flags:
+{{globalFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.
+
+For complete documentation and quick-start guides, check out our website at https://www.telepresence.io{{end}}
+`
+)
+
+func flagEqual(a, b *pflag.Flag) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Name == b.Name && a.Usage == b.Usage && a.Hidden == b.Hidden
+}
+
+func localFlags(cmd *cobra.Command, exclude ...*pflag.FlagSet) *pflag.FlagSet {
+	ngFlags := pflag.NewFlagSet("local", pflag.ContinueOnError)
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		for _, ex := range exclude {
+			if flagEqual(flag, ex.Lookup(flag.Name)) {
+				return
+			}
+		}
+		ngFlags.AddFlag(flag)
+	})
+	return ngFlags
+}
+
+func addUsageTemplate(cmd *cobra.Command) {
+	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
+	kubeConfig := genericclioptions.NewConfigFlags(false)
+	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.AddFlags(kubeFlags)
+
+	globalFlags := GlobalFlags()
+	cobra.AddTemplateFunc("globalFlags", func() *pflag.FlagSet { return globalFlags })
+	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet { return localFlags(cmd, kubeFlags, globalFlags) })
+	cobra.AddTemplateFunc("hasKubeFlags", func(cmd *cobra.Command) bool {
+		yep := true
+		flags := cmd.Flags()
+		kubeFlags.VisitAll(func(flag *pflag.Flag) {
+			if yep && !flagEqual(flag, flags.Lookup(flag.Name)) {
+				yep = false
+			}
+		})
+		return yep
+	})
+	cobra.AddTemplateFunc("kubeFlags", func() *pflag.FlagSet { return kubeFlags })
+	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
+		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
+		// adjusted
+		//  1. to take a pflag.FlagSet instead of a cobra.Command, so that we can have flag groups, and
+		//  2. to correct for the ways that Docker upsets me.
+
+		// Obey COLUMNS if the shell or user sets it.  (Docker doesn't do this.)
+		cols, err := strconv.Atoi(os.Getenv("COLUMNS"))
+		if err != nil {
+			// Try to detect the size of the stdout file descriptor.  (Docker checks stdin, not stdout.)
+			if ws, err := term.GetWinsize(1); err != nil {
+				// If stdout is a terminal, but we were unable to get its size (I'm not sure how that can
+				// happen), then fall back to assuming 80.  If stdout isn't a terminal, then we leave cols
+				// as 0, meaning "don't wrap it".  (Docker wraps it even if stdout isn't a terminal.)
+				if term.IsTerminal(1) {
+					cols = 80
+				}
+			} else {
+				cols = int(ws.Width)
+			}
+		}
+		return flags.FlagUsagesWrapped(cols)
+	})
+
+	// Set a usage template that is derived from the default but replaces the "Available Commands"
+	// section with the commandGroups() from the given command
+	cmd.SetUsageTemplate(usage)
+}
 
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
 // error message.
@@ -65,6 +174,24 @@ func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return OnlySubcommands(cmd, args)
+}
+
+// AddSubCommands adds subcommands to the given command, including the default help, the commands in the
+// CommandGroups found in the given command's context, and the completion command. It also replaces
+// the standard usage template with a custom template.
+func AddSubCommands(cmd *cobra.Command) {
+	commands := cliutil.GetSubCommands(cmd)
+	for _, command := range commands {
+		if ac := command.Args; ac != nil {
+			// Ensure that args errors don't advice the user to look in log files
+			command.Args = argsCheck(ac)
+		}
+	}
+	cmd.AddCommand(commands...)
+	cmd.PersistentFlags().AddFlagSet(GlobalFlags())
+	addCompletionCommand(cmd)
+	cmd.InitDefaultHelpCmd()
+	addUsageTemplate(cmd)
 }
 
 // RunSubcommands is for use as a cobra.Command.RunE for commands that don't do anything themselves
@@ -105,32 +232,16 @@ func Command(ctx context.Context) *cobra.Command {
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
 
-	ctx = cliutil.AddCommandGroups(ctx, cliutil.CommandGroups{
-		"Session":   []*cobra.Command{connectCommand(), statusCommand(), quitCommand()},
-		"Workloads": []*cobra.Command{listCommand(), intercept.LeaveCommand(), intercept.Command(ctx)},
-		"Install":   []*cobra.Command{helmCommand(), uninstallCommand()},
-		"Debug":     []*cobra.Command{loglevelCommand(), gatherLogsCommand()},
-		"Trace":     []*cobra.Command{GatherTracesCommand(), PushTracesCommand()},
-		"Other":     []*cobra.Command{versionCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
+	ctx = cliutil.AddSubCommands(ctx, []*cobra.Command{
+		connectCommand(), statusCommand(), quitCommand(),
+		listCommand(), intercept.LeaveCommand(), intercept.Command(ctx),
+		helmCommand(), uninstallCommand(),
+		loglevelCommand(), gatherLogsCommand(),
+		GatherTracesCommand(), PushTracesCommand(),
+		versionCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand(),
 	})
 	rootCmd.SetContext(ctx)
-	rootCmd.InitDefaultHelpCmd()
-
-	AddCommandGroups(rootCmd)
-	for _, commands := range cliutil.GetCommandGroups(rootCmd) {
-		for _, command := range commands {
-			if ac := command.Args; ac != nil {
-				// Ensure that args errors don't advice the user to look in log files
-				command.Args = argsCheck(ac)
-			}
-		}
-	}
-	for _, group := range GlobalFlagGroups() {
-		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
-	}
-
-	addCompletionCommand(rootCmd)
-
+	AddSubCommands(rootCmd)
 	return rootCmd
 }
 
@@ -145,20 +256,15 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 	}
 }
 
-func GlobalFlagGroups() []cliutil.FlagGroup {
-	return []cliutil.FlagGroup{{
-		Name: "other Telepresence flags",
-		Flags: func() *pflag.FlagSet {
-			flags := pflag.NewFlagSet("", 0)
-			flags.Bool(
-				"no-report", false,
-				"turn off anonymous crash reports and log submission on failure",
-			)
-			flags.String(
-				"output", "default",
-				"set the output format, supported values are 'json' and 'default'",
-			)
-			return flags
-		}(),
-	}}
+func GlobalFlags() *pflag.FlagSet {
+	flags := pflag.NewFlagSet("", 0)
+	flags.Bool(
+		"no-report", false,
+		"turn off anonymous crash reports and log submission on failure",
+	)
+	flags.String(
+		"output", "default",
+		"set the output format, supported values are 'json' and 'default'",
+	)
+	return flags
 }
