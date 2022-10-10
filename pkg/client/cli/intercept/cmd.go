@@ -100,7 +100,7 @@ func (a *Args) AddFlags(ctx context.Context, flags *pflag.FlagSet) {
 	flags.StringVarP(&a.Namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 }
 
-func (a *Args) Run(cmd *cobra.Command, positional []string) error {
+func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
 	if len(positional) > 1 && cmd.Flags().ArgsLenAtDash() != 1 {
 		return fmt.Errorf("commands to be run with intercept must come after options")
 	}
@@ -136,7 +136,11 @@ func (a *Args) Run(cmd *cobra.Command, positional []string) error {
 			return err
 		}
 	}
-	if err := cliutil.InitCommand(cmd); err != nil {
+	return cliutil.InitCommand(cmd)
+}
+
+func (a *Args) Run(cmd *cobra.Command, positional []string) error {
+	if err := a.Validate(cmd, positional); err != nil {
 		return err
 	}
 	return NewState(cmd, a).Intercept()
