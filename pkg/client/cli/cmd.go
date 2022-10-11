@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -180,7 +180,7 @@ func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 // CommandGroups found in the given command's context, and the completion command. It also replaces
 // the standard usage template with a custom template.
 func AddSubCommands(cmd *cobra.Command) {
-	commands := cliutil.GetSubCommands(cmd)
+	commands := util.GetSubCommands(cmd)
 	for _, command := range commands {
 		if ac := command.Args; ac != nil {
 			// Ensure that args errors don't advice the user to look in log files
@@ -232,7 +232,7 @@ func Command(ctx context.Context) *cobra.Command {
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
 
-	ctx = cliutil.AddSubCommands(ctx, []*cobra.Command{
+	ctx = util.AddSubCommands(ctx, []*cobra.Command{
 		connectCommand(), statusCommand(), quitCommand(),
 		listCommand(), intercept.LeaveCommand(), intercept.Command(ctx),
 		helmCommand(), uninstallCommand(),

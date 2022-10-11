@@ -13,7 +13,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
@@ -83,7 +83,7 @@ func statusCommand() *cobra.Command {
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
 func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
-	if err := cliutil.InitCommand(cmd); err != nil {
+	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
 	s.out = cmd.OutOrStdout()
@@ -104,7 +104,7 @@ func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
 func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *connectorStatus, error) {
 	cs := &connectorStatus{}
 	ds := &daemonStatus{}
-	userD := cliutil.GetUserDaemon(ctx)
+	userD := util.GetUserDaemon(ctx)
 	if userD == nil {
 		return ds, cs, nil
 	}

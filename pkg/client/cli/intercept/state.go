@@ -24,7 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -98,7 +98,7 @@ func (s *State) Intercept() error {
 
 		// Send info about the pid and intercept id to the traffic-manager so that it kills
 		// the process if it receives a leave of quit call.
-		if _, err = cliutil.GetUserDaemon(ctx).AddInterceptor(ctx, &ior); err != nil {
+		if _, err = util.GetUserDaemon(ctx).AddInterceptor(ctx, &ior); err != nil {
 			if grpcStatus.Code(err) == grpcCodes.Canceled {
 				// Deactivation was caused by a disconnect
 				err = nil
@@ -115,7 +115,7 @@ func (s *State) Intercept() error {
 }
 
 func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
-	ud := cliutil.GetUserDaemon(ctx)
+	ud := util.GetUserDaemon(ctx)
 	status, err := ud.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
@@ -197,12 +197,12 @@ func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
 	if doMount || err != nil {
 		volumeMountProblem = s.CheckMountCapability(ctx)
 	}
-	fmt.Fprintln(s.Cmd.OutOrStdout(), cliutil.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
+	fmt.Fprintln(s.Cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
 }
 
 func (s *State) DeactivateState(ctx context.Context) error {
-	r, err := cliutil.GetUserDaemon(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(s.Name)})
+	r, err := util.GetUserDaemon(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(s.Name)})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
@@ -211,7 +211,7 @@ func (s *State) DeactivateState(ctx context.Context) error {
 }
 
 func (s *State) CheckMountCapability(ctx context.Context) error {
-	r, err := cliutil.GetUserDaemon(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
+	r, err := util.GetUserDaemon(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
 	if err != nil {
 		return err
 	}

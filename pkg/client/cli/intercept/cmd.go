@@ -15,7 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -52,8 +52,8 @@ func Command(ctx context.Context) *cobra.Command {
 		SilenceErrors:     true,
 		RunE:              a.Run,
 		ValidArgsFunction: a.ValidArgs,
-		PreRunE:           cliutil.UpdateCheckIfDue,
-		PostRunE:          cliutil.RaiseCloudMessage,
+		PreRunE:           util.UpdateCheckIfDue,
+		PostRunE:          util.RaiseCloudMessage,
 	}
 	a.AddFlags(ctx, cmd.Flags())
 	if err := cmd.RegisterFlagCompletionFunc("namespace", a.AutocompleteNamespace); err != nil {
@@ -136,7 +136,7 @@ func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
 			return err
 		}
 	}
-	return cliutil.InitCommand(cmd)
+	return util.InitCommand(cmd)
 }
 
 func (a *Args) Run(cmd *cobra.Command, positional []string) error {
@@ -147,11 +147,11 @@ func (a *Args) Run(cmd *cobra.Command, positional []string) error {
 }
 
 func (a *Args) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if err := cliutil.InitCommand(cmd); err != nil {
+	if err := util.InitCommand(cmd); err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
 	ctx := cmd.Context()
-	ud := cliutil.GetUserDaemon(ctx)
+	ud := util.GetUserDaemon(ctx)
 	rs, err := ud.GetNamespaces(ctx, &connector.GetNamespacesRequest{
 		ForClientAccess: true,
 		Prefix:          toComplete,
@@ -172,7 +172,7 @@ func (a *Args) ValidateDockerArgs() error {
 }
 
 func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if err := cliutil.InitCommand(cmd); err != nil {
+	if err := util.InitCommand(cmd); err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
 	ctx := cmd.Context()
@@ -200,7 +200,7 @@ func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) (
 		Filter:    connector.ListRequest_INTERCEPTABLE,
 		Namespace: namespace,
 	}
-	cs := cliutil.GetUserDaemon(ctx)
+	cs := util.GetUserDaemon(ctx)
 	r, err := cs.List(ctx, &req)
 	if err != nil {
 		dlog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
@@ -236,7 +236,7 @@ func (a *Args) GetMountPoint(ctx context.Context) (string, bool, error) {
 		if err != nil {
 			return "", false, err
 		}
-		mountPoint, err = cliutil.PrepareMount(cwd, mountPoint)
+		mountPoint, err = util.PrepareMount(cwd, mountPoint)
 	}
 
 	return mountPoint, doMount, err

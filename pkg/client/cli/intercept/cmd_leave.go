@@ -10,7 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
 func LeaveCommand() *cobra.Command {
@@ -23,7 +23,7 @@ func LeaveCommand() *cobra.Command {
 			ann.Session: ann.Required,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cliutil.InitCommand(cmd); err != nil {
+			if err := util.InitCommand(cmd); err != nil {
 				return err
 			}
 			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
@@ -33,11 +33,11 @@ func LeaveCommand() *cobra.Command {
 			if len(args) != 0 {
 				return nil, shellCompDir
 			}
-			if err := cliutil.InitCommand(cmd); err != nil {
+			if err := util.InitCommand(cmd); err != nil {
 				return nil, shellCompDir | cobra.ShellCompDirectiveError
 			}
 			ctx := cmd.Context()
-			userD := cliutil.GetUserDaemon(ctx)
+			userD := util.GetUserDaemon(ctx)
 			resp, err := userD.List(ctx, &connector.ListRequest{Filter: connector.ListRequest_INTERCEPTS})
 			if err != nil {
 				return nil, shellCompDir | cobra.ShellCompDirectiveError
@@ -61,6 +61,6 @@ func LeaveCommand() *cobra.Command {
 }
 
 func removeIntercept(ctx context.Context, name string) error {
-	userD := cliutil.GetUserDaemon(ctx)
+	userD := util.GetUserDaemon(ctx)
 	return Result(userD.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name}))
 }

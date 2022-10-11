@@ -11,7 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
 func versionCommand() *cobra.Command {
@@ -20,7 +20,7 @@ func versionCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 
 		Short:   "Show version",
-		PreRunE: cliutil.ForcedUpdateCheck,
+		PreRunE: util.ForcedUpdateCheck,
 		RunE:    printVersion,
 		Annotations: map[string]string{
 			ann.RootDaemon: ann.Optional,
@@ -31,7 +31,7 @@ func versionCommand() *cobra.Command {
 
 // printVersion requests version info from the daemon and prints both client and daemon version.
 func printVersion(cmd *cobra.Command, _ []string) error {
-	if err := cliutil.InitCommand(cmd); err != nil {
+	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Client: %s\n",
@@ -42,7 +42,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	switch {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: %s (api v%d)\n", version.Version, version.ApiVersion)
-	case err == cliutil.ErrNoRootDaemon:
+	case err == util.ErrNoRootDaemon:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: not running\n")
 	default:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: error: %v\n", err)
@@ -52,7 +52,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	switch {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: %s (api v%d)\n", version.Version, version.ApiVersion)
-	case err == cliutil.ErrNoUserDaemon:
+	case err == util.ErrNoUserDaemon:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: not running\n")
 	default:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: error: %v\n", err)
@@ -65,12 +65,12 @@ func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 		defer conn.Close()
 		return daemon.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}
-	return nil, cliutil.ErrNoRootDaemon
+	return nil, util.ErrNoRootDaemon
 }
 
 func connectorVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if userD := cliutil.GetUserDaemon(ctx); userD != nil {
+	if userD := util.GetUserDaemon(ctx); userD != nil {
 		return userD.Version(ctx, &empty.Empty{})
 	}
-	return nil, cliutil.ErrNoUserDaemon
+	return nil, util.ErrNoUserDaemon
 }

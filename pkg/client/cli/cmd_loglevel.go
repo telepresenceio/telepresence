@@ -13,7 +13,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -66,14 +66,14 @@ func loglevelCommand() *cobra.Command {
 }
 
 func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) error {
-	if err := cliutil.InitCommand(cmd); err != nil {
+	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
 	if lls.localOnly && lls.remoteOnly {
 		return errcat.User.New("the local-only and remote-only options are mutually exclusive")
 	}
 	ctx := cmd.Context()
-	userD := cliutil.GetUserDaemon(ctx)
+	userD := util.GetUserDaemon(ctx)
 	rq := &manager.LogLevelRequest{LogLevel: args[0], Duration: durationpb.New(lls.duration)}
 	if !lls.remoteOnly {
 		_, err := userD.SetLogLevel(ctx, rq)
@@ -83,7 +83,7 @@ func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) er
 	}
 
 	if !lls.localOnly {
-		err := cliutil.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
+		err := util.WithManager(ctx, func(ctx context.Context, managerClient manager.ManagerClient) error {
 			_, err := managerClient.SetLogLevel(ctx, rq)
 			return err
 		})

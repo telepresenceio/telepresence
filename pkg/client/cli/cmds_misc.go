@@ -14,7 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -67,17 +67,17 @@ func connectCommand() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request.KubeFlags = kubeFlagMap(kubeFlags)
-			cmd.SetContext(cliutil.WithConnectionRequest(cmd.Context(), request))
-			if err := cliutil.InitCommand(cmd); err != nil {
+			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
+			if err := util.InitCommand(cmd); err != nil {
 				return err
 			}
 			if len(args) == 0 {
 				return nil
 			}
 			ctx := cmd.Context()
-			if cliutil.GetSession(ctx).Started {
+			if util.GetSession(ctx).Started {
 				defer func() {
-					_ = cliutil.Disconnect(ctx, false)
+					_ = util.Disconnect(ctx, false)
 				}()
 			}
 			return proc.Run(ctx, nil, cmd, args[0], args[1:]...)
@@ -117,7 +117,7 @@ func quitCommand() *cobra.Command {
 		Short:       "Tell telepresence daemon to quit",
 		Annotations: map[string]string{ann.UserDaemon: ann.Optional},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := cliutil.InitCommand(cmd); err != nil {
+			if err := util.InitCommand(cmd); err != nil {
 				return err
 			}
 			if quitUserDaemon {
@@ -129,14 +129,14 @@ func quitCommand() *cobra.Command {
 				quitDaemons = true
 			}
 			ctx := cmd.Context()
-			if quitDaemons && cliutil.GetUserDaemon(ctx) == nil {
+			if quitDaemons && util.GetUserDaemon(ctx) == nil {
 				// User daemon isn't running. If the root daemon is running, we must
 				// kill it from here.
 				if conn, err := client.DialSocket(ctx, client.DaemonSocketName); err == nil {
 					_, _ = daemon.NewDaemonClient(conn).Quit(ctx, &empty.Empty{})
 				}
 			}
-			return cliutil.Disconnect(cmd.Context(), quitDaemons)
+			return util.Disconnect(cmd.Context(), quitDaemons)
 		},
 	}
 	flags := cmd.Flags()

@@ -9,7 +9,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
@@ -74,7 +74,7 @@ func helmUninstallCommand() *cobra.Command {
 }
 
 func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
-	if err := cliutil.InitCommand(cmd); err != nil {
+	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
 	ha.request.KubeFlags = kubeFlagMap(ha.kubeFlags)
@@ -88,17 +88,17 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 
 	// always disconnect to ensure that there are no running intercepts etc.
 	ctx := cmd.Context()
-	_ = cliutil.Disconnect(ctx, false)
+	_ = util.Disconnect(ctx, false)
 
 	doQuit := false
-	userD := cliutil.GetUserDaemon(ctx)
+	userD := util.GetUserDaemon(ctx)
 
 	request := &connector.HelmRequest{
 		Type:           ha.cmdType,
 		ValuePaths:     ha.values,
 		ConnectRequest: ha.request,
 	}
-	cliutil.AddKubeconfigEnv(request.ConnectRequest)
+	util.AddKubeconfigEnv(request.ConnectRequest)
 	resp, err := userD.Helm(ctx, request)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "\nTraffic Manager %s successfully\n", msg)
 	if err == nil && doQuit {
-		err = cliutil.Disconnect(cmd.Context(), true)
+		err = util.Disconnect(cmd.Context(), true)
 	}
 	return err
 }
