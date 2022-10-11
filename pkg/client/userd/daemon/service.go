@@ -52,7 +52,7 @@ to troubleshoot problems.
 // Service represents the long-running state of the Telepresence User Daemon.
 type Service struct {
 	rpc.UnsafeConnectorServer
-	svc           *grpc.Server
+	srv           *grpc.Server
 	managerProxy  *mgrProxy
 	procName      string
 	timedLogLevel log.TimedLevel
@@ -73,14 +73,21 @@ type Service struct {
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
 }
 
-func NewService(sr *scout.Reporter, cfg *client.Config) userd.Service {
-	return &Service{
+func NewService(_ context.Context, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
+	s := &Service{
+		srv:             srv,
 		scout:           sr,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
+	if srv != nil {
+		// The podd daemon never registers the gRPC servers
+		rpc.RegisterConnectorServer(srv, s)
+		manager.RegisterManagerServer(srv, s.managerProxy)
+	}
+	return s, nil
 }
 
 func (s *Service) As(ptr any) {
@@ -94,8 +101,8 @@ func (s *Service) As(ptr any) {
 	}
 }
 
-func (s *Service) GetServer() *Service {
-	return s
+func (s *Service) Reporter() *scout.Reporter {
+	return s.scout
 }
 
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
@@ -182,7 +189,7 @@ nextSession:
 		wg.Add(1)
 		go func(cr *rpc.ConnectRequest) {
 			defer wg.Done()
-			if err := s.session.Run(s.sessionContext); err != nil {
+			if err := userd.RunSession(s.sessionContext, session); err != nil {
 				if errors.Is(err, trafficmgr.ErrSessionExpired) {
 					// Session has expired. We need to cancel the owner session and reconnect
 					dlog.Info(c, "refreshing session")
@@ -268,12 +275,25 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	si := userd.GetNewServiceFunc(c)(sr, cfg)
+	opts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+	}
+	if !cfg.Grpc.MaxReceiveSize.IsZero() {
+		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+		}
+	}
+	si, err := userd.GetNewServiceFunc(c)(c, sr, cfg, grpc.NewServer(opts...))
+	if err != nil {
+		return err
+	}
 	var s *Service
 	si.As(&s)
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err
 	}
+	common.RegisterTracingServer(s.srv, tracer)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -292,21 +312,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	g.Go("server-grpc", func(c context.Context) (err error) {
-		opts := []grpc.ServerOption{
-			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
-			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
-		}
-		if !cfg.Grpc.MaxReceiveSize.IsZero() {
-			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
-			}
-		}
-		s.svc = grpc.NewServer(opts...)
-		rpc.RegisterConnectorServer(s.svc, s)
-		manager.RegisterManagerServer(s.svc, s.managerProxy)
-		common.RegisterTracingServer(s.svc, tracer)
-
-		sc := &dhttp.ServerConfig{Handler: s.svc}
+		sc := &dhttp.ServerConfig{Handler: s.srv}
 		dlog.Info(c, "gRPC server started")
 		if err = sc.Serve(c, grpcListener); err != nil && c.Err() != nil {
 			err = nil // Normal shutdown

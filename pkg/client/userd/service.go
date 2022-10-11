@@ -17,12 +17,14 @@ type Service interface {
 	// that to the pointer. It will panic if type is not implemented.
 	As(ptr any)
 
+	Reporter() *scout.Reporter
+
 	// SetManagerClient will assign the manager client that this Service will use when acting as
 	// a ManagerServer proxy
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 }
 
-type NewServiceFunc func(*scout.Reporter, *client.Config) Service
+type NewServiceFunc func(context.Context, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)
 
 type newServiceKey struct{}
 

@@ -133,7 +133,10 @@ func main(ctx context.Context, args *Args) error {
 	ctx = client.WithEnv(ctx, env)
 
 	scoutReporter := scout.NewReporter(ctx, processName)
-	userdService := user_daemon.NewService(scoutReporter, cfg)
+	userdService, err := user_daemon.NewService(ctx, scoutReporter, cfg, nil)
+	if err != nil {
+		return err
+	}
 	var userdCoreImpl *user_daemon.Service
 	userdService.As(&userdCoreImpl)
 

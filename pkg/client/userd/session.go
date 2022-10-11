@@ -8,6 +8,7 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 
+	"github.com/datawire/dlib/dgroup"
 	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -47,7 +48,6 @@ type Session interface {
 	Status(context.Context) *rpc.ConnectInfo
 	ClearIntercepts(context.Context) error
 	RemoveIntercept(context.Context, string) error
-	Run(context.Context) error
 	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.Result, error)
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
 	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
@@ -61,6 +61,10 @@ type Session interface {
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
 	GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result
+
+	Epilog(ctx context.Context)
+	Reporter() *scout.Reporter
+	StartServices(g *dgroup.Group)
 }
 
 type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest, Service, rpc2.FuseFTPClient) (context.Context, Session, *connector.ConnectInfo)
@@ -76,4 +80,20 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 		return f
 	}
 	panic("No User daemon Session creator has been registered")
+}
+
+// RunSession (1) starts up with ensuring that the manager is installed and running,
+// but then for most of its life
+//   - (2) calls manager.ArriveAsClient and then periodically calls manager.Remain
+//   - run the intercepts (manager.WatchIntercepts) and then
+//   - (3) listen on the appropriate local ports and forward them to the intercepted
+//     Services, and
+//   - (4) mount the appropriate remote volumes.
+func RunSession(c context.Context, s Session) error {
+	defer func() {
+		s.Epilog(c)
+	}()
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	s.StartServices(g)
+	return g.Wait()
 }

@@ -471,27 +471,22 @@ func (tm *session) updateDaemonNamespaces(c context.Context) {
 	dlog.Debug(c, "search paths posted successfully")
 }
 
-// Run (1) starts up with ensuring that the manager is installed and running,
-// but then for most of its life
-//   - (2) calls manager.ArriveAsClient and then periodically calls manager.Remain
-//   - run the intercepts (manager.WatchIntercepts) and then
-//   - (3) listen on the appropriate local ports and forward them to the intercepted
-//     Services, and
-//   - (4) mount the appropriate remote volumes.
-func (tm *session) Run(c context.Context) error {
-	defer func() {
-		if tm.rootDaemon != nil {
-			_, _ = tm.rootDaemon.Disconnect(c, &empty.Empty{})
-		}
-		defer dlog.Info(c, "-- Session ended")
-	}()
+func (tm *session) Epilog(ctx context.Context) {
+	if tm.rootDaemon != nil {
+		_, _ = tm.rootDaemon.Disconnect(ctx, &empty.Empty{})
+	}
+	defer dlog.Info(ctx, "-- Session ended")
+}
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+func (tm *session) StartServices(g *dgroup.Group) {
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.watchInterceptsHandler)
 	g.Go("agent-watcher", tm.agentInfoWatcher)
 	g.Go("dial-request-watcher", tm.dialRequestWatcher)
-	return g.Wait()
+}
+
+func (tm *session) Reporter() *scout.Reporter {
+	return tm.sr
 }
 
 func (tm *session) session() *manager.SessionInfo {
