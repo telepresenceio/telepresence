@@ -20,7 +20,7 @@ import (
 
 func TestNewInfo_GetClusterID(t *testing.T) {
 	env := managerutil.Env{
-		ManagedNamespaces: "ambassador test",
+		ManagedNamespaces: []string{"ambassador test"},
 		ManagerNamespace:  "test",
 	}
 

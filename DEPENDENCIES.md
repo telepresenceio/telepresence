@@ -31,6 +31,7 @@ following Free and Open Source software:
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
+    github.com/datawire/envconfig                                                v0.0.0-20221005101338-acca084843b3        Apache License 2.0
     github.com/datawire/go-ftpserver                                             v0.1.1                                    Apache License 2.0
     github.com/datawire/go-fuseftp/rpc                                           v0.2.0                                    Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                    Apache License 2.0
@@ -121,7 +122,6 @@ following Free and Open Source software:
     github.com/rubenv/sql-migrate                                                v1.2.0                                    MIT license
     github.com/russross/blackfriday                                              v1.6.0                                    2-clause BSD license
     github.com/sabhiram/go-gitignore                                             v0.0.0-20210923224102-525f6e181f06        MIT license
-    github.com/sethvargo/go-envconfig                                            v0.8.2                                    Apache License 2.0
     github.com/shopspring/decimal                                                v1.3.1                                    MIT license
     github.com/sirupsen/logrus                                                   v1.9.0                                    MIT license
     github.com/spf13/afero                                                       v1.9.2                                    Apache License 2.0

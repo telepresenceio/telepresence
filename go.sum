@@ -148,6 +148,8 @@ github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1 h1:u/41zrBxTiE9jmR
 github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1/go.mod h1:NiGDmetmbkBvtznpWSx6C0vA0s0LK9aHna3LJDqjruk=
 github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f h1:Yz+xVYWkSARvfJ0e3LWwF1N5F+zJI9pCZ9R41OtkrKE=
 github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f/go.mod h1:D/jb71PHlfUjfNSUVpXQAscXsXy3x+CY+c52lPnW2qU=
+github.com/datawire/envconfig v0.0.0-20221005101338-acca084843b3 h1:O4cEgBwV1N78+WTNwBrzlXhflOeDlUPtys1YrtL8lXQ=
+github.com/datawire/envconfig v0.0.0-20221005101338-acca084843b3/go.mod h1:3SpNv+sKT10l7Gt88j8Eyk4Rd5FhMCnEYbfPo4Ee/e4=
 github.com/datawire/go-ftpserver v0.1.1 h1:73szT7FqirsyrofMNuq/tmYC+eRxhWtWswPd/i00uBA=
 github.com/datawire/go-ftpserver v0.1.1/go.mod h1:WXsutHvPI+JqjYEXD42U43++L5Samu9o+rMX7dY0Sc0=
 github.com/datawire/go-fuseftp/rpc v0.2.0 h1:KS7bmmHLqy3bpscwEhKolgTf+vykQlMbICamYkiEA/U=
@@ -593,8 +595,6 @@ github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+e
 github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529/go.mod h1:DxrIzT+xaE7yg65j358z/aeFdxmN0P9QXhEzd20vsDc=
 github.com/secsy/goftp v0.0.0-20200609142545-aa2de14babf4 h1:PT+ElG/UUFMfqy5HrxJxNzj3QBOf7dZwupeVC+mG1Lo=
 github.com/sergi/go-diff v1.1.0 h1:we8PVUC3FE2uYfodKH/nBHMSetSfHDR6scGdBi+erh0=
-github.com/sethvargo/go-envconfig v0.8.2 h1:DDUVuG21RMgeB/bn4leclUI/837y6cQCD4w8hb5797k=
-github.com/sethvargo/go-envconfig v0.8.2/go.mod h1:Iz1Gy1Sf3T64TQlJSvee81qDhf7YIlt8GMUX6yyNFs0=
 github.com/shopspring/decimal v1.2.0/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
 github.com/shopspring/decimal v1.3.1 h1:2Usl1nmF/WZucqkFZhnfFYxxxu8LG21F6nPQBE5gKV8=
 github.com/shopspring/decimal v1.3.1/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=

@@ -2,9 +2,11 @@ package client
 
 import (
 	"context"
+	"net/url"
 	"os"
+	"reflect"
 
-	"github.com/sethvargo/go-envconfig"
+	"github.com/datawire/envconfig"
 )
 
 type Env struct {
@@ -12,21 +14,20 @@ type Env struct {
 	// sethvargo/go-envconfig doesn't support filling in the default for our later references to
 	// it in following settings, so we have to do the hack with maybeSetDefault below.  *sigh* I
 	// guess I'm just spoiled by apro/cmd/amb-sidecar/types/internal/envconfig.
-	LoginDomain        string `env:"TELEPRESENCE_LOGIN_DOMAIN,required"`
-	LoginAuthURL       string `env:"TELEPRESENCE_LOGIN_AUTH_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/auth"`
-	LoginTokenURL      string `env:"TELEPRESENCE_LOGIN_TOKEN_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/token"`
-	LoginCompletionURL string `env:"TELEPRESENCE_LOGIN_COMPLETION_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/completion"`
-	UserInfoURL        string `env:"TELEPRESENCE_USER_INFO_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
-
-	ManagerNamespace string `env:"TELEPRESENCE_MANAGER_NAMESPACE,default=ambassador"`
+	LoginDomain        string   `env:"TELEPRESENCE_LOGIN_DOMAIN,        parser=nonempty-string"`
+	LoginAuthURL       *url.URL `env:"TELEPRESENCE_LOGIN_AUTH_URL,      parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/auth"`
+	LoginTokenURL      *url.URL `env:"TELEPRESENCE_LOGIN_TOKEN_URL,     parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/token"`
+	LoginCompletionURL *url.URL `env:"TELEPRESENCE_LOGIN_COMPLETION_URL,parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/completion"`
+	UserInfoURL        *url.URL `env:"TELEPRESENCE_USER_INFO_URL,       parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
+	ManagerNamespace   string   `env:"TELEPRESENCE_MANAGER_NAMESPACE,   parser=nonempty-string,default=ambassador"`
 
 	// This environment variable becomes the default for the images.registry and images.webhookRegistry
-	Registry string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
+	Registry string `env:"TELEPRESENCE_REGISTRY,                        parser=nonempty-string,default=docker.io/datawire"`
 
 	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
-	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,default="`
+	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,                   parser=possibly-empty-string,default="`
 
-	lookuper envconfig.Lookuper
+	lookupFunc func(key string) (string, bool)
 }
 
 func (env Env) Get(key string) string {
@@ -34,19 +35,19 @@ func (env Env) Get(key string) string {
 	case "TELEPRESENCE_LOGIN_DOMAIN":
 		return env.LoginDomain
 	case "TELEPRESENCE_LOGIN_AUTH_URL":
-		return env.LoginAuthURL
+		return env.LoginAuthURL.String()
 	case "TELEPRESENCE_LOGIN_TOKEN_URL":
-		return env.LoginTokenURL
+		return env.LoginTokenURL.String()
 	case "TELEPRESENCE_LOGIN_COMPLETION_URL":
-		return env.LoginCompletionURL
+		return env.LoginCompletionURL.String()
 	case "TELEPRESENCE_USER_INFO_URL":
-		return env.UserInfoURL
+		return env.UserInfoURL.String()
 
 	case "TELEPRESENCE_MANAGER_NAMESPACE":
 		return env.ManagerNamespace
 
 	default:
-		if v, ok := env.lookuper.Lookup(key); ok {
+		if v, ok := env.lookupFunc(key); ok {
 			return v
 		}
 		return ""
@@ -68,28 +69,35 @@ func GetEnv(ctx context.Context) *Env {
 	return env
 }
 
-func LoadEnv(ctx context.Context) (*Env, error) {
-	return LoadEnvWith(ctx, envconfig.OsLookuper())
+func LoadEnv() (*Env, error) {
+	return LoadEnvWith(os.LookupEnv)
 }
 
-func LoadEnvWith(ctx context.Context, lookuper envconfig.Lookuper) (*Env, error) {
-	if _, ok := lookuper.Lookup("TELEPRESENCE_LOGIN_DOMAIN"); !ok {
-		loginDomain := "auth.datawire.io"
-		if se, ok := lookuper.Lookup("SYSTEMA_ENV"); ok && se == "staging" {
-			// XXX : This is hacky bc we really should move TELEPRESENCE_LOGIN_DOMAIN
-			// to the config.yml and get rid of that env var and all the related ones.
-			// But I (donnyyung) am about to be on vacation for a week so don't want
-			// to make such a huge change and then leave, so I will take care of
-			// cleaning this up once I'm back.
-			loginDomain = "staging-auth.datawire.io"
+func LoadEnvWith(lookupFunc func(key string) (string, bool)) (*Env, error) {
+	if _, ok := lookupFunc("TELEPRESENCE_LOGIN_DOMAIN"); !ok {
+		olf := lookupFunc
+		lookupFunc = func(key string) (string, bool) {
+			if key == "TELEPRESENCE_LOGIN_DOMAIN" {
+				if se, ok := olf("SYSTEMA_ENV"); ok && se == "staging" {
+					// XXX : This is hacky bc we really should move TELEPRESENCE_LOGIN_DOMAIN
+					// to the config.yml and get rid of that env var and all the related ones.
+					// But I (donnyyung) am about to be on vacation for a week so don't want
+					// to make such a huge change and then leave, so I will take care of
+					// cleaning this up once I'm back.
+					return "staging-auth.datawire.io", true
+				}
+				return "auth.datawire.io", true
+			}
+			return olf(key)
 		}
-		os.Setenv("TELEPRESENCE_LOGIN_DOMAIN", loginDomain)
 	}
 
 	var env Env
-	if err := envconfig.ProcessWith(ctx, &env, lookuper); err != nil {
+	parser, err := envconfig.GenerateParser(reflect.TypeOf(env), envconfig.DefaultFieldTypeHandlers())
+	if err != nil {
 		return nil, err
 	}
-	env.lookuper = lookuper
+	parser.ParseFromEnv(&env, lookupFunc)
+	env.lookupFunc = lookupFunc
 	return &env, nil
 }

@@ -43,6 +43,13 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	if err = yaml.Unmarshal(bs, &c.Sidecar); err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
+	if c.LogLevel != "" {
+		// Override default from environment
+		log.SetLevel(ctx, c.LogLevel)
+	}
+	if c.ManagerPort == 0 {
+		c.ManagerPort = 8081
+	}
 	c.podIP = dos.Getenv(ctx, "_TEL_AGENT_POD_IP")
 	for _, cn := range c.Containers {
 		if err := addAppMounts(ctx, cn); err != nil {
@@ -51,10 +58,6 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		if err := addSecretsMounts(ctx, cn); err != nil {
 			return nil, err
 		}
-	}
-	if c.LogLevel != "" {
-		// Override default from environment
-		log.SetLevel(ctx, c.LogLevel)
 	}
 	return &c, nil
 }

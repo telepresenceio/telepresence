@@ -44,7 +44,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -399,9 +398,7 @@ func connectMgr(
 	if err != nil {
 		return nil, err
 	}
-	grpcAddr := net.JoinHostPort(
-		"svc/traffic-manager."+cluster.GetManagerNamespace(),
-		fmt.Sprint(install.ManagerPortHTTP))
+	grpcAddr := net.JoinHostPort("svc/traffic-manager."+cluster.GetManagerNamespace(), "api")
 
 	// First check. Establish connection
 	tc, tCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)

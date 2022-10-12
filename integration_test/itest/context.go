@@ -114,7 +114,7 @@ func WithEnv(ctx context.Context, env map[string]string) context.Context {
 		env = merged
 	}
 	ctx = context.WithValue(ctx, envContextKey{}, env)
-	evx, err := client.LoadEnvWith(ctx, &envCtxLookuper{ctx})
+	evx, err := client.LoadEnvWith((&envCtxLookuper{ctx}).Lookup)
 	if err != nil {
 		getT(ctx).Fatal(err)
 	}

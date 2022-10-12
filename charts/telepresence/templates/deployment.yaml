@@ -1,112 +1,179 @@
-{{- if not .Values.rbac.only }}
+{{- with .Values }}
+{{- if not .rbac.only }}
+{{- /* verify that we either have access to Ambassador Cloud or have a agent.image defined */}}
+{{- if not (or (and .systemaHost .systemaPort) (and .agent.image.name .agent.image.tag) (and .agentInjector.agentImage.name .agentInjector.agentImage.tag)) }}
+{{- fail "Either systemaHost and systemaPort or agent.image.name and agent.image.tag must be defined" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "telepresence.fullname" . }}
-  namespace: {{ include "telepresence.namespace" . }}
+  name: {{ include "traffic-manager.name" $ }}
+  namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
-    {{- include "telepresence.labels" . | nindent 4 }}
+    {{- include "telepresence.labels" $ | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .replicaCount }}
   selector:
     matchLabels:
-      {{- include "telepresence.selectorLabels" . | nindent 6 }}
+      {{- include "telepresence.selectorLabels" $ | nindent 6 }}
   template:
     metadata:
-    {{- with .Values.podAnnotations }}
+    {{- with .podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
     {{- end }}
       labels:
-        {{- include "telepresence.selectorLabels" . | nindent 8 }}
+        {{- include "telepresence.selectorLabels" $ | nindent 8 }}
     spec:
-      {{- with .Values.image.imagePullSecrets }}
+      {{- with .image.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml .podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ include "telepresence.fullname" . }}
+        - name: {{ include "traffic-manager.name" $ }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+            {{- toYaml .securityContext | nindent 12 }}
+          {{- with .image }}
+          image: "{{ .registry }}/{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
           env:
           - name: LOG_LEVEL
-            value: {{ .Values.logLevel }}
+            value: {{ .logLevel }}
+          - name: SERVER_PORT
+            value: {{ .apiPort | quote }}
           - name: POD_CIDR_STRATEGY
-            value: {{ .Values.podCIDRStrategy }}
-          - name: DNS_SERVICE_NAME
-            value: {{ .Values.dnsServiceName }}
-          - name: DNS_SERVICE_NAMESPACE
-            value: {{ .Values.dnsServiceNamespace }}
-          - name: DNS_SERVICE_IP
-            value: {{ .Values.dnsServiceIP }}
-          {{- with .Values.podCIDRs }}
+            value: {{ .podCIDRStrategy }}
+          {{- with .podCIDRs }}
           - name: POD_CIDRS
             value: "{{ join " " . }}"
           {{- end }}
           - name: SYSTEMA_HOST
-            value: {{ .Values.systemaHost }}
+            value: {{ .systemaHost }}
           - name: SYSTEMA_PORT
-            value: {{ .Values.systemaPort | quote }}
-          {{- with .Values.tracing }}
-          {{ if .grpcPort }}
-          - name: TELEPRESENCE_GRPC_TRACE_PORT
+            value: {{ .systemaPort | quote }}
+          {{- with .tracing }}
+          {{- if .grpcPort }}
+          - name: TRACING_GRPC_PORT
             value: {{ .grpcPort | quote }}
           {{- end }}
           {{- end }}
-          {{- with .Values.telepresenceAPI }}
+          {{- with .telepresenceAPI }}
           {{- if .port }}
-          - name: TELEPRESENCE_API_PORT
+          - name: AGENT_REST_API_PORT
             value: {{ .port | quote }}
           {{- end }}
           {{- end }}
-          {{- if .Values.grpc }}
-          {{- if .Values.grpc.maxReceiveSize }}
-          - name: TELEPRESENCE_MAX_RECEIVE_SIZE
-            value: {{ .Values.grpc.maxReceiveSize }}
+          {{- if .grpc }}
+          {{- if .grpc.maxReceiveSize }}
+          - name: GRPC_MAX_RECEIVE_SIZE
+            value: {{ .grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
-          {{- with .Values.agentInjector }}
-          {{- with .agentImage }}
-          {{ if .name }}
-          - name: TELEPRESENCE_AGENT_IMAGE
-            value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
-          {{- end }}
-          {{- with .resources }}
-          - name: AGENT_RESOURCES
-            value: '{{ toJson . }}'
-          {{- end }}
-          {{- with .initResources }}
-          - name: AGENT_INIT_RESOURCES
-            value: '{{ toJson . }}'
-          {{- end }}
-          - name: TELEPRESENCE_REGISTRY
-            value: {{ .registry }}
-          {{- end }}
-          - name: TELEPRESENCE_APP_PROTO_STRATEGY
-            value: {{ .appProtocolStrategy }}
+        {{- /*
+        Traffic agent injector configuration
+        */}}
+          {{- with .agentInjector }}
           - name: AGENT_INJECT_POLICY
             value: {{ .injectPolicy }}
           {{- end }}
-          {{- if .Values.prometheus.port }}  # 0 is false
+        {{- /*
+        Traffic agent configuration
+        */}}
+          {{- with .agent }}
+          {{- if .logLevel }}
+          - name: AGENT_LOGLEVEL
+            value: {{ .logLevel }}
+          {{- end }}
+          {{- if .port }}
+          - name: AGENT_PORT
+            value: {{ .port | quote }}
+          {{- end }}
+          {{- /* replaced by agent.appProtocolStrategy. Retained for backward compatibility */}}
+          {{- with $.Values.agentInjector.appProtocolStrategy }}
+          - name: AGENT_APP_PROTO_STRATEGY
+            value: {{ . }}
+          {{- else }}
+          {{- if .appProtocolStrategy }}
+          - name: AGENT_APP_PROTO_STRATEGY
+            value: {{ .appProtocolStrategy }}
+          {{- end }}
+          {{- end }}
+          {{- /* replaced by agent (.resources and .initResoruces). Retained for backward compatibility */}}
+          {{- with $.Values.agentInjector.agentImage }}
+          {{- if .resources }}
+          - name: AGENT_RESOURCES
+            value: '{{ toJson .resources }}'
+          {{- end }}
+          {{- if .initResources }}
+          - name: AGENT_INIT_RESOURCES
+            value: '{{ toJson .initResources }}'
+          {{- end }}
+          {{- else }}
+          {{- if .resources }}
+          - name: AGENT_RESOURCES
+            value: '{{ toJson .resources }}'
+          {{- end }}
+          {{- if .initResources }}
+          - name: AGENT_INIT_RESOURCES
+            value: '{{ toJson .initResources }}'
+          {{- end }}
+          {{- end }}
+          {{- /* replaced by agent.image. Retained for backward compatibility */}}
+          {{- with $.Values.agentInjector.agentImage }}
+          {{- if .name }}
+          - name: AGENT_IMAGE
+            value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+          {{- end }}
+          {{- if .registry }}
+          - name: AGENT_REGISTRY
+            value: {{ .registry }}
+          {{- end }}
+          {{- else }}
+          {{- with .image }}
+          {{- if .name }}
+          - name: AGENT_IMAGE
+            value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+          {{- end }}
+          {{- if .registry }}
+          - name: AGENT_REGISTRY
+            value: {{ .registry }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- with .envoy }}
+          {{- if .logLevel }}
+          - name: AGENT_ENVOY_LOGLEVEL
+            value: {{ .logLevel }}
+          {{- end }}
+          {{- if .serverPort }}
+          - name: AGENT_ENVOY_SERVER_PORT
+            value: {{ .serverPort | quote }}
+          {{- end }}
+          {{- if .adminPort }}
+          - name: AGENT_ENVOY_ADMIN_PORT
+            value: {{ .adminPort | quote }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- if .prometheus.port }}  # 0 is false
           - name: PROMETHEUS_PORT
-            value: "{{ .Values.prometheus.port }}"
+            value: "{{ .prometheus.port }}"
           {{- end }}
           - name: MANAGER_NAMESPACE
             valueFrom:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
-          - name: TELEPRESENCE_MANAGER_POD_IP
+          - name: POD_IP
             valueFrom:
               fieldRef:
                 apiVersion : v1
                 fieldPath: status.podIP
-          {{- if .Values.managerRbac.namespaced }}
-          {{- with .Values.managerRbac.namespaces }}
+          {{- if .managerRbac.namespaced }}
+          {{- with .managerRbac.namespaces }}
           - name: MANAGED_NAMESPACES
             value: "{{ join " " . }}"
           {{- end }}
@@ -114,9 +181,9 @@ spec:
         {{- /*
         Client configuration
         */}}
-          {{- with .Values.client }}
+          {{- with .client }}
           - name: CLIENT_CONNECTION_TTL
-            value: "{{ .connectionTTL }}"
+            value: {{ .connectionTTL }}
           {{- /* replaced by client.routing. Retained for backward compatibility */}}
           {{- with $.Values.dnsConfig }}
           {{- if .alsoProxySubnets }}
@@ -138,6 +205,7 @@ spec:
             value: "{{ join " " .neverProxySubnets }}"
           {{- end }}
           {{- end }}
+          {{- end }}
           {{- with .dns }}
           {{- with .excludeSuffixes }}
           - name: CLIENT_DNS_EXCLUDE_SUFFIXES
@@ -149,31 +217,30 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
-          {{- end }}
           ports:
           - name: api
-            containerPort: 8081
+            containerPort: {{ .apiPort }}
           - name: https
             containerPort: 8443
-          {{- if .Values.prometheus.port }}  # 0 is false
+          {{- if .prometheus.port }}  # 0 is false
           - name: prometheus
-            containerPort: {{ .Values.prometheus.port }}
+            containerPort: {{ .prometheus.port }}
           {{- end }}
-          {{- with .Values.tracing }}
+          {{- with .tracing }}
           - name: grpc-trace
             containerPort: {{ .grpcPort }}
           {{- end }}
-          {{- with .Values.resources }}
+          {{- with .resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-          {{- if .Values.licenseKey.create }}
+          {{- if .licenseKey.create }}
           - name: license
             mountPath: /home/telepresence
             readOnly: true
           {{- end }}
-          {{- if .Values.httpsProxy.rootCATLSSecret }}
+          {{- if .httpsProxy.rootCATLSSecret }}
           - name: proxy-ca
             mountPath: /var/run/secrets/proxy_tls
             readOnly: true
@@ -181,38 +248,39 @@ spec:
           - name: tls
             mountPath: /var/run/secrets/tls
             readOnly: true
-      {{- with .Values.nodeSelector }}
+      {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
+      {{- with .affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- with .tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.priorityClassName }}
+      {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
       volumes:
-      {{- if .Values.licenseKey.create }}
+      {{- if .licenseKey.create }}
       - name: license
         secret:
           defaultMode: 420
-          secretName: {{ .Values.licenseKey.secret.name }}
+          secretName: {{ .licenseKey.secret.name }}
       {{- end }}
-      {{- if .Values.httpsProxy.rootCATLSSecret }}
+      {{- if .httpsProxy.rootCATLSSecret }}
       - name: proxy-ca
         secret:
           defaultMode: 420
-          secretName: {{ .Values.httpsProxy.rootCATLSSecret }}
+          secretName: {{ .httpsProxy.rootCATLSSecret }}
       {{- end }}
       - name: tls
         secret:
           defaultMode: 420
-          secretName: {{ .Values.agentInjector.secret.name }}
+          secretName: {{ .agentInjector.secret.name }}
       serviceAccount: traffic-manager
       serviceAccountName: traffic-manager
+{{- end }}
 {{- end }}

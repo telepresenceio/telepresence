@@ -63,7 +63,7 @@ intercept:
 	c := dlog.NewTestContext(t, false)
 	c = filelocation.WithAppSystemConfigDirs(c, []string{sys1, sys2})
 	c = filelocation.WithAppUserConfigDir(c, user)
-	env, err := LoadEnv(c)
+	env, err := LoadEnv()
 	require.NoError(t, err)
 	c = WithEnv(c, env)
 
@@ -92,7 +92,7 @@ intercept:
 
 func Test_ConfigMarshalYAML(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
-	env, err := LoadEnv(ctx)
+	env, err := LoadEnv()
 	require.NoError(t, err)
 	ctx = WithEnv(ctx, env)
 	cfg := GetDefaultConfig()

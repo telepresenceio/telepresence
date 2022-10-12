@@ -508,8 +508,13 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			ClusterDomain: mgrInfo.ClusterDomain,
 		}
 	}
-	kubeIP := net.IP(dns.KubeIp)
-	dlog.Infof(ctx, "Setting cluster DNS to %s", kubeIP)
+
+	// We use the ManagerPodIp as the dnsIP. The reason for this is that no one should ever
+	// talk to the traffic-manager directly using the TUN device, so it's safe to use its
+	// IP to impersonate the DNS server. All traffic sent to that IP, will be routed to
+	// the local DNS server.
+	dnsIP := net.IP(mgrInfo.ManagerPodIp)
+	dlog.Infof(ctx, "Setting cluster DNS to %s", dnsIP)
 	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
 	s.dnsServer.SetClusterDNS(dns)
 
@@ -575,10 +580,14 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 		return
 	}
 	ip := net.IP(info.ManagerPodIp).String()
+	port := info.ManagerPodPort
+	if port == 0 {
+		port = 8081 // Traffic managers before 2.8.0 didn't include the port because it was hardcoded at 8081
+	}
 	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
 	dlog.Debugf(ctx, "Performing connectivity check with timeout %s", ct)
-	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:8081", ip), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
 		return

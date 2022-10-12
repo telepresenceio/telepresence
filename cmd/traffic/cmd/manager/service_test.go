@@ -648,9 +648,14 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
+		SystemAHost:     "localhost",
+		SystemAPort:     1234,
 		MaxReceiveSize:  resource.Quantity{},
 		PodCIDRStrategy: "environment",
-		PodCIDRs:        "192.168.0.0/16",
+		PodCIDRs: []*net.IPNet{{
+			IP:   net.IP{192, 168, 0, 0},
+			Mask: net.CIDRMask(16, 32),
+		}},
 	})
 
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))

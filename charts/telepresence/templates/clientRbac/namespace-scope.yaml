@@ -1,6 +1,8 @@
-# These are the namespace-scoped rbac roles + bindings that will be used by users
-# who want to use telepresence once its components have been set
-# up in the cluster.
+{{- /*
+These are the namespace-scoped rbac roles + bindings that will be used by users
+who want to use telepresence once its components have been set
+up in the cluster.
+*/}}
 {{- if .Values.clientRbac.create }}
 {{- if .Values.clientRbac.namespaced }}
 
@@ -41,13 +43,15 @@ roleRef:
 
 ---
 
-# Client must have the following RBAC in the traffic-manager namespace to establish
-# a port-forward to the traffic-manager pod.
+{{- /*
+Client must have the following RBAC in the traffic-manager.namespace to establish
+a port-forward to the traffic-manager pod.
+*/}}
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name:  traffic-manager-connect
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 rules:
@@ -64,7 +68,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: traffic-manager-connect
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 subjects:
