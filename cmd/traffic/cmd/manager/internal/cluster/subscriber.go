@@ -16,9 +16,9 @@ type clusterInfoSubscribers struct {
 	subscribers map[int]chan *rpc.ClusterInfo
 }
 
-func newClusterInfoSubscribers() *clusterInfoSubscribers {
+func newClusterInfoSubscribers(ci *rpc.ClusterInfo) *clusterInfoSubscribers {
 	return &clusterInfoSubscribers{
-		current:     &rpc.ClusterInfo{},
+		current:     ci,
 		subscribers: make(map[int]chan *rpc.ClusterInfo),
 	}
 }
@@ -48,7 +48,7 @@ func (ss *clusterInfoSubscribers) subscribe() (int, <-chan *rpc.ClusterInfo) {
 	ss.subscribers[id] = ch
 	curr := ss.current
 	ss.Unlock()
-	if curr.KubeDnsIp != nil {
+	if curr.Dns.KubeIp != nil {
 		// Post initial state
 		ch <- curr
 	}
@@ -93,8 +93,8 @@ func (ss *clusterInfoSubscribers) subscriberLoop(ctx context.Context, rec interf
 func clusterInfoEqual(a, b *rpc.ClusterInfo) bool {
 	if len(a.PodSubnets) != len(b.PodSubnets) ||
 		a.ServiceSubnet != b.ServiceSubnet ||
-		a.ClusterDomain != b.ClusterDomain ||
-		!net.IP(a.KubeDnsIp).Equal(b.KubeDnsIp) {
+		a.Dns.ClusterDomain != b.Dns.ClusterDomain ||
+		!net.IP(a.Dns.KubeIp).Equal(b.Dns.KubeIp) {
 		return false
 	}
 	for i, aps := range a.PodSubnets {

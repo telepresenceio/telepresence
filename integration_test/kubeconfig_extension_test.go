@@ -213,7 +213,7 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 		require.NoError(err)
 		defer rootLog.Close()
 
-		scanFor := fmt.Sprintf(`LookupHost "%s"`, host)
+		scanFor := fmt.Sprintf(`Lookup A "%s."`, host)
 		scn := bufio.NewScanner(rootLog)
 		for scn.Scan() {
 			if strings.Contains(scn.Text(), scanFor) {

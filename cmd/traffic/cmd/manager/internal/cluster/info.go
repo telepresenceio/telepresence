@@ -58,7 +58,7 @@ func NewInfo(ctx context.Context) Info {
 	env := managerutil.GetEnv(ctx)
 	managedNamespaces := env.GetManagedNamespaces()
 	namespaced := len(managedNamespaces) > 0
-	oi := info{ciSubs: newClusterInfoSubscribers()}
+	oi := info{}
 	ki := k8sapi.GetK8sInterface(ctx)
 
 	// Validate that the kubernetes server version is supported
@@ -110,34 +110,37 @@ func NewInfo(ctx context.Context) Info {
 			Namespace: env.DNSServiceNamespace,
 		},
 	}
+
+	var kubeDnsIp net.IP
 	for _, svc := range dnsServices {
 		if ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc.Name+"."+svc.Namespace); err == nil && len(ips) > 0 {
 			dlog.Infof(ctx, "Using DNS IP from %s.%s", svc.Name, svc.Namespace)
-			oi.KubeDnsIp = ips[0]
+			kubeDnsIp = ips[0]
 			break
 		}
 	}
 
-	if oi.KubeDnsIp == nil && env.DNSServiceIP != "" {
+	if kubeDnsIp == nil && env.DNSServiceIP != "" {
 		dlog.Infof(ctx, "Unable to determine DNS IP, using user supplied IP %s", env.DNSServiceIP)
-		oi.KubeDnsIp = net.ParseIP(env.DNSServiceIP)
-		if oi.KubeDnsIp == nil {
+		kubeDnsIp = net.ParseIP(env.DNSServiceIP)
+		if kubeDnsIp == nil {
 			dlog.Warn(ctx, "The user supplied IP is not a valid IP address")
 		}
 	}
 
-	if oi.KubeDnsIp == nil {
+	if kubeDnsIp == nil {
 		dlog.Warn(ctx, "Could not determine DNS ClusterIP")
 	}
 
 	apiSvc := "kubernetes.default.svc"
+	var clusterDomain string
 	if cn, err := net.LookupCNAME(apiSvc); err != nil {
 		dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s: %v"`, err, apiSvc)
-		oi.ClusterDomain = "cluster.local."
+		clusterDomain = "cluster.local."
 	} else {
-		oi.ClusterDomain = cn[len(apiSvc)+1:]
+		clusterDomain = cn[len(apiSvc)+1:]
 	}
-	dlog.Infof(ctx, "Using cluster domain %q", oi.ClusterDomain)
+	dlog.Infof(ctx, "Using cluster domain %q", clusterDomain)
 
 	// make an attempt to create a service with ClusterIP that is out of range and then
 	// check the error message for the correct range as suggested tin the second answer here:
@@ -172,20 +175,59 @@ func NewInfo(ctx context.Context) Info {
 		}
 	}
 
-	if oi.ServiceSubnet == nil && oi.KubeDnsIp != nil {
+	if oi.ServiceSubnet == nil && kubeDnsIp != nil {
 		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
 		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
 		// from the kubeDNS IP. This is cheating but a cluster may only have one service subnet and the mask is
 		// unlikely to cover less than half the bits.
-		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", net.IP(oi.KubeDnsIp))
-		bits := len(oi.KubeDnsIp) * 8
+		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of kube-dns.kube-system)", kubeDnsIp)
+		bits := len(kubeDnsIp) * 8
 		ones := bits / 2
 		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
-		oi.ServiceSubnet = &rpc.IPNet{Ip: net.IP(oi.KubeDnsIp).Mask(mask), Mask: int32(ones)}
+		oi.ServiceSubnet = &rpc.IPNet{Ip: kubeDnsIp.Mask(mask), Mask: int32(ones)}
 	}
 
 	podCIDRStrategy := env.PodCIDRStrategy
 	dlog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
+
+	oi.ManagerPodIp = iputil.Parse(env.PodIP)
+	if oi.ManagerPodIp == nil {
+		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
+	}
+
+	alsoProxy, err := env.GetAlsoProxySubnets()
+	if err != nil {
+		dlog.Errorf(ctx, "AlsoProxySubnets not parsed: %v", err)
+	}
+	neverProxy, err := env.GetNeverProxySubnets()
+	if err != nil {
+		dlog.Errorf(ctx, "NeverProxySubnets not parsed: %v", err)
+	}
+	dlog.Infof(ctx, "Using AlsoProxy: %v", alsoProxy)
+	dlog.Infof(ctx, "Using NeverProxy: %v", neverProxy)
+
+	oi.Routing = &rpc.Routing{
+		AlsoProxySubnets:  make([]*rpc.IPNet, len(alsoProxy)),
+		NeverProxySubnets: make([]*rpc.IPNet, len(neverProxy)),
+	}
+	for i, sn := range alsoProxy {
+		oi.Routing.AlsoProxySubnets[i] = iputil.IPNetToRPC(sn)
+	}
+	for i, sn := range neverProxy {
+		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(sn)
+	}
+
+	oi.Dns = &rpc.DNS{
+		IncludeSuffixes: env.ClientDnsIncludeSuffixes,
+		ExcludeSuffixes: env.ClientDnsExcludeSuffixes,
+		KubeIp:          kubeDnsIp,
+		ClusterDomain:   clusterDomain,
+	}
+
+	dlog.Infof(ctx, "ExcludeSuffixes: %+v", oi.Dns.ExcludeSuffixes)
+	dlog.Infof(ctx, "IncludeSuffixes: %+v", oi.Dns.IncludeSuffixes)
+
+	oi.ciSubs = newClusterInfoSubscribers(oi.clusterInfo())
 
 	switch {
 	case strings.EqualFold("auto", podCIDRStrategy):
@@ -207,29 +249,6 @@ func NewInfo(ctx context.Context) Info {
 	default:
 		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
 	}
-
-	oi.ManagerPodIp = iputil.Parse(env.PodIP)
-	if oi.ManagerPodIp == nil {
-		dlog.Warnf(ctx, "Unable to get manager pod ip; env var says %s", env.PodIP)
-	}
-
-	oi.DnsConfig = &rpc.DNSConfig{}
-	oi.DnsConfig.AlsoProxySubnets, err = env.GetAlsoProxySubnets()
-	if err != nil {
-		dlog.Errorf(ctx, "AlsoProxySubnets not parsed: %v", err)
-	}
-	for _, subnet := range oi.DnsConfig.AlsoProxySubnets {
-		dlog.Infof(ctx, "Using AlsoProxySubnet: %+v", subnet)
-	}
-
-	oi.DnsConfig.NeverProxySubnets, err = env.GetNeverProxySubnets()
-	if err != nil {
-		dlog.Errorf(ctx, "NeverProxySubnets not parsed: %v", err)
-	}
-	for _, subnet := range oi.DnsConfig.NeverProxySubnets {
-		dlog.Infof(ctx, "Using NeverProxySubnet: %+v", subnet)
-	}
-
 	return &oi
 }
 
@@ -336,12 +355,13 @@ func (oi *info) GetClusterID() string {
 
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	ci := &rpc.ClusterInfo{
-		KubeDnsIp:     oi.KubeDnsIp,
 		ServiceSubnet: oi.ServiceSubnet,
 		PodSubnets:    make([]*rpc.IPNet, len(oi.PodSubnets)),
-		ClusterDomain: oi.ClusterDomain,
 		ManagerPodIp:  oi.ManagerPodIp,
-		DnsConfig:     oi.GetDnsConfig(),
+		Routing:       oi.Routing,
+		Dns:           oi.Dns,
+		KubeDnsIp:     oi.Dns.KubeIp,
+		ClusterDomain: oi.Dns.ClusterDomain,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci

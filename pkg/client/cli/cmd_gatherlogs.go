@@ -17,6 +17,8 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -60,8 +62,9 @@ telepresence gather-logs --traffic-manager=False --traffic-agents=echo-easy-6848
 telepresence gather-logs --daemons=None
 `,
 
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return gl.gatherLogs(cmd.Context(), cmd)
+		RunE: gl.gatherLogs,
+		Annotations: map[string]string{
+			ann.Session: ann.Optional,
 		},
 	}
 	flags := cmd.Flags()
@@ -84,7 +87,11 @@ type anonymizer struct {
 }
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
-func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command) error {
+func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, _ []string) error {
+	if err := cliutil.InitCommand(cmd); err != nil {
+		return err
+	}
+	ctx := cmd.Context()
 	scout := scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 	defer scout.Close()
@@ -155,7 +162,12 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command) er
 	// We gather those logs before we gather the connector.log so that problems that
 	// may occur during that process will be included in the connector.log
 	if gl.trafficManager || gl.trafficAgents != "None" {
-		gl.gatherClusterLogs(ctx, cmd, exportDir, az)
+		if err := gl.gatherClusterLogs(ctx, cmd, exportDir, az); err != nil {
+			// We let the user know we were unable to get logs from the kubernetes components,
+			// and why, but this shouldn't block the command returning successful with the logs
+			// it was able to get.
+			fmt.Fprintf(cmd.ErrOrStderr(), "error getting logs from kubernetes components: %s\n", err)
+		}
 	}
 
 	// Get all logs from the logDir that match the daemons the user cares about.
@@ -221,7 +233,7 @@ func (gl *gatherLogsArgs) gatherLogs(ctx context.Context, cmd *cobra.Command) er
 	return nil
 }
 
-func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Command, exportDir string, az *anonymizer) {
+func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Command, exportDir string, az *anonymizer) error {
 	// To get logs from the components in the kubernetes cluster, we ask the
 	// traffic-manager.
 	rq := &connector.LogsRequest{
@@ -230,7 +242,8 @@ func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Comm
 		GetPodYaml:     gl.podYaml,
 		ExportDir:      exportDir,
 	}
-	err := withConnector(cmd, false, nil, func(_ context.Context, cs *connectorState) error {
+	userD := cliutil.GetUserDaemon(ctx)
+	if userD != nil {
 		var opts []grpc.CallOption
 		cfg := client.GetConfig(ctx)
 		if !cfg.Grpc.MaxReceiveSize.IsZero() {
@@ -238,7 +251,7 @@ func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Comm
 				opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
 			}
 		}
-		lr, err := cs.userD.GatherLogs(ctx, rq, opts...)
+		lr, err := userD.GatherLogs(ctx, rq, opts...)
 		if err != nil {
 			return err
 		}
@@ -247,14 +260,8 @@ func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Comm
 				return err
 			}
 		}
-		return nil
-	})
-	// We let the user know we were unable to get logs from the kubernetes components,
-	// and why, but this shouldn't block the command returning successful with the logs
-	// it was able to get.
-	if err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "error getting logs from kubernetes components: %s\n", err)
 	}
+	return nil
 }
 
 func isEmpty(file string) (bool, error) {

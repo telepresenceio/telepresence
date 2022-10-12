@@ -142,7 +142,7 @@ func TestInitContext(t *testing.T) {
 
 		msg := "some message"
 		log.Print(msg)
-		time.Sleep(30 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		check.FileExists(logFile)
 
 		bs, err := os.ReadFile(logFile)

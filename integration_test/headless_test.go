@@ -79,9 +79,15 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 					`agent is never removed`)
 			}()
 
-			stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-			require.Contains(stdout, "echo-headless: intercepted")
-			require.NotContains(stdout, "Volume Mount Point")
+			require.Eventually(
+				func() bool {
+					stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+					return strings.Contains(stdout, "echo-headless: intercepted")
+				},
+				30*time.Second, // waitFor
+				3*time.Second,  // polling interval
+				`intercepted workload never show up in list`)
+
 			itest.PingInterceptedEchoServer(ctx, svc, "8080")
 		})
 	}

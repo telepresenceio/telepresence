@@ -95,7 +95,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
 	if !s.prePushed {
-		s.testVersion = "v2.6.0-gotest.z" + s.suffix
+		s.testVersion = "v2.8.0-gotest.z" + s.suffix
 	}
 	version.Version = s.testVersion
 
@@ -153,7 +153,7 @@ func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that no telepresence is running when the tests start
-	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
+	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that the daemon-socket is non-existent.
 	_ = rmAsRoot(client.DaemonSocketName)
@@ -446,6 +446,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		return err
 	}
 	settings := []string{
+		"--set", "logLevel=debug",
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
@@ -460,7 +461,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		settings = append(settings, "--set", k+"="+v)
 	}
 
-	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
+	helmValues := filepath.Join("integration_test", "testdata", "namespaced-values.yaml")
 	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)
@@ -586,10 +587,8 @@ func TelepresenceDisconnectOk(ctx context.Context) {
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Network disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Network is already disconnected"))
-	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Traffic Manager is already disconnected"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Daemons disconnecting...done") ||
+		strings.Contains(stdout, "Telepresence Daemons are already disconnected"))
 	if t.Failed() {
 		t.Logf("Disconnect output was %q", stdout)
 	}
@@ -597,16 +596,14 @@ func AssertDisconnectOutput(ctx context.Context, stdout string) {
 
 // TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output
 func TelepresenceQuitOk(ctx context.Context) {
-	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-ur"))
+	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-s"))
 }
 
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command
 func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Network quitting...done") ||
-		strings.Contains(stdout, "Telepresence Network had already quit"))
-	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager quitting...done") ||
-		strings.Contains(stdout, "Telepresence Traffic Manager had already quit"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Daemons quitting...done") ||
+		strings.Contains(stdout, "Telepresence Daemons have already quit"))
 	if t.Failed() {
 		t.Logf("Quit output was %q", stdout)
 	}

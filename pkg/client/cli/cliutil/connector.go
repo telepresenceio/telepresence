@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
@@ -18,89 +16,196 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
+type connectRequest struct{}
+
 var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
+var ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
 var ErrNoTrafficManager = errors.New("telepresence traffic manager is not connected")
 
-// WithConnector (1) ensures that the connector is running, (2) establishes a connection to it, and
-// (3) runs the given function with that connection.
-//
-// It streams to stdout any messages that the connector wants us to display to the user (which
-// WithConnector listens for via the UserNotifications gRPC call).  WithConnector does NOT make the
-// "Connect" gRPC call or any other gRPC call except for UserNotifications.
-//
-// Nested calls to WithConnector will reuse the outer connection.
-func WithConnector(ctx context.Context, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, true, true, fn)
+func WithConnectionRequest(ctx context.Context, rq *connector.ConnectRequest) context.Context {
+	return context.WithValue(ctx, connectRequest{}, rq)
 }
 
-// WithStartedConnector is like WithConnector, but returns ErrNoUserDaemon if the connector is not
-// already running, rather than starting it.
-func WithStartedConnector(ctx context.Context, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
-	return withConnector(ctx, false, withNotify, fn)
-}
-
-type connectorConnPtrKey struct{}
-
-func getConnectorConn(ctx context.Context) *grpc.ClientConn {
-	if connP, ok := ctx.Value(connectorConnPtrKey{}).(*unsafe.Pointer); ok {
-		return (*grpc.ClientConn)(atomic.LoadPointer(connP))
+func GetConnectRequest(ctx context.Context) *connector.ConnectRequest {
+	if cr, ok := ctx.Value(connectRequest{}).(*connector.ConnectRequest); ok {
+		return cr
 	}
 	return nil
 }
 
-func replaceConnectorConn(ctx context.Context, conn *grpc.ClientConn) {
-	if connP, ok := ctx.Value(connectorConnPtrKey{}).(*unsafe.Pointer); ok {
-		atomic.StorePointer(connP, unsafe.Pointer(conn))
+type userDaemonKey struct{}
+
+func GetUserDaemon(ctx context.Context) *UserDaemon {
+	if ud, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
+		return ud
 	}
+	return nil
 }
 
-func withConnectorConn(ctx context.Context, conn *grpc.ClientConn) context.Context {
-	var up unsafe.Pointer
-	atomic.StorePointer(&up, unsafe.Pointer(conn))
-	return context.WithValue(ctx, connectorConnPtrKey{}, &up)
+type sessionKey struct{}
+
+func GetSession(ctx context.Context) *Session {
+	if s, ok := ctx.Value(sessionKey{}).(*Session); ok {
+		return s
+	}
+	return nil
 }
 
-func launchConnectorDaemon(ctx context.Context, connectorDaemon string, maybeStart bool) (conn *grpc.ClientConn, err error) {
-	for {
-		conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
-		if err == nil {
-			return conn, nil
+func InitCommand(cmd *cobra.Command) (err error) {
+	ctx := cmd.Context()
+	as := cmd.Annotations
+
+	if v, ok := as[ann.Session]; ok {
+		as[ann.UserDaemon] = v
+	}
+	if as[ann.RootDaemon] == ann.Required {
+		if err = EnsureRootDaemonRunning(ctx); err != nil {
+			return err
 		}
-		if errors.Is(err, os.ErrNotExist) {
-			err = ErrNoUserDaemon
-			if maybeStart {
-				stdout, _ := output.Structured(ctx)
-				fmt.Fprintln(stdout, "Launching Telepresence User Daemon")
-				if _, err = ensureAppUserConfigDir(ctx); err != nil {
-					return nil, err
-				}
-				if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
-					return nil, fmt.Errorf("failed to launch the connector service: %w", err)
-				}
-				if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-					return nil, fmt.Errorf("connector service did not start: %w", err)
-				}
-				maybeStart = false
-				continue
+	}
+	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
+		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
+			if v == ann.Optional && err == ErrNoUserDaemon {
+				// This is OK, but further initialization is not possible
+				err = nil
+			}
+			return err
+		}
+
+		// RootDaemon == Optional means that the RootDaemon must be started if
+		// the UserDaemon was started
+		if as[ann.RootDaemon] == ann.Optional {
+			if err = EnsureRootDaemonRunning(ctx); err != nil {
+				return err
 			}
 		}
-		return nil, err
+	} else {
+		// The rest requires a user daemon
+		return nil
+	}
+	if as[ann.VersionCheck] == ann.Required {
+		if err = ensureDaemonVersion(ctx); err != nil {
+			return err
+		}
+	}
+
+	if v := as[ann.Session]; v == ann.Optional || v == ann.Required {
+		if ctx, err = ensureSession(ctx, v == ann.Required); err != nil {
+			return err
+		}
+	}
+	if as[ann.Notifications] == ann.Required {
+		if err = ensureNotifications(ctx); err != nil {
+			return err
+		}
+	}
+	cmd.SetContext(ctx)
+	return nil
+}
+
+func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
+	stdout, _ := output.Structured(ctx)
+	fmt.Fprint(stdout, "Telepresence Daemons ")
+	ud := GetUserDaemon(ctx)
+	if ud == nil {
+		fmt.Fprintln(stdout, "have already quit")
+		return ErrNoUserDaemon
+	}
+	defer func() {
+		if err == nil {
+			fmt.Fprintln(stdout, "done")
+		}
+	}()
+
+	if quitDaemons {
+		fmt.Fprint(stdout, "quitting...")
+	} else {
+		fmt.Fprint(stdout, "disconnecting...")
+		if _, err = ud.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
+			// nil or not unimplemented
+			return err
+		}
+		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
+	}
+	if _, err = ud.Quit(ctx, &empty.Empty{}); err == nil || grpcStatus.Code(err) == grpcCodes.Unavailable {
+		err = client.WaitUntilSocketVanishes("user daemon", client.ConnectorSocketName, 5*time.Second)
+	}
+	if err != nil && grpcStatus.Code(err) == grpcCodes.Unavailable {
+		if quitDaemons {
+			fmt.Fprintln(stdout, "have already quit")
+		} else {
+			fmt.Fprintln(stdout, "are already disconnected")
+		}
+		err = nil
+	}
+	return err
+}
+
+func AddKubeconfigEnv(cr *connector.ConnectRequest) {
+	// Certain options' default are bound to the connector daemon process; this is notably true of the kubeconfig file(s) to use,
+	// and since those files can be specified, both as a --kubeconfig flag and in the KUBECONFIG setting, and since the flag won't
+	// accept multiple path entries, we need to pass the environment setting to the connector daemon so that it can set it every
+	// time it receives a new config.
+	if cfg, ok := os.LookupEnv("KUBECONFIG"); ok {
+		if cr.KubeFlags == nil {
+			cr.KubeFlags = make(map[string]string)
+		}
+		cr.KubeFlags["KUBECONFIG"] = cfg
 	}
 }
 
-func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn func(context.Context, connector.ConnectorClient) error) error {
-	if conn := getConnectorConn(ctx); conn != nil {
-		connectorClient := connector.NewConnectorClient(conn)
-		return fn(ctx, connectorClient)
+func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (conn *grpc.ClientConn, err error) {
+	conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
+	if errors.Is(err, os.ErrNotExist) {
+		err = ErrNoUserDaemon
+		if required {
+			stdout, _ := output.Structured(ctx)
+			fmt.Fprintln(stdout, "Launching Telepresence User Daemon")
+			if _, err = ensureAppUserConfigDir(ctx); err != nil {
+				return nil, err
+			}
+			if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
+				return nil, fmt.Errorf("failed to launch the connector service: %w", err)
+			}
+			if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
+				return nil, fmt.Errorf("connector service did not start: %w", err)
+			}
+			conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
+		}
 	}
+	return conn, err
+}
 
+type UserDaemon struct {
+	connector.ConnectorClient
+	Conn *grpc.ClientConn
+}
+
+type Session struct {
+	UserDaemon
+	Info    *connector.ConnectInfo
+	Started bool
+}
+
+func replaceUserDaemon(ctx context.Context, conn *grpc.ClientConn) {
+	if uc, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
+		uc.Conn = conn
+		uc.ConnectorClient = connector.NewConnectorClient(conn)
+	}
+}
+
+func ensureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
+	if _, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
+		return ctx, nil
+	}
 	// If the UserDaemonBinary isn't set, use the same executable as the
 	// CLI binary
 	connectorDaemon := client.GetConfig(ctx).Daemons.UserDaemonBinary
@@ -108,100 +213,114 @@ func withConnector(ctx context.Context, maybeStart bool, withNotify bool, fn fun
 	if !configuredDaemon {
 		connectorDaemon = client.GetExe()
 	}
-	conn, err := launchConnectorDaemon(ctx, connectorDaemon, maybeStart)
+	conn, err := launchConnectorDaemon(ctx, connectorDaemon, required)
+	if err != nil {
+		return ctx, err
+	}
+	return context.WithValue(ctx, userDaemonKey{}, &UserDaemon{
+		Conn:            conn,
+		ConnectorClient: connector.NewConnectorClient(conn),
+	}), nil
+}
+
+func ensureDaemonVersion(ctx context.Context) error {
+	// If the UserDaemonBinary isn't set, use the same executable as the
+	// CLI binary
+	connectorDaemon := client.GetConfig(ctx).Daemons.UserDaemonBinary
+	configuredDaemon := connectorDaemon != ""
+	if !configuredDaemon {
+		connectorDaemon = client.GetExe()
+	}
+	cc := GetUserDaemon(ctx)
+
+	// Ensure that the already running daemon has the correct version
+	return versionCheck(ctx, connectorDaemon, configuredDaemon, cc)
+}
+
+func ensureNotifications(ctx context.Context) error {
+	cc := GetUserDaemon(ctx)
+	stdout, _ := output.Structured(ctx)
+	stream, err := cc.UserNotifications(ctx, &empty.Empty{})
 	if err != nil {
 		return err
 	}
-	ctx = withConnectorConn(ctx, conn)
-	defer func() {
-		if conn := getConnectorConn(ctx); conn != nil {
-			conn.Close()
-		}
-	}()
-
-	connectorClient := connector.NewConnectorClient(conn)
-
-	// Ensure that the already running daemon has the correct version
-	if err = versionCheck(ctx, "User", connectorDaemon, configuredDaemon, connectorClient); err != nil {
-		return err
-	}
-	// The connection might have been swapped at this point, due to an upgrade of the user daemon
-	connectorClient = connector.NewConnectorClient(getConnectorConn(ctx))
-	if !withNotify {
-		// No user interaction for this command.
-		return fn(ctx, connectorClient)
-	}
-
-	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		ShutdownOnNonError: true,
-		DisableLogging:     true,
-	})
-
-	grp.Go("stdio", func(ctx context.Context) error {
-		stdout, _ := output.Structured(ctx)
-		stream, err := connectorClient.UserNotifications(ctx, &empty.Empty{})
-		if err != nil {
-			return err
-		}
+	go func() {
 		for {
 			msg, err := stream.Recv()
 			if err != nil {
-				if err == io.EOF {
-					return nil
-				}
-				if grpcStatus.Code(err) == grpcCodes.Canceled {
-					return nil
-				}
-				return err
+				return
 			}
 			fmt.Fprintln(stdout, strings.TrimRight(msg.Message, "\n"))
 		}
-	})
-	grp.Go("main", func(ctx context.Context) error {
-		return fn(ctx, connectorClient)
-	})
-
-	return grp.Wait()
+	}()
+	return nil
 }
 
-func UserDaemonDisconnect(ctx context.Context, quitUserDaemon bool) error {
-	stdout, _ := output.Structured(ctx)
-	fmt.Fprint(stdout, "Telepresence Traffic Manager ")
-	err := WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) (err error) {
-		defer func() {
-			if err == nil {
-				fmt.Fprintln(stdout, "done")
-			}
-		}()
-		if quitUserDaemon {
-			fmt.Fprint(stdout, "quitting...")
-		} else {
-			var ci *connector.ConnectInfo
-			if ci, err = connectorClient.Status(ctx, &empty.Empty{}); err != nil {
-				return err
-			}
-			if ci.Error == connector.ConnectInfo_DISCONNECTED {
-				return ErrNoUserDaemon
-			}
-			fmt.Fprint(stdout, "disconnecting...")
-			if _, err = connectorClient.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
-				// nil or not unimplemented
-				return err
-			}
-			// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
-		}
-		if _, err = connectorClient.Quit(ctx, &empty.Empty{}); err == nil || grpcStatus.Code(err) == grpcCodes.Unavailable {
-			err = client.WaitUntilSocketVanishes("user daemon", client.ConnectorSocketName, 5*time.Second)
-		}
-		return err
-	})
-	if err != nil && (errors.Is(err, ErrNoUserDaemon) || grpcStatus.Code(err) == grpcCodes.Unavailable) {
-		if quitUserDaemon {
-			fmt.Fprintln(stdout, "had already quit")
-		} else {
-			fmt.Fprintln(stdout, "is already disconnected")
-		}
-		err = nil
+func ensureSession(ctx context.Context, required bool) (context.Context, error) {
+	if _, ok := ctx.Value(sessionKey{}).(*Session); ok {
+		return ctx, nil
 	}
-	return err
+	s, err := connect(ctx, GetUserDaemon(ctx), GetConnectRequest(ctx), required)
+	if err != nil {
+		return ctx, err
+	}
+	if s == nil {
+		return ctx, nil
+	}
+	return context.WithValue(ctx, sessionKey{}, s), nil
+}
+
+func connect(ctx context.Context, userD *UserDaemon, request *connector.ConnectRequest, required bool) (*Session, error) {
+	var ci *connector.ConnectInfo
+	var err error
+	if request == nil {
+		// implicit calls use the current Status instead of passing flags and mapped namespaces.
+		ci, err = userD.Status(ctx, &empty.Empty{})
+	} else {
+		if !required {
+			return nil, nil
+		}
+		AddKubeconfigEnv(request)
+		ci, err = userD.Connect(ctx, request)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var msg string
+	cat := errcat.Unknown
+	switch ci.Error {
+	case connector.ConnectInfo_UNSPECIFIED:
+		stdout, _ := output.Structured(ctx)
+		fmt.Fprintf(stdout, "Connected to context %s (%s)\n", ci.ClusterContext, ci.ClusterServer)
+		return &Session{
+			UserDaemon: *userD,
+			Info:       ci,
+			Started:    true,
+		}, nil
+	case connector.ConnectInfo_ALREADY_CONNECTED:
+		return &Session{
+			UserDaemon: *userD,
+			Info:       ci,
+			Started:    false,
+		}, nil
+	case connector.ConnectInfo_DISCONNECTED:
+		if !required {
+			return nil, nil
+		}
+		if request != nil {
+			return nil, ErrNoTrafficManager
+		}
+		// The attempt is implicit, i.e. caused by direct invocation of another command without a
+		// prior call to connect. So we make it explicit here without flags
+		return connect(ctx, userD, &connector.ConnectRequest{}, required)
+	case connector.ConnectInfo_MUST_RESTART:
+		msg = "Cluster configuration changed, please quit telepresence and reconnect"
+	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:
+		msg = ci.ErrorText
+		if ci.ErrorCategory != 0 {
+			cat = errcat.Category(ci.ErrorCategory)
+		}
+	}
+	return nil, cat.Newf("connector.Connect: %s", msg)
 }

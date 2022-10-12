@@ -2,6 +2,26 @@
 
 ### 2.8.0 (TBD)
 
+- Feature: The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,
+  `MX`, `NS`, `PTR`, `SRV`, and `TXT`.
+
+- Feature: A new `client` struct was added to the Helm chart. It contains a `connectionTTL` that controls
+  how long the traffic manager will retain a client connection without seeing any sign of life from the client.
+
+- Feature: A `dns` struct container the fields `includeSuffixes` and `excludeSuffixes` was added to the Helm 
+  chart `client` struct, making those values configurable per cluster.
+
+- Change: The Helm chart `dnsConfig` was deprecated but retained for backward compatibility. The fields
+  `alwaysProxySubnets` and `neverProxySubnets` can now be found under `routing` in the `client` struct.
+
+- Bugfix: An attempt to create simultaneous intercepts that span multiple namespace on the same workstation
+  is detected early and prohibited instead of resulting in failing DNS lookups later on.
+
+- Bugfix: Spurious and incorrect ""!! SRV xxx"" messages will no longer appear in the logs when the reason
+  is normal context cancellation.
+
+- Bugfix: Single label names now resolves correctly when using Telepresence in Docker on a Linux host
+
 - Bugfix: The Helm chart value `appProtocolStrategy` is now correctly named (used to be `appPortStategy`)
 
 ### 2.7.6 (September 16, 2022)

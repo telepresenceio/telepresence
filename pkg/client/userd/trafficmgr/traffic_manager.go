@@ -88,13 +88,13 @@ type Session interface {
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
 	RemainWithToken(context.Context) error
-	AddNamespaceListener(k8s.NamespaceListener)
+	AddNamespaceListener(context.Context, k8s.NamespaceListener)
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
+	LoginExecutor() auth.LoginExecutor
 }
 
 type Service interface {
-	RootDaemonClient(context.Context) (daemon.DaemonClient, error)
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 	LoginExecutor() auth.LoginExecutor
 }
@@ -111,14 +111,13 @@ type apiMatcher struct {
 
 type TrafficManager struct {
 	*k8s.Cluster
+	rootDaemon daemon.DaemonClient
+
+	loginExecutor auth.LoginExecutor
 
 	// local information
 	installID   string // telepresence's install ID
 	userAndHost string // "laptop-username@laptop-hostname"
-
-	getCloudAPIKey func(context.Context, string, bool) (string, error)
-
-	ingressInfo []*manager.IngressInfo
 
 	// manager client
 	managerClient manager.ManagerClient
@@ -129,25 +128,12 @@ type TrafficManager struct {
 	// version reported by the manager
 	managerVersion semver.Version
 
-	// search paths are propagated to the rootDaemon
-	rootDaemon daemon.DaemonClient
-
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
 	wlWatcher *workloadsAndServicesWatcher
 
-	insLock sync.Mutex
-
-	// Currently intercepted namespaces by remote intercepts
-	interceptedNamespaces map[string]struct{}
-
-	// Currently intercepted namespaces by local intercepts
-	localInterceptedNamespaces map[string]struct{}
-
-	localIntercepts map[string]string
-
 	// currentInterceptsLock ensures that all accesses to currentIntercepts, currentMatchers,
-	// currentAPIServers, and interceptWaiters are synchronized
+	// currentAPIServers, interceptWaiters, localIntercepts, interceptedNamespace, and ingressInfo are synchronized
 	//
 	currentInterceptsLock sync.Mutex
 
@@ -166,6 +152,14 @@ type TrafficManager struct {
 	// is filled in prior to the intercept being created. Entries are short lived. They
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
+
+	// Names of local intercepts
+	localIntercepts map[string]struct{}
+
+	// Name of currently intercepted namespace
+	interceptedNamespace string
+
+	ingressInfo []*manager.IngressInfo
 
 	// currentAgents is the latest snapshot returned by the agent watcher
 	currentAgents     []*manager.AgentInfo
@@ -188,7 +182,7 @@ type TrafficManager struct {
 
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap
 // TODO: Change to released version
-var firstAgentConfigMapVersion = semver.MustParse("2.6.0-alpha.64")
+var firstAgentConfigMapVersion = semver.MustParse("2.6.0")
 
 func NewSession(
 	ctx context.Context,
@@ -200,15 +194,6 @@ func NewSession(
 ) (context.Context, Session, *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 	sr.Report(ctx, "connect")
-
-	var rootDaemon daemon.DaemonClient
-	if !cr.IsPodDaemon {
-		var err error
-		rootDaemon, err = svc.RootDaemonClient(ctx)
-		if err != nil {
-			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-		}
-	}
 
 	dlog.Info(ctx, "Connecting to k8s cluster...")
 	cluster, err := connectCluster(ctx, cr)
@@ -231,7 +216,7 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), svc, rootDaemon, cr.IsPodDaemon, extraServices, fuseFtp)
+	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), svc, cr.IsPodDaemon, extraServices, fuseFtp)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to TrafficManager: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -248,38 +233,19 @@ func NewSession(
 	}
 	svc.SetManagerClient(tmgr.managerClient, opts...)
 
-	// Tell daemon what it needs to know in order to establish outbound traffic to the cluster
-	if !cr.IsPodDaemon {
-		oi := tmgr.getOutboundInfo(ctx)
-
-		dlog.Debug(ctx, "Connecting to root daemon")
-		var rootStatus *daemon.DaemonStatus
-		for attempt := 1; ; attempt++ {
-			if rootStatus, err = rootDaemon.Connect(ctx, oi); err != nil {
-				dlog.Errorf(ctx, "failed to connect to root daemon: %v", err)
-				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-			}
-			oc := rootStatus.OutboundConfig
-			if oc == nil || oc.Session == nil {
-				// This is an internal error. Something is wrong with the root daemon.
-				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon's OutboundConfig has no Session"))
-			}
-			if oc.Session.SessionId == oi.Session.SessionId {
-				break
-			}
-
-			// Root daemon was running an old session. This indicates that this daemon somehow
-			// crashed without disconnecting. So let's do that now, and then reconnect...
-			if attempt == 2 {
-				// ...or not, since we've already done it.
-				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("unable to reconnect"))
-			}
-			if _, err = rootDaemon.Disconnect(ctx, &empty.Empty{}); err != nil {
-				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, fmt.Errorf("failed to disconnect from the root daemon: %w", err))
-			}
+	// Connect to the root daemon if it is running. It's the CLI that starts it initially
+	rdRunning, err := client.IsRunning(ctx, client.DaemonSocketName)
+	if err != nil {
+		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+	}
+	if rdRunning {
+		tmgr.rootDaemon, err = connectRootDaemon(ctx, tmgr.getOutboundInfo(ctx))
+		if err != nil {
+			tmgr.managerConn.Close()
+			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
-		dlog.Debug(ctx, "Connected to root daemon")
-		tmgr.AddNamespaceListener(tmgr.updateDaemonNamespaces)
+	} else {
+		dlog.Info(ctx, "Root daemon is not running")
 	}
 
 	// Collect data on how long connection time took
@@ -287,6 +253,7 @@ func NewSession(
 	sr.Report(ctx, "finished_connecting_traffic_manager", scout.Entry{
 		Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
 
+	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
 		ClusterContext: cluster.Config.Context,
@@ -295,12 +262,11 @@ func NewSession(
 		SessionInfo:    tmgr.session(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 	}
-	ctx = WithSession(ctx, tmgr)
-	return ctx, tmgr, ret
+	return WithSession(ctx, tmgr), tmgr, ret
 }
 
 func (tm *TrafficManager) RemainWithToken(ctx context.Context) error {
-	tok, err := tm.getCloudAPIKey(ctx, a8rcloud.KeyDescTrafficManager, false)
+	tok, err := auth.GetCloudAPIKey(ctx, tm.loginExecutor, a8rcloud.KeyDescTrafficManager, false)
 	if err != nil {
 		return fmt.Errorf("failed to get api key: %w", err)
 	}
@@ -312,6 +278,10 @@ func (tm *TrafficManager) RemainWithToken(ctx context.Context) error {
 		return fmt.Errorf("error calling Remain: %w", err)
 	}
 	return nil
+}
+
+func (tm *TrafficManager) LoginExecutor() auth.LoginExecutor {
+	return tm.loginExecutor
 }
 
 func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
@@ -390,7 +360,6 @@ func connectMgr(
 	cluster *k8s.Cluster,
 	installID string,
 	svc Service,
-	rootDaemon daemon.DaemonClient,
 	isPodDaemon bool,
 	sessionServices []SessionService,
 	fuseFtp rpc2.FuseFTPClient,
@@ -516,18 +485,15 @@ func connectMgr(
 	}
 
 	return &TrafficManager{
-		Cluster:     cluster,
-		installID:   installID,
-		userAndHost: userAndHost,
-		getCloudAPIKey: func(ctx context.Context, desc string, autoLogin bool) (string, error) {
-			return auth.GetCloudAPIKey(ctx, svc.LoginExecutor(), desc, autoLogin)
-		},
+		Cluster:          cluster,
+		installID:        installID,
+		userAndHost:      userAndHost,
+		loginExecutor:    svc.LoginExecutor(),
 		managerClient:    mClient,
 		managerConn:      conn,
 		managerVersion:   managerVersion,
 		sessionInfo:      si,
-		rootDaemon:       rootDaemon,
-		localIntercepts:  make(map[string]string),
+		localIntercepts:  make(map[string]struct{}),
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      isPodDaemon,
@@ -545,31 +511,32 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 	}
 }
 
-func (tm *TrafficManager) setInterceptedNamespaces(c context.Context, interceptedNamespaces map[string]struct{}) {
-	tm.insLock.Lock()
-	tm.interceptedNamespaces = interceptedNamespaces
-	tm.insLock.Unlock()
-	tm.updateDaemonNamespaces(c)
+func (tm *TrafficManager) setInterceptedNamespace(c context.Context, ns string) {
+	tm.currentInterceptsLock.Lock()
+	diff := tm.interceptedNamespace != ns
+	if diff {
+		tm.interceptedNamespace = ns
+	}
+	tm.currentInterceptsLock.Unlock()
+	if diff {
+		tm.updateDaemonNamespaces(c)
+	}
 }
 
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
 func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 	tm.wlWatcher.setNamespacesToWatch(c, tm.GetCurrentNamespaces(true))
-
-	tm.insLock.Lock()
-	namespaces := make([]string, 0, len(tm.interceptedNamespaces)+len(tm.localIntercepts))
-	for ns := range tm.interceptedNamespaces {
-		namespaces = append(namespaces, ns)
+	if tm.rootDaemon == nil {
+		return
 	}
-	for ns := range tm.localInterceptedNamespaces {
-		if _, found := tm.interceptedNamespaces[ns]; !found {
-			namespaces = append(namespaces, ns)
-		}
+	var namespaces []string
+	tm.currentInterceptsLock.Lock()
+	if tm.interceptedNamespace != "" {
+		namespaces = []string{tm.interceptedNamespace}
 	}
+	tm.currentInterceptsLock.Unlock()
 	// Avoid being locked for the remainder of this function.
-	tm.insLock.Unlock()
-	sort.Strings(namespaces)
 
 	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
 	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
@@ -590,7 +557,12 @@ func (tm *TrafficManager) updateDaemonNamespaces(c context.Context) {
 //     Services, and
 //   - (4) mount the appropriate remote volumes.
 func (tm *TrafficManager) Run(c context.Context) error {
-	defer dlog.Info(c, "-- Session ended")
+	defer func() {
+		if tm.rootDaemon != nil {
+			_, _ = tm.rootDaemon.Disconnect(c, &empty.Empty{})
+		}
+		defer dlog.Info(c, "-- Session ended")
+	}()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
@@ -768,22 +740,16 @@ func (tm *TrafficManager) workloadInfoSnapshot(
 
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {
-		// Special case, we don't care about namespaces. Instead, we use the namespaces of all
-		// intercepts.
-		nsMap := make(map[string]struct{})
-		for _, i := range is {
-			nsMap[i.Spec.Namespace] = struct{}{}
+		// Special case, we don't care about namespaces in general. Instead, we use the intercepted namespaces
+		tm.currentInterceptsLock.Lock()
+		if tm.interceptedNamespace != "" {
+			nss = []string{tm.interceptedNamespace}
 		}
-		for _, ns := range tm.localIntercepts {
-			nsMap[ns] = struct{}{}
+		tm.currentInterceptsLock.Unlock()
+		if len(nss) == 0 {
+			// No active intercepts
+			return &rpc.WorkloadInfoSnapshot{}, nil
 		}
-		nss = make([]string, len(nsMap))
-		i := 0
-		for ns := range nsMap {
-			nss[i] = ns
-			i++
-		}
-		sort.Strings(nss) // sort them so that the result is predictable
 	} else {
 		nss = make([]string, 0, len(namespaces))
 		for _, ns := range namespaces {
@@ -820,19 +786,15 @@ nextIs:
 	}
 
 	if includeLocalIntercepts {
-	nextLocalNs:
-		for localIntercept, localNs := range tm.localIntercepts {
-			for _, ns := range nss {
-				if localNs == ns {
-					workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
-						Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
-						Disposition:       manager.InterceptDispositionType_ACTIVE,
-						MechanismArgsDesc: "as local-only",
-					}}})
-					continue nextLocalNs
-				}
-			}
+		tm.currentInterceptsLock.Lock()
+		for localIntercept := range tm.localIntercepts {
+			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
+				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: tm.interceptedNamespace},
+				Disposition:       manager.InterceptDispositionType_ACTIVE,
+				MechanismArgsDesc: "as local-only",
+			}}})
 		}
+		tm.currentInterceptsLock.Unlock()
 	}
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
@@ -867,7 +829,7 @@ func (tm *TrafficManager) remain(c context.Context) error {
 				ApiKey: func() string {
 					// Discard any errors; including an apikey with this request
 					// is optional.  We might not even be logged in.
-					tok, _ := tm.getCloudAPIKey(c, a8rcloud.KeyDescTrafficManager, false)
+					tok, _ := auth.GetCloudAPIKey(c, tm.loginExecutor, a8rcloud.KeyDescTrafficManager, false)
 					return tok
 				}(),
 			})
@@ -904,9 +866,9 @@ func (tm *TrafficManager) UpdateStatus(c context.Context, cr *rpc.ConnectRequest
 	}
 
 	if tm.SetMappedNamespaces(c, cr.MappedNamespaces) {
-		tm.insLock.Lock()
+		tm.currentInterceptsLock.Lock()
 		tm.ingressInfo = nil
-		tm.insLock.Unlock()
+		tm.currentInterceptsLock.Unlock()
 	}
 	return tm.Status(c)
 }
@@ -920,6 +882,13 @@ func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterId:      tm.GetClusterId(c),
 		SessionInfo:    tm.session(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentInterceptInfos()},
+	}
+	if tm.rootDaemon != nil {
+		var err error
+		ret.DaemonStatus, err = tm.rootDaemon.Status(c, &empty.Empty{})
+		if err != nil {
+			return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
 	}
 	return ret
 }
@@ -1164,4 +1133,61 @@ func (tm *TrafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundI
 		}
 	}
 	return info
+}
+
+func connectRootDaemon(ctx context.Context, oi *daemon.OutboundInfo) (daemon.DaemonClient, error) {
+	// establish a connection to the root daemon gRPC grpcService
+	dlog.Info(ctx, "Connecting to root daemon...")
+	conn, err := client.DialSocket(ctx, client.DaemonSocketName,
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable open root daemon socket: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			conn.Close()
+		}
+	}()
+	rd := daemon.NewDaemonClient(conn)
+
+	for attempt := 1; ; attempt++ {
+		var rootStatus *daemon.DaemonStatus
+		if rootStatus, err = rd.Connect(ctx, oi); err != nil {
+			return nil, fmt.Errorf("failed to connect to root daemon: %w", err)
+		}
+		oc := rootStatus.OutboundConfig
+		if oc == nil || oc.Session == nil {
+			// This is an internal error. Something is wrong with the root daemon.
+			return nil, errors.New("root daemon's OutboundConfig has no Session")
+		}
+		if oc.Session.SessionId == oi.Session.SessionId {
+			break
+		}
+
+		// Root daemon was running an old session. This indicates that this daemon somehow
+		// crashed without disconnecting. So let's do that now, and then reconnect...
+		if attempt == 2 {
+			// ...or not, since we've already done it.
+			return nil, errors.New("unable to reconnect to root daemon")
+		}
+		if _, err = rd.Disconnect(ctx, &empty.Empty{}); err != nil {
+			return nil, fmt.Errorf("failed to disconnect from the root daemon: %w", err)
+		}
+	}
+
+	// The root daemon needs time to set up the TUN-device and DNS, which involves interacting
+	// with the cluster-side traffic-manager. We know that the traffic-manager is up and
+	// responding at this point, so it shouldn't take too long.
+	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
+	defer cancel()
+	if _, err = rd.WaitForNetwork(ctx, &empty.Empty{}); err != nil {
+		if se, ok := status.FromError(err); ok {
+			err = se.Err()
+		}
+		return nil, fmt.Errorf("failed to connect to root daemon: %v", err)
+	}
+	dlog.Debug(ctx, "Connected to root daemon")
+	return rd, nil
 }

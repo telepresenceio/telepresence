@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	dns2 "github.com/miekg/dns"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -20,6 +21,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -124,19 +126,30 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		}
 	}()
 
-	// Deal with host lookups dispatched to this agent during intercepts
-	lrStream, err := manager.WatchLookupHost(ctx, session)
-	if err != nil {
-		return err
-	}
-
 	wg := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout: time.Second * 10,
 		HardShutdownTimeout: time.Second * 10,
 	})
-	wg.Go("lookupHostWait", func(ctx context.Context) error {
-		return lookupHostWaitLoop(ctx, manager, session, lrStream)
-	})
+
+	if dnsproxy.ManagerCanDoDNSQueryTypes(mgrVer) {
+		// Deal with DNS lookups dispatched to this agent during intercepts
+		dnsStream, err := manager.WatchLookupDNS(ctx, session)
+		if err != nil {
+			return err
+		}
+		wg.Go("lookupDNSWait", func(ctx context.Context) error {
+			return lookupDNSWaitLoop(ctx, manager, session, dnsStream)
+		})
+	} else {
+		// Deal with host lookups dispatched to this agent during intercepts
+		lrStream, err := manager.WatchLookupHost(ctx, session)
+		if err != nil {
+			return err
+		}
+		wg.Go("lookupHostWait", func(ctx context.Context) error {
+			return lookupHostWaitLoop(ctx, manager, session, lrStream)
+		})
+	}
 
 	// Deal with dial requests from the manager
 	dialerStream, err := manager.WatchDial(ctx, session)
@@ -239,24 +252,39 @@ func lookupHostWaitLoop(ctx context.Context, manager rpc.ManagerClient, session 
 			}
 			return nil
 		}
-		go lookupAndRespond(ctx, manager, session, lr)
+		go lookupHostAndRespond(ctx, manager, session, lr)
 	}
 	return nil
 }
 
-func lookupAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.LookupHostRequest) {
-	dlog.Debugf(ctx, "LookupRequest for %s", lr.Host)
+func lookupDNSWaitLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lookupDNSStream rpc.Manager_WatchLookupDNSClient) error {
+	for ctx.Err() == nil {
+		lr, err := lookupDNSStream.Recv()
+		if err != nil {
+			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
+				return fmt.Errorf("lookup request stream recv: %w", err)
+			}
+			return nil
+		}
+		go lookupDNSAndRespond(ctx, manager, session, lr)
+	}
+	return nil
+}
+
+// Deprecated: retained for backward compatibility
+func lookupHostAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.LookupHostRequest) {
+	dlog.Debugf(ctx, "LookupRequest for %s", lr.Name)
 	response := rpc.LookupHostAgentResponse{
 		Session:  session,
 		Request:  lr,
 		Response: &rpc.LookupHostResponse{},
 	}
 
-	addrs, err := net.DefaultResolver.LookupHost(ctx, lr.Host)
+	addrs, err := net.DefaultResolver.LookupHost(ctx, lr.Name)
 	switch {
 	case err != nil:
 		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
-			dlog.Debugf(ctx, "Lookup response for %s -> NOT FOUND", lr.Host)
+			dlog.Debugf(ctx, "Lookup response for %s -> NOT FOUND", lr.Name)
 		} else {
 			dlog.Errorf(ctx, "LookupHost: %v", err)
 		}
@@ -265,14 +293,39 @@ func lookupAndRespond(ctx context.Context, manager rpc.ManagerClient, session *r
 		for i, addr := range addrs {
 			ips[i] = iputil.Parse(addr)
 		}
-		dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Host, ips)
+		dlog.Debugf(ctx, "Lookup response for %s -> %s", lr.Name, ips)
 		response.Response.Ips = ips.BytesSlice()
 	default:
-		dlog.Debugf(ctx, "Lookup response for %s -> EMPTY", lr.Host)
+		dlog.Debugf(ctx, "Lookup response for %s -> EMPTY", lr.Name)
 	}
 	if _, err = manager.AgentLookupHostResponse(ctx, &response); err != nil {
 		if ctx.Err() == nil {
 			dlog.Debugf(ctx, "lookup response: %+v %v", err, &response)
+		}
+	}
+}
+
+func lookupDNSAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.DNSRequest) {
+	qType := uint16(lr.Type)
+	tqn := dns2.TypeToString[qType]
+	rrs, rCode, err := dnsproxy.Lookup(ctx, qType, lr.Name)
+	if err != nil {
+		dlog.Errorf(ctx, "LookupDNS %s %s: %v", lr.Name, tqn, err)
+		return
+	}
+	res, err := dnsproxy.ToRPC(rrs, rCode)
+	if err != nil {
+		dlog.Errorf(ctx, "ToRPC %s %s: %v", lr.Name, tqn, err)
+		return
+	}
+	if len(rrs) > 0 {
+		dlog.Debugf(ctx, "LookupDNS %s %s -> %v", lr.Name, tqn, rrs)
+	} else {
+		dlog.Debugf(ctx, "LookupDNS %s %s -> EMPTY", lr.Name, tqn)
+	}
+	if _, err := manager.AgentLookupDNSResponse(ctx, &rpc.DNSAgentResponse{Session: session, Request: lr, Response: res}); err != nil {
+		if ctx.Err() == nil {
+			dlog.Errorf(ctx, "AgentLookupDNSResponse: %v", err)
 		}
 	}
 }

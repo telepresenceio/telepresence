@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -30,20 +31,19 @@ func TestEnvconfig(t *testing.T) {
 	}()
 
 	defaults := managerutil.Env{
-		User:                "",
-		ServerHost:          "",
-		ServerPort:          "8081",
-		PrometheusPort:      "0",
-		SystemAHost:         "app.getambassador.io",
-		SystemAPort:         "443",
-		AgentRegistry:       "docker.io/datawire",
-		AgentImage:          "",
-		AgentPort:           9900,
-		MaxReceiveSize:      resource.MustParse("4Mi"),
-		PodCIDRStrategy:     "auto",
-		DNSServiceName:      "coredns",
-		DNSServiceNamespace: "kube-system",
-		LogLevel:            "info",
+		ServerPort:               "8081",
+		PrometheusPort:           "0",
+		SystemAHost:              "app.getambassador.io",
+		SystemAPort:              "443",
+		AgentRegistry:            "docker.io/datawire",
+		AgentPort:                9900,
+		MaxReceiveSize:           resource.MustParse("4Mi"),
+		PodCIDRStrategy:          "auto",
+		DNSServiceName:           "coredns",
+		DNSServiceNamespace:      "kube-system",
+		LogLevel:                 "info",
+		ClientConnectionTTL:      24 * time.Hour,
+		ClientDnsExcludeSuffixes: []string{".com", ".io", ".net", ".org", ".ru"},
 	}
 
 	testcases := map[string]struct {

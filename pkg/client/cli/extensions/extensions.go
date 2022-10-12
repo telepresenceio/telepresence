@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,7 +12,6 @@ import (
 	"github.com/spf13/pflag"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -37,10 +33,6 @@ type CLIFlagState struct {
 	cachedMechanism struct {
 		Mech string
 		Err  error
-	}
-	cachedImage struct {
-		Image string
-		Err   error
 	}
 }
 
@@ -327,77 +319,6 @@ func (es *CLIFlagState) RequiresAPIKeyOrLicense() (bool, error) {
 		return false, err
 	}
 	return es.extInfos.exts[es.extInfos.mech2ext[mechname]].RequiresAPIKeyOrLicense, nil
-}
-
-func urlSchemeIsOneOf(urlStr string, schemes ...string) bool {
-	u, err := url.Parse(urlStr)
-	if err != nil {
-		return false
-	}
-	for _, scheme := range schemes {
-		if u.Scheme == scheme {
-			return true
-		}
-	}
-	return false
-}
-
-// AgentImage returns the repository/name combination that will be assigned to the container
-// image attribute.
-// Deprecated: The image to  use is determined by the traffic-manager
-func (es *CLIFlagState) AgentImage(ctx context.Context) (string, error) {
-	cfg := client.GetConfig(ctx)
-	if ai := cfg.Images.AgentImage(ctx); ai != "" {
-		return fmt.Sprintf("%s/%s", cfg.Images.Registry(ctx), ai), nil
-	}
-	if es.cachedImage.Image != "" || es.cachedImage.Err != nil {
-		return es.cachedImage.Image, es.cachedImage.Err
-	}
-	mechname, err := es.Mechanism()
-	if err != nil {
-		return "", err
-	}
-	image := os.Expand(es.extInfos.exts[es.extInfos.mech2ext[mechname]].Image, client.GetEnv(ctx).Get)
-	if cfg.Cloud.SkipLogin {
-		msg := fmt.Sprintf(
-			`images.agentImage must be set with cloud.skipLogin in
-%s for intercepts of mechanism: %s`, client.GetConfigFile(ctx), mechname)
-		err := errcat.Config.New(msg)
-		return "", err
-	}
-	for urlSchemeIsOneOf(image, "http", "https", "grpc+https") {
-		if strings.HasPrefix(strings.ToLower(image), "grpc+") {
-			image, err = systemaGetPreferredAgentImageName(ctx, image)
-		} else {
-			image, err = func() (string, error) {
-				req, err := http.NewRequest(http.MethodGet, image, nil)
-				if err != nil {
-					return "", err
-				}
-				req = req.WithContext(ctx)
-
-				resp, err := http.DefaultClient.Do(req)
-				if err != nil {
-					return "", err
-				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					return "", errcat.NoDaemonLogs.Newf("image URL %q returned HTTP %v", image, resp.StatusCode)
-				}
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					return "", errcat.NoDaemonLogs.New(err)
-				}
-				return strings.TrimSpace(string(body)), nil
-			}()
-		}
-		if err != nil {
-			es.cachedImage.Err = err
-			return "", err
-		}
-	}
-	es.cachedImage.Image = image
-	return image, nil
 }
 
 func (es *CLIFlagState) MechanismArgs() ([]string, error) {

@@ -228,6 +228,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
 			cmd.SetOut(stdout)
 			cmd.SetErr(stderr)
+			cmd.SetContext(ctx)
 			gl := &gatherLogsArgs{
 				outputFile: tc.outputFile,
 				daemons:    tc.daemons,
@@ -238,7 +239,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			}
 
 			// Ensure we can create a zip of the logs
-			err := gl.gatherLogs(ctx, cmd)
+			err := gl.gatherLogs(cmd, nil)
 			if tc.errMsg != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.errMsg)

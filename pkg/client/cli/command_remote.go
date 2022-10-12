@@ -14,7 +14,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -22,14 +22,22 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func getRemoteCommands(ctx context.Context, cmd *cobra.Command, forceStart bool) (groups cliutil.CommandGroups, err error) {
+func getRemoteCommands(cmd *cobra.Command, forceStart bool) (groups cliutil.CommandGroups, err error) {
 	groups = make(cliutil.CommandGroups)
-	listCommands := func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		remote, err := connectorClient.ListCommands(ctx, &empty.Empty{})
+	av := ann.Optional
+	if forceStart {
+		av = ann.Required
+	}
+	cmd.Annotations = map[string]string{ann.UserDaemon: av}
+	if err := cliutil.InitCommand(cmd); err != nil {
+		return nil, err
+	}
+	ctx := cmd.Context()
+	if userD := cliutil.GetUserDaemon(ctx); userD != nil {
+		remote, err := userD.ListCommands(ctx, &empty.Empty{})
 		if err != nil {
-			return fmt.Errorf("unable to call ListCommands: %w", err)
+			return nil, fmt.Errorf("unable to call ListCommands: %w", err)
 		}
-
 		var funcBundle = cliutil.CommandFuncBundle{
 			RunE:              runRemote,
 			ValidArgsFunction: validArgsFuncRemote,
@@ -37,42 +45,35 @@ func getRemoteCommands(ctx context.Context, cmd *cobra.Command, forceStart bool)
 		if groups, err = cliutil.RPCToCommands(remote, funcBundle); err != nil {
 			groups = commands.GetCommandsForLocal(ctx, err)
 		}
-
 		userDaemonRunning = true
-		return err
-	}
-	if forceStart {
-		err = withConnector(cmd, true, nil, func(ctx context.Context, state *connectorState) error {
-			return listCommands(ctx, state.userD)
-		})
-	} else {
-		err = cliutil.WithStartedConnector(ctx, false, listCommands)
 	}
 	return groups, err
 }
 
+func initRemoteCommand(cmd *cobra.Command) error {
+	ca := cmd.Annotations
+	if ca == nil {
+		ca = make(map[string]string)
+		cmd.Annotations = ca
+	}
+	ca[ann.Session] = ann.Required
+	ca[ann.RootDaemon] = ann.Required
+	return cliutil.InitCommand(cmd)
+}
+
 func validArgsFuncRemote(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	var (
-		resp *connector.ValidArgsForCommandResponse
-		err  error
-	)
-
-	err = cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, _ daemon.DaemonClient) error {
-		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-			resp, err = connectorClient.ValidArgsForCommand(ctx, &connector.ValidArgsForCommandRequest{
-				CmdName:    cmd.Name(),
-				OsArgs:     args,
-				ToComplete: toComplete,
-			})
-
-			return err
-		})
+	if err := initRemoteCommand(cmd); err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	ctx := cmd.Context()
+	resp, err := cliutil.GetUserDaemon(ctx).ValidArgsForCommand(ctx, &connector.ValidArgsForCommandRequest{
+		CmdName:    cmd.Name(),
+		OsArgs:     args,
+		ToComplete: toComplete,
 	})
-
 	if err != nil {
 		return []string{}, 0
 	}
-
 	return resp.Completions, cobra.ShellCompDirective(resp.ShellCompDirective)
 }
 
@@ -168,39 +169,40 @@ func stdoutAndStderrPump(ctx context.Context, cmdStream connector.Connector_RunC
 }
 
 func runRemote(cmd *cobra.Command, args []string) error {
+	if err := initRemoteCommand(cmd); err != nil {
+		return err
+	}
+	ctx := cmd.Context()
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	return cliutil.WithNetwork(cmd.Context(), func(ctx context.Context, _ daemon.DaemonClient) error {
-		return cliutil.WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-			// Use a graceful termination period
-			ctx, cancel := context.WithCancel(ctx)
-			defer cancel()
-			_, stderr := output.Structured(ctx)
+	userD := cliutil.GetUserDaemon(ctx)
+	// Use a graceful termination period
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	_, stderr := output.Structured(ctx)
 
-			cmdStream, err := connectorClient.RunCommand(ctx)
-			if err != nil {
-				fmt.Fprintf(stderr, "failed start command: %v\n", err)
-				return err
-			}
+	cmdStream, err := userD.RunCommand(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "failed start command: %v\n", err)
+		return err
+	}
 
-			// FlagParsing is disabled on the local-side cmd so args is actually going to hold flags and args both
-			// Thus command_name + args is the entire command line (except for the "telepresence" string in os.Args[0])
-			err = cmdStream.Send(&connector.RunCommandRequest{
-				COrD: &connector.RunCommandRequest_Command_{Command: &connector.RunCommandRequest_Command{
-					OsArgs: append([]string{cmd.CalledAs()}, args...),
-					Cwd:    cwd,
-				}}})
-			if err != nil {
-				fmt.Fprintf(stderr, "failed to send: %v\n", err)
-				return err
-			}
+	// FlagParsing is disabled on the local-side cmd so args is actually going to hold flags and args both
+	// Thus command_name + args is the entire command line (except for the "telepresence" string in os.Args[0])
+	err = cmdStream.Send(&connector.RunCommandRequest{
+		COrD: &connector.RunCommandRequest_Command_{Command: &connector.RunCommandRequest_Command{
+			OsArgs: append([]string{cmd.CalledAs()}, args...),
+			Cwd:    cwd,
+		}}})
+	if err != nil {
+		fmt.Fprintf(stderr, "failed to send: %v\n", err)
+		return err
+	}
 
-			// Start all pumps, wait for the stdout/stderr pump to finish
-			go stdinPump(ctx, cmdStream, cmd)
-			go interruptPump(ctx, cmdStream, cancel)
-			return stdoutAndStderrPump(ctx, cmdStream, cmd)
-		})
-	})
+	// Start all pumps, wait for the stdout/stderr pump to finish
+	go stdinPump(ctx, cmdStream, cmd)
+	go interruptPump(ctx, cmdStream, cancel)
+	return stdoutAndStderrPump(ctx, cmdStream, cmd)
 }

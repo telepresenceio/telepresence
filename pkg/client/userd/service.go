@@ -20,7 +20,6 @@ import (
 	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -65,12 +64,10 @@ type CommandFactory func(context.Context) cliutil.CommandGroups
 // Service represents the long-running state of the Telepresence User Daemon
 type Service struct {
 	rpc.UnsafeConnectorServer
-
 	svc               *grpc.Server
 	ManagerProxy      trafficmgr.ManagerProxy
 	procName          string
 	timedLogLevel     log.TimedLevel
-	daemonClient      daemon.DaemonClient
 	loginExecutor     auth.LoginExecutor
 	userNotifications func(context.Context) <-chan string
 	ucn               int64
@@ -95,24 +92,6 @@ type Service struct {
 
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
 	s.ManagerProxy.SetClient(managerClient, callOptions...)
-}
-
-func (s *Service) RootDaemonClient(c context.Context) (daemon.DaemonClient, error) {
-	if s.daemonClient != nil {
-		return s.daemonClient, nil
-	}
-	// establish a connection to the root daemon gRPC grpcService
-	dlog.Info(c, "Connecting to root daemon...")
-	conn, err := client.DialSocket(c, client.DaemonSocketName,
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	if err != nil {
-		dlog.Errorf(c, "unable to connect to root daemon: %+v", err)
-		return nil, err
-	}
-	s.daemonClient = daemon.NewDaemonClient(conn)
-	return s.daemonClient, nil
 }
 
 func (s *Service) LoginExecutor() auth.LoginExecutor {
@@ -168,14 +147,15 @@ nextSession:
 				rsp = s.session.UpdateStatus(s.sessionContext, cr)
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
+				s.sessionCancel = sCancel
 				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices, fuseFtp)
-				sCtx = a8rcloud.WithSystemAPool[*SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
+				sCtx = a8rcloud.WithSystemAPool[a8rcloud.SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
-					s.sessionCancel = sCancel
 					s.session = session
 				} else {
 					sCancel()
+					s.sessionCancel = nil
 				}
 			}
 		}

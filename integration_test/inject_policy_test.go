@@ -42,7 +42,7 @@ func (s *helmSuite) injectPolicyTest(ctx context.Context, policy agentconfig.Inj
 	defer s.UninstallTrafficManager(ctx, namespace)
 
 	itest.TelepresenceOk(ctx, "connect")
-	defer itest.TelepresenceOk(ctx, "quit", "-ur")
+	defer itest.TelepresenceOk(ctx, "quit", "-s")
 
 	itest.TelepresenceOk(ctx, "loglevel", "debug")
 
@@ -86,7 +86,7 @@ func (s *helmSuite) injectPolicyTest(ctx context.Context, policy agentconfig.Inj
 
 func (s *helmSuite) TestInjectPolicy() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "quit", "-ur")
+	itest.TelepresenceOk(ctx, "quit", "-s")
 	defer func() {
 		itest.TelepresenceOk(ctx, "connect")
 	}()

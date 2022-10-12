@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	v1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -72,31 +74,7 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	defer span.End()
 	k8sapi.RecordWorkloadInfo(span, wl)
 	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
-		// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
-		// set must be scaled down and then up again.
-		dlog.Debugf(ctx, "Performing ReplicaSet rollout of %s.%s using scaling", wl.GetName(), wl.GetNamespace())
-		replicas := 1
-		if rp := rs.Spec.Replicas; rp != nil {
-			replicas = int(*rp)
-		}
-		if replicas > 0 {
-			patch := `{"spec": {"replicas": 0}}`
-			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
-				err = fmt.Errorf("unable to scale ReplicaSet %s.%s to zero: %w", wl.GetName(), wl.GetNamespace(), err)
-				dlog.Error(ctx, err)
-				span.SetStatus(codes.Error, err.Error())
-				return
-			}
-			patch = fmt.Sprintf(`{"spec": {"replicas": %d}}`, replicas)
-			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
-				err = fmt.Errorf("unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
-				dlog.Error(ctx, err)
-				span.SetStatus(codes.Error, err.Error())
-			}
-		} else {
-			span.AddEvent("tel2.noop-rollout")
-			dlog.Debugf(ctx, "ReplicaSet %s.%s has zero replicas so rollout was a no-op", wl.GetName(), wl.GetNamespace())
-		}
+		triggerRolloutReplicaSet(ctx, wl, rs, span)
 		return
 	}
 	restartAnnotation := fmt.Sprintf(
@@ -112,6 +90,60 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 		return
 	}
 	dlog.Infof(ctx, "Successfully rolled out %s.%s", wl.GetName(), wl.GetNamespace())
+}
+
+func triggerRolloutReplicaSet(ctx context.Context, wl k8sapi.Workload, rs *v1.ReplicaSet, span trace.Span) {
+	// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
+	// set must be scaled down and then up again.
+	dlog.Debugf(ctx, "Performing ReplicaSet rollout of %s.%s using scaling", wl.GetName(), wl.GetNamespace())
+	replicas := int32(1)
+	if rp := rs.Spec.Replicas; rp != nil {
+		replicas = *rp
+	}
+	if replicas == 0 {
+		span.AddEvent("tel2.noop-rollout")
+		dlog.Debugf(ctx, "ReplicaSet %s.%s has zero replicas so rollout was a no-op", wl.GetName(), wl.GetNamespace())
+		return
+	}
+
+	waitForReplicaCount := func(count int32) error {
+		for retry := 0; retry < 200; retry++ {
+			if nwl, err := k8sapi.GetReplicaSet(ctx, wl.GetName(), wl.GetNamespace()); err == nil {
+				rs, _ = k8sapi.ReplicaSetImpl(nwl)
+				if rp := rs.Spec.Replicas; rp != nil && *rp == count {
+					wl = nwl
+					return nil
+				}
+			}
+			dtime.SleepWithContext(ctx, 300*time.Millisecond)
+		}
+		return fmt.Errorf("ReplicaSet %s.%s never scaled down to zero", wl.GetName(), wl.GetNamespace())
+	}
+
+	patch := `{"spec": {"replicas": 0}}`
+	if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
+		err = fmt.Errorf("unable to scale ReplicaSet %s.%s to zero: %w", wl.GetName(), wl.GetNamespace(), err)
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	if err := waitForReplicaCount(0); err != nil {
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	dlog.Debugf(ctx, "ReplicaSet %s.%s was scaled down to zero. Scaling back to %d", wl.GetName(), wl.GetNamespace(), replicas)
+	patch = fmt.Sprintf(`{"spec": {"replicas": %d}}`, replicas)
+	if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
+		err = fmt.Errorf("unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	if err := waitForReplicaCount(replicas); err != nil {
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
 }
 
 // RegenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,

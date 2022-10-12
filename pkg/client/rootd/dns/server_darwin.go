@@ -201,7 +201,6 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 			namespaces[path] = struct{}{}
 		}
 	}
-	namespaces[tel2SubDomain] = struct{}{}
 
 	// All namespaces and include suffixes become domains
 	domains := make(map[string]struct{}, len(namespaces)+len(s.config.IncludeSuffixes))

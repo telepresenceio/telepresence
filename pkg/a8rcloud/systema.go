@@ -12,6 +12,8 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 )
 
 const (
@@ -40,6 +42,13 @@ type ClientProvider[T Closeable] interface {
 	HeaderProvider
 	GetCloudConfig(ctx context.Context) (*manager.AmbassadorCloudConfig, error)
 	BuildClient(ctx context.Context, conn *grpc.ClientConn) (T, error)
+}
+
+type SessionClient interface {
+	userdaemon.SystemAClient
+	systema.SystemACRUDClient
+	systema.UserDaemonSystemAProxyClient
+	Closeable
 }
 
 type systemaPoolKey string

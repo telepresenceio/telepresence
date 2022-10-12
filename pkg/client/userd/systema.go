@@ -7,7 +7,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 
 	"google.golang.org/grpc"
@@ -18,12 +18,13 @@ type SessionClientProvider struct {
 	session trafficmgr.Session
 }
 
-type SessionClient struct {
+type sessionClient struct {
 	userdaemon.SystemAClient
+	systema.SystemACRUDClient
 	systema.UserDaemonSystemAProxyClient
 }
 
-func (c *SessionClient) Close(ctx context.Context) error {
+func (c *sessionClient) Close(ctx context.Context) error {
 	return nil
 }
 
@@ -37,7 +38,7 @@ func (p *SessionClientProvider) GetCloudConfig(ctx context.Context) (*manager.Am
 }
 
 func (p *SessionClientProvider) GetAPIKey(ctx context.Context) (string, error) {
-	return cliutil.GetCloudAPIKey(ctx, a8rcloud.KeyDescWorkstation, true)
+	return auth.GetCloudAPIKey(ctx, p.session.LoginExecutor(), a8rcloud.KeyDescWorkstation, true)
 }
 
 func (p *SessionClientProvider) GetInstallID(ctx context.Context) (string, error) {
@@ -48,8 +49,10 @@ func (p *SessionClientProvider) GetExtraHeaders(ctx context.Context) (map[string
 	return map[string]string{}, nil
 }
 
-func (p *SessionClientProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (*SessionClient, error) {
-	userdCli := userdaemon.NewSystemAClient(conn)
-	userdProxyCli := systema.NewUserDaemonSystemAProxyClient(conn)
-	return &SessionClient{SystemAClient: userdCli, UserDaemonSystemAProxyClient: userdProxyCli}, nil
+func (p *SessionClientProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (a8rcloud.SessionClient, error) {
+	return &sessionClient{
+		SystemAClient:                userdaemon.NewSystemAClient(conn),
+		SystemACRUDClient:            systema.NewSystemACRUDClient(conn),
+		UserDaemonSystemAProxyClient: systema.NewUserDaemonSystemAProxyClient(conn),
+	}, nil
 }

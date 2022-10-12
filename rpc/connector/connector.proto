@@ -4,6 +4,7 @@ package telepresence.connector;
 import "google/protobuf/empty.proto";
 import "rpc/common/errors.proto";
 import "rpc/common/version.proto";
+import "rpc/daemon/daemon.proto";
 import "rpc/manager/manager.proto";
 import "rpc/userdaemon/userdaemon.proto";
 
@@ -15,6 +16,9 @@ service Connector {
   // Returns version information from the Connector
   rpc Version(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
 
+  // Returns version information from the Root Daemon
+  rpc RootDaemonVersion(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
+
   // Connects to the cluster and connects the laptop's network (via
   // the daemon process) to the cluster's network.  A result code of
   // UNSPECIFIED indicates that the connection was successfully
@@ -25,6 +29,9 @@ service Connector {
 
   // Disconnects the cluster
   rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // GetClusterSubnets gets the outbound info that has been set on daemon
+  rpc GetClusterSubnets(google.protobuf.Empty) returns (daemon.ClusterSubnets);
 
   // Status returns the status of the current connection or DISCONNECTED
   // if no connection has been established.
@@ -231,6 +238,8 @@ message ConnectInfo {
 
   telepresence.manager.SessionInfo session_info = 10;
   string cluster_id = 11;
+
+  daemon.DaemonStatus daemon_status = 13;
 
   reserved 5;
   reserved 6;

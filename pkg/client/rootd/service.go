@@ -96,7 +96,12 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	d.sessionLock.RLock()
 	defer d.sessionLock.RUnlock()
-	r := &rpc.DaemonStatus{}
+	r := &rpc.DaemonStatus{
+		Version: &common.VersionInfo{
+			ApiVersion: client.APIVersion,
+			Version:    client.Version(),
+		},
+	}
 	if d.session != nil {
 		r.OutboundConfig = d.session.getInfo()
 	}
@@ -139,6 +144,16 @@ func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty,
 	dlog.Debug(ctx, "Received gRPC Disconnect")
 	d.cancelSession()
 	return &empty.Empty{}, nil
+}
+
+func (d *service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Empty, error) {
+	err := d.withSession(ctx, func(ctx context.Context, session *session) error {
+		if err, ok := <-session.networkReady(ctx); ok {
+			return status.Error(codes.Unavailable, err.Error())
+		}
+		return nil
+	})
+	return &empty.Empty{}, err
 }
 
 func (d *service) cancelSession() {
@@ -239,8 +254,14 @@ nextSession:
 		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
 			// Respond by setting the session and returning the error (or nil
 			// if everything is ok)
+			reply.status = &rpc.DaemonStatus{
+				Version: &common.VersionInfo{
+					ApiVersion: client.APIVersion,
+					Version:    client.Version(),
+				},
+			}
 			if d.session != nil {
-				reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+				reply.status.OutboundConfig = d.session.getInfo()
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
 				session, reply.err = newSession(sCtx, d.scout, oi)
@@ -248,7 +269,7 @@ nextSession:
 					d.session = session
 					d.sessionContext = sCtx
 					d.sessionCancel = sCancel
-					reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+					reply.status.OutboundConfig = d.session.getInfo()
 				} else {
 					sCancel()
 				}
@@ -274,7 +295,12 @@ nextSession:
 		// the session is running. The d.session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer func() {
+				d.sessionLock.Lock()
+				d.session = nil
+				d.sessionLock.Unlock()
+				wg.Done()
+			}()
 			if err := d.session.run(d.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}

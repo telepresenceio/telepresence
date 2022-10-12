@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/sethvargo/go-envconfig"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -44,11 +43,15 @@ type Env struct {
 	PodCIDRs        string `env:"POD_CIDRS,default="`
 	PodIP           string `env:"TELEPRESENCE_MANAGER_POD_IP,default="`
 
-	DNSServiceName       string `env:"DNS_SERVICE_NAME,default=coredns"`
-	DNSServiceNamespace  string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
-	DNSServiceIP         string `env:"DNS_SERVICE_IP,default="`
-	DNSAlsoProxySubnets  string `env:"ALSO_PROXY_SUBNETS,default="`
-	DNSNeverProxySubnets string `env:"NEVER_PROXY_SUBNETS,default="`
+	DNSServiceName      string `env:"DNS_SERVICE_NAME,default=coredns"`
+	DNSServiceNamespace string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
+	DNSServiceIP        string `env:"DNS_SERVICE_IP,default="`
+
+	ClientRoutingAlsoProxySubnets  []string      `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,default="`
+	ClientRoutingNeverProxySubnets []string      `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS,default="`
+	ClientDnsExcludeSuffixes       []string      `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,default=.com,.io,.net,.org,.ru"`
+	ClientDnsIncludeSuffixes       []string      `env:"CLIENT_DNS_INCLUDE_SUFFIXES,default="`
+	ClientConnectionTTL            time.Duration `env:"CLIENT_CONNECTION_TTL,default=24h"`
 }
 
 type envKey struct{}
@@ -97,27 +100,26 @@ func (e *Env) GetManagedNamespaces() []string {
 	return nil
 }
 
-func (e *Env) GetAlsoProxySubnets() ([]*manager.IPNet, error) {
-	return parseRawSubnets(e.DNSAlsoProxySubnets)
+func (e *Env) GetAlsoProxySubnets() ([]*net.IPNet, error) {
+	return parseRawSubnets(e.ClientRoutingAlsoProxySubnets)
 }
 
-func (e *Env) GetNeverProxySubnets() ([]*manager.IPNet, error) {
-	return parseRawSubnets(e.DNSNeverProxySubnets)
+func (e *Env) GetNeverProxySubnets() ([]*net.IPNet, error) {
+	return parseRawSubnets(e.ClientRoutingNeverProxySubnets)
 }
 
-func parseRawSubnets(ipNetsStr string) ([]*manager.IPNet, error) {
-	if ipNetsStr == "" { // env var not set
+func parseRawSubnets(ipNetStrs []string) ([]*net.IPNet, error) {
+	if len(ipNetStrs) == 0 { // env var not set
 		return nil, nil
 	}
 
-	splitIPNets := strings.Split(ipNetsStr, " ")
-	ipNets := make([]*manager.IPNet, len(splitIPNets))
-	for i, s := range splitIPNets {
+	ipNets := make([]*net.IPNet, len(ipNetStrs))
+	for i, s := range ipNetStrs {
 		_, ipNet, err := net.ParseCIDR(s)
 		if err != nil {
 			return nil, err
 		}
-		ipNets[i] = iputil.IPNetToRPC(ipNet)
+		ipNets[i] = ipNet
 	}
 	return ipNets, nil
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"io"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
@@ -32,6 +32,9 @@ func listCommand() *cobra.Command {
 
 		Short: "List current intercepts",
 		RunE:  s.list,
+		Annotations: map[string]string{
+			ann.Session: ann.Required,
+		},
 	}
 	flags := cmd.Flags()
 	flags.BoolVarP(&s.onlyIntercepts, "intercepts", "i", false, "intercepts only")
@@ -42,93 +45,93 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
 
 	_ = cmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		var (
-			completions  = []string{}
-			shellCompDir = cobra.ShellCompDirectiveNoFileComp
-		)
-		err := withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
-			resp, err := cs.userD.GetNamespaces(ctx, &connector.GetNamespacesRequest{
-				ForClientAccess: false,
-				Prefix:          toComplete,
-			})
-			if err != nil {
-				return err
-			}
-			completions = resp.Namespaces
-			return nil
+		shellCompDir := cobra.ShellCompDirectiveNoFileComp
+		if err := cliutil.InitCommand(cmd); err != nil {
+			shellCompDir |= cobra.ShellCompDirectiveError
+			return nil, shellCompDir
+		}
+		ctx := cmd.Context()
+		userD := cliutil.GetUserDaemon(ctx)
+		resp, err := userD.GetNamespaces(ctx, &connector.GetNamespacesRequest{
+			ForClientAccess: false,
+			Prefix:          toComplete,
 		})
 		if err != nil {
 			dlog.Debugf(cmd.Context(), "error getting namespaces: %v", err)
 			shellCompDir |= cobra.ShellCompDirectiveError
+			return nil, shellCompDir
 		}
-		return completions, shellCompDir
+		return resp.Namespaces, shellCompDir
 	})
 	return cmd
 }
 
 // list requests a list current intercepts from the daemon
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
+	if err := cliutil.InitCommand(cmd); err != nil {
+		return err
+	}
 	stdout := cmd.OutOrStdout()
-	return withConnector(cmd, true, nil, func(ctx context.Context, cs *connectorState) error {
-		var filter connector.ListRequest_Filter
-		switch {
-		case s.onlyIntercepts:
-			filter = connector.ListRequest_INTERCEPTS
-		case s.onlyAgents:
-			filter = connector.ListRequest_INSTALLED_AGENTS
-		case s.onlyInterceptable:
-			filter = connector.ListRequest_INTERCEPTABLE
-		default:
-			filter = connector.ListRequest_EVERYTHING
-		}
+	ctx := cmd.Context()
+	userD := cliutil.GetUserDaemon(ctx)
+	var filter connector.ListRequest_Filter
+	switch {
+	case s.onlyIntercepts:
+		filter = connector.ListRequest_INTERCEPTS
+	case s.onlyAgents:
+		filter = connector.ListRequest_INSTALLED_AGENTS
+	case s.onlyInterceptable:
+		filter = connector.ListRequest_INTERCEPTABLE
+	default:
+		filter = connector.ListRequest_EVERYTHING
+	}
 
-		cfg := client.GetConfig(ctx)
-		maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. List can be quit long.
-		if !cfg.Grpc.MaxReceiveSize.IsZero() {
-			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-				if mz > maxRecSize {
-					maxRecSize = mz
-				}
+	cfg := client.GetConfig(ctx)
+	maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. List can be quit long.
+	if !cfg.Grpc.MaxReceiveSize.IsZero() {
+		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+			if mz > maxRecSize {
+				maxRecSize = mz
 			}
 		}
+	}
 
-		jsonOut := output.WantsJSONOutput(cmd.Flags())
-		if !s.watch {
-			r, err := cs.userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
-			if err != nil {
-				return err
-			}
-			s.printList(r.Workloads, stdout, jsonOut)
-			return nil
-		}
-
-		stream, err := cs.userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+	jsonOut := output.WantsJSONOutput(cmd.Flags())
+	if !s.watch {
+		r, err := userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 		if err != nil {
 			return err
 		}
-
-		ch := make(chan *connector.WorkloadInfoSnapshot)
-		go func() {
-			for {
-				r, err := stream.Recv()
-				if err != nil {
-					break
-				}
-				ch <- r
-			}
-		}()
-
-	looper:
-		for {
-			select {
-			case r := <-ch:
-				s.printList(r.Workloads, stdout, jsonOut)
-			case <-ctx.Done():
-				break looper
-			}
-		}
+		s.printList(r.Workloads, stdout, jsonOut)
 		return nil
-	})
+	}
+
+	stream, err := userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+	if err != nil {
+		return err
+	}
+
+	ch := make(chan *connector.WorkloadInfoSnapshot)
+	go func() {
+		for {
+			r, err := stream.Recv()
+			if err != nil {
+				break
+			}
+			ch <- r
+		}
+	}()
+
+looper:
+	for {
+		select {
+		case r := <-ch:
+			s.printList(r.Workloads, stdout, jsonOut)
+		case <-ctx.Done():
+			break looper
+		}
+	}
+	return nil
 }
 
 func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer, jsonOut bool) {
