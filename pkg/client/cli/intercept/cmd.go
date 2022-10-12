@@ -2,7 +2,6 @@ package intercept
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -42,7 +41,7 @@ type Args struct {
 	ExtensionInfo []byte
 }
 
-func Command(ctx context.Context) *cobra.Command {
+func Command() *cobra.Command {
 	a := &Args{}
 	cmd := &cobra.Command{
 		Use:   "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
@@ -59,16 +58,16 @@ func Command(ctx context.Context) *cobra.Command {
 		PreRunE:           util.UpdateCheckIfDue,
 		PostRunE:          util.RaiseCloudMessage,
 	}
-	a.AddFlags(ctx, cmd.Flags())
+	a.AddFlags(cmd.Flags())
 	if err := cmd.RegisterFlagCompletionFunc("namespace", a.AutocompleteNamespace); err != nil {
 		log.Fatal(err)
 	}
 	return cmd
 }
 
-func (a *Args) AddFlags(ctx context.Context, flags *pflag.FlagSet) {
+func (a *Args) AddFlags(flags *pflag.FlagSet) {
 	flags.StringVarP(&a.AgentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
-	flags.StringVarP(&a.Port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
+	flags.StringVarP(&a.Port, "port", "p", "", ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
 		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
 		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
@@ -108,12 +107,11 @@ func (a *Args) AddFlags(ctx context.Context, flags *pflag.FlagSet) {
 
 func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
 	if len(positional) > 1 && cmd.Flags().ArgsLenAtDash() != 1 {
-		return fmt.Errorf("commands to be run with intercept must come after options")
+		return errcat.User.New("commands to be run with intercept must come after options")
 	}
 	a.Name = positional[0]
 	a.Cmdline = positional[1:]
-	switch a.LocalOnly { // a switch instead of an if/else to get gocritic to not suggest "else if"
-	case true:
+	if a.LocalOnly {
 		// Not actually intercepting anything -- check that the flags make sense for that
 		if a.AgentName != "" {
 			return errcat.User.New("a local-only intercept cannot have a workload")
@@ -127,14 +125,17 @@ func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
 		if cmd.Flag("mount").Changed {
 			return errcat.User.New("a local-only intercept cannot have mounts")
 		}
-	case false:
-		// Actually intercepting something
-		if a.AgentName == "" {
-			a.AgentName = a.Name
-			if a.Namespace != "" {
-				a.Name += "-" + a.Namespace
-			}
+		return nil
+	}
+	// Actually intercepting something
+	if a.AgentName == "" {
+		a.AgentName = a.Name
+		if a.Namespace != "" {
+			a.Name += "-" + a.Namespace
 		}
+	}
+	if a.Port == "" {
+		a.Port = strconv.Itoa(client.GetConfig(cmd.Context()).Intercept.DefaultPort)
 	}
 	a.MountSet = cmd.Flag("mount").Changed
 	if a.DockerRun {
@@ -142,11 +143,14 @@ func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
 			return err
 		}
 	}
-	return util.InitCommand(cmd)
+	return nil
 }
 
 func (a *Args) Run(cmd *cobra.Command, positional []string) error {
 	if err := a.Validate(cmd, positional); err != nil {
+		return err
+	}
+	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
 	return NewState(cmd, a).Intercept()

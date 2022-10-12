@@ -234,7 +234,7 @@ func Command(ctx context.Context) *cobra.Command {
 
 	ctx = util.AddSubCommands(ctx, []*cobra.Command{
 		connectCommand(), statusCommand(), quitCommand(),
-		listCommand(), intercept.LeaveCommand(), intercept.Command(ctx),
+		listCommand(), intercept.LeaveCommand(), intercept.Command(),
 		helmCommand(), uninstallCommand(),
 		loglevelCommand(), gatherLogsCommand(),
 		GatherTracesCommand(), PushTracesCommand(),
