@@ -36,6 +36,10 @@ type Args struct {
 	DockerRun   bool     // --docker-run
 	DockerMount string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 	Cmdline     []string // Args[1:]
+
+	Mechanism     string // --mechanism tcp
+	MechanismArgs []string
+	ExtensionInfo []byte
 }
 
 func Command(ctx context.Context) *cobra.Command {
@@ -98,6 +102,8 @@ func (a *Args) AddFlags(ctx context.Context, flags *pflag.FlagSet) {
 		`The volume mount point in docker. Defaults to same as "--mount"`)
 
 	flags.StringVarP(&a.Namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+
+	flags.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
 }
 
 func (a *Args) Validate(cmd *cobra.Command, positional []string) error {

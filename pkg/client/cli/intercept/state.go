@@ -124,8 +124,8 @@ func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
 	// Add whatever metadata we already have to scout
 	s.Scout.SetMetadatum(ctx, "service_name", s.AgentName)
 	s.Scout.SetMetadatum(ctx, "cluster_id", status.ClusterId)
-	s.Scout.SetMetadatum(ctx, "intercept_mechanism", "tcp")
-	s.Scout.SetMetadatum(ctx, "intercept_mechanism_numargs", 0)
+	s.Scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
+	s.Scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
 
 	ir, err := s.CreateRequest(ctx)
 	if err != nil {
@@ -234,7 +234,8 @@ func (s *State) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		spec.ServiceName = s.ServiceName
 	}
 
-	spec.Mechanism = "tcp"
+	spec.Mechanism = s.Mechanism
+	spec.MechanismArgs = s.MechanismArgs
 	spec.Agent = s.AgentName
 	spec.TargetHost = "127.0.0.1"
 
