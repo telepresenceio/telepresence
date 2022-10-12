@@ -172,36 +172,26 @@ func (a *Args) ValidateDockerArgs() error {
 }
 
 func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		// Not completing the name of the workload
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
 	if err := util.InitCommand(cmd); err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
-	ctx := cmd.Context()
-	var (
-		namespaceArgsIdx int
-		namespaceArg     string
-		namespace        = "default"
-	)
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if strings.HasPrefix(arg, "--namespace") || strings.HasPrefix(arg, "-n") {
-			namespaceArgsIdx = i
-			namespaceArg = args[i]
-			break
-		}
-	}
-	namespaceArgParts := strings.Split(namespaceArg, "=")
-	if len(namespaceArgParts) == 2 {
-		namespace = namespaceArgParts[1]
-	} else if namespaceArgsIdx+1 < len(args) {
-		namespace = args[namespaceArgsIdx+1]
-	}
-
 	req := connector.ListRequest{
-		Filter:    connector.ListRequest_INTERCEPTABLE,
-		Namespace: namespace,
+		Filter: connector.ListRequest_INTERCEPTABLE,
 	}
-	cs := util.GetUserDaemon(ctx)
-	r, err := cs.List(ctx, &req)
+	nf := cmd.Flag("namespace")
+	if nf.Changed {
+		req.Namespace = nf.Value.String()
+	}
+	ctx := cmd.Context()
+
+	// Trace level is used here, because we generally don't want to log expansion attempts
+	// in the cli.log
+	dlog.Tracef(ctx, "ns = %s, toComplete = %s, args = %v", req.Namespace, toComplete, args)
+	r, err := util.GetUserDaemon(ctx).List(ctx, &req)
 	if err != nil {
 		dlog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
 		return nil, cobra.ShellCompDirectiveError
