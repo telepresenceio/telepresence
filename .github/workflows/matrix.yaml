@@ -43,7 +43,7 @@ jobs:
 #        cluster_telepresence_version:  ["none", "2.7", "2.6", "2.5"]
     runs-on: ${{ matrix.client_os }}-${{ matrix.client_arch}}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
       - uses: ./.gitub/actions/provision-cluster
         with:
           distribution: ${{matrix.clusters.distribution}}
