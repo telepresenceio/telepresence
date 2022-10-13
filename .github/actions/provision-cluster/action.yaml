@@ -7,9 +7,9 @@ inputs:
   version:
     description: "The version of the cluster to create."
     required: true
-outputs:
   kubeconfig:
-    description: "The resulting kubeconfig file"
+    description: "Path to the resulting kubeconfig file."
+    required: true
 runs:
   using: node16
   main: create.js

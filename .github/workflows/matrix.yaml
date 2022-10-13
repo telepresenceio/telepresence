@@ -1,13 +1,13 @@
 name: "Telepresence Test Matrix"
 on:
-  # Use pull request for dev purposes, but switch to "workflow_dispatch" for manual triggering only.
-  pull_request
-#  workflow_dispatch:
-#    inputs:
-#      logLevel:
-#        description: 'Log level'     
-#        required: true
-#        default: 'warning'
+  # Using pull_request for dev, but "workflow_dispatch" will let us manually trigger with parameters.
+  pull_request: {}
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'warning'
 jobs:
   telepresence_matrix:
     strategy:
@@ -41,13 +41,14 @@ jobs:
 
         cluster_telepresence_version:  ["none", "2.7"]
 #        cluster_telepresence_version:  ["none", "2.7", "2.6", "2.5"]
-    runs-on: ${{ matrix.client_os }}-${{ matrix.client_arch}}
+    runs-on: ${{ matrix.client_os }}-${{ matrix.client_arch }}
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/provision-cluster
         with:
           distribution: ${{ matrix.clusters.distribution }}
           version: ${{ matrix.clusters.version }}
+          kubeconfig: kubeconfig.yaml
       - run: |
           echo Testing telepresence client version ${{ matrix.client_telepresence_version }} on ${{ matrix.client_os }} ${{ matrix.client_arch }} against server version ${{ matrix.cluster_telepresence_version }} on ${{ matrix.clusters.distribution }} cluster version ${{ matrix.clusters.version }}
-          
+          cat kubeconfig.yaml
