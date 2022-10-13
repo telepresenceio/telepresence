@@ -1,0 +1,16 @@
+name: "Provision Cluster"
+description: "Provision a Cluster"
+inputs:
+  distribution:
+    description: "One of GKE, AKS, EKS, OpenShift, or Kubeception"
+    required: true
+  version:
+    description: "The version of the cluster to create."
+    required: true
+outputs:
+  kubeconfig:
+    description: "The resulting kubeconfig file"
+runs:
+  using: node16
+  main: create.js
+  post: delete.js

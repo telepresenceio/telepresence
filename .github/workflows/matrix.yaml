@@ -1,0 +1,51 @@
+name: "Telepresence Test Matrix"
+on: 
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'     
+        required: true
+        default: 'warning'
+jobs:
+  telepresence_matrix:
+    strategy:
+      matrix:
+
+        # Comment out the full range of dimensions and use just a subset for faster iteration.
+
+        client_os: [ubuntu]
+        client_arch: [latest]
+#        client_os: [ubuntu-22.04, ubuntu-20.04]
+#        client_arch: [arm, x86]
+
+        client_telepresence_version: ["2.7"]
+#        client_telepresence_version: ["2.7", "2.6", "2.5"]
+
+        clusters:
+
+         - distribution: GKE
+           version: "1.23"
+#         - distribution: GKE
+#           version: "1.22"
+#         - distribution: GKE
+#           version: "1.21"
+
+         - distribution: AKS
+           version: "1.22"
+#         - distribution: AKS
+#           version: "1.21"
+#         - distribution: AKS
+#           version: "1.20"
+
+        cluster_telepresence_version:  ["none", "2.7"]
+#        cluster_telepresence_version:  ["none", "2.7", "2.6", "2.5"]
+    runs-on: ${{ matrix.client_os }}-${{ matrix.client_arch}}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.gitub/actions/provision-cluster
+        with:
+          distribution: ${{matrix.clusters.distribution}}
+          version: ${{ matrix.clusters.version }}
+      - run: |
+          echo Testing telepresence client version ${{matrix.client_telepresence_version}} on ${{matrix.client_os}} ${{matrix.client_arch}} against server version ${{matrix.server_telepresence_version}} on ${{matrix.clusters.distribution}} cluster version ${{matrix.clusters.distribution}}
+          
