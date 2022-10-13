@@ -92,8 +92,9 @@ func (uc *UpdateChecker) UpdateAvailable(currentVersion *semver.Version, errOut 
 		return nil, false
 	}
 	defer resp.Body.Close()
+
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	if err != nil || resp.StatusCode != http.StatusOK {
 		// silently ignore failure to read response body
 		return nil, false
 	}
