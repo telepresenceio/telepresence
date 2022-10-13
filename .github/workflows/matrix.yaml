@@ -1,11 +1,13 @@
 name: "Telepresence Test Matrix"
-on: 
-  workflow_dispatch:
-    inputs:
-      logLevel:
-        description: 'Log level'     
-        required: true
-        default: 'warning'
+on:
+  # Use pull request for dev purposes, but switch to "workflow_dispatch" for manual triggering only.
+  pull_request
+#  workflow_dispatch:
+#    inputs:
+#      logLevel:
+#        description: 'Log level'     
+#        required: true
+#        default: 'warning'
 jobs:
   telepresence_matrix:
     strategy:
