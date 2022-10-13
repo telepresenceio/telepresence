@@ -25,7 +25,8 @@ func LoginCommand() *cobra.Command {
 			return err
 		},
 		Annotations: map[string]string{
-			ann.UserDaemon: ann.Required,
+			ann.UserDaemon:    ann.Required,
+			ann.Notifications: ann.Required,
 		},
 	}
 	cmd.Flags().StringVar(&args.apikey, "apikey", "",
