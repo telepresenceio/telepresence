@@ -2,13 +2,17 @@ package ann
 
 // -- Annotation keys
 
-const RootDaemon = "rootD"
-const UserDaemon = "userD"
-const Session = "session"
-const Notifications = "notifications"
-const VersionCheck = "versionCheck"
+const (
+	RootDaemon    = "rootD"
+	UserDaemon    = "userD"
+	Session       = "session"
+	Notifications = "notifications"
+	VersionCheck  = "versionCheck"
+)
 
 // -- Annotation values
 
-const Optional = "optional"
-const Required = "required"
+const (
+	Optional = "optional"
+	Required = "required"
+)

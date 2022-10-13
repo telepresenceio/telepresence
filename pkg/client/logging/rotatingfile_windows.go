@@ -6,8 +6,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// IsTerminal returns whether the given file descriptor is a terminal
-var IsTerminal = func(fd int) bool {
+// IsTerminal returns whether the given file descriptor is a terminal.
+var IsTerminal = func(fd int) bool { //nolint:gochecknoglobals // os specific func replacement
 	return false
 }
 

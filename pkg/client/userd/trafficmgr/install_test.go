@@ -186,7 +186,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 					err = os.WriteFile(
 						filepath.Join("testdata/addAgentToWorkload", tcName+".output.yaml"),
 						goldBytes,
-						0644)
+						0o644)
 					assert.NoError(t, err)
 				}
 			})

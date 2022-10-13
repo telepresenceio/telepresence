@@ -135,7 +135,7 @@ func RunTests(t *testing.T) {
 	defaultRunner.RunTests(t)
 }
 
-// RunTests creates all suites using the added constructors and runs them
+// RunTests creates all suites using the added constructors and runs them.
 func (r *runner) RunTests(t *testing.T) { //nolint:gocognit
 	c := TestContext(t)
 	dtest.WithMachineLock(c, func(c context.Context) {

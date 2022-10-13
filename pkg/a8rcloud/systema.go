@@ -118,7 +118,6 @@ func (p *systemAPool[T]) Get(ctx context.Context) (T, error) {
 			grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
 			grpc.WithPerRPCCredentials(&systemACredentials{p.Provider}),
 		)
-
 		if err != nil {
 			cancel()
 			return client, err

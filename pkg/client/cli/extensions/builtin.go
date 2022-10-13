@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/blang/semver"
@@ -32,7 +33,7 @@ func builtinExtensions(ctx context.Context) map[string]ExtensionInfo {
 	version := strings.TrimPrefix(client.Version(), "v")
 	image := fmt.Sprintf("%s/tel2:%s", registry, version)
 	// XXX: not using net.JoinHostPort means that setting cloud.SystemaHost to an IPv6 address won't work
-	extImage := fmt.Sprintf("grpc+https://%s:%s", cloud.SystemaHost, cloud.SystemaPort)
+	extImage := fmt.Sprintf("grpc+https://%s", net.JoinHostPort(cloud.SystemaHost, cloud.SystemaPort))
 	return map[string]ExtensionInfo{
 		// Real extensions won't have a "/" in the extname, by putting one builtin extension names
 		// we can avoid clashes.

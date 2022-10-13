@@ -11,12 +11,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-// DialSocket dials the given socket and returns the resulting connection
+// DialSocket dials the given socket and returns the resulting connection.
 func DialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	return dialSocket(ctx, socketName, opts...)
 }
 
-// ListenSocket returns a listener for the given socket and returns the resulting connection
+// ListenSocket returns a listener for the given socket and returns the resulting connection.
 func ListenSocket(ctx context.Context, processName, socketName string) (net.Listener, error) {
 	return listenSocket(ctx, processName, socketName)
 }
@@ -26,7 +26,7 @@ func RemoveSocket(listener net.Listener) error {
 	return removeSocket(listener)
 }
 
-// SocketExists returns true if a socket is found with the given name
+// SocketExists returns true if a socket is found with the given name.
 func SocketExists(name string) (bool, error) {
 	return socketExists(name)
 }

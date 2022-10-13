@@ -31,7 +31,7 @@ const (
 )
 
 // streamReader is implemented by the dialer and udpListener so that they can share the
-// readLoop function
+// readLoop function.
 type streamReader interface {
 	Idle() <-chan time.Time
 	ResetIdle() bool
@@ -41,7 +41,7 @@ type streamReader interface {
 	startDisconnect(context.Context, string)
 }
 
-// The dialer takes care of dispatching messages between gRPC and UDP connections
+// The dialer takes care of dispatching messages between gRPC and UDP connections.
 type dialer struct {
 	TimedHandler
 	stream    Stream
@@ -150,7 +150,7 @@ func (h *dialer) Done() <-chan struct{} {
 	return h.done
 }
 
-// Stop will close the underlying TCP/UDP connection
+// Stop will close the underlying TCP/UDP connection.
 func (h *dialer) Stop(ctx context.Context) {
 	h.startDisconnect(ctx, "explicit close")
 	h.cancel()

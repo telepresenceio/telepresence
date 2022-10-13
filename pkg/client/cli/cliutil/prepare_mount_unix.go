@@ -19,5 +19,5 @@ func PrepareMount(cwd string, mountPoint string) (string, error) {
 		mountPoint = filepath.Clean(mountPoint)
 	}
 
-	return mountPoint, os.MkdirAll(mountPoint, 0700)
+	return mountPoint, os.MkdirAll(mountPoint, 0o700)
 }

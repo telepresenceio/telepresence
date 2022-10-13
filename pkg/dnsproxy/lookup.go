@@ -18,8 +18,10 @@ import (
 
 const dnsTTL = 4
 
-const arpaV4 = ".in-addr.arpa."
-const arpaV6 = ".ip6.arpa."
+const (
+	arpaV4 = ".in-addr.arpa."
+	arpaV6 = ".ip6.arpa."
+)
 
 type RRs []dns.RR
 

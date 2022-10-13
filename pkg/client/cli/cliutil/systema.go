@@ -90,7 +90,7 @@ func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*conne
 
 // GetCloudLicense communicates with System A to get the jwt version of the
 // license, puts it in a kubernetes secret, and then writes that secret to the
-// output file for the user to apply to their cluster
+// output file for the user to apply to their cluster.
 func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string, error) {
 	licenseData, err := GetUserDaemon(ctx).GetCloudLicense(ctx, &connector.LicenseRequest{
 		Id: id,
@@ -184,7 +184,7 @@ func getTelepresencePro(ctx context.Context, userD connector.ConnectorClient) (e
 }
 
 // installTelepresencePro installs the binary. Users should be asked for
-// permission before using this function
+// permission before using this function.
 func installTelepresencePro(ctx context.Context, telProLocation string, userD connector.ConnectorClient) error {
 	// We install the correct version of telepresence-pro based on
 	// the OSS version that is associated with this client since
@@ -228,11 +228,11 @@ func installTelepresencePro(ctx context.Context, telProLocation string, userD co
 
 // downloadProDaemon copies the 'from' stream into a temporary file in the same directory as the
 // designated binary, chmods it to be executable, removes the old binary, and then renames the
-// temporary file as the new binary
+// temporary file as the new binary.
 func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, telProLocation string) (err error) {
 	stdout, _ := output.Structured(ctx)
 	dir := filepath.Dir(telProLocation)
-	if err = os.MkdirAll(dir, 0777); err != nil {
+	if err = os.MkdirAll(dir, 0o777); err != nil {
 		return errcat.NoDaemonLogs.Newf("error creating directory %q: %w", dir, err)
 	}
 
@@ -258,7 +258,7 @@ func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, 
 		return errcat.NoDaemonLogs.Newf("unable to download the enhanced free client: %w", err)
 	}
 	fmt.Fprintln(stdout, "done")
-	if err = os.Chmod(tmpName, 0755); err != nil {
+	if err = os.Chmod(tmpName, 0o755); err != nil {
 		return errcat.NoDaemonLogs.Newf("unable to set permissions of %q to 755: %w", telProLocation, err)
 	}
 	if err = os.Remove(telProLocation); err != nil && !os.IsNotExist(err) {
@@ -294,7 +294,7 @@ func updateConfig(ctx context.Context, telProLocation string) error {
 		_ = os.Rename(cfgFile, cfgFile+".bak")
 	}
 
-	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("error opening config file: %w", err)
 	}

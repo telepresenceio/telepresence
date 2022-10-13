@@ -69,7 +69,8 @@ func (ss *clusterInfoSubscribers) unsubscribe(id int) {
 
 func (ss *clusterInfoSubscribers) subscriberLoop(ctx context.Context, rec interface {
 	Send(request *rpc.ClusterInfo) error
-}) error {
+},
+) error {
 	id, ch := ss.subscribe()
 	defer ss.unsubscribe(id)
 	for {

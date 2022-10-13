@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// The Request matcher uses a Value matcher and a Headers matcher to match the path and headers of a http request
+// The Request matcher uses a Value matcher and a Headers matcher to match the path and headers of a http request.
 type Request interface {
 	fmt.Stringer
 
@@ -106,7 +106,7 @@ func (r *request) Matches(path string, headers http.Header) bool {
 	return r == nil || (r.path == nil || r.path.Matches(path)) && (r.headers == nil || r.headers.Matches(headers))
 }
 
-// Path returns the path
+// Path returns the path.
 func (r *request) Path() Value {
 	return r.path
 }

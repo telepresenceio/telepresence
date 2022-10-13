@@ -134,7 +134,7 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 	}
 	fhs[reflect.TypeOf(net.IP{})] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){
-			"ip": func(str string) (any, error) {
+			"ip": func(str string) (any, error) { //nolint:unparam // API requirement
 				return iputil.Parse(str), nil
 			},
 		},
@@ -142,7 +142,7 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 	}
 	fhs[reflect.TypeOf([]string{})] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){
-			"split-trim": func(str string) (any, error) {
+			"split-trim": func(str string) (any, error) { //nolint:unparam // API requirement
 				if len(str) == 0 {
 					return nil, nil
 				}
@@ -191,6 +191,7 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 	}
 	return fhs
 }
+
 func LoadEnv(ctx context.Context, lookupFunc func(string) (string, bool)) (context.Context, error) {
 	env := Env{}
 	parser, err := envconfig.GenerateParser(reflect.TypeOf(env), fieldTypeHandlers())

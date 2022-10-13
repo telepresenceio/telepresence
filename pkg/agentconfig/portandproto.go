@@ -17,7 +17,7 @@ const ProtoSeparator = byte('/')
 
 // ParseNumericPort parses the given string into a positive unsigned 16-bit integer.
 // ErrNotInteger is returned if the string doesn't represent an integer.
-// A range error is return unless the integer is between 1 and 65535
+// A range error is return unless the integer is between 1 and 65535.
 func ParseNumericPort(portStr string) (uint16, error) {
 	port, err := strconv.Atoi(portStr)
 	if err != nil {

@@ -38,7 +38,7 @@ func getRemoteCommands(cmd *cobra.Command, forceStart bool) (groups cliutil.Comm
 		if err != nil {
 			return nil, fmt.Errorf("unable to call ListCommands: %w", err)
 		}
-		var funcBundle = cliutil.CommandFuncBundle{
+		funcBundle := cliutil.CommandFuncBundle{
 			RunE:              runRemote,
 			ValidArgsFunction: validArgsFuncRemote,
 		}
@@ -195,7 +195,8 @@ func runRemote(cmd *cobra.Command, args []string) error {
 		COrD: &connector.RunCommandRequest_Command_{Command: &connector.RunCommandRequest_Command{
 			OsArgs: append([]string{cmd.CalledAs()}, args...),
 			Cwd:    cwd,
-		}}})
+		}},
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to send: %v\n", err)
 		return err

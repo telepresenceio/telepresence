@@ -6,7 +6,7 @@ import (
 	"net"
 )
 
-// IPKey is an immutable cast of a net.IP suitable to be used as a map key. It must be created using IPKey(ip)
+// IPKey is an immutable cast of a net.IP suitable to be used as a map key. It must be created using IPKey(ip).
 type IPKey string
 
 func (k IPKey) IP() net.IP {

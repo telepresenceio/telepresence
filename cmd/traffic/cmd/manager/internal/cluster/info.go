@@ -235,7 +235,7 @@ func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
 	return true
 }
 
-func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) bool {
+func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -269,11 +269,10 @@ func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) bool {
 	retriever := newPodWatcher(ctx, podListers, podInformers)
 	if !retriever.viable(ctx) {
 		dlog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
-		return false
+		return
 	}
 	dlog.Infof(ctx, "Deriving subnets from IPs of pods")
 	oi.watchSubnets(ctx, retriever)
-	return true
 }
 
 func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
@@ -364,7 +363,7 @@ func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*core
 }
 
 // GetTrafficManagerPods gets all pods in the manager's namespace that have
-// `traffic-manager` in the name
+// `traffic-manager` in the name.
 func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*corev1.Pod, error) {
 	client := k8sapi.GetK8sInterface(ctx).CoreV1()
 	env := managerutil.GetEnv(ctx)

@@ -12,10 +12,12 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-const HeaderCallerInterceptID = "x-telepresence-caller-intercept-id"
-const HeaderInterceptID = "x-telepresence-intercept-id"
-const EndPointConsumeHere = "/consume-here"
-const EndPointInterceptInfo = "/intercept-info"
+const (
+	HeaderCallerInterceptID = "x-telepresence-caller-intercept-id"
+	HeaderInterceptID       = "x-telepresence-intercept-id"
+	EndPointConsumeHere     = "/consume-here"
+	EndPointInterceptInfo   = "/intercept-info"
+)
 
 type InterceptInfo struct {
 	// True if the service is being intercepted
@@ -53,7 +55,7 @@ type server struct {
 	agent AgentState
 }
 
-// ListenAndServe is like Serve but creates a TCP listener on "localhost:<apiPort>"
+// ListenAndServe is like Serve but creates a TCP listener on "localhost:<apiPort>".
 func (s *server) ListenAndServe(c context.Context, apiPort int) error {
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(apiPort))
 	if err != nil {

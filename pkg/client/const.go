@@ -6,18 +6,18 @@ import (
 )
 
 const (
-	// APIVersion is the API version of the daemon and connector API
+	// APIVersion is the API version of the daemon and connector API.
 	APIVersion = 3
 )
 
-// DisplayVersion returns a printable version for `telepresence`
+// DisplayVersion returns a printable version for `telepresence`.
 func DisplayVersion() string {
 	return fmt.Sprintf("%s (api v%d)", Version(), APIVersion)
 }
 
 var exeName string
 
-// GetExe returns the name of the running executable
+// GetExe returns the name of the running executable.
 func GetExe() string {
 	if exeName == "" {
 		// Figure out our executable
@@ -31,7 +31,7 @@ func GetExe() string {
 	return exeName
 }
 
-// SetExe defines the name of the executable (for testing purposes only)
+// SetExe defines the name of the executable (for testing purposes only).
 func SetExe(executable string) {
 	exeName = executable
 }

@@ -46,7 +46,7 @@ func NewSet(subnets []*net.IPNet) Set {
 	return s
 }
 
-// Equals returns true if the two sets have the same content
+// Equals returns true if the two sets have the same content.
 func (s Set) Equals(o Set) bool {
 	if len(s) != len(o) {
 		return false
@@ -60,7 +60,7 @@ func (s Set) Equals(o Set) bool {
 }
 
 // AppendSortedTo appends the sorted subnets of this set to the given slice and returns
-// the resulting slice
+// the resulting slice.
 func (s Set) AppendSortedTo(subnets []*net.IPNet) []*net.IPNet {
 	sz := len(s)
 	if sz == 0 {
@@ -80,7 +80,7 @@ func (s Set) AppendSortedTo(subnets []*net.IPNet) []*net.IPNet {
 	return subnets
 }
 
-// Add adds a subnet to this set unless it doesn't already exist. Returns true if the subnet was added, false otherwise
+// Add adds a subnet to this set unless it doesn't already exist. Returns true if the subnet was added, false otherwise.
 func (s Set) Add(subnet *net.IPNet) bool {
 	key := newSetKey(subnet)
 	if _, ok := s[key]; ok {
@@ -90,7 +90,7 @@ func (s Set) Add(subnet *net.IPNet) bool {
 	return true
 }
 
-// Delete deletes a subnet equal to the given subnet. Returns true if the subnet was deleted, false otherwise
+// Delete deletes a subnet equal to the given subnet. Returns true if the subnet was deleted, false otherwise.
 func (s Set) Delete(subnet *net.IPNet) bool {
 	key := newSetKey(subnet)
 	if _, ok := s[key]; ok {
@@ -100,7 +100,7 @@ func (s Set) Delete(subnet *net.IPNet) bool {
 	return false
 }
 
-// Clone returns a copy of this Set
+// Clone returns a copy of this Set.
 func (s Set) Clone() Set {
 	c := make(Set, len(s))
 	for k, v := range s {

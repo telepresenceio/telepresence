@@ -14,5 +14,5 @@ func restoreCTimeAfterRename(_ string, _ time.Time) error {
 	return nil
 }
 
-// IsTerminal returns whether the given file descriptor is a terminal
+// IsTerminal returns whether the given file descriptor is a terminal.
 var IsTerminal = term.IsTerminal

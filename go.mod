@@ -9,7 +9,7 @@ require (
 	github.com/creack/pty v1.1.18
 	github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
-	github.com/datawire/envconfig v0.0.0-20221005101338-acca084843b3
+	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/datawire/go-ftpserver v0.1.1
 	github.com/datawire/go-fuseftp/rpc v0.2.0
 	github.com/datawire/metriton-go-client v0.1.1
@@ -42,8 +42,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.10.0
 	go.opentelemetry.io/proto/otlp v0.19.0
 	golang.org/x/net v0.0.0-20220923203811-8be639271d50
-	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
-	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8
+	golang.org/x/sys v0.0.0-20221010170243-090e33056c14
 	golang.org/x/term v0.0.0-20220919170432-7a66f970e087
 	golang.zx2c4.com/wireguard v0.0.0-20220920152132-bb719d3a6e2c
 	golang.zx2c4.com/wireguard/windows v0.5.3
@@ -188,5 +187,7 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.13.9 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
+
+require golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

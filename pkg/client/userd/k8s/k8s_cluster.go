@@ -22,7 +22,7 @@ const supportedKubeAPIVersion = "1.17.0"
 
 type NamespaceListener func(context.Context)
 
-// Cluster is a Kubernetes cluster reference
+// Cluster is a Kubernetes cluster reference.
 type Cluster struct {
 	*Config
 	mappedNamespaces []string
@@ -55,7 +55,7 @@ func (kc *Cluster) ActualNamespace(namespace string) string {
 	return namespace
 }
 
-// check uses a non-caching DiscoveryClientConfig to retrieve the server version
+// check uses a non-caching DiscoveryClientConfig to retrieve the server version.
 func (kc *Cluster) check(c context.Context) error {
 	// The discover client is using context.TODO() so the timeout specified in our
 	// context has no effect.
@@ -109,7 +109,7 @@ func (kc *Cluster) check(c context.Context) error {
 }
 
 // namespaceAccessible answers the question if the namespace is present and accessible
-// to this client
+// to this client.
 func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 	kc.nsLock.Lock()
 	ok := kc.currentMappedNamespaces[namespace]

@@ -26,9 +26,11 @@ import (
 
 type connectRequest struct{}
 
-var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
-var ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
-var ErrNoTrafficManager = errors.New("telepresence traffic manager is not connected")
+var (
+	ErrNoUserDaemon     = errors.New("telepresence user daemon is not running")
+	ErrNoRootDaemon     = errors.New("telepresence root daemon is not running")
+	ErrNoTrafficManager = errors.New("telepresence traffic manager is not connected")
+)
 
 func WithConnectionRequest(ctx context.Context, rq *connector.ConnectRequest) context.Context {
 	return context.WithValue(ctx, connectRequest{}, rq)

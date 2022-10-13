@@ -66,7 +66,7 @@ func listCommand() *cobra.Command {
 	return cmd
 }
 
-// list requests a list current intercepts from the daemon
+// list requests a list current intercepts from the daemon.
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	if err := cliutil.InitCommand(cmd); err != nil {
 		return err

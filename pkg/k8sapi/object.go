@@ -31,7 +31,7 @@ func GetService(c context.Context, name, namespace string) (Object, error) {
 	return &service{d}, nil
 }
 
-// Services returns all services found in the given Namespace
+// Services returns all services found in the given Namespace.
 func Services(c context.Context, namespace string, labelSelector labels.Set) ([]Object, error) {
 	ls, err := services(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
@@ -50,7 +50,7 @@ func Service(d *core.Service) Object {
 }
 
 // ServiceImpl casts the given Object as an *core.Service and returns
-// it together with a status flag indicating whether the cast was possible
+// it together with a status flag indicating whether the cast was possible.
 func ServiceImpl(o Object) (*core.Service, bool) {
 	if s, ok := o.(*service); ok {
 		return s.Service, true
@@ -66,7 +66,7 @@ func GetPod(c context.Context, name, namespace string) (Object, error) {
 	return &pod{d}, nil
 }
 
-// Pods returns all pods found in the given Namespace
+// Pods returns all pods found in the given Namespace.
 func Pods(c context.Context, namespace string, labelSelector labels.Set) ([]Object, error) {
 	ls, err := pods(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
@@ -85,7 +85,7 @@ func Pod(d *core.Pod) Object {
 }
 
 // PodImpl casts the given Object as an *core.Pod and returns
-// it together with a status flag indicating whether the cast was possible
+// it together with a status flag indicating whether the cast was possible.
 func PodImpl(o Object) (*core.Pod, bool) {
 	if s, ok := o.(*pod); ok {
 		return s.Pod, true

@@ -51,7 +51,7 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	return cmd.FlagErrorFunc()(cmd, err)
 }
 
-// PerhapsLegacyCommands is like OnlySubcommands but performs some initial check for legacy flags
+// PerhapsLegacyCommands is like OnlySubcommands but performs some initial check for legacy flags.
 func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 	// If a user is using a flag that is coming from telepresence 1, we try to
 	// construct the tp2 command based on their input. If the args passed to
@@ -129,7 +129,7 @@ func userWantsRootLevelHelp() bool {
 	return arg == "help" || arg == "--help" || arg == "-h"
 }
 
-// Command returns the top level "telepresence" CLI command
+// Command returns the top level "telepresence" CLI command.
 func Command(ctx context.Context) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:  "telepresence",
@@ -152,7 +152,7 @@ func Command(ctx context.Context) *cobra.Command {
 		"Other Commands":   []*cobra.Command{versionCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
 	}
 
-	var groups = make(cliutil.CommandGroups)
+	groups := make(cliutil.CommandGroups)
 	if !IsCommand("quit") && !userWantsRootLevelHelp() {
 		// These are commands that known to always exist in the user daemon. If the daemon
 		// isn't running, it will be started just to retrieve the command spec.
@@ -218,7 +218,7 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 // argsCheck wraps an PositionalArgs checker in a function that wraps a potential error
-// using errcat.User
+// using errcat.User.
 func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := f(cmd, args); err != nil {

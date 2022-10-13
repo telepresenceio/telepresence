@@ -40,14 +40,14 @@ func WithAppUserLogDir(ctx context.Context, logdir string) context.Context {
 
 type configCtxKey struct{}
 
-// WithAppUserConfigDir spoofs the AppUserConfigDir.  This is useful for testing
+// WithAppUserConfigDir spoofs the AppUserConfigDir.  This is useful for testing.
 func WithAppUserConfigDir(ctx context.Context, configDir string) context.Context {
 	return context.WithValue(ctx, configCtxKey{}, configDir)
 }
 
 type sysConfigsCtxKey struct{}
 
-// WithAppSystemConfigDirs spoofs the AppSystemConfigDirs.  This is useful for testing
+// WithAppSystemConfigDirs spoofs the AppSystemConfigDirs.  This is useful for testing.
 func WithAppSystemConfigDirs(ctx context.Context, configDirs []string) context.Context {
 	return context.WithValue(ctx, sysConfigsCtxKey{}, configDirs)
 }

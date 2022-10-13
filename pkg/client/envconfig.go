@@ -56,7 +56,7 @@ func (env Env) Get(key string) string {
 
 type envKey struct{}
 
-// WithEnv returns a context with the given Env
+// WithEnv returns a context with the given Env.
 func WithEnv(ctx context.Context, env *Env) context.Context {
 	return context.WithValue(ctx, envKey{}, env)
 }

@@ -148,7 +148,7 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 
 // withRouteSocket will open the socket to where RouteMessages should be sent
 // and call the given function with that socket. The socket is closed when the
-// function returns
+// function returns.
 func withRouteSocket(f func(routeSocket int) error) error {
 	routeSocket, err := unix.Socket(unix.AF_ROUTE, unix.SOCK_RAW, unix.AF_UNSPEC)
 	if err != nil {
@@ -163,7 +163,7 @@ func withRouteSocket(f func(routeSocket int) error) error {
 	return f(routeSocket)
 }
 
-// toRouteAddr converts a net.IP to its corresponding addrMessage.Addr
+// toRouteAddr converts a net.IP to its corresponding addrMessage.Addr.
 func toRouteAddr(ip net.IP) (addr route.Addr) {
 	if ip4 := ip.To4(); ip4 != nil {
 		dst := route.Inet4Addr{}

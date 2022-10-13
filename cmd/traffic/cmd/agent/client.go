@@ -104,7 +104,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	// The presence of this file is used in the readiness check.
 	dir := "/tmp/agent"
 	if _, err := dos.Stat(ctx, dir); os.IsNotExist(err) {
-		if err := dos.Mkdir(ctx, "/tmp/agent", 0777); err != nil {
+		if err := dos.Mkdir(ctx, "/tmp/agent", 0o777); err != nil {
 			return err
 		}
 	}
@@ -185,7 +185,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return remainLoop(ctx, manager, session)
 	})
 
-	file, err := dos.OpenFile(ctx, "/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := dos.OpenFile(ctx, "/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0o666)
 	if err != nil {
 		return err
 	}
@@ -270,7 +270,7 @@ func lookupDNSWaitLoop(ctx context.Context, manager rpc.ManagerClient, session *
 	return nil
 }
 
-// Deprecated: retained for backward compatibility
+// Deprecated: retained for backward compatibility.
 func lookupHostAndRespond(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, lr *rpc.LookupHostRequest) {
 	dlog.Debugf(ctx, "LookupRequest for %s", lr.Name)
 	response := rpc.LookupHostAgentResponse{

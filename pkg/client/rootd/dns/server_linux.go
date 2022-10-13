@@ -40,7 +40,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	return err
 }
 
-// shouldApplySearch returns true if search path should be applied
+// shouldApplySearch returns true if search path should be applied.
 func (s *Server) shouldApplySearch(query string) bool {
 	if len(s.search) == 0 {
 		return false
@@ -286,7 +286,7 @@ func runningInDocker() bool {
 	return err == nil
 }
 
-// runNatTableCmd runs "iptables -t nat ..."
+// runNatTableCmd runs "iptables -t nat ...".
 func runNatTableCmd(c context.Context, args ...string) error {
 	// We specifically don't want to use the cancellation of 'ctx' here, because we don't ever
 	// want to leave things in a half-cleaned-up state.

@@ -25,7 +25,7 @@ import (
 
 const configFile = "config.yml"
 
-// Config contains all configuration values for the telepresence CLI
+// Config contains all configuration values for the telepresence CLI.
 type Config struct {
 	Timeouts        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
 	LogLevels       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
@@ -196,7 +196,7 @@ type timeoutContext struct {
 func (ctx timeoutContext) Err() error {
 	err := ctx.Context.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
-		err = timeoutErr{
+		err = timeoutError{
 			timeoutID:  ctx.timeoutID,
 			timeoutVal: ctx.timeoutVal,
 			configFile: GetConfigFile(ctx),
@@ -248,14 +248,14 @@ func (t *Timeouts) TimeoutContext(ctx context.Context, timeoutID TimeoutID) (con
 	return ctx, cancel
 }
 
-type timeoutErr struct {
+type timeoutError struct {
 	timeoutID  TimeoutID
 	timeoutVal time.Duration
 	configFile string
 	err        error
 }
 
-func (e timeoutErr) Error() string {
+func (e timeoutError) Error() string {
 	var yamlName, humanName string
 	switch e.timeoutID {
 	case TimeoutAgentInstall:
@@ -298,7 +298,7 @@ func (e timeoutErr) Error() string {
 		humanName, e.timeoutVal, "timeouts."+yamlName, e.configFile)
 }
 
-func (e timeoutErr) Unwrap() error {
+func (e timeoutError) Unwrap() error {
 	return e.err
 }
 
@@ -371,17 +371,19 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-const defaultTimeoutsAgentInstall = 120 * time.Second
-const defaultTimeoutsApply = 1 * time.Minute
-const defaultTimeoutsClusterConnect = 20 * time.Second
-const defaultTimeoutsConnectivityCheck = 500 * time.Millisecond
-const defaultTimeoutsEndpointDial = 3 * time.Second
-const defaultTimeoutsHelm = 30 * time.Second
-const defaultTimeoutsIntercept = 5 * time.Second
-const defaultTimeoutsProxyDial = 5 * time.Second
-const defaultTimeoutsRoundtripLatency = 2 * time.Second
-const defaultTimeoutsTrafficManagerAPI = 15 * time.Second
-const defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+const (
+	defaultTimeoutsAgentInstall          = 120 * time.Second
+	defaultTimeoutsApply                 = 1 * time.Minute
+	defaultTimeoutsClusterConnect        = 20 * time.Second
+	defaultTimeoutsConnectivityCheck     = 500 * time.Millisecond
+	defaultTimeoutsEndpointDial          = 3 * time.Second
+	defaultTimeoutsHelm                  = 30 * time.Second
+	defaultTimeoutsIntercept             = 5 * time.Second
+	defaultTimeoutsProxyDial             = 5 * time.Second
+	defaultTimeoutsRoundtripLatency      = 2 * time.Second
+	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
+	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+)
 
 var defaultTimeouts = Timeouts{
 	PrivateAgentInstall:          defaultTimeoutsAgentInstall,
@@ -397,12 +399,12 @@ var defaultTimeouts = Timeouts{
 	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
 }
 
-// IsZero controls whether this element will be included in marshalled output
+// IsZero controls whether this element will be included in marshalled output.
 func (t Timeouts) IsZero() bool {
 	return t == defaultTimeouts
 }
 
-// MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct
+// MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct.
 func (t Timeouts) MarshalYAML() (any, error) {
 	tm := make(map[string]string)
 	if t.PrivateAgentInstall != 0 && t.PrivateAgentInstall != defaultTimeoutsAgentInstall {
@@ -478,8 +480,10 @@ func (t *Timeouts) merge(o *Timeouts) {
 	}
 }
 
-const defaultLogLevelsUserDaemon = logrus.InfoLevel
-const defaultLogLevelsRootDaemon = logrus.InfoLevel
+const (
+	defaultLogLevelsUserDaemon = logrus.InfoLevel
+	defaultLogLevelsRootDaemon = logrus.InfoLevel
+)
 
 var defaultLogLevels = LogLevels{
 	UserDaemon: defaultLogLevelsUserDaemon,
@@ -491,12 +495,12 @@ type LogLevels struct {
 	RootDaemon logrus.Level `json:"rootDaemon,omitempty" yaml:"rootDaemon,omitempty"`
 }
 
-// IsZero controls whether this element will be included in marshalled output
+// IsZero controls whether this element will be included in marshalled output.
 func (ll LogLevels) IsZero() bool {
 	return ll == defaultLogLevels
 }
 
-// UnmarshalYAML parses the logrus log-levels
+// UnmarshalYAML parses the logrus log-levels.
 func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("timeouts must be an object", node))
@@ -543,7 +547,7 @@ type Images struct {
 	PrivateWebhookRegistry string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
 }
 
-// UnmarshalYAML parses the images YAML
+// UnmarshalYAML parses the images YAML.
 func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("images must be an object", node))
@@ -616,7 +620,7 @@ type Cloud struct {
 	SystemaPort     string        `json:"systemaPort,omitempty" yaml:"systemaPort,omitempty"`
 }
 
-// UnmarshalYAML parses the images YAML
+// UnmarshalYAML parses the images YAML.
 func (c *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("cloud must be an object", node))
@@ -658,9 +662,11 @@ func (c *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-const defaultCloudSystemAHost = "app.getambassador.io"
-const defaultCloudSystemAPort = "443"
-const defaultCloudRefreshMessages = 24 * 7 * time.Hour
+const (
+	defaultCloudSystemAHost     = "app.getambassador.io"
+	defaultCloudSystemAPort     = "443"
+	defaultCloudRefreshMessages = 24 * 7 * time.Hour
+)
 
 var defaultCloud = Cloud{
 	SkipLogin:       false,
@@ -669,12 +675,12 @@ var defaultCloud = Cloud{
 	SystemaPort:     defaultCloudSystemAPort,
 }
 
-// IsZero controls whether this element will be included in marshalled output
+// IsZero controls whether this element will be included in marshalled output.
 func (c Cloud) IsZero() bool {
 	return c == defaultCloud
 }
 
-// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
+// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct.
 func (c Cloud) MarshalYAML() (any, error) {
 	cm := make(map[string]any)
 	if c.RefreshMessages != 0 && c.RefreshMessages != defaultCloudRefreshMessages {
@@ -719,7 +725,7 @@ func (g *Grpc) merge(o *Grpc) {
 	}
 }
 
-// UnmarshalYAML parses the images YAML
+// UnmarshalYAML parses the images YAML.
 func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("grpc must be an object", node))
@@ -750,7 +756,7 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 	return nil
 }
 
-// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct
+// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct.
 func (g Grpc) MarshalYAML() (any, error) {
 	cm := make(map[string]any)
 	if !g.MaxReceiveSize.IsZero() {
@@ -803,12 +809,12 @@ func (ic *Intercept) merge(o *Intercept) {
 	}
 }
 
-// IsZero controls whether this element will be included in marshalled output
+// IsZero controls whether this element will be included in marshalled output.
 func (ic Intercept) IsZero() bool {
 	return ic == defaultIntercept
 }
 
-// MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct
+// MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct.
 func (ic Intercept) MarshalYAML() (any, error) {
 	im := make(map[string]any)
 	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
@@ -838,7 +844,7 @@ func withLoc(s string, n *yaml.Node) string {
 
 type configKey struct{}
 
-// WithConfig returns a context with the given Config
+// WithConfig returns a context with the given Config.
 func WithConfig(ctx context.Context, config *Config) context.Context {
 	return context.WithValue(ctx, configKey{}, (*unsafe.Pointer)(unsafe.Pointer(&config)))
 }
@@ -850,20 +856,20 @@ func GetConfig(ctx context.Context) *Config {
 	return nil
 }
 
-// ReplaceConfig replaces the config last stored using WithConfig with the given Config
+// ReplaceConfig replaces the config last stored using WithConfig with the given Config.
 func ReplaceConfig(ctx context.Context, config *Config) {
 	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
 		atomic.StorePointer(configPtr, unsafe.Pointer(config))
 	}
 }
 
-// GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir
+// GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
 func GetConfigFile(c context.Context) string {
 	dir, _ := filelocation.AppUserConfigDir(c)
 	return filepath.Join(dir, configFile)
 }
 
-// GetDefaultConfig returns the default configuration settings
+// GetDefaultConfig returns the default configuration settings.
 func GetDefaultConfig() Config {
 	return Config{
 		Timeouts: Timeouts{
@@ -899,7 +905,7 @@ func GetDefaultConfig() Config {
 }
 
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
-// or filelocation.AppSystemConfigDirs
+// or filelocation.AppSystemConfigDirs.
 func LoadConfig(c context.Context) (cfg *Config, err error) {
 	defer func() {
 		if err != nil {

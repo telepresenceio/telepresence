@@ -77,7 +77,7 @@ func WithModuleRoot(ctx context.Context) context.Context {
 
 type dirContextKey struct{}
 
-// WithWorkingDir determines the working directory for the Command function
+// WithWorkingDir determines the working directory for the Command function.
 func WithWorkingDir(ctx context.Context, dir string) context.Context {
 	return context.WithValue(ctx, dirContextKey{}, dir)
 }

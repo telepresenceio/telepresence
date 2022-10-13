@@ -63,7 +63,7 @@ func UniqueSorted(ips []net.IP) IPs {
 	return ips[:last+1]
 }
 
-// BytesSlice is returns a [][]byte copy of the IPs
+// BytesSlice is returns a [][]byte copy of the IPs.
 func (ips IPs) BytesSlice() [][]byte {
 	bss := make([][]byte, len(ips))
 	for i, bs := range ips {

@@ -169,7 +169,7 @@ func (s *Service) Status(c context.Context, ex *empty.Empty) (result *rpc.Connec
 
 // isMultiPortIntercept checks if the intercept is one of several active intercepts on the same workload.
 // If it is, then the first returned value will be true and the second will indicate if those intercepts are
-// on different services. Otherwise, this function returns false, false
+// on different services. Otherwise, this function returns false, false.
 func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
 	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
 
@@ -804,7 +804,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 }
 
 func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
-	var resp = rpc.ValidArgsForCommandResponse{
+	resp := rpc.ValidArgsForCommandResponse{
 		Completions: make([]string, 0),
 	}
 	var (
@@ -953,7 +953,7 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	}
 
 	if p := req.Prefix; p != "" {
-		var namespaces = []string{}
+		namespaces := []string{}
 		for _, namespace := range resp.Namespaces {
 			if strings.HasPrefix(namespace, p) {
 				namespaces = append(namespaces, namespace)

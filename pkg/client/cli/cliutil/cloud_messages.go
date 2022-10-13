@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -28,7 +29,7 @@ type cloudMessageCache struct {
 	MessagesDelivered map[string]struct{} `json:"messagess_delivered"`
 }
 
-// newCloudMessageCache returns a new CloudMessageCache, initialized from the users' if it exists
+// newCloudMessageCache returns a new CloudMessageCache, initialized from the users' if it exists.
 func newCloudMessageCache(ctx context.Context) (*cloudMessageCache, error) {
 	cmc := &cloudMessageCache{}
 
@@ -117,7 +118,7 @@ func RaiseCloudMessage(cmd *cobra.Command, _ []string) error {
 
 	// Check if it is time to get new messages from Ambassador Cloud
 	if dtime.Now().After(cmc.NextCheck) {
-		systemaURL := fmt.Sprintf("https://%s:%s", cloudCfg.SystemaHost, cloudCfg.SystemaPort)
+		systemaURL := fmt.Sprintf("https://%s", net.JoinHostPort(cloudCfg.SystemaHost, cloudCfg.SystemaPort))
 		resp, err := getCloudMessages(ctx, systemaURL)
 		if err != nil {
 			// We try again in an hour since we encountered an error

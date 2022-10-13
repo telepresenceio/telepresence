@@ -34,8 +34,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-const ProcessName = "connector"
-const titleName = "Connector"
+const (
+	ProcessName = "connector"
+	titleName   = "Connector"
+)
 
 var help = `The Telepresence ` + titleName + ` is a background component that manages a connection. It
 requires that a daemon is already running.
@@ -61,7 +63,7 @@ type DaemonService interface {
 
 type CommandFactory func(context.Context) cliutil.CommandGroups
 
-// Service represents the long-running state of the Telepresence User Daemon
+// Service represents the long-running state of the Telepresence User Daemon.
 type Service struct {
 	rpc.UnsafeConnectorServer
 	svc               *grpc.Server
@@ -98,7 +100,7 @@ func (s *Service) LoginExecutor() auth.LoginExecutor {
 	return s.loginExecutor
 }
 
-// Command returns the CLI sub-command for "connector-foreground"
+// Command returns the CLI sub-command for "connector-foreground".
 func Command(getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) *cobra.Command {
 	c := &cobra.Command{
 		Use:    ProcessName + "-foreground",
@@ -181,7 +183,7 @@ nextSession:
 		go func(cr *rpc.ConnectRequest) {
 			defer wg.Done()
 			if err := s.session.Run(s.sessionContext); err != nil {
-				if errors.Is(err, trafficmgr.SessionExpiredErr) {
+				if errors.Is(err, trafficmgr.ErrSessionExpired) {
 					// Session has expired. We need to cancel the owner session and reconnect
 					dlog.Info(c, "refreshing session")
 					s.cancelSession()
@@ -237,7 +239,7 @@ func GetPoddService(sc *scout.Reporter, cfg client.Config, login auth.LoginExecu
 	}
 }
 
-// run is the main function when executing as the connector
+// run is the main function when executing as the connector.
 func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) error {
 	cfg, err := client.LoadConfig(c)
 	if err != nil {

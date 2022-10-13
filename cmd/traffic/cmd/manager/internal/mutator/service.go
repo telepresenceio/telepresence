@@ -150,8 +150,8 @@ func ServeMutator(ctx context.Context) error {
 	return nil
 }
 
-// Skip mutate requests in these namespaces
-func isNamespaceOfInterest(ctx context.Context, ns string) bool {
+// Skip mutate requests in these namespaces.
+func isNamespaceOfInterest(ns string) bool {
 	for _, skippedNs := range []string{
 		meta.NamespacePublic,
 		meta.NamespaceSystem,
@@ -226,7 +226,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 
 	var patchOps patchOps
 	// Apply the mf() function only namespaces of interest
-	if isNamespaceOfInterest(ctx, request.Namespace) {
+	if isNamespaceOfInterest(request.Namespace) {
 		patchOps, err = mf(ctx, request)
 	}
 

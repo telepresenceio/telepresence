@@ -82,6 +82,7 @@ func Test_headers_Matches(t *testing.T) {
 		})
 	}
 }
+
 func Test_NewHeaders_error(t *testing.T) {
 	m, err := NewHeaders(map[string]string{"a": "un(balanced"})
 	sErr := &syntax.Error{}

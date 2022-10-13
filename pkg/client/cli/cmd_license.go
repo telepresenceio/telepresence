@@ -52,7 +52,7 @@ https://www.getambassador.io/docs/telepresence/latest/reference/cluster-config/`
 
 // getCloudLicense communicates with system a, acquires the jwt formatted license
 // given by the id, places it in a secret, and outputs it to stdout or writes it
-// to a file given by the user
+// to a file given by the user.
 func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, licenseFile, hostDomain string) error {
 	if licenseFile == "" && id == "" {
 		return errcat.User.New("Must use either --id or --license-file flag")
@@ -95,7 +95,7 @@ func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, lice
 
 // Creates the kubernetes secret that can be put in your cluster
 // to access licensed features if the cluster is air-gapped and
-// writes it to the given writer
+// writes it to the given writer.
 func createSecretFromLicense(writer io.Writer, license, hostDomain string) error {
 	secret := &core.Secret{
 		TypeMeta: meta.TypeMeta{

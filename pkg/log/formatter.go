@@ -20,7 +20,7 @@ func NewFormatter(timestampFormat string) *Formatter {
 	return &Formatter{timestampFormat: timestampFormat}
 }
 
-// Format implements logrus.Formatter
+// Format implements logrus.Formatter.
 func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
 	var b *bytes.Buffer
 	if entry.Buffer != nil {
