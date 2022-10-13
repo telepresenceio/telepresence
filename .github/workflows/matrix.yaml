@@ -46,8 +46,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/provision-cluster
         with:
-          distribution: ${{matrix.clusters.distribution}}
+          distribution: ${{ matrix.clusters.distribution }}
           version: ${{ matrix.clusters.version }}
       - run: |
-          echo Testing telepresence client version ${{matrix.client_telepresence_version}} on ${{matrix.client_os}} ${{matrix.client_arch}} against server version ${{matrix.server_telepresence_version}} on ${{matrix.clusters.distribution}} cluster version ${{matrix.clusters.distribution}}
+          echo Testing telepresence client version ${{ matrix.client_telepresence_version }} on ${{ matrix.client_os }} ${{ matrix.client_arch }} against server version ${{ matrix.cluster_telepresence_version }} on ${{ matrix.clusters.distribution }} cluster version ${{ matrix.clusters.version }}
           
