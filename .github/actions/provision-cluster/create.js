@@ -6,6 +6,7 @@ try {
   const distribution = core.getInput('distribution');
   const version = core.getInput('version');
   console.log(`Creating ${distribution} ${version}!`);
+  core.setOutput('kubeconfig', "Mock kubeconfig file for ${distribution} ${version}.");
   // Get the JSON webhook payload for the event that triggered the workflow
   //const payload = JSON.stringify(github.context.payload, undefined, 2)
   //console.log(`The event payload: ${payload}`);
