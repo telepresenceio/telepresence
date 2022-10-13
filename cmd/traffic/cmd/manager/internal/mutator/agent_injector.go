@@ -194,7 +194,7 @@ func (a *agentInjector) uninstall(ctx context.Context) {
 	a.agentConfigs.DeleteMapsAndRolloutAll(ctx)
 }
 
-// upgradeLegacy
+// upgradeLegacy.
 func (a *agentInjector) upgradeLegacy(ctx context.Context) {
 	a.agentConfigs.UninstallV25(ctx)
 }
@@ -290,7 +290,7 @@ func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) p
 	return patches
 }
 
-// compareProbes compares two Probes but will only consider their Handler.Exec.Command in the comparison
+// compareProbes compares two Probes but will only consider their Handler.Exec.Command in the comparison.
 func compareProbes(a, b *core.Probe) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -327,7 +327,7 @@ func compareCapabilities(a *core.SecurityContext, b *core.SecurityContext) bool 
 	return compareCaps(ac.Add, bc.Add) && compareCaps(ac.Drop, bc.Drop)
 }
 
-// compareVolumeMounts compares two VolumeMount slices but will not include volume mounts using "kube-api-access-" prefix
+// compareVolumeMounts compares two VolumeMount slices but will not include volume mounts using "kube-api-access-" prefix.
 func compareVolumeMounts(a, b []core.VolumeMount) bool {
 	stripKubeAPI := func(vs []core.VolumeMount) []core.VolumeMount {
 		ss := make([]core.VolumeMount, 0, len(vs))
@@ -350,7 +350,7 @@ func containerEqual(a, b *core.Container) bool {
 		cmpopts.IgnoreFields(core.Container{}, "ImagePullPolicy", "Resources", "TerminationMessagePath", "TerminationMessagePolicy"))
 }
 
-// addAgentContainer creates a patch operation to add the traffic-agent container
+// addAgentContainer creates a patch operation to add the traffic-agent container.
 func addAgentContainer(
 	ctx context.Context,
 	pod *core.Pod,
@@ -374,17 +374,19 @@ func addAgentContainer(
 			return append(patches, patchOperation{
 				Op:    "replace",
 				Path:  "/spec/containers/" + strconv.Itoa(i),
-				Value: acn})
+				Value: acn,
+			})
 		}
 	}
 
 	return append(patches, patchOperation{
 		Op:    "add",
 		Path:  "/spec/containers/-",
-		Value: acn})
+		Value: acn,
+	})
 }
 
-// addTPEnv adds telepresence specific environment variables to all interceptable app containers
+// addTPEnv adds telepresence specific environment variables to all interceptable app containers.
 func addTPEnv(pod *core.Pod, config *agentconfig.Sidecar, env map[string]string, patches patchOps) patchOps {
 	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		patches = addContainerTPEnv(pod, app, env, patches)
@@ -392,7 +394,7 @@ func addTPEnv(pod *core.Pod, config *agentconfig.Sidecar, env map[string]string,
 	return patches
 }
 
-// addContainerTPEnv adds telepresence specific environment variables to the app container
+// addContainerTPEnv adds telepresence specific environment variables to the app container.
 func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string, patches patchOps) patchOps {
 	if l := len(cn.Env); l > 0 {
 		for _, e := range cn.Env {
@@ -441,7 +443,7 @@ func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string,
 }
 
 // hidePorts  will replace the symbolic name of a container port with a generated name. It will perform
-// the same replacement on all references to that port from the probes of the container
+// the same replacement on all references to that port from the probes of the container.
 func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
 	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		for _, ic := range agentconfig.PortUniqueIntercepts(cc) {
@@ -456,7 +458,7 @@ func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) pat
 }
 
 // hideContainerPorts  will replace the symbolic name of a container port with a generated name. It will perform
-// the same replacement on all references to that port from the probes of the container
+// the same replacement on all references to that port from the probes of the container.
 func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, patches patchOps) patchOps {
 	cns := pod.Spec.Containers
 	var containerPath string

@@ -180,7 +180,7 @@ type TrafficManager struct {
 }
 
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap
-// TODO: Change to released version
+// TODO: Change to released version.
 var firstAgentConfigMapVersion = semver.MustParse("2.6.0")
 
 func NewSession(
@@ -250,7 +250,8 @@ func NewSession(
 	// Collect data on how long connection time took
 	dlog.Debug(ctx, "Finished connecting to traffic manager")
 	sr.Report(ctx, "finished_connecting_traffic_manager", scout.Entry{
-		Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
+		Key: "connect_duration", Value: time.Since(connectStart).Seconds(),
+	})
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
 	ret := &rpc.ConnectInfo{
@@ -291,7 +292,7 @@ func (tm *TrafficManager) ManagerConn() *grpc.ClientConn {
 	return tm.managerConn
 }
 
-// connectCluster returns a configured cluster instance
+// connectCluster returns a configured cluster instance.
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
 	var config *k8s.Config
 	var err error
@@ -404,7 +405,8 @@ func connectMgr(
 	tc, tCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 	defer tCancel()
 
-	opts := []grpc.DialOption{grpc.WithContextDialer(grpcDialer),
+	opts := []grpc.DialOption{
+		grpc.WithContextDialer(grpcDialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
@@ -588,12 +590,11 @@ func (tm *TrafficManager) getInfosForWorkloads(
 	iMap map[string][]*manager.InterceptInfo,
 	aMap map[string]*manager.AgentInfo,
 	filter rpc.ListRequest_Filter,
-) ([]*rpc.WorkloadInfo, error) {
+) []*rpc.WorkloadInfo {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
-	var err error
 	tm.wlWatcher.eachService(ctx, tm.GetManagerNamespace(), namespaces, func(svc *core.Service) {
-		var wls []k8sapi.Workload
-		if wls, err = tm.wlWatcher.findMatchingWorkloads(ctx, svc); err != nil {
+		wls, err := tm.wlWatcher.findMatchingWorkloads(ctx, svc)
+		if err != nil {
 			return
 		}
 		for _, workload := range wls {
@@ -638,7 +639,7 @@ func (tm *TrafficManager) getInfosForWorkloads(
 		i++
 	}
 	sort.Slice(wiz, func(i, j int) bool { return wiz[i].Name < wiz[j].Name })
-	return wiz, nil
+	return wiz
 }
 
 func (tm *TrafficManager) waitForSync(ctx context.Context) {
@@ -692,7 +693,8 @@ func (tm *TrafficManager) WorkloadInfoSnapshot(
 }
 
 func (tm *TrafficManager) ensureWatchers(ctx context.Context,
-	namespaces []string) {
+	namespaces []string,
+) {
 	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
 	waitCh := make(chan struct{}, 1)
 	tm.currentAgentsLock.Lock()
@@ -777,10 +779,7 @@ nextIs:
 			aMap[k] = v
 		}
 	}
-	workloadInfos, err := tm.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
-	if err != nil {
-		return nil, err
-	}
+	workloadInfos := tm.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
 
 	if includeLocalIntercepts {
 		tm.currentInterceptsLock.Lock()
@@ -796,7 +795,7 @@ nextIs:
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 
-var SessionExpiredErr = errors.New("session expired")
+var ErrSessionExpired = errors.New("session expired")
 
 func (tm *TrafficManager) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
@@ -834,7 +833,7 @@ func (tm *TrafficManager) remain(c context.Context) error {
 				dlog.Error(c, err)
 				if gErr, ok := status.FromError(err); ok && gErr.Code() == codes.NotFound {
 					// Session has expired. We need to cancel the owner session and reconnect
-					return SessionExpiredErr
+					return ErrSessionExpired
 				}
 			}
 		}
@@ -892,7 +891,7 @@ func (tm *TrafficManager) Status(c context.Context) *rpc.ConnectInfo {
 
 // Given a slice of AgentInfo, this returns another slice of agents with one
 // agent per namespace, name pair.
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
 	type workload struct {
 		name, namespace string
@@ -909,7 +908,7 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 	return representativeAgents
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func (tm *TrafficManager) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
 	result := &rpc.Result{}
 	agents := tm.getCurrentAgents()
@@ -1067,7 +1066,7 @@ func (tm *TrafficManager) Uninstall(ctx context.Context, ur *rpc.UninstallReques
 	return errcat.ToResult(nil), nil
 }
 
-// getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster
+// getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster.
 func (tm *TrafficManager) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the

@@ -14,7 +14,7 @@ func SpecMatchesIntercept(spec *manager.InterceptSpec, ic *Intercept) bool {
 }
 
 // IsInterceptFor returns true when the given PortIdentifier is equal to the
-// config's ServicePortName, or can be parsed to an integer equal to the config's ServicePort
+// config's ServicePortName, or can be parsed to an integer equal to the config's ServicePort.
 func IsInterceptFor(spi PortIdentifier, ic *Intercept) bool {
 	proto, name, num := spi.ProtoAndNameOrNumber()
 	if spi.HasProto() && proto != ic.Protocol {

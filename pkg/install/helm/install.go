@@ -20,8 +20,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-const helmDriver = "secrets"
-const releaseName = "traffic-manager"
+const (
+	helmDriver  = "secrets"
+	releaseName = "traffic-manager"
+)
 
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
@@ -187,7 +189,7 @@ func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 	return existing, helmConfig, nil
 }
 
-// EnsureTrafficManager ensures the traffic manager is installed
+// EnsureTrafficManager ensures the traffic manager is installed.
 func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest) error {
 	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
 	if err != nil {
@@ -248,7 +250,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	return err
 }
 
-// DeleteTrafficManager deletes the traffic manager
+// DeleteTrafficManager deletes the traffic manager.
 func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {

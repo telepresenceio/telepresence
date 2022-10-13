@@ -86,7 +86,7 @@ type anonymizer struct {
 	podNames   map[string]string
 }
 
-// gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip
+// gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip.
 func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, _ []string) error {
 	if err := cliutil.InitCommand(cmd); err != nil {
 		return err
@@ -162,7 +162,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, _ []string) error {
 	// We gather those logs before we gather the connector.log so that problems that
 	// may occur during that process will be included in the connector.log
 	if gl.trafficManager || gl.trafficAgents != "None" {
-		if err := gl.gatherClusterLogs(ctx, cmd, exportDir, az); err != nil {
+		if err := gl.gatherClusterLogs(ctx, exportDir, az); err != nil {
 			// We let the user know we were unable to get logs from the kubernetes components,
 			// and why, but this shouldn't block the command returning successful with the logs
 			// it was able to get.
@@ -233,7 +233,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, cmd *cobra.Command, exportDir string, az *anonymizer) error {
+func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, exportDir string, az *anonymizer) error {
 	// To get logs from the components in the kubernetes cluster, we ask the
 	// traffic-manager.
 	rq := &connector.LogsRequest{
@@ -367,7 +367,7 @@ func (a *anonymizer) anonymizeFileNames(lr *connector.LogsResponse, exportDir st
 		qn := filepath.Join(exportDir, n)
 		if v != "ok" {
 			// Write the error to retrieve the log as the log content. It's better than nothing
-			_ = os.WriteFile(qn, []byte(v), 0666)
+			_ = os.WriteFile(qn, []byte(v), 0o666)
 		}
 		anonQn := filepath.Join(exportDir, a.getPodName(n))
 		if err := os.Rename(qn, anonQn); err != nil {

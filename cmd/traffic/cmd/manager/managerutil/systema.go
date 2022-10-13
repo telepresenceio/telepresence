@@ -46,6 +46,7 @@ type unauthdClient struct {
 func (c *unauthdClient) Close(ctx context.Context) error {
 	return nil
 }
+
 func (p *UnauthdConnProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (SystemaCRUDClient, error) {
 	client := systema.NewSystemACRUDClient(conn)
 	return &unauthdClient{client}, nil

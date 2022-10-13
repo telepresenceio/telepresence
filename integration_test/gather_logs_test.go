@@ -225,7 +225,7 @@ func getZipData(require *require.Assertions, outputFile, appNamespace, mgrNamesp
 
 // readZip reads a zip file and returns the []byte string. Used in tests for
 // checking that a zipped file's contents are correct. Exported since it is
-// also used in telepresence_test.go
+// also used in telepresence_test.go.
 func readZip(require *require.Assertions, zippedFile *zip.File) []byte {
 	fileReader, err := zippedFile.Open()
 	require.NoError(err)

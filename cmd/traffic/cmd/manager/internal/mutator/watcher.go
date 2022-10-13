@@ -335,7 +335,7 @@ func (c *configWatcher) GetInto(key, ns string, into any) (bool, error) {
 
 // Delete will delete an agent config from the agents ConfigMap for the given namespace. It will
 // also update the current snapshot.
-// An attempt to delete a manually added config is a no-op
+// An attempt to delete a manually added config is a no-op.
 func (c *configWatcher) Delete(ctx context.Context, name, namespace string) error {
 	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
 	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})

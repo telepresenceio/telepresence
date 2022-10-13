@@ -88,17 +88,17 @@ func (d *device) Close() error {
 	return d.dev.Close()
 }
 
-// Index returns the index of this device
+// Index returns the index of this device.
 func (d *device) Index() int32 {
 	return d.dev.index()
 }
 
-// Name returns the name of this device, e.g. "tun0"
+// Name returns the name of this device, e.g. "tun0".
 func (d *device) Name() string {
 	return d.dev.name
 }
 
-// SetDNS sets the DNS configuration for the device on the windows platform
+// SetDNS sets the DNS configuration for the device on the windows platform.
 func (d *device) SetDNS(ctx context.Context, server net.IP, domains []string) (err error) {
 	return d.dev.setDNS(ctx, server, domains)
 }

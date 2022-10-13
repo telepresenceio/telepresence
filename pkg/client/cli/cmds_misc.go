@@ -22,7 +22,7 @@ import (
 
 // ClusterIdCommand is a simple command that makes it easier for users to
 // figure out what their cluster ID is. For now this is just used when
-// people are making licenses for air-gapped environments
+// people are making licenses for air-gapped environments.
 func ClusterIdCommand() *cobra.Command {
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	cmd := &cobra.Command{
@@ -132,7 +132,8 @@ func dashboardCommand() *cobra.Command {
 			}
 
 			return nil
-		}}
+		},
+	}
 }
 
 func quitCommand() *cobra.Command {

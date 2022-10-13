@@ -22,10 +22,10 @@ import (
 // resyncPeriod controls how often the controller goes through all items in the cache and fires an update func again.
 // Resyncs are made to periodically check if updates were somehow missed (due to network glitches etc.). They consume
 // a fair amount of resources on a large cluster and shouldn't run too frequently.
-// TODO: Probably a good candidate to include in the cluster config
+// TODO: Probably a good candidate to include in the cluster config.
 const resyncPeriod = 2 * time.Minute
 
-// Watcher watches some resource and can be cancelled
+// Watcher watches some resource and can be cancelled.
 type Watcher struct {
 	sync.Mutex
 	cancel         context.CancelFunc
@@ -77,14 +77,14 @@ func NewWatcher(resource, namespace string, getter cache.Getter, objType runtime
 }
 
 // AddStateListener adds a listener function that will be called when the watcher
-// changes its state (starts or is cancelled)
+// changes its state (starts or is cancelled).
 func (w *Watcher) AddStateListener(l *StateListener) {
 	w.Lock()
 	w.stateListeners = append(w.stateListeners, l)
 	w.Unlock()
 }
 
-// RemoveStateListener removes a listener function
+// RemoveStateListener removes a listener function.
 func (w *Watcher) RemoveStateListener(rl *StateListener) {
 	w.Lock()
 	sls := w.stateListeners
@@ -121,7 +121,7 @@ func (w *Watcher) callStateListeners() {
 	}
 }
 
-// HasSynced returns true if this Watcher's controller has synced, or if this watcher hasn't started yet
+// HasSynced returns true if this Watcher's controller has synced, or if this watcher hasn't started yet.
 func (w *Watcher) HasSynced() bool {
 	w.Lock()
 	defer w.Unlock()
@@ -167,7 +167,7 @@ func (w *Watcher) List(c context.Context) []any {
 	return w.store.List()
 }
 
-// Active returns true if the watcher has been started and not yet cancelled
+// Active returns true if the watcher has been started and not yet cancelled.
 func (w *Watcher) Active() bool {
 	w.Lock()
 	active := w.cancel != nil
@@ -271,7 +271,7 @@ func (w *Watcher) process(c context.Context, ds cache.Deltas, eventCh chan<- str
 const idleTriggerDuration = 50 * time.Millisecond
 
 // handleEvents reads the channel and broadcasts on the condition once the channel has
-// been quite for idleTriggerDuration
+// been quite for idleTriggerDuration.
 func (w *Watcher) handleEvents(c context.Context, eventCh <-chan struct{}) {
 	idleTrigger := time.NewTimer(time.Duration(math.MaxInt64))
 	idleTrigger.Stop()

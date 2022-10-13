@@ -56,12 +56,12 @@ func NewZeroID() ConnID {
 	return ConnID(make([]byte, 13))
 }
 
-// IsIPv4 returns true if the source and destination of this ConnID are IPv4
+// IsIPv4 returns true if the source and destination of this ConnID are IPv4.
 func (id ConnID) IsIPv4() bool {
 	return len(id) == 13
 }
 
-// Source returns the source IP
+// Source returns the source IP.
 func (id ConnID) Source() net.IP {
 	if id.IsIPv4() {
 		return net.IP(id[0:4])
@@ -78,7 +78,7 @@ func (id ConnID) SourceAddr() net.Addr {
 	return &net.UDPAddr{IP: id.Source(), Port: int(id.SourcePort())}
 }
 
-// SourcePort returns the source port
+// SourcePort returns the source port.
 func (id ConnID) SourcePort() uint16 {
 	if id.IsIPv4() {
 		return binary.BigEndian.Uint16([]byte(id)[4:])
@@ -86,7 +86,7 @@ func (id ConnID) SourcePort() uint16 {
 	return binary.BigEndian.Uint16([]byte(id)[16:])
 }
 
-// Destination returns the destination IP
+// Destination returns the destination IP.
 func (id ConnID) Destination() net.IP {
 	if id.IsIPv4() {
 		return net.IP(id[6:10])
@@ -103,7 +103,7 @@ func (id ConnID) DestinationAddr() net.Addr {
 	return &net.UDPAddr{IP: id.Destination(), Port: int(id.DestinationPort())}
 }
 
-// DestinationPort returns the destination port
+// DestinationPort returns the destination port.
 func (id ConnID) DestinationPort() uint16 {
 	if id.IsIPv4() {
 		return binary.BigEndian.Uint16([]byte(id)[10:])
@@ -111,12 +111,12 @@ func (id ConnID) DestinationPort() uint16 {
 	return binary.BigEndian.Uint16([]byte(id)[34:])
 }
 
-// Protocol returns the protocol, e.g. ipproto.TCP
+// Protocol returns the protocol, e.g. ipproto.TCP.
 func (id ConnID) Protocol() int {
 	return int(id[len(id)-1])
 }
 
-// ProtocolString returns the protocol string, e.g. "tcp4"
+// ProtocolString returns the protocol string, e.g. "tcp4".
 func (id ConnID) ProtocolString() (proto string) {
 	p := id.Protocol()
 	switch p {
@@ -138,7 +138,7 @@ func (id ConnID) ProtocolString() (proto string) {
 	return proto
 }
 
-// Network returns either "ip4" or "ip6"
+// Network returns either "ip4" or "ip6".
 func (id ConnID) Network() string {
 	if id.IsIPv4() {
 		return "ip4"
@@ -159,7 +159,7 @@ func (id ConnID) SpanRecord(span trace.Span) {
 }
 
 // IPProto returns the IP protocol for the given network. Currently only supports
-// TCP, UDP, and ICMP
+// TCP, UDP, and ICMP.
 func IPProto(network string) int {
 	switch network {
 	case "tcp", "tcp4":
@@ -190,17 +190,17 @@ func protoString(proto int) string {
 	}
 }
 
-// Reply returns a copy of this ConnID with swapped source and destination properties
+// Reply returns a copy of this ConnID with swapped source and destination properties.
 func (id ConnID) Reply() ConnID {
 	return NewConnID(id.Protocol(), id.Destination(), id.Source(), id.DestinationPort(), id.SourcePort())
 }
 
-// ReplyString returns a formatted string suitable for logging showing the destination:destinationPort -> source:sourcePort
+// ReplyString returns a formatted string suitable for logging showing the destination:destinationPort -> source:sourcePort.
 func (id ConnID) ReplyString() string {
 	return fmt.Sprintf("%s %s:%d -> %s:%d", protoString(id.Protocol()), id.Destination(), id.DestinationPort(), id.Source(), id.SourcePort())
 }
 
-// String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort
+// String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort.
 func (id ConnID) String() string {
 	if len(id) < 13 {
 		return "bogus ConnID"

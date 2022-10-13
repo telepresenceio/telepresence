@@ -98,7 +98,7 @@ func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context,
 	return context.WithValue(ctx, irKey{}, ir)
 }
 
-// GetAgentImage returns the fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.7.4"
+// GetAgentImage returns the fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.7.4".
 func GetAgentImage(ctx context.Context) string {
 	if ir, ok := ctx.Value(irKey{}).(imageRetriever); ok {
 		return ir.getImage()

@@ -34,10 +34,10 @@ func launchDaemon(ctx context.Context) error {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		if err = os.MkdirAll(logDir, 0700); err != nil {
+		if err = os.MkdirAll(logDir, 0o700); err != nil {
 			return err
 		}
-		fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0600)
+		fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			return err
 		}
@@ -51,7 +51,7 @@ func launchDaemon(ctx context.Context) error {
 	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir)
 }
 
-// EnsureRootDaemonRunning ensures that the daemon is running
+// EnsureRootDaemonRunning ensures that the daemon is running.
 func EnsureRootDaemonRunning(ctx context.Context) error {
 	running, err := client.IsRunning(ctx, client.DaemonSocketName)
 	if err != nil || running {
@@ -95,7 +95,7 @@ func ensureAppUserConfigDir(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", errcat.NoDaemonLogs.New(err)
 	}
-	if err = os.MkdirAll(configDir, 0700); err != nil {
+	if err = os.MkdirAll(configDir, 0o700); err != nil {
 		return "", errcat.NoDaemonLogs.Newf("unable to ensure that config directory %q exists: %w", configDir, err)
 	}
 	return configDir, nil

@@ -38,7 +38,7 @@ func managerImageName(ctx context.Context) string {
 }
 
 // AgentImageFromSystemA returns the systemA preferred agent
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func AgentImageFromSystemA(ctx context.Context, v semver.Version) (string, error) {
 	systemaPool, err := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
 	if err != nil {
@@ -63,7 +63,7 @@ func AgentImageFromSystemA(ctx context.Context, v semver.Version) (string, error
 
 // legacyRemoveAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
 // it will also remove the traffic-manager service and deployment.
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func legacyRemoveAgents(c context.Context, agents []*manager.AgentInfo) error {
 	// Removes the manager and all agents from the cluster
 	var errs []error
@@ -130,7 +130,7 @@ func legacyRemoveAgents(c context.Context, agents []*manager.AgentInfo) error {
 }
 
 // recreates "kubectl rollout restart <obj>" for obj
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func rolloutRestart(c context.Context, obj k8sapi.Object) error {
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
@@ -141,7 +141,7 @@ func rolloutRestart(c context.Context, obj k8sapi.Object) error {
 }
 
 // Finds the Referenced Service in an objects' annotations
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func getSvcFromObjAnnotation(c context.Context, obj k8sapi.Object) (k8sapi.Object, error) {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
@@ -172,7 +172,7 @@ func getSvcFromObjAnnotation(c context.Context, obj k8sapi.Object) (k8sapi.Objec
 // the port to-be-intercepted has changed. It raises an error if either of these
 // cases exist since to go forward with an intercept would require changing the
 // configuration of the agent.
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func checkSvcSame(_ context.Context, obj k8sapi.Object, svcName, portNameOrNumber string) error {
 	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
@@ -201,9 +201,9 @@ func checkSvcSame(_ context.Context, obj k8sapi.Object, svcName, portNameOrNumbe
 	return nil
 }
 
-var agentNotFound = errors.New("no such agent")
+var errAgentNotFound = errors.New("no such agent")
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func ensureInjectedAgent(
 	c context.Context,
 	svc *core.Service,
@@ -256,7 +256,7 @@ nextPod:
 	return nil
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
 	a := podTpl.ObjectMeta.Annotations
 	webhookInjected := a != nil && a[install.InjectAnnotation] == "enabled"
@@ -269,7 +269,7 @@ func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
 }
 
 // exploreSvc finds the matching service, its containers, and their ports
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*serviceProps, error) {
 	podTemplate := obj.GetPodTemplate()
 	cns := podTemplate.Spec.Containers
@@ -309,7 +309,7 @@ already exist for this service`, kind, name)
 // is installed alongside the proper workload. In doing that, it also ensures that
 // the workload is referenced by a service. Lastly, it returns the service UID
 // associated with the workload since this is where that correlation is made.
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func legacyEnsureAgent(
 	c context.Context,
 	kl *k8s.Cluster,
@@ -406,7 +406,7 @@ func legacyEnsureAgent(
 	return string(svc.GetUID()), kind, nil
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload) error {
 	tos := &client.GetConfig(c).Timeouts
 	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
@@ -442,7 +442,7 @@ func waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload
 // refreshReplicaSet finds pods owned by a given ReplicaSet and deletes them.
 // We need this because updating a Replica Set does *not* generate new
 // pods if the desired amount already exists.
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func refreshReplicaSet(c context.Context, namespace string, rs *apps.ReplicaSet) error {
 	pods, err := k8sapi.Pods(c, namespace, rs.Spec.Selector.MatchLabels)
 	if err != nil {
@@ -468,7 +468,7 @@ func refreshReplicaSet(c context.Context, namespace string, rs *apps.ReplicaSet)
 	return nil
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
 	ann := obj.GetAnnotations()
 	if ann == nil {
@@ -499,7 +499,7 @@ func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
 	return true, nil
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func undoObjectModsAndUpdate(c context.Context, obj k8sapi.Object) error {
 	referencedService, err := undoObjectMods(c, obj)
 	if err != nil {
@@ -517,7 +517,7 @@ func undoObjectModsAndUpdate(c context.Context, obj k8sapi.Object) error {
 	return obj.Update(c)
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func undoObjectMods(c context.Context, obj k8sapi.Object) (string, error) {
 	var actions workloadActions
 	ok, err := getAnnotation(obj, &actions)
@@ -545,7 +545,7 @@ func undoObjectMods(c context.Context, obj k8sapi.Object) (string, error) {
 	return actions.ReferencedService, nil
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func undoServiceModsAndUpdate(c context.Context, svc k8sapi.Object) (err error) {
 	if err = undoServiceMods(c, svc); err == nil {
 		err = svc.Update(c)
@@ -553,7 +553,7 @@ func undoServiceModsAndUpdate(c context.Context, svc k8sapi.Object) (err error) 
 	return err
 }
 
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 	var actions svcActions
 	ok, err := getAnnotation(svc, &actions)
@@ -580,7 +580,7 @@ func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 // addAgentToWorkload takes a given workload object and a service and
 // determines which container + port to use for an intercept. It also
 // prepares and performs modifications to the obj and/or service.
-// Deprecated: not used with traffic-manager versions >= 2.6.0
+// Deprecated: not used with traffic-manager versions >= 2.6.0.
 func addAgentToWorkload(
 	c context.Context,
 	svcProps *serviceProps,

@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	// ConnectorSocketName is the path used when communicating to the connector process
+	// ConnectorSocketName is the path used when communicating to the connector process.
 	ConnectorSocketName = "/tmp/telepresence-connector.socket"
 
-	// DaemonSocketName is the path used when communicating to the daemon process
+	// DaemonSocketName is the path used when communicating to the daemon process.
 	DaemonSocketName = "/var/run/telepresence-daemon.socket"
 )
 
@@ -99,7 +99,7 @@ func removeSocket(listener net.Listener) error {
 	return os.Remove(listener.Addr().String())
 }
 
-// socketExists returns true if a socket is found at the given path
+// socketExists returns true if a socket is found at the given path.
 func socketExists(path string) (bool, error) {
 	s, err := os.Stat(path)
 	if err != nil {

@@ -57,7 +57,8 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	ss.Unlock()
 
 	// Send dial request to the client/agent
-	dr := &rpc.DialRequest{ConnId: []byte(id),
+	dr := &rpc.DialRequest{
+		ConnId:           []byte(id),
 		RoundtripLatency: int64(stream.RoundtripLatency()),
 		DialTimeout:      int64(stream.DialTimeout()),
 	}

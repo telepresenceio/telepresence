@@ -317,7 +317,7 @@ func (ica *addInitContainerAction) Undo(ver semver.Version, obj k8sapi.Object) e
 	return nil
 }
 
-// addTPEnvironmentAction  /////////////////////////////////////////////////////
+// addTPEnvironmentAction  /////////////////////////////////////////////////////.
 type addTPEnvironmentAction struct {
 	ContainerName string `json:"container_name"`
 	Env           map[string]string
@@ -360,7 +360,7 @@ func (ae *addTPEnvironmentAction) getContainer(obj k8sapi.Object) (*core.Contain
 
 // A hideContainerPortAction will replace the symbolic name of a container port
 // with a generated name. It will perform the same replacement on all references
-// to that port from the probes of the container
+// to that port from the probes of the container.
 type hideContainerPortAction struct {
 	ContainerName string `json:"container_name"`
 	PortName      string `json:"port_name"`
@@ -420,7 +420,7 @@ func (hcp *hideContainerPortAction) undo(obj k8sapi.Object) error {
 	return nil
 }
 
-// workloadActions ///////////////////////////////////////////////////////////
+// workloadActions ///////////////////////////////////////////////////////////.
 type workloadActions struct {
 	Version                   string `json:"version"`
 	ReferencedService         string

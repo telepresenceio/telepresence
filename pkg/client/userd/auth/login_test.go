@@ -459,7 +459,6 @@ func sendCallbackRequest(t *testing.T, callbackUrl *url.URL) *http.Response {
 		return http.ErrUseLastResponse
 	}}
 	callbackResponse, err := client.Get(callbackUrl.String())
-
 	if err != nil {
 		t.Fatal(err)
 	}

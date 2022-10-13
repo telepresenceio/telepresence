@@ -17,7 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-// The dnsConfig is part of the kubeconfigExtension struct
+// The dnsConfig is part of the kubeconfigExtension struct.
 type dnsConfig struct {
 	// LocalIP is the address of the local DNS server. This entry is only
 	// used on Linux system that are not configured to use systemd-resolved and
@@ -41,7 +41,7 @@ type dnsConfig struct {
 	LookupTimeout metav1.Duration `json:"lookup-timeout,omitempty"`
 }
 
-// The managerConfig is part of the kubeconfigExtension struct. It configures discovery of the traffic manager
+// The managerConfig is part of the kubeconfigExtension struct. It configures discovery of the traffic manager.
 type managerConfig struct {
 	// Namespace is the name of the namespace where the traffic manager is to be found
 	Namespace string `json:"namespace,omitempty"`
@@ -162,7 +162,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	return k, nil
 }
 
-// This represents an inClusterConfig
+// This represents an inClusterConfig.
 func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.

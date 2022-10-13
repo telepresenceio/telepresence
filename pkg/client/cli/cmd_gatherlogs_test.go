@@ -425,7 +425,7 @@ func Test_gatherLogsSignificantPodNames(t *testing.T) {
 
 // ReadZip reads a zip file and returns the []byte string. Used in tests for
 // checking that a zipped file's contents are correct. Exported since it is
-// also used in telepresence_test.go
+// also used in telepresence_test.go.
 func ReadZip(zippedFile *zip.File) ([]byte, error) {
 	fileReader, err := zippedFile.Open()
 	if err != nil {

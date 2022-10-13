@@ -111,10 +111,7 @@ func (ts *TraceServer) DumpTraces(ctx context.Context, _ *emptypb.Empty) (*commo
 	if err != nil {
 		return nil, fmt.Errorf("failed to force flush tracer: %w", err)
 	}
-	b, err := ts.shim.dumpTraces(ctx)
-	if err != nil {
-		return nil, err
-	}
+	b := ts.shim.dumpTraces()
 	return &common.Trace{
 		TraceData: b,
 	}, nil

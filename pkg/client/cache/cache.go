@@ -16,7 +16,7 @@ func ensureCacheDir(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return "", err
 	}
 	return cacheDir, nil
@@ -31,7 +31,7 @@ func SaveToUserCache(ctx context.Context, object any, file string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, file), jsonContent, 0600)
+	return os.WriteFile(filepath.Join(dir, file), jsonContent, 0o600)
 }
 
 func LoadFromUserCache(ctx context.Context, dest any, file string) error {

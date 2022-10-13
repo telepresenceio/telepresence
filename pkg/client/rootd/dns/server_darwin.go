@@ -104,7 +104,7 @@ func (r *resolveFile) write(fileName string) error {
 		}
 		buf.WriteByte('\n')
 	}
-	return os.WriteFile(fileName, buf.Bytes(), 0644)
+	return os.WriteFile(fileName, buf.Bytes(), 0o644)
 }
 
 func (r *resolveFile) setSearchPaths(paths ...string) {
@@ -143,7 +143,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	}
 	configureDNS(nil, dnsAddr)
 
-	err = os.MkdirAll(resolverDirName, 0755)
+	err = os.MkdirAll(resolverDirName, 0o755)
 	if err != nil {
 		return err
 	}

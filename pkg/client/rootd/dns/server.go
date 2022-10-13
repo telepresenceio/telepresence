@@ -32,7 +32,7 @@ type Resolver func(context.Context, *dns.Question) (dnsproxy.RRs, int, error)
 // recursively. This is common when the cluster is running on the local host (k3s in docker for instance).
 const recursionCheck = "tel2-recursion-check.kube-system."
 
-// defaultClusterDomain used unless traffic-manager reports otherwise
+// defaultClusterDomain used unless traffic-manager reports otherwise.
 const defaultClusterDomain = "cluster.local."
 
 type FallbackPool interface {
@@ -48,7 +48,7 @@ const (
 	recursionTestInProgress
 )
 
-// Server is a DNS server which implements the github.com/miekg/dns Handler interface
+// Server is a DNS server which implements the github.com/miekg/dns Handler interface.
 type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
 	fallbackPool FallbackPool
@@ -100,7 +100,7 @@ func (dv *cacheEntry) expired() bool {
 	return time.Since(dv.created) > cacheTTL
 }
 
-// NewServer returns a new dns.Server
+// NewServer returns a new dns.Server.
 func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *Server {
 	if config == nil {
 		config = &rpc.DNSConfig{}
@@ -145,11 +145,13 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 const tel2SubDomain = "tel2-search"
 const tel2SubDomainDot = tel2SubDomain + "."
 
-// wpadDot is used when rejecting all WPAD (Wep Proxy Auto-Discovery) queries
+// wpadDot is used when rejecting all WPAD (Wep Proxy Auto-Discovery) queries.
 const wpadDot = "wpad."
 
-var localhostIPv4 = net.IP{127, 0, 0, 1}
-var localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+var (
+	localhostIPv4 = net.IP{127, 0, 0, 1}
+	localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+)
 
 func (s *Server) shouldDoClusterLookup(query string) bool {
 	if strings.HasPrefix(query, wpadDot) {
@@ -282,7 +284,7 @@ func (s *Server) SetClusterDNS(dns *manager.DNS) {
 	s.config.IncludeSuffixes = appendUnique(s.config.IncludeSuffixes, dns.IncludeSuffixes)
 }
 
-// SetSearchPath updates the DNS search path used by the resolver
+// SetSearchPath updates the DNS search path used by the resolver.
 func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) {
 	if len(namespaces) > 0 {
 		// Provide direct access to intercepted namespaces
@@ -618,7 +620,7 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 	return copyRRs(dv.answer, q.Qtype), dv.rCode, err
 }
 
-// Run starts the DNS server(s) and waits for them to end
+// Run starts the DNS server(s) and waits for them to end.
 func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallbackPool FallbackPool, resolve Resolver) error {
 	s.ctx = c
 	s.fallbackPool = fallbackPool

@@ -68,6 +68,7 @@ func (p *mgrProxy) Version(ctx context.Context, arg *empty.Empty) (*managerrpc.V
 	}
 	return client.Version(ctx, arg, callOptions...)
 }
+
 func (p *mgrProxy) GetLicense(ctx context.Context, arg *empty.Empty) (*managerrpc.License, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
@@ -108,6 +109,7 @@ func (p *mgrProxy) ArriveAsClient(ctx context.Context, arg *managerrpc.ClientInf
 	}
 	return client.ArriveAsClient(ctx, arg, callOptions...)
 }
+
 func (p *mgrProxy) ArriveAsAgent(ctx context.Context, arg *managerrpc.AgentInfo) (*managerrpc.SessionInfo, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
@@ -115,6 +117,7 @@ func (p *mgrProxy) ArriveAsAgent(ctx context.Context, arg *managerrpc.AgentInfo)
 	}
 	return client.ArriveAsAgent(ctx, arg, callOptions...)
 }
+
 func (p *mgrProxy) Remain(ctx context.Context, arg *managerrpc.RemainRequest) (*empty.Empty, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
@@ -122,6 +125,7 @@ func (p *mgrProxy) Remain(ctx context.Context, arg *managerrpc.RemainRequest) (*
 	}
 	return client.Remain(ctx, arg, callOptions...)
 }
+
 func (p *mgrProxy) Depart(ctx context.Context, arg *managerrpc.SessionInfo) (*empty.Empty, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
@@ -183,12 +187,15 @@ func (p *mgrProxy) WatchIntercepts(arg *managerrpc.SessionInfo, srv managerrpc.M
 func (p *mgrProxy) PrepareIntercept(_ context.Context, _ *managerrpc.CreateInterceptRequest) (*managerrpc.PreparedIntercept, error) {
 	return nil, errors.New("must call connector.CanIntercept instead of manager.CreateIntercept")
 }
+
 func (p *mgrProxy) CreateIntercept(_ context.Context, _ *managerrpc.CreateInterceptRequest) (*managerrpc.InterceptInfo, error) {
 	return nil, errors.New("must call connector.CreateIntercept instead of manager.CreateIntercept")
 }
+
 func (p *mgrProxy) RemoveIntercept(context.Context, *managerrpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "must call connector.RemoveIntercept instead of manager.RemoveIntercept")
 }
+
 func (p *mgrProxy) UpdateIntercept(ctx context.Context, arg *managerrpc.UpdateInterceptRequest) (*managerrpc.InterceptInfo, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
@@ -196,6 +203,7 @@ func (p *mgrProxy) UpdateIntercept(ctx context.Context, arg *managerrpc.UpdateIn
 	}
 	return client.UpdateIntercept(ctx, arg, callOptions...)
 }
+
 func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewInterceptRequest) (*empty.Empty, error) {
 	client, callOptions, err := p.get()
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 
 // StdOutput sends everything written to its Stdout and Stderr to its
 // ResultChannel. Things written to Stdout will have an error category
-// of errcat.OK whereas Stderr with use errcat.NoDaemonLogs
+// of errcat.OK whereas Stderr with use errcat.NoDaemonLogs.
 type StdOutput interface {
 	Stdout() io.Writer
 	Stderr() io.Writer
@@ -81,7 +81,7 @@ func (h stdioHandler) ResultChannel() <-chan *connector.StreamResult {
 	return h
 }
 
-// NewStdOutput returns a new instance of StdOutput
+// NewStdOutput returns a new instance of StdOutput.
 func NewStdOutput() StdOutput {
 	return make(stdioHandler)
 }

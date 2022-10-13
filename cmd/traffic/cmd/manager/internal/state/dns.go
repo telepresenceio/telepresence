@@ -14,16 +14,13 @@ import (
 
 // We can use our own Rcodes in the range that is reserved for private use
 
-// RcodeNoAgents means that no agents replied to the DNS request
+// RcodeNoAgents means that no agents replied to the DNS request.
 const RcodeNoAgents = 3841
 
 // AgentsLookupDNS will send the given request to all agents currently intercepted by the client identified with
 // the clientSessionID, it will then wait for results to arrive, collect those results, and return the result.
 func (s *State) AgentsLookupDNS(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) (dnsproxy.RRs, int, error) {
-	rs, err := s.agentsLookup(ctx, clientSessionID, request)
-	if err != nil {
-		return nil, 0, err
-	}
+	rs := s.agentsLookup(ctx, clientSessionID, request)
 	if len(rs) == 0 {
 		return nil, RcodeNoAgents, nil
 	}
@@ -45,7 +42,7 @@ func (s *State) AgentsLookupDNS(ctx context.Context, clientSessionID string, req
 }
 
 // PostLookupDNSResponse receives lookup responses from an agent and places them in the channel
-// that corresponds to the lookup request
+// that corresponds to the lookup request.
 func (s *State) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
 	request := response.GetRequest()
 	rid := requestId(request)
@@ -77,11 +74,11 @@ func (s *State) WatchLookupDNS(agentSessionID string) <-chan *rpc.DNSRequest {
 	return ss.(*agentSessionState).dnsRequests
 }
 
-func (s *State) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) ([]*rpc.DNSResponse, error) {
+func (s *State) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) []*rpc.DNSResponse {
 	aIDs := s.getAgentsInterceptedByClient(clientSessionID)
 	aCount := len(aIDs)
 	if aCount == 0 {
-		return nil, nil
+		return nil
 	}
 
 	rsBuf := make(chan *rpc.DNSResponse, aCount)
@@ -118,7 +115,7 @@ func (s *State) agentsLookup(ctx context.Context, clientSessionID string, reques
 	for i := 0; i < bz; i++ {
 		rs[i] = <-rsBuf
 	}
-	return rs, nil
+	return rs
 }
 
 func (s *State) startLookup(agentSessionID, rid string, request *rpc.DNSRequest) <-chan *rpc.DNSResponse {

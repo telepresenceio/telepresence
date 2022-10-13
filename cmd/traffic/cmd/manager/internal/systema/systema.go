@@ -34,7 +34,7 @@ type server struct {
 	manager.UnsafeManagerProxyServer
 }
 
-// HandleConnection implements manager.ManagerProxyServer
+// HandleConnection implements manager.ManagerProxyServer.
 func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionServer) error {
 	ctx := rawconn.Context()
 

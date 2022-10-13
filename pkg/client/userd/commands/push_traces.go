@@ -47,12 +47,12 @@ func (c *pushTracesCommand) cobraCommand(ctx context.Context) *cobra.Command {
 
 func (*pushTracesCommand) init(_ context.Context) {}
 
-func (c *pushTracesCommand) traceClient(url string) (otlptrace.Client, error) {
+func (c *pushTracesCommand) traceClient(url string) otlptrace.Client {
 	client := otlptracegrpc.NewClient(
 		otlptracegrpc.WithEndpoint(url),
 		otlptracegrpc.WithInsecure(),
 	)
-	return client, nil
+	return client
 }
 
 func (c *pushTracesCommand) pushTraces(cmd *cobra.Command, args []string) error {
@@ -73,10 +73,7 @@ func (c *pushTracesCommand) pushTraces(cmd *cobra.Command, args []string) error 
 		return fmt.Errorf("failed to unzip %s: %w", zipFile, err)
 	}
 	defer zipR.Close()
-	client, err := c.traceClient(jaegerTarget)
-	if err != nil {
-		return err
-	}
+	client := c.traceClient(jaegerTarget)
 	pr := tracing.NewProtoReader(zipR, func() *tracepb.ResourceSpans { return &tracepb.ResourceSpans{} })
 	spans, err := pr.ReadAll(ctx)
 	if err != nil {

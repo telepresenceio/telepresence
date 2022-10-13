@@ -56,8 +56,8 @@ intercept:
 	sys2 := filepath.Join(tmp, "sys2")
 	user := filepath.Join(tmp, "user")
 	for i, dir := range []string{sys1, sys2, user} {
-		require.NoError(t, os.MkdirAll(dir, 0700))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, configFile), []byte(configs[i]), 0600))
+		require.NoError(t, os.MkdirAll(dir, 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, configFile), []byte(configs[i]), 0o600))
 	}
 
 	c := dlog.NewTestContext(t, false)
@@ -109,7 +109,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 
 	// Store YAML in file
 	tmp := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(tmp, configFile), cfgBytes, 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, configFile), cfgBytes, 0o600))
 	ctx = filelocation.WithAppUserConfigDir(ctx, tmp)
 
 	// Load from file and compare

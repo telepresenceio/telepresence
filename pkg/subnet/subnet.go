@@ -138,7 +138,7 @@ func Partition(subnets []*net.IPNet, filter func(int, *net.IPNet) bool) (matched
 	return
 }
 
-// Equal returns true if a and b have equal IP and masks
+// Equal returns true if a and b have equal IP and masks.
 func Equal(a, b *net.IPNet) bool {
 	if a.IP.Equal(b.IP) {
 		ao, ab := a.Mask.Size()
@@ -148,7 +148,7 @@ func Equal(a, b *net.IPNet) bool {
 	return false
 }
 
-// Covers answers the question if network range a contains all of network range b
+// Covers answers the question if network range a contains all of network range b.
 func Covers(a, b *net.IPNet) bool {
 	if !a.Contains(b.IP) {
 		return false

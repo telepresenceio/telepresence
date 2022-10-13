@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// LevelSetter is a function that sets the log-level
+// LevelSetter is a function that sets the log-level.
 type LevelSetter func(ctx context.Context, logLevel string)
 
 // TimedLevel is an object capable of setting a log-level for a given time
@@ -38,7 +38,7 @@ type timedLevel struct {
 	expires      *time.Time
 }
 
-// NewTimedLevel returns a new TimedLevel for the given default level and setter
+// NewTimedLevel returns a new TimedLevel for the given default level and setter.
 func NewTimedLevel(defaultLevel string, setter LevelSetter) TimedLevel {
 	return &timedLevel{
 		setter:       setter,
@@ -91,7 +91,7 @@ func (tl *timedLevel) Set(ctx context.Context, level string, duration time.Durat
 	}
 }
 
-// Reset restores the log-level to its default value
+// Reset restores the log-level to its default value.
 func (tl *timedLevel) Reset(ctx context.Context) {
 	tl.Lock()
 	defer tl.Unlock()

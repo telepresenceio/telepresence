@@ -148,8 +148,8 @@ github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1 h1:u/41zrBxTiE9jmR
 github.com/datawire/dlib v1.3.1-0.20220715022530-b09ab2e017e1/go.mod h1:NiGDmetmbkBvtznpWSx6C0vA0s0LK9aHna3LJDqjruk=
 github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f h1:Yz+xVYWkSARvfJ0e3LWwF1N5F+zJI9pCZ9R41OtkrKE=
 github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f/go.mod h1:D/jb71PHlfUjfNSUVpXQAscXsXy3x+CY+c52lPnW2qU=
-github.com/datawire/envconfig v0.0.0-20221005101338-acca084843b3 h1:O4cEgBwV1N78+WTNwBrzlXhflOeDlUPtys1YrtL8lXQ=
-github.com/datawire/envconfig v0.0.0-20221005101338-acca084843b3/go.mod h1:3SpNv+sKT10l7Gt88j8Eyk4Rd5FhMCnEYbfPo4Ee/e4=
+github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b h1:QXkFwAQPkOoX4jXItBbUdYCQC9I5OwhI50gZl/Dn5jc=
+github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b/go.mod h1:3SpNv+sKT10l7Gt88j8Eyk4Rd5FhMCnEYbfPo4Ee/e4=
 github.com/datawire/go-ftpserver v0.1.1 h1:73szT7FqirsyrofMNuq/tmYC+eRxhWtWswPd/i00uBA=
 github.com/datawire/go-ftpserver v0.1.1/go.mod h1:WXsutHvPI+JqjYEXD42U43++L5Samu9o+rMX7dY0Sc0=
 github.com/datawire/go-fuseftp/rpc v0.2.0 h1:KS7bmmHLqy3bpscwEhKolgTf+vykQlMbICamYkiEA/U=
@@ -894,8 +894,8 @@ golang.org/x/sys v0.0.0-20220114195835-da31bd327af9/go.mod h1:oPkhp1MJrh7nUepCBc
 golang.org/x/sys v0.0.0-20220412211240-33da011f77ad/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
-golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8 h1:h+EGohizhe9XlX18rfpa8k8RAc5XyaeamM+0VHRd4lc=
-golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+golang.org/x/sys v0.0.0-20221010170243-090e33056c14 h1:k5II8e6QD8mITdi+okbbmR/cIyEbeXLBhy5Ha4nevyc=
+golang.org/x/sys v0.0.0-20221010170243-090e33056c14/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
 golang.org/x/term v0.0.0-20220919170432-7a66f970e087 h1:tPwmk4vmvVCMdr98VgL4JH+qZxPL8fqlUOHnyOM8N3w=

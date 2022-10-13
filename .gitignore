@@ -36,7 +36,7 @@ tst-systema
 !/charts/telepresence
 
 # Downloaded fuseftp bits
-pkg/client/userd/fuseftp.bits
+fuseftp.bits
 
 # Needed to build on windows
 .wintools

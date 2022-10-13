@@ -263,7 +263,7 @@ func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) string {
 	return s.addClient(sessionID, client, now)
 }
 
-// addClient is like AddClient, but takes a sessionID, for testing purposes
+// addClient is like AddClient, but takes a sessionID, for testing purposes.
 func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

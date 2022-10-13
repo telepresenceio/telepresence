@@ -17,8 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
-type vpnDiagInfo struct {
-}
+type vpnDiagInfo struct{}
 
 func vpnDiagCommand() *cobra.Command {
 	di := vpnDiagInfo{}

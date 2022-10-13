@@ -298,10 +298,10 @@ func TestInstallID(t *testing.T) {
 			}
 
 			for filename, filebody := range tcData.InputHomeDir {
-				if err := os.MkdirAll(filepath.Dir(filepath.Join(homedir, filename)), 0755); err != nil {
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(homedir, filename)), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(homedir, filename), []byte(filebody), 0644); err != nil {
+				if err := os.WriteFile(filepath.Join(homedir, filename), []byte(filebody), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}

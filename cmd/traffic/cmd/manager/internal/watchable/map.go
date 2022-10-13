@@ -123,7 +123,7 @@ func (tm *Map[V]) Store(key string, val V) {
 // LoadOrStore returns the existing value for the key if present.  Otherwise, it stores and returns
 // the given value. The 'loaded' result is true if the value was loaded, false if stored.
 //
-// If the value does need to be stored, all the same blocking semantics as .Store() apply
+// If the value does need to be stored, all the same blocking semantics as .Store() apply.
 func (tm *Map[V]) LoadOrStore(key string, val V) (value V, loaded bool) {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()
@@ -143,12 +143,12 @@ func (tm *Map[V]) LoadOrStore(key string, val V) (value V, loaded bool) {
 //	    return true
 //	}
 //	return false
-func (tm *Map[V]) CompareAndSwap(key string, old, new V) bool {
+func (tm *Map[V]) CompareAndSwap(key string, oldVal, newVal V) bool {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()
 
-	if loadedVal, loadedOK := tm.value[key]; loadedOK && proto.Equal(loadedVal, old) {
-		tm.unlockedStore(key, new)
+	if loadedVal, loadedOK := tm.value[key]; loadedOK && proto.Equal(loadedVal, oldVal) {
+		tm.unlockedStore(key, newVal)
 		return true
 	}
 	return false

@@ -17,7 +17,7 @@ import (
 )
 
 // Test_RestartInterceptedPod build belongs to the interceptMountSuite because we want to
-// verify that the mount survives the scaling
+// verify that the mount survives the scaling.
 func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	assert := s.Assert()
 	require := s.Require()
@@ -71,7 +71,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 }
 
 // Test_StopInterceptedPodOfMany build belongs to the interceptMountSuite because we want to
-// verify that the mount survives the scaling
+// verify that the mount survives the scaling.
 func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	assert := s.Assert()
 	require := s.Require()

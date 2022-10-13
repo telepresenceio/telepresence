@@ -17,9 +17,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
-const sysProtoControl = 2
-const uTunOptIfName = 2
-const uTunControlName = "com.apple.net.utun_control"
+const (
+	sysProtoControl = 2
+	uTunOptIfName   = 2
+	uTunControlName = "com.apple.net.utun_control"
+)
 
 type nativeDevice struct {
 	*os.File
@@ -163,11 +165,11 @@ type addrIfReq6 struct {
 	prefixLifeTime uint32
 }
 
-// SIOCAIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCAIFADDR adjusted with size of addrIfReq6
+// SIOCAIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCAIFADDR adjusted with size of addrIfReq6.
 const SIOCAIFADDR_IN6 = (unix.SIOCAIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
 const ND6_INFINITE_LIFETIME = 0xffffffff
 
-// SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6
+// SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6.
 const SIOCDIFADDR_IN6 = (unix.SIOCDIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
 
 func addrToIp4(subnet *net.IPNet, to net.IP) (*net.IPNet, net.IP, bool) {

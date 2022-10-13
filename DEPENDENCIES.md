@@ -31,7 +31,7 @@ following Free and Open Source software:
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
-    github.com/datawire/envconfig                                                v0.0.0-20221005101338-acca084843b3        Apache License 2.0
+    github.com/datawire/envconfig                                                v0.0.0-20221012222025-09524dc7d59b        Apache License 2.0
     github.com/datawire/go-ftpserver                                             v0.1.1                                    Apache License 2.0
     github.com/datawire/go-fuseftp/rpc                                           v0.2.0                                    Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                    Apache License 2.0
@@ -150,7 +150,7 @@ following Free and Open Source software:
     golang.org/x/net                                                             v0.0.0-20220923203811-8be639271d50        3-clause BSD license
     golang.org/x/oauth2                                                          v0.0.0-20220909003341-f21342109be1        3-clause BSD license
     golang.org/x/sync                                                            v0.0.0-20220923202941-7f9b1623fab7        3-clause BSD license
-    golang.org/x/sys                                                             v0.0.0-20220919091848-fb04ddd9f9c8        3-clause BSD license
+    golang.org/x/sys                                                             v0.0.0-20221010170243-090e33056c14        3-clause BSD license
     golang.org/x/term                                                            v0.0.0-20220919170432-7a66f970e087        3-clause BSD license
     golang.org/x/text                                                            v0.3.8-0.20211105212822-18b340fc7af2      3-clause BSD license
     golang.org/x/time                                                            v0.0.0-20220922220347-f3bd1da661af        3-clause BSD license
