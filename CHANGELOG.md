@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.8.1 (October 14, 2022)
+
+- rollback to 2.7.6 while issues are being investigated
+
 ### 2.7.6 (September 16, 2022)
 
 - Reintroduce everything from 2.7.4 with fix for issue preventing the CLI from launching on arm64 builds
@@ -68,7 +72,6 @@
 - Bugfix: Telepresence help message functionality without a running user daemon has been restored.
 
 - Bugfix: The `telepresence list` command no longer includes the `traffic-manager` deployment.
-
 
 ### 2.7.1 (August 10, 2022)
 
