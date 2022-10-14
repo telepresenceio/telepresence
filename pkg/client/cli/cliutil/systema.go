@@ -33,6 +33,10 @@ import (
 // login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
+	err := getTelepresencePro(ctx, GetUserDaemon(ctx))
+	if err != nil {
+		return connector.LoginResult_UNSPECIFIED, err
+	}
 	resp, err := GetUserDaemon(ctx).Login(ctx, &connector.LoginRequest{
 		ApiKey: apikey,
 	})

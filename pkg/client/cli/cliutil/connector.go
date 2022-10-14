@@ -67,7 +67,12 @@ func InitCommand(cmd *cobra.Command) (err error) {
 
 	if v, ok := as[ann.Session]; ok {
 		as[ann.UserDaemon] = v
+		as[ann.VersionCheck] = ann.Required
 	}
+	if _, ok := as[ann.Notifications]; ok {
+		as[ann.VersionCheck] = ann.Required
+	}
+
 	if as[ann.RootDaemon] == ann.Required {
 		if err = EnsureRootDaemonRunning(ctx); err != nil {
 			return err
