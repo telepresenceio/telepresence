@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.8.0 (October 14, 2022)
+### 2.8.2 (TBD)
 
 - Feature: The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,
   `MX`, `NS`, `PTR`, `SRV`, and `TXT`.
