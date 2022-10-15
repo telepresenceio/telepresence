@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.8.0 (TBD)
+### 2.8.2 (October 15, 2022)
 
 - Feature: The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,
   `MX`, `NS`, `PTR`, `SRV`, and `TXT`.
@@ -15,7 +15,7 @@
   The default port is 8081.
 
 - Change: The Helm chart `dnsConfig` was deprecated but retained for backward compatibility. The fields
-  `alwaysProxySubnets` and `neverProxySubnets` can now be found under `routing` in the `client` struct.
+  `alsoProxySubnets` and `neverProxySubnets` can now be found under `routing` in the `client` struct.
 
 - Change: The Helm chart `agentInjector.agentImage` was moved to `agent.image`. The old value is deprecated but
   retained for backward compatibility.

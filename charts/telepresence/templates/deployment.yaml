@@ -82,68 +82,65 @@ spec:
         {{- /*
         Traffic agent configuration
         */}}
-          {{- with .agent }}
-          {{- if .logLevel }}
+          {{- if .agent.logLevel }}
           - name: AGENT_LOGLEVEL
-            value: {{ .logLevel }}
+            value: {{ .agent.logLevel }}
           {{- end }}
-          {{- if .port }}
+          {{- if .agent.port }}
           - name: AGENT_PORT
-            value: {{ .port | quote }}
+            value: {{ .agent.port | quote }}
           {{- end }}
           {{- /* replaced by agent.appProtocolStrategy. Retained for backward compatibility */}}
-          {{- with $.Values.agentInjector.appProtocolStrategy }}
+          {{- if $.Values.agentInjector.appProtocolStrategy }}
           - name: AGENT_APP_PROTO_STRATEGY
-            value: {{ . }}
+            value: {{ $.Values.agentInjector.appProtocolStrategy }}
           {{- else }}
-          {{- if .appProtocolStrategy }}
+          {{- if .agent.appProtocolStrategy }}
           - name: AGENT_APP_PROTO_STRATEGY
-            value: {{ .appProtocolStrategy }}
+            value: {{ .agent.appProtocolStrategy }}
           {{- end }}
           {{- end }}
-          {{- /* replaced by agent (.resources and .initResoruces). Retained for backward compatibility */}}
-          {{- with $.Values.agentInjector.agentImage }}
-          {{- if .resources }}
+          {{- /* replaced by agent.resources. Retained for backward compatibility */}}
+          {{- if $.Values.agentInjector.agentImage.resources }}
           - name: AGENT_RESOURCES
-            value: '{{ toJson .resources }}'
-          {{- end }}
-          {{- if .initResources }}
-          - name: AGENT_INIT_RESOURCES
-            value: '{{ toJson .initResources }}'
-          {{- end }}
+            value: '{{ toJson $.Values.agentInjector.agentImage.resources }}'
           {{- else }}
-          {{- if .resources }}
+          {{- if .agent.resources }}
           - name: AGENT_RESOURCES
-            value: '{{ toJson .resources }}'
+            value: '{{ toJson .agent.resources }}'
           {{- end }}
-          {{- if .initResources }}
+          {{- end }}
+          {{- /* replaced by agent.initResoruces. Retained for backward compatibility */}}
+          {{- if $.Values.agentInjector.agentImage.initResources }}
           - name: AGENT_INIT_RESOURCES
-            value: '{{ toJson .initResources }}'
-          {{- end }}
-          {{- end }}
-          {{- /* replaced by agent.image. Retained for backward compatibility */}}
-          {{- with $.Values.agentInjector.agentImage }}
-          {{- if .name }}
-          - name: AGENT_IMAGE
-            value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
-          {{- end }}
-          {{- if .registry }}
-          - name: AGENT_REGISTRY
-            value: {{ .registry }}
-          {{- end }}
+            value: '{{ toJson $.Values.agentInjector.agentImage.initResources }}'
           {{- else }}
-          {{- with .image }}
-          {{- if .name }}
+          {{- if .agent.initResources }}
+          - name: AGENT_INIT_RESOURCES
+            value: '{{ toJson .agent.initResources }}'
+          {{- end }}
+          {{- end }}
+          {{- /* replaced by agent.image.name Retained for backward compatibility */}}
+          {{- if $.Values.agentInjector.agentImage.name }}
           - name: AGENT_IMAGE
-            value: "{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+            value: "{{ $.Values.agentInjector.agentImage.name }}:{{ $.Values.agentInjector.agentImage.tag | default $.Chart.AppVersion }}"
+          {{- else }}
+          {{- if .agent.image.name }}
+          - name: AGENT_IMAGE
+            value: "{{ .agent.image.name }}:{{ .agent.image.tag | default $.Chart.AppVersion }}"
           {{- end }}
-          {{- if .registry }}
+          {{- end }}
+          {{- /* replaced by agent.image.registry Retained for backward compatibility */}}
+          {{- if $.Values.agentInjector.agentImage.registry }}
           - name: AGENT_REGISTRY
-            value: {{ .registry }}
+            value: {{ $.Values.agentInjector.agentImage.registry }}
+          {{- else }}
+          {{- if .agent.image.registry }}
+          - name: AGENT_REGISTRY
+            value: {{ .agent.image.registry }}
           {{- end }}
           {{- end }}
-          {{- end }}
-          {{- with .envoy }}
+          {{- with .agent.envoy }}
           {{- if .logLevel }}
           - name: AGENT_ENVOY_LOGLEVEL
             value: {{ .logLevel }}
@@ -155,7 +152,6 @@ spec:
           {{- if .adminPort }}
           - name: AGENT_ENVOY_ADMIN_PORT
             value: {{ .adminPort | quote }}
-          {{- end }}
           {{- end }}
           {{- end }}
           {{- if .prometheus.port }}  # 0 is false

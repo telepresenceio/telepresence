@@ -256,7 +256,7 @@ helm_install() {
       exit 1
     fi
 
-    helm_overrides+=("agentInjector.agentImage.name=$image_name" "agentInjector.agentImage.tag=$image_tag")
+    helm_overrides+=("agentInjector.agentImage.name=$image_name" "agentInjector.agentImage.tag=$image_tag" "agentInjector.agentImage.registry=$smart_agent_registry")
 
     # Clean up any pre-existing helm installation for the traffic-manager
     local output
@@ -390,6 +390,10 @@ get_config
 
 if [ -f "$config_file" ]; then
     smart_agent=$(sed -n -e 's/^[ ]*agentImage\:[ ]*//p' "$config_file")
+    smart_agent_registry=$(yq e '.images.registry' "$config_file")
+    if [[ -z "$smart_agent_registry" ]]; then
+        smart_agent_registry="datawire"
+    fi
     echo "Smart agent: $smart_agent"
     config_bak="$config_file.bak"
     echo

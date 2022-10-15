@@ -113,6 +113,10 @@ func dashboardCommand() *cobra.Command {
 		Args: cobra.NoArgs,
 
 		Short: "Open the dashboard in a web page",
+		Annotations: map[string]string{
+			ann.RootDaemon: ann.Required,
+			ann.Session:    ann.Required,
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cloudCfg := client.GetConfig(cmd.Context()).Cloud
 
