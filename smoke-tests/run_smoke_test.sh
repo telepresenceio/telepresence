@@ -866,7 +866,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ###########  Step 18 - Verify Cloud Intercept  ###########
     ##########################################################
     echo "Step ${STEP}: log into https://getambassador.io/cloud and start an intercept."
-    read -p "Success(y/n)? " yn
+    read -r -p "Success(y/n)? " yn
     case $yn in
         [Yy]* )	finish_step;; 
         [Nn]* ) echo "Should be able to initiate intercept from the cloud"; exit 1;;
