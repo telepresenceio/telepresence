@@ -865,14 +865,13 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
     ###########  Step 18 - Verify Cloud Intercept  ###########
     ##########################################################
-    echo "Step 18: log into https://getambassador.io/cloud and start an intercept."
-    read -p "Success(y|n): " yn
+    echo "Step ${STEP}: log into https://getambassador.io/cloud and start an intercept."
+    read -p "Success(y/n)? " yn
     case $yn in
-        [Yy]* ) echo "Step 18 sucess!"; break;;
+        [Yy]* )	finish_step;; 
         [Nn]* ) echo "Should be able to initiate intercept from the cloud"; exit 1;;
         * ) echo "invalid input"; exit 1;;
     esac
-    finish_step
 
 
     $TELEPRESENCE helm uninstall >"$output_location"
