@@ -618,7 +618,6 @@ verify_output_empty "${output}" true
 
 finish_step
 
-
 ###############################################
 #### Step 7 - Verify login prompted        ####
 ###############################################
@@ -861,11 +860,26 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
         echo "Intercept should have errored since the license is invalid"
         exit 1
     fi
+    finish_step
+
+    ##########################################################
+    ###########  Step 18 - Verify Cloud Intercept  ###########
+    ##########################################################
+    echo "Step 18: log into https://getambassador.io/cloud and start an intercept."
+    read -p "Success(y|n): " yn
+    case $yn in
+        [Yy]* ) echo "Step 18 sucess!"; break;;
+        [Nn]* ) echo "Should be able to initiate intercept from the cloud"; exit 1;;
+        * ) echo "invalid input"; exit 1;;
+    esac
+    finish_step
+
 
     $TELEPRESENCE helm uninstall >"$output_location"
     finish_step
     restore_config
     trap - EXIT
+
 fi
 ##########################################################
 #### The end :)                                       ####
