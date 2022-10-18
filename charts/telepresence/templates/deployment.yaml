@@ -83,7 +83,7 @@ spec:
         Traffic agent configuration
         */}}
           {{- if .agent.logLevel }}
-          - name: AGENT_LOGLEVEL
+          - name: AGENT_LOG_LEVEL
             value: {{ .agent.logLevel }}
           {{- end }}
           {{- if .agent.port }}
@@ -142,7 +142,7 @@ spec:
           {{- end }}
           {{- with .agent.envoy }}
           {{- if .logLevel }}
-          - name: AGENT_ENVOY_LOGLEVEL
+          - name: AGENT_ENVOY_LOG_LEVEL
             value: {{ .logLevel }}
           {{- end }}
           {{- if .serverPort }}
