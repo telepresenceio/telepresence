@@ -10,6 +10,8 @@
 - Bugfix: `telepresence connect` now works as long as the traffic manager is installed, even if
   it wasn't installed via `helm install`
 
+- Bugfix. telepresence check-vpn no longer crashes when the daemons don't start properly.
+
 ### 2.8.2 (October 15, 2022)
 
 - Feature: The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,

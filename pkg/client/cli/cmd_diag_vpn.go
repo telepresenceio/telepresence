@@ -150,7 +150,9 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		return fmt.Errorf("failed to get routing table: %w", err)
 	}
 	subnets := map[string][]*net.IPNet{podType: {}, svcType: {}}
-	err = cliutil.InitCommand(cmd)
+	if err = cliutil.InitCommand(cmd); err != nil {
+		return err
+	}
 	ctx = cmd.Context()
 
 	// If this times out, it's likely to be because the traffic manager never gave us the subnets;
