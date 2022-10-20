@@ -35,7 +35,7 @@ spec:
   type: {{ .Values.service.type }}
   ports:
   - name: https
-    port: 443
+    port: {{ .Values.agentInjector.webhook.port }}
     targetPort: https
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}

@@ -179,7 +179,7 @@ spec:
         - containerPort: 8081
           name: api
           protocol: TCP
-        - containerPort: 8443
+        - containerPort: 443
           name: https
           protocol: TCP
         resources: {}

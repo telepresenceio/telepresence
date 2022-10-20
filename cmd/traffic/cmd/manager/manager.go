@@ -32,7 +32,7 @@ import (
 
 // Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
-	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
+	dlog.Infof(ctx, "Traffic Manager %s [uid:%d,gid:%d]", version.Version, os.Getuid(), os.Getgid())
 
 	ctx, err := managerutil.LoadEnv(ctx, os.LookupEnv)
 	if err != nil {

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -25,7 +24,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 const (
@@ -140,7 +138,7 @@ func ServeMutator(ctx context.Context) error {
 		return operation + r.URL.Path
 	}))
 	server := &dhttp.ServerConfig{Handler: wrapped}
-	addr := ":" + strconv.Itoa(install.MutatorWebhookPortHTTPS)
+	addr := fmt.Sprintf(":%d", managerutil.GetEnv(ctx).MutatorWebhookPort)
 
 	dlog.Infof(ctx, "Mutating webhook service is listening on %v", addr)
 	defer dlog.Info(ctx, "Mutating webhook service stopped")

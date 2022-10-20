@@ -54,6 +54,8 @@ spec:
             value: {{ .systemaHost }}
           - name: SYSTEMA_PORT
             value: {{ .systemaPort | quote }}
+          - name: MUTATOR_WEBHOOK_PORT
+            value: {{ .agentInjector.webhook.port | quote }}
           {{- with .tracing }}
           {{- if .grpcPort }}
           - name: TRACING_GRPC_PORT
@@ -217,7 +219,7 @@ spec:
           - name: api
             containerPort: {{ .apiPort }}
           - name: https
-            containerPort: 8443
+            containerPort: {{ .agentInjector.webhook.port }}
           {{- if .prometheus.port }}  # 0 is false
           - name: prometheus
             containerPort: {{ .prometheus.port }}
