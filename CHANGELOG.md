@@ -1,5 +1,12 @@
 # Changelog
 
+### 2.8.3 (TBD)
+
+- Feature: The port used for the mutating webhook can be configured using the Helm chart setting
+  `agentInjector.webhook.port`.
+
+- Change: The default port for the mutating webhook is now `443`. It used to be `8443`.
+
 ### 2.8.2 (October 15, 2022)
 
 - Feature: The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,

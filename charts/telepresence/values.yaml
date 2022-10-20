@@ -159,12 +159,6 @@ managerRbac:
 ################################################################################
 agentInjector:
   name: agent-injector
-  service:
-    type: ClusterIP
-    ports:
-    - name: https
-      port: 443
-      targetPort: https
   secret:
     name: mutator-webhook-tls
   certificate:

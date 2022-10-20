@@ -16,7 +16,7 @@
 
 FROM golang:alpine3.15 as tel2-build
 
-RUN apk add --no-cache gcc musl-dev fuse-dev
+RUN apk add --no-cache gcc musl-dev fuse-dev libcap
 
 WORKDIR telepresence
 COPY go.mod go.sum .
@@ -31,7 +31,10 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod \
     go build -o /usr/local/bin/ -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/traffic/...
 
-# The tel2 targer is the one that gets published. It aims to be a small as possible.
+# setcap is necessary because the process will listen to privileged ports
+RUN setcap 'cap_net_bind_service+ep' /usr/local/bin/traffic
+
+# The tel2 target is the one that gets published. It aims to be a small as possible.
 FROM alpine:3.15 as tel2
 
 RUN apk add --no-cache ca-certificates iptables
