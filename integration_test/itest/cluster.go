@@ -61,6 +61,8 @@ type Cluster interface {
 	Suffix() string
 	TelepresenceVersion() string
 	UninstallTrafficManager(ctx context.Context, managerNamespace string)
+	PackageHelmChart(ctx context.Context) (string, error)
+	GetValuesForHelm(values map[string]string, managerNamespace string, appNamespaces ...string) []string
 }
 
 // The cluster is created once and then reused by all tests. It ensures that:
@@ -428,25 +430,23 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 }
 
-func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
-	chartFilename, err := func() (string, error) {
-		filename := filepath.Join(getT(ctx).TempDir(), "telepresence-chart.tgz")
-		fh, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0o666)
-		if err != nil {
-			return "", err
-		}
-		if err := telcharts.WriteChart(fh, s.TelepresenceVersion()[1:]); err != nil {
-			_ = fh.Close()
-			return "", err
-		}
-		if err := fh.Close(); err != nil {
-			return "", err
-		}
-		return filename, nil
-	}()
+func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
+	filename := filepath.Join(getT(ctx).TempDir(), "telepresence-chart.tgz")
+	fh, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0o666)
 	if err != nil {
-		return err
+		return "", err
 	}
+	if err := telcharts.WriteChart(fh, s.TelepresenceVersion()[1:]); err != nil {
+		_ = fh.Close()
+		return "", err
+	}
+	if err := fh.Close(); err != nil {
+		return "", err
+	}
+	return filename, nil
+}
+
+func (s *cluster) GetValuesForHelm(values map[string]string, managerNamespace string, appNamespaces ...string) []string {
 	settings := []string{
 		"--set", "logLevel=debug",
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
@@ -462,6 +462,15 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 	for k, v := range values {
 		settings = append(settings, "--set", k+"="+v)
 	}
+	return settings
+}
+
+func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
+	chartFilename, err := s.PackageHelmChart(ctx)
+	if err != nil {
+		return err
+	}
+	settings := s.GetValuesForHelm(values, managerNamespace, appNamespaces...)
 
 	helmValues := filepath.Join("integration_test", "testdata", "namespaced-values.yaml")
 	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
