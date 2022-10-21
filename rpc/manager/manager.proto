@@ -100,6 +100,15 @@ message InterceptSpec {
   // optionally followed by a "/TCP" or "/UDP"
   string service_port_identifier = 10;
 
+  // The resolved service port name
+  string service_port_name = 19;
+
+  // The resolved service port
+  int32 service_port = 20;
+
+  // The resolved protocol used by the service port
+  string protocol = 21; // TCP or UDP
+
   // .uid.metadata of service associated with intercept
   string service_uid = 12;
 

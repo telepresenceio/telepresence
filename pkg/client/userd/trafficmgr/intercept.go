@@ -513,7 +513,7 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	}
 
 	iInfo := &interceptInfo{preparedIntercept: pi}
-	return iInfo, iInfo.InterceptResult()
+	return iInfo, nil
 }
 
 // legacyImage ensures that the installer never modifies a workload to
@@ -571,10 +571,9 @@ func (s *session) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInte
 }
 
 // AddIntercept adds one intercept.
-func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) { //nolint:gocognit // bugger off
-	var iInfo userd.InterceptInfo
-	iInfo, result = s.CanIntercept(c, ir)
-	if result != nil && result.Error != common.InterceptError_UNSPECIFIED {
+func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) { //nolint:gocognit // bugger off
+	iInfo, result := s.CanIntercept(c, ir)
+	if result != nil {
 		return result, nil
 	}
 
@@ -592,10 +591,9 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	apiPort := uint16(cfg.TelepresenceAPI.Port)
 	if apiPort == 0 {
 		// Default to the API port declared by the traffic-manager
-		var apiInfo *manager.TelepresenceAPIInfo
-		if apiInfo, err = s.managerClient.GetTelepresenceAPI(c, &empty.Empty{}); err != nil {
+		if apiInfo, err := s.managerClient.GetTelepresenceAPI(c, &empty.Empty{}); err != nil {
 			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
-			dlog.Errorf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
+			dlog.Warnf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
 		} else {
 			apiPort = uint16(apiInfo.Port)
 		}
@@ -614,11 +612,15 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	} else {
 		// Make spec port identifier unambiguous.
 		spec.ServiceName = pi.ServiceName
+		spec.ServicePortName = pi.ServicePortName
+		spec.ServicePort = pi.ServicePort
+		spec.Protocol = pi.Protocol
 		pi, err := iInfo.PortIdentifier()
 		if err != nil {
-			return nil, err
+			return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err), nil
 		}
 		spec.ServicePortIdentifier = pi.String()
+		result = iInfo.InterceptResult()
 	}
 
 	spec.ServiceUid = result.ServiceUid
@@ -649,8 +651,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		s.currentInterceptsLock.Unlock()
 	}()
 
-	var ii *manager.InterceptInfo
-	ii, err = s.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+	ii, err := s.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       s.session(),
 		InterceptSpec: spec,
 		ApiKey:        iInfo.APIKey(),
