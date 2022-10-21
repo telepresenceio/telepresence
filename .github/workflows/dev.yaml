@@ -67,7 +67,6 @@ jobs:
           platform: macos
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
-          github-sha: ${{ github.event.pull_request.head.sha }}
         id: kluster
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'
@@ -84,13 +83,6 @@ jobs:
         run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
         if: always()
-      - uses: ./.github/actions/cleanup-kluster
-        with:
-          platform: macos
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          github-sha: ${{ github.event.pull_request.head.sha }}
-        if: always()
-
   "windows_test":
     runs-on: windows-2019
     needs: "build_image"
@@ -142,7 +134,6 @@ jobs:
           platform: windows
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
-          github-sha: ${{ github.event.pull_request.head.sha }}
         id: kluster
       - run: |
           # We want to validate that tests still pass, even if the metrics host
@@ -164,12 +155,6 @@ jobs:
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
-        if: always()
-      - uses: ./.github/actions/cleanup-kluster
-        with:
-          platform: windows
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          github-sha: ${{ github.event.pull_request.head.sha }}
         if: always()
   "linux_test":
     runs-on: ubuntu-latest
@@ -211,7 +196,6 @@ jobs:
           platform: linux
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
-          github-sha: ${{ github.event.pull_request.head.sha }}
         id: kluster
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'
@@ -227,10 +211,4 @@ jobs:
       - name: Mark test as successful
         run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
-        if: always()
-      - uses: ./.github/actions/cleanup-kluster
-        with:
-          platform: linux
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          github-sha: ${{ github.event.pull_request.head.sha }}
         if: always()
