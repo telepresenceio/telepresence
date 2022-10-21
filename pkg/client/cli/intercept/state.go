@@ -31,34 +31,59 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-type State struct {
+type State interface {
+	Cmd() *cobra.Command
+	CreateRequest(context.Context) (*connector.CreateInterceptRequest, error)
+	Intercept() error
+	Name() string
+	Reporter() *scout.Reporter
+	RunAndLeave() bool
+}
+
+type state struct {
 	*Args
 
-	Cmd        *cobra.Command
-	Scout      *scout.Reporter
-	Env        map[string]string
-	MountPoint string // if non-empty, this the final mount point of a successful mount
-	LocalPort  uint16 // the parsed <local port>
-	DockerPort uint16
+	cmd        *cobra.Command
+	scout      *scout.Reporter
+	env        map[string]string
+	mountPoint string // if non-empty, this the final mount point of a successful mount
+	localPort  uint16 // the parsed <local port>
+	dockerPort uint16
 }
 
 func NewState(
 	cmd *cobra.Command,
 	args *Args,
-) *State {
-	return &State{
+) State {
+	return &state{
 		Args:  args,
-		Cmd:   cmd,
-		Scout: scout.NewReporter(cmd.Context(), "cli"),
+		cmd:   cmd,
+		scout: scout.NewReporter(cmd.Context(), "cli"),
 	}
 }
 
-func (s *State) Intercept() error {
-	ctx := s.Cmd.Context()
-	s.Scout.Start(ctx)
-	defer s.Scout.Close()
+func (s *state) Cmd() *cobra.Command {
+	return s.cmd
+}
 
-	if len(s.Cmdline) == 0 && !s.DockerRun {
+func (s *state) Name() string {
+	return s.Args.Name
+}
+
+func (s *state) Reporter() *scout.Reporter {
+	return s.scout
+}
+
+func (s *state) RunAndLeave() bool {
+	return len(s.Cmdline) > 0 || s.DockerRun
+}
+
+func (s *state) Intercept() error {
+	ctx := s.cmd.Context()
+	s.scout.Start(ctx)
+	defer s.scout.Close()
+
+	if !s.RunAndLeave() {
 		// start and retain the intercept
 		return client.WithEnsuredState(ctx, s, true, func() error { return nil })
 	}
@@ -83,7 +108,7 @@ func (s *State) Intercept() error {
 			}
 			cmd, err = s.startInDocker(ctx, envFile, s.Cmdline)
 		} else {
-			cmd, err = proc.Start(ctx, s.Env, s.Cmd, s.Cmdline[0], s.Cmdline[1:]...)
+			cmd, err = proc.Start(ctx, s.env, s.cmd, s.Cmdline[0], s.Cmdline[1:]...)
 		}
 		if err != nil {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
@@ -92,7 +117,7 @@ func (s *State) Intercept() error {
 
 		// setup cleanup for the interceptor process
 		ior := connector.Interceptor{
-			InterceptId: s.Env["TELEPRESENCE_INTERCEPT_ID"],
+			InterceptId: s.env["TELEPRESENCE_INTERCEPT_ID"],
 			Pid:         int32(cmd.Process.Pid),
 		}
 
@@ -114,7 +139,7 @@ func (s *State) Intercept() error {
 	})
 }
 
-func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
+func (s *state) EnsureState(ctx context.Context) (acquired bool, err error) {
 	ud := util.GetUserDaemon(ctx)
 	status, err := ud.Status(ctx, &empty.Empty{})
 	if err != nil {
@@ -122,14 +147,14 @@ func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
 	}
 
 	// Add whatever metadata we already have to scout
-	s.Scout.SetMetadatum(ctx, "service_name", s.AgentName)
-	s.Scout.SetMetadatum(ctx, "cluster_id", status.ClusterId)
-	s.Scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
-	s.Scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
+	s.scout.SetMetadatum(ctx, "service_name", s.AgentName)
+	s.scout.SetMetadatum(ctx, "cluster_id", status.ClusterId)
+	s.scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
+	s.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
 
 	ir, err := s.CreateRequest(ctx)
 	if err != nil {
-		s.Scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
+		s.scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
 		return false, err
 	}
 
@@ -140,14 +165,14 @@ func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
 				_ = os.Remove(ir.MountPoint)
 			}
 		}()
-		s.MountPoint = ir.MountPoint
+		s.mountPoint = ir.MountPoint
 	}
 
 	defer func() {
 		if err != nil {
-			s.Scout.Report(ctx, "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
+			s.scout.Report(ctx, "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
 		} else {
-			s.Scout.Report(ctx, "intercept_success")
+			s.scout.Report(ctx, "intercept_success")
 		}
 	}()
 
@@ -161,26 +186,26 @@ func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
 		// local-only
 		return true, nil
 	}
-	fmt.Fprintf(s.Cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, s.AgentName)
+	fmt.Fprintf(s.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, s.AgentName)
 	var intercept *manager.InterceptInfo
 
 	// Add metadata to scout from InterceptResult
-	s.Scout.SetMetadatum(ctx, "service_uid", r.GetServiceUid())
-	s.Scout.SetMetadatum(ctx, "workload_kind", r.GetWorkloadKind())
+	s.scout.SetMetadatum(ctx, "service_uid", r.GetServiceUid())
+	s.scout.SetMetadatum(ctx, "workload_kind", r.GetWorkloadKind())
 	// Since a user can create an intercept without specifying a namespace
 	// (thus using the default in their kubeconfig), we should be getting
 	// the namespace from the InterceptResult because that adds the namespace
 	// if it wasn't given on the cli by the user
-	s.Scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
+	s.scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 	intercept = r.InterceptInfo
-	s.Scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
+	s.scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
 
-	s.Env = intercept.Environment
-	if s.Env == nil {
-		s.Env = make(map[string]string)
+	s.env = intercept.Environment
+	if s.env == nil {
+		s.env = make(map[string]string)
 	}
-	s.Env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
-	s.Env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint
+	s.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
+	s.env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint
 	if s.EnvFile != "" {
 		if err = s.writeEnvFile(); err != nil {
 			return true, err
@@ -197,12 +222,12 @@ func (s *State) EnsureState(ctx context.Context) (acquired bool, err error) {
 	if doMount || err != nil {
 		volumeMountProblem = s.CheckMountCapability(ctx)
 	}
-	fmt.Fprintln(s.Cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
+	fmt.Fprintln(s.cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
 }
 
-func (s *State) DeactivateState(ctx context.Context) error {
-	r, err := util.GetUserDaemon(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(s.Name)})
+func (s *state) DeactivateState(ctx context.Context) error {
+	r, err := util.GetUserDaemon(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(s.Name())})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
@@ -210,7 +235,7 @@ func (s *State) DeactivateState(ctx context.Context) error {
 	return Result(r, err)
 }
 
-func (s *State) CheckMountCapability(ctx context.Context) error {
+func (s *state) CheckMountCapability(ctx context.Context) error {
 	r, err := util.GetUserDaemon(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
 	if err != nil {
 		return err
@@ -218,9 +243,9 @@ func (s *State) CheckMountCapability(ctx context.Context) error {
 	return errcat.FromResult(r)
 }
 
-func (s *State) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
+func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	spec := &manager.InterceptSpec{
-		Name:      s.Name,
+		Name:      s.Name(),
 		Namespace: s.Namespace,
 	}
 	ir := &connector.CreateInterceptRequest{Spec: spec}
@@ -241,11 +266,11 @@ func (s *State) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 	// Parse port into spec based on how it's formatted
 	var err error
-	s.LocalPort, s.DockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun)
+	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun)
 	if err != nil {
 		return nil, err
 	}
-	spec.TargetPort = int32(s.LocalPort)
+	spec.TargetPort = int32(s.localPort)
 
 	doMount := false
 	if err = s.CheckMountCapability(ctx); err == nil {
@@ -284,7 +309,7 @@ func (s *State) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	return ir, nil
 }
 
-func (s *State) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
+func (s *state) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
 	ourArgs := []string{
 		"run",
 		"--env-file", envFile,
@@ -312,29 +337,29 @@ func (s *State) startInDocker(ctx context.Context, envFile string, args []string
 		return nil, errors.New("no value found for docker flag `--name`")
 	}
 	if !hasName {
-		name = fmt.Sprintf("intercept-%s-%d", s.Name, s.LocalPort)
+		name = fmt.Sprintf("intercept-%s-%d", s.Name, s.localPort)
 		ourArgs = append(ourArgs, "--name", name)
 	}
 
-	if s.DockerPort != 0 {
-		ourArgs = append(ourArgs, "-p", fmt.Sprintf("%d:%d", s.LocalPort, s.DockerPort))
+	if s.dockerPort != 0 {
+		ourArgs = append(ourArgs, "-p", fmt.Sprintf("%d:%d", s.localPort, s.dockerPort))
 	}
 
 	dockerMount := ""
-	if s.MountPoint != "" { // do we have a mount point at all?
+	if s.mountPoint != "" { // do we have a mount point at all?
 		if dockerMount = s.DockerMount; dockerMount == "" {
-			dockerMount = s.MountPoint
+			dockerMount = s.mountPoint
 		}
 	}
 	if dockerMount != "" {
-		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", s.MountPoint, dockerMount))
+		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", s.mountPoint, dockerMount))
 	}
 	args = append(ourArgs, args...)
 	cmd := proc.CommandContext(ctx, "docker", args...)
 	cmd.DisableLogging = true
-	cmd.Stdout = s.Cmd.OutOrStdout()
-	cmd.Stderr = s.Cmd.ErrOrStderr()
-	cmd.Stdin = s.Cmd.InOrStdin()
+	cmd.Stdout = s.cmd.OutOrStdout()
+	cmd.Stderr = s.cmd.ErrOrStderr()
+	cmd.Stdin = s.cmd.InOrStdin()
 	dlog.Debugf(ctx, shellquote.ShellString("docker", args))
 	err := cmd.Start()
 	if err != nil {
@@ -343,7 +368,7 @@ func (s *State) startInDocker(ctx context.Context, envFile string, args []string
 	return cmd, err
 }
 
-func (s *State) writeEnvFile() error {
+func (s *state) writeEnvFile() error {
 	file, err := os.Create(s.EnvFile)
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("failed to create environment file %q: %w", s.EnvFile, err)
@@ -351,13 +376,13 @@ func (s *State) writeEnvFile() error {
 	return s.writeEnvToFileAndClose(file)
 }
 
-func (s *State) writeEnvToFileAndClose(file *os.File) (err error) {
+func (s *state) writeEnvToFileAndClose(file *os.File) (err error) {
 	defer file.Close()
 	w := bufio.NewWriter(file)
 
-	keys := make([]string, len(s.Env))
+	keys := make([]string, len(s.env))
 	i := 0
-	for k := range s.Env {
+	for k := range s.env {
 		keys[i] = k
 		i++
 	}
@@ -370,7 +395,7 @@ func (s *State) writeEnvToFileAndClose(file *os.File) (err error) {
 		if err = w.WriteByte('='); err != nil {
 			return err
 		}
-		if _, err = w.WriteString(s.Env[k]); err != nil {
+		if _, err = w.WriteString(s.env[k]); err != nil {
 			return err
 		}
 		if err = w.WriteByte('\n'); err != nil {
@@ -380,8 +405,8 @@ func (s *State) writeEnvToFileAndClose(file *os.File) (err error) {
 	return w.Flush()
 }
 
-func (s *State) writeEnvJSON() error {
-	data, err := json.MarshalIndent(s.Env, "", "  ")
+func (s *state) writeEnvJSON() error {
+	data, err := json.MarshalIndent(s.env, "", "  ")
 	if err != nil {
 		// Creating JSON from a map[string]string should never fail
 		panic(err)
