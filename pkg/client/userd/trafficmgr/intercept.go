@@ -519,7 +519,7 @@ func CanIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.Category(pi.ErrorCategory).Newf(pi.Error))
 	}
 
-	iInfo := &interceptInfo{preparedIntercept: pi}
+	iInfo := &interceptInfo{preparedIntercept: pi, apiKey: mgrIr.ApiKey}
 	return iInfo, nil
 }
 

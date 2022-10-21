@@ -78,6 +78,8 @@ type session struct {
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
+	apiKeyFunc func(context.Context) (string, error) // Function that returns the API Key to use, if any
+
 	wlWatcher *workloadsAndServicesWatcher
 
 	// currentInterceptsLock ensures that all accesses to currentIntercepts, currentMatchers,
@@ -161,7 +163,7 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon, fuseFtp)
+	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon, fuseFtp, svc.GetAPIKey)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -299,6 +301,7 @@ func connectMgr(
 	installID string,
 	isPodDaemon bool,
 	fuseFtp rpc2.FuseFTPClient,
+	apiKeyFunc func(context.Context) (string, error),
 ) (*session, error) {
 	clientConfig := client.GetConfig(ctx)
 	tos := &clientConfig.Timeouts
@@ -372,8 +375,13 @@ func connectMgr(
 
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
+		apiKey, err := apiKeyFunc(ctx)
+		if err != nil {
+			dlog.Errorf(ctx, "failed to retrieve API key: %v", err)
+		}
 		_, err = mClient.Remain(ctx, &manager.RemainRequest{
 			Session: si,
+			ApiKey:  apiKey,
 		})
 		if err == nil {
 			if ctx.Err() != nil {
@@ -415,6 +423,7 @@ func connectMgr(
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      isPodDaemon,
 		fuseFtp:          fuseFtp,
+		apiKeyFunc:       apiKeyFunc,
 		sr:               sr,
 	}, nil
 }
@@ -740,8 +749,13 @@ func (s *session) remain(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			_, err := s.managerClient.Remain(c, &manager.RemainRequest{
+			apiKey, err := s.apiKeyFunc(c)
+			if err != nil {
+				dlog.Errorf(c, "failed to retrieve API key: %v", err)
+			}
+			_, err = s.managerClient.Remain(c, &manager.RemainRequest{
 				Session: s.SessionInfo(),
+				ApiKey:  apiKey,
 			})
 			if err != nil && c.Err() == nil {
 				dlog.Error(c, err)

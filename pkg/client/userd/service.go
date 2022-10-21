@@ -27,6 +27,9 @@ type Service interface {
 	// SetManagerClient will assign the manager client that this Service will use when acting as
 	// a ManagerServer proxy
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
+
+	// GetAPIKey returns the current API key
+	GetAPIKey(context.Context) (string, error)
 }
 
 type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)

@@ -103,6 +103,10 @@ func (s *Service) As(ptr any) {
 	}
 }
 
+func (s *Service) GetAPIKey(_ context.Context) (string, error) {
+	return "", nil
+}
+
 func (s *Service) Reporter() *scout.Reporter {
 	return s.scout
 }
