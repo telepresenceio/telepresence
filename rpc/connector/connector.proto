@@ -213,6 +213,7 @@ message CreateInterceptRequest {
   string mount_point = 2;
   string agent_image = 3;
   bool is_pod_daemon = 4;
+  bytes extended_info = 5;
 }
 
 message ListRequest {

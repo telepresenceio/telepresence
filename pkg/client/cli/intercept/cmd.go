@@ -38,7 +38,7 @@ type Args struct {
 
 	Mechanism     string // --mechanism tcp
 	MechanismArgs []string
-	ExtensionInfo []byte
+	ExtendedInfo  []byte
 }
 
 func Command() *cobra.Command {
