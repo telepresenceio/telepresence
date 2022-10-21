@@ -2,6 +2,7 @@ package managerutil
 
 import (
 	"context"
+	"errors"
 
 	"google.golang.org/grpc"
 
@@ -54,9 +55,9 @@ func (p *UnauthdConnProvider) BuildClient(ctx context.Context, conn *grpc.Client
 
 func AgentImageFromSystemA(ctx context.Context) (string, error) {
 	// This is currently the only use case for the unauthenticated pool, but it's very important that we be able to get the image name
-	systemaPool, err := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName)
-	if err != nil {
-		return "", err
+	systemaPool, ok := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName)
+	if !ok {
+		return "", errors.New("unable to contact SystemA")
 	}
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {

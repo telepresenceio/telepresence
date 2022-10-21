@@ -3,7 +3,6 @@ package a8rcloud
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"net"
 	"sync"
 
@@ -58,11 +57,9 @@ func WithSystemAPool[T Closeable](ctx context.Context, poolName string, provider
 	return context.WithValue(ctx, key, &systemAPool[T]{Provider: provider, Name: poolName, parentCtx: ctx})
 }
 
-func GetSystemAPool[T Closeable](ctx context.Context, poolName string) (SystemAPool[T], error) {
-	if p, ok := ctx.Value(systemaPoolKey(poolName)).(*systemAPool[T]); ok {
-		return p, nil
-	}
-	return nil, errors.New("access to Ambassador Cloud is not configured")
+func GetSystemAPool[T Closeable](ctx context.Context, poolName string) (SystemAPool[T], bool) {
+	p, ok := ctx.Value(systemaPoolKey(poolName)).(*systemAPool[T])
+	return p, ok
 }
 
 type SystemAPool[T Closeable] interface {

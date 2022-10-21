@@ -479,9 +479,9 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		if interceptInfo.ApiKey == "" {
 			return nil
 		}
-		sysa, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-		if err != nil {
-			return err
+		sysa, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+		if !ok {
+			return nil
 		}
 		if sa, err := sysa.Get(ctx); err != nil {
 			dlog.Errorln(ctx, "systema: acquire connection:", err)
@@ -564,9 +564,9 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string) (*rpc.InterceptInfo, error) {
 	var domain string
-	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-	if err != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if !ok {
+		return nil, status.Errorf(codes.FailedPrecondition, "access to Ambassador Cloud is not configured")
 	}
 
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
@@ -603,11 +603,12 @@ func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string)
 func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
 	var domain string
 	var sa systema.SystemACRUDClient
-	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-	if err != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if !ok {
+		return nil, status.Errorf(codes.FailedPrecondition, "access to Ambassador Cloud is not configured")
 	}
 
+	var err error
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain != "" {
 			return

@@ -40,9 +40,9 @@ func managerImageName(ctx context.Context) string {
 // AgentImageFromSystemA returns the systemA preferred agent
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
 func AgentImageFromSystemA(ctx context.Context, v semver.Version) (string, error) {
-	systemaPool, err := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
-	if err != nil {
-		return "", err
+	systemaPool, ok := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
+	if !ok {
+		return "", errors.New("unable to contact SystemA")
 	}
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {
