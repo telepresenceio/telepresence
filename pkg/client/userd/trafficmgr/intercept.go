@@ -288,7 +288,7 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 			if ins == "" {
 				ins = ns
 			} else if ins != ns {
-				err = fmt.Errorf("active intercepts in both namespace %s and %s", ns, ins)
+				err = errcat.User.Newf("active intercepts in both namespace %s and %s", ns, ins)
 			}
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
