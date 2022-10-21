@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 )
 
 const (
@@ -29,7 +30,7 @@ type UpdateChecker struct {
 	url       string
 }
 
-// newUpdateChecker returns a new update checker, possibly initialized from the users cache.
+// NewUpdateChecker returns a new update checker, possibly initialized from the users cache.
 func NewUpdateChecker(ctx context.Context, url string) (*UpdateChecker, error) {
 	ts := &UpdateChecker{
 		url: url,
@@ -61,7 +62,8 @@ func ForcedUpdateCheck(cmd *cobra.Command, _ []string) error {
 //	forcedCheck: if true, perform check regardless of if it's due or not
 func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	cloudCfg := client.GetConfig(cmd.Context()).Cloud
-	uc, err := NewUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
+	format := cmd.Annotations[ann.UpdateCheckFormat]
+	uc, err := NewUpdateChecker(cmd.Context(), fmt.Sprintf(format, cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
 	if err != nil || !(forceCheck || uc.timeToCheck()) {
 		return err
 	}

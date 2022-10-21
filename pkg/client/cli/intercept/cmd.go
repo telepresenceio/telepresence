@@ -48,8 +48,9 @@ func Command() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		Short: "Intercept a service",
 		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
-			ann.Session:    ann.Required,
+			ann.RootDaemon:        ann.Required,
+			ann.Session:           ann.Required,
+			ann.UpdateCheckFormat: ann.Tel2,
 		},
 		SilenceUsage:      true,
 		SilenceErrors:     true,
