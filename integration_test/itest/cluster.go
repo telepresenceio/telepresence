@@ -101,7 +101,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	if !s.prePushed {
 		s.testVersion = "v2.8.0-gotest.z" + s.suffix
 	}
-	version.Version = s.testVersion
+	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
 
 	t := getT(ctx)
 	s.agentImageName = "tel2"

@@ -118,7 +118,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 			}
 
 			t.Run(tcName+"/install", func(t *testing.T) {
-				version.Version = tc.InputVersion
+				version.Version, version.Structured = version.Init(tc.InputVersion, "TELEPRESENCE_VERSION")
 
 				expectedWrk := deepCopyObject(tc.OutputWorkload)
 				sanitizeWorkload(expectedWrk)
@@ -196,7 +196,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 		for tcName, tc := range testcases {
 			tc := tc
 			t.Run(tcName+"/uninstall", func(t *testing.T) {
-				version.Version = tc.InputVersion
+				version.Version, version.Structured = version.Init(tc.InputVersion, "TELEPRESENCE_VERSION")
 
 				expectedWrk := deepCopyObject(tc.InputWorkload)
 				sanitizeWorkload(expectedWrk)
