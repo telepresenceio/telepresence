@@ -70,7 +70,7 @@ type Service struct {
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
 }
 
-func NewService(_ context.Context, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
+func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
 	s := &Service{
 		srv:             srv,
 		scout:           sr,
@@ -83,6 +83,11 @@ func NewService(_ context.Context, sr *scout.Reporter, cfg *client.Config, srv *
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
 		manager.RegisterManagerServer(srv, s.managerProxy)
+		tracer, err := tracing.NewTraceServer(ctx, "user-daemon")
+		if err != nil {
+			return nil, err
+		}
+		common.RegisterTracingServer(srv, tracer)
 	}
 	return s, nil
 }
@@ -100,6 +105,10 @@ func (s *Service) As(ptr any) {
 
 func (s *Service) Reporter() *scout.Reporter {
 	return s.scout
+}
+
+func (s *Service) Server() *grpc.Server {
+	return s.srv
 }
 
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
@@ -266,37 +275,50 @@ func run(cmd *cobra.Command, _ []string) error {
 	// Don't bother calling 'conn.Close()', it should remain open until we shut down, and just
 	// prefer to let the OS close it when we exit.
 
-	sr := scout.NewReporter(c, "connector")
-	tracer, err := tracing.NewTraceServer(c, "user-daemon")
-	if err != nil {
-		return err
-	}
-
-	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
-		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
-	}
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
-		}
-	}
-	si, err := userd.GetNewServiceFunc(c)(c, sr, cfg, grpc.NewServer(opts...))
-	if err != nil {
-		return err
-	}
-	var s *Service
-	si.As(&s)
-	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
-		return err
-	}
-	common.RegisterTracingServer(s.srv, tracer)
-
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
 	})
+
+	// Start services from within a group routine so that it gets proper cancellation
+	// when the group is cancelled.
+	siCh := make(chan userd.Service)
+	g.Go("service", func(c context.Context) error {
+		opts := []grpc.ServerOption{
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+		}
+		if !cfg.Grpc.MaxReceiveSize.IsZero() {
+			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+			}
+		}
+		sr := scout.NewReporter(c, "connector")
+		si, err := userd.GetNewServiceFunc(c)(c, g, sr, cfg, grpc.NewServer(opts...))
+		if err != nil {
+			close(siCh)
+			return err
+		}
+		siCh <- si
+		close(siCh)
+
+		<-c.Done() // wait for context cancellation
+		return nil
+	})
+
+	si, ok := <-siCh
+	if !ok {
+		// Return error from the "service" go routine
+		return g.Wait()
+	}
+
+	var s *Service
+	si.As(&s)
+
+	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
+		return err
+	}
 
 	fuseFtpCh := make(chan rpc2.FuseFTPClient)
 	if cfg.Intercept.UseFtp {

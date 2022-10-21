@@ -5,6 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -21,12 +22,14 @@ type Service interface {
 
 	Reporter() *scout.Reporter
 
+	Server() *grpc.Server
+
 	// SetManagerClient will assign the manager client that this Service will use when acting as
 	// a ManagerServer proxy
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 }
 
-type NewServiceFunc func(context.Context, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)
+type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)
 
 type newServiceKey struct{}
 

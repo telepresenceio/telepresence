@@ -133,18 +133,18 @@ func main(ctx context.Context, args *Args) error {
 	ctx = client.WithEnv(ctx, env)
 
 	scoutReporter := scout.NewReporter(ctx, processName)
-	userdService, err := user_daemon.NewService(ctx, scoutReporter, cfg, nil)
-	if err != nil {
-		return err
-	}
-	var userdCoreImpl *user_daemon.Service
-	userdService.As(&userdCoreImpl)
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
 	})
+	userdService, err := user_daemon.NewService(ctx, grp, scoutReporter, cfg, nil)
+	if err != nil {
+		return err
+	}
+	var userdCoreImpl *user_daemon.Service
+	userdService.As(&userdCoreImpl)
 
 	grp.Go("telemetry", scoutReporter.Run)
 	grp.Go("session", func(ctx context.Context) error {
