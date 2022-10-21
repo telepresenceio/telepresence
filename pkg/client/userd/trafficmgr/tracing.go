@@ -202,8 +202,8 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 	}, nil)
 }
 
-func (tm *session) GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result {
-	return errcat.ToResult((&traceCollector{tr}).gatherTraces(ctx, tm))
+func (s *session) GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result {
+	return errcat.ToResult((&traceCollector{tr}).gatherTraces(ctx, s))
 }
 
 func (c *traceCollector) gatherTraces(ctx context.Context, sess *session) error {

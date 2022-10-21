@@ -23,25 +23,25 @@ import (
 
 // getCurrentAgents returns a copy of the current agent snapshot
 // Deprecated.
-func (tm *session) getCurrentAgents() []*manager.AgentInfo {
+func (s *session) getCurrentAgents() []*manager.AgentInfo {
 	// Copy the current snapshot
-	tm.currentAgentsLock.Lock()
-	agents := make([]*manager.AgentInfo, len(tm.currentAgents))
-	for i, ii := range tm.currentAgents {
+	s.currentAgentsLock.Lock()
+	agents := make([]*manager.AgentInfo, len(s.currentAgents))
+	for i, ii := range s.currentAgents {
 		agents[i] = proto.Clone(ii).(*manager.AgentInfo)
 	}
-	tm.currentAgentsLock.Unlock()
+	s.currentAgentsLock.Unlock()
 	return agents
 }
 
 // getCurrentAgentsInNamespace returns a map of agents matching the given namespace from the current agent snapshot.
 // The map contains the first agent for each name found. Agents from replicas of the same workload are ignored.
 // Deprecated.
-func (tm *session) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
+func (s *session) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
 	// Copy the current snapshot
-	tm.currentAgentsLock.Lock()
+	s.currentAgentsLock.Lock()
 	agents := make(map[string]*manager.AgentInfo)
-	for _, ii := range tm.currentAgents {
+	for _, ii := range s.currentAgents {
 		if ii.Namespace == ns {
 			// There may be any number or replicas of the agent. Avoid cloning all of them.
 			if _, ok := agents[ii.Name]; !ok {
@@ -49,7 +49,7 @@ func (tm *session) getCurrentAgentsInNamespace(ns string) map[string]*manager.Ag
 			}
 		}
 	}
-	tm.currentAgentsLock.Unlock()
+	s.currentAgentsLock.Unlock()
 	return agents
 }
 
@@ -70,18 +70,18 @@ func (as agentsStringer) String() string {
 	return sb.String()
 }
 
-func (tm *session) setCurrentAgents(ctx context.Context, agents []*manager.AgentInfo) {
-	tm.currentAgentsLock.Lock()
-	tm.currentAgents = agents
+func (s *session) setCurrentAgents(ctx context.Context, agents []*manager.AgentInfo) {
+	s.currentAgentsLock.Lock()
+	s.currentAgents = agents
 	dlog.Debugf(ctx, "setCurrentAgents %s", agentsStringer(agents))
-	tm.currentAgentsLock.Unlock()
+	s.currentAgentsLock.Unlock()
 }
 
-func (tm *session) notifyAgentWatchers(ctx context.Context, agents []*manager.AgentInfo) {
-	tm.currentAgentsLock.Lock()
-	aiws := tm.agentInitWaiters
-	tm.agentInitWaiters = nil
-	tm.currentAgentsLock.Unlock()
+func (s *session) notifyAgentWatchers(ctx context.Context, agents []*manager.AgentInfo) {
+	s.currentAgentsLock.Lock()
+	aiws := s.agentInitWaiters
+	s.agentInitWaiters = nil
+	s.currentAgentsLock.Unlock()
 	for _, aiw := range aiws {
 		close(aiw)
 	}
@@ -89,7 +89,7 @@ func (tm *session) notifyAgentWatchers(ctx context.Context, agents []*manager.Ag
 	// Notify waiters for agents
 	for _, agent := range agents {
 		fullName := agent.Name + "." + agent.Namespace
-		if chUt, loaded := tm.agentWaiters.LoadAndDelete(fullName); loaded {
+		if chUt, loaded := s.agentWaiters.LoadAndDelete(fullName); loaded {
 			if ch, ok := chUt.(chan *manager.AgentInfo); ok {
 				dlog.Debugf(ctx, "wait status: agent %s arrived", fullName)
 				ch <- agent
@@ -99,15 +99,15 @@ func (tm *session) notifyAgentWatchers(ctx context.Context, agents []*manager.Ag
 	}
 }
 
-func (tm *session) watchAgentsNS(ctx context.Context) error {
+func (s *session) watchAgentsNS(ctx context.Context) error {
 	// Cancel this watcher whenever the set of active namespaces change
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	tm.addActiveNamespaceListener(func() {
+	s.addActiveNamespaceListener(func() {
 		cancel()
 	})
 
-	nss := tm.getActiveNamespaces(ctx)
+	nss := s.getActiveNamespaces(ctx)
 	if len(nss) == 0 {
 		// Not much point in watching for nothing, so just wait until
 		// the set of namespaces change. Returning nil here means that
@@ -128,8 +128,8 @@ func (tm *session) watchAgentsNS(ctx context.Context) error {
 	}
 
 	wm := "WatchAgentsNS"
-	stream, err := tm.managerClient.WatchAgentsNS(ctx, &manager.AgentsRequest{
-		Session:    tm.session(),
+	stream, err := s.managerClient.WatchAgentsNS(ctx, &manager.AgentsRequest{
+		Session:    s.session(),
 		Namespaces: nss,
 	}, opts...)
 	if err != nil {
@@ -138,7 +138,7 @@ func (tm *session) watchAgentsNS(ctx context.Context) error {
 		} else {
 			err = nil
 		}
-		tm.setCurrentAgents(ctx, nil)
+		s.setCurrentAgents(ctx, nil)
 		return err
 	}
 
@@ -148,24 +148,24 @@ func (tm *session) watchAgentsNS(ctx context.Context) error {
 			if gErr, ok := status.FromError(err); ok && gErr.Code() == codes.Unimplemented {
 				// Fall back to old method of watching all namespaces
 				wm = "WatchAgents"
-				err = tm.watchAgents(ctx, opts)
+				err = s.watchAgents(ctx, opts)
 			}
 			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
 				dlog.Errorf(ctx, "manager.%s recv: %v", wm, err)
 			} else {
 				err = nil
 			}
-			tm.setCurrentAgents(ctx, nil)
+			s.setCurrentAgents(ctx, nil)
 			return err
 		}
-		tm.setCurrentAgents(ctx, snapshot.Agents)
-		tm.notifyAgentWatchers(ctx, snapshot.Agents)
+		s.setCurrentAgents(ctx, snapshot.Agents)
+		s.notifyAgentWatchers(ctx, snapshot.Agents)
 	}
 	return nil
 }
 
-func (tm *session) watchAgents(ctx context.Context, opts []grpc.CallOption) error {
-	stream, err := tm.managerClient.WatchAgents(ctx, tm.session(), opts...)
+func (s *session) watchAgents(ctx context.Context, opts []grpc.CallOption) error {
+	stream, err := s.managerClient.WatchAgents(ctx, s.session(), opts...)
 	if err != nil {
 		return err
 	}
@@ -175,16 +175,16 @@ func (tm *session) watchAgents(ctx context.Context, opts []grpc.CallOption) erro
 		if err != nil {
 			return err
 		}
-		tm.setCurrentAgents(ctx, snapshot.Agents)
-		tm.notifyAgentWatchers(ctx, snapshot.Agents)
+		s.setCurrentAgents(ctx, snapshot.Agents)
+		s.notifyAgentWatchers(ctx, snapshot.Agents)
 	}
 	return nil
 }
 
-func (tm *session) agentInfoWatcher(ctx context.Context) error {
+func (s *session) agentInfoWatcher(ctx context.Context) error {
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
-		if err := tm.watchAgentsNS(ctx); err != nil {
+		if err := s.watchAgentsNS(ctx); err != nil {
 			dlog.Error(ctx, err)
 			dtime.SleepWithContext(ctx, backoff)
 			backoff *= 2
@@ -197,7 +197,7 @@ func (tm *session) agentInfoWatcher(ctx context.Context) error {
 }
 
 // Deprecated.
-func (tm *session) addAgent(
+func (s *session) addAgent(
 	c context.Context,
 	svcProps *serviceProps,
 	agentImageName string,
@@ -206,7 +206,7 @@ func (tm *session) addAgent(
 	workload := svcProps.workload
 	agentName := workload.GetName()
 	namespace := workload.GetNamespace()
-	_, kind, err := legacyEnsureAgent(c, tm.Cluster, workload, svcProps, agentImageName, telepresenceAPIPort)
+	_, kind, err := legacyEnsureAgent(c, s.Cluster, workload, svcProps, agentImageName, telepresenceAPIPort)
 	if err != nil {
 		if err == errAgentNotFound {
 			return nil, &rpc.InterceptResult{
@@ -222,7 +222,7 @@ func (tm *session) addAgent(
 	}
 
 	dlog.Infof(c, "Waiting for agent for %s %s.%s", kind, agentName, namespace)
-	ai, err := tm.waitForAgent(c, agentName, namespace)
+	ai, err := s.waitForAgent(c, agentName, namespace)
 	if err != nil {
 		dlog.Error(c, err)
 		return nil, &rpc.InterceptResult{
@@ -235,15 +235,15 @@ func (tm *session) addAgent(
 }
 
 // Deprecated.
-func (tm *session) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
+func (s *session) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
 	fullName := name + "." + namespace
 	waitCh := make(chan *manager.AgentInfo)
-	tm.agentWaiters.Store(fullName, waitCh)
-	tm.wlWatcher.ensureStarted(ctx, namespace, nil)
-	defer tm.agentWaiters.Delete(fullName)
+	s.agentWaiters.Store(fullName, waitCh)
+	s.wlWatcher.ensureStarted(ctx, namespace, nil)
+	defer s.agentWaiters.Delete(fullName)
 
 	// Agent may already exist.
-	for _, agent := range tm.getCurrentAgentsInNamespace(namespace) {
+	for _, agent := range s.getCurrentAgentsInNamespace(namespace) {
 		if agent.Name == name {
 			return agent, nil
 		}

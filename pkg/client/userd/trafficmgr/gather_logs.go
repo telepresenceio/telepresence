@@ -72,7 +72,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 	}
 }
 
-func (tm *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error {
+func (s *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error {
 	hasContainer := func(pod *core.Pod) bool {
 		if filter == nil || filter(pod) {
 			cns := pod.Spec.Containers
@@ -86,7 +86,7 @@ func (tm *session) ForeachAgentPod(ctx context.Context, fn func(context.Context,
 	}
 
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
-	for _, ns := range tm.GetCurrentNamespaces(true) {
+	for _, ns := range s.GetCurrentNamespaces(true) {
 		podsAPI := coreAPI.Pods(ns)
 		podList, err := podsAPI.List(ctx, meta.ListOptions{})
 		if err != nil {
@@ -116,14 +116,14 @@ func (tm *session) ForeachAgentPod(ctx context.Context, fn func(context.Context,
 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // connector.LogsRequest and returns them to the caller.
-func (tm *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
+func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	exportDir := request.ExportDir
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
 	resp := &connector.LogsResponse{}
 	result := sync.Map{}
 
 	if !strings.EqualFold(request.Agents, "none") {
-		err := tm.ForeachAgentPod(ctx, func(ctx context.Context, podsAPI typed.PodInterface, pod *core.Pod) {
+		err := s.ForeachAgentPod(ctx, func(ctx context.Context, podsAPI typed.PodInterface, pod *core.Pod) {
 			podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
 			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
 			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ContainerName, request.GetPodYaml)
@@ -140,7 +140,7 @@ func (tm *session) GatherLogs(ctx context.Context, request *connector.LogsReques
 	// any errors in the traffic-manager getting the traffic-agent pods, we
 	// want those logs to appear in what we export
 	if request.TrafficManager {
-		ns := tm.GetManagerNamespace()
+		ns := s.GetManagerNamespace()
 		podsAPI := coreAPI.Pods(ns)
 		selector := labels.SelectorFromSet(labels.Set{
 			"app":          "traffic-manager",

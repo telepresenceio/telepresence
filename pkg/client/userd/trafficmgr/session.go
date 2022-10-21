@@ -212,12 +212,12 @@ func NewSession(
 	return ctx, tmgr, ret
 }
 
-func (tm *session) ManagerClient() manager.ManagerClient {
-	return tm.managerClient
+func (s *session) ManagerClient() manager.ManagerClient {
+	return s.managerClient
 }
 
-func (tm *session) ManagerConn() *grpc.ClientConn {
-	return tm.managerConn
+func (s *session) ManagerConn() *grpc.ClientConn {
+	return s.managerConn
 }
 
 // connectCluster returns a configured cluster instance.
@@ -433,68 +433,68 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 	}
 }
 
-func (tm *session) setInterceptedNamespace(c context.Context, ns string) {
-	tm.currentInterceptsLock.Lock()
-	diff := tm.interceptedNamespace != ns
+func (s *session) setInterceptedNamespace(c context.Context, ns string) {
+	s.currentInterceptsLock.Lock()
+	diff := s.interceptedNamespace != ns
 	if diff {
-		tm.interceptedNamespace = ns
+		s.interceptedNamespace = ns
 	}
-	tm.currentInterceptsLock.Unlock()
+	s.currentInterceptsLock.Unlock()
 	if diff {
-		tm.updateDaemonNamespaces(c)
+		s.updateDaemonNamespaces(c)
 	}
 }
 
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
-func (tm *session) updateDaemonNamespaces(c context.Context) {
-	tm.wlWatcher.setNamespacesToWatch(c, tm.GetCurrentNamespaces(true))
-	if tm.rootDaemon == nil {
+func (s *session) updateDaemonNamespaces(c context.Context) {
+	s.wlWatcher.setNamespacesToWatch(c, s.GetCurrentNamespaces(true))
+	if s.rootDaemon == nil {
 		return
 	}
 	var namespaces []string
-	tm.currentInterceptsLock.Lock()
-	if tm.interceptedNamespace != "" {
-		namespaces = []string{tm.interceptedNamespace}
+	s.currentInterceptsLock.Lock()
+	if s.interceptedNamespace != "" {
+		namespaces = []string{s.interceptedNamespace}
 	}
-	tm.currentInterceptsLock.Unlock()
+	s.currentInterceptsLock.Unlock()
 	// Avoid being locked for the remainder of this function.
 
 	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
 	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
-	paths := tm.GetCurrentNamespaces(false)
+	paths := s.GetCurrentNamespaces(false)
 	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
 
-	if _, err := tm.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
+	if _, err := s.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
 		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
 	}
 	dlog.Debug(c, "search paths posted successfully")
 }
 
-func (tm *session) Epilog(ctx context.Context) {
-	if tm.rootDaemon != nil {
-		_, _ = tm.rootDaemon.Disconnect(ctx, &empty.Empty{})
+func (s *session) Epilog(ctx context.Context) {
+	if s.rootDaemon != nil {
+		_, _ = s.rootDaemon.Disconnect(ctx, &empty.Empty{})
 	}
 	defer dlog.Info(ctx, "-- Session ended")
 }
 
-func (tm *session) StartServices(g *dgroup.Group) {
-	g.Go("remain", tm.remain)
-	g.Go("intercept-port-forward", tm.watchInterceptsHandler)
-	g.Go("agent-watcher", tm.agentInfoWatcher)
-	g.Go("dial-request-watcher", tm.dialRequestWatcher)
+func (s *session) StartServices(g *dgroup.Group) {
+	g.Go("remain", s.remain)
+	g.Go("intercept-port-forward", s.watchInterceptsHandler)
+	g.Go("agent-watcher", s.agentInfoWatcher)
+	g.Go("dial-request-watcher", s.dialRequestWatcher)
 }
 
-func (tm *session) Reporter() *scout.Reporter {
-	return tm.sr
+func (s *session) Reporter() *scout.Reporter {
+	return s.sr
 }
 
-func (tm *session) session() *manager.SessionInfo {
-	return tm.sessionInfo
+func (s *session) session() *manager.SessionInfo {
+	return s.sessionInfo
 }
 
 // getInfosForWorkloads returns a list of workloads found in the given namespace that fulfils the given filter criteria.
-func (tm *session) getInfosForWorkloads(
+func (s *session) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
 	iMap map[string][]*manager.InterceptInfo,
@@ -502,8 +502,8 @@ func (tm *session) getInfosForWorkloads(
 	filter rpc.ListRequest_Filter,
 ) []*rpc.WorkloadInfo {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
-	tm.wlWatcher.eachService(ctx, tm.GetManagerNamespace(), namespaces, func(svc *core.Service) {
-		wls, err := tm.wlWatcher.findMatchingWorkloads(ctx, svc)
+	s.wlWatcher.eachService(ctx, s.GetManagerNamespace(), namespaces, func(svc *core.Service) {
+		wls, err := s.wlWatcher.findMatchingWorkloads(ctx, svc)
 		if err != nil {
 			return
 		}
@@ -552,35 +552,35 @@ func (tm *session) getInfosForWorkloads(
 	return wiz
 }
 
-func (tm *session) waitForSync(ctx context.Context) {
-	tm.WaitForNSSync(ctx)
-	tm.wlWatcher.setNamespacesToWatch(ctx, tm.GetCurrentNamespaces(true))
-	tm.wlWatcher.waitForSync(ctx)
+func (s *session) waitForSync(ctx context.Context) {
+	s.WaitForNSSync(ctx)
+	s.wlWatcher.setNamespacesToWatch(ctx, s.GetCurrentNamespaces(true))
+	s.wlWatcher.waitForSync(ctx)
 }
 
-func (tm *session) getActiveNamespaces(ctx context.Context) []string {
-	tm.waitForSync(ctx)
-	return tm.wlWatcher.getActiveNamespaces()
+func (s *session) getActiveNamespaces(ctx context.Context) []string {
+	s.waitForSync(ctx)
+	return s.wlWatcher.getActiveNamespaces()
 }
 
-func (tm *session) addActiveNamespaceListener(l func()) {
-	tm.wlWatcher.addActiveNamespaceListener(l)
+func (s *session) addActiveNamespaceListener(l func()) {
+	s.wlWatcher.addActiveNamespaceListener(l)
 }
 
-func (tm *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
-	tm.waitForSync(c)
-	tm.ensureWatchers(c, wr.Namespaces)
+func (s *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
+	s.waitForSync(c)
+	s.ensureWatchers(c, wr.Namespaces)
 	sCtx, sCancel := context.WithCancel(c)
 	// We need to make sure the subscription ends when we leave this method, since this is the one consuming the snapshotAvailable channel.
 	// Otherwise, the goroutine that writes to the channel will leak.
 	defer sCancel()
-	snapshotAvailable := tm.wlWatcher.subscribe(sCtx)
+	snapshotAvailable := s.wlWatcher.subscribe(sCtx)
 	for {
 		select {
 		case <-c.Done():
 			return nil
 		case <-snapshotAvailable:
-			snapshot, err := tm.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
+			snapshot, err := s.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
 			if err != nil {
 				return status.Errorf(codes.Unavailable, "failed to create WorkloadInfoSnapshot: %v", err)
 			}
@@ -592,24 +592,24 @@ func (tm *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsReque
 	}
 }
 
-func (tm *session) WorkloadInfoSnapshot(
+func (s *session) WorkloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
 	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
-	tm.waitForSync(ctx)
-	return tm.workloadInfoSnapshot(ctx, namespaces, filter, includeLocalIntercepts)
+	s.waitForSync(ctx)
+	return s.workloadInfoSnapshot(ctx, namespaces, filter, includeLocalIntercepts)
 }
 
-func (tm *session) ensureWatchers(ctx context.Context,
+func (s *session) ensureWatchers(ctx context.Context,
 	namespaces []string,
 ) {
 	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
 	waitCh := make(chan struct{}, 1)
-	tm.currentAgentsLock.Lock()
-	tm.agentInitWaiters = append(tm.agentInitWaiters, waitCh)
-	tm.currentAgentsLock.Unlock()
+	s.currentAgentsLock.Lock()
+	s.agentInitWaiters = append(s.agentInitWaiters, waitCh)
+	s.currentAgentsLock.Unlock()
 	needWait := false
 
 	wg := sync.WaitGroup{}
@@ -618,9 +618,9 @@ func (tm *session) ensureWatchers(ctx context.Context,
 		if ns == "" {
 			// Don't use tm.ActualNamespace here because the accessibility of the namespace
 			// is actually determined once the watcher starts
-			ns = tm.Namespace
+			ns = s.Namespace
 		}
-		tm.wlWatcher.ensureStarted(ctx, ns, func(started bool) {
+		s.wlWatcher.ensureStarted(ctx, ns, func(started bool) {
 			if started {
 				needWait = true
 			}
@@ -638,23 +638,23 @@ func (tm *session) ensureWatchers(ctx context.Context,
 	}
 }
 
-func (tm *session) workloadInfoSnapshot(
+func (s *session) workloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
 	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
-	is := tm.getCurrentIntercepts()
-	tm.ensureWatchers(ctx, namespaces)
+	is := s.getCurrentIntercepts()
+	s.ensureWatchers(ctx, namespaces)
 
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {
 		// Special case, we don't care about namespaces in general. Instead, we use the intercepted namespaces
-		tm.currentInterceptsLock.Lock()
-		if tm.interceptedNamespace != "" {
-			nss = []string{tm.interceptedNamespace}
+		s.currentInterceptsLock.Lock()
+		if s.interceptedNamespace != "" {
+			nss = []string{s.interceptedNamespace}
 		}
-		tm.currentInterceptsLock.Unlock()
+		s.currentInterceptsLock.Unlock()
 		if len(nss) == 0 {
 			// No active intercepts
 			return &rpc.WorkloadInfoSnapshot{}, nil
@@ -662,7 +662,7 @@ func (tm *session) workloadInfoSnapshot(
 	} else {
 		nss = make([]string, 0, len(namespaces))
 		for _, ns := range namespaces {
-			ns = tm.ActualNamespace(ns)
+			ns = s.ActualNamespace(ns)
 			if ns != "" {
 				nss = append(nss, ns)
 			}
@@ -685,36 +685,36 @@ nextIs:
 	}
 	aMap := make(map[string]*manager.AgentInfo)
 	for _, ns := range nss {
-		for k, v := range tm.getCurrentAgentsInNamespace(ns) {
+		for k, v := range s.getCurrentAgentsInNamespace(ns) {
 			aMap[k] = v
 		}
 	}
-	workloadInfos := tm.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
+	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
 
 	if includeLocalIntercepts {
-		tm.currentInterceptsLock.Lock()
-		for localIntercept := range tm.localIntercepts {
+		s.currentInterceptsLock.Lock()
+		for localIntercept := range s.localIntercepts {
 			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
-				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: tm.interceptedNamespace},
+				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: s.interceptedNamespace},
 				Disposition:       manager.InterceptDispositionType_ACTIVE,
 				MechanismArgsDesc: "as local-only",
 			}}})
 		}
-		tm.currentInterceptsLock.Unlock()
+		s.currentInterceptsLock.Unlock()
 	}
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 
 var ErrSessionExpired = errors.New("session expired")
 
-func (tm *session) remain(c context.Context) error {
+func (s *session) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer func() {
 		ticker.Stop()
 		c = dcontext.WithoutCancel(c)
 		c, cancel := context.WithTimeout(c, 3*time.Second)
 		defer cancel()
-		if _, err := tm.managerClient.Depart(c, tm.session()); err != nil {
+		if _, err := s.managerClient.Depart(c, s.session()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded so the traffic-manager has dropped the session. We should too
@@ -722,7 +722,7 @@ func (tm *session) remain(c context.Context) error {
 				dlog.Errorf(c, "failed to delete session from user cache: %v", err)
 			}
 		}
-		tm.managerConn.Close()
+		s.managerConn.Close()
 	}()
 
 	for {
@@ -730,8 +730,8 @@ func (tm *session) remain(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
-				Session: tm.session(),
+			_, err := s.managerClient.Remain(c, &manager.RemainRequest{
+				Session: s.session(),
 			})
 			if err != nil && c.Err() == nil {
 				dlog.Error(c, err)
@@ -744,7 +744,7 @@ func (tm *session) remain(c context.Context) error {
 	}
 }
 
-func (tm *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 	var config *k8s.Config
 	var err error
 	if cr.IsPodDaemon {
@@ -756,36 +756,36 @@ func (tm *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
-	if !cr.IsPodDaemon && !tm.Config.ContextServiceAndFlagsEqual(config) {
+	if !cr.IsPodDaemon && !s.Config.ContextServiceAndFlagsEqual(config) {
 		return &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterContext: tm.Config.Context,
-			ClusterServer:  tm.Config.Server,
-			ClusterId:      tm.GetClusterId(c),
+			ClusterContext: s.Config.Context,
+			ClusterServer:  s.Config.Server,
+			ClusterId:      s.GetClusterId(c),
 		}
 	}
 
-	if tm.SetMappedNamespaces(c, cr.MappedNamespaces) {
-		tm.currentInterceptsLock.Lock()
-		tm.ingressInfo = nil
-		tm.currentInterceptsLock.Unlock()
+	if s.SetMappedNamespaces(c, cr.MappedNamespaces) {
+		s.currentInterceptsLock.Lock()
+		s.ingressInfo = nil
+		s.currentInterceptsLock.Unlock()
 	}
-	return tm.Status(c)
+	return s.Status(c)
 }
 
-func (tm *session) Status(c context.Context) *rpc.ConnectInfo {
-	cfg := tm.Config
+func (s *session) Status(c context.Context) *rpc.ConnectInfo {
+	cfg := s.Config
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
 		ClusterContext: cfg.Context,
 		ClusterServer:  cfg.Server,
-		ClusterId:      tm.GetClusterId(c),
-		SessionInfo:    tm.session(),
-		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tm.getCurrentInterceptInfos()},
+		ClusterId:      s.GetClusterId(c),
+		SessionInfo:    s.session(),
+		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 	}
-	if tm.rootDaemon != nil {
+	if s.rootDaemon != nil {
 		var err error
-		ret.DaemonStatus, err = tm.rootDaemon.Status(c, &empty.Empty{})
+		ret.DaemonStatus, err = s.rootDaemon.Status(c, &empty.Empty{})
 		if err != nil {
 			return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
@@ -813,9 +813,9 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 }
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
-func (tm *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
+func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
 	result := &rpc.Result{}
-	agents := tm.getCurrentAgents()
+	agents := s.getCurrentAgents()
 
 	// Since workloads can have more than one replica, we get a slice of agents
 	// where the agent to workload mapping is 1-to-1.  This is important
@@ -823,7 +823,7 @@ func (tm *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) 
 	// workload n times for n replicas, which could cause race conditions
 	agents = getRepresentativeAgents(c, agents)
 
-	_ = tm.ClearIntercepts(c)
+	_ = s.ClearIntercepts(c)
 	switch ur.UninstallType {
 	case rpc.UninstallRequest_UNSPECIFIED:
 		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
@@ -831,7 +831,7 @@ func (tm *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) 
 		var selectedAgents []*manager.AgentInfo
 		for _, di := range ur.Agents {
 			found := false
-			namespace := tm.ActualNamespace(ur.Namespace)
+			namespace := s.ActualNamespace(ur.Namespace)
 			if namespace != "" {
 				for _, ai := range agents {
 					if namespace == ai.Namespace && di == ai.Name {
@@ -863,10 +863,10 @@ func (tm *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) 
 // a `helm uninstall traffic-manager`.
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
-func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
-	if tm.managerVersion.LT(firstAgentConfigMapVersion) {
+func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
+	if s.managerVersion.LT(firstAgentConfigMapVersion) {
 		// fall back traffic-manager behaviour prior to 2.6
-		return tm.legacyUninstall(ctx, ur)
+		return s.legacyUninstall(ctx, ur)
 	}
 
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
@@ -893,12 +893,12 @@ func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rp
 	// to prevent the clients from doing it.
 	if ur.UninstallType == rpc.UninstallRequest_NAMED_AGENTS {
 		// must have a valid namespace in order to uninstall named agents
-		tm.waitForSync(ctx)
+		s.waitForSync(ctx)
 		if ur.Namespace == "" {
-			ur.Namespace = tm.Namespace
+			ur.Namespace = s.Namespace
 		}
-		tm.wlWatcher.ensureStarted(ctx, ur.Namespace, nil)
-		namespace := tm.ActualNamespace(ur.Namespace)
+		s.wlWatcher.ensureStarted(ctx, ur.Namespace, nil)
+		namespace := s.ActualNamespace(ur.Namespace)
 		if namespace == "" {
 			// namespace is not mapped
 			return errcat.ToResult(errcat.User.Newf("namespace %s is not mapped", ur.Namespace)), nil
@@ -908,11 +908,11 @@ func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rp
 			return errcat.ToResult(err), nil
 		}
 		changed := false
-		ics := tm.getCurrentIntercepts()
+		ics := s.getCurrentIntercepts()
 		for _, an := range ur.Agents {
 			for _, ic := range ics {
 				if ic.Spec.Namespace == namespace && ic.Spec.Agent == an {
-					_ = tm.removeIntercept(ctx, ic)
+					_ = s.removeIntercept(ctx, ic)
 					break
 				}
 			}
@@ -930,7 +930,7 @@ func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rp
 		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
 	}
 
-	_ = tm.ClearIntercepts(ctx)
+	_ = s.ClearIntercepts(ctx)
 	clearAgentsConfigMap := func(ns string) error {
 		cm, err := loadAgentConfigMap(ns)
 		if err != nil {
@@ -947,12 +947,12 @@ func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rp
 	}
 
 	if ur.Namespace != "" {
-		tm.waitForSync(ctx)
+		s.waitForSync(ctx)
 		if ur.Namespace == "" {
-			ur.Namespace = tm.Namespace
+			ur.Namespace = s.Namespace
 		}
-		tm.wlWatcher.ensureStarted(ctx, ur.Namespace, nil)
-		namespace := tm.ActualNamespace(ur.Namespace)
+		s.wlWatcher.ensureStarted(ctx, ur.Namespace, nil)
+		namespace := s.ActualNamespace(ur.Namespace)
 		if namespace == "" {
 			// namespace is not mapped
 			return errcat.ToResult(errcat.User.Newf("namespace %s is not mapped", ur.Namespace)), nil
@@ -960,7 +960,7 @@ func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rp
 		return errcat.ToResult(clearAgentsConfigMap(namespace)), nil
 	} else {
 		// Load all effected configmaps
-		for _, ns := range tm.GetCurrentNamespaces(true) {
+		for _, ns := range s.GetCurrentNamespaces(true) {
 			err := clearAgentsConfigMap(ns)
 			if err != nil {
 				return errcat.ToResult(err), nil
@@ -971,17 +971,17 @@ func (tm *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rp
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster.
-func (tm *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
+func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
 	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
 	// the cluster, since an open tunnel to the traffic-manager (via the API server) is itself required
 	// to communicate with the cluster.
 	neverProxy := []*manager.IPNet{}
-	url, err := url.Parse(tm.Server)
+	url, err := url.Parse(s.Server)
 	if err != nil {
 		// This really shouldn't happen as we are connected to the server
-		dlog.Errorf(ctx, "Unable to parse url for k8s server %s: %v", tm.Server, err)
+		dlog.Errorf(ctx, "Unable to parse url for k8s server %s: %v", s.Server, err)
 	} else {
 		hostname := url.Hostname()
 		rawIP := iputil.Parse(hostname)
@@ -1004,31 +1004,31 @@ func (tm *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 			neverProxy = append(neverProxy, iputil.IPNetToRPC(ipnet))
 		}
 	}
-	for _, np := range tm.NeverProxy {
+	for _, np := range s.NeverProxy {
 		neverProxy = append(neverProxy, iputil.IPNetToRPC((*net.IPNet)(np)))
 	}
 	info := &daemon.OutboundInfo{
-		Session:           tm.sessionInfo,
+		Session:           s.sessionInfo,
 		NeverProxySubnets: neverProxy,
 	}
 
-	if tm.DNS != nil {
+	if s.DNS != nil {
 		info.Dns = &daemon.DNSConfig{
-			ExcludeSuffixes: tm.DNS.ExcludeSuffixes,
-			IncludeSuffixes: tm.DNS.IncludeSuffixes,
-			LookupTimeout:   durationpb.New(tm.DNS.LookupTimeout.Duration),
+			ExcludeSuffixes: s.DNS.ExcludeSuffixes,
+			IncludeSuffixes: s.DNS.IncludeSuffixes,
+			LookupTimeout:   durationpb.New(s.DNS.LookupTimeout.Duration),
 		}
-		if len(tm.DNS.LocalIP) > 0 {
-			info.Dns.LocalIp = tm.DNS.LocalIP.IP()
+		if len(s.DNS.LocalIP) > 0 {
+			info.Dns.LocalIp = s.DNS.LocalIP.IP()
 		}
-		if len(tm.DNS.RemoteIP) > 0 {
-			info.Dns.RemoteIp = tm.DNS.RemoteIP.IP()
+		if len(s.DNS.RemoteIP) > 0 {
+			info.Dns.RemoteIp = s.DNS.RemoteIP.IP()
 		}
 	}
 
-	if len(tm.AlsoProxy) > 0 {
-		info.AlsoProxySubnets = make([]*manager.IPNet, len(tm.AlsoProxy))
-		for i, ap := range tm.AlsoProxy {
+	if len(s.AlsoProxy) > 0 {
+		info.AlsoProxySubnets = make([]*manager.IPNet, len(s.AlsoProxy))
+		for i, ap := range s.AlsoProxy {
 			info.AlsoProxySubnets[i] = iputil.IPNetToRPC((*net.IPNet)(ap))
 		}
 	}
