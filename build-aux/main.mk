@@ -42,7 +42,6 @@ else
 CGO_ENABLED=0
 endif
 
-# Build using CGO_ENABLED=1 on all platforms except windows.
 ifeq ($(GOOS),windows)
 BEXE=.exe
 else
