@@ -232,6 +232,10 @@ func (s *session) ManagerConn() *grpc.ClientConn {
 	return s.managerConn
 }
 
+func (s *session) ManagerVersion() semver.Version {
+	return s.managerVersion
+}
+
 // connectCluster returns a configured cluster instance.
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
 	var config *k8s.Config

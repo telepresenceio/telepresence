@@ -8,6 +8,8 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 
+	"github.com/blang/semver"
+
 	"github.com/datawire/dlib/dgroup"
 	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -57,6 +59,7 @@ type Session interface {
 
 	ManagerClient() manager.ManagerClient
 	ManagerConn() *grpc.ClientConn
+	ManagerVersion() semver.Version
 
 	Status(context.Context) *rpc.ConnectInfo
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
