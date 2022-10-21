@@ -7,7 +7,7 @@ option go_package = "github.com/telepresenceio/telepresence/rpc/v2/common";
 // remove, list, available).
 enum InterceptError {
   UNSPECIFIED = 0; // no error
-  reserved 1;
+  INTERNAL = 1;
   NO_CONNECTION = 2; // Have not made the .Connect RPC call (or it errored)
   NO_TRAFFIC_MANAGER = 3;
   TRAFFIC_MANAGER_CONNECTING = 4;
