@@ -10,35 +10,36 @@ inputs:
   tel-image:
     description: "Path to the image to load onto the cluster"
     required: true
-  github-sha:
-    description: "The sha of the PR, used for naming the kluster"
-    required: true
 outputs:
   kubeconfig:
     description: "The resulting kubeconfig file"
-    value: ${{ steps.provision.outputs.kubeconfig-path }}
+    value: ${{ steps.kubeconfig.outputs.KUBECONFIG }}
 runs:
   using: composite
   steps:
-    - name: Create kluster
+    - name: Get KUBECONFIG path
+      id: kubeconfig
       shell: bash
-      id: provision
-      env:
-        DEV_TELEPRESENCE_KUBECEPTION_TOKEN: ${{ inputs.token }}
       run: |
-        go run ./build-aux/kubeception create "tp-ci-${{ inputs.platform }}-${{ inputs.github-sha }}" > "$HOME/kubeconfig"
-        export KUBECONFIG="$HOME/kubeconfig"
-        go run ./build-aux/wait_for_cluster "$KUBECONFIG"
+        KUBECONFIG=$HOME/kubeconfig
         if [[ "${{ inputs.platform }}" == "windows" ]]; then
           # With thanks to stack overflow (https://stackoverflow.com/a/13701495) for showing how to convert a unix path to a windows path
-          echo "::set-output name=kubeconfig-path::$(echo $KUBECONFIG | sed -e 's/^\///' -e 's/\//\\/g' -e 's/^./\0:/')"
-        else
-          echo "::set-output name=kubeconfig-path::$(echo $KUBECONFIG)"
+          KUBECONFIG=$(echo $KUBECONFIG | sed -e 's/^\///' -e 's/\//\\/g' -e 's/^./\0:/')
         fi
+        echo "KUBECONFIG=$KUBECONFIG" >> $GITHUB_OUTPUT
+    - name: Create kluster
+      uses: datawire/infra-actions/provision-cluster@v0.2.0
+      if: steps.get_last_run.outputs.passed != 'success'
+      with:
+        distribution: kubeception
+        version: 1.19
+        kubeconfig: "${{ steps.kubeconfig.outputs.KUBECONFIG }}"
+        kubeceptionToken: ${{ inputs.token }}
     - name: Load image
       shell: bash
+      env:
+        KUBECONFIG: "${{ steps.kubeconfig.outputs.KUBECONFIG }}"
       run: |
-        export KUBECONFIG="$HOME/kubeconfig"
         kubectl apply -f build-aux/image-importer.yaml
         kubectl rollout status -w deployment/image-importer
         POD_NAME=$(kubectl get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
