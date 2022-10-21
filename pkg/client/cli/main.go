@@ -4,18 +4,35 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	userDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
+
+func InitContext(ctx context.Context) context.Context {
+	switch client.ProcessName() {
+	case userd.ProcessName:
+		ctx = userd.WithNewServiceFunc(ctx, userDaemon.NewService)
+		ctx = userd.WithNewSessionFunc(ctx, trafficmgr.NewSession)
+	case rootd.ProcessName:
+		ctx = rootd.WithNewServiceFunc(ctx, rootd.NewService)
+		ctx = rootd.WithNewSessionFunc(ctx, rootd.NewSession)
+	default:
+		ctx = util.WithCommandInitializer(ctx, util.CommandInitializer)
+		ctx = WithSubCommands(ctx)
+	}
+	return ctx
+}
 
 func Main(ctx context.Context) {
 	if dir := os.Getenv("DEV_TELEPRESENCE_CONFIG_DIR"); dir != "" {
@@ -24,7 +41,6 @@ func Main(ctx context.Context) {
 	if dir := os.Getenv("DEV_TELEPRESENCE_LOG_DIR"); dir != "" {
 		ctx = filelocation.WithAppUserLogDir(ctx, dir)
 	}
-
 	env, err := client.LoadEnv()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load environment: %v", err)
@@ -33,7 +49,7 @@ func Main(ctx context.Context) {
 	ctx = client.WithEnv(ctx, env)
 
 	var cmd *cobra.Command
-	if IsDaemon() {
+	if client.IsDaemon() {
 		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
 		// avoids checks for legacy commands.
 		cmd = &cobra.Command{
@@ -46,7 +62,7 @@ func Main(ctx context.Context) {
 			SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 			SilenceUsage:  true, // our FlagErrorFunc will handle it
 		}
-		cmd.AddCommand(daemon.Command())
+		cmd.AddCommand(userDaemon.Command())
 		cmd.AddCommand(rootd.Command())
 		if err := cmd.ExecuteContext(ctx); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
@@ -85,16 +101,10 @@ func Main(ctx context.Context) {
 	}
 }
 
-func IsDaemon() bool {
-	const fg = "-foreground"
-	a := os.Args
-	return len(a) > 1 && strings.HasSuffix(a[1], fg) || len(a) > 2 && strings.HasSuffix(a[2], fg) && a[1] == "help"
-}
-
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
 	w := cmd.ErrOrStderr()
 	first := true
-	for _, proc := range []string{rootd.ProcessName, daemon.ProcessName} {
+	for _, proc := range []string{rootd.ProcessName, userd.ProcessName} {
 		if summary, err := logging.SummarizeLog(ctx, proc); err != nil {
 			fmt.Fprintf(w, "failed to scan %s logs: %v\n", proc, err)
 		} else if summary != "" {

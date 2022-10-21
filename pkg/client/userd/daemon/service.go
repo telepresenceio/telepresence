@@ -31,10 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-const (
-	ProcessName = "connector"
-	titleName   = "Connector"
-)
+const titleName = "Connector"
 
 func help() string {
 	return `The Telepresence ` + titleName + ` is a background component that manages a connection. It
@@ -44,7 +41,7 @@ Launch the Telepresence ` + titleName + `:
     telepresence connect
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
+    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), userd.ProcessName+".log") + `
 to troubleshoot problems.
 `
 }
@@ -112,7 +109,7 @@ func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOpti
 // Command returns the CLI sub-command for "connector-foreground".
 func Command() *cobra.Command {
 	c := &cobra.Command{
-		Use:    ProcessName + "-foreground",
+		Use:    userd.ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
@@ -243,8 +240,8 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	c = client.WithConfig(c, cfg)
-	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
-	c, err = logging.InitContext(c, ProcessName, logging.RotateDaily, true)
+	c = dgroup.WithGoroutineName(c, "/"+userd.ProcessName)
+	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
 	if err != nil {
 		return err
 	}
@@ -252,7 +249,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
 	// the socket/pipe to appear before it gives up.
-	grpcListener, err := client.ListenSocket(c, ProcessName, client.ConnectorSocketName)
+	grpcListener, err := client.ListenSocket(c, userd.ProcessName, client.ConnectorSocketName)
 	if err != nil {
 		return err
 	}

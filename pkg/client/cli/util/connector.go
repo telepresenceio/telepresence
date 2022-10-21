@@ -60,7 +60,21 @@ func GetSession(ctx context.Context) *Session {
 	return nil
 }
 
+type cmdInitKey struct{}
+
+func WithCommandInitializer(ctx context.Context, cmdInit func(cmd *cobra.Command) error) context.Context {
+	return context.WithValue(ctx, cmdInitKey{}, cmdInit)
+}
+
 func InitCommand(cmd *cobra.Command) (err error) {
+	cmdInit, ok := cmd.Context().Value(cmdInitKey{}).(func(cmd *cobra.Command) error)
+	if !ok {
+		panic("no registered command initializer")
+	}
+	return cmdInit(cmd)
+}
+
+func CommandInitializer(cmd *cobra.Command) (err error) {
 	ctx := cmd.Context()
 	as := cmd.Annotations
 
@@ -68,7 +82,6 @@ func InitCommand(cmd *cobra.Command) (err error) {
 		as[ann.UserDaemon] = v
 		as[ann.VersionCheck] = ann.Required
 	}
-
 	if as[ann.RootDaemon] == ann.Required {
 		if err = EnsureRootDaemonRunning(ctx); err != nil {
 			return err

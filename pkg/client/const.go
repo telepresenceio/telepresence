@@ -3,6 +3,9 @@ package client
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 const (
@@ -23,4 +26,28 @@ func GetExe() string {
 		panic(err)
 	}
 	return exeName
+}
+
+func IsDaemon() bool {
+	const fg = "-foreground"
+	a := os.Args
+	return len(a) > 1 && strings.HasSuffix(a[1], fg) || len(a) > 2 && strings.HasSuffix(a[2], fg) && a[1] == "help"
+}
+
+func ProcessName() string {
+	const fg = "-foreground"
+	a := os.Args
+	var pn string
+	switch {
+	case len(a) > 2 && a[1] == "help":
+		pn = a[2]
+	case len(a) > 1:
+		pn = a[1]
+	default:
+		pn = filepath.Base(a[0])
+		if runtime.GOOS == "windows" {
+			pn = strings.TrimSuffix(pn, ".exe")
+		}
+	}
+	return strings.TrimSuffix(pn, fg)
 }

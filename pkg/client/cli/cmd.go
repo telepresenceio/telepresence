@@ -180,12 +180,14 @@ func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 // CommandGroups found in the given command's context, and the completion command. It also replaces
 // the standard usage template with a custom template.
 func AddSubCommands(cmd *cobra.Command) {
+	ctx := cmd.Context()
 	commands := util.GetSubCommands(cmd)
 	for _, command := range commands {
 		if ac := command.Args; ac != nil {
 			// Ensure that args errors don't advice the user to look in log files
 			command.Args = argsCheck(ac)
 		}
+		command.SetContext(ctx)
 	}
 	cmd.AddCommand(commands...)
 	cmd.PersistentFlags().AddFlagSet(GlobalFlags())
@@ -231,18 +233,20 @@ func Command(ctx context.Context) *cobra.Command {
 		SilenceUsage:       true, // our FlagErrorFunc will handle it
 		DisableFlagParsing: true, // Bc of the legacyCommand parsing, see legacy_command.go
 	}
+	rootCmd.SetContext(ctx)
+	AddSubCommands(rootCmd)
+	return rootCmd
+}
 
-	ctx = util.AddSubCommands(ctx, []*cobra.Command{
+func WithSubCommands(ctx context.Context) context.Context {
+	return util.AddSubCommands(ctx,
 		connectCommand(), statusCommand(), quitCommand(),
 		listCommand(), intercept.LeaveCommand(), intercept.Command(),
 		helmCommand(), uninstallCommand(),
 		loglevelCommand(), gatherLogsCommand(),
 		GatherTracesCommand(), PushTracesCommand(),
 		versionCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand(),
-	})
-	rootCmd.SetContext(ctx)
-	AddSubCommands(rootCmd)
-	return rootCmd
+	)
 }
 
 // argsCheck wraps an PositionalArgs checker in a function that wraps a potential error

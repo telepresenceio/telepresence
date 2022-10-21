@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -214,6 +215,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
 			testLogDir := "testdata/testLogDir"
 			ctx = filelocation.WithAppUserLogDir(ctx, testLogDir)
+			ctx = util.WithCommandInitializer(ctx, util.InitCommand)
 
 			// this isn't actually used for our unit tests, but is needed for the function
 			// when it is getting logs from k8s components

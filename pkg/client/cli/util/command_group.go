@@ -10,7 +10,7 @@ import (
 
 type subCommandsKey struct{}
 
-func AddSubCommands(ctx context.Context, commands []*cobra.Command) context.Context {
+func AddSubCommands(ctx context.Context, commands ...*cobra.Command) context.Context {
 	if ecs, ok := ctx.Value(subCommandsKey{}).(*[]*cobra.Command); ok {
 		*ecs = mergeCommands(*ecs, commands)
 	} else {
