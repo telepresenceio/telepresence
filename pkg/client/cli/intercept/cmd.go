@@ -154,7 +154,7 @@ func (a *Args) Run(cmd *cobra.Command, positional []string) error {
 	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
-	return NewState(cmd, a).Intercept()
+	return Run(cmd.Context(), NewState(cmd, a))
 }
 
 func (a *Args) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {

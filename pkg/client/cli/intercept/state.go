@@ -32,9 +32,9 @@ import (
 )
 
 type State interface {
+	As(ptr any)
 	Cmd() *cobra.Command
 	CreateRequest(context.Context) (*connector.CreateInterceptRequest, error)
-	Intercept() error
 	Name() string
 	Reporter() *scout.Reporter
 	RunAndLeave() bool
@@ -42,7 +42,6 @@ type State interface {
 
 type state struct {
 	*Args
-
 	cmd        *cobra.Command
 	scout      *scout.Reporter
 	env        map[string]string
@@ -62,6 +61,15 @@ func NewState(
 	}
 }
 
+func (s *state) As(ptr any) {
+	switch ptr := ptr.(type) {
+	case **state:
+		*ptr = s
+	default:
+		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
+	}
+}
+
 func (s *state) Cmd() *cobra.Command {
 	return s.cmd
 }
@@ -78,27 +86,29 @@ func (s *state) RunAndLeave() bool {
 	return len(s.Cmdline) > 0 || s.DockerRun
 }
 
-func (s *state) Intercept() error {
-	ctx := s.cmd.Context()
-	s.scout.Start(ctx)
-	defer s.scout.Close()
+func Run(ctx context.Context, sif State) error {
+	scout := sif.Reporter()
+	scout.Start(ctx)
+	defer scout.Close()
 
-	if s.RunAndLeave() {
-		return client.WithEnsuredState(ctx, s, false, func() (err error) {
-			return s.runCommand(ctx)
-		})
+	if sif.RunAndLeave() {
+		// start intercept, run command, then leave the intercept
+		return client.WithEnsuredState(ctx, sif, create, runCommand, leave)
 	}
 
 	// start and retain the intercept
-	return client.WithEnsuredState(ctx, s, true, func() error { return nil })
+	return client.WithEnsuredState(ctx, sif, create, nil, nil)
 }
 
-func (s *state) EnsureState(ctx context.Context) (acquired bool, err error) {
+func create(sif State, ctx context.Context) (acquired bool, err error) {
 	ud := util.GetUserDaemon(ctx)
 	status, err := ud.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
 	}
+
+	var s *state
+	sif.As(&s)
 
 	// Add whatever metadata we already have to scout
 	s.scout.SetMetadatum(ctx, "service_name", s.AgentName)
@@ -106,7 +116,7 @@ func (s *state) EnsureState(ctx context.Context) (acquired bool, err error) {
 	s.scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
 	s.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
 
-	ir, err := s.CreateRequest(ctx)
+	ir, err := sif.CreateRequest(ctx)
 	if err != nil {
 		s.scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
 		return false, err
@@ -180,8 +190,8 @@ func (s *state) EnsureState(ctx context.Context) (acquired bool, err error) {
 	return true, nil
 }
 
-func (s *state) DeactivateState(ctx context.Context) error {
-	r, err := util.GetUserDaemon(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(s.Name())})
+func leave(sif State, ctx context.Context) error {
+	r, err := util.GetUserDaemon(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(sif.Name())})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
@@ -189,8 +199,10 @@ func (s *state) DeactivateState(ctx context.Context) error {
 	return Result(r, err)
 }
 
-func (s *state) runCommand(ctx context.Context) error {
+func runCommand(sif State, ctx context.Context) error {
 	// start the interceptor process
+	var s *state
+	sif.As(&s)
 
 	var cmd *dexec.Cmd
 	var err error
@@ -238,8 +250,8 @@ func (s *state) runCommand(ctx context.Context) error {
 	// The external command will not output anything to the logs. An error here
 	// is likely caused by the user hitting <ctrl>-C to terminate the process.
 	return errcat.NoDaemonLogs.New(proc.Wait(ctx, func() {}, cmd))
-
 }
+
 func (s *state) checkMountCapability(ctx context.Context) error {
 	r, err := util.GetUserDaemon(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
 	if err != nil {
@@ -253,7 +265,10 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		Name:      s.Name(),
 		Namespace: s.Namespace,
 	}
-	ir := &connector.CreateInterceptRequest{Spec: spec}
+	ir := &connector.CreateInterceptRequest{
+		Spec:         spec,
+		ExtendedInfo: s.ExtendedInfo,
+	}
 
 	if s.AgentName == "" {
 		// local-only
@@ -342,7 +357,7 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		return nil, errors.New("no value found for docker flag `--name`")
 	}
 	if !hasName {
-		name = fmt.Sprintf("intercept-%s-%d", s.Name, s.localPort)
+		name = fmt.Sprintf("intercept-%s-%d", s.Name(), s.localPort)
 		ourArgs = append(ourArgs, "--name", name)
 	}
 
