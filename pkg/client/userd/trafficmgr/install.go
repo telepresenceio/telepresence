@@ -3,6 +3,7 @@ package trafficmgr
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	"github.com/pkg/errors"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -288,12 +288,11 @@ func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.
 	}
 
 	if err := checkSvcSame(c, obj, svcName, portNameOrNumber); err != nil {
-		msg := fmt.Sprintf(
+		return nil, fmt.Errorf(
 			`%s already being used for intercept with a different service
 configuration. To intercept this with your new configuration, please use
 telepresence uninstall --agent %s This will cancel any intercepts that
 already exist for this service`, kind, name)
-		return nil, errors.Wrap(err, msg)
 	}
 
 	return &interceptInfo{

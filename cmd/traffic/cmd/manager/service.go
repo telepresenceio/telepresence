@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	dns2 "github.com/miekg/dns"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -96,7 +95,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if cloudConfig != nil {
+	if cloudConfig != nil && cloudConfig.Host != "" && cloudConfig.Port != "" {
 		ret.cloudConfig = cloudConfig
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
@@ -559,7 +558,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 		}
 		return intercept, nil
 	default:
-		panic(errors.Errorf("Unimplemented UpdateInterceptRequest action: %T", action))
+		panic(fmt.Errorf("unimplemented UpdateInterceptRequest action: %T", action))
 	}
 }
 
@@ -617,7 +616,7 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 		if sa == nil {
 			sa, err = systemaPool.Get(ctx)
 			if err != nil {
-				err = errors.Wrap(err, "systema: acquire connection")
+				err = fmt.Errorf("systema: acquire connection: %w", err)
 				return
 			}
 		}
@@ -635,7 +634,7 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 				AddRequestHeaders: action.AddPreviewDomain.AddRequestHeaders,
 			})
 			if err != nil {
-				err = errors.Wrap(err, "systema: create domain")
+				err = status.Errorf(status.Code(err), fmt.Sprintf("systema: create domain: %v", err))
 				return
 			}
 			domain = resp.Domain

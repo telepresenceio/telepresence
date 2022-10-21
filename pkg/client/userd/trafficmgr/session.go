@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	stacktrace "github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -298,11 +297,11 @@ func connectMgr(
 
 	userinfo, err := user.Current()
 	if err != nil {
-		return nil, stacktrace.Wrap(err, "user.Current()")
+		return nil, fmt.Errorf("unable to obtain current user: %w", err)
 	}
 	host, err := os.Hostname()
 	if err != nil {
-		return nil, stacktrace.Wrap(err, "os.Hostname()")
+		return nil, fmt.Errorf("unable to obtain hostname: %w", err)
 	}
 
 	err = CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
