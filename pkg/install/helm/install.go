@@ -145,7 +145,7 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 	})
 }
 
-func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, *action.Configuration, error) {
+func isTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, *action.Configuration, error) {
 	dlog.Debug(ctx, "getHelmConfig")
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
@@ -191,7 +191,7 @@ func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 
 // EnsureTrafficManager ensures the traffic manager is installed.
 func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest) error {
-	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
+	existing, helmConfig, err := isTrafficManager(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("err detecting traffic manager: %w", err)
 	}

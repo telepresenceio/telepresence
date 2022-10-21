@@ -385,17 +385,9 @@ func connectMgr(
 		dlog.Errorf(ctx, "unable to get APIKey: %v", err)
 	}
 
-	dlog.Debug(ctx, "checking that traffic-manager exists")
-	coreV1 := k8sapi.GetK8sInterface(ctx).CoreV1()
-	if _, err := coreV1.Services(cluster.GetManagerNamespace()).Get(ctx, "traffic-manager", meta.GetOptions{}); err != nil {
-		msg := fmt.Sprintf("unable to get service traffic-manager in %s: %v", cluster.GetManagerNamespace(), err)
-		se := &k8serrors.StatusError{}
-		if errors.As(err, &se) {
-			if se.Status().Code == http.StatusNotFound {
-				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'"
-			}
-		}
-		return nil, errcat.User.New(msg)
+	err = CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
+	if err != nil {
+		return nil, err
 	}
 
 	dlog.Debug(ctx, "creating port-forward")
@@ -499,6 +491,22 @@ func connectMgr(
 		fuseFtp:          fuseFtp,
 		sr:               sr,
 	}, nil
+}
+
+func CheckTrafficManagerService(ctx context.Context, namespace string) error {
+	dlog.Debug(ctx, "checking that traffic-manager exists")
+	coreV1 := k8sapi.GetK8sInterface(ctx).CoreV1()
+	if _, err := coreV1.Services(namespace).Get(ctx, "traffic-manager", meta.GetOptions{}); err != nil {
+		msg := fmt.Sprintf("unable to get service traffic-manager in %s: %v", namespace, err)
+		se := &k8serrors.StatusError{}
+		if errors.As(err, &se) {
+			if se.Status().Code == http.StatusNotFound {
+				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'"
+			}
+		}
+		return errcat.User.New(msg)
+	}
+	return nil
 }
 
 func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
