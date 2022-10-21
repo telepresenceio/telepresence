@@ -7,6 +7,9 @@
 
 - Change: The default port for the mutating webhook is now `443`. It used to be `8443`.
 
+- Bugfix: `telepresence connect` now works as long as the traffic manager is installed, even if
+  it wasn't installed via `helm install`
+
 ### 2.8.2 (October 15, 2022)
 
 - Feature: The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,

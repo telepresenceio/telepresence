@@ -47,6 +47,36 @@ func (is *installSuite) SetupSuite() {
 	_ = itest.Run(ctx, "helm", "uninstall", "traffic-manager", "--namespace", is.ManagerNamespace())
 }
 
+func (is *installSuite) Test_NonHelmInstall() {
+	ctx := is.Context()
+	require := is.Require()
+
+	chart, err := is.PackageHelmChart(ctx)
+	require.NoError(err)
+	values := is.GetValuesForHelm(map[string]string{}, is.ManagerNamespace(), is.AppNamespace())
+	values = append([]string{"template", "traffic-manager", chart, "-n", is.ManagerNamespace()}, values...)
+	manifest, err := itest.Output(ctx, "helm", values...)
+	require.NoError(err)
+	cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(manifest)
+	out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
+	cmd.Stdout = out
+	cmd.Stderr = out
+	require.NoError(cmd.Run())
+	defer func() {
+		cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "delete", "-f", "-")
+		cmd.Stdin = strings.NewReader(manifest)
+		out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
+		cmd.Stdout = out
+		cmd.Stderr = out
+		// Sometimes the traffic-agents configmap gets wiped, causing the delete command to fail, hence we don't require.NoError
+		_ = cmd.Run()
+	}()
+	stdout := itest.TelepresenceOk(ctx, "connect")
+	is.Contains(stdout, "Connected to context")
+	defer itest.TelepresenceQuitOk(ctx)
+}
+
 func (is *installSuite) Test_FindTrafficManager_notPresent() {
 	ctx := is.Context()
 	ctx, _ = is.cluster(ctx, "default", is.ManagerNamespace()) // ensure that k8sapi is initialized

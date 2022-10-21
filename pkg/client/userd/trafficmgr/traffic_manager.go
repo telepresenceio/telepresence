@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/user"
@@ -384,14 +385,9 @@ func connectMgr(
 		dlog.Errorf(ctx, "unable to get APIKey: %v", err)
 	}
 
-	dlog.Debug(ctx, "checking that traffic-manager exists")
-	existing, _, isManagerErr := helm.IsTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace())
-	if isManagerErr == nil && existing == nil {
-		return nil, errcat.User.New("traffic manager not found, if it is not installed, please run 'telepresence helm install'")
-	}
-
-	if isManagerErr != nil {
-		dlog.Infof(ctx, "unable to look for existing helm release: %v. Assuming it's there and continuing...", isManagerErr)
+	err = CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
+	if err != nil {
+		return nil, err
 	}
 
 	dlog.Debug(ctx, "creating port-forward")
@@ -417,11 +413,6 @@ func connectMgr(
 
 	var conn *grpc.ClientConn
 	if conn, err = grpc.DialContext(tc, grpcAddr, opts...); err != nil {
-		// if traffic manager was not found in previous step, it is probably not installed
-		// return `helm install` err message
-		if isManagerErr != nil {
-			return nil, isManagerErr
-		}
 		return nil, client.CheckTimeout(tc, fmt.Errorf("dial manager: %w", err))
 	}
 	defer func() {
@@ -500,6 +491,22 @@ func connectMgr(
 		fuseFtp:          fuseFtp,
 		sr:               sr,
 	}, nil
+}
+
+func CheckTrafficManagerService(ctx context.Context, namespace string) error {
+	dlog.Debug(ctx, "checking that traffic-manager exists")
+	coreV1 := k8sapi.GetK8sInterface(ctx).CoreV1()
+	if _, err := coreV1.Services(namespace).Get(ctx, "traffic-manager", meta.GetOptions{}); err != nil {
+		msg := fmt.Sprintf("unable to get service traffic-manager in %s: %v", namespace, err)
+		se := &k8serrors.StatusError{}
+		if errors.As(err, &se) {
+			if se.Status().Code == http.StatusNotFound {
+				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'"
+			}
+		}
+		return errcat.User.New(msg)
+	}
+	return nil
 }
 
 func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
