@@ -83,60 +83,14 @@ func (s *state) Intercept() error {
 	s.scout.Start(ctx)
 	defer s.scout.Close()
 
-	if !s.RunAndLeave() {
-		// start and retain the intercept
-		return client.WithEnsuredState(ctx, s, true, func() error { return nil })
+	if s.RunAndLeave() {
+		return client.WithEnsuredState(ctx, s, false, func() (err error) {
+			return s.runCommand(ctx)
+		})
 	}
 
-	return client.WithEnsuredState(ctx, s, false, func() (err error) {
-		// start the interceptor process
-
-		var cmd *dexec.Cmd
-		if s.DockerRun {
-			envFile := s.EnvFile
-			if envFile == "" {
-				file, err := os.CreateTemp("", "tel-*.env")
-				if err != nil {
-					return fmt.Errorf("failed to create temporary environment file. %w", err)
-				}
-				defer os.Remove(file.Name())
-
-				if err = s.writeEnvToFileAndClose(file); err != nil {
-					return err
-				}
-				envFile = file.Name()
-			}
-			cmd, err = s.startInDocker(ctx, envFile, s.Cmdline)
-		} else {
-			cmd, err = proc.Start(ctx, s.env, s.cmd, s.Cmdline[0], s.Cmdline[1:]...)
-		}
-		if err != nil {
-			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
-			return errcat.NoDaemonLogs.New(err)
-		}
-
-		// setup cleanup for the interceptor process
-		ior := connector.Interceptor{
-			InterceptId: s.env["TELEPRESENCE_INTERCEPT_ID"],
-			Pid:         int32(cmd.Process.Pid),
-		}
-
-		// Send info about the pid and intercept id to the traffic-manager so that it kills
-		// the process if it receives a leave of quit call.
-		if _, err = util.GetUserDaemon(ctx).AddInterceptor(ctx, &ior); err != nil {
-			if grpcStatus.Code(err) == grpcCodes.Canceled {
-				// Deactivation was caused by a disconnect
-				err = nil
-			}
-			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
-			_ = cmd.Process.Kill()
-			return err
-		}
-
-		// The external command will not output anything to the logs. An error here
-		// is likely caused by the user hitting <ctrl>-C to terminate the process.
-		return errcat.NoDaemonLogs.New(proc.Wait(ctx, func() {}, cmd))
-	})
+	// start and retain the intercept
+	return client.WithEnsuredState(ctx, s, true, func() error { return nil })
 }
 
 func (s *state) EnsureState(ctx context.Context) (acquired bool, err error) {
@@ -220,7 +174,7 @@ func (s *state) EnsureState(ctx context.Context) (acquired bool, err error) {
 	var volumeMountProblem error
 	doMount, err := strconv.ParseBool(s.Mount)
 	if doMount || err != nil {
-		volumeMountProblem = s.CheckMountCapability(ctx)
+		volumeMountProblem = s.checkMountCapability(ctx)
 	}
 	fmt.Fprintln(s.cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	return true, nil
@@ -235,7 +189,58 @@ func (s *state) DeactivateState(ctx context.Context) error {
 	return Result(r, err)
 }
 
-func (s *state) CheckMountCapability(ctx context.Context) error {
+func (s *state) runCommand(ctx context.Context) error {
+	// start the interceptor process
+
+	var cmd *dexec.Cmd
+	var err error
+	if s.DockerRun {
+		envFile := s.EnvFile
+		if envFile == "" {
+			file, err := os.CreateTemp("", "tel-*.env")
+			if err != nil {
+				return fmt.Errorf("failed to create temporary environment file. %w", err)
+			}
+			defer os.Remove(file.Name())
+
+			if err = s.writeEnvToFileAndClose(file); err != nil {
+				return err
+			}
+			envFile = file.Name()
+		}
+		cmd, err = s.startInDocker(ctx, envFile, s.Cmdline)
+	} else {
+		cmd, err = proc.Start(ctx, s.env, s.cmd, s.Cmdline[0], s.Cmdline[1:]...)
+	}
+	if err != nil {
+		dlog.Errorf(ctx, "error interceptor starting process: %v", err)
+		return errcat.NoDaemonLogs.New(err)
+	}
+
+	// setup cleanup for the interceptor process
+	ior := connector.Interceptor{
+		InterceptId: s.env["TELEPRESENCE_INTERCEPT_ID"],
+		Pid:         int32(cmd.Process.Pid),
+	}
+
+	// Send info about the pid and intercept id to the traffic-manager so that it kills
+	// the process if it receives a leave of quit call.
+	if _, err = util.GetUserDaemon(ctx).AddInterceptor(ctx, &ior); err != nil {
+		if grpcStatus.Code(err) == grpcCodes.Canceled {
+			// Deactivation was caused by a disconnect
+			err = nil
+		}
+		dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
+		_ = cmd.Process.Kill()
+		return err
+	}
+
+	// The external command will not output anything to the logs. An error here
+	// is likely caused by the user hitting <ctrl>-C to terminate the process.
+	return errcat.NoDaemonLogs.New(proc.Wait(ctx, func() {}, cmd))
+
+}
+func (s *state) checkMountCapability(ctx context.Context) error {
 	r, err := util.GetUserDaemon(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
 	if err != nil {
 		return err
@@ -273,7 +278,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.TargetPort = int32(s.localPort)
 
 	doMount := false
-	if err = s.CheckMountCapability(ctx); err == nil {
+	if err = s.checkMountCapability(ctx); err == nil {
 		if ir.MountPoint, doMount, err = s.GetMountPoint(ctx); err != nil {
 			return nil, err
 		}
