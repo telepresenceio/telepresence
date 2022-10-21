@@ -239,7 +239,7 @@ func (s *session) watchInterceptsHandler(ctx context.Context) error {
 }
 
 func (s *session) watchInterceptsLoop(ctx context.Context) error {
-	stream, err := s.managerClient.WatchIntercepts(ctx, s.session())
+	stream, err := s.managerClient.WatchIntercepts(ctx, s.SessionInfo())
 	if err != nil {
 		return fmt.Errorf("manager.WatchIntercepts dial: %w", err)
 	}
@@ -476,7 +476,10 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, *rpc.InterceptResult) {
+func CanIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, *rpc.InterceptResult) {
+	var s *session
+	sif.As(&s)
+
 	s.waitForSync(c)
 	spec := ir.Spec
 	spec.Namespace = s.ActualNamespace(spec.Namespace)
@@ -502,7 +505,7 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	}
 
 	pi, err := s.managerClient.PrepareIntercept(c, &manager.CreateInterceptRequest{
-		Session:       s.session(),
+		Session:       s.SessionInfo(),
 		InterceptSpec: spec,
 	})
 	if err != nil {
@@ -567,15 +570,18 @@ func (s *session) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInte
 	if err != nil {
 		return nil, InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, err)
 	}
-	return iInfo, iInfo.InterceptResult()
+	return iInfo, nil
 }
 
 // AddIntercept adds one intercept.
-func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) *rpc.InterceptResult { //nolint:gocognit // bugger off
-	iInfo, result := s.CanIntercept(c, ir)
+func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptRequest) *rpc.InterceptResult {
+	iInfo, result := CanIntercept(sif, c, ir)
 	if result != nil {
 		return result
 	}
+
+	var s *session
+	sif.As(&s)
 
 	spec := ir.Spec
 	if iInfo == nil {
@@ -651,8 +657,8 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		s.currentInterceptsLock.Unlock()
 	}()
 
-	ii, err := s.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
-		Session:       s.session(),
+	ii, err := sif.ManagerClient().CreateIntercept(c, &manager.CreateInterceptRequest{
+		Session:       sif.SessionInfo(),
 		InterceptSpec: spec,
 		ApiKey:        iInfo.APIKey(),
 	})
@@ -672,7 +678,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 			// context is already done.
 			rc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 5*time.Second)
 			defer cancel()
-			if removeErr := s.RemoveIntercept(rc, ii.Spec.Name); removeErr != nil {
+			if removeErr := sif.RemoveIntercept(rc, ii.Spec.Name); removeErr != nil {
 				dlog.Warnf(c, "failed to remove failed intercept %s: %v", ii.Spec.Name, removeErr)
 			}
 		}
@@ -686,7 +692,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 			return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, client.CheckTimeout(c, c.Err()))
 		case wr := <-waitCh:
 			if wr.err != nil {
-				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err))
+				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, wr.err)
 			}
 			ic := wr.intercept
 			ii = ic.InterceptInfo
@@ -754,7 +760,7 @@ func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 	c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 	_, err := s.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
-		Session: s.session(),
+		Session: s.SessionInfo(),
 		Name:    name,
 	})
 	return err

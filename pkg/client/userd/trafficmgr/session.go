@@ -205,10 +205,21 @@ func NewSession(
 		ClusterContext: cluster.Config.Context,
 		ClusterServer:  cluster.Config.Server,
 		ClusterId:      cluster.GetClusterId(ctx),
-		SessionInfo:    tmgr.session(),
+		SessionInfo:    tmgr.SessionInfo(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 	}
 	return ctx, tmgr, ret
+}
+
+func (s *session) As(ptr any) {
+	switch ptr := ptr.(type) {
+	case **session:
+		*ptr = s
+	case *manager.ManagerClient:
+		*ptr = s.managerClient
+	default:
+		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
+	}
 }
 
 func (s *session) ManagerClient() manager.ManagerClient {
@@ -488,7 +499,7 @@ func (s *session) Reporter() *scout.Reporter {
 	return s.sr
 }
 
-func (s *session) session() *manager.SessionInfo {
+func (s *session) SessionInfo() *manager.SessionInfo {
 	return s.sessionInfo
 }
 
@@ -713,7 +724,7 @@ func (s *session) remain(c context.Context) error {
 		c = dcontext.WithoutCancel(c)
 		c, cancel := context.WithTimeout(c, 3*time.Second)
 		defer cancel()
-		if _, err := s.managerClient.Depart(c, s.session()); err != nil {
+		if _, err := s.managerClient.Depart(c, s.SessionInfo()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded so the traffic-manager has dropped the session. We should too
@@ -730,7 +741,7 @@ func (s *session) remain(c context.Context) error {
 			return nil
 		case <-ticker.C:
 			_, err := s.managerClient.Remain(c, &manager.RemainRequest{
-				Session: s.session(),
+				Session: s.SessionInfo(),
 			})
 			if err != nil && c.Err() == nil {
 				dlog.Error(c, err)
@@ -779,7 +790,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterContext: cfg.Context,
 		ClusterServer:  cfg.Server,
 		ClusterId:      s.GetClusterId(c),
-		SessionInfo:    s.session(),
+		SessionInfo:    s.SessionInfo(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 	}
 	if s.rootDaemon != nil {

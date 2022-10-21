@@ -39,32 +39,46 @@ type NamespaceListener func(context.Context)
 type Session interface {
 	restapi.AgentState
 	KubeConfig
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest) *rpc.InterceptResult
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
+
+	// As will cast this instance to what the given ptr points to, and assign
+	// that to the pointer. It will panic if type is not implemented.
+	As(ptr any)
+
+	RemoveIntercept(context.Context, string) error
+
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error
+	ClearIntercepts(context.Context) error
+
 	GetInterceptSpec(string) *manager.InterceptSpec
 	InterceptsForWorkload(string, string) []*manager.InterceptSpec
-	Status(context.Context) *rpc.ConnectInfo
-	ClearIntercepts(context.Context) error
-	RemoveIntercept(context.Context, string) error
-	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.Result, error)
-	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
-	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
-	WithK8sInterface(context.Context) context.Context
-	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
+
 	ManagerClient() manager.ManagerClient
 	ManagerConn() *grpc.ClientConn
+
+	Status(context.Context) *rpc.ConnectInfo
+	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
+
+	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.Result, error)
+
+	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
+	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
+
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string
 	AddNamespaceListener(context.Context, NamespaceListener)
-	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
+
+	WithK8sInterface(context.Context) context.Context
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
+
+	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 	GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result
 
-	Epilog(ctx context.Context)
 	Reporter() *scout.Reporter
+	SessionInfo() *manager.SessionInfo
+
 	StartServices(g *dgroup.Group)
+	Epilog(ctx context.Context)
 }
 
 type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest, Service, rpc2.FuseFTPClient) (context.Context, Session, *connector.ConnectInfo)

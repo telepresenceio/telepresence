@@ -230,7 +230,7 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	err = s.WithSession(c, "CanIntercept", func(c context.Context, session userd.Session) error {
 		span := trace.SpanFromContext(c)
 		tracing.RecordInterceptSpec(span, ir.Spec)
-		_, result = session.CanIntercept(c, ir)
+		_, result = trafficmgr.CanIntercept(session, c, ir)
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
@@ -255,8 +255,8 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 	err = s.WithSession(c, "CreateIntercept", func(c context.Context, session userd.Session) error {
 		span := trace.SpanFromContext(c)
 		tracing.RecordInterceptSpec(span, ir.Spec)
-		result = session.AddIntercept(c, ir)
-		if err == nil && result != nil && result.InterceptInfo != nil {
+		result = trafficmgr.AddIntercept(session, c, ir)
+		if result != nil && result.InterceptInfo != nil {
 			tracing.RecordInterceptInfo(span, result.InterceptInfo)
 		}
 		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result)

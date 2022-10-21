@@ -129,7 +129,7 @@ func (s *session) watchAgentsNS(ctx context.Context) error {
 
 	wm := "WatchAgentsNS"
 	stream, err := s.managerClient.WatchAgentsNS(ctx, &manager.AgentsRequest{
-		Session:    s.session(),
+		Session:    s.SessionInfo(),
 		Namespaces: nss,
 	}, opts...)
 	if err != nil {
@@ -165,7 +165,7 @@ func (s *session) watchAgentsNS(ctx context.Context) error {
 }
 
 func (s *session) watchAgents(ctx context.Context, opts []grpc.CallOption) error {
-	stream, err := s.managerClient.WatchAgents(ctx, s.session(), opts...)
+	stream, err := s.managerClient.WatchAgents(ctx, s.SessionInfo(), opts...)
 	if err != nil {
 		return err
 	}
