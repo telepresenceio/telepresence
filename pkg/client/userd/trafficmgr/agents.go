@@ -199,7 +199,7 @@ func (s *session) agentInfoWatcher(ctx context.Context) error {
 // Deprecated.
 func (s *session) addAgent(
 	c context.Context,
-	svcProps *serviceProps,
+	svcProps *interceptInfo,
 	agentImageName string,
 	telepresenceAPIPort uint16,
 ) (map[string]string, *rpc.InterceptResult) {

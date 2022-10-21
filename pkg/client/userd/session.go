@@ -22,7 +22,7 @@ type WatchWorkloadsStream interface {
 	Send(*rpc.WorkloadInfoSnapshot) error
 }
 
-type ServiceProps interface {
+type InterceptInfo interface {
 	APIKey() string
 	InterceptResult() *rpc.InterceptResult
 	PreparedIntercept() *manager.PreparedIntercept
@@ -40,7 +40,7 @@ type Session interface {
 	restapi.AgentState
 	KubeConfig
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (ServiceProps, *rpc.InterceptResult)
+	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error
 	GetInterceptSpec(string) *manager.InterceptSpec

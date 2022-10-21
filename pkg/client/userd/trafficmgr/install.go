@@ -270,7 +270,7 @@ func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
 
 // exploreSvc finds the matching service, its containers, and their ports
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
-func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*serviceProps, error) {
+func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*interceptInfo, error) {
 	podTemplate := obj.GetPodTemplate()
 	cns := podTemplate.Spec.Containers
 	namespace := obj.GetNamespace()
@@ -296,7 +296,7 @@ already exist for this service`, kind, name)
 		return nil, errors.Wrap(err, msg)
 	}
 
-	return &serviceProps{
+	return &interceptInfo{
 		service:            matchingSvc,
 		servicePort:        servicePort,
 		workload:           obj,
@@ -314,7 +314,7 @@ func legacyEnsureAgent(
 	c context.Context,
 	kl *k8s.Cluster,
 	obj k8sapi.Workload,
-	svcProps *serviceProps,
+	svcProps *interceptInfo,
 	agentImageName string,
 	telepresenceAPIPort uint16,
 ) (string, string, error) {
@@ -583,7 +583,7 @@ func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
 func addAgentToWorkload(
 	c context.Context,
-	svcProps *serviceProps,
+	svcProps *interceptInfo,
 	agentImageName string,
 	trafficManagerNamespace string,
 	telepresenceAPIPort uint16,

@@ -142,7 +142,7 @@ func TestAddAgentToWorkload(t *testing.T) {
 
 				actualWrk, _, actualErr := addAgentToWorkload(
 					ctx,
-					&serviceProps{
+					&interceptInfo{
 						service:            svc,
 						servicePort:        servicePort,
 						container:          container,
