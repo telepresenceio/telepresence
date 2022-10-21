@@ -504,10 +504,14 @@ func CanIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 		return s.legacyCanInterceptEpilog(c, ir)
 	}
 
-	pi, err := s.managerClient.PrepareIntercept(c, &manager.CreateInterceptRequest{
+	mgrIr := &manager.CreateInterceptRequest{
 		Session:       s.SessionInfo(),
 		InterceptSpec: spec,
-	})
+	}
+	if er := sif.InterceptProlog(c, mgrIr); er != nil {
+		return nil, er
+	}
+	pi, err := s.managerClient.PrepareIntercept(c, mgrIr)
 	if err != nil {
 		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
 	}
@@ -707,10 +711,21 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 			if !waitForDNS(c, spec.ServiceName) {
 				dlog.Warningf(c, "DNS cannot resolve name of intercepted %q service", spec.ServiceName)
 			}
-			success = true
+			if er := sif.InterceptEpilog(c, ir, result); er != nil {
+				return er
+			}
+			success = true // Prevent removal in deferred function
 			return result
 		}
 	}
+}
+
+func (s *session) InterceptProlog(context.Context, *manager.CreateInterceptRequest) *rpc.InterceptResult {
+	return nil
+}
+
+func (s *session) InterceptEpilog(context.Context, *rpc.CreateInterceptRequest, *rpc.InterceptResult) *rpc.InterceptResult {
+	return nil
 }
 
 func waitForDNS(c context.Context, host string) bool {

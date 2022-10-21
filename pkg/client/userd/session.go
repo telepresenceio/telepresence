@@ -44,6 +44,8 @@ type Session interface {
 	// that to the pointer. It will panic if type is not implemented.
 	As(ptr any)
 
+	InterceptProlog(context.Context, *manager.CreateInterceptRequest) *rpc.InterceptResult
+	InterceptEpilog(context.Context, *rpc.CreateInterceptRequest, *rpc.InterceptResult) *rpc.InterceptResult
 	RemoveIntercept(context.Context, string) error
 
 	AddInterceptor(string, int) error
