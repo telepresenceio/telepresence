@@ -39,7 +39,7 @@ type NamespaceListener func(context.Context)
 type Session interface {
 	restapi.AgentState
 	KubeConfig
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error)
+	AddIntercept(context.Context, *rpc.CreateInterceptRequest) *rpc.InterceptResult
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
 	AddInterceptor(string, int) error
 	RemoveInterceptor(string) error

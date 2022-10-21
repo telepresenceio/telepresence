@@ -186,7 +186,7 @@ func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, 
 	return true, false
 }
 
-func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult, err error) ([]scout.Entry, bool) {
+func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult) ([]scout.Entry, bool) {
 	// The scout belongs to the session and can only contain session specific meta-data
 	// so we don't want to use scout.SetMetadatum() here.
 	entries := make([]scout.Entry, 0, 7)
@@ -205,19 +205,12 @@ func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc
 			}
 		}
 	}
-	var msg string
 	if result != nil {
 		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
 		if result.Error != common.InterceptError_UNSPECIFIED {
-			msg = result.Error.String()
+			entries = append(entries, scout.Entry{Key: "error", Value: result.Error.String()})
+			return entries, false
 		}
-	}
-	if err != nil && msg == "" {
-		msg = err.Error()
-	}
-	if msg != "" {
-		entries = append(entries, scout.Entry{Key: "error", Value: msg})
-		return entries, false
 	}
 	return entries, true
 }
@@ -241,8 +234,8 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
-		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result, err)
-		return err
+		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result)
+		return nil
 	})
 	return
 }
@@ -262,12 +255,12 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 	err = s.WithSession(c, "CreateIntercept", func(c context.Context, session userd.Session) error {
 		span := trace.SpanFromContext(c)
 		tracing.RecordInterceptSpec(span, ir.Spec)
-		result, err = session.AddIntercept(c, ir)
+		result = session.AddIntercept(c, ir)
 		if err == nil && result != nil && result.InterceptInfo != nil {
 			tracing.RecordInterceptInfo(span, result.InterceptInfo)
 		}
-		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result, err)
-		return err
+		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result)
+		return nil
 	})
 	return
 }
@@ -303,7 +296,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
-		entries, ok = s.scoutInterceptEntries(spec, result, err)
+		entries, ok = s.scoutInterceptEntries(spec, result)
 		return nil
 	})
 	return result, err

@@ -571,15 +571,15 @@ func (s *session) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInte
 }
 
 // AddIntercept adds one intercept.
-func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) { //nolint:gocognit // bugger off
+func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) *rpc.InterceptResult { //nolint:gocognit // bugger off
 	iInfo, result := s.CanIntercept(c, ir)
 	if result != nil {
-		return result, nil
+		return result
 	}
 
 	spec := ir.Spec
 	if iInfo == nil {
-		return s.addLocalOnlyIntercept(c, spec), nil
+		return s.addLocalOnlyIntercept(c, spec)
 	}
 
 	spec.Client = s.userAndHost
@@ -607,7 +607,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		// no-op.
 		agentEnv, result = s.addAgent(c, iInfo.(*interceptInfo), ir.AgentImage, apiPort)
 		if result.Error != common.InterceptError_UNSPECIFIED {
-			return result, nil
+			return result
 		}
 	} else {
 		// Make spec port identifier unambiguous.
@@ -617,7 +617,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		spec.Protocol = pi.Protocol
 		pi, err := iInfo.PortIdentifier()
 		if err != nil {
-			return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err), nil
+			return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err)
 		}
 		spec.ServicePortIdentifier = pi.String()
 		result = iInfo.InterceptResult()
@@ -658,14 +658,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
-		err = client.CheckTimeout(c, err)
-		code := grpcCodes.Internal
-		if errors.Is(err, context.DeadlineExceeded) {
-			code = grpcCodes.DeadlineExceeded
-		} else if errors.Is(err, context.Canceled) {
-			code = grpcCodes.Canceled
-		}
-		return nil, grpcStatus.Error(code, err.Error())
+		return InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
 	}
 
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
@@ -690,16 +683,10 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	for {
 		select {
 		case <-c.Done():
-			err = client.CheckTimeout(c, c.Err())
-			code := grpcCodes.Canceled
-			if errors.Is(err, context.DeadlineExceeded) {
-				code = grpcCodes.DeadlineExceeded
-			}
-			err = grpcStatus.Error(code, err.Error())
-			return nil, err
+			return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, client.CheckTimeout(c, c.Err()))
 		case wr := <-waitCh:
 			if wr.err != nil {
-				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err)), nil
+				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, errcat.User.New(wr.err))
 			}
 			ic := wr.intercept
 			ii = ic.InterceptInfo
@@ -715,7 +702,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 				dlog.Warningf(c, "DNS cannot resolve name of intercepted %q service", spec.ServiceName)
 			}
 			success = true
-			return result, nil
+			return result
 		}
 	}
 }
