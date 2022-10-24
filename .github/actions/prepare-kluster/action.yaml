@@ -29,7 +29,6 @@ runs:
         echo "KUBECONFIG=$KUBECONFIG" >> $GITHUB_OUTPUT
     - name: Create kluster
       uses: datawire/infra-actions/provision-cluster@aosorio/request-kluster-with-dumb-retry
-      if: steps.get_last_run.outputs.passed != 'success'
       with:
         distribution: kubeception
         version: 1.19
