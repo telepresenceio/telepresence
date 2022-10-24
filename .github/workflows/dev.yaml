@@ -232,7 +232,7 @@ jobs:
       - uses: azure/setup-kubectl@v3.0
         if: steps.get_last_run.outputs.passed != 'success'
         with:
-          version: 'v1.19.3'
+          version: 'v1.25.3'
         id: kubectl
       - run: |
           brew update
