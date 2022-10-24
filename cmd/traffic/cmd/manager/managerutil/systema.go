@@ -5,6 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
@@ -62,14 +63,16 @@ func AgentImageFromSystemA(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer func() {
+		if err := systemaPool.Done(ctx); err != nil {
+			dlog.Errorf(ctx, "unexpected error when returning to systemA pool: %v", err)
+		}
+	}()
 	resp, err := systemaClient.PreferredAgent(ctx, &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	})
 	if err != nil {
-		return "", err
-	}
-	if err = systemaPool.Done(ctx); err != nil {
 		return "", err
 	}
 	return resp.GetImageName(), nil
