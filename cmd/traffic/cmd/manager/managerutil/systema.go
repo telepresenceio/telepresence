@@ -2,6 +2,8 @@ package managerutil
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -76,4 +78,25 @@ func AgentImageFromSystemA(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return resp.GetImageName(), nil
+}
+
+func AgentImageFromSystemAWithRetry(ctx context.Context) (string, error) {
+	img, err := AgentImageFromSystemA(ctx)
+	if err == nil {
+		return img, nil
+	}
+
+	if strings.Contains(err.Error(), "not configured") {
+		// No use retrying when access isn't configured. This is normally prohibited by a Helm chart
+		// assertion that either systemA is configured or AGENT_IMAGE is set.
+		return "", err
+	}
+
+	// Retry several accesses before giving up. Giving up here causes the webhook injector to be disabled.
+	err = client.Retry(ctx, "retrieve agent-image", func(ctx context.Context) error {
+		dlog.Warnf(ctx, "unable to retrieve preferred agent image: %v. Retrying", err)
+		img, err = AgentImageFromSystemA(ctx)
+		return err
+	}, 3*time.Second)
+	return img, err
 }
