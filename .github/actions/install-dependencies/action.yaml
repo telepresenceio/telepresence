@@ -10,9 +10,9 @@ runs:
     - uses: actions/setup-go@v3
       with:
         go-version: '1.19'
-    - uses: azure/setup-kubectl@v1
+    - uses: azure/setup-kubectl@v3.0
       with:
-        version: 'v1.19.3'
+        version: 'v1.25.3'
       id: kubectl
     - if: inputs.runner-version == 'ubuntu-latest'
       name: install ${{ inputs.runner-version }} dependencies
