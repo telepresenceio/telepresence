@@ -128,11 +128,9 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	defer restoreVersion()
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
-	ctx = itest.WithConfig(ctx, &client.Config{
-		Timeouts: client.Timeouts{
-			PrivateHelm: 30 * time.Second,
-		},
-	})
+	cfg := client.GetDefaultConfig()
+	cfg.Timeouts.PrivateHelm = 30 * time.Second
+	ctx = itest.WithConfig(ctx, &cfg)
 	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 	require.Error(ensureTrafficManager(ctx, kc))
 	restoreVersion()
