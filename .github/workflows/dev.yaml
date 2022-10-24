@@ -30,7 +30,7 @@ jobs:
   run_tests:
     strategy:
       matrix:
-        runner: ["ubuntu-latest", "macos-latest"]
+        runner: ["ubuntu-latest", "macos-latest", "windows-2019"]
         clusters:
           - distribution: Kubeception
             version: "1.19"
@@ -56,15 +56,8 @@ jobs:
           cluster-distribution: ${{ matrix.clusters.distribution }}
           cluster-version: ${{ matrix.clusters.version }}
         id: kluster
-      - name: Run tests
-        uses: nick-invision/retry@v2.8.2
+      - uses: ./.github/actions/integration-tests
         with:
-          max_attempts: 3
-          timeout_minutes: 30
-          command: |
-            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-            export DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}"
-            export DTEST_REGISTRY="docker.io/datawire"
-            make check-integration
+          kubeconfig: "${{ steps.kluster.outputs.kubeconfig }}"
       - uses: ./.github/actions/upload-logs
         if: always()

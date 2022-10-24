@@ -44,7 +44,3 @@ runs:
         Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
         
         [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
-
-        # We want to validate that tests still pass, even if the metrics host
-        # points to a broken IP
-        echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
