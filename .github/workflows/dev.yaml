@@ -35,16 +35,10 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-
-      - name: Get last run
-        uses: ./.github/actions/rerun-cache
-        id: get_last_run
-
       - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - uses: azure/setup-kubectl@v1
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           version: 'v1.19.3'
         id: kubectl
@@ -54,22 +48,17 @@ jobs:
           brew install gromgit/fuse/sshfs-mac
           brew link --overwrite sshfs-mac
         name: install dependencies
-        if: steps.get_last_run.outputs.passed != 'success'
       - run: make build
-        if: steps.get_last_run.outputs.passed != 'success'
       - uses: actions/download-artifact@v2
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           name: image
       - uses: ./.github/actions/prepare-kluster
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           platform: macos
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
         id: kluster
       - name: Run tests
-        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry@v2.8.2
         with:
           max_attempts: 3
@@ -79,8 +68,6 @@ jobs:
             export DTEST_KUBECONFIG=${{ steps.kluster.outputs.kubeconfig }}
             export DTEST_REGISTRY=docker.io/datawire
             make check-integration
-      - name: Mark test as successful
-        run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
         if: always()
   "windows_test":
@@ -91,31 +78,22 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-
-      - name: Get last run
-        uses: ./.github/actions/rerun-cache
-        id: get_last_run
-
       - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - uses: azure/setup-kubectl@v1
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           version: 'v1.19.3'
         id: kubectl
       - run: |
           choco install make
-        if: steps.get_last_run.outputs.passed != 'success'
         name: install dependencies
       - name: "Download sshfs"
-        if: steps.get_last_run.outputs.passed != 'success'
         run: |
           curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
           curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
         shell: bash
       - name: "Install sshfs"
-        if: steps.get_last_run.outputs.passed != 'success'
         shell: powershell
         run: |
           dir
@@ -123,13 +101,10 @@ jobs:
           Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
           [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
       - uses: actions/download-artifact@v2
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           name: image
       - run: make build
-        if: steps.get_last_run.outputs.passed != 'success'
       - uses: ./.github/actions/prepare-kluster
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           platform: windows
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
@@ -139,10 +114,8 @@ jobs:
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
           echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
-        if: steps.get_last_run.outputs.passed != 'success'
         name: Update etc\hosts
       - name: Run tests
-        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry@v2.8.2
         with:
           max_attempts: 3
@@ -152,48 +125,45 @@ jobs:
             $ENV:DTEST_REGISTRY = "docker.io/datawire"
             $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
             make check-integration
-      - name: Mark test as successful
-        run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
         if: always()
-  "linux_test":
-    runs-on: ubuntu-latest
+  "macM1_test":
+    runs-on: [self-hosted, macOS, ARM64]
     needs: "build_image"
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-
-      - name: Get last run
-        uses: ./.github/actions/rerun-cache
-        id: get_last_run
-
       - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - uses: azure/setup-kubectl@v1
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           version: 'v1.19.3'
         id: kubectl
       - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y sshfs socat
-          sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
-        if: steps.get_last_run.outputs.passed != 'success'
+          choco install make
         name: install dependencies
+      - name: "Download sshfs"
+        run: |
+          curl -L -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
+          curl -L -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
+        shell: bash
+      - name: "Install sshfs"
+        shell: powershell
+        run: |
+          dir
+          Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
+          Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
+          [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
       - uses: actions/download-artifact@v2
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
           name: image
       - run: make build
-        if: steps.get_last_run.outputs.passed != 'success'
       - uses: ./.github/actions/prepare-kluster
-        if: steps.get_last_run.outputs.passed != 'success'
         with:
-          platform: linux
+          platform: windows
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
         id: kluster
@@ -236,38 +206,19 @@ jobs:
           version: 'v1.25.3'
         id: kubectl
       - run: |
-          brew update
-          brew install --cask macfuse
-          brew install gromgit/fuse/sshfs-mac
-          brew link --overwrite sshfs-mac
-          brew install jq
-        name: install dependencies
-        if: steps.get_last_run.outputs.passed != 'success'
-      - run: make build
-        if: steps.get_last_run.outputs.passed != 'success'
-      - uses: actions/download-artifact@v3
-        if: steps.get_last_run.outputs.passed != 'success'
-        with:
-          name: image
-      - uses: ./.github/actions/prepare-kluster
-        if: steps.get_last_run.outputs.passed != 'success'
-        with:
-          platform: macos
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          tel-image: tel2-image.tar
-        id: kluster
+          # We want to validate that tests still pass, even if the metrics host
+          # points to a broken IP
+          echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
+        name: Update etc\hosts
       - name: Run tests
-        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry@v2.8.2
         with:
           max_attempts: 3
           timeout_minutes: 30
           command: |
-            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
-            export DTEST_KUBECONFIG=${{ steps.kluster.outputs.kubeconfig }}
-            export DTEST_REGISTRY=docker.io/datawire
+            $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
+            $ENV:DTEST_REGISTRY = "docker.io/datawire"
+            $ENV:Path += ".;C:\\Program Files\\SSHFS-Win\\bin"
             make check-integration
-      - name: Mark test as successful
-        run: echo "::set-output name=run_result::success" > run_result
       - uses: ./.github/actions/upload-logs
         if: always()
