@@ -185,6 +185,10 @@ func (s *State) loadAgentConfig(
 	} else {
 		agentImage = managerutil.GetAgentImage(ctx)
 	}
+	if agentImage == "" {
+		return nil, errcat.User.Newf(
+			"intercepts are disabled because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
+	}
 	span.SetAttributes(
 		attribute.String("tel2.agent-image", agentImage),
 	)

@@ -2,9 +2,7 @@ package managerutil_test
 
 import (
 	"context"
-	"fmt"
 	"net"
-	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +13,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func TestEnvconfig(t *testing.T) {
@@ -100,12 +97,7 @@ func TestEnvconfig(t *testing.T) {
 			require.NoError(t, err)
 			actual := managerutil.GetEnv(ctx)
 			assert.Equal(t, &expected, actual)
-			assert.Equal(t,
-				fmt.Sprintf(
-					"%s/tel2:%s",
-					actual.AgentRegistry,
-					strings.TrimPrefix(version.Version, "v")),
-				actual.QualifiedAgentImage())
+			assert.Equal(t, "", actual.QualifiedAgentImage())
 		})
 	}
 }

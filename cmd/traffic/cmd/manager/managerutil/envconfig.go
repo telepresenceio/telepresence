@@ -18,7 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 // Env is the traffic-manager's environment. It does not define any defaults because all
@@ -90,7 +89,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 func (e *Env) QualifiedAgentImage() string {
 	img := e.AgentImage
 	if img == "" {
-		img = "tel2:" + strings.TrimPrefix(version.Version, "v")
+		return ""
 	}
 	return e.AgentRegistry + "/" + img
 }

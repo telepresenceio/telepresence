@@ -278,7 +278,12 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 		return
 	}
 	if ac.Create {
-		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+		img := managerutil.GetAgentImage(ctx)
+		if img == "" {
+			// Unable to get image. This has been logged elsewhere
+			return
+		}
+		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
 		if err != nil {
 			dlog.Error(ctx, err)
 			return
@@ -625,6 +630,10 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDelete bool) {
 	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
 	// If so, include them, or if workload for the config entry isn't found, delete that entry
+	img := managerutil.GetAgentImage(ctx)
+	if img == "" {
+		return
+	}
 	cfg, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
 	if err != nil {
 		dlog.Error(ctx, err)
@@ -770,7 +779,12 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
 		}
 	}
-	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	img := managerutil.GetAgentImage(ctx)
+	if img == "" {
+		dlog.Warn(ctx, "no traffic-agents will be injected because the traffic-manager is unable to determine which image to use")
+		return
+	}
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return

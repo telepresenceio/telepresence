@@ -71,7 +71,7 @@ func Main(ctx context.Context, _ ...string) error {
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
-	ctx = managerutil.WithAgentImageRetriever(ctx, mutator.RegenerateAgentMaps)
+	ctx, imgRetErr := managerutil.WithAgentImageRetriever(ctx, mutator.RegenerateAgentMaps)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
@@ -83,7 +83,11 @@ func Main(ctx context.Context, _ ...string) error {
 
 	g.Go("prometheus", mgr.servePrometheus)
 
-	g.Go("agent-injector", mutator.ServeMutator)
+	if imgRetErr != nil {
+		dlog.Errorf(ctx, "unable to initialize agent injector: %v", imgRetErr)
+	} else {
+		g.Go("agent-injector", mutator.ServeMutator)
+	}
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
 
