@@ -1,9 +1,6 @@
 name: "Prepare Kluster"
 description: "Provision a kluster"
 inputs:
-  platform:
-    description: "The platform the kluster will be running tests for"
-    required: true
   token:
     description: "The kubeception token to use"
     required: true
@@ -30,7 +27,7 @@ runs:
       shell: bash
       run: |
         KUBECONFIG=$HOME/kubeconfig
-        if [[ "${{ inputs.platform }}" == "windows" ]]; then
+        if [[ "${RUNNER_OS}" == "Windows" ]]; then
           # With thanks to stack overflow (https://stackoverflow.com/a/13701495) for showing how to convert a unix path to a windows path
           KUBECONFIG=$(echo $KUBECONFIG | sed -e 's/^\///' -e 's/\//\\/g' -e 's/^./\0:/')
         fi
