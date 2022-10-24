@@ -10,6 +10,14 @@ inputs:
   tel-image:
     description: "Path to the image to load onto the cluster"
     required: true
+  cluster-distribution:
+    description: "Cluster distribution"
+    required: true
+    default: Kubeception
+  cluster-version:
+    description: "Kubernetes version"
+    required: true
+    default: "1.19"
 outputs:
   kubeconfig:
     description: "The resulting kubeconfig file"
@@ -30,8 +38,8 @@ runs:
     - name: Create kluster
       uses: datawire/infra-actions/provision-cluster@aosorio/request-kluster-with-dumb-retry
       with:
-        distribution: kubeception
-        version: 1.19
+        distribution: ${{ inputs.cluster-distribution }}
+        version: ${{ inputs.cluster-version }}
         kubeconfig: "${{ steps.kubeconfig.outputs.KUBECONFIG }}"
         kubeceptionToken: ${{ inputs.token }}
     - name: Load image
