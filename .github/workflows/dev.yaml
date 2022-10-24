@@ -1,12 +1,13 @@
 name: "Integration Tests"
 on:
+  pull_request: {}
   pull_request_target:
     types:
       - labeled
 jobs:
   "build_image":
     runs-on: ubuntu-latest
-    if: ${{ github.event.label.name == 'ok to test' }}
+#    if: ${{ github.event.label.name == 'ok to test' }}
     steps:
       - name: Remove label
         uses: andymckay/labeler@master
