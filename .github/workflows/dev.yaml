@@ -239,6 +239,7 @@ jobs:
           brew install --cask macfuse
           brew install gromgit/fuse/sshfs-mac
           brew link --overwrite sshfs-mac
+          brew install jq
         name: install dependencies
         if: steps.get_last_run.outputs.passed != 'success'
       - run: make build
