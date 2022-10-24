@@ -7,6 +7,9 @@
 
 - Change: The default port for the mutating webhook is now `443`. It used to be `8443`.
 
+- Change: The traffic-manager will no longer default to use the `tel2` image for the traffic-agent when it is
+  unable to connect to Ambassador Cloud. Air-gapped environments must declare what image to use in the Helm chart.
+
 - Bugfix: `telepresence connect` now works as long as the traffic manager is installed, even if
   it wasn't installed via `helm install`
 
