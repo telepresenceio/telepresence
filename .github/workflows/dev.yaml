@@ -42,18 +42,9 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v3
+      - uses: ./.github/actions/install-dependencies
         with:
-          go-version: '1.19'
-      - uses: azure/setup-kubectl@v1
-        with:
-          version: 'v1.19.3'
-        id: kubectl
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y sshfs socat
-          sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
+          runner-version: ${{ matrix.runner }}
         name: install dependencies
       - uses: actions/download-artifact@v2
         with:
