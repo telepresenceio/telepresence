@@ -31,7 +31,7 @@ jobs:
   run_tests:
     strategy:
       matrix:
-        runner: ["ubuntu-latest", "macos-latest", "windows-2019"]
+        runner: ["ubuntu-latest", "macos-latest", "windows-2019", "self-hosted"]
         clusters:
           - distribution: Kubeception
             version: 1.19
@@ -43,8 +43,6 @@ jobs:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: ./.github/actions/install-dependencies
-        with:
-          runner-version: ${{ matrix.runner }}
         name: install dependencies
       - uses: actions/download-artifact@v3
         with:
