@@ -30,7 +30,7 @@ jobs:
   run_tests:
     strategy:
       matrix:
-        runner: ["ubuntu-latest"]
+        runner: ["ubuntu-latest", "macos-latest"]
         clusters:
           - distribution: Kubeception
             version: "1.19"
@@ -51,7 +51,6 @@ jobs:
       - run: make build
       - uses: ./.github/actions/prepare-kluster
         with:
-          platform: linux
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
           cluster-distribution: ${{ matrix.clusters.distribution }}
