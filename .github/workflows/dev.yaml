@@ -24,7 +24,7 @@ jobs:
         run: |
           make tel2-image
       - name: Upload image
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: image
           path: build-output/tel2-image.tar
