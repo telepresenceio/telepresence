@@ -1653,7 +1653,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
 			ctx = managerutil.WithEnv(ctx, env)
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
-			ctx = managerutil.WithAgentImageRetriever(ctx, nil)
+			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
+			require.NoError(t, err)
 			if test.envAdditions != nil {
 				env := managerutil.GetEnv(ctx)
 				newEnv := *env

@@ -114,6 +114,11 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		}
 		fallthrough
 	case "enabled":
+		img := managerutil.GetAgentImage(ctx)
+		if img == "" {
+			dlog.Debug(ctx, "Skipping webhook injection because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
+			return nil, nil
+		}
 		config, err = a.findConfigMapValue(ctx, pod, nil)
 		if err != nil {
 			if isDelete {
@@ -150,7 +155,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 		var gc *agentmap.GeneratorConfig
-		if gc, err = env.GeneratorConfig(managerutil.GetAgentImage(ctx)); err != nil {
+		if gc, err = env.GeneratorConfig(img); err != nil {
 			return nil, err
 		}
 		if config, err = agentmap.Generate(ctx, wl, gc); err != nil {

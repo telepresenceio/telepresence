@@ -119,11 +119,6 @@ func ServeMutator(ctx context.Context) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-
-	// Existing telepresence-agent config maps must be regenerated. Conditions might have changed.
-	if err := RegenerateAgentMaps(ctx, managerutil.GetAgentImage(ctx)); err != nil {
-		return err
-	}
 	cw, err := Load(ctx)
 	if err != nil {
 		return err

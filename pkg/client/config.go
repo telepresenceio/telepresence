@@ -685,10 +685,10 @@ func (c Cloud) MarshalYAML() (any, error) {
 	if c.SkipLogin {
 		cm["skipLogin"] = true
 	}
-	if c.SystemaHost != "" && c.SystemaHost != defaultCloudSystemAHost {
+	if c.SystemaHost != defaultCloudSystemAHost {
 		cm["systemaHost"] = c.SystemaHost
 	}
-	if c.SystemaPort != "" && c.SystemaPort != defaultCloudSystemAPort {
+	if c.SystemaPort != defaultCloudSystemAPort {
 		cm["systemaPort"] = c.SystemaPort
 	}
 	return cm, nil
@@ -803,7 +803,7 @@ func (ic Intercept) IsZero() bool {
 // MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct.
 func (ic Intercept) MarshalYAML() (any, error) {
 	im := make(map[string]any)
-	if ic.DefaultPort != 0 && ic.DefaultPort != defaultInterceptDefaultPort {
+	if ic.DefaultPort != defaultInterceptDefaultPort {
 		im["defaultPort"] = ic.DefaultPort
 	}
 	if ic.AppProtocolStrategy != k8sapi.Http2Probe {

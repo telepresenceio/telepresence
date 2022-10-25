@@ -3,9 +3,12 @@ package managerutil
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
@@ -63,6 +66,11 @@ func AgentImageFromSystemA(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer func() {
+		if err := systemaPool.Done(ctx); err != nil {
+			dlog.Errorf(ctx, "unexpected error when returning to systemA pool: %v", err)
+		}
+	}()
 	resp, err := systemaClient.PreferredAgent(ctx, &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
@@ -70,8 +78,26 @@ func AgentImageFromSystemA(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err = systemaPool.Done(ctx); err != nil {
+	return resp.GetImageName(), nil
+}
+
+func AgentImageFromSystemAWithRetry(ctx context.Context) (string, error) {
+	img, err := AgentImageFromSystemA(ctx)
+	if err == nil {
+		return img, nil
+	}
+
+	if strings.Contains(err.Error(), "not configured") {
+		// No use retrying when access isn't configured. This is normally prohibited by a Helm chart
+		// assertion that either systemA is configured or AGENT_IMAGE is set.
 		return "", err
 	}
-	return resp.GetImageName(), nil
+
+	// Retry several accesses before giving up. Giving up here causes the webhook injector to be disabled.
+	err = client.Retry(ctx, "retrieve agent-image", func(ctx context.Context) error {
+		dlog.Warnf(ctx, "unable to retrieve preferred agent image: %v. Retrying", err)
+		img, err = AgentImageFromSystemA(ctx)
+		return err
+	}, 3*time.Second)
+	return img, err
 }
