@@ -22,10 +22,11 @@ func helmCommand() *cobra.Command {
 }
 
 type helmArgs struct {
-	cmdType   connector.HelmRequest_Type
-	values    []string
-	request   *connector.ConnectRequest
-	kubeFlags *pflag.FlagSet
+	cmdType    connector.HelmRequest_Type
+	values     []string
+	valuePairs []string
+	request    *connector.ConnectRequest
+	kubeFlags  *pflag.FlagSet
 }
 
 func helmInstallCommand() *cobra.Command {
@@ -51,6 +52,7 @@ func helmInstallCommand() *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
 	flags.StringSliceVarP(&ha.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
+	flags.StringSliceVarP(&ha.valuePairs, "value", "v", []string{}, "specify a value as a.b=v (can specify multiple)")
 
 	ha.request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd
@@ -96,6 +98,7 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 	request := &connector.HelmRequest{
 		Type:           ha.cmdType,
 		ValuePaths:     ha.values,
+		ValuePairs:     ha.valuePairs,
 		ConnectRequest: ha.request,
 	}
 	util.AddKubeconfigEnv(request.ConnectRequest)

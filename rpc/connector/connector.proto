@@ -186,6 +186,7 @@ message HelmRequest {
   ConnectRequest connect_request = 1;
   Type type = 2;
   repeated string value_paths = 3;
+  repeated string value_pairs = 4;
 }
 
 message UninstallRequest {
