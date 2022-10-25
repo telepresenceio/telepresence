@@ -31,6 +31,7 @@ func TestEnvconfig(t *testing.T) {
 		"POD_IP":                      "203.0.113.18",
 		"POD_CIDR_STRATEGY":           "auto",
 		"SERVER_PORT":                 "8081",
+		"INTERCEPT_DISABLE_GLOBAL":    "false",
 	}
 
 	defaults := managerutil.Env{
