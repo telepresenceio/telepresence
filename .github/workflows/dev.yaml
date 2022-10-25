@@ -70,7 +70,7 @@ jobs:
         id: kluster
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'
-        uses: nick-invision/retry@v2.4.0
+        uses: nick-invision/retry@v2.8.2
         with:
           max_attempts: 3
           timeout_minutes: 60
@@ -143,7 +143,7 @@ jobs:
         name: Update etc\hosts
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'
-        uses: nick-invision/retry@v2.4.0
+        uses: nick-invision/retry@v2.8.2
         with:
           max_attempts: 3
           timeout_minutes: 60
@@ -199,7 +199,7 @@ jobs:
         id: kluster
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'
-        uses: nick-invision/retry@v2.4.0
+        uses: nick-invision/retry@v2.8.2
         with:
           max_attempts: 3
           timeout_minutes: 60
@@ -256,7 +256,7 @@ jobs:
         id: kluster
       - name: Run tests
         if: steps.get_last_run.outputs.passed != 'success'
-        uses: nick-invision/retry@v2.4.0
+        uses: nick-invision/retry@v2.8.2
         with:
           max_attempts: 3
           timeout_minutes: 30
