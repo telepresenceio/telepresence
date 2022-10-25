@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - name: Build dev image
@@ -40,7 +40,7 @@ jobs:
         uses: ./.github/actions/rerun-cache
         id: get_last_run
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - uses: azure/setup-kubectl@v1
@@ -96,7 +96,7 @@ jobs:
         uses: ./.github/actions/rerun-cache
         id: get_last_run
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - uses: azure/setup-kubectl@v1
@@ -169,7 +169,7 @@ jobs:
         uses: ./.github/actions/rerun-cache
         id: get_last_run
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - uses: azure/setup-kubectl@v1
@@ -225,7 +225,7 @@ jobs:
         uses: ./.github/actions/rerun-cache
         id: get_last_run
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
       - uses: azure/setup-kubectl@v3.0
