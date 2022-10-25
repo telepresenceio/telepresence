@@ -227,6 +227,14 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		values = chartutil.CoalesceTables(vals.AsMap(), values)
 	}
 
+	if vl := len(req.ValuePairs); vl > 0 {
+		vls, err := makeMapFromValuePairs(req.ValuePairs)
+		if err != nil {
+			return errcat.User.Newf("--value flag error: %v", err)
+		}
+		values = chartutil.CoalesceTables(vls, values)
+	}
+
 	switch {
 	case existing == nil: // fresh install
 		dlog.Debugf(ctx, "Importing legacy for namespace %s", namespace)
@@ -248,6 +256,47 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		err = errcat.User.Newf("traffic manager version %q is already installed, use the '--upgrade' flag to replace it", releaseVer(existing))
 	}
 	return err
+}
+
+// makeMapFromValuePairs turns a slice of strings in the form x.y.z=v into
+// a map like {x: {y: {z: v}}} and returns it.
+func makeMapFromValuePairs(valuePairs []string) (map[string]any, error) {
+	vls := make(map[string]any)
+	for _, v := range valuePairs {
+		kv := strings.SplitN(v, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("%s is not in the form key=value", v)
+		}
+		keys := strings.Split(kv[0], ".")
+		val := kv[1]
+		vm := vls
+		nk := len(keys) - 1
+		for i := 0; i <= nk; i++ {
+			key := keys[i]
+			ov, ok := vm[key]
+			if !ok {
+				if i == nk {
+					vm[key] = val
+					break
+				}
+				m := make(map[string]any)
+				vm[key] = m
+				vm = m
+				continue
+			}
+			om, ok := ov.(map[string]any)
+			if ok {
+				if i < nk {
+					vm = om
+					continue
+				}
+			} else if i == nk {
+				return nil, fmt.Errorf("%s was defined as both %v and %v", kv[0], ov, kv[1])
+			}
+			return nil, fmt.Errorf("%s cannot be both a map and a scalar value", strings.Join(keys[:i+1], "."))
+		}
+	}
+	return vls, nil
 }
 
 // DeleteTrafficManager deletes the traffic manager.
