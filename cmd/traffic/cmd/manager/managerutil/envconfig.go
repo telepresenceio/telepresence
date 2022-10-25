@@ -29,17 +29,18 @@ import (
 // The Env is responsible for all parsing of the environment strings. No parsing of such
 // strings should be made elsewhere in the code.
 type Env struct {
-	LogLevel           string   `env:"LOG_LEVEL,             parser=logLevel"`
-	User               string   `env:"USER,                  parser=string,      default="`
-	ServerHost         string   `env:"SERVER_HOST,           parser=string,      default="`
-	ServerPort         uint16   `env:"SERVER_PORT,           parser=port-number"`
-	PrometheusPort     uint16   `env:"PROMETHEUS_PORT,       parser=port-number, default=0"`
-	MutatorWebhookPort uint16   `env:"MUTATOR_WEBHOOK_PORT,  parser=port-number, default=0"`
-	SystemAHost        string   `env:"SYSTEMA_HOST,          parser=string,      default="`
-	SystemAPort        uint16   `env:"SYSTEMA_PORT,          parser=port-number, default=0"`
-	ManagerNamespace   string   `env:"MANAGER_NAMESPACE,     parser=string,      default="`
-	ManagedNamespaces  []string `env:"MANAGED_NAMESPACES,    parser=split-trim,  default="`
-	APIPort            uint16   `env:"AGENT_REST_API_PORT,   parser=port-number, default=0"`
+	LogLevel               string   `env:"LOG_LEVEL,                parser=logLevel"`
+	User                   string   `env:"USER,                     parser=string,      default="`
+	ServerHost             string   `env:"SERVER_HOST,              parser=string,      default="`
+	ServerPort             uint16   `env:"SERVER_PORT,              parser=port-number"`
+	PrometheusPort         uint16   `env:"PROMETHEUS_PORT,          parser=port-number, default=0"`
+	MutatorWebhookPort     uint16   `env:"MUTATOR_WEBHOOK_PORT,     parser=port-number, default=0"`
+	SystemAHost            string   `env:"SYSTEMA_HOST,             parser=string,      default="`
+	SystemAPort            uint16   `env:"SYSTEMA_PORT,             parser=port-number, default=0"`
+	ManagerNamespace       string   `env:"MANAGER_NAMESPACE,        parser=string,      default="`
+	ManagedNamespaces      []string `env:"MANAGED_NAMESPACES,       parser=split-trim,  default="`
+	APIPort                uint16   `env:"AGENT_REST_API_PORT,      parser=port-number, default=0"`
+	InterceptDisableGlobal bool     `env:"INTERCEPT_DISABLE_GLOBAL, parser=bool"`
 
 	TracingGrpcPort uint16            `env:"TRACING_GRPC_PORT,     parser=port-number,default=0"`
 	MaxReceiveSize  resource.Quantity `env:"GRPC_MAX_RECEIVE_SIZE, parser=quantity"`
@@ -96,9 +97,11 @@ func (e *Env) QualifiedAgentImage() string {
 
 func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 	fhs := envconfig.DefaultFieldTypeHandlers()
-	sp := fhs[reflect.TypeOf("")]
-	sp.Parsers["string"] = sp.Parsers["possibly-empty-string"]
-	sp.Parsers["logLevel"] = sp.Parsers["logrus.ParseLevel"]
+	fp := fhs[reflect.TypeOf("")]
+	fp.Parsers["string"] = fp.Parsers["possibly-empty-string"]
+	fp.Parsers["logLevel"] = fp.Parsers["logrus.ParseLevel"]
+	fp = fhs[reflect.TypeOf(true)]
+	fp.Parsers["bool"] = fp.Parsers["strconv.ParseBool"]
 	fhs[reflect.TypeOf(uint16(0))] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){
 			"port-number": func(str string) (any, error) {

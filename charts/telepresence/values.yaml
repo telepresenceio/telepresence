@@ -153,6 +153,8 @@ managerRbac:
   # If namespaced is true, which namespaces the managerRbac should apply to
   namespaces: []
 
+intercept:
+  disableGlobal: false
 
 ################################################################################
 ## Agent Injector Configuration
