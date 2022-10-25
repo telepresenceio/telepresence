@@ -312,10 +312,13 @@ func (s *Session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rr
 	return rrs, dns2.RcodeSuccess, nil
 }
 
-func (s *Session) getInfo() *rpc.OutboundInfo {
+func (s *Session) getNetworkConfig() *rpc.NetworkConfig {
 	info := rpc.OutboundInfo{
 		Session: s.session,
 		Dns:     s.dnsServer.GetConfig(),
+	}
+	nc := &rpc.NetworkConfig{
+		OutboundInfo: &info,
 	}
 	if s.dnsLocalAddr != nil {
 		info.Dns.RemoteIp = s.dnsLocalAddr.IP
@@ -333,8 +336,11 @@ func (s *Session) getInfo() *rpc.OutboundInfo {
 			info.NeverProxySubnets[i] = iputil.IPNetToRPC(np.RoutedNet)
 		}
 	}
-
-	return &info
+	nc.Subnets = make([]*manager.IPNet, len(s.curSubnets))
+	for i, sn := range s.curSubnets {
+		nc.Subnets[i] = iputil.IPNetToRPC(sn)
+	}
+	return nc
 }
 
 func (s *Session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {

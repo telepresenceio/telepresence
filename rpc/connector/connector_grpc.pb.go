@@ -88,6 +88,8 @@ type ConnectorClient interface {
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
 	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*Result, error)
+	// GetConfig returns the current configuration
+	GetConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClientConfig, error)
 }
 
 type connectorClient struct {
@@ -355,6 +357,15 @@ func (c *connectorClient) RemoteMountAvailability(ctx context.Context, in *empty
 	return out, nil
 }
 
+func (c *connectorClient) GetConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClientConfig, error) {
+	out := new(ClientConfig)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetConfig", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -421,6 +432,8 @@ type ConnectorServer interface {
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
 	RemoteMountAvailability(context.Context, *emptypb.Empty) (*Result, error)
+	// GetConfig returns the current configuration
+	GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -505,6 +518,9 @@ func (UnimplementedConnectorServer) GetNamespaces(context.Context, *GetNamespace
 }
 func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoteMountAvailability not implemented")
+}
+func (UnimplementedConnectorServer) GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetConfig not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -990,6 +1006,24 @@ func _Connector_RemoteMountAvailability_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_GetConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GetConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GetConfig",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GetConfig(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1096,6 +1130,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoteMountAvailability",
 			Handler:    _Connector_RemoteMountAvailability_Handler,
+		},
+		{
+			MethodName: "GetConfig",
+			Handler:    _Connector_GetConfig_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

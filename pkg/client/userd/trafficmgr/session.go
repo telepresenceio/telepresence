@@ -256,8 +256,8 @@ func (s *session) ManagerVersion() semver.Version {
 	return s.managerVersion
 }
 
-func (s *session) GetSessionConfig() client.Config {
-	return s.sessionConfig
+func (s *session) GetSessionConfig() *client.Config {
+	return &s.sessionConfig
 }
 
 // connectCluster returns a configured cluster instance.

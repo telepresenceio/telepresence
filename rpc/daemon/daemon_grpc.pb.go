@@ -37,6 +37,8 @@ type DaemonClient interface {
 	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
 	GetClusterSubnets(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClusterSubnets, error)
+	// GetNetworkConfig returns the current network configuration
+	GetNetworkConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*NetworkConfig, error)
 	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
@@ -107,6 +109,15 @@ func (c *daemonClient) GetClusterSubnets(ctx context.Context, in *emptypb.Empty,
 	return out, nil
 }
 
+func (c *daemonClient) GetNetworkConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*NetworkConfig, error) {
+	out := new(NetworkConfig)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/GetNetworkConfig", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetDnsSearchPath", in, out, opts...)
@@ -150,6 +161,8 @@ type DaemonServer interface {
 	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
 	GetClusterSubnets(context.Context, *emptypb.Empty) (*ClusterSubnets, error)
+	// GetNetworkConfig returns the current network configuration
+	GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error)
 	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
@@ -180,6 +193,9 @@ func (UnimplementedDaemonServer) Disconnect(context.Context, *emptypb.Empty) (*e
 }
 func (UnimplementedDaemonServer) GetClusterSubnets(context.Context, *emptypb.Empty) (*ClusterSubnets, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClusterSubnets not implemented")
+}
+func (UnimplementedDaemonServer) GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetNetworkConfig not implemented")
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
@@ -311,6 +327,24 @@ func _Daemon_GetClusterSubnets_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_GetNetworkConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).GetNetworkConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.daemon.Daemon/GetNetworkConfig",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).GetNetworkConfig(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Daemon_SetDnsSearchPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Paths)
 	if err := dec(in); err != nil {
@@ -395,6 +429,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetClusterSubnets",
 			Handler:    _Daemon_GetClusterSubnets_Handler,
+		},
+		{
+			MethodName: "GetNetworkConfig",
+			Handler:    _Daemon_GetNetworkConfig_Handler,
 		},
 		{
 			MethodName: "SetDnsSearchPath",

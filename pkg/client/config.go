@@ -23,7 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-const configFile = "config.yml"
+const ConfigFile = "config.yml"
 
 // Config contains all configuration values for the telepresence CLI.
 type Config struct {
@@ -816,7 +816,7 @@ func ReplaceConfig(ctx context.Context, config *Config) {
 // GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
 func GetConfigFile(c context.Context) string {
 	dir, _ := filelocation.AppUserConfigDir(c)
-	return filepath.Join(dir, configFile)
+	return filepath.Join(dir, ConfigFile)
 }
 
 // GetDefaultConfig returns the default configuration settings.
@@ -874,7 +874,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
 		}
-		fileName := filepath.Join(dir, configFile)
+		fileName := filepath.Join(dir, ConfigFile)
 		bs, err := os.ReadFile(fileName)
 		if err != nil {
 			if os.IsNotExist(err) {

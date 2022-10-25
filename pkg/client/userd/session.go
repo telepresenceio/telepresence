@@ -2,6 +2,8 @@ package userd
 
 import (
 	"context"
+	"net"
+	"time"
 
 	"google.golang.org/grpc"
 	core "k8s.io/api/core/v1"
@@ -16,7 +18,9 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -34,6 +38,28 @@ type InterceptInfo interface {
 type KubeConfig interface {
 	GetRestConfig() *rest.Config
 	GetManagerNamespace() string
+}
+
+type Routing struct {
+	Subnets    []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
+	AlsoProxy  []*iputil.Subnet `json:"alsoProxy,omitempty" yaml:"alsoProxy,omitempty"`
+	NeverProxy []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
+}
+
+type DNS struct {
+	LocalIP         net.IP        `json:"localIP,omitempty" yaml:"localIP,omitempty"`
+	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
+	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
+	ExcludeSuffixes []string      `json:"excludeSuffixes,omitempty" yaml:"excludeSuffixes,omitempty"`
+	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty" yaml:"lookupTimeout,omitempty"`
+}
+
+type SessionConfig struct {
+	ClientFile       string `json:"clientFile,omitempty" yaml:"clientFile,omitempty"`
+	*client.Config   `json:"clientConfig" yaml:",inline"`
+	DNS              DNS     `json:"dns,omitempty" yaml:"dns,omitempty"`
+	Routing          Routing `json:"routing,omitempty" yaml:"routing,omitempty"`
+	ManagerNamespace string  `json:"managerNamespace,omitempty" yaml:"managerNamespace,omitempty"`
 }
 
 type NamespaceListener func(context.Context)
@@ -83,6 +109,7 @@ type Session interface {
 	SessionInfo() *manager.SessionInfo
 
 	ApplyConfig(context.Context) error
+	GetConfig(context.Context) (*SessionConfig, error)
 	StartServices(g *dgroup.Group)
 	Epilog(ctx context.Context)
 	Done() <-chan struct{}
