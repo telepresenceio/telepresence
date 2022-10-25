@@ -13,7 +13,7 @@ jobs:
         with:
           remove-labels: "ok to test"
         if: always()
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v3
@@ -31,7 +31,7 @@ jobs:
     runs-on: macos-latest
     needs: "build_image"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
@@ -87,7 +87,7 @@ jobs:
     runs-on: windows-2019
     needs: "build_image"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
@@ -160,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: "build_image"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
@@ -216,6 +216,8 @@ jobs:
     runs-on: [self-hosted, macOS, ARM64]
     needs: "build_image"
     steps:
+      - run: sysctl -a | grep kern.version
+        name: Get machine info
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
