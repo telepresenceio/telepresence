@@ -1,5 +1,5 @@
-name: "Prepare Kluster"
-description: "Provision a kluster"
+name: "Prepare Cluster"
+description: "Provision a cluster"
 inputs:
   token:
     description: "The kubeception token to use"
@@ -32,7 +32,7 @@ runs:
           KUBECONFIG=$(echo $KUBECONFIG | sed -e 's/^\///' -e 's/\//\\/g' -e 's/^./\0:/')
         fi
         echo "KUBECONFIG=$KUBECONFIG" >> $GITHUB_OUTPUT
-    - name: Create kluster
+    - name: Create cluster
       uses: datawire/infra-actions/provision-cluster@v0.2.0
       with:
         distribution: ${{ inputs.cluster-distribution }}
