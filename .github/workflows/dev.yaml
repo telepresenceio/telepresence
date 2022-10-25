@@ -48,7 +48,7 @@ jobs:
         with:
           name: image
       - run: make build
-      - uses: ./.github/actions/prepare-kluster
+      - uses: ./.github/actions/prepare-cluster
         with:
           token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           tel-image: tel2-image.tar
