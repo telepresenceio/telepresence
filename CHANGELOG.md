@@ -2,6 +2,9 @@
 
 ### 2.8.3 (TBD)
 
+- Feature: The traffic-manager can be configured to disable global (non-http) intercepts using the
+  Helm chart setting `intercept.disableGlobal`.
+
 - Feature: The port used for the mutating webhook can be configured using the Helm chart setting
   `agentInjector.webhook.port`.
 

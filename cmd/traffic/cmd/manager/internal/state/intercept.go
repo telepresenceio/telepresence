@@ -60,6 +60,13 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
+	env := managerutil.GetEnv(ctx)
+	if env.InterceptDisableGlobal {
+		if cr.InterceptSpec.Mechanism != "http" {
+			return interceptError(errcat.User.New("Global intercepts are not allowed. Please log in and use http intercepts"))
+		}
+	}
+
 	spec := cr.InterceptSpec
 	wl, err := k8sapi.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {
