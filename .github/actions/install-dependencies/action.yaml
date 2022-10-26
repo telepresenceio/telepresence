@@ -14,10 +14,30 @@ runs:
       name: install Linux dependencies
       shell: bash
       run: |
+        set -ex
+        
         sudo rm -f /etc/apt/sources.list.d/google-chrome.list
         sudo apt-get update
         sudo apt-get install -y sshfs socat libfuse-dev
         sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
+        
+        if [[ ${RUNNER_ARCH} == "ARM64" ]]; then
+          sudo apt-get install -y ca-certificates curl gnupg lsb-release
+
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          
+          # Set-up docker repository
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+          $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          
+          sudo apt-get update
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+          sudo apt-get install -y
+        
+          # Add current user to the docker group
+          sudo usermod -aG docker $USER
+        fi
     - if: runner.os == 'macOS'
       name: install macOS dependencies
       shell: bash
