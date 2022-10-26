@@ -152,6 +152,9 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 // GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
 // the agents).
 func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
+	if m.cloudConfig == nil {
+		return nil, status.Error(codes.Unavailable, "access to Ambassador Cloud is not configured")
+	}
 	return proto.Clone(m.cloudConfig).(*rpc.AmbassadorCloudConfig), nil
 }
 
