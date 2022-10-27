@@ -627,7 +627,6 @@ func (s *session) run(c context.Context) error {
 	case <-wc.Done():
 		// Time out when waiting for the cluster info to arrive
 		s.vifReady <- wc.Err()
-		close(s.vifReady)
 		s.dnsServer.Stop()
 		return wc.Err()
 	case <-s.vifReady:
