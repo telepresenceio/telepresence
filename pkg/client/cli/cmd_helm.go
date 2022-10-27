@@ -52,7 +52,7 @@ func helmInstallCommand() *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
 	flags.StringSliceVarP(&ha.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
-	flags.StringSliceVarP(&ha.valuePairs, "value", "v", []string{}, "specify a value as a.b=v (can specify multiple)")
+	flags.StringSliceVarP(&ha.valuePairs, "set", "", []string{}, "specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)")
 
 	ha.request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd

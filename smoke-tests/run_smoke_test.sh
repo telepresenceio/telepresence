@@ -472,14 +472,15 @@ case "$choice" in
     * ) echo "invalid"; exit 1;;
 esac
 
-$TELEPRESENCE quit -ru
+$TELEPRESENCE logout
+$TELEPRESENCE quit -s
 
 # For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
 if (helm list -n ambassador | grep traffic-manager); then
     $TELEPRESENCE helm uninstall >"$output_location"
 else
-    $TELEPRESENCE quit -ru >"$output_location"
+    $TELEPRESENCE quit -s >"$output_location"
 fi
 if [[ -n "$INSTALL_DEMO" ]]; then
     setup_demo_app
@@ -630,7 +631,7 @@ yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-
 # Now we need to update the config for license workflow
 if [[ -n "$USE_CHART" ]]; then
     $TELEPRESENCE logout > "$output_location"
-    $TELEPRESENCE quit -ru > "$output_location"
+    $TELEPRESENCE quit -s > "$output_location"
     helm uninstall -n ambassador traffic-manager > "$output_location"
 else
     $TELEPRESENCE helm uninstall > "$output_location"
@@ -834,7 +835,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
     #### Step 17 - Verify Invalid License Behavior (helm) ####
     ##########################################################
-    $TELEPRESENCE quit -ru >"$output_location"
+    $TELEPRESENCE quit -s >"$output_location"
     helm uninstall traffic-manager --namespace ambassador > "$output_location" 2>&1
 
     expired_license="eyJhbGciOiJSUzI1NiJ9.eyJhY2NvdW50SWQiOiJjOWQxYmMwMi1iOWYyLTQ3NW\

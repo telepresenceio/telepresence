@@ -230,7 +230,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	if vl := len(req.ValuePairs); vl > 0 {
 		vls, err := makeMapFromValuePairs(req.ValuePairs)
 		if err != nil {
-			return errcat.User.Newf("--value flag error: %v", err)
+			return errcat.User.Newf("--set flag error: %v", err)
 		}
 		values = chartutil.CoalesceTables(vls, values)
 	}
