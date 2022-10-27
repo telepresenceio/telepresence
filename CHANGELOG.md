@@ -8,6 +8,9 @@
 - Feature: The port used for the mutating webhook can be configured using the Helm chart setting
   `agentInjector.webhook.port`.
 
+- Feature: A new repeated `--set a.b.c=v` flag was added to the `telepresence helm install` command so that
+  values can be passed directly from the command line, without first storing them in a file.
+
 - Change: The default port for the mutating webhook is now `443`. It used to be `8443`.
 
 - Change: The traffic-manager will no longer default to use the `tel2` image for the traffic-agent when it is
