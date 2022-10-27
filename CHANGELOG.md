@@ -57,6 +57,7 @@
 - Bugfix: Single label names now resolves correctly when using Telepresence in Docker on a Linux host
 
 - Bugfix: The Helm chart value `appProtocolStrategy` is now correctly named (used to be `appPortStategy`)
+- Bugfix: Include file name in error message when failing to parse JSON file.
 
 ### 2.7.6 (September 16, 2022)
 
