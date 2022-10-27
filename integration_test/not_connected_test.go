@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"path/filepath"
 	"runtime"
 
 	"github.com/stretchr/testify/suite"
@@ -23,7 +22,7 @@ func init() {
 func (s *notConnectedSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := itest.WithUser(s.Context(), "default")
-	itest.TelepresenceOk(ctx, "helm", "install", "--values", filepath.Join("testdata", "connect-values.yaml"))
+	itest.TelepresenceOk(ctx, "helm", "install", "--set", "logLevel=debug,agent.logLevel=debug")
 	stdout := itest.TelepresenceOk(ctx, "connect")
 	s.Contains(stdout, "Connected to context")
 	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())

@@ -2,8 +2,14 @@
 
 ### 2.8.3 (TBD)
 
+- Feature: The traffic-manager can be configured to disable global (non-http) intercepts using the
+  Helm chart setting `intercept.disableGlobal`.
+
 - Feature: The port used for the mutating webhook can be configured using the Helm chart setting
   `agentInjector.webhook.port`.
+
+- Feature: A new repeated `--set a.b.c=v` flag was added to the `telepresence helm install` command so that
+  values can be passed directly from the command line, without first storing them in a file.
 
 - Change: The default port for the mutating webhook is now `443`. It used to be `8443`.
 
@@ -54,6 +60,7 @@
 - Bugfix: Single label names now resolves correctly when using Telepresence in Docker on a Linux host
 
 - Bugfix: The Helm chart value `appProtocolStrategy` is now correctly named (used to be `appPortStategy`)
+- Bugfix: Include file name in error message when failing to parse JSON file.
 
 ### 2.7.6 (September 16, 2022)
 
