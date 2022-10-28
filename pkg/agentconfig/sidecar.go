@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	// ConfigMap is the name of the ConfigMap that contains the agent configs
+	// ConfigMap is the name of the ConfigMap that contains the agent configs.
 	ConfigMap = "telepresence-agents"
 
 	ContainerName        = "traffic-agent"
@@ -28,20 +28,20 @@ const (
 	EnvPrefixAgent       = EnvPrefix + "AGENT_"
 	EnvPrefixApp         = EnvPrefix + "APP_"
 
-	// EnvInterceptContainer intercepted container propagated to client during intercept
+	// EnvInterceptContainer intercepted container propagated to client during intercept.
 	EnvInterceptContainer = "TELEPRESENCE_CONTAINER"
 
-	// EnvInterceptMounts mount points propagated to client during intercept
+	// EnvInterceptMounts mount points propagated to client during intercept.
 	EnvInterceptMounts = "TELEPRESENCE_MOUNTS"
 
-	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled
+	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
 	DomainPrefix     = "telepresence.getambassador.io/"
 	InjectAnnotation = DomainPrefix + "inject-" + ContainerName
 )
 
-// Intercept describes the mapping between a service port and an intercepted container port
+// Intercept describes the mapping between a service port and an intercepted container port.
 type Intercept struct {
 	// The name of the intercepted container port
 	ContainerPortName string `json:"containerPortName,omitempty"`
@@ -77,7 +77,7 @@ type Intercept struct {
 	AgentPort uint16 `json:"agentPort,omitempty"`
 }
 
-// Container describes one container that can have one or several intercepts
+// Container describes one container that can have one or several intercepts.
 type Container struct {
 	// Name of the intercepted container
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
@@ -95,7 +95,7 @@ type Container struct {
 	Mounts []string
 }
 
-// The Sidecar configures the traffic-agent sidecar
+// The Sidecar configures the traffic-agent sidecar.
 type Sidecar struct {
 	// If Create is true, then this Config has not yet been filled in.
 	Create bool `json:"create,omitempty"`
@@ -125,13 +125,22 @@ type Sidecar struct {
 	ManagerHost string `json:"managerHost,omitempty"`
 
 	// The port used when connecting to the traffic manager
-	ManagerPort int32 `json:"managerPort,omitempty"`
+	ManagerPort uint16 `json:"managerPort,omitempty"`
 
 	// The port used by the agents restFUL API server
 	APIPort uint16 `json:"apiPort,omitempty"`
 
 	// The port used by the agent's GRPC tracing server
 	TracingPort uint16 `json:"tracingPort,omitempty"`
+
+	// LogLevel used by the envoy instance
+	EnvoyLogLevel string
+
+	// The port used by the Envoy server
+	EnvoyServerPort uint16
+
+	// The port used for Envoy administration
+	EnvoyAdminPort uint16
 
 	// Resources for the sidecar
 	Resources *core.ResourceRequirements `json:"resources,omitempty"`

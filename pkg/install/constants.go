@@ -10,8 +10,6 @@ const (
 	ServiceNameAnnotation     = DomainPrefix + "inject-service-name"
 	ManualInjectAnnotation    = DomainPrefix + "manually-injected"
 	ManagerAppName            = "traffic-manager"
-	ManagerPortHTTP           = 8081
-	MutatorWebhookPortHTTPS   = 8443
 	MutatorWebhookTLSName     = "mutator-webhook-tls"
 	TelAppMountPoint          = "/tel_app_mounts"
 )

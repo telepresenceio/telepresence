@@ -123,7 +123,7 @@ Parsing:
 }
 
 // genTPCommand constructs a Telepresence command based on
-// the values that are set in the legacyCommand struct
+// the values that are set in the legacyCommand struct.
 func (lc *legacyCommand) genTPCommand() (string, error) {
 	var cmdSlice []string
 	switch {

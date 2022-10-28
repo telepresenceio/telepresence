@@ -22,7 +22,7 @@ import (
 )
 
 // getCurrentAgents returns a copy of the current agent snapshot
-// Deprecated
+// Deprecated.
 func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
@@ -36,7 +36,7 @@ func (tm *TrafficManager) getCurrentAgents() []*manager.AgentInfo {
 
 // getCurrentAgentsInNamespace returns a map of agents matching the given namespace from the current agent snapshot.
 // The map contains the first agent for each name found. Agents from replicas of the same workload are ignored.
-// Deprecated
+// Deprecated.
 func (tm *TrafficManager) getCurrentAgentsInNamespace(ns string) map[string]*manager.AgentInfo {
 	// Copy the current snapshot
 	tm.currentAgentsLock.Lock()
@@ -132,7 +132,6 @@ func (tm *TrafficManager) watchAgentsNS(ctx context.Context) error {
 		Session:    tm.session(),
 		Namespaces: nss,
 	}, opts...)
-
 	if err != nil {
 		if ctx.Err() == nil {
 			err = fmt.Errorf("manager.WatchAgentsNS dial: %w", err)
@@ -197,7 +196,7 @@ func (tm *TrafficManager) agentInfoWatcher(ctx context.Context) error {
 	return nil
 }
 
-// Deprecated
+// Deprecated.
 func (tm *TrafficManager) addAgent(
 	c context.Context,
 	svcProps *serviceProps,
@@ -209,7 +208,7 @@ func (tm *TrafficManager) addAgent(
 	namespace := workload.GetNamespace()
 	_, kind, err := legacyEnsureAgent(c, tm.Cluster, workload, svcProps, agentImageName, telepresenceAPIPort)
 	if err != nil {
-		if err == agentNotFound {
+		if err == errAgentNotFound {
 			return nil, &rpc.InterceptResult{
 				Error:     common.InterceptError_NOT_FOUND,
 				ErrorText: agentName,
@@ -236,7 +235,7 @@ func (tm *TrafficManager) addAgent(
 	return ai.Environment, result
 }
 
-// Deprecated
+// Deprecated.
 func (tm *TrafficManager) waitForAgent(ctx context.Context, name, namespace string) (*manager.AgentInfo, error) {
 	fullName := name + "." + namespace
 	waitCh := make(chan *manager.AgentInfo)

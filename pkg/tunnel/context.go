@@ -4,7 +4,7 @@ import "context"
 
 type poolKey struct{}
 
-// WithPool returns a context with the given Pool
+// WithPool returns a context with the given Pool.
 func WithPool(ctx context.Context, pool *Pool) context.Context {
 	return context.WithValue(ctx, poolKey{}, pool)
 }

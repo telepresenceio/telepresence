@@ -23,7 +23,7 @@ func (b *Bitfield256) GetBit(bv byte) bool {
 	return b[bv>>6]&(uint64(1)<<uint64(bv&0x3f)) != 0
 }
 
-// Equals returns true if this Bitfield256 equals the argument
+// Equals returns true if this Bitfield256 equals the argument.
 func (b *Bitfield256) Equals(other *Bitfield256) bool {
 	if other == nil {
 		return false
@@ -41,12 +41,12 @@ func (b *Bitfield256) OnesCount() (l int) {
 	return
 }
 
-// String prints the hexadecimal representation of the bits
+// String prints the hexadecimal representation of the bits.
 func (b *Bitfield256) String() string {
 	return fmt.Sprintf("%0.16x%0.16x%0.16x%0.16x", b[0], b[1], b[2], b[3])
 }
 
-// ToSlice returns an ordered slice of all bytes in this Bitfield256
+// ToSlice returns an ordered slice of all bytes in this Bitfield256.
 func (b *Bitfield256) ToSlice() []byte {
 	l := b.OnesCount() // faster and more accurate than repeatedly growing a slice
 	if l == 0 {

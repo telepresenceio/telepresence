@@ -1,12 +1,12 @@
 {{- if not .Values.rbac.only }}
-{{- $altNames := list ( printf "agent-injector.%s" (include "telepresence.namespace" .)) ( printf "agent-injector.%s.svc" (include "telepresence.namespace" .)) -}}
+{{- $altNames := list ( printf "agent-injector.%s" (include "traffic-manager.namespace" .)) ( printf "agent-injector.%s.svc" (include "traffic-manager.namespace" .)) -}}
 {{- $genCA := genCA "agent-injector-ca" 365 -}}
 {{- $genCert := genSignedCert "agent-injector" nil $altNames 365 $genCA -}}
-{{- $secretData := (lookup "v1" "Secret" (include "telepresence.namespace" .) .Values.agentInjector.secret.name).data -}}
+{{- $secretData := (lookup "v1" "Secret" (include "traffic-manager.namespace" .) .Values.agentInjector.secret.name).data -}}
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: {{ .Values.agentInjector.webhook.name }}-{{ include "telepresence.namespace" . }}
+  name: {{ .Values.agentInjector.webhook.name }}-{{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 webhooks:
@@ -22,7 +22,7 @@ webhooks:
 {{- end }}
     service:
       name: {{ .Values.agentInjector.name }}
-      namespace: {{ include "telepresence.namespace" . }}
+      namespace: {{ include "traffic-manager.namespace" . }}
       path: {{ .Values.agentInjector.webhook.servicePath }}
       port: {{ .Values.agentInjector.webhook.port }}
   rules:
@@ -56,7 +56,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: {{ .Values.agentInjector.secret.name }}
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 data:

@@ -44,7 +44,7 @@ func commands() []command {
 
 // GetCommands will return all commands implemented by the connector daemon.
 func GetCommands(ctx context.Context) cliutil.CommandGroups {
-	var groups = cliutil.CommandGroups{}
+	groups := cliutil.CommandGroups{}
 	for _, cmd := range commands() {
 		var (
 			groupName = cmd.group()
@@ -59,7 +59,7 @@ func GetCommands(ctx context.Context) cliutil.CommandGroups {
 // GetCommandsForLocal will return the same commands as GetCommands but in a non-runnable state that reports
 // the error given. Should be used to build help strings even if it's not possible to connect to the connector daemon.
 func GetCommandsForLocal(ctx context.Context, err error) cliutil.CommandGroups {
-	var groups = cliutil.CommandGroups{}
+	groups := cliutil.CommandGroups{}
 	for _, cmd := range commands() {
 		var (
 			groupName = cmd.group()

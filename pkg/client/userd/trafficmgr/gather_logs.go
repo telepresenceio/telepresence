@@ -64,7 +64,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 			result.Store(podYaml, err.Error())
 			return
 		}
-		if err = os.WriteFile(filepath.Join(exportDir, podYaml), b, 0666); err != nil {
+		if err = os.WriteFile(filepath.Join(exportDir, podYaml), b, 0o666); err != nil {
 			result.Store(podYaml, err.Error())
 			return
 		}
@@ -115,7 +115,7 @@ func (tm *TrafficManager) ForeachAgentPod(ctx context.Context, fn func(context.C
 }
 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
-// connector.LogsRequest and returns them to the caller
+// connector.LogsRequest and returns them to the caller.
 func (tm *TrafficManager) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	exportDir := request.ExportDir
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()

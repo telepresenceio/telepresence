@@ -8,7 +8,15 @@ import (
 
 type setLogLevelContextKey struct{}
 
-// SetLevel sets the log-level for the logger of the given context
+var DlogLevelNames = [5]string{
+	"error",
+	"warning",
+	"info",
+	"debug",
+	"trace",
+}
+
+// SetLevel sets the log-level for the logger of the given context.
 func SetLevel(ctx context.Context, logLevelStr string) {
 	if setter, ok := ctx.Value(setLogLevelContextKey{}).(func(string)); ok {
 		setter(logLevelStr)
@@ -16,7 +24,7 @@ func SetLevel(ctx context.Context, logLevelStr string) {
 }
 
 // WithLevelSetter enables setting the log-level of the given Logger by using the returned context as
-// an argument to the SetLevel function
+// an argument to the SetLevel function.
 func WithLevelSetter(ctx context.Context, logrusLogger *logrus.Logger) context.Context {
 	return context.WithValue(ctx, setLogLevelContextKey{}, func(logLevelStr string) {
 		SetLogrusLevel(logrusLogger, logLevelStr)

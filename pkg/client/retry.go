@@ -7,8 +7,10 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-const defaultRetryDelay = 100 * time.Millisecond
-const defaultMaxDelay = 3 * time.Second
+const (
+	defaultRetryDelay = 100 * time.Millisecond
+	defaultMaxDelay   = 3 * time.Second
+)
 
 // Retry will run the given function repeatedly with an increasing delay until it returns without error.
 //

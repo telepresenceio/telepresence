@@ -47,6 +47,36 @@ func (is *installSuite) SetupSuite() {
 	_ = itest.Run(ctx, "helm", "uninstall", "traffic-manager", "--namespace", is.ManagerNamespace())
 }
 
+func (is *installSuite) Test_NonHelmInstall() {
+	ctx := is.Context()
+	require := is.Require()
+
+	chart, err := is.PackageHelmChart(ctx)
+	require.NoError(err)
+	values := is.GetValuesForHelm(map[string]string{}, is.ManagerNamespace(), is.AppNamespace())
+	values = append([]string{"template", "traffic-manager", chart, "-n", is.ManagerNamespace()}, values...)
+	manifest, err := itest.Output(ctx, "helm", values...)
+	require.NoError(err)
+	cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(manifest)
+	out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
+	cmd.Stdout = out
+	cmd.Stderr = out
+	require.NoError(cmd.Run())
+	defer func() {
+		cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "delete", "-f", "-")
+		cmd.Stdin = strings.NewReader(manifest)
+		out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
+		cmd.Stdout = out
+		cmd.Stderr = out
+		// Sometimes the traffic-agents configmap gets wiped, causing the delete command to fail, hence we don't require.NoError
+		_ = cmd.Run()
+	}()
+	stdout := itest.TelepresenceOk(ctx, "connect")
+	is.Contains(stdout, "Connected to context")
+	defer itest.TelepresenceQuitOk(ctx)
+}
+
 func (is *installSuite) Test_FindTrafficManager_notPresent() {
 	ctx := is.Context()
 	ctx, _ = is.cluster(ctx, "default", is.ManagerNamespace()) // ensure that k8sapi is initialized
@@ -98,11 +128,9 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	defer restoreVersion()
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
-	ctx = itest.WithConfig(ctx, &client.Config{
-		Timeouts: client.Timeouts{
-			PrivateHelm: 30 * time.Second,
-		},
-	})
+	cfg := client.GetDefaultConfig()
+	cfg.Timeouts.PrivateHelm = 30 * time.Second
+	ctx = itest.WithConfig(ctx, &cfg)
 	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 	require.Error(ensureTrafficManager(ctx, kc))
 	restoreVersion()
@@ -283,7 +311,7 @@ func (is *installSuite) Test_No_Upgrade() {
 	/*
 		require.Error(ensureTrafficManager(ctx, kc))
 		// using --upgrade and --values replaces TM with values
-		helmValues := filepath.Join("integration_test", "testdata", "dns-values.yaml")
+		helmValues := filepath.Join("integration_test", "testdata", "routing-values.yaml")
 		require.NoError(helm.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &connector.HelmRequest{
 			Type:       connector.HelmRequest_UPGRADE,
 			ValuePaths: []string{helmValues},
@@ -329,7 +357,8 @@ func (is *installSuite) cluster(ctx context.Context, context, managerNamespace s
 	cfgAndFlags, err := k8s.NewConfig(ctx, map[string]string{
 		"KUBECONFIG": itest.KubeConfig(ctx),
 		"context":    context,
-		"namespace":  managerNamespace})
+		"namespace":  managerNamespace,
+	})
 	require.NoError(err)
 	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
 	require.NoError(err)

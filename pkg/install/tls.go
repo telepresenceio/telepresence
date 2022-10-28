@@ -14,7 +14,7 @@ import (
 )
 
 // GenerateKeys creates the crt.pem, key.pem, and ca.pem needed when
-// setting up the mutator webhook for agent auto-injection
+// setting up the mutator webhook for agent auto-injection.
 func GenerateKeys(mgrNamespace string) (crtPem, keyPem, caPem []byte, err error) {
 	caCert := &x509.Certificate{
 		SerialNumber: big.NewInt(0xefecab0),
@@ -84,7 +84,7 @@ func bigIntHash(n *big.Int) []byte {
 	return h.Sum(nil)
 }
 
-// ToPEM returns the PEM encoding of data
+// ToPEM returns the PEM encoding of data.
 func ToPEM(file, keyType string, data []byte) ([]byte, error) {
 	wrt := bytes.Buffer{}
 	if err := pem.Encode(&wrt, &pem.Block{Type: keyType, Bytes: data}); err != nil {

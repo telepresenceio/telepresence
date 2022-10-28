@@ -2,9 +2,12 @@ package managerutil
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
@@ -46,6 +49,7 @@ type unauthdClient struct {
 func (c *unauthdClient) Close(ctx context.Context) error {
 	return nil
 }
+
 func (p *UnauthdConnProvider) BuildClient(ctx context.Context, conn *grpc.ClientConn) (SystemaCRUDClient, error) {
 	client := systema.NewSystemACRUDClient(conn)
 	return &unauthdClient{client}, nil
@@ -53,11 +57,19 @@ func (p *UnauthdConnProvider) BuildClient(ctx context.Context, conn *grpc.Client
 
 func AgentImageFromSystemA(ctx context.Context) (string, error) {
 	// This is currently the only use case for the unauthenticated pool, but it's very important that we be able to get the image name
-	systemaPool := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName)
+	systemaPool, err := a8rcloud.GetSystemAPool[SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName)
+	if err != nil {
+		return "", err
+	}
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {
 		return "", err
 	}
+	defer func() {
+		if err := systemaPool.Done(ctx); err != nil {
+			dlog.Errorf(ctx, "unexpected error when returning to systemA pool: %v", err)
+		}
+	}()
 	resp, err := systemaClient.PreferredAgent(ctx, &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
@@ -65,8 +77,26 @@ func AgentImageFromSystemA(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err = systemaPool.Done(ctx); err != nil {
+	return resp.GetImageName(), nil
+}
+
+func AgentImageFromSystemAWithRetry(ctx context.Context) (string, error) {
+	img, err := AgentImageFromSystemA(ctx)
+	if err == nil {
+		return img, nil
+	}
+
+	if strings.Contains(err.Error(), "not configured") {
+		// No use retrying when access isn't configured. This is normally prohibited by a Helm chart
+		// assertion that either systemA is configured or AGENT_IMAGE is set.
 		return "", err
 	}
-	return resp.GetImageName(), nil
+
+	// Retry several accesses before giving up. Giving up here causes the webhook injector to be disabled.
+	err = client.Retry(ctx, "retrieve agent-image", func(ctx context.Context) error {
+		dlog.Warnf(ctx, "unable to retrieve preferred agent image: %v. Retrying", err)
+		img, err = AgentImageFromSystemA(ctx)
+		return err
+	}, 3*time.Second)
+	return img, err
 }

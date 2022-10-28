@@ -21,6 +21,7 @@ func newLoglevelSubscribers() *loglevelSubscribers {
 		subscribers: make(map[int]chan *rpc.LogLevelRequest),
 	}
 }
+
 func (ss *loglevelSubscribers) notify(ctx context.Context, ll *rpc.LogLevelRequest) {
 	ss.Lock()
 	defer ss.Unlock()
@@ -67,7 +68,8 @@ func (ss *loglevelSubscribers) unsubscribe(id int) {
 
 func (ss *loglevelSubscribers) subscriberLoop(ctx context.Context, rec interface {
 	Send(request *rpc.LogLevelRequest) error
-}) error {
+},
+) error {
 	id, ch := ss.subscribe()
 	defer ss.unsubscribe(id)
 	for {

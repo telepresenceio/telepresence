@@ -1,8 +1,68 @@
 # Changelog
 
-### 2.8.0 (TBD)
+### 2.8.3 (October 27, 2022)
+
+- Feature: The traffic-manager can be configured to disable global (non-http) intercepts using the
+  Helm chart setting `intercept.disableGlobal`.
+
+- Feature: The port used for the mutating webhook can be configured using the Helm chart setting
+  `agentInjector.webhook.port`.
+
+- Feature: A new repeated `--set a.b.c=v` flag was added to the `telepresence helm install` command so that
+  values can be passed directly from the command line, without first storing them in a file.
+
+- Change: The default port for the mutating webhook is now `443`. It used to be `8443`.
+
+- Change: The traffic-manager will no longer default to use the `tel2` image for the traffic-agent when it is
+  unable to connect to Ambassador Cloud. Air-gapped environments must declare what image to use in the Helm chart.
+
+- Bugfix: `telepresence connect` now works as long as the traffic manager is installed, even if
+  it wasn't installed via `helm install`
+
+- Bugfix: Telepresence check-vpn no longer crashes when the daemons don't start properly.
+
+- Bugfix: The root daemon no longer crashes when the session boot times out before the cluster connection succeeds.
+
+### 2.8.2 (October 15, 2022)
+
+- Feature: The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,
+  `MX`, `NS`, `PTR`, `SRV`, and `TXT`.
+
+- Feature: A new `client` struct was added to the Helm chart. It contains a `connectionTTL` that controls
+  how long the traffic manager will retain a client connection without seeing any sign of life from the client.
+
+- Feature: A `dns` struct container the fields `includeSuffixes` and `excludeSuffixes` was added to the Helm 
+  chart `client` struct, making those values configurable per cluster.
+
+- Feature: The API port used by the traffic-manager is now configurable using the Helm chart value `apiPort`.
+  The default port is 8081.
+
+- Change: The Helm chart `dnsConfig` was deprecated but retained for backward compatibility. The fields
+  `alsoProxySubnets` and `neverProxySubnets` can now be found under `routing` in the `client` struct.
+
+- Change: The Helm chart `agentInjector.agentImage` was moved to `agent.image`. The old value is deprecated but
+  retained for backward compatibility.
+
+- Change: The Helm chart `agentInjector.appProtocolStrategy` was moved to `agent.appProtocolStrategy`. The old 
+  value is deprecated but retained for backward compatibility.
+
+- Change: The Helm chart `dnsServiceName`, `dnsServiceNamespace`, and `dnsServiceIP` has been removed, because
+  they are no longer needed. The TUN-device will use the traffic-manager pod-IP on platforms where it needs to
+  dedicate an IP for its local resolver.
+
+- Bugfix: Environment variable interpolation now works for all definitions that are copied from pod containers
+  into the injected traffic-agent container.
+
+- Bugfix: An attempt to create simultaneous intercepts that span multiple namespace on the same workstation
+  is detected early and prohibited instead of resulting in failing DNS lookups later on.
+
+- Bugfix: Spurious and incorrect ""!! SRV xxx"" messages will no longer appear in the logs when the reason
+  is normal context cancellation.
+
+- Bugfix: Single label names now resolves correctly when using Telepresence in Docker on a Linux host
 
 - Bugfix: The Helm chart value `appProtocolStrategy` is now correctly named (used to be `appPortStategy`)
+- Bugfix: Include file name in error message when failing to parse JSON file.
 
 ### 2.7.6 (September 16, 2022)
 

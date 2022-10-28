@@ -4,128 +4,209 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"reflect"
+	"strconv"
 	"strings"
+	"time"
 
-	"github.com/sethvargo/go-envconfig"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/datawire/dlib/derror"
+	"github.com/datawire/envconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
+// Env is the traffic-manager's environment. It does not define any defaults because all
+// defaults are declared in the Helm chart that creates the deployment. The reason for this
+// is that some defaults are needed in other places in the Helm chart. In other words, since
+// the Helm chart needs access to all defaults, and the traffic-manager only needs a subset,
+// it's better to declare defaults in the Helm chart.
+//
+// The Env is responsible for all parsing of the environment strings. No parsing of such
+// strings should be made elsewhere in the code.
 type Env struct {
-	LogLevel       string `env:"LOG_LEVEL,default=info"`
-	User           string `env:"USER,default="`
-	ServerHost     string `env:"SERVER_HOST,default="`
-	ServerPort     string `env:"SERVER_PORT,default=8081"`
-	PrometheusPort string `env:"PROMETHEUS_PORT,default=0"`
-	SystemAHost    string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
-	SystemAPort    string `env:"SYSTEMA_PORT,default=443"`
+	LogLevel               string   `env:"LOG_LEVEL,                parser=logLevel"`
+	User                   string   `env:"USER,                     parser=string,      default="`
+	ServerHost             string   `env:"SERVER_HOST,              parser=string,      default="`
+	ServerPort             uint16   `env:"SERVER_PORT,              parser=port-number"`
+	PrometheusPort         uint16   `env:"PROMETHEUS_PORT,          parser=port-number, default=0"`
+	MutatorWebhookPort     uint16   `env:"MUTATOR_WEBHOOK_PORT,     parser=port-number, default=0"`
+	SystemAHost            string   `env:"SYSTEMA_HOST,             parser=string,      default="`
+	SystemAPort            uint16   `env:"SYSTEMA_PORT,             parser=port-number, default=0"`
+	ManagerNamespace       string   `env:"MANAGER_NAMESPACE,        parser=string,      default="`
+	ManagedNamespaces      []string `env:"MANAGED_NAMESPACES,       parser=split-trim,  default="`
+	APIPort                uint16   `env:"AGENT_REST_API_PORT,      parser=port-number, default=0"`
+	InterceptDisableGlobal bool     `env:"INTERCEPT_DISABLE_GLOBAL, parser=bool"`
 
-	ManagerNamespace    string                     `env:"MANAGER_NAMESPACE,default="`
-	ManagedNamespaces   string                     `env:"MANAGED_NAMESPACES,default="`
-	AgentRegistry       string                     `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
-	AgentImage          string                     `env:"TELEPRESENCE_AGENT_IMAGE,default="`
-	AgentPort           int32                      `env:"TELEPRESENCE_AGENT_PORT,default=9900"`
-	AgentResources      string                     `env:"AGENT_RESOURCES,default="`
-	AgentInitResources  string                     `env:"AGENT_INIT_RESOURCES,default="`
-	APIPort             int32                      `env:"TELEPRESENCE_API_PORT,default="`
-	TracingPort         int32                      `env:"TELEPRESENCE_GRPC_TRACE_PORT,default="`
-	MaxReceiveSize      resource.Quantity          `env:"TELEPRESENCE_MAX_RECEIVE_SIZE,default=4Mi"`
-	AppProtocolStrategy k8sapi.AppProtocolStrategy `env:"TELEPRESENCE_APP_PROTO_STRATEGY,default="`
-	AgentInjectPolicy   agentconfig.InjectPolicy   `env:"AGENT_INJECT_POLICY,default="`
+	TracingGrpcPort uint16            `env:"TRACING_GRPC_PORT,     parser=port-number,default=0"`
+	MaxReceiveSize  resource.Quantity `env:"GRPC_MAX_RECEIVE_SIZE, parser=quantity"`
 
-	PodCIDRStrategy string `env:"POD_CIDR_STRATEGY,default=auto"`
-	PodCIDRs        string `env:"POD_CIDRS,default="`
-	PodIP           string `env:"TELEPRESENCE_MANAGER_POD_IP,default="`
+	PodCIDRStrategy string       `env:"POD_CIDR_STRATEGY, parser=nonempty-string"`
+	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
+	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
 
-	DNSServiceName       string `env:"DNS_SERVICE_NAME,default=coredns"`
-	DNSServiceNamespace  string `env:"DNS_SERVICE_NAMESPACE,default=kube-system"`
-	DNSServiceIP         string `env:"DNS_SERVICE_IP,default="`
-	DNSAlsoProxySubnets  string `env:"ALSO_PROXY_SUBNETS,default="`
-	DNSNeverProxySubnets string `env:"NEVER_PROXY_SUBNETS,default="`
+	AgentRegistry            string                     `env:"AGENT_REGISTRY,           parser=nonempty-string"`
+	AgentImage               string                     `env:"AGENT_IMAGE,              parser=string,         default="`
+	AgentInjectPolicy        agentconfig.InjectPolicy   `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
+	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
+	AgentLogLevel            string                     `env:"AGENT_LOG_LEVEL,          parser=logLevel,       defaultFrom=LogLevel"`
+	AgentPort                uint16                     `env:"AGENT_PORT,               parser=port-number"`
+	AgentResources           *core.ResourceRequirements `env:"AGENT_RESOURCES,          parser=json-resources, default="`
+	AgentInitResources       *core.ResourceRequirements `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
+	AgentEnvoyLogLevel       string                     `env:"AGENT_ENVOY_LOG_LEVEL,    parser=logLevel,       defaultFrom=AgentLogLevel"`
+	AgentEnvoyServerPort     uint16                     `env:"AGENT_ENVOY_SERVER_PORT,  parser=port-number"`
+	AgentEnvoyAdminPort      uint16                     `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
+
+	ClientRoutingAlsoProxySubnets  []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  parser=split-ipnet, default="`
+	ClientRoutingNeverProxySubnets []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, parser=split-ipnet, default="`
+	ClientDnsExcludeSuffixes       []string      `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,        parser=split-trim"`
+	ClientDnsIncludeSuffixes       []string      `env:"CLIENT_DNS_INCLUDE_SUFFIXES,        parser=split-trim,  default="`
+	ClientConnectionTTL            time.Duration `env:"CLIENT_CONNECTION_TTL,              parser=time.ParseDuration"`
 }
 
 type envKey struct{}
 
 func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
-	gc := &agentmap.GeneratorConfig{
-		AgentPort:           uint16(e.AgentPort),
-		APIPort:             uint16(e.APIPort),
-		TracingPort:         uint16(e.TracingPort),
+	return &agentmap.GeneratorConfig{
+		AgentPort:           e.AgentPort,
+		APIPort:             e.APIPort,
+		TracingPort:         e.TracingGrpcPort,
+		ManagerPort:         e.ServerPort,
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
-		LogLevel:            e.LogLevel,
-	}
-	parseResources := func(js string) (*core.ResourceRequirements, error) {
-		if js == "" {
-			return nil, nil
-		}
-		var rr *core.ResourceRequirements
-		if err := json.Unmarshal([]byte(js), &rr); err != nil {
-			return nil, err
-		}
-		return rr, nil
-	}
-	var err error
-	if gc.InitResources, err = parseResources(e.AgentInitResources); err != nil {
-		return nil, err
-	}
-	if gc.Resources, err = parseResources(e.AgentResources); err != nil {
-		return nil, err
-	}
-	return gc, nil
+		LogLevel:            e.AgentLogLevel,
+		InitResources:       e.AgentInitResources,
+		Resources:           e.AgentResources,
+		EnvoyServerPort:     e.AgentEnvoyServerPort,
+		EnvoyAdminPort:      e.AgentEnvoyAdminPort,
+		EnvoyLogLevel:       e.AgentEnvoyLogLevel,
+	}, nil
 }
 
 func (e *Env) QualifiedAgentImage() string {
 	img := e.AgentImage
 	if img == "" {
-		img = "tel2:" + strings.TrimPrefix(version.Version, "v")
+		return ""
 	}
 	return e.AgentRegistry + "/" + img
 }
 
-func (e *Env) GetManagedNamespaces() []string {
-	if mns := e.ManagedNamespaces; mns != "" {
-		return strings.Split(mns, " ")
+func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
+	fhs := envconfig.DefaultFieldTypeHandlers()
+	fp := fhs[reflect.TypeOf("")]
+	fp.Parsers["string"] = fp.Parsers["possibly-empty-string"]
+	fp.Parsers["logLevel"] = fp.Parsers["logrus.ParseLevel"]
+	fp = fhs[reflect.TypeOf(true)]
+	fp.Parsers["bool"] = fp.Parsers["strconv.ParseBool"]
+	fhs[reflect.TypeOf(uint16(0))] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"port-number": func(str string) (any, error) {
+				pn, err := strconv.ParseUint(str, 10, 16)
+				return uint16(pn), err
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.SetUint(uint64(src.(uint16))) },
 	}
-	return nil
-}
-
-func (e *Env) GetAlsoProxySubnets() ([]*manager.IPNet, error) {
-	return parseRawSubnets(e.DNSAlsoProxySubnets)
-}
-
-func (e *Env) GetNeverProxySubnets() ([]*manager.IPNet, error) {
-	return parseRawSubnets(e.DNSNeverProxySubnets)
-}
-
-func parseRawSubnets(ipNetsStr string) ([]*manager.IPNet, error) {
-	if ipNetsStr == "" { // env var not set
-		return nil, nil
+	fhs[reflect.TypeOf(k8sapi.AppProtocolStrategy(0))] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"app-proto-strategy": func(str string) (any, error) {
+				return k8sapi.NewAppProtocolStrategy(str)
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.SetInt(int64(src.(k8sapi.AppProtocolStrategy))) },
 	}
-
-	splitIPNets := strings.Split(ipNetsStr, " ")
-	ipNets := make([]*manager.IPNet, len(splitIPNets))
-	for i, s := range splitIPNets {
-		_, ipNet, err := net.ParseCIDR(s)
-		if err != nil {
-			return nil, err
-		}
-		ipNets[i] = iputil.IPNetToRPC(ipNet)
+	fhs[reflect.TypeOf(agentconfig.InjectPolicy(0))] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"enable-policy": func(str string) (any, error) {
+				return agentconfig.NewEnablePolicy(str)
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.SetInt(int64(src.(agentconfig.InjectPolicy))) },
 	}
-	return ipNets, nil
+	fhs[reflect.TypeOf(resource.Quantity{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"quantity": func(str string) (any, error) {
+				return resource.ParseQuantity(str)
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(resource.Quantity))) },
+	}
+	fhs[reflect.TypeOf(net.IP{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"ip": func(str string) (any, error) { //nolint:unparam // API requirement
+				return iputil.Parse(str), nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(net.IP))) },
+	}
+	fhs[reflect.TypeOf([]string{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"split-trim": func(str string) (any, error) { //nolint:unparam // API requirement
+				if len(str) == 0 {
+					return nil, nil
+				}
+				ss := strings.Split(str, " ")
+				for i, s := range ss {
+					ss[i] = strings.TrimSpace(s)
+				}
+				return ss, nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]string))) },
+	}
+	fhs[reflect.TypeOf([]*net.IPNet{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"split-ipnet": func(str string) (any, error) {
+				if len(str) == 0 {
+					return nil, nil
+				}
+				ss := strings.Split(str, " ")
+				ns := make([]*net.IPNet, len(ss))
+				for i, s := range ss {
+					var err error
+					if _, ns[i], err = net.ParseCIDR(strings.TrimSpace(s)); err != nil {
+						return nil, err
+					}
+				}
+				return ns, nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]*net.IPNet))) },
+	}
+	fhs[reflect.TypeOf(&core.ResourceRequirements{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"json-resources": func(js string) (any, error) {
+				if js == "" {
+					return nil, nil
+				}
+				var rr *core.ResourceRequirements
+				if err := json.Unmarshal([]byte(js), &rr); err != nil {
+					return nil, err
+				}
+				return rr, nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(*core.ResourceRequirements))) },
+	}
+	return fhs
 }
 
-func LoadEnv(ctx context.Context) (context.Context, error) {
-	var env Env
-	if err := envconfig.Process(ctx, &env); err != nil {
-		return ctx, err
+func LoadEnv(ctx context.Context, lookupFunc func(string) (string, bool)) (context.Context, error) {
+	env := Env{}
+	parser, err := envconfig.GenerateParser(reflect.TypeOf(env), fieldTypeHandlers())
+	if err != nil {
+		panic(err)
+	}
+	var errs derror.MultiError
+	warn, fatal := parser.ParseFromEnv(&env, lookupFunc)
+	errs = append(errs, warn...)
+	errs = append(errs, fatal...)
+	if len(errs) > 0 {
+		return ctx, errs
 	}
 	return WithEnv(ctx, &env), nil
 }

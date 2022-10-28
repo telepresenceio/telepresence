@@ -1,3 +1,4 @@
+logLevel: debug
 
 clientRbac:
   create: true

@@ -108,21 +108,21 @@ func (s *nsPair) DeleteSvcAndWorkload(ctx context.Context, workload, name string
 	DeleteSvcAndWorkload(ctx, workload, name, s.namespace)
 }
 
-// Kubectl runs kubectl with the default context and the application namespace
+// Kubectl runs kubectl with the default context and the application namespace.
 func (s *nsPair) Kubectl(ctx context.Context, args ...string) error {
 	getT(ctx).Helper()
 	return Kubectl(ctx, s.namespace, args...)
 }
 
 // KubectlOk runs kubectl with the default context and the application namespace and returns its combined output
-// and fails if an error occurred
+// and fails if an error occurred.
 func (s *nsPair) KubectlOk(ctx context.Context, args ...string) string {
 	out, err := KubectlOut(ctx, s.namespace, args...)
 	require.NoError(getT(ctx), err)
 	return out
 }
 
-// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output
+// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output.
 func (s *nsPair) KubectlOut(ctx context.Context, args ...string) (string, error) {
 	getT(ctx).Helper()
 	return KubectlOut(ctx, s.namespace, args...)

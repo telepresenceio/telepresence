@@ -36,7 +36,7 @@ func (d discard) WithField(_ string, _ any) dlog.Logger {
 	return d
 }
 
-// WithDiscardingLogger returns a context that discards all log output
+// WithDiscardingLogger returns a context that discards all log output.
 func WithDiscardingLogger(ctx context.Context) context.Context {
 	return dlog.WithLogger(ctx, discard(0))
 }

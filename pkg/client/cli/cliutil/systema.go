@@ -33,22 +33,11 @@ import (
 // login.  If the `apikey` argument is empty an interactive login is performed; if it is non-empty
 // the key is used instead of performing an interactive login.
 func EnsureLoggedIn(ctx context.Context, apikey string) (connector.LoginResult_Code, error) {
-	err := GetTelepresencePro(ctx)
+	err := getTelepresencePro(ctx, GetUserDaemon(ctx))
 	if err != nil {
 		return connector.LoginResult_UNSPECIFIED, err
 	}
-	var code connector.LoginResult_Code
-	err = WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		var err error
-		code, err = ClientEnsureLoggedIn(ctx, apikey, connectorClient)
-		return err
-	})
-	return code, err
-}
-
-// ClientEnsureLoggedIn is like EnsureLoggedIn but uses an already acquired ConnectorClient.
-func ClientEnsureLoggedIn(ctx context.Context, apikey string, connectorClient connector.ConnectorClient) (connector.LoginResult_Code, error) {
-	resp, err := connectorClient.Login(ctx, &connector.LoginRequest{
+	resp, err := GetUserDaemon(ctx).Login(ctx, &connector.LoginRequest{
 		ApiKey: apikey,
 	})
 	if err != nil {
@@ -62,10 +51,7 @@ func ClientEnsureLoggedIn(ctx context.Context, apikey string, connectorClient co
 
 // Logout logs out of Ambassador Cloud.  Returns an error if not logged in.
 func Logout(ctx context.Context) error {
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		_, err := connectorClient.Logout(ctx, &empty.Empty{})
-		return err
-	})
+	_, err := GetUserDaemon(ctx).Logout(ctx, &empty.Empty{})
 	if grpcStatus.Code(err) == grpcCodes.NotFound {
 		err = errcat.User.New(grpcStatus.Convert(err).Message())
 	}
@@ -78,10 +64,7 @@ func Logout(ctx context.Context) error {
 // EnsureLoggedOut ensures that the user is logged out of Ambassador Cloud.  Returns nil if not
 // logged in.
 func EnsureLoggedOut(ctx context.Context) error {
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		_, err := connectorClient.Logout(ctx, &empty.Empty{})
-		return err
-	})
+	_, err := GetUserDaemon(ctx).Logout(ctx, &empty.Empty{})
 	if grpcStatus.Code(err) == grpcCodes.NotFound {
 		err = nil
 	}
@@ -99,14 +82,9 @@ func HasLoggedIn(ctx context.Context) bool {
 }
 
 func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*connector.UserInfo, error) {
-	var userInfo *connector.UserInfo
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		var err error
-		userInfo, err = connectorClient.GetCloudUserInfo(ctx, &connector.UserInfoRequest{
-			AutoLogin: autoLogin,
-			Refresh:   refresh,
-		})
-		return err
+	userInfo, err := GetUserDaemon(ctx).GetCloudUserInfo(ctx, &connector.UserInfoRequest{
+		AutoLogin: autoLogin,
+		Refresh:   refresh,
 	})
 	if err != nil {
 		return nil, err
@@ -114,33 +92,12 @@ func GetCloudUserInfo(ctx context.Context, autoLogin bool, refresh bool) (*conne
 	return userInfo, nil
 }
 
-func GetCloudAPIKey(ctx context.Context, description string, autoLogin bool) (string, error) {
-	var keyData *connector.KeyData
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		var err error
-		keyData, err = connectorClient.GetCloudAPIKey(ctx, &connector.KeyRequest{
-			AutoLogin:   autoLogin,
-			Description: description,
-		})
-		return err
-	})
-	if err != nil {
-		return "", err
-	}
-	return keyData.GetApiKey(), nil
-}
-
 // GetCloudLicense communicates with System A to get the jwt version of the
 // license, puts it in a kubernetes secret, and then writes that secret to the
-// output file for the user to apply to their cluster
+// output file for the user to apply to their cluster.
 func GetCloudLicense(ctx context.Context, outputFile, id string) (string, string, error) {
-	var licenseData *connector.LicenseData
-	err := WithConnector(ctx, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		var err error
-		licenseData, err = connectorClient.GetCloudLicense(ctx, &connector.LicenseRequest{
-			Id: id,
-		})
-		return err
+	licenseData, err := GetUserDaemon(ctx).GetCloudLicense(ctx, &connector.LicenseRequest{
+		Id: id,
 	})
 	if err != nil {
 		return "", "", err
@@ -180,10 +137,10 @@ func checkProVersion(ctx context.Context, telProLocation string) (bool, error) {
 	return strings.Contains(string(output), client.Version()), nil
 }
 
-// GetTelepresencePro prompts the user to optionally install Telepresence Pro
+// getTelepresencePro prompts the user to optionally install Telepresence Pro
 // if it isn't installed. If the user installs it, it also asks the user to
 // automatically update their configuration to use the new binary.
-func GetTelepresencePro(ctx context.Context) (err error) {
+func getTelepresencePro(ctx context.Context, userD connector.ConnectorClient) (err error) {
 	dlog.Debugf(ctx, "Checking for telepresence-pro")
 	sc := scout.NewReporter(ctx, "cli")
 	sc.Start(ctx)
@@ -224,15 +181,15 @@ func GetTelepresencePro(ctx context.Context) (err error) {
 		}
 	}
 
-	if err = installTelepresencePro(ctx, telProLocation); err != nil {
+	if err = installTelepresencePro(ctx, telProLocation, userD); err != nil {
 		return errcat.NoDaemonLogs.Newf("error installing updated enhanced free client: %w", err)
 	}
 	return updateConfig(ctx, telProLocation)
 }
 
 // installTelepresencePro installs the binary. Users should be asked for
-// permission before using this function
-func installTelepresencePro(ctx context.Context, telProLocation string) error {
+// permission before using this function.
+func installTelepresencePro(ctx context.Context, telProLocation string, userD connector.ConnectorClient) error {
 	// We install the correct version of telepresence-pro based on
 	// the OSS version that is associated with this client since
 	// daemon versions need to match
@@ -255,38 +212,31 @@ func installTelepresencePro(ctx context.Context, telProLocation string) error {
 	}
 
 	// Disconnect before attempting to create the new file.
-	wasRunning := false
-	err = WithStartedConnector(ctx, false, func(ctx context.Context, connectorClient connector.ConnectorClient) error {
-		wasRunning = true
-		_, err := connectorClient.Quit(ctx, &empty.Empty{})
+	if _, err := userD.Quit(ctx, &empty.Empty{}); err != nil {
 		return err
-	})
+	}
 	if err != nil && err != ErrNoUserDaemon {
 		return err
 	}
-	replaceConnectorConn(ctx, nil)
-
 	if err = downloadProDaemon(ctx, "the enhanced free client", resp.Body, telProLocation); err != nil {
 		return err
 	}
-	if wasRunning {
-		// relaunch the connector
-		var conn *grpc.ClientConn
-		if conn, err = launchConnectorDaemon(ctx, telProLocation, true); err != nil {
-			return err
-		}
-		replaceConnectorConn(ctx, conn)
+	// relaunch the connector
+	var conn *grpc.ClientConn
+	if conn, err = launchConnectorDaemon(ctx, telProLocation, true); err != nil {
+		return err
 	}
+	replaceUserDaemon(ctx, conn)
 	return nil
 }
 
 // downloadProDaemon copies the 'from' stream into a temporary file in the same directory as the
 // designated binary, chmods it to be executable, removes the old binary, and then renames the
-// temporary file as the new binary
+// temporary file as the new binary.
 func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, telProLocation string) (err error) {
 	stdout, _ := output.Structured(ctx)
 	dir := filepath.Dir(telProLocation)
-	if err = os.MkdirAll(dir, 0777); err != nil {
+	if err = os.MkdirAll(dir, 0o777); err != nil {
 		return errcat.NoDaemonLogs.Newf("error creating directory %q: %w", dir, err)
 	}
 
@@ -312,7 +262,7 @@ func downloadProDaemon(ctx context.Context, downloadURL string, from io.Reader, 
 		return errcat.NoDaemonLogs.Newf("unable to download the enhanced free client: %w", err)
 	}
 	fmt.Fprintln(stdout, "done")
-	if err = os.Chmod(tmpName, 0755); err != nil {
+	if err = os.Chmod(tmpName, 0o755); err != nil {
 		return errcat.NoDaemonLogs.Newf("unable to set permissions of %q to 755: %w", telProLocation, err)
 	}
 	if err = os.Remove(telProLocation); err != nil && !os.IsNotExist(err) {
@@ -348,7 +298,7 @@ func updateConfig(ctx context.Context, telProLocation string) error {
 		_ = os.Rename(cfgFile, cfgFile+".bak")
 	}
 
-	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return errcat.NoDaemonLogs.Newf("error opening config file: %w", err)
 	}

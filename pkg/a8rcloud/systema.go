@@ -3,6 +3,7 @@ package a8rcloud
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net"
 	"sync"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 )
 
 const (
@@ -42,6 +45,13 @@ type ClientProvider[T Closeable] interface {
 	BuildClient(ctx context.Context, conn *grpc.ClientConn) (T, error)
 }
 
+type SessionClient interface {
+	userdaemon.SystemAClient
+	systema.SystemACRUDClient
+	systema.UserDaemonSystemAProxyClient
+	Closeable
+}
+
 type systemaPoolKey string
 
 func WithSystemAPool[T Closeable](ctx context.Context, poolName string, provider ClientProvider[T]) context.Context {
@@ -52,11 +62,11 @@ func WithSystemAPool[T Closeable](ctx context.Context, poolName string, provider
 	return context.WithValue(ctx, key, &systemAPool[T]{Provider: provider, Name: poolName, parentCtx: ctx})
 }
 
-func GetSystemAPool[T Closeable](ctx context.Context, poolName string) SystemAPool[T] {
+func GetSystemAPool[T Closeable](ctx context.Context, poolName string) (SystemAPool[T], error) {
 	if p, ok := ctx.Value(systemaPoolKey(poolName)).(*systemAPool[T]); ok {
-		return p
+		return p, nil
 	}
-	return nil
+	return nil, errors.New("access to Ambassador Cloud is not configured")
 }
 
 func GetSystemAPoolProvider[T Closeable](ctx context.Context, poolName string) ClientProvider[T] {
@@ -108,7 +118,6 @@ func (p *systemAPool[T]) Get(ctx context.Context) (T, error) {
 			grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
 			grpc.WithPerRPCCredentials(&systemACredentials{p.Provider}),
 		)
-
 		if err != nil {
 			cancel()
 			return client, err

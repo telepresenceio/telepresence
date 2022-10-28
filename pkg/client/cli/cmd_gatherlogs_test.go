@@ -228,6 +228,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
 			cmd.SetOut(stdout)
 			cmd.SetErr(stderr)
+			cmd.SetContext(ctx)
 			gl := &gatherLogsArgs{
 				outputFile: tc.outputFile,
 				daemons:    tc.daemons,
@@ -238,7 +239,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			}
 
 			// Ensure we can create a zip of the logs
-			err := gl.gatherLogs(ctx, cmd)
+			err := gl.gatherLogs(cmd, nil)
 			if tc.errMsg != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.errMsg)
@@ -424,7 +425,7 @@ func Test_gatherLogsSignificantPodNames(t *testing.T) {
 
 // ReadZip reads a zip file and returns the []byte string. Used in tests for
 // checking that a zipped file's contents are correct. Exported since it is
-// also used in telepresence_test.go
+// also used in telepresence_test.go.
 func ReadZip(zippedFile *zip.File) ([]byte, error) {
 	fileReader, err := zippedFile.Open()
 	if err != nil {

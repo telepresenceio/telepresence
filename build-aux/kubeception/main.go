@@ -64,7 +64,8 @@ func run() error {
 				"timeoutSecs":    "7200",
 				"version":        "1.19",
 				"provider":       "preview",
-				"enableSNIRelay": "true"})
+				"enableSNIRelay": "true",
+			})
 			if err != nil {
 				return err
 			}

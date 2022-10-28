@@ -20,9 +20,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos/aferofs"
 )
 
-const serviceName = "test-echo"
-const namespace = "teltest"
-const podIP = "192.168.50.34"
+const (
+	serviceName = "test-echo"
+	namespace   = "teltest"
+	podIP       = "192.168.50.34"
+)
 
 var testConfig = agentconfig.Sidecar{
 	Create:       false,
@@ -63,9 +65,9 @@ func testContext(t *testing.T, env dos.MapEnv) context.Context {
 	y, err := yaml.Marshal(&testConfig)
 	require.NoError(t, err)
 
-	require.NoError(t, fs.MkdirAll(agentconfig.ConfigMountPoint, 0700))
-	require.NoError(t, fs.MkdirAll(agentconfig.ExportsMountPoint, 0700))
-	require.NoError(t, afero.WriteFile(fs, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile), y, 0600))
+	require.NoError(t, fs.MkdirAll(agentconfig.ConfigMountPoint, 0o700))
+	require.NoError(t, fs.MkdirAll(agentconfig.ExportsMountPoint, 0o700))
+	require.NoError(t, afero.WriteFile(fs, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile), y, 0o600))
 
 	env[agentconfig.EnvPrefixAgent+"POD_IP"] = podIP
 
@@ -95,7 +97,7 @@ func Test_AppEnvironment(t *testing.T) {
 	})
 
 	ksDir := "/var/run/secrets/kubernetes.io/serviceaccount"
-	require.NoError(t, dos.MkdirAll(ctx, ksDir, 0700))
+	require.NoError(t, dos.MkdirAll(ctx, ksDir, 0o700))
 	f, err := dos.Create(ctx, filepath.Join(ksDir, "namespace"))
 	require.NoError(t, err)
 	_, err = fmt.Fprintln(f, "default")

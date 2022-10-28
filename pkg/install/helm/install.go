@@ -20,8 +20,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-const helmDriver = "secrets"
-const releaseName = "traffic-manager"
+const (
+	helmDriver  = "secrets"
+	releaseName = "traffic-manager"
+)
 
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
@@ -143,7 +145,7 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 	})
 }
 
-func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, *action.Configuration, error) {
+func isTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, *action.Configuration, error) {
 	dlog.Debug(ctx, "getHelmConfig")
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
@@ -187,9 +189,9 @@ func IsTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 	return existing, helmConfig, nil
 }
 
-// EnsureTrafficManager ensures the traffic manager is installed
+// EnsureTrafficManager ensures the traffic manager is installed.
 func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest) error {
-	existing, helmConfig, err := IsTrafficManager(ctx, configFlags, namespace)
+	existing, helmConfig, err := isTrafficManager(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("err detecting traffic manager: %w", err)
 	}
@@ -225,6 +227,14 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		values = chartutil.CoalesceTables(vals.AsMap(), values)
 	}
 
+	if vl := len(req.ValuePairs); vl > 0 {
+		vls, err := makeMapFromValuePairs(req.ValuePairs)
+		if err != nil {
+			return errcat.User.Newf("--set flag error: %v", err)
+		}
+		values = chartutil.CoalesceTables(vls, values)
+	}
+
 	switch {
 	case existing == nil: // fresh install
 		dlog.Debugf(ctx, "Importing legacy for namespace %s", namespace)
@@ -248,7 +258,48 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	return err
 }
 
-// DeleteTrafficManager deletes the traffic manager
+// makeMapFromValuePairs turns a slice of strings in the form x.y.z=v into
+// a map like {x: {y: {z: v}}} and returns it.
+func makeMapFromValuePairs(valuePairs []string) (map[string]any, error) {
+	vls := make(map[string]any)
+	for _, v := range valuePairs {
+		kv := strings.SplitN(v, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("%s is not in the form key=value", v)
+		}
+		keys := strings.Split(kv[0], ".")
+		val := kv[1]
+		vm := vls
+		nk := len(keys) - 1
+		for i := 0; i <= nk; i++ {
+			key := keys[i]
+			ov, ok := vm[key]
+			if !ok {
+				if i == nk {
+					vm[key] = val
+					break
+				}
+				m := make(map[string]any)
+				vm[key] = m
+				vm = m
+				continue
+			}
+			om, ok := ov.(map[string]any)
+			if ok {
+				if i < nk {
+					vm = om
+					continue
+				}
+			} else if i == nk {
+				return nil, fmt.Errorf("%s was defined as both %v and %v", kv[0], ov, kv[1])
+			}
+			return nil, fmt.Errorf("%s cannot be both a map and a scalar value", strings.Join(keys[:i+1], "."))
+		}
+	}
+	return vls, nil
+}
+
+// DeleteTrafficManager deletes the traffic manager.
 func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {

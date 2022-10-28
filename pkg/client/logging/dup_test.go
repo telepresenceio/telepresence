@@ -68,7 +68,7 @@ func testDupToStdHelper() int {
 
 	dirname := args[0]
 
-	file, err := os.OpenFile(filepath.Join(dirname, "log.txt"), os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := os.OpenFile(filepath.Join(dirname, "log.txt"), os.O_CREATE|os.O_WRONLY, 0o666)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "open: %v\n", err)
 		return 1

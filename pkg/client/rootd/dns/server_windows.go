@@ -41,7 +41,6 @@ func (s *Server) updateRouterDNS(c context.Context, paths []string, dev vif.Devi
 			namespaces[path] = struct{}{}
 		}
 	}
-	namespaces[tel2SubDomain] = struct{}{}
 	s.domainsLock.Lock()
 	s.namespaces = namespaces
 	s.search = search

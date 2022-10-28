@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"unsafe"
 
 	//nolint:depguard // We want no logging and no soft-context signal handling
 	"os/exec"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 
@@ -87,7 +87,7 @@ func terminateChildrenOf(ctx context.Context, pid uint32, pes []*processInfo) er
 	return nil
 }
 
-// processIsAlive checks if the given pid exists in the current process snapshot
+// processIsAlive checks if the given pid exists in the current process snapshot.
 func processIsAlive(pid uint32) (bool, error) {
 	found := false
 	err := eachProcess(func(pe *windows.ProcessEntry32) bool {

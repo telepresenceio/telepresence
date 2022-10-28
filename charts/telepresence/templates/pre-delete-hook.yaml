@@ -3,15 +3,14 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: uninstall-agents
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
     app.kubernetes.io/instance: {{ .Release.Name | quote }}
     app.kubernetes.io/version: {{ .Chart.AppVersion }}
     helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
   annotations:
-    # This is what defines this resource as a hook. Without this line, the
-    # job is considered part of the release.
+    {{- /* This is what defines this resource as a hook. Without this line, the job is considered part of the release. */}}
     "helm.sh/hook": pre-delete
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
@@ -50,7 +49,7 @@ spec:
             - sh
             - -c
           args:
-            - 'curl --fail --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "telepresence.namespace" . }}/uninstall || exit 0'
+            - 'curl --fail --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" . }}/uninstall || exit 0'
       volumes:
         - name: secret-volume
           secret:

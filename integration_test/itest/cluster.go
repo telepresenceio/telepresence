@@ -43,8 +43,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-const TestUser = "telepresence-test-developer"
-const TestUserAccount = "system:serviceaccount:default:" + TestUser
+const (
+	TestUser        = "telepresence-test-developer"
+	TestUserAccount = "system:serviceaccount:default:" + TestUser
+)
 
 type Cluster interface {
 	AgentImageName() string
@@ -59,6 +61,8 @@ type Cluster interface {
 	Suffix() string
 	TelepresenceVersion() string
 	UninstallTrafficManager(ctx context.Context, managerNamespace string)
+	PackageHelmChart(ctx context.Context) (string, error)
+	GetValuesForHelm(values map[string]string, managerNamespace string, appNamespaces ...string) []string
 }
 
 // The cluster is created once and then reused by all tests. It ensures that:
@@ -95,7 +99,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
 	if !s.prePushed {
-		s.testVersion = "v2.6.0-gotest.z" + s.suffix
+		s.testVersion = "v2.8.0-gotest.z" + s.suffix
 	}
 	version.Version = s.testVersion
 
@@ -153,7 +157,7 @@ func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that no telepresence is running when the tests start
-	_, _, _ = Telepresence(ctx, "quit", "-ur") //nolint:dogsled // don't care about any of the returns
+	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that the daemon-socket is non-existent.
 	_ = rmAsRoot(client.DaemonSocketName)
@@ -230,7 +234,7 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	}
 	t := getT(ctx)
 	s.kubeConfig = dtest.Kubeconfig(log.WithDiscardingLogger(ctx))
-	require.NoError(t, os.Chmod(s.kubeConfig, 0600), "failed to chmod 0600 %q", s.kubeConfig)
+	require.NoError(t, os.Chmod(s.kubeConfig, 0o600), "failed to chmod 0600 %q", s.kubeConfig)
 
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.
 	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,clusterrole,clusterrolebinding", "-l", "app=traffic-manager")
@@ -426,26 +430,25 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 }
 
-func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
-	chartFilename, err := func() (string, error) {
-		filename := filepath.Join(getT(ctx).TempDir(), "telepresence-chart.tgz")
-		fh, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
-		if err != nil {
-			return "", err
-		}
-		if err := telcharts.WriteChart(fh, s.TelepresenceVersion()[1:]); err != nil {
-			_ = fh.Close()
-			return "", err
-		}
-		if err := fh.Close(); err != nil {
-			return "", err
-		}
-		return filename, nil
-	}()
+func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
+	filename := filepath.Join(getT(ctx).TempDir(), "telepresence-chart.tgz")
+	fh, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0o666)
 	if err != nil {
-		return err
+		return "", err
 	}
+	if err := telcharts.WriteChart(fh, s.TelepresenceVersion()[1:]); err != nil {
+		_ = fh.Close()
+		return "", err
+	}
+	if err := fh.Close(); err != nil {
+		return "", err
+	}
+	return filename, nil
+}
+
+func (s *cluster) GetValuesForHelm(values map[string]string, managerNamespace string, appNamespaces ...string) []string {
 	settings := []string{
+		"--set", "logLevel=debug",
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
@@ -459,8 +462,17 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 	for k, v := range values {
 		settings = append(settings, "--set", k+"="+v)
 	}
+	return settings
+}
 
-	helmValues := filepath.Join("integration_test", "testdata", "test-values.yaml")
+func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
+	chartFilename, err := s.PackageHelmChart(ctx)
+	if err != nil {
+		return err
+	}
+	settings := s.GetValuesForHelm(values, managerNamespace, appNamespaces...)
+
+	helmValues := filepath.Join("integration_test", "testdata", "namespaced-values.yaml")
 	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)
@@ -493,7 +505,7 @@ func KubeConfig(ctx context.Context) string {
 
 // Command creates and returns a dexec.Cmd  initialized with the global environment
 // from the cluster harness and any other environment that has been added using the
-// WithEnv() function
+// WithEnv() function.
 func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd {
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
@@ -521,7 +533,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	return cmd
 }
 
-// TelepresenceOk executes the CLI command in a new process and requires the result to be OK
+// TelepresenceOk executes the CLI command in a new process and requires the result to be OK.
 func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
@@ -531,7 +543,7 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	return stdout
 }
 
-// Telepresence executes the CLI command in a new process
+// Telepresence executes the CLI command in a new process.
 func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 	t := getT(ctx)
 	t.Helper()
@@ -548,7 +560,7 @@ func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 
 // TelepresenceCmd creates a dexec.Cmd using the Command function. Before the command is created,
 // the environment is extended with DEV_TELEPRESENCE_CONFIG_DIR from filelocation.AppUserConfigDir
-// and DEV_TELEPRESENCE_LOG_DIR from filelocation.AppUserLogDir
+// and DEV_TELEPRESENCE_LOG_DIR from filelocation.AppUserLogDir.
 func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	t := getT(ctx)
 	t.Helper()
@@ -578,35 +590,31 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	return cmd
 }
 
-// TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output
+// TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output.
 func TelepresenceDisconnectOk(ctx context.Context) {
 	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, "quit"))
 }
 
-// AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command
+// AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Network disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Network is already disconnected"))
-	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Traffic Manager is already disconnected"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Daemons disconnecting...done") ||
+		strings.Contains(stdout, "Telepresence Daemons are already disconnected"))
 	if t.Failed() {
 		t.Logf("Disconnect output was %q", stdout)
 	}
 }
 
-// TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output
+// TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output.
 func TelepresenceQuitOk(ctx context.Context) {
-	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-ur"))
+	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-s"))
 }
 
-// AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command
+// AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertQuitOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Network quitting...done") ||
-		strings.Contains(stdout, "Telepresence Network had already quit"))
-	assert.True(t, strings.Contains(stdout, "Telepresence Traffic Manager quitting...done") ||
-		strings.Contains(stdout, "Telepresence Traffic Manager had already quit"))
+	assert.True(t, strings.Contains(stdout, "Telepresence Daemons quitting...done") ||
+		strings.Contains(stdout, "Telepresence Daemons have already quit"))
 	if t.Failed() {
 		t.Logf("Quit output was %q", stdout)
 	}
@@ -649,7 +657,7 @@ func Output(ctx context.Context, exe string, args ...string) (string, error) {
 }
 
 // Kubectl runs kubectl with the default context and the given namespace, or in the default namespace if the given
-// namespace is an empty string
+// namespace is an empty string.
 func Kubectl(ctx context.Context, namespace string, args ...string) error {
 	getT(ctx).Helper()
 	var ks []string
@@ -662,7 +670,7 @@ func Kubectl(ctx context.Context, namespace string, args ...string) error {
 	return Run(ctx, "kubectl", ks...)
 }
 
-// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output
+// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output.
 func KubectlOut(ctx context.Context, namespace string, args ...string) (string, error) {
 	getT(ctx).Helper()
 	var ks []string
@@ -801,7 +809,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 		}
 
 		hc := http.Client{Timeout: 2 * time.Second}
-		resp, err := hc.Get(fmt.Sprintf("http://%s:%s", ips[0], svcPort))
+		resp, err := hc.Get(fmt.Sprintf("http://%s", net.JoinHostPort(ips[0].String(), svcPort)))
 		if err != nil {
 			dlog.Info(ctx, err)
 			return false

@@ -29,7 +29,7 @@ func LoadTokenFromUserCache(ctx context.Context) (*oauth2.Token, error) {
 	return &token, nil
 }
 
-// DeleteTokenFromUserCache removes token cache if existing or returns an error
+// DeleteTokenFromUserCache removes token cache if existing or returns an error.
 func DeleteTokenFromUserCache(ctx context.Context) error {
 	return cache.DeleteFromUserCache(ctx, tokenFile)
 }
