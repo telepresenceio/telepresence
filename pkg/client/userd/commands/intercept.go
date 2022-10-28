@@ -142,6 +142,9 @@ func (c *interceptCommand) init(ctx context.Context) {
 	c.command.PostRunE = func(cmd *cobra.Command, args []string) error {
 		// Currently, we only have messages that should be served when a user
 		// isn't logged in, so we check that here
+
+		// Can't use the context passed to init(ctx) here.
+		ctx := cmd.Context()
 		if _, err := authdata.LoadUserInfoFromUserCache(ctx); err == nil {
 			_, err := GetConnectorServer(ctx).GetCloudUserInfo(ctx, &connector.UserInfoRequest{
 				AutoLogin: false,

@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.8.3 (TBD)
+### 2.8.3 (October 27, 2022)
 
 - Feature: The traffic-manager can be configured to disable global (non-http) intercepts using the
   Helm chart setting `intercept.disableGlobal`.
