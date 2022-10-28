@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.8.3 (TBD)
+### 2.8.3 (October 27, 2022)
 
 - Feature: The traffic-manager can be configured to disable global (non-http) intercepts using the
   Helm chart setting `intercept.disableGlobal`.
@@ -19,7 +19,9 @@
 - Bugfix: `telepresence connect` now works as long as the traffic manager is installed, even if
   it wasn't installed via `helm install`
 
-- Bugfix. telepresence check-vpn no longer crashes when the daemons don't start properly.
+- Bugfix: Telepresence check-vpn no longer crashes when the daemons don't start properly.
+
+- Bugfix: The root daemon no longer crashes when the session boot times out before the cluster connection succeeds.
 
 ### 2.8.2 (October 15, 2022)
 
