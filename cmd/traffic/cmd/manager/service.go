@@ -24,6 +24,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cliconfig"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
@@ -35,6 +36,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
+
+const clientConfigPath = "/var/run/config/cli"
 
 // Clock is the mechanism used by the Manager state to get the current time.
 type Clock interface {
@@ -48,6 +51,7 @@ type Manager struct {
 	state        *state.State
 	clusterInfo  cluster.Info
 	cloudConfig  *rpc.AmbassadorCloudConfig
+	cliConfig    cliconfig.CLIConfigWatcher
 	tokenService cloudtoken.Service
 
 	rpc.UnsafeManagerServer
@@ -104,6 +108,11 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
+	w, err := cliconfig.NewCLIConfigWatcher(clientConfigPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to start cli config watcher: %w", err)
+	}
+	ret.cliConfig = w
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
@@ -200,6 +209,19 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		SessionId: sessionID,
 		ClusterId: m.clusterInfo.GetClusterID(),
 	}, nil
+}
+
+func (m *Manager) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLIConfig, error) {
+	dlog.Debug(ctx, "GetClientConfig called")
+
+	cfg, err := m.cliConfig.GetConfigJson()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	ret := &rpc.CLIConfig{
+		ConfigJson: cfg,
+	}
+	return ret, nil
 }
 
 // Remain indicates that the session is still valid.

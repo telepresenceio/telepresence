@@ -8,15 +8,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
-// ReloadDaemonConfig replaces the current config with one loaded from disk and
-// calls SetLevel with the log level defined for the rootDaemon or userDaemon
-// depending on the root flag.
+// ReloadDaemonConfig calls SetLevel with the log level defined
+// for the rootDaemon or userDaemon
+// depending on the root flag. Assumes that the config has already been reloaded.
 func ReloadDaemonConfig(c context.Context, root bool) error {
-	newCfg, err := client.LoadConfig(c)
-	if err != nil {
-		return err
-	}
-	client.ReplaceConfig(c, newCfg)
+	newCfg := client.GetConfig(c)
 	var level string
 	if root {
 		level = newCfg.LogLevels.RootDaemon.String()

@@ -530,6 +530,11 @@ message DNS {
   string cluster_domain = 4;
 }
 
+message CLIConfig {
+  // config_json is a yaml blob containing the client config.
+  string config_json = 1;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -545,6 +550,9 @@ service Manager {
   // GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
   // by the agents.
   rpc GetCloudConfig(google.protobuf.Empty) returns (AmbassadorCloudConfig);
+
+  // GetClientConfig returns the config that connected clients should use for this manager.
+  rpc GetClientConfig(google.protobuf.Empty) returns (CLIConfig);
 
   // GetTelepresenceAPI returns information about the TelepresenceAPI server
   rpc GetTelepresenceAPI(google.protobuf.Empty) returns (TelepresenceAPIInfo);

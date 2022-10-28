@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gopkg.in/yaml.v2"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/datawire/dlib/dcontext"
@@ -143,6 +144,9 @@ type session struct {
 
 	// vifReady is closed when the virtual network interface has been configured.
 	vifReady chan error
+
+	// config is the session config given by the traffic manager
+	config client.Config
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
@@ -207,6 +211,19 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		return nil, err
 	}
 
+	cfg := client.GetDefaultConfig()
+	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
+	if err != nil {
+		dlog.Warnf(c, "Failed to get remote config from traffic manager: %v", err)
+	} else {
+		bs := []byte(cliCfg.ConfigJson)
+		err := yaml.Unmarshal(bs, &cfg)
+		if err != nil {
+			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
+		}
+	}
+	dlog.Debugf(c, "Traffic manager gave config %s", cliCfg.ConfigJson)
+
 	as := convertSubnets(mi.AlsoProxySubnets)
 	ns := convertSubnets(mi.NeverProxySubnets)
 	s := &session{
@@ -222,6 +239,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		neverProxyRoutes: routing.Routes(c, ns),
 		proxyCluster:     true,
 		vifReady:         make(chan error, 2),
+		config:           cfg,
 	}
 
 	s.dev, err = vif.OpenTun(c)

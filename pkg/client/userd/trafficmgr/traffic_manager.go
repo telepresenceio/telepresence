@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,6 +93,7 @@ type Session interface {
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
 	LoginExecutor() auth.LoginExecutor
+	GetSessionConfig() client.Config
 }
 
 type Service interface {
@@ -178,6 +180,8 @@ type TrafficManager struct {
 	isPodDaemon bool
 
 	fuseFtp rpc2.FuseFTPClient
+
+	sessionConfig client.Config
 }
 
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap
@@ -232,6 +236,20 @@ func NewSession(
 		}
 	}
 	svc.SetManagerClient(tmgr.managerClient, opts...)
+
+	tmgr.sessionConfig = client.GetDefaultConfig()
+	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
+	if err != nil {
+		dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
+	} else {
+		bs := []byte(cliCfg.ConfigJson)
+		if err := yaml.Unmarshal(bs, &tmgr.sessionConfig); err != nil {
+			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
+		}
+		if err := cluster.AddRemoteKubeConfigExtension(ctx, cliCfg.ConfigJson); err != nil {
+			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
+		}
+	}
 
 	// Connect to the root daemon if it is running. It's the CLI that starts it initially
 	rdRunning, err := client.IsRunning(ctx, client.DaemonSocketName)
@@ -291,6 +309,10 @@ func (tm *TrafficManager) ManagerClient() manager.ManagerClient {
 
 func (tm *TrafficManager) ManagerConn() *grpc.ClientConn {
 	return tm.managerConn
+}
+
+func (tm *TrafficManager) GetSessionConfig() client.Config {
+	return tm.sessionConfig
 }
 
 // connectCluster returns a configured cluster instance.

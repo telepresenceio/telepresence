@@ -78,6 +78,8 @@ func Main(ctx context.Context, _ ...string) error {
 		SoftShutdownTimeout:  5 * time.Second,
 	})
 
+	g.Go("cli-config", mgr.cliConfig.Run)
+
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
 

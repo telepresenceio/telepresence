@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/spf13/pflag"
@@ -11,6 +12,8 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
+
+	"github.com/datawire/dlib/dlog"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
@@ -218,6 +221,32 @@ func (kf *Config) GetManagerNamespace() string {
 
 func (kf *Config) GetRestConfig() *rest.Config {
 	return kf.RestConfig
+}
+
+func (kf *Config) AddRemoteKubeConfigExtension(ctx context.Context, cfgJson string) error {
+	dlog.Debugf(ctx, "Applying remote kubeconfig: %s", cfgJson)
+	remote := &kubeconfigExtension{}
+	if err := json.Unmarshal([]byte(cfgJson), &remote); err != nil {
+		return fmt.Errorf("unable to parse remote kubeconfig: %w", err)
+	}
+	if kf.DNS == nil {
+		kf.DNS = remote.DNS
+	} else {
+		if kf.DNS.LocalIP == "" {
+			kf.DNS.LocalIP = remote.DNS.LocalIP
+		}
+		if kf.DNS.RemoteIP == "" {
+			kf.DNS.RemoteIP = remote.DNS.RemoteIP
+		}
+		kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, remote.DNS.ExcludeSuffixes...)
+		kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, remote.DNS.IncludeSuffixes...)
+		if kf.DNS.LookupTimeout.Duration == 0 {
+			kf.DNS.LookupTimeout = remote.DNS.LookupTimeout
+		}
+	}
+	kf.AlsoProxy = append(kf.AlsoProxy, remote.AlsoProxy...)
+	kf.NeverProxy = append(kf.NeverProxy, remote.NeverProxy...)
+	return nil
 }
 
 func mapEqual(a, b map[string]string) bool {

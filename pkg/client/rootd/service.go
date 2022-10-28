@@ -67,6 +67,7 @@ type service struct {
 	sessionLock     sync.RWMutex
 	sessionCancel   context.CancelFunc
 	sessionContext  context.Context
+	sessionConfig   *client.Config
 	sessionQuitting int32 // atomic boolean. True if non-zero.
 	session         *session
 	timedLogLevel   log.TimedLevel
@@ -168,6 +169,7 @@ func (d *service) cancelSession() {
 
 	d.sessionLock.Lock()
 	d.session = nil
+	d.sessionConfig = nil
 	d.sessionCancel()
 	atomic.StoreInt32(&d.sessionQuitting, 0)
 	d.sessionLock.Unlock()
@@ -227,8 +229,19 @@ func (d *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 
 func (d *service) configReload(c context.Context) error {
 	return client.Watch(c, func(c context.Context) error {
-		return logging.ReloadDaemonConfig(c, true)
+		d.sessionLock.RLock()
+		defer d.sessionLock.RUnlock()
+		return d.applySessionConfig(c)
 	})
+}
+
+func (d *service) applySessionConfig(c context.Context) error {
+	cfg, err := client.LoadConfig(c)
+	if err != nil {
+		return err
+	}
+	client.MergeAndReplace(c, d.sessionConfig, cfg)
+	return logging.ReloadDaemonConfig(c, true)
 }
 
 // manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
@@ -271,6 +284,12 @@ nextSession:
 					d.session = session
 					d.sessionContext = sCtx
 					d.sessionCancel = sCancel
+					sessionCfg := session.config
+					d.sessionConfig = &sessionCfg
+					if err := d.applySessionConfig(c); err != nil {
+						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
+					}
+
 					reply.status.OutboundConfig = d.session.getInfo()
 				} else {
 					sCancel()
@@ -300,6 +319,10 @@ nextSession:
 			defer func() {
 				d.sessionLock.Lock()
 				d.session = nil
+				d.sessionConfig = nil
+				if err := d.applySessionConfig(c); err != nil {
+					dlog.Warn(c, err)
+				}
 				d.sessionLock.Unlock()
 				wg.Done()
 			}()

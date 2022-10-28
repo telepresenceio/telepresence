@@ -1,7 +1,9 @@
 # Changelog
 
-### 2.8.4 (TBD)
+### 2.9.0 (TBD)
 
+- Feature: The traffic-manager can now configure all clients that connect through the `client:` map in
+  the `values.yaml` file.
 - Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
 
 ### 2.8.3 (October 27, 2022)
