@@ -21,7 +21,7 @@ func versionCommand() *cobra.Command {
 
 		Short:   "Show version",
 		PreRunE: util.ForcedUpdateCheck,
-		RunE:    printVersion,
+		RunE:    PrintVersion,
 		Annotations: map[string]string{
 			ann.RootDaemon: ann.Optional,
 			ann.UserDaemon: ann.Optional,
@@ -29,8 +29,8 @@ func versionCommand() *cobra.Command {
 	}
 }
 
-// printVersion requests version info from the daemon and prints both client and daemon version.
-func printVersion(cmd *cobra.Command, _ []string) error {
+// PrintVersion requests version info from the daemon and prints both client and daemon version.
+func PrintVersion(cmd *cobra.Command, _ []string) error {
 	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
