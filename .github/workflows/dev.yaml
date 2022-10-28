@@ -29,6 +29,7 @@ jobs:
           path: build-output/tel2-image.tar
   run_tests:
     strategy:
+      fail-fast: false
       matrix:
         runners:
           - ubuntu-latest
