@@ -25,11 +25,12 @@ func (s *connectedSuite) Test_ListExcludesTM() {
 	s.NotContains(stdout, "traffic-manager")
 }
 
-func (s *connectedSuite) Test_ReportsVersionFromDaemon() {
+func (s *connectedSuite) Test_ReportsAllVersions() {
 	stdout := itest.TelepresenceOk(s.Context(), "version")
 	s.Contains(stdout, fmt.Sprintf("Client: %s", s.TelepresenceVersion()))
 	s.Contains(stdout, fmt.Sprintf("Root Daemon: %s", s.TelepresenceVersion()))
 	s.Contains(stdout, fmt.Sprintf("User Daemon: %s", s.TelepresenceVersion()))
+	s.Contains(stdout, fmt.Sprintf("Traffic Manager: %s", s.TelepresenceVersion()))
 }
 
 func (s *connectedSuite) Test_Status() {

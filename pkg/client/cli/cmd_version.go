@@ -9,6 +9,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
@@ -52,6 +53,14 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	switch {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: %s (api v%d)\n", version.Version, version.ApiVersion)
+		var mgrVer *manager.VersionInfo2
+		mgrVer, err = managerVersion(ctx)
+		switch {
+		case err == nil:
+			fmt.Fprintf(cmd.OutOrStdout(), "Traffic Manager: %s\n", mgrVer.Version)
+		default:
+			fmt.Fprintf(cmd.OutOrStdout(), "Traffic Manager: error: %v\n", err)
+		}
 	case err == cliutil.ErrNoUserDaemon:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: not running\n")
 	default:
@@ -73,4 +82,12 @@ func connectorVersion(ctx context.Context) (*common.VersionInfo, error) {
 		return userD.Version(ctx, &empty.Empty{})
 	}
 	return nil, cliutil.ErrNoUserDaemon
+}
+
+func managerVersion(ctx context.Context) (*manager.VersionInfo2, error) {
+	userD := cliutil.GetUserDaemon(ctx)
+	if userD == nil {
+		return nil, cliutil.ErrNoUserDaemon
+	}
+	return manager.NewManagerClient(userD.Conn).Version(ctx, &empty.Empty{})
 }
