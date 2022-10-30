@@ -84,6 +84,7 @@ type Session interface {
 
 	StartServices(g *dgroup.Group)
 	Epilog(ctx context.Context)
+	Done() <-chan struct{}
 }
 
 type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest, Service, rpc2.FuseFTPClient) (context.Context, Session, *connector.ConnectInfo)

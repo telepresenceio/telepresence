@@ -167,11 +167,14 @@ nextSession:
 				rsp = s.session.UpdateStatus(s.sessionContext, cr)
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
-				s.sessionCancel = sCancel
 				sCtx, session, rsp = userd.GetNewSessionFunc(c)(sCtx, s.scout, cr, si, fuseFtp)
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.session = session
+					s.sessionCancel = func() {
+						sCancel()
+						<-session.Done()
+					}
 				} else {
 					sCancel()
 					s.sessionCancel = nil

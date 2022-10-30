@@ -127,6 +127,9 @@ type session struct {
 	isPodDaemon bool
 
 	fuseFtp rpc2.FuseFTPClient
+
+	// done is closed when the session ends
+	done chan struct{}
 }
 
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap.
@@ -429,6 +432,7 @@ func connectMgr(
 		fuseFtp:          fuseFtp,
 		apiKeyFunc:       apiKeyFunc,
 		sr:               sr,
+		done:             make(chan struct{}),
 	}, nil
 }
 
@@ -498,7 +502,8 @@ func (s *session) Epilog(ctx context.Context) {
 	if s.rootDaemon != nil {
 		_, _ = s.rootDaemon.Disconnect(ctx, &empty.Empty{})
 	}
-	defer dlog.Info(ctx, "-- Session ended")
+	dlog.Info(ctx, "-- Session ended")
+	close(s.done)
 }
 
 func (s *session) StartServices(g *dgroup.Group) {
@@ -506,6 +511,10 @@ func (s *session) StartServices(g *dgroup.Group) {
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
 	g.Go("agent-watcher", s.agentInfoWatcher)
 	g.Go("dial-request-watcher", s.dialRequestWatcher)
+}
+
+func (s *session) Done() <-chan struct{} {
+	return s.done
 }
 
 func (s *session) Reporter() *scout.Reporter {
