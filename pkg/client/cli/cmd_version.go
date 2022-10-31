@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
@@ -44,7 +46,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	case err == nil:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: %s (api v%d)\n", version.Version, version.ApiVersion)
 	case err == cliutil.ErrNoRootDaemon:
-		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: not running\n")
+		fmt.Fprintln(cmd.OutOrStdout(), "Root Daemon: not running")
 	default:
 		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: error: %v\n", err)
 	}
@@ -58,11 +60,13 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 		switch {
 		case err == nil:
 			fmt.Fprintf(cmd.OutOrStdout(), "Traffic Manager: %s\n", mgrVer.Version)
+		case status.Code(err) == codes.Unavailable:
+			fmt.Fprintln(cmd.OutOrStdout(), "Traffic Manager: not connected")
 		default:
 			fmt.Fprintf(cmd.OutOrStdout(), "Traffic Manager: error: %v\n", err)
 		}
 	case err == cliutil.ErrNoUserDaemon:
-		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: not running\n")
+		fmt.Fprintln(cmd.OutOrStdout(), "User Daemon: not running")
 	default:
 		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: error: %v\n", err)
 	}
