@@ -1,8 +1,11 @@
 name: "Prepare Cluster"
 description: "Provision a cluster"
 inputs:
-  token:
+  kubeception-token:
     description: "The kubeception token to use"
+    required: true
+  gke-credentials:
+    description: "Service account credentials in JSON format. Account needs permissions to create/destroy clusters"
     required: true
   tel-image:
     description: "Path to the image to load onto the cluster"
@@ -38,7 +41,8 @@ runs:
         distribution: ${{ inputs.cluster-distribution }}
         version: ${{ inputs.cluster-version }}
         kubeconfig: "${{ steps.kubeconfig.outputs.KUBECONFIG }}"
-        kubeceptionToken: ${{ inputs.token }}
+        kubeceptionToken: ${{ inputs.kubeception-token }}
+        gkeCredentials: ${{ inputs.gke-credentials }}
     - name: Load image
       shell: bash
       env:

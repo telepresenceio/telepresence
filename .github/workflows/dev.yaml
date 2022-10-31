@@ -54,7 +54,8 @@ jobs:
       - run: make build
       - uses: ./.github/actions/prepare-cluster
         with:
-          token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          kubeception-token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          gke-credentials: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           tel-image: tel2-image.tar
           cluster-distribution: ${{ matrix.clusters.distribution }}
           cluster-version: ${{ matrix.clusters.version }}
