@@ -17,13 +17,56 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Client and server versions can specify an exact released value like "2.8.3", they can
+        # specify "nightly" to reference nightly builds, and they can specify "-<N>" to reference
+        # the most recent Z release in the N'th most recent minor series of release. So for example
+        # "-1" will always refer to the most recent release, "-2" will always refer to latest Z
+        # release of the minor release prior to the current, "-3" will always refer to the latest Z
+        # release of the minor release *two* releases prior to the current, etc.
+
         client_version: ["nightly"]
-        server_version:  ["nightly", "2.8.3", "2.7.6"]
+        server_version:  ["nightly", "-1", "-2"]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - run: |
-          curl -fL https://app.getambassador.io/download/tel2/linux/amd64/${{ matrix.client_version}}/telepresence -o telepresence-client
-          curl -fL https://app.getambassador.io/download/tel2/linux/amd64/${{ matrix.server_version }}/telepresence -o telepresence-server
+          cat << 'EOF' >> get-version
+          # This is the version as specified. A negative number N indicates N minor versions ago, so
+          # -1 is the most recently released minor version, -2 is the one before that, and -3 is the
+          # one before that.
+          VSPEC="${1}"
+
+          # List every version based on tags, most recently listed first.
+          list-versions() {
+            git tag -l 'v*.*.*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -u -r -V
+          }
+
+          # List versions with just major.minor, no z version.
+          list-versions-no-z() {
+            list-versions | cut -d. -f 1,2 | sort -u -r -V
+          }
+
+          if [[ "$1" = -* ]]; then
+            # This is a relative version, so strip off the first character to get the index value.
+            IDX="${VSPEC:1}"
+            # Print just then IDX'th line of the sorted no-z versions to find the desired minor version.
+            DESIRED_MINOR=$(list-versions-no-z | sed "${IDX}q;d")
+            # The grep filters the ordered list of all versions down to just the set of desired
+            # minor versions, and the sed picks the most recent from that set of minor versions.
+            DESIRED_EXACT=$(list-versions | grep -F "${DESIRED_MINOR}" | sed '1q;d')
+            # Strip off the "v" that is the first character in the tag.
+            printf  "${DESIRED_EXACT:1}\n"
+          else
+            printf "${VSPEC}\n"
+          fi
+          EOF
+          echo SERVER_VERSION=$(bash ./get-version ${{ matrix.server_version }}) >> ${GITHUB_ENV}
+          echo CLIENT_VERSION=$(bash ./get-version ${{ matrix.client_version }}) >> ${GITHUB_ENV}
+      - run: |
+          curl -fL https://app.getambassador.io/download/tel2/linux/amd64/${CLIENT_VERSION}/telepresence -o telepresence-client
+          curl -fL https://app.getambassador.io/download/tel2/linux/amd64/${SERVER_VERSION}/telepresence -o telepresence-server
           chmod a+x telepresence-client
           chmod a+x telepresence-server
 
