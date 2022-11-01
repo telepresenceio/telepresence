@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.8.4 (TBD)
+
+- Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
+
 ### 2.8.3 (October 27, 2022)
 
 - Feature: The traffic-manager can be configured to disable global (non-http) intercepts using the
