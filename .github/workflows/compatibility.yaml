@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         client_version: ["nightly"]
-        server_version:  ["nightly", "2.8.3", "2.7.6", "2.6.8"]
+        server_version:  ["nightly", "2.8.3", "2.7.6"]
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -41,8 +41,13 @@ jobs:
           ./telepresence-server version
 
           ./telepresence-server helm install
-          # Quit the user and root daemons since they get started by the installation.
-          ./telepresence-server quit
+
+          # Quit the user and root daemons since they get started by the installation. Use multiple
+          # different ways since the arguments have changed.
+          ./telepresence-server quit -u || true
+          ./telepresence-server quit -r || true
+          ./telepresence-server quit -s || true
+
           ./telepresence-client connect
           ./telepresence-client status
           ./telepresence-client list
