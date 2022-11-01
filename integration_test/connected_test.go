@@ -41,7 +41,7 @@ func (s *connectedSuite) Test_ReportsNotConnected() {
 	s.Contains(stdout, fmt.Sprintf("Client: %s", s.TelepresenceVersion()))
 	s.Contains(stdout, fmt.Sprintf("Root Daemon: %s", s.TelepresenceVersion()))
 	s.Contains(stdout, fmt.Sprintf("User Daemon: %s", s.TelepresenceVersion()))
-	s.Contains(stdout, fmt.Sprintf("Traffic Manager: not connected"))
+	s.Contains(stdout, "Traffic Manager: not connected")
 }
 
 func (s *connectedSuite) Test_Status() {
