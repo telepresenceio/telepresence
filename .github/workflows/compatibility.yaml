@@ -40,6 +40,8 @@ jobs:
           ./telepresence-server version
 
           ./telepresence-server helm install
+          # Quit the user and root daemons since they get started by the installation.
+          ./telepresence-server quit
           ./telepresence-client connect
           ./telepresence-client status
           ./telepresence-client list
