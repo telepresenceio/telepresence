@@ -1,0 +1,46 @@
+# This github workflow tests client and server compatibility for telepresence using nightly builds.
+#
+# See the "matrix" field below for which versions are tested.
+
+name: "Telepresence Test Matrix"
+on:
+  # Run daily at 9am UTC.
+  schedule:
+    - cron: '0 9 * * *'
+  # Run whenever this file is modified.
+  push:
+    paths:
+      - '.github/workflows/compatibility.yaml'
+
+jobs:
+  telepresence_matrix:
+    strategy:
+      matrix:
+        client_version: ["nightly"]
+        server_version:  ["nightly", "2.8.3", "2.7.6", "2.6.8"]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -fL https://app.getambassador.io/download/tel2/linux/amd64/${{ matrix.client_version}}/telepresence -o telepresence-client
+          curl -fL https://app.getambassador.io/download/tel2/linux/amd64/${{ matrix.server_version }}/telepresence -o telepresence-server
+          chmod a+x telepresence-client
+          chmod a+x telepresence-server
+
+      # Provision cluster as late as possible so we don't waste resources if any prior steps fail.
+      - uses: datawire/infra-actions/provision-cluster@v0.2.0
+        with:
+          distribution: Kubeception
+          version: 1.23
+          kubeconfig: kubeconfig.yaml
+          kubeceptionToken: ${{ secrets.KUBECEPTION_TOKEN }}
+          gkeCredentials: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
+      - run: |
+          ./telepresence-client version
+          ./telepresence-server version
+
+          ./telepresence-server helm install
+          ./telepresence-client connect
+          ./telepresence-client status
+          ./telepresence-client list
+          curl -v -k https://kubernetes.default.svc.cluster.local
