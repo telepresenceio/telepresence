@@ -32,7 +32,7 @@ jobs:
           distribution: Kubeception
           version: 1.23
           kubeconfig: kubeconfig.yaml
-          kubeceptionToken: ${{ secrets.KUBECEPTION_TOKEN }}
+          kubeceptionToken: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           gkeCredentials: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
       - run: |
