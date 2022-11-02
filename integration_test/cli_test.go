@@ -47,7 +47,7 @@ func (s *cliSuite) Test_Help() {
 	s.Contains(stdout, helpHead)
 	s.Contains(stdout, usageHead)
 
-	stdout, stderr, err = itest.Telepresence(s.Context(), "--help")
+	stdout, stderr, err = itest.Telepresence(s.Context(), "--helps")
 	if err != nil {
 		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence --help isn't working, nothing will: %w", err))
 		s.Require().NoError(err)
