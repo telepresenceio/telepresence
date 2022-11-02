@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -17,8 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
-
-	"github.com/google/go-cmp/cmp"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -62,7 +62,7 @@ func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Work
 	if err := decode(e.value, ac); err != nil {
 		return nil, nil, fmt.Errorf("failed to decode ConfigMap entry %q into an agent config", e.value)
 	}
-	wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+	wl, err := GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -72,7 +72,7 @@ func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Work
 func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.triggerRollout")
 	defer span.End()
-	k8sapi.RecordWorkloadInfo(span, wl)
+	RecordWorkloadInfo(span, wl)
 	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
 		triggerRolloutReplicaSet(ctx, wl, rs, span)
 		return
@@ -265,7 +265,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 	dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
 	ac, wl, err := e.workload(ctx)
 	ac.RecordInSpan(span)
-	k8sapi.RecordWorkloadInfo(span, wl)
+	RecordWorkloadInfo(span, wl)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			dlog.Error(ctx, err)
@@ -306,7 +306,7 @@ func (*configWatcher) handleDelete(ctx context.Context, e entry) {
 	defer span.End()
 	dlog.Debugf(ctx, "del %s.%s", e.name, e.namespace)
 	ac, wl, err := e.workload(ctx)
-	k8sapi.RecordWorkloadInfo(span, wl)
+	RecordWorkloadInfo(span, wl)
 	ac.RecordInSpan(span)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -640,7 +640,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		return
 	}
 	for _, ac := range c.affectedConfigs(ctx, svc, isDelete) {
-		wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+		wl, err := GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
@@ -798,4 +798,28 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 			dlog.Warn(ctx, err)
 		}
 	}
+}
+
+func RecordWorkloadInfo(span trace.Span, wl k8sapi.Workload) {
+	if wl == nil {
+		return
+	}
+	span.SetAttributes(
+		attribute.String("tel2.workload-name", wl.GetName()),
+		attribute.String("tel2.workload-namespace", wl.GetNamespace()),
+		attribute.String("tel2.workload-kind", wl.GetKind()),
+	)
+}
+
+func GetWorkload(c context.Context, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
+	c, span := otel.GetTracerProvider().Tracer("").Start(c, "k8sapi.GetWorkload",
+		trace.WithAttributes(
+			attribute.String("tel2.workload-name", name),
+			attribute.String("tel2.workload-namespace", namespace),
+			attribute.String("tel2.workload-kind", workloadKind),
+		),
+	)
+	defer tracing.EndAndRecord(span, err)
+
+	return k8sapi.GetWorkload(c, name, namespace, workloadKind)
 }

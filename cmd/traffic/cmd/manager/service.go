@@ -93,7 +93,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	ret := &Manager{
 		clock:        wall{},
 		ID:           uuid.New().String(),
-		tokenService: cloudtoken.NewCreateConfigmapIfNotPresent(ctx),
+		tokenService: cloudtoken.NewPatchConfigmapIfNotPresent(ctx),
 	}
 	cloudConfig, err := getCloudConfig(ctx)
 	if err != nil {
