@@ -14,10 +14,10 @@ import (
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/envconfig"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // Env is the traffic-manager's environment. It does not define any defaults because all

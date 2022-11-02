@@ -34,6 +34,7 @@ following Free and Open Source software:
     github.com/datawire/envconfig                                                v0.0.0-20221012222025-09524dc7d59b        Apache License 2.0
     github.com/datawire/go-ftpserver                                             v0.1.1                                    Apache License 2.0
     github.com/datawire/go-fuseftp/rpc                                           v0.2.0                                    Apache License 2.0
+    github.com/datawire/k8sapi                                                   v0.1.1-0.20221102000402-bab67787b913      Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                    Apache License 2.0
     github.com/davecgh/go-spew                                                   v1.1.1                                    ISC license
     github.com/docker/cli                                                        v20.10.18+incompatible                    Apache License 2.0
@@ -136,13 +137,13 @@ following Free and Open Source software:
     github.com/xlab/treeprint                                                    v1.1.0                                    MIT license
     go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc  v0.36.0                                   Apache License 2.0
     go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp                v0.36.0                                   Apache License 2.0
-    go.opentelemetry.io/otel                                                     v1.10.0                                   Apache License 2.0
+    go.opentelemetry.io/otel                                                     v1.11.1                                   Apache License 2.0
     go.opentelemetry.io/otel/exporters/otlp/internal/retry                       v1.10.0                                   Apache License 2.0
     go.opentelemetry.io/otel/exporters/otlp/otlptrace                            v1.10.0                                   Apache License 2.0
     go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc              v1.10.0                                   Apache License 2.0
     go.opentelemetry.io/otel/metric                                              v0.32.1                                   Apache License 2.0
     go.opentelemetry.io/otel/sdk                                                 v1.10.0                                   Apache License 2.0
-    go.opentelemetry.io/otel/trace                                               v1.10.0                                   Apache License 2.0
+    go.opentelemetry.io/otel/trace                                               v1.11.1                                   Apache License 2.0
     go.opentelemetry.io/proto/otlp                                               v0.19.0                                   Apache License 2.0
     go.starlark.net                                                              v0.0.0-20220817180228-f738f5508c12        3-clause BSD license
     golang.org/x/crypto                                                          v0.0.0-20220924013350-4ba4fb4dd9e7        3-clause BSD license

@@ -33,13 +33,13 @@ require (
 	github.com/telepresenceio/telepresence/rpc/v2 v2.8.3
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.36.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.36.0
-	go.opentelemetry.io/otel v1.10.0
+	go.opentelemetry.io/otel v1.11.1
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.10.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.10.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.10.0
 	go.opentelemetry.io/otel/metric v0.32.1 // indirect
 	go.opentelemetry.io/otel/sdk v1.10.0
-	go.opentelemetry.io/otel/trace v1.10.0
+	go.opentelemetry.io/otel/trace v1.11.1
 	go.opentelemetry.io/proto/otlp v0.19.0
 	golang.org/x/net v0.0.0-20220923203811-8be639271d50
 	golang.org/x/sys v0.0.0-20221010170243-090e33056c14
@@ -188,6 +188,9 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
 
-require golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
+require (
+	github.com/datawire/k8sapi v0.1.1-0.20221102000402-bab67787b913
+	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
+)
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

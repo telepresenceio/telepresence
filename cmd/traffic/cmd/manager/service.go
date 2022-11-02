@@ -23,6 +23,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
@@ -41,12 +42,13 @@ type Clock interface {
 }
 
 type Manager struct {
-	ctx         context.Context
-	clock       Clock
-	ID          string
-	state       *state.State
-	clusterInfo cluster.Info
-	cloudConfig *rpc.AmbassadorCloudConfig
+	ctx          context.Context
+	clock        Clock
+	ID           string
+	state        *state.State
+	clusterInfo  cluster.Info
+	cloudConfig  *rpc.AmbassadorCloudConfig
+	tokenService cloudtoken.Service
 
 	rpc.UnsafeManagerServer
 }
@@ -89,8 +91,9 @@ func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
 func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &Manager{
-		clock: wall{},
-		ID:    uuid.New().String(),
+		clock:        wall{},
+		ID:           uuid.New().String(),
+		tokenService: cloudtoken.NewCreateConfigmapIfNotPresent(ctx),
 	}
 	cloudConfig, err := getCloudConfig(ctx)
 	if err != nil {
@@ -174,6 +177,8 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
 
+	m.MaybeAddToken(ctx, client.GetApiKey())
+
 	installId := client.GetInstallId()
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
@@ -198,10 +203,20 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 	}, nil
 }
 
+func (m *Manager) MaybeAddToken(ctx context.Context, apikey string) {
+	if apikey != "" {
+		if err := m.tokenService.MaybeAddToken(ctx, apikey); err != nil {
+			dlog.Errorf(ctx, "error creating cloud token: %s", err)
+		}
+	}
+}
+
 // Remain indicates that the session is still valid.
-func (m *Manager) Remain(_ context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
+func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	// ctx = WithSessionInfo(ctx, req.GetSession())
 	// dlog.Debug(ctx, "Remain called")
+
+	m.MaybeAddToken(ctx, req.GetApiKey())
 
 	if ok := m.state.MarkSession(req, m.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", req.GetSession().GetSessionId())
