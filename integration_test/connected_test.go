@@ -21,7 +21,7 @@ func init() {
 }
 
 func (s *connectedSuite) Test_ListExcludesTM() {
-	stdout := itest.TelepresenceOk(s.Context(), "list", "-n", s.ManagerNamespace())
+	stdout := itest.TelepresenceOk(s.Context(), "list", "-s", s.ManagerNamespace())
 	s.NotContains(stdout, "traffic-manager")
 }
 
@@ -34,7 +34,7 @@ func (s *connectedSuite) Test_ReportsVersionFromDaemon() {
 
 func (s *connectedSuite) Test_Status() {
 	stdout := itest.TelepresenceOk(s.Context(), "status")
-	s.Contains(stdout, "Root Daemon: Running")
+	s.Contains(stdout, "Root Daemon: Running11")
 	s.Contains(stdout, "User Daemon: Running")
 	s.Contains(stdout, "Kubernetes context:")
 }
