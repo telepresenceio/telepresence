@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.8.5 (TBD)
+### 2.8.5 (November 2, 2022)
 
 - Change: This is a security release. It's identical with 2.8.3 but built using Go 1.19.3 to address
   [CVE-2022-41716 and Go issue https://go.dev/issue/56284](https://github.com/golang/go/issues/56284).
