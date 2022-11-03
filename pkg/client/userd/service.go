@@ -182,6 +182,7 @@ nextSession:
 		wg.Add(1)
 		go func(cr *rpc.ConnectRequest) {
 			defer wg.Done()
+			defer s.SetManagerClient(nil)
 			if err := s.session.Run(s.sessionContext); err != nil {
 				if errors.Is(err, trafficmgr.ErrSessionExpired) {
 					// Session has expired. We need to cancel the owner session and reconnect

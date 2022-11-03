@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.9.0 (TBD)
+
+- Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
+
 ### 2.8.5 (November 2, 2022)
 
 - Change: This is a security release. It's identical with 2.8.3 but built using Go 1.19.3 to address
