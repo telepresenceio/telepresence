@@ -284,7 +284,7 @@ func (aacu ambassadadorAgentChartUpdate) execute() (string, error) {
 
 	defer response.Body.Close()
 
-	if err := os.MkdirAll(aacu.chartDir, 0700); err != nil {
+	if err := os.MkdirAll(aacu.chartDir, 0o700); err != nil {
 		return "", err
 	}
 
