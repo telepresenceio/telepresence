@@ -219,7 +219,8 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		fmt.Fprintln(cmd.OutOrStdout(), instruction)
 	}
 	if configIssues {
-		fmt.Fprintln(cmd.OutOrStdout(), "\nPlease see https://www.telepresence.io/docs/latest/reference/vpn for more info on these corrective actions, as well as examples")
+		fmt.Fprintln(cmd.OutOrStdout(),
+			"\nPlease see https://www.getambassador.io/docs/telepresence/latest/reference/vpn/ for more info on these corrective actions, as well as examples")
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nStill having issues? Please create a new github issue at https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md\n",
 		"Please make sure to add the following to your issue:\n",
