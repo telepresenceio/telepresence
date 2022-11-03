@@ -154,8 +154,8 @@ github.com/datawire/go-ftpserver v0.1.1 h1:73szT7FqirsyrofMNuq/tmYC+eRxhWtWswPd/
 github.com/datawire/go-ftpserver v0.1.1/go.mod h1:WXsutHvPI+JqjYEXD42U43++L5Samu9o+rMX7dY0Sc0=
 github.com/datawire/go-fuseftp/rpc v0.2.0 h1:KS7bmmHLqy3bpscwEhKolgTf+vykQlMbICamYkiEA/U=
 github.com/datawire/go-fuseftp/rpc v0.2.0/go.mod h1:Qk+XkTKLm/lSHkdziS/0a+4UYhtm2lUrDHNdfYUkXYY=
-github.com/datawire/k8sapi v0.1.1-0.20221102212418-ff24519a45be h1:q7GXkRb7nQviaHAdvF3Lp1u95I+s8gOjTRcbm9z+DtQ=
-github.com/datawire/k8sapi v0.1.1-0.20221102212418-ff24519a45be/go.mod h1:JwHXYUKrMwYoAhl18CIf8XDqHduhKZPc/QZ75prLLQs=
+github.com/datawire/k8sapi v0.1.1 h1:MHkhfh5ZfexyZDQY4NE68SZdq+CZyjMh667sKG1Unvg=
+github.com/datawire/k8sapi v0.1.1/go.mod h1:JwHXYUKrMwYoAhl18CIf8XDqHduhKZPc/QZ75prLLQs=
 github.com/datawire/metriton-go-client v0.1.1 h1:T+gFOmIWBg4Cc8B5OTst0lllflaT1Pdh/LaxA1YouTQ=
 github.com/datawire/metriton-go-client v0.1.1/go.mod h1:OVLUaTDnGNk58GluwoaFKaWTo0IYU03b9qiN14cdwkw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

@@ -189,7 +189,7 @@ require (
 )
 
 require (
-	github.com/datawire/k8sapi v0.1.1-0.20221102212418-ff24519a45be
+	github.com/datawire/k8sapi v0.1.1
 	golang.org/x/oauth2 v0.0.0-20220909003341-f21342109be1
 )
 
