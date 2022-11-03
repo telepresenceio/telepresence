@@ -24,7 +24,7 @@ import (
 )
 
 func (ic *intercept) shouldMount() bool {
-	return ic.FtpPort > 0 || ic.SftpPort > 0 && ic.ClientMountPoint != ""
+	return (ic.FtpPort > 0 || ic.SftpPort > 0) && ic.ClientMountPoint != ""
 }
 
 // startMount starts the mount for the given podInterceptKey.

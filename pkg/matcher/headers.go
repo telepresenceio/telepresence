@@ -9,7 +9,7 @@ import (
 
 type HeaderMap map[string]Value
 
-// Headers uses a set of Value matchers to match a http.Header
+// Headers uses a set of Value matchers to match a http.Header.
 type Headers interface {
 	// Map returns the map correspondence of this instance. The returned value can be
 	// used as an argument to NewHeaders to create an identical Headers.

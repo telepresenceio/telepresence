@@ -12,6 +12,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -35,6 +36,10 @@ https://www.getambassador.io/docs/telepresence/latest/reference/cluster-config/`
 			return getCloudLicense(cmd.Context(), cmd.OutOrStdout(),
 				flags.id, flags.outputFile, flags.licenseFile, flags.hostDomain)
 		},
+		Annotations: map[string]string{
+			ann.Session:       ann.Required,
+			ann.Notifications: ann.Required,
+		},
 	}
 
 	cmd.Flags().StringVarP(&flags.id, "id", "i", "", "The id associated with your license.")
@@ -47,7 +52,7 @@ https://www.getambassador.io/docs/telepresence/latest/reference/cluster-config/`
 
 // getCloudLicense communicates with system a, acquires the jwt formatted license
 // given by the id, places it in a secret, and outputs it to stdout or writes it
-// to a file given by the user
+// to a file given by the user.
 func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, licenseFile, hostDomain string) error {
 	if licenseFile == "" && id == "" {
 		return errcat.User.New("Must use either --id or --license-file flag")
@@ -82,7 +87,7 @@ func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, lice
 		fmt.Fprintf(stdout, "Writing secret to %v", outputFile)
 		writer = f
 	}
-	if err := createSecretFromLicense(ctx, writer, license, hostDomain); err != nil {
+	if err := createSecretFromLicense(writer, license, hostDomain); err != nil {
 		return err
 	}
 	return nil
@@ -90,8 +95,8 @@ func getCloudLicense(ctx context.Context, stdout io.Writer, id, outputFile, lice
 
 // Creates the kubernetes secret that can be put in your cluster
 // to access licensed features if the cluster is air-gapped and
-// writes it to the given writer
-func createSecretFromLicense(ctx context.Context, writer io.Writer, license, hostDomain string) error {
+// writes it to the given writer.
+func createSecretFromLicense(writer io.Writer, license, hostDomain string) error {
 	secret := &core.Secret{
 		TypeMeta: meta.TypeMeta{
 			Kind:       "Secret",

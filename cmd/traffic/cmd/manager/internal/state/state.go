@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -20,159 +19,9 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
-
-type SessionState interface {
-	Cancel()
-	Done() <-chan struct{}
-	LastMarked() time.Time
-	SetLastMarked(lastMarked time.Time)
-	Dials() <-chan *rpc.DialRequest
-	EstablishBidiPipe(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
-	OnConnect(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
-}
-
-type awaitingBidiPipe struct {
-	stream     tunnel.Stream
-	bidiPipeCh chan tunnel.Endpoint
-}
-
-type sessionState struct {
-	sync.Mutex
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	lastMarked          time.Time
-	awaitingBidiPipeMap map[tunnel.ConnID]*awaitingBidiPipe
-	dials               chan *rpc.DialRequest
-}
-
-// EstablishBidiPipe registers the given stream as waiting for a matching stream to arrive in a call
-// to Tunnel, sends a DialRequest to the owner of this sessionState, and then waits. When the call
-// arrives, a BidiPipe connecting the two streams is returned.
-func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
-	// Dispatch directly to agent and let the dial happen there
-	bidiPipeCh := make(chan tunnel.Endpoint)
-	id := stream.ID()
-	abp := &awaitingBidiPipe{stream: stream, bidiPipeCh: bidiPipeCh}
-
-	ss.Lock()
-	if ss.awaitingBidiPipeMap == nil {
-		ss.awaitingBidiPipeMap = map[tunnel.ConnID]*awaitingBidiPipe{id: abp}
-	} else {
-		ss.awaitingBidiPipeMap[id] = abp
-	}
-	ss.Unlock()
-
-	// Send dial request to the client/agent
-	dr := &rpc.DialRequest{ConnId: []byte(id),
-		RoundtripLatency: int64(stream.RoundtripLatency()),
-		DialTimeout:      int64(stream.DialTimeout()),
-	}
-	propagator := otel.GetTextMapPropagator()
-	carrier := propagation.MapCarrier{}
-	propagator.Inject(ctx, carrier)
-	dr.TraceContext = carrier
-	select {
-	case <-ss.Done():
-		return nil, status.Error(codes.Canceled, "session cancelled")
-	case ss.dials <- dr:
-	}
-
-	// Wait for the client/agent to connect. Allow extra time for the call
-	ctx, cancel := context.WithTimeout(ctx, stream.DialTimeout()+stream.RoundtripLatency())
-	defer cancel()
-	select {
-	case <-ctx.Done():
-		return nil, status.Error(codes.DeadlineExceeded, "timeout while establishing bidipipe")
-	case <-ss.Done():
-		return nil, status.Error(codes.Canceled, "session cancelled")
-	case bidi := <-bidiPipeCh:
-		return bidi, nil
-	}
-}
-
-// OnConnect checks if a stream is waiting for the given stream to arrive in order to create a BidiPipe.
-// If that's the case, the BidiPipe is created, started, and returned by both this method and the EstablishBidiPipe
-// method that registered the waiting stream. Otherwise, this method returns nil.
-func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
-	id := stream.ID()
-	ss.Lock()
-	abp, ok := ss.awaitingBidiPipeMap[id]
-	if ok {
-		delete(ss.awaitingBidiPipeMap, id)
-	}
-	ss.Unlock()
-
-	if !ok {
-		return nil, nil
-	}
-	dlog.Debugf(ctx, "   FWD %s, connect session %s with %s", id, abp.stream.SessionID(), stream.SessionID())
-	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream)
-	bidiPipe.Start(ctx)
-
-	defer close(abp.bidiPipeCh)
-	select {
-	case <-ss.Done():
-		return nil, status.Error(codes.Canceled, "session cancelled")
-	case abp.bidiPipeCh <- bidiPipe:
-		return bidiPipe, nil
-	}
-}
-
-func (ss *sessionState) Cancel() {
-	ss.cancel()
-	close(ss.dials)
-}
-
-func (ss *sessionState) Dials() <-chan *rpc.DialRequest {
-	return ss.dials
-}
-
-func (ss *sessionState) Done() <-chan struct{} {
-	return ss.ctx.Done()
-}
-
-func (ss *sessionState) LastMarked() time.Time {
-	return ss.lastMarked
-}
-
-func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
-	ss.lastMarked = lastMarked
-}
-
-func (s *State) newSessionState(now time.Time) sessionState {
-	ctx, cancel := context.WithCancel(s.ctx)
-	return sessionState{
-		ctx:        ctx,
-		cancel:     cancel,
-		lastMarked: now,
-		dials:      make(chan *rpc.DialRequest),
-	}
-}
-
-type clientSessionState struct {
-	sessionState
-	name string
-	pool *tunnel.Pool
-}
-
-type agentSessionState struct {
-	sessionState
-	agent           *rpc.AgentInfo
-	lookups         chan *rpc.LookupHostRequest
-	lookupResponses map[string]chan *rpc.LookupHostResponse
-}
-
-func (ss *agentSessionState) Cancel() {
-	close(ss.lookups)
-	for _, lr := range ss.lookupResponses {
-		close(lr)
-	}
-	ss.sessionState.Cancel()
-}
 
 // State is the total state of the Traffic Manager.  A zero State is invalid; you must call
 // NewState.
@@ -195,10 +44,10 @@ type State struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts      watchable.Map[*rpc.InterceptInfo]
-	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions
-	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions
-	sessions        map[string]SessionState              // info for all sessions
+	intercepts      watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
+	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
+	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
+	sessions        map[string]SessionState              // info for all sessions, keyed by session id
 	agentsByName    map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 	interceptStates map[string]*interceptState
 	timedLogLevel   log.TimedLevel
@@ -414,7 +263,7 @@ func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) string {
 	return s.addClient(sessionID, client, now)
 }
 
-// addClient is like AddClient, but takes a sessionID, for testing purposes
+// addClient is like AddClient, but takes a sessionID, for testing purposes.
 func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -422,11 +271,7 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	if oldClient, hasConflict := s.clients.LoadOrStore(sessionID, client); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
-	s.sessions[sessionID] = &clientSessionState{
-		sessionState: s.newSessionState(now),
-		name:         client.Name,
-		pool:         tunnel.NewPool(),
-	}
+	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
 	return sessionID
 }
 
@@ -469,13 +314,7 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
 	}
 	s.agentsByName[agent.Name][sessionID] = agent
-
-	s.sessions[sessionID] = &agentSessionState{
-		sessionState:    s.newSessionState(now),
-		lookups:         make(chan *rpc.LookupHostRequest),
-		lookupResponses: make(map[string]chan *rpc.LookupHostResponse),
-		agent:           agent,
-	}
+	s.sessions[sessionID] = newAgentSessionState(s.ctx, now)
 
 	for interceptID, intercept := range s.intercepts.LoadAll() {
 		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
@@ -570,7 +409,7 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 		return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
 	}
 
-	state := newInterceptState(sess.ctx, s.ctx, cept.Id)
+	state := newInterceptState(cept.Id)
 	s.interceptStates[interceptID] = state
 
 	return cept, nil
@@ -653,7 +492,7 @@ func (s *State) unlockedRemoveIntercept(interceptID string) bool {
 	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
 	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
 		delete(s.interceptStates, interceptID)
-		state.terminate(intercept)
+		state.terminate(s.ctx, intercept)
 	}
 
 	return didDelete
@@ -758,122 +597,6 @@ func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
 		return nil
 	}
 	return ss.Dials()
-}
-
-// AgentsLookup will send the given request to all agents currently intercepted by the client identified with
-// the clientSessionID, it will then wait for results to arrive, collect those results, and return them as a
-// unique and sorted slice together with a count of how many agents that replied.
-func (s *State) AgentsLookup(ctx context.Context, clientSessionID string, request *rpc.LookupHostRequest) (iputil.IPs, int, error) {
-	iceptAgentIDs := s.getAgentsInterceptedByClient(clientSessionID)
-	ips := iputil.IPs{}
-	iceptCount := len(iceptAgentIDs)
-	if iceptCount == 0 {
-		return ips, 0, nil
-	}
-
-	rsMu := sync.Mutex{} // prevent concurrent updates of the ips slice
-	agentTimeout, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-
-	count := 0
-	wg := sync.WaitGroup{}
-	wg.Add(iceptCount)
-	for _, agentSessionID := range iceptAgentIDs {
-		go func(agentSessionID string) {
-			defer func() {
-				s.endHostLookup(agentSessionID, request)
-				wg.Done()
-			}()
-
-			rsCh := s.startHostLookup(agentSessionID, request)
-			if rsCh == nil {
-				return
-			}
-			select {
-			case <-agentTimeout.Done():
-				return
-			case rs := <-rsCh:
-				if rs == nil {
-					// Channel closed
-					return
-				}
-				rsMu.Lock()
-				count++
-				for _, ip := range rs.Ips {
-					ips = append(ips, ip)
-				}
-				rsMu.Unlock()
-			}
-		}(agentSessionID)
-	}
-	wg.Wait() // wait for timeout or that all agents have responded
-	return ips.UniqueSorted(), count, nil
-}
-
-// PostLookupResponse receives lookup responses from an agent and places them in the channel
-// that corresponds to the lookup request
-func (s *State) PostLookupResponse(response *rpc.LookupHostAgentResponse) {
-	responseID := response.Request.Session.SessionId + ":" + response.Request.Host
-	var rch chan<- *rpc.LookupHostResponse
-	s.mu.RLock()
-	if as, ok := s.sessions[response.Session.SessionId].(*agentSessionState); ok {
-		rch = as.lookupResponses[responseID]
-	}
-	s.mu.RUnlock()
-	if rch != nil {
-		rch <- response.Response
-	}
-}
-
-func (s *State) startHostLookup(agentSessionID string, request *rpc.LookupHostRequest) <-chan *rpc.LookupHostResponse {
-	responseID := request.Session.SessionId + ":" + request.Host
-	var (
-		rch chan *rpc.LookupHostResponse
-		as  *agentSessionState
-		ok  bool
-	)
-	s.mu.Lock()
-	if as, ok = s.sessions[agentSessionID].(*agentSessionState); ok {
-		if rch, ok = as.lookupResponses[responseID]; !ok {
-			rch = make(chan *rpc.LookupHostResponse)
-			as.lookupResponses[responseID] = rch
-		}
-	}
-	s.mu.Unlock()
-	if as != nil {
-		// the as.lookups channel may be closed at this point, so guard for panic
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					close(rch)
-				}
-			}()
-			as.lookups <- request
-		}()
-	}
-	return rch
-}
-
-func (s *State) endHostLookup(agentSessionID string, request *rpc.LookupHostRequest) {
-	responseID := request.Session.SessionId + ":" + request.Host
-	s.mu.Lock()
-	if as, ok := s.sessions[agentSessionID].(*agentSessionState); ok {
-		if rch, ok := as.lookupResponses[responseID]; ok {
-			delete(as.lookupResponses, responseID)
-			close(rch)
-		}
-	}
-	s.mu.Unlock()
-}
-
-func (s *State) WatchLookupHost(agentSessionID string) <-chan *rpc.LookupHostRequest {
-	s.mu.RLock()
-	ss, ok := s.sessions[agentSessionID]
-	s.mu.RUnlock()
-	if !ok {
-		return nil
-	}
-	return ss.(*agentSessionState).lookups
 }
 
 // SetTempLogLevel sets the temporary log-level for the traffic-manager and all agents and,

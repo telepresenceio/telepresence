@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "telepresence.fullname" . }}
-  namespace: {{ include "telepresence.namespace" . }}
+  name: {{ include "traffic-manager.name" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 spec:
@@ -11,7 +11,7 @@ spec:
   clusterIP: None
   ports:
   - name: api
-    port: 8081
+    port: {{ .Values.apiPort }}
     targetPort: api
   {{- with .Values.tracing }}
   {{- if .grpcPort }}
@@ -28,14 +28,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Values.agentInjector.name }}
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
   - name: https
-    port: 443
+    port: {{ .Values.agentInjector.webhook.port }}
     targetPort: https
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
@@ -45,7 +45,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: telepresence-prometheus
-  namespace: {{ include "telepresence.namespace" . }}
+  namespace: {{ include "traffic-manager.namespace" . }}
   labels:
     name: telepresence-prometheus
 spec:

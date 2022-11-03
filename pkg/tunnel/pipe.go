@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// NewPipe creates a pair of Streams connected using two channels
+// NewPipe creates a pair of Streams connected using two channels.
 func NewPipe(id ConnID, sessionID string) (Stream, Stream) {
 	out := make(chan Message, 1)
 	in := make(chan Message, 1)

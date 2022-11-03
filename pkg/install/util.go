@@ -7,27 +7,27 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-// AlreadyUndone means that an install action has already been undone, perhaps by manual user action
-type AlreadyUndone struct {
+// AlreadyUndoneError means that an install action has already been undone, perhaps by manual user action.
+type AlreadyUndoneError struct {
 	err error
 	msg string
 }
 
-func (e *AlreadyUndone) Error() string {
+func (e *AlreadyUndoneError) Error() string {
 	return fmt.Sprintf("%s: %v", e.msg, e.err)
 }
 
-func (e *AlreadyUndone) Unwrap() error {
+func (e *AlreadyUndoneError) Unwrap() error {
 	return e.err
 }
 
 func NewAlreadyUndone(err error, msg string) error {
-	return &AlreadyUndone{err, msg}
+	return &AlreadyUndoneError{err, msg}
 }
 
 // IsAlreadyUndone returns whether the given error -- possibly a multierror -- indicates that all actions have been undone.
 func IsAlreadyUndone(err error) bool {
-	var undone *AlreadyUndone
+	var undone *AlreadyUndoneError
 	if errors.As(err, &undone) {
 		return true
 	}

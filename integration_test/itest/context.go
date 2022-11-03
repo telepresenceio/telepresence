@@ -77,7 +77,7 @@ func WithModuleRoot(ctx context.Context) context.Context {
 
 type dirContextKey struct{}
 
-// WithWorkingDir determines the working directory for the Command function
+// WithWorkingDir determines the working directory for the Command function.
 func WithWorkingDir(ctx context.Context, dir string) context.Context {
 	return context.WithValue(ctx, dirContextKey{}, dir)
 }
@@ -114,7 +114,7 @@ func WithEnv(ctx context.Context, env map[string]string) context.Context {
 		env = merged
 	}
 	ctx = context.WithValue(ctx, envContextKey{}, env)
-	evx, err := client.LoadEnvWith(ctx, &envCtxLookuper{ctx})
+	evx, err := client.LoadEnvWith((&envCtxLookuper{ctx}).Lookup)
 	if err != nil {
 		getT(ctx).Fatal(err)
 	}

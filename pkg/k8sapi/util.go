@@ -20,7 +20,7 @@ func WithK8sInterface(ctx context.Context, ki kubernetes.Interface) context.Cont
 func GetK8sInterface(ctx context.Context) kubernetes.Interface {
 	ki, ok := ctx.Value(kiKey{}).(kubernetes.Interface)
 	if !ok {
-		return nil
+		panic("K8sInterface requested from a context that has none")
 	}
 	return ki
 }

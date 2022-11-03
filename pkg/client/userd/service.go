@@ -20,7 +20,6 @@ import (
 	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -35,8 +34,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-const ProcessName = "connector"
-const titleName = "Connector"
+const (
+	ProcessName = "connector"
+	titleName   = "Connector"
+)
 
 var help = `The Telepresence ` + titleName + ` is a background component that manages a connection. It
 requires that a daemon is already running.
@@ -62,15 +63,13 @@ type DaemonService interface {
 
 type CommandFactory func(context.Context) cliutil.CommandGroups
 
-// Service represents the long-running state of the Telepresence User Daemon
+// Service represents the long-running state of the Telepresence User Daemon.
 type Service struct {
 	rpc.UnsafeConnectorServer
-
 	svc               *grpc.Server
 	ManagerProxy      trafficmgr.ManagerProxy
 	procName          string
 	timedLogLevel     log.TimedLevel
-	daemonClient      daemon.DaemonClient
 	loginExecutor     auth.LoginExecutor
 	userNotifications func(context.Context) <-chan string
 	ucn               int64
@@ -97,29 +96,11 @@ func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOpti
 	s.ManagerProxy.SetClient(managerClient, callOptions...)
 }
 
-func (s *Service) RootDaemonClient(c context.Context) (daemon.DaemonClient, error) {
-	if s.daemonClient != nil {
-		return s.daemonClient, nil
-	}
-	// establish a connection to the root daemon gRPC grpcService
-	dlog.Info(c, "Connecting to root daemon...")
-	conn, err := client.DialSocket(c, client.DaemonSocketName,
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	if err != nil {
-		dlog.Errorf(c, "unable to connect to root daemon: %+v", err)
-		return nil, err
-	}
-	s.daemonClient = daemon.NewDaemonClient(conn)
-	return s.daemonClient, nil
-}
-
 func (s *Service) LoginExecutor() auth.LoginExecutor {
 	return s.loginExecutor
 }
 
-// Command returns the CLI sub-command for "connector-foreground"
+// Command returns the CLI sub-command for "connector-foreground".
 func Command(getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) *cobra.Command {
 	c := &cobra.Command{
 		Use:    ProcessName + "-foreground",
@@ -168,14 +149,15 @@ nextSession:
 				rsp = s.session.UpdateStatus(s.sessionContext, cr)
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
+				s.sessionCancel = sCancel
 				sCtx, session, rsp = trafficmgr.NewSession(sCtx, s.scout, cr, s, sessionServices, fuseFtp)
-				sCtx = a8rcloud.WithSystemAPool[*SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
+				sCtx = a8rcloud.WithSystemAPool[a8rcloud.SessionClient](sCtx, a8rcloud.UserdConnName, &SessionClientProvider{session})
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
-					s.sessionCancel = sCancel
 					s.session = session
 				} else {
 					sCancel()
+					s.sessionCancel = nil
 				}
 			}
 		}
@@ -200,8 +182,9 @@ nextSession:
 		wg.Add(1)
 		go func(cr *rpc.ConnectRequest) {
 			defer wg.Done()
+			defer s.SetManagerClient(nil)
 			if err := s.session.Run(s.sessionContext); err != nil {
-				if errors.Is(err, trafficmgr.SessionExpiredErr) {
+				if errors.Is(err, trafficmgr.ErrSessionExpired) {
 					// Session has expired. We need to cancel the owner session and reconnect
 					dlog.Info(c, "refreshing session")
 					s.cancelSession()
@@ -257,7 +240,7 @@ func GetPoddService(sc *scout.Reporter, cfg client.Config, login auth.LoginExecu
 	}
 }
 
-// run is the main function when executing as the connector
+// run is the main function when executing as the connector.
 func run(c context.Context, getCommands CommandFactory, daemonServices []DaemonService, sessionServices []trafficmgr.SessionService) error {
 	cfg, err := client.LoadConfig(c)
 	if err != nil {

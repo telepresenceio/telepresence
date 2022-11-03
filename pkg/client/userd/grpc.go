@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
@@ -148,12 +150,16 @@ func (s *Service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, e
 	return &empty.Empty{}, nil
 }
 
-func (s *Service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectInfo, err error) {
+func (s *Service) Status(c context.Context, ex *empty.Empty) (result *rpc.ConnectInfo, err error) {
 	s.logCall(c, "Status", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
 			result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
+			_ = s.withRootDaemon(c, func(c context.Context, dc daemon.DaemonClient) error {
+				result.DaemonStatus, err = dc.Status(c, ex)
+				return nil
+			})
 		} else {
 			result = s.session.Status(s.sessionContext)
 		}
@@ -163,7 +169,7 @@ func (s *Service) Status(c context.Context, _ *empty.Empty) (result *rpc.Connect
 
 // isMultiPortIntercept checks if the intercept is one of several active intercepts on the same workload.
 // If it is, then the first returned value will be true and the second will indicate if those intercepts are
-// on different services. Otherwise, this function returns false, false
+// on different services. Otherwise, this function returns false, false.
 func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
 	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
 
@@ -489,14 +495,18 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	return
 }
 
-func (s *Service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
 	s.logCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		s.cancelSessionReadLocked()
 		s.quit()
+		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+			_, err := rd.Quit(ctx, ex)
+			return err
+		})
 	})
-	return &empty.Empty{}, nil
+	return ex, nil
 }
 
 func (s *Service) ListCommands(ctx context.Context, _ *empty.Empty) (groups *rpc.CommandGroups, err error) {
@@ -610,11 +620,20 @@ func stdinPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, wi
 	return ctx, rd, nil
 }
 
-func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult) {
+func stdoutAndStderrPump(ctx context.Context, cmdStream rpc.Connector_RunCommandServer, ch <-chan *rpc.StreamResult, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			// Drain the channel. Sends may fail depending on why the context is cancelled
+			for {
+				select {
+				case sm := <-ch:
+					_ = cmdStream.Send(sm)
+				default:
+					return
+				}
+			}
 		case sm, ok := <-ch:
 			if !ok {
 				return
@@ -656,28 +675,21 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 		cmd := &cobra.Command{
 			Use: "telepresence",
 		}
-		defer func() {
-			if cmdErr != nil {
-				if cmdErr == pflag.ErrHelp {
-					cmdErr = nil
-					_ = cmd.Usage()
-				}
-				// Propagate command error as a normal error response. We use SilenceErrors = true, so
-				// it will not have appeared on stderr
-				_ = cmdStream.Send(
-					&rpc.StreamResult{
-						Final: true,
-						Data: &rpc.Result{
-							Data:          []byte(cmdErr.Error()),
-							ErrorCategory: rpc.Result_ErrorCategory(errcat.GetCategory(cmdErr)),
-						},
-					})
-			}
-		}()
+		cmd.SetContext(ctx)
+		wg := sync.WaitGroup{}
 
 		// Start the stdout/stderr pump
-		so := client.NewStdOutput(ctx)
-		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel())
+		so := client.NewStdOutput()
+		wg.Add(1)
+		go stdoutAndStderrPump(ctx, cmdStream, so.ResultChannel(), &wg)
+		defer func() {
+			if cmdErr == pflag.ErrHelp {
+				cmdErr = nil
+				_ = cmd.Usage()
+			}
+			so.Finish(cmdErr)
+			wg.Wait()
+		}()
 
 		cmd.SetIn(bytes.NewReader(nil))
 		cmd.SetOut(so.Stdout())
@@ -730,8 +742,8 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 				}()
 
 				// Copy the SystemAPoolProvider over
-				if pool := a8rcloud.GetSystemAPoolProvider[*SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
-					ctx = a8rcloud.WithSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName, pool)
+				if pool := a8rcloud.GetSystemAPoolProvider[a8rcloud.SessionClient](sessionCtx, a8rcloud.UserdConnName); pool != nil {
+					ctx = a8rcloud.WithSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName, pool)
 				}
 				if ki := k8sapi.GetK8sInterface(sessionCtx); ki != nil {
 					ctx = k8sapi.WithK8sInterface(ctx, ki)
@@ -748,7 +760,10 @@ func (s *Service) RunCommand(cmdStream rpc.Connector_RunCommandServer) (err erro
 
 func (s *Service) ResolveIngressInfo(ctx context.Context, req *userdaemon.IngressInfoRequest) (resp *userdaemon.IngressInfoResponse, err error) {
 	err = s.withSession(ctx, "ResolveIngressInfo", func(ctx context.Context, session trafficmgr.Session) error {
-		pool := a8rcloud.GetSystemAPool[*SessionClient](ctx, a8rcloud.UserdConnName)
+		pool, err := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
+		if err != nil {
+			return err
+		}
 		systemacli, err := pool.Get(ctx)
 		if err != nil {
 			return err
@@ -789,7 +804,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 }
 
 func (s *Service) ValidArgsForCommand(ctx context.Context, req *rpc.ValidArgsForCommandRequest) (*rpc.ValidArgsForCommandResponse, error) {
-	var resp = rpc.ValidArgsForCommandResponse{
+	resp := rpc.ValidArgsForCommandResponse{
 		Completions: make([]string, 0),
 	}
 	var (
@@ -938,7 +953,7 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	}
 
 	if p := req.Prefix; p != "" {
-		var namespaces = []string{}
+		namespaces := []string{}
 		for _, namespace := range resp.Namespaces {
 			if strings.HasPrefix(namespace, p) {
 				namespaces = append(namespaces, namespace)
@@ -948,4 +963,29 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	}
 
 	return &resp, nil
+}
+
+func (s *Service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi *common.VersionInfo, err error) {
+	err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+		vi, err = rd.Version(ctx, empty)
+		return err
+	})
+	return vi, err
+}
+
+func (s *Service) GetClusterSubnets(ctx context.Context, empty *empty.Empty) (cs *daemon.ClusterSubnets, err error) {
+	err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+		cs, err = rd.GetClusterSubnets(ctx, empty)
+		return err
+	})
+	return cs, err
+}
+
+func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
+	conn, err := client.DialSocket(ctx, client.DaemonSocketName)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return f(ctx, daemon.NewDaemonClient(conn))
 }

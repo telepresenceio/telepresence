@@ -30,7 +30,7 @@ type dlogEmitter struct {
 	context.Context
 }
 
-func (l dlogEmitter) Emit(_ int, level log.Level, _ time.Time, format string, v ...interface{}) {
+func (l dlogEmitter) Emit(_ int, level log.Level, _ time.Time, format string, v ...interface{}) { //nolint:goprintffuncname // not our API
 	switch level {
 	case log.Debug:
 		dlog.Debugf(l, format, v...)
@@ -80,8 +80,10 @@ func NewStack(ctx context.Context, dev stack.LinkEndpoint, streamCreator tunnel.
 	return s, nil
 }
 
-const myWindowScale = 6
-const maxReceiveWindow = 1 << (myWindowScale + 14) // 1MiB
+const (
+	myWindowScale    = 6
+	maxReceiveWindow = 1 << (myWindowScale + 14) // 1MiB
+)
 
 // maxInFlight specifies the max number of in-flight connection attempts.
 const maxInFlight = 512

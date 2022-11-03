@@ -10,7 +10,7 @@ import (
 
 // ReloadDaemonConfig replaces the current config with one loaded from disk and
 // calls SetLevel with the log level defined for the rootDaemon or userDaemon
-// depending on the root flag
+// depending on the root flag.
 func ReloadDaemonConfig(c context.Context, root bool) error {
 	newCfg, err := client.LoadConfig(c)
 	if err != nil {

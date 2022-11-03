@@ -426,16 +426,19 @@ message DialRequest {
 }
 
 // LookupHost request sent from a client
+// Deprecated: Retained for backward compatibility. Replaced by DNSRequest
 message LookupHostRequest {
   // Client session
   SessionInfo session = 1;
-  string host = 2;
+  string name = 2;
 }
 
+// Deprecated: Retained for backward compatibility. Replaced by DNSResponse
 message LookupHostResponse {
   repeated bytes ips = 1;
 }
 
+// Deprecated: Retained for backward compatibility. Replaced by DNSAgentResponse
 message LookupHostAgentResponse {
   // Agent session
   SessionInfo session = 1;
@@ -447,6 +450,33 @@ message LookupHostAgentResponse {
   LookupHostResponse response = 3;
 }
 
+// LookupHost request sent from a client
+message DNSRequest {
+  // Client session
+  SessionInfo session = 1;
+  string name = 2;
+  uint32 type = 3;
+}
+
+message DNSResponse {
+  // DNS return code
+  int32 r_code = 1;
+
+  // rrs is an array of packed RR records
+  bytes rrs = 2;
+}
+
+message DNSAgentResponse {
+  // Agent session
+  SessionInfo session = 1;
+
+  // DNSRequest is the request that this is a response to
+  DNSRequest request = 2;
+
+  // The response, which might be nil in case no address was found
+  DNSResponse response = 3;
+}
+
 // IPNet is a subnet. e.g. 10.43.0.0/16
 message IPNet {
   bytes ip = 1;
@@ -456,29 +486,49 @@ message IPNet {
 // ClusterInfo contains information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
 message ClusterInfo {
-  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
-  bytes kube_dns_ip = 1;
-
   // service_subnet is the Kubernetes service subnet
   IPNet service_subnet = 2;
 
   // pod_subnets are the subnets used for Kubenetes pods.
   repeated IPNet pod_subnets = 3;
 
-  // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
-  string cluster_domain = 4;
-
   // manager_pod_ip is the ip address of the traffic manager
   bytes manager_pod_ip = 5;
 
-  DNSConfig dns_config = 6;
+  // manager_pod_port is the port of the traffic manager
+  int32 manager_pod_port = 8;
+
+  // Router configuration
+  Routing routing = 6;
+
+  // DNS configuration
+  DNS dns = 7;
+
+  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
+  // Deprecated: Use dns.kube_ip
+  bytes kube_dns_ip = 1;
+
+  // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
+  // Deprecated: Use dns.cluster_domain
+  string cluster_domain = 4;
 }
 
-message DNSConfig {
+message Routing {
   repeated IPNet also_proxy_subnets = 1;
   repeated IPNet never_proxy_subnets = 2;
 }
 
+message DNS {
+  repeated string include_suffixes = 1;
+  repeated string exclude_suffixes = 2;
+
+  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
+  // Deprecated: No longer used by clients >= 2.8.0
+  bytes kube_ip = 3;
+
+  // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
+  string cluster_domain = 4;
+}
 
 service Manager {
   // Version returns the version information of the Manager.
@@ -584,13 +634,26 @@ service Manager {
 
   // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.
+  // Deprecated: Retained for backward compatibility. Replaced by LookupDNS
   rpc LookupHost(LookupHostRequest) returns (LookupHostResponse);
 
   // AgentLookupHostResponse lets an agent respond for lookup requests
+  // Deprecated: Retained for backward compatibility. Replaced by AgentLookupDNSResponse
   rpc AgentLookupHostResponse(LookupHostAgentResponse) returns (google.protobuf.Empty);
 
   // WatchLookupHost lets an agent receive lookup requests
+  // Deprecated: Retained for backward compatibility. Replaced by WatchLookupDNS
   rpc WatchLookupHost(SessionInfo) returns (stream LookupHostRequest);
+
+  // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+  // active, the lookup will be performed from the intercepted pods.
+  rpc LookupDNS(DNSRequest) returns (DNSResponse);
+
+  // AgentLookupHostResponse lets an agent respond for lookup requests
+  rpc AgentLookupDNSResponse(DNSAgentResponse) returns (google.protobuf.Empty);
+
+  // WatchLookupHost lets an agent receive lookup requests
+  rpc WatchLookupDNS(SessionInfo) returns (stream DNSRequest);
 
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);

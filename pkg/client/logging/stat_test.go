@@ -24,7 +24,7 @@ func TestFStat(t *testing.T) {
 		// supports btime.
 		t.Run("tmpdirInHome", func(t *testing.T) {
 			os.Setenv("TMPDIR", filepath.Join(os.Getenv("HOME"), "tmp"))
-			err := os.Mkdir(os.Getenv("TMPDIR"), 0777)
+			err := os.Mkdir(os.Getenv("TMPDIR"), 0o777)
 			if err != nil && !errors.Is(err, os.ErrExist) {
 				t.Fatal(err)
 			}
@@ -43,7 +43,7 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) (btimeIsCTime bool) {
 	withFile := func(flags int, fn func(*os.File)) (time.Time, time.Time) {
 		before := time.Now()
 		time.Sleep(fsVsClockLeeway)
-		file, err := os.OpenFile(filename, flags, 0666)
+		file, err := os.OpenFile(filename, flags, 0o666)
 		require.NoError(t, err)
 		require.NotNil(t, file)
 		fn(file)
@@ -69,7 +69,7 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) (btimeIsCTime bool) {
 	// ctime
 	cBefore := time.Now()
 	time.Sleep(fsVsClockLeeway)
-	require.NoError(t, os.Chmod(filename, 0777))
+	require.NoError(t, os.Chmod(filename, 0o777))
 	time.Sleep(fsVsClockLeeway)
 	cAfter := time.Now()
 

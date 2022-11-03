@@ -105,7 +105,7 @@ func GetDeployment(c context.Context, name, namespace string) (Workload, error) 
 	return &deployment{d}, nil
 }
 
-// Deployments returns all deployments found in the given Namespace
+// Deployments returns all deployments found in the given Namespace.
 func Deployments(c context.Context, namespace string, labelSelector labels.Set) ([]Workload, error) {
 	ls, err := deployments(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
@@ -124,7 +124,7 @@ func Deployment(d *apps.Deployment) Workload {
 }
 
 // DeploymentImpl casts the given Object as an *apps.Deployment and returns
-// it together with a status flag indicating whether the cast was possible
+// it together with a status flag indicating whether the cast was possible.
 func DeploymentImpl(o Object) (*apps.Deployment, bool) {
 	if s, ok := o.(*deployment); ok {
 		return s.Deployment, true
@@ -140,7 +140,7 @@ func GetReplicaSet(c context.Context, name, namespace string) (Workload, error) 
 	return &replicaSet{d}, nil
 }
 
-// ReplicaSets returns all replica sets found in the given Namespace
+// ReplicaSets returns all replica sets found in the given Namespace.
 func ReplicaSets(c context.Context, namespace string, labelSelector labels.Set) ([]Workload, error) {
 	ls, err := replicaSets(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
@@ -159,7 +159,7 @@ func ReplicaSet(d *apps.ReplicaSet) Workload {
 }
 
 // ReplicaSetImpl casts the given Object as an *apps.ReplicaSet and returns
-// it together with a status flag indicating whether the cast was possible
+// it together with a status flag indicating whether the cast was possible.
 func ReplicaSetImpl(o Object) (*apps.ReplicaSet, bool) {
 	if s, ok := o.(*replicaSet); ok {
 		return s.ReplicaSet, true
@@ -175,7 +175,7 @@ func GetStatefulSet(c context.Context, name, namespace string) (Workload, error)
 	return &statefulSet{d}, nil
 }
 
-// StatefulSets returns all stateful sets found in the given Namespace
+// StatefulSets returns all stateful sets found in the given Namespace.
 func StatefulSets(c context.Context, namespace string, labelSelector labels.Set) ([]Workload, error) {
 	ls, err := statefulSets(c, namespace).List(c, listOptions(labelSelector))
 	if err != nil {
@@ -194,7 +194,7 @@ func StatefulSet(d *apps.StatefulSet) Workload {
 }
 
 // StatefulSetImpl casts the given Object as an *apps.StatefulSet and returns
-// it together with a status flag indicating whether the cast was possible
+// it together with a status flag indicating whether the cast was possible.
 func StatefulSetImpl(o Object) (*apps.StatefulSet, bool) {
 	if s, ok := o.(*statefulSet); ok {
 		return s.StatefulSet, true

@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	//nolint:depguard // This short script has no logging and no Contexts.
 	"os/exec"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -54,7 +54,7 @@ func makeLoggerOn(bf *bytes.Buffer) context.Context {
 	return dlog.WithLogger(context.Background(), dlog.WrapLogrus(logger))
 }
 
-// Test that stdout of a process executed by DPipe is sent to peer
+// Test that stdout of a process executed by DPipe is sent to peer.
 func TestDPipe_stdout(t *testing.T) {
 	log := &bytes.Buffer{}
 	ctx := makeLoggerOn(log)
@@ -64,7 +64,7 @@ func TestDPipe_stdout(t *testing.T) {
 	assert.Equal(t, "hello stdout\n", peer.String())
 }
 
-// Test that stderr of a process executed by DPipe is logged as errors
+// Test that stderr of a process executed by DPipe is logged as errors.
 func TestDPipe_stderr(t *testing.T) {
 	log := &bytes.Buffer{}
 	ctx := makeLoggerOn(log)

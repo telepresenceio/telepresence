@@ -11,10 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miekg/dns"
+
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -37,7 +40,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	return err
 }
 
-// shouldApplySearch returns true if search path should be applied
+// shouldApplySearch returns true if search path should be applied.
 func (s *Server) shouldApplySearch(query string) bool {
 	if len(s.search) == 0 {
 		return false
@@ -76,22 +79,23 @@ func (s *Server) shouldApplySearch(query string) bool {
 // TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
 // and that's the local-only intercepts which means that using search-paths really should be limited to that
 // use-case.
-func (s *Server) resolveInSearch(c context.Context, query string) ([]net.IP, error) {
-	query = strings.ToLower(query)
+func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.RRs, int, error) {
+	query := strings.ToLower(q.Name)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 
 	if !s.shouldDoClusterLookup(query) {
-		return nil, nil
+		return nil, dns.RcodeNameError, nil
 	}
 
 	if s.shouldApplySearch(query) {
 		for _, sp := range s.search {
-			if ips, err := s.resolveInCluster(c, query+sp); err != nil || len(ips) > 0 {
-				return ips, err
+			q.Name = query + sp
+			if rrs, rCode, err := s.resolveInCluster(c, q); err != nil || len(rrs) > 0 {
+				return rrs, rCode, err
 			}
 		}
 	}
-	return s.resolveInCluster(c, query)
+	return s.resolveInCluster(c, q)
 }
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
@@ -282,7 +286,7 @@ func runningInDocker() bool {
 	return err == nil
 }
 
-// runNatTableCmd runs "iptables -t nat ..."
+// runNatTableCmd runs "iptables -t nat ...".
 func runNatTableCmd(c context.Context, args ...string) error {
 	// We specifically don't want to use the cancellation of 'ctx' here, because we don't ever
 	// want to leave things in a half-cleaned-up state.

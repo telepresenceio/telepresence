@@ -38,7 +38,7 @@ func (l *loopbackListener) AddConn(conn net.Conn) error {
 	return nil
 }
 
-// Accept implements net.Listner
+// Accept implements net.Listner.
 func (l *loopbackListener) Accept() (net.Conn, error) {
 	conn, ok := <-l.conns
 	if !ok {
@@ -47,7 +47,7 @@ func (l *loopbackListener) Accept() (net.Conn, error) {
 	return conn, nil
 }
 
-// Close implements net.Listner
+// Close implements net.Listner.
 func (l *loopbackListener) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -58,7 +58,7 @@ func (l *loopbackListener) Close() error {
 	return nil
 }
 
-// Addr implements net.Listner
+// Addr implements net.Listner.
 func (l *loopbackListener) Addr() net.Addr {
 	return loopbackAddr{}
 }

@@ -37,8 +37,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-const ProcessName = "daemon"
-const titleName = "Daemon"
+const (
+	ProcessName = "daemon"
+	titleName   = "Daemon"
+)
 
 var help = `The Telepresence ` + titleName + ` is a long-lived background component that manages
 connections and network state.
@@ -56,7 +58,7 @@ type sessionReply struct {
 	err    error
 }
 
-// service represents the state of the Telepresence Daemon
+// service represents the state of the Telepresence Daemon.
 type service struct {
 	rpc.UnsafeDaemonServer
 	quit            context.CancelFunc
@@ -72,7 +74,7 @@ type service struct {
 	scout *scout.Reporter
 }
 
-// Command returns the telepresence sub-command "daemon-foreground"
+// Command returns the telepresence sub-command "daemon-foreground".
 func Command() *cobra.Command {
 	return &cobra.Command{
 		Use:    ProcessName + "-foreground <logging dir> <config dir>",
@@ -96,7 +98,12 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	d.sessionLock.RLock()
 	defer d.sessionLock.RUnlock()
-	r := &rpc.DaemonStatus{}
+	r := &rpc.DaemonStatus{
+		Version: &common.VersionInfo{
+			ApiVersion: client.APIVersion,
+			Version:    client.Version(),
+		},
+	}
 	if d.session != nil {
 		r.OutboundConfig = d.session.getInfo()
 	}
@@ -113,7 +120,7 @@ func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error
 }
 
 func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	err := d.withSession(ctx, func(ctx context.Context, session *session) error {
+	err := d.withSession(func(ctx context.Context, session *session) error {
 		session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
 		return nil
 	})
@@ -141,6 +148,16 @@ func (d *service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty,
 	return &empty.Empty{}, nil
 }
 
+func (d *service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Empty, error) {
+	err := d.withSession(func(ctx context.Context, session *session) error {
+		if err, ok := <-session.networkReady(ctx); ok {
+			return status.Error(codes.Unavailable, err.Error())
+		}
+		return nil
+	})
+	return &empty.Empty{}, err
+}
+
 func (d *service) cancelSession() {
 	if !atomic.CompareAndSwapInt32(&d.sessionQuitting, 0, 1) {
 		return
@@ -156,7 +173,7 @@ func (d *service) cancelSession() {
 	d.sessionLock.Unlock()
 }
 
-func (d *service) withSession(c context.Context, f func(context.Context, *session) error) error {
+func (d *service) withSession(f func(context.Context, *session) error) error {
 	if atomic.LoadInt32(&d.sessionQuitting) != 0 {
 		return status.Error(codes.Canceled, "session cancelled")
 	}
@@ -171,7 +188,7 @@ func (d *service) withSession(c context.Context, f func(context.Context, *sessio
 func (d *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}
-	err := d.withSession(ctx, func(ctx context.Context, session *session) error {
+	err := d.withSession(func(ctx context.Context, session *session) error {
 		// The manager can sometimes send the different subnets in different Sends,
 		// but after 5 seconds of listening to it, we should expect to have everything
 		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
@@ -239,8 +256,14 @@ nextSession:
 		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
 			// Respond by setting the session and returning the error (or nil
 			// if everything is ok)
+			reply.status = &rpc.DaemonStatus{
+				Version: &common.VersionInfo{
+					ApiVersion: client.APIVersion,
+					Version:    client.Version(),
+				},
+			}
 			if d.session != nil {
-				reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+				reply.status.OutboundConfig = d.session.getInfo()
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
 				session, reply.err = newSession(sCtx, d.scout, oi)
@@ -248,7 +271,7 @@ nextSession:
 					d.session = session
 					d.sessionContext = sCtx
 					d.sessionCancel = sCancel
-					reply.status = &rpc.DaemonStatus{OutboundConfig: d.session.getInfo()}
+					reply.status.OutboundConfig = d.session.getInfo()
 				} else {
 					sCancel()
 				}
@@ -274,7 +297,12 @@ nextSession:
 		// the session is running. The d.session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer func() {
+				d.sessionLock.Lock()
+				d.session = nil
+				d.sessionLock.Unlock()
+				wg.Done()
+			}()
 			if err := d.session.run(d.sessionContext); err != nil {
 				dlog.Error(c, err)
 			}
@@ -319,7 +347,7 @@ func (d *service) serveGrpc(c context.Context, l net.Listener, tracer common.Tra
 	return err
 }
 
-// run is the main function when executing as the daemon
+// run is the main function when executing as the daemon.
 func run(c context.Context, loggingDir, configDir string) error {
 	if !proc.IsAdmin() {
 		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)

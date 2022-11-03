@@ -84,8 +84,10 @@ func TestByteSet_Mask(t *testing.T) {
 	}
 }
 
-var emptySet = &Bitfield256{}
-var fullSet = &Bitfield256{0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff}
+var (
+	emptySet = &Bitfield256{}
+	fullSet  = &Bitfield256{0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff}
+)
 
 func TestByteSet_String(t *testing.T) {
 	tests := []struct {

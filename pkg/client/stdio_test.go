@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"io"
 	"testing"
 	"time"
@@ -10,13 +9,12 @@ import (
 )
 
 func TestClosedChannel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	so := NewStdOutput(ctx)
+	so := NewStdOutput()
 	go func() {
 		for range so.ResultChannel() {
 		}
 	}()
-	cancel()
+	so.Finish(nil)
 	time.Sleep(time.Millisecond)
 	_, err := so.Stdout().Write([]byte("boom"))
 	require.Error(t, err, io.ErrClosedPipe)

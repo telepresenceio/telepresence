@@ -80,12 +80,12 @@ func (a wrapFs) WriteFile(name string, data []byte, perm fs.FileMode) error {
 	return afero.WriteFile(a.Fs, name, data, perm)
 }
 
-// The afero.File lacks ReadDir. Instances implement fs.ReadDirFile though
+// The afero.File lacks ReadDir. Instances implement fs.ReadDirFile though.
 type file struct {
 	afero.File
 }
 
-// dirEntry provides adapter from os.FileInfo to fs.DirEntry
+// dirEntry provides adapter from os.FileInfo to fs.DirEntry.
 type dirEntry struct {
 	fs.FileInfo
 }

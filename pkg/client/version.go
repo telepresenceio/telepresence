@@ -47,7 +47,7 @@ func GetMechanismFromPath(execPath string) (string, error) {
 	mechanism := "undetermined"
 	binaryPath, err := filepath.EvalSymlinks(execPath)
 	if err != nil {
-		wrapErr := fmt.Errorf("error following executable symlink %s: %s", execPath, err)
+		wrapErr := fmt.Errorf("error following executable symlink %s: %w", execPath, err)
 		return mechanism, wrapErr
 	}
 	switch {

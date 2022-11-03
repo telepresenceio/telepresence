@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	v1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +21,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -50,7 +52,7 @@ func Load(ctx context.Context) (m Map, err error) {
 	}()
 
 	env := managerutil.GetEnv(ctx)
-	ns := env.GetManagedNamespaces()
+	ns := env.ManagedNamespaces
 	dlog.Infof(ctx, "Loading ConfigMaps from %v", ns)
 	return NewWatcher(agentconfig.ConfigMap, ns...), nil
 }
@@ -72,31 +74,7 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	defer span.End()
 	k8sapi.RecordWorkloadInfo(span, wl)
 	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
-		// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
-		// set must be scaled down and then up again.
-		dlog.Debugf(ctx, "Performing ReplicaSet rollout of %s.%s using scaling", wl.GetName(), wl.GetNamespace())
-		replicas := 1
-		if rp := rs.Spec.Replicas; rp != nil {
-			replicas = int(*rp)
-		}
-		if replicas > 0 {
-			patch := `{"spec": {"replicas": 0}}`
-			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
-				err = fmt.Errorf("unable to scale ReplicaSet %s.%s to zero: %w", wl.GetName(), wl.GetNamespace(), err)
-				dlog.Error(ctx, err)
-				span.SetStatus(codes.Error, err.Error())
-				return
-			}
-			patch = fmt.Sprintf(`{"spec": {"replicas": %d}}`, replicas)
-			if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
-				err = fmt.Errorf("unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
-				dlog.Error(ctx, err)
-				span.SetStatus(codes.Error, err.Error())
-			}
-		} else {
-			span.AddEvent("tel2.noop-rollout")
-			dlog.Debugf(ctx, "ReplicaSet %s.%s has zero replicas so rollout was a no-op", wl.GetName(), wl.GetNamespace())
-		}
+		triggerRolloutReplicaSet(ctx, wl, rs, span)
 		return
 	}
 	restartAnnotation := fmt.Sprintf(
@@ -114,6 +92,60 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	dlog.Infof(ctx, "Successfully rolled out %s.%s", wl.GetName(), wl.GetNamespace())
 }
 
+func triggerRolloutReplicaSet(ctx context.Context, wl k8sapi.Workload, rs *v1.ReplicaSet, span trace.Span) {
+	// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
+	// set must be scaled down and then up again.
+	dlog.Debugf(ctx, "Performing ReplicaSet rollout of %s.%s using scaling", wl.GetName(), wl.GetNamespace())
+	replicas := int32(1)
+	if rp := rs.Spec.Replicas; rp != nil {
+		replicas = *rp
+	}
+	if replicas == 0 {
+		span.AddEvent("tel2.noop-rollout")
+		dlog.Debugf(ctx, "ReplicaSet %s.%s has zero replicas so rollout was a no-op", wl.GetName(), wl.GetNamespace())
+		return
+	}
+
+	waitForReplicaCount := func(count int32) error {
+		for retry := 0; retry < 200; retry++ {
+			if nwl, err := k8sapi.GetReplicaSet(ctx, wl.GetName(), wl.GetNamespace()); err == nil {
+				rs, _ = k8sapi.ReplicaSetImpl(nwl)
+				if rp := rs.Spec.Replicas; rp != nil && *rp == count {
+					wl = nwl
+					return nil
+				}
+			}
+			dtime.SleepWithContext(ctx, 300*time.Millisecond)
+		}
+		return fmt.Errorf("ReplicaSet %s.%s never scaled down to zero", wl.GetName(), wl.GetNamespace())
+	}
+
+	patch := `{"spec": {"replicas": 0}}`
+	if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
+		err = fmt.Errorf("unable to scale ReplicaSet %s.%s to zero: %w", wl.GetName(), wl.GetNamespace(), err)
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	if err := waitForReplicaCount(0); err != nil {
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+	dlog.Debugf(ctx, "ReplicaSet %s.%s was scaled down to zero. Scaling back to %d", wl.GetName(), wl.GetNamespace(), replicas)
+	patch = fmt.Sprintf(`{"spec": {"replicas": %d}}`, replicas)
+	if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch)); err != nil {
+		err = fmt.Errorf("unable to scale ReplicaSet %s.%s to %d: %v", wl.GetName(), wl.GetNamespace(), replicas, err)
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+	}
+	if err := waitForReplicaCount(replicas); err != nil {
+		dlog.Error(ctx, err)
+		span.SetStatus(codes.Error, err.Error())
+		return
+	}
+}
+
 // RegenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
 // and then, if any of the entries changed, it updates the map.
 func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
@@ -122,7 +154,7 @@ func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
 	if err != nil {
 		return err
 	}
-	nss := env.GetManagedNamespaces()
+	nss := env.ManagedNamespaces
 	if len(nss) == 0 {
 		return regenerateAgentMaps(ctx, "", gc)
 	}
@@ -246,7 +278,12 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 		return
 	}
 	if ac.Create {
-		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+		img := managerutil.GetAgentImage(ctx)
+		if img == "" {
+			// Unable to get image. This has been logged elsewhere
+			return
+		}
+		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
 		if err != nil {
 			dlog.Error(ctx, err)
 			return
@@ -303,7 +340,7 @@ func (c *configWatcher) GetInto(key, ns string, into any) (bool, error) {
 
 // Delete will delete an agent config from the agents ConfigMap for the given namespace. It will
 // also update the current snapshot.
-// An attempt to delete a manually added config is a no-op
+// An attempt to delete a manually added config is a no-op.
 func (c *configWatcher) Delete(ctx context.Context, name, namespace string) error {
 	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
 	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
@@ -593,6 +630,10 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDelete bool) {
 	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
 	// If so, include them, or if workload for the config entry isn't found, delete that entry
+	img := managerutil.GetAgentImage(ctx)
+	if img == "" {
+		return
+	}
 	cfg, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
 	if err != nil {
 		dlog.Error(ctx, err)
@@ -738,7 +779,12 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
 		}
 	}
-	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	img := managerutil.GetAgentImage(ctx)
+	if img == "" {
+		dlog.Warn(ctx, "no traffic-agents will be injected because the traffic-manager is unable to determine which image to use")
+		return
+	}
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return

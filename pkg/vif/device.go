@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"sync/atomic"
 
 	"gvisor.dev/gvisor/pkg/bufferv2"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -23,11 +22,11 @@ import (
 )
 
 type device struct {
+	sync.Mutex
 	*channel.Endpoint
-	ctx     context.Context
-	wg      sync.WaitGroup
-	dev     *nativeDevice
-	closing *int32
+	ctx context.Context
+	wg  sync.WaitGroup
+	dev *nativeDevice
 }
 
 type Device interface {
@@ -49,7 +48,7 @@ const defaultDevOutQueueLen = 1024
 var _ Device = (*device)(nil)
 
 // OpenTun creates a new TUN device and ensures that it is up and running.
-func OpenTun(ctx context.Context, closing *int32) (Device, error) {
+func OpenTun(ctx context.Context) (Device, error) {
 	dev, err := openTun(ctx)
 	if err != nil {
 		return nil, err
@@ -59,19 +58,20 @@ func OpenTun(ctx context.Context, closing *int32) (Device, error) {
 		Endpoint: channel.New(defaultDevOutQueueLen, defaultDevMtu, ""),
 		ctx:      ctx,
 		dev:      dev,
-		closing:  closing,
 	}, nil
 }
 
 func (d *device) Attach(dp stack.NetworkDispatcher) {
+	d.Lock()
 	d.Endpoint.Attach(dp)
+	d.Unlock()
 	if dp == nil {
 		// Stack is closing
 		return
 	}
-	d.wg.Add(2)
 	dlog.Info(d.ctx, "Starting Endpoint")
 	ctx, cancel := context.WithCancel(d.ctx)
+	d.wg.Add(2)
 	go d.tunToDispatch(cancel)
 	go d.dispatchToTun(ctx)
 }
@@ -88,17 +88,17 @@ func (d *device) Close() error {
 	return d.dev.Close()
 }
 
-// Index returns the index of this device
+// Index returns the index of this device.
 func (d *device) Index() int32 {
 	return d.dev.index()
 }
 
-// Name returns the name of this device, e.g. "tun0"
+// Name returns the name of this device, e.g. "tun0".
 func (d *device) Name() string {
 	return d.dev.name
 }
 
-// SetDNS sets the DNS configuration for the device on the windows platform
+// SetDNS sets the DNS configuration for the device on the windows platform.
 func (d *device) SetDNS(ctx context.Context, server net.IP, domains []string) (err error) {
 	return d.dev.setDNS(ctx, server, domains)
 }
@@ -127,10 +127,13 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 	}()
 	buf := buffer.NewData(0x10000)
 	data := buf.Buf()
-	for atomic.LoadInt32(d.closing) < 2 {
+	for ok := true; ok; {
 		n, err := d.dev.readPacket(buf)
 		if err != nil {
-			if d.ctx.Err() == nil && atomic.LoadInt32(d.closing) == 2 {
+			d.Lock()
+			ok = d.IsAttached()
+			d.Unlock()
+			if ok && d.ctx.Err() == nil {
 				dlog.Errorf(d.ctx, "read packet error: %v", err)
 			}
 			return
@@ -152,7 +155,12 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 		pb := stack.NewPacketBuffer(stack.PacketBufferOptions{
 			Payload: bufferv2.MakeWithData(data[:n]),
 		})
-		d.InjectInbound(ipv, pb)
+
+		d.Lock()
+		if ok = d.IsAttached(); ok {
+			d.InjectInbound(ipv, pb)
+		}
+		d.Unlock()
 		pb.DecRef()
 	}
 }

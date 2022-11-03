@@ -164,7 +164,7 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 
 	srcIp, srcPort, err := iputil.SplitToIPPort(addr)
 	if err != nil {
-		return fmt.Errorf("failed to parse intercept source address %s", addr)
+		return fmt.Errorf("failed to parse intercept source address %s: %w", addr, err)
 	}
 
 	spec := iCept.Spec

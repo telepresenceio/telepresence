@@ -18,9 +18,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 )
 
-const checkDuration = 24 * time.Hour
-const binaryName = "telepresence"
-const cacheFilename = "update-checks.json"
+const (
+	checkDuration = 24 * time.Hour
+	binaryName    = "telepresence"
+	cacheFilename = "update-checks.json"
+)
 
 type UpdateChecker struct {
 	NextCheck map[string]time.Time `json:"next_check"`

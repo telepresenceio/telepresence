@@ -34,24 +34,23 @@ const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 func int32P(i int32) *int32 {
 	return &i
 }
+
 func boolP(b bool) *bool {
 	return &b
 }
+
 func stringP(s string) *string {
 	return &s
 }
 
 func TestTrafficAgentConfigGenerator(t *testing.T) {
 	env := &managerutil.Env{
-		User:        "",
-		ServerHost:  "tel-example",
-		ServerPort:  "80",
-		SystemAHost: "",
-		SystemAPort: "",
+		ServerHost: "tel-example",
+		ServerPort: 8081,
 
 		ManagerNamespace: "default",
 		AgentRegistry:    "docker.io/datawire",
-		AgentImage:       "tel2:2.6.0",
+		AgentImage:       "tel2:2.8.0",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)
@@ -87,7 +86,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		}
 	}
 
-	secretMode := int32(0644)
+	secretMode := int32(0o644)
 	yes := true
 	no := false
 	podNamedPort := core.Pod{
@@ -415,7 +414,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 						Port:        8001,
 						AppProtocol: stringP("grpc"),
 						TargetPort:  intstr.FromString("grpc"),
-					}},
+					},
+				},
 				Selector: map[string]string{
 					"service": "multi-port",
 				},
@@ -460,8 +460,9 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 					Containers: []core.Container{
 						{
 							Ports: []core.ContainerPort{
-								{Name: "http", ContainerPort: env.AgentPort},
-							}},
+								{Name: "http", ContainerPort: int32(env.AgentPort)},
+							},
+						},
 					},
 				},
 			},
@@ -741,11 +742,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 func TestTrafficAgentInjector(t *testing.T) {
 	env := &managerutil.Env{
-		User:        "",
-		ServerHost:  "tel-example",
-		ServerPort:  "80",
-		SystemAHost: "",
-		SystemAPort: "",
+		ServerHost: "tel-example",
+		ServerPort: 8081,
 
 		ManagerNamespace:  "default",
 		AgentRegistry:     "docker.io/datawire",
@@ -759,7 +757,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 	podName := func(name string) string {
 		return name + podSuffix
 	}
-	secretMode := int32(0644)
+	secretMode := int32(0o644)
 
 	wlName := func(podName string) string {
 		return strings.TrimSuffix(podName, podSuffix)
@@ -942,18 +940,22 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Env: []core.EnvVar{
-							{
-								Name:  "SOME_NAME",
-								Value: "some value",
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Env: []core.EnvVar{
+								{
+									Name:  "SOME_NAME",
+									Value: "some value",
+								},
+							},
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
 							},
 						},
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
 					},
 				},
 			},
@@ -1029,12 +1031,16 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1129,12 +1135,16 @@ func TestTrafficAgentInjector(t *testing.T) {
 					OwnerReferences: podOwner("named-port"),
 				},
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1157,12 +1167,16 @@ func TestTrafficAgentInjector(t *testing.T) {
 					OwnerReferences: podOwner("named-port"),
 				},
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
-						}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1236,10 +1250,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("numeric-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{{ContainerPort: 8888}},
+						},
 					},
 				},
 			},
@@ -1328,10 +1344,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 						Name:  "some-init-container",
 						Image: "some-init-image",
 					}},
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{ContainerPort: 8888}}},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Ports: []core.ContainerPort{{ContainerPort: 8888}},
+						},
 					},
 				},
 			},
@@ -1509,22 +1527,36 @@ func TestTrafficAgentInjector(t *testing.T) {
 			&core.Pod{
 				ObjectMeta: podObjectMeta("named-port"),
 				Spec: core.PodSpec{
-					Containers: []core.Container{{
-						Name:  "some-container",
-						Image: "some-app-image",
-						Ports: []core.ContainerPort{{
-							Name: "http", ContainerPort: 8888},
+					Containers: []core.Container{
+						{
+							Name:  "some-container",
+							Image: "some-app-image",
+							Env: []core.EnvVar{
+								{
+									Name:  "TOKEN_VOLUME",
+									Value: "default-token-vol",
+								},
+								{
+									Name:  "SECRET_NAME",
+									Value: "default-secret-name",
+								},
+							},
+							Ports: []core.ContainerPort{
+								{
+									Name: "http", ContainerPort: 8888,
+								},
+							},
+							VolumeMounts: []core.VolumeMount{
+								{Name: "$(TOKEN_VOLUME)", ReadOnly: true, MountPath: serviceAccountMountPath},
+							},
 						},
-						VolumeMounts: []core.VolumeMount{
-							{Name: "default-token-nkspp", ReadOnly: true, MountPath: serviceAccountMountPath},
-						}},
 					},
 					Volumes: []core.Volume{
 						{
-							Name: "default-token-nkspp",
+							Name: "default-token-vol",
 							VolumeSource: core.VolumeSource{
 								Secret: &core.SecretVolumeSource{
-									SecretName:  "default-token-nkspp",
+									SecretName:  "default-secret-name",
 									DefaultMode: &secretMode,
 								},
 							},
@@ -1539,6 +1571,10 @@ func TestTrafficAgentInjector(t *testing.T) {
     args:
     - agent
     env:
+    - name: _TEL_APP_A_TOKEN_VOLUME
+      value: default-token-vol
+    - name: _TEL_APP_A_SECRET_NAME
+      value: default-secret-name
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1563,7 +1599,7 @@ func TestTrafficAgentInjector(t *testing.T) {
     resources: {}
     volumeMounts:
     - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
-      name: default-token-nkspp
+      name: $(_TEL_APP_A_TOKEN_VOLUME)
       readOnly: true
     - mountPath: /tel_pod_info
       name: traffic-annotations
@@ -1617,7 +1653,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
 			ctx = managerutil.WithEnv(ctx, env)
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
-			ctx = managerutil.WithAgentImageRetriever(ctx, nil)
+			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
+			require.NoError(t, err)
 			if test.envAdditions != nil {
 				env := managerutil.GetEnv(ctx)
 				newEnv := *env
@@ -1625,7 +1662,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ae := reflect.ValueOf(test.envAdditions).Elem()
 				for i := ae.NumField() - 1; i >= 0; i-- {
 					ef := ae.Field(i)
-					if (ef.Kind() == reflect.String || ef.Kind() == reflect.Int32) && !ef.IsZero() {
+					if (ef.Kind() == reflect.String || ef.Kind() == reflect.Uint16) && !ef.IsZero() {
 						ne.Field(i).Set(ef)
 					}
 				}

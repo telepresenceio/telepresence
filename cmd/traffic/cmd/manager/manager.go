@@ -30,11 +30,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-// Main starts up the traffic manager and blocks until it ends
+// Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
-	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
+	dlog.Infof(ctx, "Traffic Manager %s [uid:%d,gid:%d]", version.Version, os.Getuid(), os.Getgid())
 
-	ctx, err := managerutil.LoadEnv(ctx)
+	ctx, err := managerutil.LoadEnv(ctx, os.LookupEnv)
 	if err != nil {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
@@ -42,14 +42,13 @@ func Main(ctx context.Context, _ ...string) error {
 	env := managerutil.GetEnv(ctx)
 	var tracer *tracing.TraceServer
 
-	if env.TracingPort != 0 {
+	if env.TracingGrpcPort != 0 {
 		tracer, err = tracing.NewTraceServer(ctx, "traffic-manager",
 			attribute.String("tel2.agent-image", env.AgentRegistry+"/"+env.AgentImage),
-			attribute.String("tel2.managed-namespaces", env.ManagedNamespaces),
-			attribute.String("tel2.dns-service", env.DNSServiceName+"."+env.DNSServiceNamespace),
-			attribute.String("tel2.systema-endpoint", env.SystemAHost+":"+env.SystemAPort),
+			attribute.String("tel2.managed-namespaces", strings.Join(env.ManagedNamespaces, ",")),
+			attribute.String("tel2.systema-endpoint", fmt.Sprintf("%s:%d", env.SystemAHost, env.SystemAPort)),
 			attribute.String("k8s.namespace", env.ManagerNamespace),
-			attribute.String("k8s.pod-ip", env.PodIP),
+			attribute.String("k8s.pod-ip", env.PodIP.String()),
 		)
 		if err != nil {
 			return err
@@ -72,7 +71,7 @@ func Main(ctx context.Context, _ ...string) error {
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
-	ctx = managerutil.WithAgentImageRetriever(ctx, mutator.RegenerateAgentMaps)
+	ctx, imgRetErr := managerutil.WithAgentImageRetriever(ctx, mutator.RegenerateAgentMaps)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
@@ -84,13 +83,17 @@ func Main(ctx context.Context, _ ...string) error {
 
 	g.Go("prometheus", mgr.servePrometheus)
 
-	g.Go("agent-injector", mutator.ServeMutator)
+	if imgRetErr != nil {
+		dlog.Errorf(ctx, "unable to initialize agent injector: %v", imgRetErr)
+	} else {
+		g.Go("agent-injector", mutator.ServeMutator)
+	}
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
 
 	if tracer != nil {
 		g.Go("tracer-grpc", func(c context.Context) error {
-			return tracer.ServeGrpc(c, uint16(env.TracingPort))
+			return tracer.ServeGrpc(c, env.TracingGrpcPort)
 		})
 	}
 
@@ -98,11 +101,11 @@ func Main(ctx context.Context, _ ...string) error {
 	return g.Wait()
 }
 
-// Serve Prometheus metrics if env.PrometheusPort != 0
+// Serve Prometheus metrics if env.PrometheusPort != 0.
 func (m *Manager) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	port := env.PrometheusPort
-	if env.PrometheusPort != "0" {
+	if env.PrometheusPort != 0 {
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
 			Name: "client_count",
 			Help: "Number of Clients Connected",
@@ -113,8 +116,8 @@ func (m *Manager) servePrometheus(ctx context.Context) error {
 		sc := &dhttp.ServerConfig{
 			Handler: promhttp.Handler(),
 		}
-		dlog.Infof(ctx, "Prometheus metrics server started on port: %v", port)
-		return sc.ListenAndServe(ctx, ":"+port)
+		dlog.Infof(ctx, "Prometheus metrics server started on port: %d", port)
+		return sc.ListenAndServe(ctx, fmt.Sprintf(":%d", port))
 	}
 	dlog.Info(ctx, "Prometheus metrics server not started")
 	return nil
@@ -149,7 +152,7 @@ func (m *Manager) serveHTTP(ctx context.Context) error {
 	rpc.RegisterManagerServer(grpcHandler, m)
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 
-	return sc.ListenAndServe(ctx, host+":"+port)
+	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
 func (m *Manager) runSessionGCLoop(ctx context.Context) error {

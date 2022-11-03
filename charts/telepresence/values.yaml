@@ -2,10 +2,12 @@
 ## Deployment Configuration
 ################################################################################
 
+isCI: false
+
 # The Traffic Manager only support running with one replica at the moment.
 # Configuring the replicaCount will be added in future versions of Telepresence
 
-# replicaCount: 1
+replicaCount: 1
 
 # The Telepresence client will try to ensure that the Traffic Manager image is
 # up to date and from the right registry. If you are changing the value below,
@@ -22,6 +24,8 @@ image:
   tag: ""
 
   imagePullSecrets: []
+
+apiPort: 8081
 
 podAnnotations: {}
 
@@ -64,16 +68,15 @@ service:
 ################################################################################
 
 # The log level of the Traffic Manager.
-#
-# Default: info
 logLevel: info
 
 # GRPC configuration for the Traffic Manager.
 # This is identical to the grpc configuration for local clients.
 # See https://www.telepresence.io/docs/latest/reference/config/#grpc for more info
-grpc: {}
-  # maxReceiveSize configures the maximum message size that the traffic manager will service.
-  # maxReceiveSize: 4Mi
+grpc:
+  # maxReceiveSize is a quantity that configures the maximum message size that the traffic
+  # manager will service.
+  maxReceiveSize: 4Mi
 
 # podCIDRs is the verbatim list of CIDRs used when the podCIDRStrategy is set to environment
 podCIDRs: []
@@ -89,32 +92,12 @@ podCIDRs: []
 # Default: auto
 podCIDRStrategy: auto
 
-# dnsServiceName adds a user supplied service to the list of services Telepresence tries to resolve in order to detect the
-# clusterIP DNS is using
-dnsServiceName: "coredns"
-
-# dnsServiceNamespace specifies what namespace Telepresensce should look for when using the user supplied dnsServiceName
-dnsServiceNamespace: "kube-system"
-
-# dnsServiceIP specifies a fallback clusterIP for Telepresence to use should auto DNS discovery fail, this value is ignored if Telepresence finds a valid clusterIP
-dnsServiceIP: ""
-
-dnsConfig:
-  # add the following subnets to the dns server
-  # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
-  alsoProxySubnets:  []
-  neverProxySubnets: []
-
 # systemaHost is used by the traffic-manager when using an extension
 # or features that require a specific extension.
-#
-# Default: app.getambassador.io
-systemaHost: "app.getambassador.io"
+systemaHost: app.getambassador.io
 
 # systemaPort is the port used with systemaHost
-#
-# Default: 443
-systemaPort: "443"
+systemaPort: 443
 
 # Configuration if the traffic manager/agents/cluster is behind an HTTPS proxy
 httpsProxy:
@@ -170,24 +153,14 @@ managerRbac:
   # If namespaced is true, which namespaces the managerRbac should apply to
   namespaces: []
 
+intercept:
+  disableGlobal: false
 
 ################################################################################
 ## Agent Injector Configuration
 ################################################################################
 agentInjector:
   name: agent-injector
-  agentImage:
-    registry: docker.io/datawire
-    name: ""
-    tag: ""
-    resources: {}
-    initResources: {}
-  service:
-    type: ClusterIP
-    ports:
-    - name: https
-      port: 443
-      targetPort: https
   secret:
     name: mutator-webhook-tls
   certificate:
@@ -202,7 +175,25 @@ agentInjector:
     reinvocationPolicy: Never
     sideEffects: None
     timeoutSeconds: 5
-  appPortStrategy: http2Probe
+  agentImage: {}
+
+################################################################################
+## Telepresence traffic-agent configuration
+################################################################################
+agent:
+  logLevel:
+  resources: {}
+  initResources: {}
+  appProtocolStrategy: http2Probe
+  port: 9900
+  image:
+    registry: docker.io/datawire
+    name:
+    tag:
+  envoy:
+    logLevel: warning
+    serverPort: 18000
+    adminPort: 19000
 
 ################################################################################
 ## Telepresence API Server Configuration
@@ -320,3 +311,24 @@ hooks:
     registry: docker.io
     image: "curlimages/curl"
     tag: latest
+
+client:
+  # Max time that the traffic-manager will keep a client connection alive when it doesn't receive
+  # any calls to Remain.
+  connectionTTL: 24h
+
+  routing:
+    # add the following subnets to the client's virtual network interface
+    # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
+    alsoProxySubnets:  []
+
+    # remove the following subnets from the client's virtual network interface
+    # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
+    neverProxySubnets: []
+
+  dns:
+    # Tell client's DNS resolver to never send names with these suffixes to the cluster side resolver
+    excludeSuffixes: [".com", ".io", ".net", ".org", ".ru"]
+
+    # Tell client's DNS resolver to always send names with these suffixes to the cluster side resolver
+    includeSuffixes: []

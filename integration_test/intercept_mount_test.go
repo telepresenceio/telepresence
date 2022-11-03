@@ -32,10 +32,13 @@ func init() {
 
 func (s *interceptMountSuite) SetupSuite() {
 	s.Suite.SetupSuite()
-	// TempDir() will not be a valid mount on Windows -- it wants a lettered drive.
-	if goRuntime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "darwin":
+		// Run without mounting on darwin. Apple prevents proper install of kernel extensions
+		s.mountPoint = "false"
+	case "windows":
 		s.mountPoint = "T:"
-	} else {
+	default:
 		var err error
 		s.mountPoint, err = os.MkdirTemp("", "mount-") // Don't use the testing.Tempdir() because deletion is delayed.
 		s.Require().NoError(err)
@@ -57,7 +60,7 @@ func (s *interceptMountSuite) TearDownSuite() {
 		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
-	if goRuntime.GOOS != "windows" {
+	if goRuntime.GOOS != "windows" && goRuntime.GOOS != "darwin" {
 		// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
 		go func() {
 			time.Sleep(2 * time.Second)

@@ -98,28 +98,25 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 		return true
 	}
 	if !w.changed.IsZero() {
-		// Tested before but didn't produce anything
+		// Tested before but errored
 		return false
 	}
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
 	// Create the initial snapshot
-	changed := false
 	for _, lister := range w.listers {
 		pods, err := lister.List(labels.Everything())
 		if err != nil {
 			dlog.Errorf(ctx, "unable to list pods: %v", err)
+			w.changed = time.Now()
 			return false
 		}
 		for _, pod := range pods {
-			if w.addLocked(podIPKeys(ctx, pod)) {
-				changed = true
-			}
+			w.addLocked(podIPKeys(ctx, pod))
 		}
 	}
-	w.changed = time.Now()
-	return changed
+	return true
 }
 
 func (w *podWatcher) onPodAdded(ctx context.Context, pod *corev1.Pod) {
@@ -215,7 +212,7 @@ func (w *podWatcher) dropLocked(ips []iputil.IPKey) bool {
 
 // getIPsDelta returns the difference between the old and new IPs.
 //
-// NOTE! The array of the old slice is modified and used for the dropped return
+// NOTE! The array of the old slice is modified and used for the dropped return.
 func getIPsDelta(oldIPs, newIPs []iputil.IPKey) (added, dropped []iputil.IPKey) {
 	lastOI := len(oldIPs) - 1
 	if lastOI < 0 {

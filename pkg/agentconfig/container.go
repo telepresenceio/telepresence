@@ -1,14 +1,20 @@
 package agentconfig
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 
 	core "k8s.io/api/core/v1"
+
+	"github.com/datawire/dlib/dlog"
 )
 
-// AgentContainer will return a configured traffic-agent
+// AgentContainer will return a configured traffic-agent.
 func AgentContainer(
+	ctx context.Context,
 	pod *core.Pod,
 	config *Sidecar,
 ) *core.Container {
@@ -28,9 +34,10 @@ func AgentContainer(
 
 	evs := make([]core.EnvVar, 0, len(config.Containers)*5)
 	efs := make([]core.EnvFromSource, 0, len(config.Containers)*3)
+	subst := make(map[string]string, len(evs)+len(efs))
 	EachContainer(pod, config, func(app *core.Container, cc *Container) {
-		evs = appendAppContainerEnv(app, cc, evs)
-		efs = appendAppContainerEnvFrom(app, cc, efs)
+		evs = appendAppContainerEnv(app, cc, evs, subst)
+		efs = appendAppContainerEnvFrom(app, cc, efs, subst)
 	})
 	if config.APIPort > 0 {
 		evs = append(evs, core.EnvVar{
@@ -85,6 +92,7 @@ func AgentContainer(
 	if len(efs) == 0 {
 		efs = nil
 	}
+
 	ac := &core.Container{
 		Name:         ContainerName,
 		Image:        config.AgentImage,
@@ -103,6 +111,20 @@ func AgentContainer(
 	}
 	if r := config.Resources; r != nil {
 		ac.Resources = *r
+	}
+
+	// Replace all occurrences of "$(ENV" with "$(PFX_ENV"
+	aj, err := json.Marshal(&ac)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return nil
+	}
+	for k, pk := range subst {
+		aj = bytes.ReplaceAll(aj, []byte("$("+k), []byte("$("+pk))
+	}
+	if err = json.Unmarshal(aj, &ac); err != nil {
+		dlog.Error(ctx, err)
+		return nil
 	}
 	return ac
 }
@@ -219,22 +241,27 @@ func appendAppContainerVolumeMounts(app *core.Container, cc *Container, mounts [
 		} else {
 			m.MountPath = cc.MountPoint + "/" + strings.TrimPrefix(m.MountPath, "/")
 		}
+
 		mounts = append(mounts, m)
 	}
 	return mounts
 }
 
-func appendAppContainerEnv(app *core.Container, cc *Container, es []core.EnvVar) []core.EnvVar {
+func appendAppContainerEnv(app *core.Container, cc *Container, es []core.EnvVar, subst map[string]string) []core.EnvVar {
 	for _, e := range app.Env {
-		e.Name = EnvPrefixApp + cc.EnvPrefix + e.Name
+		pn := EnvPrefixApp + cc.EnvPrefix + e.Name
+		subst[e.Name] = pn
+		e.Name = pn
 		es = append(es, e)
 	}
 	return es
 }
 
-func appendAppContainerEnvFrom(app *core.Container, cc *Container, es []core.EnvFromSource) []core.EnvFromSource {
+func appendAppContainerEnvFrom(app *core.Container, cc *Container, es []core.EnvFromSource, subst map[string]string) []core.EnvFromSource {
 	for _, e := range app.EnvFrom {
-		e.Prefix = EnvPrefixApp + cc.EnvPrefix + e.Prefix
+		pn := EnvPrefixApp + cc.EnvPrefix + e.Prefix
+		subst[e.Prefix] = pn
+		e.Prefix = pn
 		es = append(es, e)
 	}
 	return es

@@ -36,6 +36,15 @@ func (ips IPs) String() string {
 }
 
 func (ips IPs) UniqueSorted() IPs {
+	return UniqueSorted(ips)
+}
+
+func UniqueSorted(ips []net.IP) IPs {
+	for i, ip := range ips {
+		if ip4 := ip.To4(); ip4 != nil {
+			ips[i] = ip4
+		}
+	}
 	sort.Slice(ips, func(i, j int) bool {
 		return bytes.Compare(ips[i], ips[j]) < 0
 	})
@@ -54,7 +63,7 @@ func (ips IPs) UniqueSorted() IPs {
 	return ips[:last+1]
 }
 
-// BytesSlice is returns a [][]byte copy of the IPs
+// BytesSlice is returns a [][]byte copy of the IPs.
 func (ips IPs) BytesSlice() [][]byte {
 	bss := make([][]byte, len(ips))
 	for i, bs := range ips {

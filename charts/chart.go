@@ -48,7 +48,7 @@ func addFile(tarWriter *tar.Writer, fi fs.FileInfo, filename string, content io.
 		return err
 	}
 	header.Name = filename
-	header.Mode = 0644
+	header.Mode = 0o644
 	header.Size = fi.Size()
 
 	if br, ok := content.(*bytes.Reader); ok {

@@ -66,7 +66,7 @@ type loginExecutor struct {
 	refreshTimerReset     chan time.Duration
 }
 
-// LoginExecutor controls the execution of a login flow
+// LoginExecutor controls the execution of a login flow.
 type LoginExecutor interface {
 	Worker(ctx context.Context) error
 	Login(ctx context.Context) error
@@ -77,7 +77,7 @@ type LoginExecutor interface {
 	GetUserInfo(ctx context.Context, refresh bool) (*authdata.UserInfo, error)
 }
 
-// NewLoginExecutor returns an instance of LoginExecutor
+// NewLoginExecutor returns an instance of LoginExecutor.
 func NewLoginExecutor(
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
 	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
@@ -189,8 +189,8 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 		ClientID:    loginClientID,
 		RedirectURL: fmt.Sprintf("http://localhost:%d%s", listener.Addr().(*net.TCPAddr).Port, callbackPath),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  env.LoginAuthURL,
-			TokenURL: env.LoginTokenURL,
+			AuthURL:  env.LoginAuthURL.String(),
+			TokenURL: env.LoginTokenURL.String(),
 		},
 		Scopes: []string{"openid", "profile", "email"},
 	}
@@ -247,7 +247,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 			select {
 			case <-l.refreshTimer.C:
 				dlog.Infoln(ctx, "refreshing access token...")
-				if token, err := l.getToken(ctx); err != nil {
+				if token, err := l.getToken(); err != nil {
 					dlog.Infof(ctx, "could not refresh access token: %v", err)
 				} else if token != "" {
 					dlog.Infof(ctx, "got new access token")
@@ -454,7 +454,7 @@ func GetCloudAPIKey(ctx context.Context, l LoginExecutor, desc string, autoLogin
 	return key, nil
 }
 
-func (l *loginExecutor) getToken(ctx context.Context) (string, error) {
+func (l *loginExecutor) getToken() (string, error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
@@ -535,7 +535,7 @@ func (l *loginExecutor) GetAPIKey(ctx context.Context, description string) (stri
 // Must hold l.loginMu to call this.
 func (l *loginExecutor) lockedRetrieveUserInfo(ctx context.Context, creds map[string]string) error {
 	var userInfo authdata.UserInfo
-	req, err := http.NewRequest("GET", client.GetEnv(ctx).UserInfoURL, nil)
+	req, err := http.NewRequest(http.MethodGet, client.GetEnv(ctx).UserInfoURL.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -581,9 +581,11 @@ func (l *loginExecutor) httpHandler(ctx context.Context, w http.ResponseWriter, 
 		completionURL := client.GetEnv(ctx).LoginCompletionURL
 		// Attribute login to the correct client
 		if mech, _ := client.GetInstallMechanism(); mech == "docker" {
-			completionURL += "?client=docker-desktop"
+			cq := completionURL.Query()
+			cq.Set("client", "docker-desktop")
+			completionURL.RawQuery = cq.Encode()
 		}
-		w.Header().Set("Location", completionURL)
+		w.Header().Set("Location", completionURL.String())
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		sb.WriteString("<h1>Authentication Successful</h1>")
 		sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")

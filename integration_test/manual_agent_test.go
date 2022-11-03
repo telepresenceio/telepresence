@@ -137,7 +137,8 @@ func (s *connectedSuite) Test_ManualAgent() {
 		require.NoError(s.Kubectl(ctx, "delete", "-f", dplYaml, "--context", "default"))
 	}()
 
-	require.NoError(s.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName))
+	err = s.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName)
+	require.NoError(err)
 
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
 	require.Regexp(regexp.MustCompile(`.*`+ac.WorkloadName+`\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)

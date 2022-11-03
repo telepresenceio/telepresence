@@ -15,7 +15,7 @@ import (
 type PortIdentifier string
 
 // ValidatePort validates a port string. An error is returned if the string isn't a
-// number between 1 and 65535 or a DNS_LABEL
+// number between 1 and 65535 or a DNS_LABEL.
 func ValidatePort(s string) error {
 	_, err := ParseNumericPort(s)
 	if err == ErrNotInteger {
@@ -29,7 +29,7 @@ func ValidatePort(s string) error {
 
 // NewPortIdentifier creates a new PortIdentifier from a protocol and a string that
 // is either a name or a number. An error is returned if the protocol is unsupported,
-// if a port number is not between 1 and 65535, or if the name isn't a DNS_LABEL
+// if a port number is not between 1 and 65535, or if the name isn't a DNS_LABEL.
 func NewPortIdentifier(protocol string, portString string) (PortIdentifier, error) {
 	if err := ValidatePort(portString); err != nil {
 		return "", err

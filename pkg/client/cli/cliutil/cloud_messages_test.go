@@ -16,7 +16,7 @@ func newTestContext(t *testing.T) context.Context {
 	// Create a fake user cache directory
 	ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
 
-	env, err := client.LoadEnv(ctx)
+	env, err := client.LoadEnv()
 	if err != nil {
 		t.Error(err)
 	}

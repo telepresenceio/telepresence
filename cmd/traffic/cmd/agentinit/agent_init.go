@@ -23,8 +23,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-const nat = "nat"
-const inboundChain = "TEL_INBOUND"
+const (
+	nat          = "nat"
+	inboundChain = "TEL_INBOUND"
+)
 
 type config struct {
 	agentconfig.Sidecar
@@ -43,7 +45,7 @@ func loadConfig(ctx context.Context) (*config, error) {
 	return &c, nil
 }
 
-func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTables, loopback string) error {
+func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTables, loopback string) error {
 	// These iptables rules implement routing such that a packet directed to the appPort will hit the agentPort instead.
 	// If there's no mesh this is simply request -> agent -> app (or intercept)
 	// However, if there's a service mesh we want to make sure we don't bypass the mesh, so the traffic
@@ -142,7 +144,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 	return nil
 }
 
-func findLoopback(ctx context.Context) (string, error) {
+func findLoopback() (string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return "", fmt.Errorf("failed to get network interfaces: %w", err)
@@ -159,7 +161,7 @@ func findLoopback(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("unable to find loopback network interface")
 }
 
-// Main is the main function for the agent init container
+// Main is the main function for the agent init container.
 func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Agent Init %s", version.Version)
 	defer func() {
@@ -173,7 +175,7 @@ func Main(ctx context.Context, args ...string) error {
 		return err
 	}
 
-	lo, err := findLoopback(ctx)
+	lo, err := findLoopback()
 	if err != nil {
 		dlog.Error(ctx, err)
 		return err

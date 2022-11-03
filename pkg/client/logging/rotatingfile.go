@@ -21,7 +21,7 @@ type RotationStrategy interface {
 
 type rotateNever int
 
-// The RotateNever strategy will always answer false to the RotateNow question
+// The RotateNever strategy will always answer false to the RotateNow question.
 const RotateNever = rotateNever(0)
 
 func (rotateNever) RotateNow(_ *RotatingFile, _ int) bool {
@@ -102,7 +102,7 @@ type RotatingFile struct {
 // - strategy:  determines when a rotation should take place
 //
 // - maxFiles: maximum number of files in rotation, including the currently active logfile. A value of zero means
-// unlimited
+// unlimited.
 func OpenRotatingFile(
 	logfilePath string,
 	timeFormat string,
@@ -114,7 +114,7 @@ func OpenRotatingFile(
 	logfileDir, logfileBase := filepath.Split(logfilePath)
 
 	var err error
-	if err = os.MkdirAll(logfileDir, 0755); err != nil {
+	if err = os.MkdirAll(logfileDir, 0o755); err != nil {
 		return nil, err
 	}
 
@@ -158,7 +158,7 @@ func (rf *RotatingFile) BirthTime() time.Time {
 	return bt
 }
 
-// Close implements io.Closer
+// Close implements io.Closer.
 func (rf *RotatingFile) Close() error {
 	return rf.file.Close()
 }
@@ -171,7 +171,7 @@ func (rf *RotatingFile) Rotate() (err error) {
 	return rf.rotate()
 }
 
-// Size returns the size of the current file
+// Size returns the size of the current file.
 func (rf *RotatingFile) Size() int64 {
 	rf.mutex.Lock()
 	sz := rf.size
@@ -179,7 +179,7 @@ func (rf *RotatingFile) Size() int64 {
 	return sz
 }
 
-// Write implements io.Writer
+// Write implements io.Writer.
 func (rf *RotatingFile) Write(data []byte) (int, error) {
 	rotateNow := rf.strategy.RotateNow(rf, len(data))
 	rf.mutex.Lock()
@@ -267,7 +267,7 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 // name as this RotatingFile and then, as long as the number of files exceed the maxFiles given to  the
 // constructor, it will continuously remove the oldest file.
 //
-// This function should typically run in its own goroutine
+// This function should typically run in its own goroutine.
 func (rf *RotatingFile) removeOldFiles() {
 	rf.removeMutex.Lock()
 	defer rf.removeMutex.Unlock()

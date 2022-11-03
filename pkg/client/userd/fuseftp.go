@@ -57,7 +57,7 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	}
 
 	if len(fuseftpBits) != sz {
-		if err = os.WriteFile(qn, fuseftpBits, 0700); err != nil {
+		if err = os.WriteFile(qn, fuseftpBits, 0o700); err != nil {
 			return err
 		}
 	}

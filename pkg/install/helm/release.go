@@ -9,7 +9,7 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 )
 
-// getHelmRelease gets the traffic-manager helm release; if it is not found, it will return nil
+// getHelmRelease gets the traffic-manager helm release; if it is not found, it will return nil.
 func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*release.Release, error) {
 	list := action.NewList(helmConfig)
 	list.Deployed = true
@@ -45,7 +45,6 @@ func getHelmRelease(ctx context.Context, helmConfig *action.Configuration) (*rel
 			return nil
 		}
 	})
-
 	if err != nil {
 		return nil, err
 	}

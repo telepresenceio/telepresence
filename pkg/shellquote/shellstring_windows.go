@@ -69,7 +69,7 @@ func quoteArg(arg string) string {
 	return b.String()
 }
 
-// Split the given string into an array, using shell quote semantics
+// Split the given string into an array, using shell quote semantics.
 func Split(line string) ([]string, error) {
 	if line == "" {
 		return nil, nil

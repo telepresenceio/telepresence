@@ -8,9 +8,11 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	dns2 "github.com/miekg/dns"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
@@ -21,11 +23,13 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -38,12 +42,13 @@ type Clock interface {
 }
 
 type Manager struct {
-	ctx         context.Context
-	clock       Clock
-	ID          string
-	state       *state.State
-	clusterInfo cluster.Info
-	cloudConfig *rpc.AmbassadorCloudConfig
+	ctx          context.Context
+	clock        Clock
+	ID           string
+	state        *state.State
+	clusterInfo  cluster.Info
+	cloudConfig  *rpc.AmbassadorCloudConfig
+	tokenService cloudtoken.Service
 
 	rpc.UnsafeManagerServer
 }
@@ -60,7 +65,10 @@ func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
 	const proxyCertsPath = "/var/run/secrets/proxy_tls"
 
 	env := managerutil.GetEnv(ctx)
-	ret := &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: env.SystemAPort}
+	if env.SystemAHost == "" || env.SystemAPort == 0 {
+		return nil, nil
+	}
+	ret := &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: strconv.Itoa(int(env.SystemAPort))} // Why is the port a string?
 	if _, err := os.Stat(proxyCertsPath); err != nil {
 		if os.IsNotExist(err) {
 			return ret, nil
@@ -83,16 +91,19 @@ func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
 func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &Manager{
-		clock: wall{},
-		ID:    uuid.New().String(),
+		clock:        wall{},
+		ID:           uuid.New().String(),
+		tokenService: cloudtoken.NewPatchConfigmapIfNotPresent(ctx),
 	}
 	cloudConfig, err := getCloudConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	ret.cloudConfig = cloudConfig
-	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
-	ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
+	if cloudConfig != nil {
+		ret.cloudConfig = cloudConfig
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
+		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
+	}
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
@@ -107,7 +118,7 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 
 // GetLicense returns the license for the cluster. This directory is mounted
 // via the connector if it detects the presence of a systema license secret
-// when installing the traffic-manager
+// when installing the traffic-manager.
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
 	resp := rpc.License{
 		ClusterId: m.clusterInfo.GetClusterID(),
@@ -125,11 +136,14 @@ func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License,
 }
 
 // CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
-// from within a cluster
+// from within a cluster.
 func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
 	env := managerutil.GetEnv(ctx)
+	if env.SystemAHost == "" || env.SystemAPort == 0 {
+		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
+	}
 	timeout := 2 * time.Second
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", env.SystemAHost, env.SystemAPort), timeout)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", env.SystemAHost, env.SystemAPort), timeout)
 	if err != nil {
 		dlog.Debugf(ctx, "Failed to connect so assuming in air-gapped environment %s", err)
 		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
@@ -139,15 +153,18 @@ func (m *Manager) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty)
 }
 
 // GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
-// the agents)
+// the agents).
 func (m *Manager) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
+	if m.cloudConfig == nil {
+		return nil, status.Error(codes.Unavailable, "access to Ambassador Cloud is not configured")
+	}
 	return proto.Clone(m.cloudConfig).(*rpc.AmbassadorCloudConfig), nil
 }
 
-// GetTelepresenceAPI returns information about the TelepresenceAPI server
+// GetTelepresenceAPI returns information about the TelepresenceAPI server.
 func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.TelepresenceAPIInfo, error) {
 	env := managerutil.GetEnv(ctx)
-	return &rpc.TelepresenceAPIInfo{Port: env.APIPort}, nil
+	return &rpc.TelepresenceAPIInfo{Port: int32(env.APIPort)}, nil
 }
 
 // ArriveAsClient establishes a session between a client and the Manager.
@@ -159,6 +176,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	}
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
+	m.MaybeAddToken(ctx, client.GetApiKey())
 
 	installId := client.GetInstallId()
 	return &rpc.SessionInfo{
@@ -185,9 +203,10 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 // Remain indicates that the session is still valid.
-func (m *Manager) Remain(_ context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
+func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	// ctx = WithSessionInfo(ctx, req.GetSession())
 	// dlog.Debug(ctx, "Remain called")
+	m.MaybeAddToken(ctx, req.GetApiKey())
 
 	if ok := m.state.MarkSession(req, m.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", req.GetSession().GetSessionId())
@@ -462,11 +481,17 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	if interceptInfo != nil {
 		tracing.RecordInterceptInfo(span, interceptInfo)
 	}
+	if m.cloudConfig == nil {
+		return interceptInfo, nil
+	}
 	err = m.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 		if interceptInfo.ApiKey == "" {
 			return nil
 		}
-		sysa := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+		sysa, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+		if err != nil {
+			return err
+		}
 		if sa, err := sysa.Get(ctx); err != nil {
 			dlog.Errorln(ctx, "systema: acquire connection:", err)
 			return err
@@ -475,7 +500,6 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 			_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
 				InterceptId: interceptInfo.Id,
 			})
-
 			if err != nil {
 				return err
 			}
@@ -493,7 +517,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return interceptInfo, nil
 }
 
-func (m *Manager) makeinterceptID(ctx context.Context, sessionID string, name string) (string, error) {
+func (m *Manager) makeinterceptID(_ context.Context, sessionID string, name string) (string, error) {
 	// When something without a session ID (e.g. System A) calls this function,
 	// it is sending the intercept ID as the name, so we use that.
 	//
@@ -549,7 +573,10 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string) (*rpc.InterceptInfo, error) {
 	var domain string
-	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if err != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	}
 
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain == "" {
@@ -585,8 +612,10 @@ func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string)
 func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
 	var domain string
 	var sa systema.SystemACRUDClient
-	var err error
-	systemaPool := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if err != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	}
 
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain != "" {
@@ -697,7 +726,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	return &empty.Empty{}, nil
 }
 
-// GetIntercept gets an intercept info from intercept name
+// GetIntercept gets an intercept info from intercept name.
 func (m *Manager) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
 	interceptID, err := m.makeinterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
 	if err != nil {
@@ -781,35 +810,33 @@ func (m *Manager) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDi
 	}
 }
 
+// LookupHost
+// Deprecated: Use LookupDNS
+//
+//nolint:staticcheck // retained for backward compatibility
 func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest) (*rpc.LookupHostResponse, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
-	dlog.Debugf(ctx, "LookupHost called %s", request.Host)
-	sessionID := request.GetSession().GetSessionId()
+	dlog.Debugf(ctx, "LookupHost %s", request.Name)
 
-	ips, count, err := m.state.AgentsLookup(ctx, sessionID, request)
+	// Use LookupDNS internally
+	rsp, err := m.LookupDNS(ctx, &rpc.DNSRequest{
+		Session: request.Session,
+		Name:    request.Name + ".",
+		Type:    uint32(dns2.TypeA),
+	})
 	if err != nil {
-		dlog.Errorf(ctx, "AgentLookup: %v", err)
-	} else if count > 0 {
-		if len(ips) == 0 {
-			dlog.Debugf(ctx, "LookupHost on agents: %s -> NOT FOUND", request.Host)
-		} else {
-			dlog.Debugf(ctx, "LookupHost on agents: %s -> %s", request.Host, ips)
-		}
+		return nil, err
 	}
-
-	if count == 0 {
-		if addrs, err := net.DefaultResolver.LookupHost(ctx, request.Host); err != nil {
-			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
-				dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> NOT FOUND", request.Host)
-			} else {
-				dlog.Errorf(ctx, "LookupHost on traffic-manager LookupHost: %v", err)
+	rrs, rcode, err := dnsproxy.FromRPC(rsp)
+	if err != nil {
+		return nil, err
+	}
+	var ips iputil.IPs
+	if rcode == dns2.RcodeSuccess {
+		for _, rr := range rrs {
+			if ar, ok := rr.(*dns2.A); ok {
+				ips = append(ips, ar.A)
 			}
-		} else {
-			ips = make(iputil.IPs, len(addrs))
-			for i, addr := range addrs {
-				ips[i] = iputil.Parse(addr)
-			}
-			dlog.Debugf(ctx, "LookupHost on traffic-manager: %s -> %s", request.Host, ips)
 		}
 	}
 	if ips == nil {
@@ -818,27 +845,114 @@ func (m *Manager) LookupHost(ctx context.Context, request *rpc.LookupHostRequest
 	return &rpc.LookupHostResponse{Ips: ips.BytesSlice()}, nil
 }
 
+// AgentLookupHostResponse
+// Deprecated: More recent clients will use LookupDNS
+//
+//nolint:staticcheck // retained for backward compatibility
 func (m *Manager) AgentLookupHostResponse(ctx context.Context, response *rpc.LookupHostAgentResponse) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, response.GetSession())
-	dlog.Debugf(ctx, "AgentLookupHostResponse called %s -> %s", response.Request.Host, iputil.IPsFromBytesSlice(response.Response.Ips))
-	m.state.PostLookupResponse(response)
+	ips := iputil.IPsFromBytesSlice(response.Response.Ips)
+	request := response.Request
+	dlog.Debugf(ctx, "AgentLookupHostResponse called %s -> %s", request.Name, ips)
+	rcode := dns2.RcodeNameError
+	var rrs dnsproxy.RRs
+	if len(ips) > 0 {
+		rcode = dns2.RcodeSuccess
+		rrs = make(dnsproxy.RRs, len(ips))
+		for i, ip := range ips {
+			rrs[i] = &dns2.A{Hdr: dnsproxy.NewHeader(request.Name, dns2.TypeA), A: ip}
+		}
+	}
+	rsp, err := dnsproxy.ToRPC(rrs, rcode)
+	if err != nil {
+		return nil, err
+	}
+	m.state.PostLookupDNSResponse(&rpc.DNSAgentResponse{
+		Session: response.Session,
+		Request: &rpc.DNSRequest{
+			Session: request.Session,
+			Name:    request.Name,
+			Type:    uint32(dns2.TypeA),
+		},
+		Response: rsp,
+	})
 	return &empty.Empty{}, nil
 }
 
+// WatchLookupHost
+// Deprecated: retained for backward compatibility. More recent clients will use LookupDNS.
 func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_WatchLookupHostServer) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	dlog.Debugf(ctx, "WatchLookupHost called")
-	lrCh := m.state.WatchLookupHost(session.SessionId)
+	rqCh := m.state.WatchLookupDNS(session.SessionId)
 	for {
 		select {
 		case <-m.ctx.Done():
 			return nil
-		case lr := <-lrCh:
-			if lr == nil {
+		case rq := <-rqCh:
+			if rq == nil {
 				return nil
 			}
-			if err := stream.Send(lr); err != nil {
+			if err := stream.Send(&rpc.LookupHostRequest{Session: rq.Session, Name: rq.Name}); err != nil {
 				dlog.Errorf(ctx, "WatchLookupHost.Send() failed: %v", err)
+				return nil
+			}
+		}
+	}
+}
+
+func (m *Manager) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.DNSResponse, error) {
+	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
+	qType := uint16(request.Type)
+	qtn := dns2.TypeToString[qType]
+	dlog.Debugf(ctx, "LookupDNS %s %s", request.Name, qtn)
+
+	rrs, rCode, err := m.state.AgentsLookupDNS(ctx, request.GetSession().GetSessionId(), request)
+	if err != nil {
+		dlog.Errorf(ctx, "AgentsLookupDNS %s %s: %v", request.Name, qtn, err)
+	} else if rCode != state.RcodeNoAgents {
+		if len(rrs) == 0 {
+			dlog.Debugf(ctx, "LookupDNS on agents: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
+		} else {
+			dlog.Debugf(ctx, "LookupDNS on agents: %s %s -> %s", request.Name, qtn, rrs)
+		}
+	}
+	if rCode == state.RcodeNoAgents {
+		rrs, rCode, err = dnsproxy.Lookup(ctx, qType, request.Name)
+		if err != nil {
+			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s %s", request.Name, qtn, dns2.RcodeToString[rCode], err)
+			return nil, err
+		}
+		if len(rrs) == 0 {
+			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
+		} else {
+			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s", request.Name, qtn, rrs)
+		}
+	}
+	return dnsproxy.ToRPC(rrs, rCode)
+}
+
+func (m *Manager) AgentLookupDNSResponse(ctx context.Context, response *rpc.DNSAgentResponse) (*empty.Empty, error) {
+	ctx = managerutil.WithSessionInfo(ctx, response.GetSession())
+	dlog.Debugf(ctx, "AgentLookupDNSResponse called %s", response.Request.Name)
+	m.state.PostLookupDNSResponse(response)
+	return &empty.Empty{}, nil
+}
+
+func (m *Manager) WatchLookupDNS(session *rpc.SessionInfo, stream rpc.Manager_WatchLookupDNSServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	dlog.Debugf(ctx, "WatchLookupDNS called")
+	rqCh := m.state.WatchLookupDNS(session.SessionId)
+	for {
+		select {
+		case <-m.ctx.Done():
+			return nil
+		case rq := <-rqCh:
+			if rq == nil {
+				return nil
+			}
+			if err := stream.Send(rq); err != nil {
+				dlog.Errorf(ctx, "WatchLookupDNS.Send() failed: %v", err)
 				return nil
 			}
 		}
@@ -847,7 +961,7 @@ func (m *Manager) WatchLookupHost(session *rpc.SessionInfo, stream rpc.Manager_W
 
 // GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // GetLogsRequest and returns them to the caller
-// Deprecated: Clients should use the user daemon's GatherLogs method
+// Deprecated: Clients should use the user daemon's GatherLogs method.
 func (m *Manager) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
 	return &rpc.LogsResponse{
 		PodLogs: make(map[string]string),
@@ -872,11 +986,19 @@ func (m *Manager) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 	return m.clusterInfo.Watch(ctx, stream)
 }
 
-const clientSessionTTL = 24 * time.Hour
 const agentSessionTTL = 15 * time.Second
 
 // expire removes stale sessions.
 func (m *Manager) expire(ctx context.Context) {
 	now := m.clock.Now()
-	m.state.ExpireSessions(ctx, now.Add(-clientSessionTTL), now.Add(-agentSessionTTL))
+	m.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
+}
+
+// MaybeAddToken maybe adds apikey to the cluster so that the ambassador agent can login.
+func (m *Manager) MaybeAddToken(ctx context.Context, apikey string) {
+	if apikey != "" && m.tokenService != nil {
+		if err := m.tokenService.MaybeAddToken(ctx, apikey); err != nil {
+			dlog.Errorf(ctx, "error creating cloud token: %s", err)
+		}
+	}
 }

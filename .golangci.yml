@@ -26,6 +26,9 @@ issues:
         - unparam
 
 linters-settings:
+  cyclop:
+    max-complexity: 32
+    skip-tests: true
   depguard:
     list-type: blacklist
     include-go-root: true
@@ -70,50 +73,96 @@ linters-settings:
     require-specific: true
     allow-no-explanation:
       - gocognit
-
 linters:
-  disable-all: true
+  # Enable specific linter
+  # https://golangci-lint.run/usage/linters/#enabled-by-default
   enable:
+    - asasalint
+    - asciicheck
+    - bidichk
     - bodyclose
-    - deadcode
+    - cyclop
+    - decorder
     - depguard
     - dogsled
+    - durationcheck
     - errcheck
+    - errname
+    - execinquery
     - exportloopref
     - forbidigo
-    - goimports
     - gocognit
     - gocritic
     - gocyclo
+    - godot
     - gofmt
+    - gofumpt
+    - goheader
+    - goimports
     - gomodguard
+    - goprintffuncname
     - gosimple
     - govet
+    - grouper
+    - importas
     - ineffassign
     - lll
+    - logrlint
+    - makezero
     - misspell
     - nakedret
     - nolintlint
+    - nosprintfhostport
     - prealloc
+    - predeclared
+    - reassign
     - staticcheck
-    - structcheck
-    - typecheck
     - unconvert
+    - unparam
     - unused
-    - varcheck
+    - usestdlibvars
     - whitespace
-
-  # don't enable:
-  # - dupl
-  # - funlen
-  # - gci
-  # - gochecknoglobals
-  # - gochecknoinits
-  # - goconst
-  # - godox
-  # - golint
-  # - gosec
-  # - interfacer
-  # - maligned # is premature-optimization
-  # - stylecheck
-  # - unparam
+  disable:
+    - containedctx
+    - contextcheck
+    - dupl
+    - errchkjson
+    - errorlint
+    - exhaustive
+    - exhaustruct
+    - forcetypeassert
+    - funlen
+    - gci
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - goerr113
+    - godox
+    - gomnd
+    - gomoddirectives
+    - gosec
+    - interfacebloat
+    - ireturn
+    - maintidx
+    - nestif
+    - nilerr
+    - nilnil
+    - nlreturn
+    - noctx
+    - nonamedreturns
+    - paralleltest
+    - promlinter
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - stylecheck
+    - tagliatelle
+    - tenv
+    - testpackage
+    - thelper
+    - tparallel
+    - typecheck
+    - varnamelen
+    - wastedassign
+    - wrapcheck
+    - wsl

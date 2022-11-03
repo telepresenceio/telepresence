@@ -24,7 +24,7 @@ func init() {
 func (s *notConnectedSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := itest.WithUser(s.Context(), "default")
-	itest.TelepresenceOk(ctx, "helm", "install")
+	itest.TelepresenceOk(ctx, "helm", "install", "--set", "logLevel=debug,agent.logLevel=debug")
 	stdout := itest.TelepresenceOk(ctx, "connect")
 	s.Contains(stdout, "Connected to context")
 	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
@@ -50,7 +50,7 @@ func (s *notConnectedSuite) Test_ConnectWithCommand() {
 
 func (s *notConnectedSuite) Test_InvalidKubeconfig() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "quit", "-ur")
+	itest.TelepresenceOk(ctx, "quit", "-s")
 	path := "/dev/null"
 	if runtime.GOOS == "windows" {
 		path = "C:\\NUL"

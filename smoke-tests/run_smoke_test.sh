@@ -256,7 +256,7 @@ helm_install() {
       exit 1
     fi
 
-    helm_overrides+=("agentInjector.agentImage.name=$image_name" "agentInjector.agentImage.tag=$image_tag")
+    helm_overrides+=("agentInjector.agentImage.name=$image_name" "agentInjector.agentImage.tag=$image_tag" "agentInjector.agentImage.registry=$smart_agent_registry")
 
     # Clean up any pre-existing helm installation for the traffic-manager
     local output
@@ -390,6 +390,10 @@ get_config
 
 if [ -f "$config_file" ]; then
     smart_agent=$(sed -n -e 's/^[ ]*agentImage\:[ ]*//p' "$config_file")
+    smart_agent_registry=$(yq e '.images.registry' "$config_file")
+    if [[ -z "$smart_agent_registry" ]]; then
+        smart_agent_registry="datawire"
+    fi
     echo "Smart agent: $smart_agent"
     config_bak="$config_file.bak"
     echo
@@ -468,14 +472,15 @@ case "$choice" in
     * ) echo "invalid"; exit 1;;
 esac
 
-$TELEPRESENCE quit -ru
+$TELEPRESENCE logout
+$TELEPRESENCE quit -s
 
 # For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
 if (helm list -n ambassador | grep traffic-manager); then
     $TELEPRESENCE helm uninstall >"$output_location"
 else
-    $TELEPRESENCE quit -ru >"$output_location"
+    $TELEPRESENCE quit -s >"$output_location"
 fi
 if [[ -n "$INSTALL_DEMO" ]]; then
     setup_demo_app
@@ -618,7 +623,6 @@ verify_output_empty "${output}" true
 
 finish_step
 
-
 ###############################################
 #### Step 7 - Verify login prompted        ####
 ###############################################
@@ -627,7 +631,7 @@ yq e ".licenseKey.value = \"$TELEPRESENCE_LICENSE\"" smoke-tests/license-values-
 # Now we need to update the config for license workflow
 if [[ -n "$USE_CHART" ]]; then
     $TELEPRESENCE logout > "$output_location"
-    $TELEPRESENCE quit -ru > "$output_location"
+    $TELEPRESENCE quit -s > "$output_location"
     helm uninstall -n ambassador traffic-manager > "$output_location"
 else
     $TELEPRESENCE helm uninstall > "$output_location"
@@ -831,7 +835,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     ##########################################################
     #### Step 17 - Verify Invalid License Behavior (helm) ####
     ##########################################################
-    $TELEPRESENCE quit -ru >"$output_location"
+    $TELEPRESENCE quit -s >"$output_location"
     helm uninstall traffic-manager --namespace ambassador > "$output_location" 2>&1
 
     expired_license="eyJhbGciOiJSUzI1NiJ9.eyJhY2NvdW50SWQiOiJjOWQxYmMwMi1iOWYyLTQ3NW\
@@ -861,11 +865,25 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
         echo "Intercept should have errored since the license is invalid"
         exit 1
     fi
+    finish_step
+
+    ##########################################################
+    ###########  Step 18 - Verify Cloud Intercept  ###########
+    ##########################################################
+    echo "Step ${STEP}: log into https://getambassador.io/cloud and start an intercept."
+    read -r -p "Success(y/n)? " yn
+    case $yn in
+        [Yy]* )	finish_step;; 
+        [Nn]* ) echo "Should be able to initiate intercept from the cloud"; exit 1;;
+        * ) echo "invalid input"; exit 1;;
+    esac
+
 
     $TELEPRESENCE helm uninstall >"$output_location"
     finish_step
     restore_config
     trap - EXIT
+
 fi
 ##########################################################
 #### The end :)                                       ####

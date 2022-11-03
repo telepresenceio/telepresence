@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -25,7 +24,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 const (
@@ -121,11 +119,6 @@ func ServeMutator(ctx context.Context) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-
-	// Existing telepresence-agent config maps must be regenerated. Conditions might have changed.
-	if err := RegenerateAgentMaps(ctx, managerutil.GetAgentImage(ctx)); err != nil {
-		return err
-	}
 	cw, err := Load(ctx)
 	if err != nil {
 		return err
@@ -140,7 +133,7 @@ func ServeMutator(ctx context.Context) error {
 		return operation + r.URL.Path
 	}))
 	server := &dhttp.ServerConfig{Handler: wrapped}
-	addr := ":" + strconv.Itoa(install.MutatorWebhookPortHTTPS)
+	addr := fmt.Sprintf(":%d", managerutil.GetEnv(ctx).MutatorWebhookPort)
 
 	dlog.Infof(ctx, "Mutating webhook service is listening on %v", addr)
 	defer dlog.Info(ctx, "Mutating webhook service stopped")
@@ -150,8 +143,8 @@ func ServeMutator(ctx context.Context) error {
 	return nil
 }
 
-// Skip mutate requests in these namespaces
-func isNamespaceOfInterest(ctx context.Context, ns string) bool {
+// Skip mutate requests in these namespaces.
+func isNamespaceOfInterest(ns string) bool {
 	for _, skippedNs := range []string{
 		meta.NamespacePublic,
 		meta.NamespaceSystem,
@@ -226,7 +219,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 
 	var patchOps patchOps
 	// Apply the mf() function only namespaces of interest
-	if isNamespaceOfInterest(ctx, request.Namespace) {
+	if isNamespaceOfInterest(request.Namespace) {
 		patchOps, err = mf(ctx, request)
 	}
 

@@ -10,7 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-var SignalsToForward = []os.Signal{os.Interrupt}
+var SignalsToForward = []os.Signal{os.Interrupt} //nolint:gochecknoglobals // OS-specific constant list
 
 func CommandContext(ctx context.Context, name string, args ...string) *dexec.Cmd {
 	cmd := dexec.CommandContext(ctx, name, args...)

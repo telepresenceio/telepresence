@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/blang/semver"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	grpcCodes "google.golang.org/grpc/codes"
@@ -32,8 +31,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
 type interceptCommand struct {
@@ -68,6 +69,9 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 	cmd.args = interceptArgs{}
 	flags := cmd.command.Flags()
 
+	_, err := authdata.LoadUserInfoFromUserCache(ctx)
+	hasLoggedIn := err == nil
+
 	flags.StringVarP(&cmd.args.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
 	flags.StringVarP(&cmd.args.port, "port", "p", strconv.Itoa(client.GetConfig(ctx).Intercept.DefaultPort), ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
@@ -80,7 +84,7 @@ func (cmd *interceptCommand) cobraCommand(ctx context.Context) *cobra.Command {
 	flags.BoolVarP(&cmd.args.localOnly, "local-only", "l", false, ``+
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
 
-	flags.BoolVarP(&cmd.args.previewEnabled, "preview-url", "u", cliutil.HasLoggedIn(ctx), ``+
+	flags.BoolVarP(&cmd.args.previewEnabled, "preview-url", "u", hasLoggedIn, ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
@@ -135,7 +139,23 @@ func (c *interceptCommand) init(ctx context.Context) {
 	}
 
 	c.command.PreRunE = cliutil.UpdateCheckIfDue
-	c.command.PostRunE = cliutil.RaiseCloudMessage
+	c.command.PostRunE = func(cmd *cobra.Command, args []string) error {
+		// Currently, we only have messages that should be served when a user
+		// isn't logged in, so we check that here
+
+		// Can't use the context passed to init(ctx) here.
+		ctx := cmd.Context()
+		if _, err := authdata.LoadUserInfoFromUserCache(ctx); err == nil {
+			_, err := GetConnectorServer(ctx).GetCloudUserInfo(ctx, &connector.UserInfoRequest{
+				AutoLogin: false,
+				Refresh:   false,
+			})
+			if err == nil {
+				return nil
+			}
+		}
+		return cliutil.RaiseCloudMessage(cmd, args)
+	}
 	c.command.RunE = func(ccmd *cobra.Command, positional []string) error {
 		if c.extErr != nil {
 			return c.extErr
@@ -155,7 +175,7 @@ func (c *interceptCommand) init(ctx context.Context) {
 		args.name = positional[0]
 		args.cmdline = positional[1:]
 
-		var cmd = c.command
+		cmd := c.command
 		switch args.localOnly { // a switch instead of an if/else to get gocritic to not suggest "else if"
 		case true:
 			// Not actually intercepting anything -- check that the flags make sense for that
@@ -454,6 +474,11 @@ func interceptMessage(r *connector.InterceptResult) error {
 		msg = r.ErrorText
 	case common.InterceptError_ALREADY_EXISTS:
 		msg = fmt.Sprintf("Intercept with name %q already exists", r.ErrorText)
+	case common.InterceptError_NAMESPACE_AMBIGUITY:
+		nss := strings.Split(r.ErrorText, ",")
+		msg = fmt.Sprintf(
+			"A workstation cannot have simultaneous intercepts in different namespaces. Leave all intercepts in %q before creting new ones in %q",
+			nss[0], nss[1])
 	case common.InterceptError_LOCAL_TARGET_IN_USE:
 		spec := r.InterceptInfo.Spec
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
@@ -530,7 +555,7 @@ func (is *interceptState) checkMountCapability(ctx context.Context) error {
 	return nil
 }
 
-// parsePort parses portSpec based on how it's formatted
+// parsePort parses portSpec based on how it's formatted.
 func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, svcPortId string, err error) {
 	portMapping := strings.Split(portSpec, ":")
 	portError := func() (uint16, uint16, string, error) {
@@ -753,29 +778,13 @@ func (is *interceptState) createAndValidateRequest(ctx context.Context) (*connec
 			return nil, err
 		}
 	}
-
-	// The agentImage is only needed if we're dealing with a traffic-manager older than 2.6.0
-	vi, err := is.managerClient.Version(ctx, &empty.Empty{})
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
-	}
-	mv, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
-	}
-	if mv.Major == 2 && mv.Minor < 6 {
-		ir.AgentImage, err = is.args.extState.AgentImage(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return ir, nil
 }
 
 func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err error) {
 	args := &is.args
 
-	status, err := is.connectorServer.Status(ctx, nil)
+	status, err := is.connectorServer.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
 	}
@@ -857,7 +866,7 @@ func (is *interceptState) EnsureState(ctx context.Context) (acquired bool, err e
 			}
 		}
 
-		status, err := is.connectorServer.Status(ctx, nil)
+		status, err := is.connectorServer.Status(ctx, &empty.Empty{})
 		if err != nil {
 			return true, err
 		}
@@ -941,9 +950,10 @@ func validateDockerArgs(args []string) error {
 func (is *interceptState) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
 	ourArgs := []string{
 		"run",
-		"--dns-search", "tel2-search",
 		"--env-file", envFile,
+		"--dns-search", "tel2-search",
 	}
+
 	getArg := func(s string) (string, bool) {
 		for i, arg := range args {
 			if strings.Contains(arg, s) {
@@ -982,11 +992,13 @@ func (is *interceptState) startInDocker(ctx context.Context, envFile string, arg
 	if dockerMount != "" {
 		ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", is.mountPoint, dockerMount))
 	}
-	cmd := proc.CommandContext(ctx, "docker", append(ourArgs, args...)...)
+	args = append(ourArgs, args...)
+	cmd := proc.CommandContext(ctx, "docker", args...)
 	cmd.DisableLogging = true
 	cmd.Stdout = is.cmd.OutOrStdout()
 	cmd.Stderr = is.cmd.ErrOrStderr()
 	cmd.Stdin = is.cmd.InOrStdin()
+	dlog.Debugf(ctx, shellquote.ShellString("docker", args))
 	err := cmd.Start()
 	if err != nil {
 		return nil, err
@@ -1037,5 +1049,5 @@ func (is *interceptState) writeEnvJSON() error {
 		// Creating JSON from a map[string]string should never fail
 		panic(err)
 	}
-	return os.WriteFile(is.args.envJSON, data, 0644)
+	return os.WriteFile(is.args.envJSON, data, 0o644)
 }

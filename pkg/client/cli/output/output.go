@@ -65,23 +65,25 @@ func SetJSONStderr(ctx context.Context) {
 	o.stdoutIsJSON = true
 }
 
-type key struct{}
-type output struct {
-	cmd string
+type (
+	key    struct{}
+	output struct {
+		cmd string
 
-	stdoutBuf strings.Builder
-	stderrBuf strings.Builder
+		stdoutBuf strings.Builder
+		stderrBuf strings.Builder
 
-	stdoutIsJSON bool
-	stderrIsJSON bool
+		stdoutIsJSON bool
+		stderrIsJSON bool
 
-	jsonEncoder *json.Encoder
-	stdout      io.Writer
-	stderr      io.Writer
+		jsonEncoder *json.Encoder
+		stdout      io.Writer
+		stderr      io.Writer
 
-	originalStdout io.Writer
-	originalStderr io.Writer
-}
+		originalStdout io.Writer
+		originalStderr io.Writer
+	}
+)
 
 func (o *output) runE(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {

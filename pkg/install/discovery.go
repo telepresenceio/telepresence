@@ -17,7 +17,7 @@ import (
 
 // FilterServicePorts iterates through a list of ports in a service and
 // only returns the ports that match the given nameOrNumber. All ports will
-// be returned if nameOrNumber is equal to the empty string
+// be returned if nameOrNumber is equal to the empty string.
 func FilterServicePorts(svc *core.Service, nameOrNumber string) ([]core.ServicePort, error) {
 	ports := svc.Spec.Ports
 	if nameOrNumber == "" {
@@ -52,7 +52,7 @@ func FilterServicePorts(svc *core.Service, nameOrNumber string) ([]core.ServiceP
 }
 
 // FindMatchingServices find services matching the arguments
-// Deprecated
+// Deprecated.
 func FindMatchingServices(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) ([]*core.Service, error) {
 	// TODO: Expensive on large clusters but the problem goes away once we move the installer to the traffic-manager
 	si := k8sapi.GetK8sInterface(c).CoreV1().Services(namespace)
@@ -99,7 +99,7 @@ func FindMatchingServices(c context.Context, portNameOrNumber, svcName, namespac
 }
 
 // FindMatchingService find service based on given arguments
-// Deprecated
+// Deprecated.
 func FindMatchingService(c context.Context, portNameOrNumber, svcName, namespace string, labels map[string]string) (*core.Service, error) {
 	matchingSvcs, err := FindMatchingServices(c, portNameOrNumber, svcName, namespace, labels)
 	if err != nil {
@@ -128,7 +128,7 @@ func FindMatchingService(c context.Context, portNameOrNumber, svcName, namespace
 
 // FindMatchingPort finds the matching container associated with portNameOrNumber
 // in the given service.
-// Deprecated
+// Deprecated.
 func FindMatchingPort(cns []core.Container, portNameOrNumber string, svc *core.Service) (
 	sPort *core.ServicePort,
 	cn *core.Container,

@@ -91,7 +91,7 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 		"get", "deploy", "traffic-manager",
 		"--ignore-not-found",
 		"-o",
-		"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='TELEPRESENCE_AGENT_IMAGE')].value}")
+		"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='AGENT_IMAGE')].value}")
 
 	require := s.Require()
 	require.NoError(err)
@@ -99,7 +99,7 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 		"get", "deploy", "traffic-manager",
 		"--ignore-not-found",
 		"-o",
-		"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='TELEPRESENCE_REGISTRY')].value}")
+		"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='AGENT_REGISTRY')].value}")
 	require.NoError(err)
 	s.Equal("imageFromConfig:0.0.1", image)
 	s.Equal(s.Registry(), actualRegistry)

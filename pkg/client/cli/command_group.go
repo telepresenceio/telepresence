@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"strconv"
 
@@ -12,11 +13,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
-var userDaemonRunning = false
-var commandGroupMap = make(map[string]cliutil.CommandGroups)
-var globalFlagGroups []cliutil.FlagGroup
-var deprecatedGlobalFlags *pflag.FlagSet
-var kubeFlags *pflag.FlagSet
+var (
+	userDaemonRunning     = false
+	globalFlagGroups      []cliutil.FlagGroup
+	deprecatedGlobalFlags *pflag.FlagSet
+	kubeFlags             *pflag.FlagSet
+)
+
+type commandGroupMapKey struct{}
 
 func init() {
 	kubeFlags = pflag.NewFlagSet("Kubernetes flags", 0)
@@ -35,7 +39,10 @@ func init() {
 	}
 
 	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) cliutil.CommandGroups {
-		return commandGroupMap[cmd.Name()]
+		if cgs, ok := cmd.Context().Value(commandGroupMapKey{}).(cliutil.CommandGroups); ok {
+			return cgs
+		}
+		return nil
 	})
 	cobra.AddTemplateFunc("globalFlagGroups", func() []cliutil.FlagGroup {
 		return globalFlagGroups
@@ -104,17 +111,13 @@ func init() {
 	})
 }
 
-func setCommandGroups(cmd *cobra.Command, groups cliutil.CommandGroups) {
-	commandGroupMap[cmd.Name()] = groups
-}
-
 // AddCommandGroups adds all the groups in the given CommandGroups to the command,  replaces
 // the its standard usage template with a template that groups the commands according to that group.
 func AddCommandGroups(cmd *cobra.Command, groups cliutil.CommandGroups) {
 	for _, commands := range groups {
 		cmd.AddCommand(commands...)
 	}
-	setCommandGroups(cmd, groups)
+	cmd.SetContext(context.WithValue(cmd.Context(), commandGroupMapKey{}, groups))
 
 	// Set a usage template that is derived from the default but replaces the "Available Commands"
 	// section with the commandGroups() from the given command

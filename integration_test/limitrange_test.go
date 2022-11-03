@@ -20,7 +20,7 @@ func (s *helmSuite) limitedRangeTest(origCtx context.Context, policy, limitedNS 
 	svc := s.ServiceName()
 	defer func() {
 		s.UninstallTrafficManager(ctx, limitedNS)
-		itest.TelepresenceOk(ctx, "quit", "-ur")
+		itest.TelepresenceOk(ctx, "quit", "-s")
 	}()
 	s.NoError(s.InstallTrafficManager(ctx, map[string]string{"agentInjector.webhook.reinvocationPolicy": policy}, limitedNS))
 	itest.TelepresenceOk(ctx, "connect")
@@ -71,7 +71,7 @@ func (s *helmSuite) limitedRangeTest(origCtx context.Context, policy, limitedNS 
 
 func (s *helmSuite) TestLimitRange() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "quit", "-ur")
+	itest.TelepresenceOk(ctx, "quit", "-s")
 	defer func() {
 		itest.TelepresenceOk(ctx, "connect")
 	}()

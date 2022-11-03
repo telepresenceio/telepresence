@@ -10,7 +10,7 @@ import (
 )
 
 // The program creates the crt.pem, key.pem, and ca.pem needed when
-// setting up the mutator webhook for agent auto-injection
+// setting up the mutator webhook for agent auto-injection.
 func main() {
 	if len(os.Args) != 3 {
 		fmt.Fprintf(os.Stderr, "usage: %s <manager-namespace> <directory>", os.Args[0])
@@ -23,7 +23,7 @@ func main() {
 }
 
 func generateKeys(mgrNamespace, dir string) error {
-	err := os.MkdirAll(dir, 0777)
+	err := os.MkdirAll(dir, 0o777)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %q: %w", dir, err)
 	}
@@ -42,7 +42,7 @@ func generateKeys(mgrNamespace, dir string) error {
 	return writeFile(dir, "key.pem", keyPem)
 }
 
-// writeFile writes the file verbatim and as base64 encoded in the given directory
+// writeFile writes the file verbatim and as base64 encoded in the given directory.
 func writeFile(dir, file string, data []byte) error {
 	filePath := filepath.Join(dir, file)
 	f, err := os.Create(filePath)

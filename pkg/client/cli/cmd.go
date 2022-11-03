@@ -51,7 +51,7 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 	return cmd.FlagErrorFunc()(cmd, err)
 }
 
-// PerhapsLegacyCommands is like OnlySubcommands but performs some initial check for legacy flags
+// PerhapsLegacyCommands is like OnlySubcommands but performs some initial check for legacy flags.
 func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 	// If a user is using a flag that is coming from telepresence 1, we try to
 	// construct the tp2 command based on their input. If the args passed to
@@ -92,9 +92,9 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// Returns true if the string is encountered before a '--' or end of list. This
+// IsCommand returns true if the string is encountered before a '--' or end of list. This
 // is a best effort, and it might give us false positives.
-func isCommand(s string) bool {
+func IsCommand(s string) bool {
 	prev := ""
 	for _, arg := range os.Args[1:] {
 		if arg == "--" {
@@ -129,7 +129,7 @@ func userWantsRootLevelHelp() bool {
 	return arg == "help" || arg == "--help" || arg == "-h"
 }
 
-// Command returns the top level "telepresence" CLI command
+// Command returns the top level "telepresence" CLI command.
 func Command(ctx context.Context) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:  "telepresence",
@@ -152,8 +152,8 @@ func Command(ctx context.Context) *cobra.Command {
 		"Other Commands":   []*cobra.Command{versionCommand(), dashboardCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand()},
 	}
 
-	var groups = make(cliutil.CommandGroups)
-	if !isCommand("quit") && !userWantsRootLevelHelp() {
+	groups := make(cliutil.CommandGroups)
+	if !IsCommand("quit") && !userWantsRootLevelHelp() {
 		// These are commands that known to always exist in the user daemon. If the daemon
 		// isn't running, it will be started just to retrieve the command spec.
 		wellknownRemoteCommands := []string{
@@ -165,17 +165,17 @@ func Command(ctx context.Context) *cobra.Command {
 		var err error
 		wellKnown := false
 		for _, w := range wellknownRemoteCommands {
-			if isCommand(w) {
+			if IsCommand(w) {
 				wellKnown = true
 				break
 			}
 		}
-		if groups, err = getRemoteCommands(ctx, rootCmd, wellKnown); err != nil {
+		if groups, err = getRemoteCommands(rootCmd, wellKnown); err != nil {
 			if err == cliutil.ErrNoUserDaemon {
 				// This is not a problem if the command is known to the CLI
 				for _, g := range static {
 					for _, c := range g {
-						if isCommand(c.Name()) {
+						if IsCommand(c.Name()) {
 							err = nil
 						}
 					}
@@ -203,7 +203,9 @@ func Command(ctx context.Context) *cobra.Command {
 				// Ensure that args errors don't advice the user to look in log files
 				command.Args = argsCheck(ac)
 			}
-			initDeprecatedPersistentFlags(command)
+			if command.Use != "quit" {
+				initDeprecatedPersistentFlags(command)
+			}
 		}
 	}
 	for _, group := range globalFlagGroups {
@@ -216,7 +218,7 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 // argsCheck wraps an PositionalArgs checker in a function that wraps a potential error
-// using errcat.User
+// using errcat.User.
 func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := f(cmd, args); err != nil {

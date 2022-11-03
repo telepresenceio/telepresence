@@ -26,7 +26,7 @@ type config struct {
 	podIP string
 }
 
-// Keys that aren't useful when running on the local machine
+// Keys that aren't useful when running on the local machine.
 var skipKeys = map[string]bool{
 	"HOME":     true,
 	"PATH":     true,
@@ -43,6 +43,13 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	if err = yaml.Unmarshal(bs, &c.Sidecar); err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
+	if c.LogLevel != "" {
+		// Override default from environment
+		log.SetLevel(ctx, c.LogLevel)
+	}
+	if c.ManagerPort == 0 {
+		c.ManagerPort = 8081
+	}
 	c.podIP = dos.Getenv(ctx, "_TEL_AGENT_POD_IP")
 	for _, cn := range c.Containers {
 		if err := addAppMounts(ctx, cn); err != nil {
@@ -51,10 +58,6 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		if err := addSecretsMounts(ctx, cn); err != nil {
 			return nil, err
 		}
-	}
-	if c.LogLevel != "" {
-		// Override default from environment
-		log.SetLevel(ctx, c.LogLevel)
 	}
 	return &c, nil
 }
@@ -89,11 +92,11 @@ func OtelResources(ctx context.Context, c Config) []attribute.KeyValue {
 }
 
 // addAppMounts adds each of the mounts present under the containers MountPoint as a
-// symlink under the agentconfig.ExportsMountPoint/<container mount>/
+// symlink under the agentconfig.ExportsMountPoint/<container mount>/.
 func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
 	dlog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
-	if err := dos.Mkdir(ctx, cnMountPoint, 0700); err != nil {
+	if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
 		if !os.IsExist(err) {
 			return err
 		}
@@ -101,7 +104,7 @@ func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
 		if err = dos.RemoveAll(ctx, cnMountPoint); err != nil {
 			return err
 		}
-		if err = dos.Mkdir(ctx, cnMountPoint, 0700); err != nil {
+		if err = dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
 			return err
 		}
 	}
@@ -127,7 +130,7 @@ func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
 
 // addSecretsMounts adds any token-rotating system secrets directories if they exist
 // e.g. /var/run/secrets/kubernetes.io or /var/run/secrets/eks.amazonaws.com
-// to the TELEPRESENCE_MOUNTS environment variable
+// to the TELEPRESENCE_MOUNTS environment variable.
 func addSecretsMounts(ctx context.Context, ag *agentconfig.Container) error {
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
 
@@ -177,7 +180,7 @@ func addSecretsMounts(ctx context.Context, ag *agentconfig.Container) error {
 		}
 		dlog.Debugf(ctx, "create appmounts directory: %s", appMountsPath)
 		// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
-		err = dos.MkdirAll(ctx, filepath.Dir(appMountsPath), 0700)
+		err = dos.MkdirAll(ctx, filepath.Dir(appMountsPath), 0o700)
 		if err != nil {
 			return err
 		}
