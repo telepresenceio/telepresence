@@ -47,7 +47,7 @@ func NewPatchConfigmapIfNotPresent(ctx context.Context) *patchConfigmapIfNotPres
 		watchers.searchMaps(cancelCtx, cancel)
 		watchers.searchSecrets(cancelCtx, cancel)
 
-		// context for subscribe. This must be seperated from the watcher ctx
+		// context for subscribe. This must be separated from the watcher ctx
 		// because cancelling the subscribe ctx will close the channel, and a case
 		// will activate on a closed channel. we dont want search triggered after
 		// watchers are shut down
