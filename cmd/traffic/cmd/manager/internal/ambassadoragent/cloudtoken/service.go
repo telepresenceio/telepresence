@@ -49,7 +49,6 @@ func NewPatchConfigmapIfNotPresent(ctx context.Context) *patchConfigmapIfNotPres
 		// startup and search
 		dlog.Info(ctx, "starting cloud token watchers")
 		watchers.searchMaps(cancelCtx, cancel)
-		watchers.searchSecrets(cancelCtx, cancel)
 
 		// context for subscribe. This must be separated from the watcher ctx
 		// because cancelling the subscribe ctx will close the channel, and a case
@@ -62,8 +61,6 @@ func NewPatchConfigmapIfNotPresent(ctx context.Context) *patchConfigmapIfNotPres
 			select {
 			case <-subscribe(subCtx, watchers.mapsCond):
 				watchers.searchMaps(cancelCtx, cancel)
-			case <-subscribe(subCtx, watchers.secretsCond):
-				watchers.searchSecrets(cancelCtx, cancel)
 			case <-cancelCtx.Done():
 				subCancel()
 				return
