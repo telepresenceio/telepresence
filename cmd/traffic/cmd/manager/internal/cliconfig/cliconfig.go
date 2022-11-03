@@ -16,25 +16,25 @@ import (
 
 const cfgFileName = "client.json"
 
-type CLIConfigWatcher interface {
+type Watcher interface {
 	Run(ctx context.Context) error
 	GetConfigJson() (string, error)
 }
 
-type cliConfig struct {
+type config struct {
 	mountPath string
 	mu        sync.RWMutex
 	cfgJson   string
 }
 
-func NewCLIConfigWatcher(mountPath string) (CLIConfigWatcher, error) {
-	watcher := &cliConfig{
+func NewWatcher(mountPath string) (Watcher, error) {
+	watcher := &config{
 		mountPath: mountPath,
 	}
 	return watcher, nil
 }
 
-func (c *cliConfig) Run(ctx context.Context) error {
+func (c *config) Run(ctx context.Context) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -75,9 +75,7 @@ func (c *cliConfig) Run(ctx context.Context) error {
 	}
 }
 
-func (c *cliConfig) refreshFile(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *config) refreshFile(ctx context.Context) error {
 	f, err := os.Open(filepath.Join(c.mountPath, cfgFileName))
 	if err != nil {
 		return fmt.Errorf("failed to open client config file: %w", err)
@@ -87,12 +85,15 @@ func (c *cliConfig) refreshFile(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to read client config file: %w", err)
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.cfgJson = string(b)
 	dlog.Debugf(ctx, "Refreshed client config: %s", c.cfgJson)
 	return nil
 }
 
-func (c *cliConfig) GetConfigJson() (string, error) {
+func (c *config) GetConfigJson() (string, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.cfgJson, nil

@@ -27,6 +27,8 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 
 	svcName := "echo-never-proxy"
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
+	defer itest.DeleteSvcAndWorkload(ctx, "deploy", svcName, s.AppNamespace())
+
 	ip, err := itest.Output(ctx, "kubectl",
 		"--namespace", s.AppNamespace(),
 		"get", "svc", svcName,
@@ -69,7 +71,6 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		// The cluster's IP address will also be never proxied, so we gotta account for that.
 		neverProxiedCount := len(ips) + 1
 		stdout := itest.TelepresenceOk(ctx, "status")
-		dlog.Debugf(ctx, "Status: %s", stdout)
 		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets", neverProxiedCount)
 			return false
@@ -78,7 +79,6 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
 		var status statusResponse
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
-		dlog.Debugf(ctx, "Look: %s", jsonStdout)
 		if len(status.RootDaemon.NeverProxySubnets) != neverProxiedCount {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets in json status", neverProxiedCount)
 			return false
@@ -129,6 +129,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.NoError(err)
 	_, err = f.Write(b)
 	require.NoError(err)
+	require.NoError(f.Close())
 
 	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
 	defer func() {
@@ -241,6 +242,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	require.NoError(err)
 	_, err = f.Write(b)
 	require.NoError(err)
+	require.NoError(f.Close())
 
 	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
 	defer func() {

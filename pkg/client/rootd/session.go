@@ -23,7 +23,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/datawire/dlib/dcontext"
@@ -706,4 +706,16 @@ func (s *session) stop(c context.Context) {
 
 func (s *session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {
 	s.dnsServer.SetSearchPath(ctx, paths, namespaces)
+}
+
+func (s *session) applyConfig(ctx context.Context) error {
+	cfg, err := client.LoadConfig(ctx)
+	if err != nil {
+		return err
+	}
+	var sCfg *client.Config
+	if s != nil {
+		sCfg = &s.config
+	}
+	return client.MergeAndReplace(ctx, sCfg, cfg, true)
 }

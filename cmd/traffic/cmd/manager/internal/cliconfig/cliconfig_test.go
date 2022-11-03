@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cliconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -35,7 +36,7 @@ func TestCliConfigWatcher(t *testing.T) {
 	if err := writeFile(expected); err != nil {
 		t.Fatal(err)
 	}
-	watcher, err := cliconfig.NewCLIConfigWatcher(tmpdir)
+	watcher, err := cliconfig.NewWatcher(tmpdir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,29 +49,36 @@ func TestCliConfigWatcher(t *testing.T) {
 		}
 		close(errCh)
 	}()
-	dtime.SleepWithContext(ctx, 10*time.Millisecond)
-
-	result, err := watcher.GetConfigJson()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result != expected {
-		t.Fatalf("Expected %s got %s", expected, result)
-	}
+	require.Eventually(t, func() bool {
+		result, err := watcher.GetConfigJson()
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		if result != expected {
+			t.Errorf("Expected %s got %s", expected, result)
+			return false
+		}
+		return true
+	}, 1*time.Second, 50*time.Millisecond)
 
 	expected = `{"the": ["smiths", "doors", "stones"], "minute": 22}`
 	if err := writeFile(expected); err != nil {
 		t.Fatal(err)
 	}
-	dtime.SleepWithContext(ctx, 50*time.Millisecond)
-	result, err = watcher.GetConfigJson()
 
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result != expected {
-		t.Fatalf("Expected %s got %s", expected, result)
-	}
+	require.Eventually(t, func() bool {
+		result, err := watcher.GetConfigJson()
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		if result != expected {
+			t.Errorf("Expected %s got %s", expected, result)
+			return false
+		}
+		return true
+	}, 1*time.Second, 50*time.Millisecond)
 
 	cancel()
 

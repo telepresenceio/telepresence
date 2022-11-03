@@ -51,7 +51,7 @@ type Manager struct {
 	state        *state.State
 	clusterInfo  cluster.Info
 	cloudConfig  *rpc.AmbassadorCloudConfig
-	cliConfig    cliconfig.CLIConfigWatcher
+	cliConfig    cliconfig.Watcher
 	tokenService cloudtoken.Service
 
 	rpc.UnsafeManagerServer
@@ -108,7 +108,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
-	w, err := cliconfig.NewCLIConfigWatcher(clientConfigPath)
+	w, err := cliconfig.NewWatcher(clientConfigPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to start cli config watcher: %w", err)
 	}

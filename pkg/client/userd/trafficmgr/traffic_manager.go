@@ -94,6 +94,7 @@ type Session interface {
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
 	LoginExecutor() auth.LoginExecutor
 	GetSessionConfig() client.Config
+	ApplyConfig(ctx context.Context) error
 }
 
 type Service interface {
@@ -606,6 +607,18 @@ func (tm *TrafficManager) Run(c context.Context) error {
 		}(svc)
 	}
 	return g.Wait()
+}
+
+func (tm *TrafficManager) ApplyConfig(ctx context.Context) error {
+	cfg, err := client.LoadConfig(ctx)
+	if err != nil {
+		return err
+	}
+	var sCfg *client.Config
+	if tm != nil {
+		sCfg = &tm.sessionConfig
+	}
+	return client.MergeAndReplace(ctx, sCfg, cfg, false)
 }
 
 func (tm *TrafficManager) session() *manager.SessionInfo {

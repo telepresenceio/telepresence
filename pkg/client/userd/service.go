@@ -83,7 +83,6 @@ type Service struct {
 	sessionContext  context.Context
 	sessionQuitting int32 // atomic boolean. True if non-zero.
 	sessionLock     sync.RWMutex
-	sessionConfig   *client.Config
 
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
@@ -116,20 +115,11 @@ func Command(getCommands CommandFactory, daemonServices []DaemonService, session
 	return c
 }
 
-func (s *Service) applySessionConfig(c context.Context) error {
-	cfg, err := client.LoadConfig(c)
-	if err != nil {
-		return err
-	}
-	client.MergeAndReplace(c, s.sessionConfig, cfg)
-	return logging.ReloadDaemonConfig(c, false)
-}
-
 func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(ctx context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
-		return s.applySessionConfig(c)
+		return s.session.ApplyConfig(ctx)
 	})
 }
 
@@ -167,15 +157,12 @@ nextSession:
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.session = session
-					sessionCfg := session.GetSessionConfig()
-					s.sessionConfig = &sessionCfg
-					if err := s.applySessionConfig(c); err != nil {
+					if err := s.session.ApplyConfig(c); err != nil {
 						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
 					}
 				} else {
 					sCancel()
 					s.sessionCancel = nil
-					s.sessionConfig = nil
 				}
 			}
 		}
@@ -190,7 +177,7 @@ nextSession:
 			// impatient.
 			s.cancelSession()
 			s.sessionLock.RLock()
-			if err := s.applySessionConfig(c); err != nil {
+			if err := client.RestoreDefaults(c, false); err != nil {
 				dlog.Warn(c, err)
 			}
 			s.sessionLock.RUnlock()
@@ -219,11 +206,8 @@ nextSession:
 				}
 				dlog.Error(c, err)
 			}
-			// The session is over, so kill its config. We set it to nil for good measure,
-			// in case it died without s.sessionCancel being called
 			s.sessionLock.Lock()
-			s.sessionConfig = nil
-			if err := s.applySessionConfig(c); err != nil {
+			if err := client.RestoreDefaults(c, false); err != nil {
 				dlog.Warn(c, err)
 			}
 			s.sessionLock.Unlock()
@@ -254,7 +238,6 @@ func (s *Service) cancelSession() {
 	// that may be holding the RLock to die.
 	s.sessionLock.Lock()
 	s.session = nil
-	s.sessionConfig = nil
 	s.sessionCancel = nil
 	atomic.StoreInt32(&s.sessionQuitting, 0)
 	s.sessionLock.Unlock()
