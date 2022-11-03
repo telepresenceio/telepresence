@@ -7,6 +7,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+
 	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -71,14 +72,14 @@ func NewPatchConfigmapIfNotPresent(ctx context.Context) *patchConfigmapIfNotPres
 	}
 }
 
-// MaybeAddToken will add a token if one does not already exist
+// MaybeAddToken will add a token if one does not already exist.
 func (c *patchConfigmapIfNotPresent) MaybeAddToken(ctx context.Context, apikey string) error {
 	select {
 	case <-c.done: // apikey is already present or watcher err, do nothing
 		return nil
-	default: // create token
+	default: // patch configmap with token
 		// we could cancel the watchers here, and have a mutex guard this func,
-		// which would prevent multiple simultaneous calls to MaybeAddToken and therefore c.patchToken,
+		// which would prevent multiple simultaneous calls to MaybeAddToken and therefore c.patchConfigmap,
 		// but im pretty sure they would just race and the slower one wins, which is fine
 		return c.patchConfigmap(ctx, apikey)
 	}

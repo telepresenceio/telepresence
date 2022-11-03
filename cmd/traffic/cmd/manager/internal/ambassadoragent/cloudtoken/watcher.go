@@ -7,6 +7,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -51,7 +52,7 @@ func newTokenWatchers(clientset kubernetes.Interface, watchedNs string) *tokenWa
 	}
 }
 
-// search checks if apikey token exists, if it does, shut down the watchers
+// search checks if apikey token exists, if it does, shut down the watchers.
 func (w *tokenWatchers) searchMaps(ctx context.Context, cancel context.CancelFunc) {
 	configmaps, err := w.mapsWatcher.List(ctx)
 	if err != nil {
