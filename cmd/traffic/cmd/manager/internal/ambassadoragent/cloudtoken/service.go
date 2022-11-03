@@ -3,6 +3,7 @@ package cloudtoken
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -10,7 +11,6 @@ import (
 
 	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 )
 
 type Service interface {
@@ -18,8 +18,9 @@ type Service interface {
 }
 
 type patchConfigmapIfNotPresent struct {
+	sync.Mutex
 	patchConfigmap func(ctx context.Context, apikey string) error
-	done           <-chan struct{}
+	watchersDone   <-chan struct{}
 }
 
 const (
@@ -46,7 +47,7 @@ func NewPatchConfigmapIfNotPresent(ctx context.Context) *patchConfigmapIfNotPres
 		watchers.searchMaps(cancelCtx, cancel)
 		watchers.searchSecrets(cancelCtx, cancel)
 
-		// context for subscribe. This has to be different than the watcher context
+		// context for subscribe. This must be seperated from the watcher ctx
 		// because cancelling the subscribe ctx will close the channel, and a case
 		// will activate on a closed channel. we dont want search triggered after
 		// watchers are shut down
@@ -67,37 +68,35 @@ func NewPatchConfigmapIfNotPresent(ctx context.Context) *patchConfigmapIfNotPres
 	}()
 
 	return &patchConfigmapIfNotPresent{
-		patchConfigmap: buildConfigmapPatcher(clientset, managerns),
-		done:           cancelCtx.Done(),
+		patchConfigmap: func(ctx context.Context, apikey string) error {
+			dlog.Info(ctx, "patching cloud token configmap with apikey")
+			_, err := clientset.CoreV1().ConfigMaps(managerns).Patch(
+				ctx,
+				"traffic-manager-"+CLOUD_TOKEN_NAME_SUFFIX,
+				types.StrategicMergePatchType,
+				[]byte(fmt.Sprintf(`{"data":{"%s":"%s"}}`, CLOUD_TOKEN_KEY, apikey)),
+				apiv1.PatchOptions{},
+			)
+			if err == nil {
+				dlog.Info(ctx, "cloud token configmap successfully patched, stopping cloud token watchers")
+				cancel()
+			}
+			return err
+		},
+		watchersDone: cancelCtx.Done(),
 	}
 }
 
 // MaybeAddToken will add a token if one does not already exist.
 func (c *patchConfigmapIfNotPresent) MaybeAddToken(ctx context.Context, apikey string) error {
+	// prevent multiple patches with lock and cancel
+	c.Lock()
+	defer c.Unlock()
+
 	select {
-	case <-c.done: // apikey is already present or watcher err, do nothing
+	case <-c.watchersDone: // apikey is already present or watcher err, do nothing
 		return nil
 	default: // patch configmap with token
-		// we could cancel the watchers here, and have a mutex guard this func,
-		// which would prevent multiple simultaneous calls to MaybeAddToken and therefore c.patchConfigmap,
-		// but im pretty sure they would just race and the slower one wins, which is fine
 		return c.patchConfigmap(ctx, apikey)
-	}
-}
-
-func buildConfigmapPatcher(clientset kubernetes.Interface, managerns string) func(ctx context.Context, apikey string) error {
-	return func(ctx context.Context, apikey string) error {
-		dlog.Info(ctx, "patching cloud token configmap with apikey")
-		_, err := clientset.CoreV1().ConfigMaps(managerns).Patch(
-			ctx,
-			"traffic-manager-"+CLOUD_TOKEN_NAME_SUFFIX,
-			types.StrategicMergePatchType,
-			[]byte(fmt.Sprintf(`{"data":{"%s":"%s"}}`, CLOUD_TOKEN_KEY, apikey)),
-			apiv1.PatchOptions{},
-		)
-		if err == nil {
-			dlog.Info(ctx, "cloud token configmap successfully patched")
-		}
-		return err
 	}
 }
