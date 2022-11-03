@@ -86,9 +86,8 @@ jobs:
           ./telepresence-server helm install
 
           # Quit the user and root daemons since they get started by the installation. Use multiple
-          # different ways since the arguments have changed.
-          ./telepresence-server quit -u || true
-          ./telepresence-server quit -r || true
+          # different ways and ignore failure since the arguments have changed.
+          ./telepresence-server quit -ur || true
           ./telepresence-server quit -s || true
 
           ./telepresence-client connect
