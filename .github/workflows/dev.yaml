@@ -74,7 +74,7 @@ jobs:
         uses: nick-invision/retry@v2.4.0
         with:
           max_attempts: 3
-          timeout_minutes: 30
+          timeout_minutes: 60
           command: |
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             export DTEST_KUBECONFIG=${{ steps.kluster.outputs.kubeconfig }}
@@ -155,7 +155,7 @@ jobs:
         uses: nick-invision/retry@v2.4.0
         with:
           max_attempts: 3
-          timeout_minutes: 30
+          timeout_minutes: 60
           command: |
             $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
             $ENV:DTEST_REGISTRY = "docker.io/datawire"
@@ -218,7 +218,7 @@ jobs:
         uses: nick-invision/retry@v2.4.0
         with:
           max_attempts: 3
-          timeout_minutes: 30
+          timeout_minutes: 60
           command: |
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             export DTEST_KUBECONFIG="${{ steps.kluster.outputs.kubeconfig }}"
