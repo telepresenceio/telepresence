@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/client-go/rest"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 
@@ -22,6 +24,11 @@ type tokenWatchers struct {
 
 func newTokenWatchers(clientset kubernetes.Interface, watchedNs string) *tokenWatchers {
 	client := clientset.CoreV1().RESTClient()
+	if client == (*rest.RESTClient)(nil) {
+		// This happens when unit tests run because the fake clientset doesn't provide
+		// rest clients.
+		return nil
+	}
 
 	mapsCond := &sync.Cond{
 		L: &sync.Mutex{},

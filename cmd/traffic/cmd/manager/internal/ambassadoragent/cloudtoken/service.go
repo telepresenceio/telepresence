@@ -35,6 +35,10 @@ func NewPatchConfigmapIfNotPresent(ctx context.Context) *patchConfigmapIfNotPres
 	managerns := managerutil.GetEnv(ctx).ManagerNamespace
 	clientset := k8sapi.GetK8sInterface(ctx)
 	watchers := newTokenWatchers(clientset, managerns)
+	if watchers == nil {
+		// We're running unit tests.
+		return nil
+	}
 
 	// ctx for watchers, cancelled if token is found or watcher err
 	// cancelling this ctx also stops MaybeAddToken from adding token

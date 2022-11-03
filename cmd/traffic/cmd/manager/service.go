@@ -996,7 +996,7 @@ func (m *Manager) expire(ctx context.Context) {
 
 // MaybeAddToken maybe adds apikey to the cluster so that the ambassador agent can login.
 func (m *Manager) MaybeAddToken(ctx context.Context, apikey string) {
-	if apikey != "" {
+	if apikey != "" && m.tokenService != nil {
 		if err := m.tokenService.MaybeAddToken(ctx, apikey); err != nil {
 			dlog.Errorf(ctx, "error creating cloud token: %s", err)
 		}
