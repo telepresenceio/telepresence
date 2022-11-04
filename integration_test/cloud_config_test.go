@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,6 +20,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
+
+func (s *notConnectedSuite) rollbackTM() {
+	require := s.Require()
+	ctx := s.Context()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	require.NoError(itest.Run(ctx, "helm", "rollback", "--wait", "--namespace", s.ManagerNamespace(), "traffic-manager"))
+}
 
 func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	require := s.Require()
@@ -60,9 +69,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	require.NoError(err)
 
 	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
-	defer func() {
-		require.NoError(itest.Run(ctx, "helm", "rollback", "--namespace", s.ManagerNamespace(), "traffic-manager"))
-	}()
+	defer s.rollbackTM()
 
 	s.Eventually(func() bool {
 		itest.TelepresenceOk(ctx, "connect")
@@ -132,9 +139,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.NoError(f.Close())
 
 	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
-	defer func() {
-		require.NoError(itest.Run(ctx, "helm", "rollback", "--namespace", s.ManagerNamespace(), "traffic-manager"))
-	}()
+	defer s.rollbackTM()
 
 	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,
 	// and the traffic-manager will be able to apply its own. For this same reason we can't use WithConfig to do this,
@@ -245,9 +250,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	require.NoError(f.Close())
 
 	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
-	defer func() {
-		require.NoError(itest.Run(ctx, "helm", "rollback", "--namespace", s.ManagerNamespace(), "traffic-manager"))
-	}()
+	defer s.rollbackTM()
 
 	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,
 	// and the traffic-manager will be able to apply its own. For this same reason we can't use WithConfig to do this,
