@@ -1,0 +1,33 @@
+name: "Run integration tests"
+description: "Logic to run integration tests for all supported platforms"
+inputs:
+  kubeconfig:
+    description: "The kubeconfig file to use for the test"
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Run tests
+      env:
+        DTEST_KUBECONFIG: "${{ inputs.kubeconfig }}"
+        DTEST_REGISTRY: "docker.io/datawire"
+      uses: nick-invision/retry@v2.8.2
+      with:
+        max_attempts: 3
+        timeout_minutes: 30
+        shell: bash
+        command: |
+          set -ex
+          if [[ ${RUNNER_OS} == "Windows" ]]; then
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
+
+            export PATH="$PATH:/C/Program Files/SSHFS-Win/bin"
+          else
+            # We want to validate that tests still pass, even if the metrics host
+            # points to a broken IP
+            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
+          fi
+
+          make check-integration
