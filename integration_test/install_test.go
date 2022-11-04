@@ -57,14 +57,14 @@ func (is *installSuite) Test_NonHelmInstall() {
 	values = append([]string{"template", "traffic-manager", chart, "-n", is.ManagerNamespace()}, values...)
 	manifest, err := itest.Output(ctx, "helm", values...)
 	require.NoError(err)
-	cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "apply", "-f", "-")
+	cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(manifest)
 	out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
 	cmd.Stdout = out
 	cmd.Stderr = out
 	require.NoError(cmd.Run())
 	defer func() {
-		cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "delete", "-f", "-")
+		cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "delete", "-f", "-")
 		cmd.Stdin = strings.NewReader(manifest)
 		out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
 		cmd.Stdout = out
