@@ -33,6 +33,7 @@ func (s *helmSuite) assertInjected(ctx context.Context, name, namespace string, 
 }
 
 func (s *helmSuite) injectPolicyTest(ctx context.Context, policy agentconfig.InjectPolicy) {
+	s.UninstallTrafficManager(ctx, s.mgrSpace2)
 	namespace := fmt.Sprintf("%s-%s", strings.ToLower(policy.String()), s.Suffix())
 	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": namespace})
 	itest.CreateNamespaces(ctx, namespace)
