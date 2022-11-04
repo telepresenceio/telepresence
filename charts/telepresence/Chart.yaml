@@ -12,6 +12,6 @@ icon: https://www.getambassador.io/images/logo.png
 appVersion: "1.1.1-bogus.overwritten.by.charts.go"
 dependencies:
   - name: ambassador-agent
-    version: v0.1.0-rc.3
+    version: v0.1.0-rc.13
     repository: https://getambassador.io/
     condition: ambassador-agent.enabled
