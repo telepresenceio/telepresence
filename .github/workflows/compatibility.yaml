@@ -2,7 +2,7 @@
 #
 # See the "matrix" field below for which versions are tested.
 
-name: "Telepresence Test Matrix"
+name: "Telepresence Client/Server Compatibility Matrix"
 on:
   # Run daily at 9am UTC.
   schedule:
