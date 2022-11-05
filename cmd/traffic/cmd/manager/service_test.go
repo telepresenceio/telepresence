@@ -48,7 +48,7 @@ func TestConnect(t *testing.T) {
 	testClients := testdata.GetTestClients(t)
 	testAgents := testdata.GetTestAgents(t)
 
-	version.Version = "testing"
+	version.Version, version.Structured = version.Init("0.0.0-testing", "TELEPRESENCE_VERSION")
 
 	conn := getTestClientConn(ctx, t)
 	defer conn.Close()
@@ -315,7 +315,7 @@ func TestRemoveIntercept_InterceptFinalizer(t *testing.T) {
 
 	prevVersion := version.Version
 	defer func() { version.Version = prevVersion }()
-	version.Version = "testing"
+	version.Version, version.Structured = version.Init("0.0.0-testing", "TELEPRESENCE_VERSION")
 
 	t.Run("error removing intercept with systema", func(t *testing.T) {
 		dlog.SetFallbackLogger(dlog.WrapTB(t, false))
@@ -479,7 +479,7 @@ func TestUpdateIntercept(t *testing.T) {
 
 	prevVersion := version.Version
 	defer func() { version.Version = prevVersion }()
-	version.Version = "testing"
+	version.Version, version.Structured = version.Init("0.0.0-testing", "TELEPRESENCE_VERSION")
 
 	t.Run("add preview domain", func(t *testing.T) {
 		dlog.SetFallbackLogger(dlog.WrapTB(t, false))

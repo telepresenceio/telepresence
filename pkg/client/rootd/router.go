@@ -13,11 +13,11 @@ import (
 
 const dnsConnTTL = 5 * time.Second
 
-func (s *session) isForDNS(ip net.IP, port uint16) bool {
+func (s *Session) isForDNS(ip net.IP, port uint16) bool {
 	return s.remoteDnsIP != nil && port == 53 && s.remoteDnsIP.Equal(ip)
 }
 
-func (s *session) streamCreator() tunnel.StreamCreator {
+func (s *Session) streamCreator() tunnel.StreamCreator {
 	return func(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
 		p := id.Protocol()
 		if p == ipproto.UDP && s.isForDNS(id.Destination(), id.DestinationPort()) {

@@ -14,7 +14,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/metriton-go-client/metriton"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -47,7 +46,7 @@ const (
 	Docker InstallType = "docker"
 )
 
-var idFiles = map[InstallType]string{
+var idFiles = map[InstallType]string{ //nolint:gochecknoglobals // constant
 	CLI:    "id",
 	Docker: "docker_id",
 }
@@ -308,16 +307,11 @@ func (r *Reporter) doReport(ctx context.Context, be *bufEntry) {
 	metadata := make(map[string]any, 4+len(be.entries))
 	metadata["action"] = be.action
 	metadata["index"] = r.index
-	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
-	if err == nil && userInfo.Id != "" {
-		metadata["user_id"] = userInfo.Id
-		metadata["account_id"] = userInfo.AccountId
-	}
 	for _, metaItem := range be.entries {
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
-	_, err = r.reporter.Report(ctx, metadata)
+	_, err := r.reporter.Report(ctx, metadata)
 	if err != nil && ctx.Err() == nil {
 		dlog.Infof(ctx, "scout report %q failed: %v", be.action, err)
 	}

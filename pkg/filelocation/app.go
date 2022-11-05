@@ -47,6 +47,9 @@ func AppUserLogDir(ctx context.Context) (string, error) {
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
 func AppUserCacheDir(ctx context.Context) (string, error) {
+	if untyped := ctx.Value(cacheCtxKey{}); untyped != nil {
+		return untyped.(string), nil
+	}
 	userDir, err := userCacheDir(ctx)
 	if err != nil {
 		return "", err

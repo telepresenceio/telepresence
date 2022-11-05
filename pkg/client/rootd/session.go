@@ -45,14 +45,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
-// session resolves DNS names and routes outbound traffic that is centered around a TUN device. The router is
+// Session resolves DNS names and routes outbound traffic that is centered around a TUN device. The router is
 // similar to a TUN-to-SOCKS5 but uses a bidirectional gRPC muxTunnel instead of SOCKS when communicating with the
 // traffic-manager. The addresses of the device are derived from IP addresses sent to it from the user
 // daemon (which in turn receives them from the cluster).
 //
 // Data sent to the device is received as L3 IP-packets and parsed into L4 UDP and TCP before they
 // are dispatched over the muxTunnel. Returned payloads are wrapped as IP-packets before written
-// back to the device.
+// back to the device. This L3 <=> L4 conversation is made using gvisor.dev/gvisor/pkg/tcpip.
 //
 // Connection pooling:
 //
@@ -63,17 +63,8 @@ import (
 // using the gRPC ClientTunnel. At the receiving en din the traffic-manager, a similar tunnel.Pool obtains
 // a corresponding handler which manages a net.Conn matching the ConnID in the cluster.
 //
-// Negotiation:
-//
-// UDP is of course very simple. It's fire and forget. There's no negotiation whatsoever.
-//
-// TCP requires a complete workflow engine on the TUN-device side (see tcp.Handler). All TCP negotiation,
-// takes place in the client and the same bidirectional muxTunnel is then used to send both TCP and UDP
-// packets to the manager. TCP will send some control packets. One to verify that a connection can
-// be established at the manager side, and one when the connection is closed (from either side).
-//
-// A zero session is invalid; you must use newSession.
-type session struct {
+// A zero Session is invalid; you must use newSession.
+type Session struct {
 	scout *scout.Reporter
 
 	// dev is the TUN device that gets configured with the subnets found in the cluster
@@ -102,11 +93,11 @@ type session struct {
 
 	// remoteDnsIP is the IP of the DNS server attached to the TUN device. This is currently only
 	// used in conjunction with systemd-resolved. The current macOS and the overriding solution
-	// will dispatch directly to the local DNS service without going through the TUN device but
+	// will dispatch directly to the local DNS Service without going through the TUN device but
 	// that may change later if we decide to dispatch to the DNS-server in the cluster.
 	remoteDnsIP net.IP
 
-	// dnsLocalAddr is address of the local DNS service.
+	// dnsLocalAddr is address of the local DNS Service.
 	dnsLocalAddr *net.UDPAddr
 
 	// Cluster subnets reported by the traffic-manager
@@ -143,6 +134,21 @@ type session struct {
 
 	// vifReady is closed when the virtual network interface has been configured.
 	vifReady chan error
+}
+
+type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.OutboundInfo) (*Session, error)
+
+type newSessionKey struct{}
+
+func WithNewSessionFunc(ctx context.Context, f NewSessionFunc) context.Context {
+	return context.WithValue(ctx, newSessionKey{}, f)
+}
+
+func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
+	if f, ok := ctx.Value(newSessionKey{}).(NewSessionFunc); ok {
+		return f
+	}
+	panic("No User daemon Session creator has been registered")
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
@@ -199,8 +205,8 @@ func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
 	return ns
 }
 
-// newSession returns a new properly initialized session object.
-func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*session, error) {
+// NewSession returns a new properly initialized session object.
+func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
 	conn, mc, ver, err := connectToManager(c)
 	if mc == nil || err != nil {
@@ -209,7 +215,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 
 	as := convertSubnets(mi.AlsoProxySubnets)
 	ns := convertSubnets(mi.NeverProxySubnets)
-	s := &session{
+	s := &Session{
 		scout:            scout,
 		handlers:         tunnel.NewPool(),
 		fragmentMap:      make(map[uint16][]*buffer.Data),
@@ -240,7 +246,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 }
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
-func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
+func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
 	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
 	s.dnsLookups++
 
@@ -257,7 +263,7 @@ func (s *session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 }
 
 // clusterLookup sends a LookupHost request to the traffic-manager and returns the result.
-func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rrs dnsproxy.RRs, rCode int, err error) {
+func (s *Session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rrs dnsproxy.RRs, rCode int, err error) {
 	qType := q.Qtype
 	if !(qType == dns2.TypeA || qType == dns2.TypeAAAA) {
 		return nil, dns2.RcodeNotImplemented, nil
@@ -288,7 +294,7 @@ func (s *session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rr
 	return rrs, dns2.RcodeSuccess, nil
 }
 
-func (s *session) getInfo() *rpc.OutboundInfo {
+func (s *Session) getInfo() *rpc.OutboundInfo {
 	info := rpc.OutboundInfo{
 		Session: s.session,
 		Dns:     s.dnsServer.GetConfig(),
@@ -313,12 +319,12 @@ func (s *session) getInfo() *rpc.OutboundInfo {
 	return &info
 }
 
-func (s *session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
+func (s *Session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
 	s.remoteDnsIP = dnsIP
 	s.dnsLocalAddr = dnsLocalAddr
 }
 
-func (s *session) reconcileStaticRoutes(ctx context.Context) (err error) {
+func (s *Session) reconcileStaticRoutes(ctx context.Context) (err error) {
 	desired := []*routing.Route{}
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "reconcileStaticRoutes")
 	defer tracing.EndAndRecord(span, err)
@@ -362,7 +368,7 @@ removing:
 	return nil
 }
 
-func (s *session) refreshSubnets(ctx context.Context) (err error) {
+func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 	// Create a unique slice of all desired subnets.
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "refreshSubnets")
 	defer tracing.EndAndRecord(span, err)
@@ -411,7 +417,7 @@ func (s *session) refreshSubnets(ctx context.Context) (err error) {
 }
 
 // networkReady returns a channel that is close when both the VIF and DNS are ready.
-func (s *session) networkReady(ctx context.Context) <-chan error {
+func (s *Session) networkReady(ctx context.Context) <-chan error {
 	rdy := make(chan error, 2)
 	go func() {
 		defer close(rdy)
@@ -434,7 +440,7 @@ func (s *session) networkReady(ctx context.Context) <-chan error {
 	return rdy
 }
 
-func (s *session) watchClusterInfo(ctx context.Context) {
+func (s *Session) watchClusterInfo(ctx context.Context) {
 	backoff := 100 * time.Millisecond
 
 	for ctx.Err() == nil {
@@ -484,7 +490,7 @@ func (s *session) watchClusterInfo(ctx context.Context) {
 	}
 }
 
-func (s *session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
+func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
 	defer close(s.vifReady)
 	s.checkConnectivity(ctx, mgrInfo)
 	err := ctx.Err()
@@ -498,7 +504,7 @@ func (s *session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 	return nil
 }
 
-func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) {
+func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) {
 	dlog.Debugf(ctx, "WatchClusterInfo update")
 	dns := mgrInfo.Dns
 	if dns == nil {
@@ -547,7 +553,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	if s.proxyCluster {
 		if mgrInfo.ServiceSubnet != nil {
 			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
-			dlog.Infof(ctx, "Adding service subnet %s", cidr)
+			dlog.Infof(ctx, "Adding Service subnet %s", cidr)
 			subnets = append(subnets, cidr)
 		}
 
@@ -570,7 +576,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	)
 }
 
-func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterInfo) {
+func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterInfo) {
 	if info.ManagerPodIp == nil {
 		return
 	}
@@ -597,7 +603,7 @@ func (s *session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 	dlog.Info(ctx, "Already connected to cluster, will not map cluster subnets")
 }
 
-func (s *session) run(c context.Context) error {
+func (s *Session) run(c context.Context) error {
 	defer dlog.Info(c, "-- Session ended")
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
@@ -632,7 +638,7 @@ func (s *session) run(c context.Context) error {
 	case <-s.vifReady:
 	}
 
-	// Start the router and the DNS service and wait for the context
+	// Start the router and the DNS Service and wait for the context
 	// to be done. Then shut things down in order. The following happens:
 	// 1. The DNS worker terminates (it needs the TUN device to be alive while doing that)
 	// 2. The TUN device is closed (by the stop method). This unblocks the routerWorker's pending read on the device.
@@ -652,7 +658,7 @@ func (s *session) run(c context.Context) error {
 	return g.Wait()
 }
 
-func (s *session) stop(c context.Context) {
+func (s *Session) stop(c context.Context) {
 	if !atomic.CompareAndSwapInt32(&s.closing, 0, 1) {
 		// Session already stopped (or is stopping)
 		return
@@ -686,6 +692,6 @@ func (s *session) stop(c context.Context) {
 	}
 }
 
-func (s *session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {
+func (s *Session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {
 	s.dnsServer.SetSearchPath(ctx, paths, namespaces)
 }

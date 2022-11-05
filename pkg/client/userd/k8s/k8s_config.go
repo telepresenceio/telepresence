@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 // The dnsConfig is part of the kubeconfigExtension struct.
@@ -53,11 +54,6 @@ type kubeconfigExtension struct {
 	AlsoProxy  []*iputil.Subnet `json:"also-proxy,omitempty"`
 	NeverProxy []*iputil.Subnet `json:"never-proxy,omitempty"`
 	Manager    *managerConfig   `json:"manager,omitempty"`
-}
-
-type KubeConfig interface {
-	GetRestConfig() *rest.Config
-	GetManagerNamespace() string
 }
 
 type Config struct {
@@ -209,7 +205,7 @@ func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
-		mapEqual(kf.flagMap, okf.flagMap)
+		maps.Equal(kf.flagMap, okf.flagMap)
 }
 
 func (kf *Config) GetManagerNamespace() string {
@@ -218,16 +214,4 @@ func (kf *Config) GetManagerNamespace() string {
 
 func (kf *Config) GetRestConfig() *rest.Config {
 	return kf.RestConfig
-}
-
-func mapEqual(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if v != b[k] {
-			return false
-		}
-	}
-	return true
 }

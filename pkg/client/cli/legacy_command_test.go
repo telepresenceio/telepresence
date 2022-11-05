@@ -83,7 +83,6 @@ func Test_legacyCommands(t *testing.T) {
 		},
 	}
 
-	initGlobalFlagGroups()
 	for _, tc := range testCases {
 		tcName := tc.name
 		tc := tc

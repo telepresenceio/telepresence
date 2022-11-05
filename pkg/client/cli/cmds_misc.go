@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -15,7 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -68,17 +67,17 @@ func connectCommand() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request.KubeFlags = kubeFlagMap(kubeFlags)
-			cmd.SetContext(cliutil.WithConnectionRequest(cmd.Context(), request))
-			if err := cliutil.InitCommand(cmd); err != nil {
+			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
+			if err := util.InitCommand(cmd); err != nil {
 				return err
 			}
 			if len(args) == 0 {
 				return nil
 			}
 			ctx := cmd.Context()
-			if cliutil.GetSession(ctx).Started {
+			if util.GetSession(ctx).Started {
 				defer func() {
-					_ = cliutil.Disconnect(ctx, false)
+					_ = util.Disconnect(ctx, false)
 				}()
 			}
 			return proc.Run(ctx, nil, cmd, args[0], args[1:]...)
@@ -107,39 +106,6 @@ func initConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.F
 	return &cr, kubeFlags
 }
 
-func dashboardCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:  "dashboard",
-		Args: cobra.NoArgs,
-
-		Short: "Open the dashboard in a web page",
-		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
-			ann.Session:    ann.Required,
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cloudCfg := client.GetConfig(cmd.Context()).Cloud
-
-			// Ensure we're logged in
-			resultCode, err := cliutil.EnsureLoggedIn(cmd.Context(), "")
-			if err != nil {
-				return err
-			}
-
-			if resultCode == connector.LoginResult_OLD_LOGIN_REUSED {
-				// The LoginFlow takes the user to the dashboard, so we only need to
-				// explicitly take the user to the dashboard if they were already
-				// logged in.
-				if err := browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", cloudCfg.SystemaHost)); err != nil {
-					return err
-				}
-			}
-
-			return nil
-		},
-	}
-}
-
 func quitCommand() *cobra.Command {
 	quitDaemons := false
 	quitRootDaemon := false
@@ -151,7 +117,7 @@ func quitCommand() *cobra.Command {
 		Short:       "Tell telepresence daemon to quit",
 		Annotations: map[string]string{ann.UserDaemon: ann.Optional},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := cliutil.InitCommand(cmd); err != nil {
+			if err := util.InitCommand(cmd); err != nil {
 				return err
 			}
 			if quitUserDaemon {
@@ -163,14 +129,14 @@ func quitCommand() *cobra.Command {
 				quitDaemons = true
 			}
 			ctx := cmd.Context()
-			if quitDaemons && cliutil.GetUserDaemon(ctx) == nil {
+			if quitDaemons && util.GetUserDaemon(ctx) == nil {
 				// User daemon isn't running. If the root daemon is running, we must
 				// kill it from here.
 				if conn, err := client.DialSocket(ctx, client.DaemonSocketName); err == nil {
 					_, _ = daemon.NewDaemonClient(conn).Quit(ctx, &empty.Empty{})
 				}
 			}
-			return cliutil.Disconnect(cmd.Context(), quitDaemons)
+			return util.Disconnect(cmd.Context(), quitDaemons)
 		},
 	}
 	flags := cmd.Flags()

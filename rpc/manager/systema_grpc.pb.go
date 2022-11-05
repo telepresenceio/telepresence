@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.5
-// source: rpc/manager/systema.proto
+// source: manager/systema.proto
 
 package manager
 
@@ -141,5 +141,5 @@ var ManagerProxy_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "rpc/manager/systema.proto",
+	Metadata: "manager/systema.proto",
 }
