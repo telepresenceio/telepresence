@@ -237,7 +237,7 @@ func setTCPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.Str
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, f.HandlePacket)
 }
 
-var blockedUDPPorts = map[uint16]bool{
+var blockedUDPPorts = map[uint16]bool{ //nolint:gochecknoglobals // constant
 	137: true, // NETBIOS Name Service
 	138: true, // NETBIOS Datagram Service
 	139: true, // NETBIOS

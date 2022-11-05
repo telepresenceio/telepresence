@@ -10,7 +10,7 @@ import (
 // in case the service.spec.ports.appProtocol is not set.
 type AppProtocolStrategy int
 
-var apsNames = [...]string{"http2Probe", "portName", "http", "http2"}
+var apsNames = [...]string{"http2Probe", "portName", "http", "http2"} //nolint:gochecknoglobals // constant names
 
 const (
 	// Http2Probe means never guess. Choose HTTP/1.1 or HTTP/2 by probing (this is the default behavior).

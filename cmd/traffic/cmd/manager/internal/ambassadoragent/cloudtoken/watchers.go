@@ -16,10 +16,8 @@ import (
 )
 
 type tokenWatchers struct {
-	mapsCond       *sync.Cond
-	mapsWatcher    *k8sapi.Watcher
-	secretsCond    *sync.Cond
-	secretsWatcher *k8sapi.Watcher
+	mapsCond    *sync.Cond
+	mapsWatcher *k8sapi.Watcher
 }
 
 func newTokenWatchers(clientset kubernetes.Interface, watchedNs string) *tokenWatchers {
@@ -46,27 +44,9 @@ func newTokenWatchers(clientset kubernetes.Interface, watchedNs string) *tokenWa
 		},
 	)
 
-	secretsCond := &sync.Cond{
-		L: &sync.Mutex{},
-	}
-
-	secretsWatcher := k8sapi.NewWatcher(
-		"secrets",
-		watchedNs,
-		client,
-		&corev1.Secret{},
-		secretsCond,
-		func(s1, s2 runtime.Object) bool {
-			_, ok := s2.(*corev1.Secret).Data[CLOUD_TOKEN_KEY]
-			return s1.(*corev1.Secret).Name == s2.(*corev1.Secret).Name && !ok
-		},
-	)
-
 	return &tokenWatchers{
-		mapsCond:       mapsCond,
-		mapsWatcher:    mapsWatcher,
-		secretsCond:    secretsCond,
-		secretsWatcher: secretsWatcher,
+		mapsCond:    mapsCond,
+		mapsWatcher: mapsWatcher,
 	}
 }
 
@@ -77,17 +57,6 @@ func (w *tokenWatchers) searchMaps(ctx context.Context, cancel context.CancelFun
 		_, ok := cm.(*corev1.ConfigMap).Data[CLOUD_TOKEN_KEY]
 		if strings.HasSuffix(cm.(*corev1.ConfigMap).Name, CLOUD_TOKEN_NAME_SUFFIX) && ok {
 			dlog.Infof(ctx, "configmap %s found, stopping cloud token watchers", cm.(*corev1.ConfigMap).Name)
-			cancel()
-		}
-	}
-}
-
-func (w *tokenWatchers) searchSecrets(ctx context.Context, cancel context.CancelFunc) {
-	secrets := w.secretsWatcher.List(ctx)
-	for _, s := range secrets {
-		_, ok := s.(*corev1.Secret).Data[CLOUD_TOKEN_KEY]
-		if strings.HasSuffix(s.(*corev1.Secret).Name, CLOUD_TOKEN_NAME_SUFFIX) && ok {
-			dlog.Infof(ctx, "secret %s found, stopping cloud token watchers", s.(*corev1.Secret).Name)
 			cancel()
 		}
 	}

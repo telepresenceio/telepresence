@@ -26,13 +26,6 @@ type config struct {
 	podIP string
 }
 
-// Keys that aren't useful when running on the local machine.
-var skipKeys = map[string]bool{
-	"HOME":     true,
-	"PATH":     true,
-	"HOSTNAME": true,
-}
-
 func LoadConfig(ctx context.Context) (Config, error) {
 	bs, err := dos.ReadFile(ctx, filepath.Join(agentconfig.ConfigMountPoint, agentconfig.ConfigFile))
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
@@ -94,7 +94,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	sc.Start(ctx)
 	defer sc.Close()
 
-	err = cliutil.Disconnect(ctx, false)
+	err = util.Disconnect(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -150,7 +150,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		return fmt.Errorf("failed to get routing table: %w", err)
 	}
 	subnets := map[string][]*net.IPNet{podType: {}, svcType: {}}
-	if err = cliutil.InitCommand(cmd); err != nil {
+	if err = util.InitCommand(cmd); err != nil {
 		return err
 	}
 	ctx = cmd.Context()
@@ -160,7 +160,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	userd := cliutil.GetUserDaemon(ctx)
+	userd := util.GetUserDaemon(ctx)
 	clusterSubnets, err := userd.GetClusterSubnets(ctx, &empty.Empty{})
 	if err != nil {
 		return err
@@ -219,7 +219,8 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		fmt.Fprintln(cmd.OutOrStdout(), instruction)
 	}
 	if configIssues {
-		fmt.Fprintln(cmd.OutOrStdout(), "\nPlease see https://www.telepresence.io/docs/latest/reference/vpn for more info on these corrective actions, as well as examples")
+		fmt.Fprintln(cmd.OutOrStdout(),
+			"\nPlease see https://www.getambassador.io/docs/telepresence/latest/reference/vpn/ for more info on these corrective actions, as well as examples")
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), "\nStill having issues? Please create a new github issue at https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md\n",
 		"Please make sure to add the following to your issue:\n",

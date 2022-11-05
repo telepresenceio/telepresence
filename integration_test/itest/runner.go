@@ -36,7 +36,7 @@ type runner struct {
 	withSuffix  map[string]*suffixedRunner
 }
 
-var defaultRunner Runner = &runner{withSuffix: make(map[string]*suffixedRunner)}
+var defaultRunner Runner = &runner{withSuffix: make(map[string]*suffixedRunner)} //nolint:gochecknoglobals // integration test config
 
 // AddClusterSuite adds a constructor for a test suite that requires a cluster to run to the default runner.
 func AddClusterSuite(f func(context.Context) suite.TestingSuite) {

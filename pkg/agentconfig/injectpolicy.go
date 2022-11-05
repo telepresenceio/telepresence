@@ -8,7 +8,7 @@ import (
 // a pod.
 type InjectPolicy int
 
-var epNames = [...]string{"OnDemand", "WhenEnabled"}
+var epNames = [...]string{"OnDemand", "WhenEnabled"} //nolint:gochecknoglobals // constant names
 
 const (
 	// OnDemand tells the injector to inject the traffic-agent the first time someone makes an attempt

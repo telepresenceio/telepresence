@@ -8,7 +8,7 @@ import (
 
 type setLogLevelContextKey struct{}
 
-var DlogLevelNames = [5]string{
+var DlogLevelNames = [5]string{ //nolint:gochecknoglobals // constant names
 	"error",
 	"warning",
 	"info",

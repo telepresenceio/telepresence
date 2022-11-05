@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.5
-// source: rpc/manager/manager.proto
+// source: manager/manager.proto
 
 package manager
 
@@ -1719,5 +1719,5 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "rpc/manager/manager.proto",
+	Metadata: "manager/manager.proto",
 }

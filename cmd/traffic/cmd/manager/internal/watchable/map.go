@@ -5,6 +5,8 @@ import (
 	"sync"
 
 	"google.golang.org/protobuf/proto"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 type Message = proto.Message
@@ -329,12 +331,8 @@ func (tm *Map[V]) coalesce(
 		// memory corruption with our updating of 'cur' and the reader's accessing of 'cur'.
 		// snapshot.State gets set to 'nil' when we need to do a read before we can write to
 		// 'downstream' again.
-		State: make(map[string]V, len(cur)),
-
+		State:   maps.Copy(cur),
 		Updates: nil,
-	}
-	for k, v := range cur {
-		snapshot.State[k] = v
 	}
 
 	// applyUpdate applies an update to 'cur', and updates 'snapshot.State' as nescessary.
@@ -361,10 +359,7 @@ func (tm *Map[V]) coalesce(
 				if snapshot.State != nil {
 					snapshot.State[update.Key] = update.Value
 				} else {
-					snapshot.State = make(map[string]V, len(cur))
-					for k, v := range cur {
-						snapshot.State[k] = v
-					}
+					snapshot.State = maps.Copy(cur)
 				}
 			}
 		}

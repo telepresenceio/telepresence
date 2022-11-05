@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.5
-// source: rpc/systema/cli2systema.proto
+// source: systema/cli2systema.proto
 
 package systema
 
@@ -114,5 +114,5 @@ var SystemACli_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "rpc/systema/cli2systema.proto",
+	Metadata: "systema/cli2systema.proto",
 }

@@ -42,7 +42,6 @@ else
 CGO_ENABLED=0
 endif
 
-# Build using CGO_ENABLED=1 on all platforms except windows.
 ifeq ($(GOOS),windows)
 BEXE=.exe
 else
@@ -62,6 +61,7 @@ generate: generate-clean
 generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	$(tools/protoc) \
+	  -I rpc \
 	  \
 	  --go_out=./rpc \
 	  --go_opt=module=github.com/telepresenceio/telepresence/rpc/v2 \
@@ -118,14 +118,14 @@ endif
 
 FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
 
-pkg/client/userd/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
+pkg/client/userd/daemon/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
 	cp $< $@
 
 $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
 	mkdir -p $(BUILDDIR)
 	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
 
-build-deps: pkg/client/userd/fuseftp.bits
+build-deps: pkg/client/userd/daemon/fuseftp.bits
 
 ifeq ($(GOHOSTOS),windows)
 WINTUN_VERSION=0.14.1

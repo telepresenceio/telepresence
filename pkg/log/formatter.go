@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 const thisModule = "github.com/telepresenceio/telepresence/v2"
@@ -28,10 +30,7 @@ func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
 	} else {
 		b = &bytes.Buffer{}
 	}
-	data := make(logrus.Fields, len(entry.Data))
-	for k, v := range entry.Data {
-		data[k] = v
-	}
+	data := maps.Copy(entry.Data)
 	goroutine, _ := data["THREAD"].(string)
 	delete(data, "THREAD")
 
