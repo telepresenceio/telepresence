@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -128,6 +129,8 @@ type session struct {
 
 	fuseFtp rpc2.FuseFTPClient
 
+	sessionConfig client.Config
+
 	// done is closed when the session ends
 	done chan struct{}
 }
@@ -183,6 +186,20 @@ func NewSession(
 	}
 	svc.SetManagerClient(tmgr.managerClient, opts...)
 
+	tmgr.sessionConfig = client.GetDefaultConfig()
+	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
+	if err != nil {
+		dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
+	} else {
+		bs := []byte(cliCfg.ConfigJson)
+		if err := yaml.Unmarshal(bs, &tmgr.sessionConfig); err != nil {
+			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
+		}
+		if err := cluster.AddRemoteKubeConfigExtension(ctx, cliCfg.ConfigJson); err != nil {
+			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
+		}
+	}
+
 	// Connect to the root daemon if it is running. It's the CLI that starts it initially
 	rdRunning, err := client.IsRunning(ctx, client.DaemonSocketName)
 	if err != nil {
@@ -237,6 +254,10 @@ func (s *session) ManagerConn() *grpc.ClientConn {
 
 func (s *session) ManagerVersion() semver.Version {
 	return s.managerVersion
+}
+
+func (s *session) GetSessionConfig() client.Config {
+	return s.sessionConfig
 }
 
 // connectCluster returns a configured cluster instance.
@@ -523,6 +544,14 @@ func (s *session) Reporter() *scout.Reporter {
 
 func (s *session) SessionInfo() *manager.SessionInfo {
 	return s.sessionInfo
+}
+
+func (s *session) ApplyConfig(ctx context.Context) error {
+	cfg, err := client.LoadConfig(ctx)
+	if err != nil {
+		return err
+	}
+	return client.MergeAndReplace(ctx, &s.sessionConfig, cfg, false)
 }
 
 // getInfosForWorkloads returns a list of workloads found in the given namespace that fulfils the given filter criteria.

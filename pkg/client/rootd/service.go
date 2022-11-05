@@ -261,7 +261,9 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 
 func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(c context.Context) error {
-		return logging.ReloadDaemonConfig(c, true)
+		s.sessionLock.RLock()
+		defer s.sessionLock.RUnlock()
+		return s.session.applyConfig(c)
 	})
 }
 
@@ -305,6 +307,10 @@ nextSession:
 					s.session = session
 					s.sessionContext = sCtx
 					s.sessionCancel = sCancel
+					if err := s.session.applyConfig(c); err != nil {
+						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
+					}
+
 					reply.status.OutboundConfig = s.session.getInfo()
 				} else {
 					sCancel()
@@ -334,6 +340,9 @@ nextSession:
 			defer func() {
 				s.sessionLock.Lock()
 				s.session = nil
+				if err := client.RestoreDefaults(c, true); err != nil {
+					dlog.Warn(c, err)
+				}
 				s.sessionLock.Unlock()
 				wg.Done()
 			}()

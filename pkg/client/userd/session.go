@@ -82,6 +82,7 @@ type Session interface {
 	Reporter() *scout.Reporter
 	SessionInfo() *manager.SessionInfo
 
+	ApplyConfig(context.Context) error
 	StartServices(g *dgroup.Group)
 	Epilog(ctx context.Context)
 	Done() <-chan struct{}

@@ -1,0 +1,9 @@
+{{- if .Values.client }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "traffic-manager.name" $ }}-clients
+  namespace:  {{ include "traffic-manager.namespace" . }}
+data:
+  client.json: {{ toJson .Values.client | quote }}
+{{- end }}

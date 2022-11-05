@@ -133,8 +133,10 @@ func Command() *cobra.Command {
 }
 
 func (s *Service) configReload(c context.Context) error {
-	return client.Watch(c, func(c context.Context) error {
-		return logging.ReloadDaemonConfig(c, false)
+	return client.Watch(c, func(ctx context.Context) error {
+		s.sessionLock.RLock()
+		defer s.sessionLock.RUnlock()
+		return s.session.ApplyConfig(ctx)
 	})
 }
 
@@ -171,6 +173,9 @@ nextSession:
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.session = session
+					if err := s.session.ApplyConfig(c); err != nil {
+						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
+					}
 					s.sessionCancel = func() {
 						sCancel()
 						<-session.Done()
@@ -190,6 +195,11 @@ nextSession:
 		default:
 			// Nobody there to read the response? That's fine. The user may have got
 			// impatient.
+			s.sessionLock.RLock()
+			if err := client.RestoreDefaults(c, false); err != nil {
+				dlog.Warn(c, err)
+			}
+			s.sessionLock.RUnlock()
 			s.cancelSession()
 			continue
 		}
@@ -217,6 +227,11 @@ nextSession:
 
 				dlog.Error(c, err)
 			}
+			s.sessionLock.Lock()
+			if err := client.RestoreDefaults(c, false); err != nil {
+				dlog.Warn(c, err)
+			}
+			s.sessionLock.Unlock()
 		}(cr)
 	}
 	wg.Wait()

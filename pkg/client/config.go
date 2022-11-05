@@ -374,7 +374,7 @@ const (
 	defaultTimeoutsConnectivityCheck     = 500 * time.Millisecond
 	defaultTimeoutsEndpointDial          = 3 * time.Second
 	defaultTimeoutsHelm                  = 30 * time.Second
-	defaultTimeoutsIntercept             = 5 * time.Second
+	defaultTimeoutsIntercept             = 30 * time.Second
 	defaultTimeoutsProxyDial             = 5 * time.Second
 	defaultTimeoutsRoundtripLatency      = 2 * time.Second
 	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second

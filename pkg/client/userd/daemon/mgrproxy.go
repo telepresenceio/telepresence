@@ -92,6 +92,14 @@ func (p *mgrProxy) GetCloudConfig(ctx context.Context, arg *empty.Empty) (*manag
 	return client.GetCloudConfig(ctx, arg, callOptions...)
 }
 
+func (p *mgrProxy) GetClientConfig(ctx context.Context, arg *empty.Empty) (*managerrpc.CLIConfig, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetClientConfig(ctx, arg, callOptions...)
+}
+
 func (p *mgrProxy) ArriveAsClient(ctx context.Context, arg *managerrpc.ClientInfo) (*managerrpc.SessionInfo, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
