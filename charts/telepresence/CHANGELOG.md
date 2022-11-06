@@ -2,7 +2,7 @@
 
 ### v2.8.5
 
-- Change: add `podLabels` values to helm-chart.
+- Feature: add `podLabels` values to helm-chart.
 
 ### 2.6.8 (TBD)
 
