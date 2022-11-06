@@ -88,9 +88,25 @@ func (s *cliSuite) Test_Status() {
 	s.Contains(stdout, "User Daemon: Not running")
 }
 
-func (s *cliSuite) Test_StatusWithJSON() {
+func (s *cliSuite) Test_StatusWithJSONFlag() {
 	itest.TelepresenceQuitOk(s.Context())
 	stdout, stderr, err := itest.Telepresence(s.Context(), "status", "--json")
+	if err != nil {
+		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence status isn't working, nothing will: %w", err))
+		s.Require().NoError(err)
+	}
+	s.NoError(err)
+	s.Empty(stderr)
+
+	var status statusResponse
+	s.NoError(json.Unmarshal([]byte(stdout), &status))
+	s.False(status.RootDaemon.Running)
+	s.False(status.UserDaemon.Running)
+}
+
+func (s *cliSuite) Test_StatusWithJSON() {
+	itest.TelepresenceQuitOk(s.Context())
+	stdout, stderr, err := itest.Telepresence(s.Context(), "status", "--output", "json")
 	if err != nil {
 		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence status isn't working, nothing will: %w", err))
 		s.Require().NoError(err)

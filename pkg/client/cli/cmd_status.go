@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -69,8 +69,9 @@ func statusCommand() *cobra.Command {
 		Use:  "status",
 		Args: cobra.NoArgs,
 
-		Short: "Show connectivity status",
-		RunE:  s.status,
+		Short:             "Show connectivity status",
+		RunE:              s.status,
+		PersistentPreRunE: fixFlag,
 		Annotations: map[string]string{
 			ann.RootDaemon: ann.Optional,
 			ann.UserDaemon: ann.Optional,
@@ -78,7 +79,23 @@ func statusCommand() *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.BoolVarP(&s.json, "json", "j", false, "output as json object")
+	flags.Lookup("json").Hidden = true
 	return cmd
+}
+
+func fixFlag(cmd *cobra.Command, _ []string) error {
+	flags := cmd.Flags()
+	json, err := flags.GetBool("json")
+	if err != nil {
+		return err
+	}
+	rootCmd := cmd.Parent()
+	if json {
+		if err = rootCmd.PersistentFlags().Set("output", "json"); err != nil {
+			return err
+		}
+	}
+	return rootCmd.PersistentPreRunE(cmd, flags.Args())
 }
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
@@ -94,10 +111,11 @@ func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if s.json {
-		return s.printJSON(ds, cs)
+	if output.WantsFormatted(cmd) {
+		s.printJSON(ctx, ds, cs)
+	} else {
+		s.printText(ds, cs)
 	}
-	s.printText(ds, cs)
 	return nil
 }
 
@@ -173,16 +191,11 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *conne
 	return ds, cs, nil
 }
 
-func (s *statusInfo) printJSON(ds *daemonStatus, cs *connectorStatus) error {
-	output, err := json.Marshal(statusOutput{
+func (s *statusInfo) printJSON(ctx context.Context, ds *daemonStatus, cs *connectorStatus) {
+	output.Object(ctx, statusOutput{
 		DaemonStatus: *ds,
 		UserDaemon:   *cs,
-	})
-	if err != nil {
-		return err
-	}
-	s.println(string(output))
-	return nil
+	}, true)
 }
 
 func (s *statusInfo) printText(ds *daemonStatus, cs *connectorStatus) {

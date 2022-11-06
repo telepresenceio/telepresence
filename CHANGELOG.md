@@ -9,6 +9,8 @@
 
 - Feature: The telepresence flag `--output` now accepts `yaml` as a valid format.
 
+- Change: The `telepresence status --json` flag is deprecated. Use `telepresence status --output=json` instead.
+
 - Bugfix: Informational messages that don't really originate from the command, such as "Launching Telepresence Root Daemon",
   or "An update of telepresence ...", are discarded instead of being printed as plain text before the actual formatted
   output when using the `--output=json`.
