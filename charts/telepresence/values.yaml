@@ -155,6 +155,7 @@ managerRbac:
 
 intercept:
   disableGlobal: false
+  disablePersonal: false
 
 ################################################################################
 ## Agent Injector Configuration
