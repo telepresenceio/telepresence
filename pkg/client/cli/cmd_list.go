@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -96,13 +97,13 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	jsonOut := output.WantsJSONOutput(cmd.Flags())
+	formattedOutput := output.WantsFormatted(cmd)
 	if !s.watch {
 		r, err := userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 		if err != nil {
 			return err
 		}
-		s.printList(r.Workloads, stdout, jsonOut)
+		s.printList(ctx, r.Workloads, stdout, formattedOutput)
 		return nil
 	}
 
@@ -126,7 +127,7 @@ looper:
 	for {
 		select {
 		case r := <-ch:
-			s.printList(r.Workloads, stdout, jsonOut)
+			s.printList(ctx, r.Workloads, stdout, formattedOutput)
 		case <-ctx.Done():
 			break looper
 		}
@@ -134,19 +135,10 @@ looper:
 	return nil
 }
 
-func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer, jsonOut bool) {
-	var streamerOut output.StructuredStreamer
-
-	if jsonOut {
-		streamerOut, _ = stdout.(output.StructuredStreamer)
-		if streamerOut == nil {
-			panic("writer not output.StructuredStreamer")
-		}
-	}
-
+func (s *listInfo) printList(ctx context.Context, workloads []*connector.WorkloadInfo, stdout io.Writer, formattedOut bool) {
 	if len(workloads) == 0 {
-		if jsonOut {
-			streamerOut.StructuredStream([]struct{}{}, nil)
+		if formattedOut {
+			output.Object(ctx, []struct{}{}, false)
 		} else {
 			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 		}
@@ -168,8 +160,8 @@ func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writ
 		}
 	}
 
-	if jsonOut {
-		streamerOut.StructuredStream(workloads, nil)
+	if formattedOut {
+		output.Object(ctx, workloads, false)
 	} else {
 		includeNs := false
 		ns := s.namespace

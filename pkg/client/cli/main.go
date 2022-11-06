@@ -48,11 +48,10 @@ func Main(ctx context.Context) {
 	}
 	ctx = client.WithEnv(ctx, env)
 
-	var cmd *cobra.Command
 	if client.IsDaemon() {
 		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
 		// avoids checks for legacy commands.
-		cmd = &cobra.Command{
+		cmd := &cobra.Command{
 			Use:  "telepresence",
 			Args: OnlySubcommands,
 			RunE: func(cmd *cobra.Command, args []string) error {
@@ -79,12 +78,10 @@ func Main(ctx context.Context) {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
-		cmd = Command(ctx)
-		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-			return errcat.User.New(err)
-		})
-		ctx = output.WithStructure(ctx, cmd)
-		if err := cmd.ExecuteContext(ctx); err != nil {
+		if cmd, fmtOutput, err := output.Execute(Command(ctx)); err != nil {
+			if fmtOutput {
+				os.Exit(1)
+			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			if errcat.GetCategory(err) > errcat.NoDaemonLogs {
 				summarizeLogs(ctx, cmd)

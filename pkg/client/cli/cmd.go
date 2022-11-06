@@ -235,6 +235,9 @@ func Command(ctx context.Context) *cobra.Command {
 	}
 	rootCmd.SetContext(ctx)
 	AddSubCommands(rootCmd)
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return errcat.User.New(err)
+	})
 	return rootCmd
 }
 

@@ -1,8 +1,9 @@
 // Package output provides structured output for *cobra.Command.
-// Writing JSON to stdout is enable by setting the --output=json flag.
+// Formatted output is enabled by setting the --output=json flag.
 package output
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -10,153 +11,187 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
 
-func WithStructure(ctx context.Context, cmd *cobra.Command) context.Context {
-	next := cmd.PersistentPreRun
-	o := output{
-		originalStdout: cmd.OutOrStdout(),
-		originalStderr: cmd.ErrOrStderr(),
+// Out returns an io.Writer that writes to the OutOrStdout of the current *cobra.Command, or
+// if no command is active, to the os.Stdout. If formatted output is requested, the output
+// will be delayed until Execute is called.
+func Out(ctx context.Context) io.Writer {
+	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
+		return cmd.OutOrStdout()
 	}
-	o.stdout = o.originalStdout
-	o.stderr = o.originalStderr
+	return os.Stdout
+}
 
-	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		// never output help messages as json
-		if cmd.RunE == nil {
-			return
+// Err returns an io.Writer that writes to the ErrOrStderr of the current *cobra.Command, or
+// if no command is active, to the os.Stderr. If formatted output is requested, the output
+// will be delayed until Execute is called.
+func Err(ctx context.Context) io.Writer {
+	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
+		return cmd.ErrOrStderr()
+	}
+	return os.Stderr
+}
+
+// Info is similar to Out, but if formatted output is requested, the output will be discarded.
+//
+// Info is primarily intended for messages that are not directly related to the command that
+// executes, such as messages about starting up daemons or being connected to a context.
+func Info(ctx context.Context) io.Writer {
+	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
+		if _, ok := cmd.OutOrStdout().(*output); ok {
+			return io.Discard
 		}
+		return cmd.OutOrStdout()
+	}
+	return os.Stdout
+}
 
-		cmd.RunE = o.runE(cmd.RunE)
-
-		if next != nil {
-			next(cmd, args)
+// Object sets the object to be marshalled and printed on stdout when formatted output
+// is requested using the `--output=<fmt>` flag. Otherwise, this function does nothing.
+//
+// If override is set to true, then the formatted output will consist solely of the given
+// object. There will be no "cmd", "stdout", or "stderr" tags.
+//
+// The function will panic if data already has been written to the stdout of the command
+// or if an Object already has been called.
+func Object(ctx context.Context, obj any, override bool) {
+	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
+		if o, ok := cmd.OutOrStdout().(*output); ok {
+			if o.Len() > 0 {
+				panic("output.Object cannot be used together with output.Out")
+			}
+			if o.obj != nil {
+				panic("output.Object can only be used once")
+			}
+			o.obj = obj
+			o.override = override
 		}
 	}
-
-	return context.WithValue(ctx, key{}, &o)
 }
 
-func Structured(ctx context.Context) (stdout, stderr io.Writer) {
-	o, _ := ctx.Value(key{}).(*output)
-	if o == nil {
-		return os.Stdout, os.Stderr
+// Execute will call ExecuteC on the given command, optionally print all formatted
+// output, and return a boolean indicating if formatted output was printed. The
+// result of the execution is provided in the second return value.
+func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
+	setFormat(cmd)
+	cmd, err := cmd.ExecuteC()
+	o, ok := cmd.OutOrStdout().(*output)
+	if !ok {
+		return cmd, false, err
 	}
 
-	return o.stdout, o.stderr
-}
-
-func SetJSONStdout(ctx context.Context) {
-	o, _ := ctx.Value(key{}).(*output)
-	if o == nil {
-		return
-	}
-
-	o.stdoutIsJSON = true
-}
-
-func SetJSONStderr(ctx context.Context) {
-	o, _ := ctx.Value(key{}).(*output)
-	if o != nil {
-		return
-	}
-
-	o.stdoutIsJSON = true
-}
-
-type (
-	key    struct{}
-	output struct {
-		cmd string
-
-		stdoutBuf strings.Builder
-		stderrBuf strings.Builder
-
-		stdoutIsJSON bool
-		stderrIsJSON bool
-
-		jsonEncoder *json.Encoder
-		stdout      io.Writer
-		stderr      io.Writer
-
-		originalStdout io.Writer
-		originalStderr io.Writer
-	}
-)
-
-func (o *output) runE(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
-	return func(cmd *cobra.Command, args []string) error {
-		if !WantsJSONOutput(cmd.Flags()) {
-			return f(cmd, args)
+	var obj any
+	if err == nil && o.override {
+		obj = o.obj
+	} else {
+		response := &object{
+			Cmd: cmd.Name(),
 		}
+		if buf := o.Buffer; buf.Len() > 0 {
+			response.Stdout = buf.String()
+		} else if o.obj != nil {
+			response.Stdout = o.obj
+		}
+		if buf, ok := cmd.ErrOrStderr().(*bytes.Buffer); ok && buf.Len() > 0 {
+			response.Stderr = buf.String()
+		}
+		if err != nil {
+			response.Err = err.Error()
+		}
+		// don't print out the "zero" object
+		if response.hasCmdOnly() {
+			return cmd, true, err
+		}
+		obj = response
+	}
+	switch o.format {
+	case formatJSON:
+		if encErr := json.NewEncoder(o.originalStdout).Encode(obj); encErr != nil {
+			panic(encErr)
+		}
+	}
+	return cmd, true, err
+}
 
-		o.cmd = cmd.Name()
-		o.jsonEncoder = json.NewEncoder(o.originalStdout)
-		o.stdout = &o.stdoutBuf
-		o.stderr = &o.stderrBuf
-
-		cmd.SetOut(&streamerWriter{
-			output: o,
-		})
-		cmd.SetErr(&streamerWriter{
-			output:   o,
-			isStderr: true,
-		})
-
-		err := f(cmd, args)
-		o.writeStructured(err)
-
+// setFormat assigns a cobra.Command.PersistentPreRunE function that all sub commands will inherit. This
+// function checks if the global `--output` flag was used, and if so, ensures that formatted output is
+// initialized.
+func setFormat(cmd *cobra.Command) {
+	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		fmt, err := validateFlag(cmd)
+		if err != nil {
+			return err
+		}
+		if fmt != formatDefault {
+			o := output{
+				format:         fmt,
+				originalStdout: cmd.OutOrStdout(),
+			}
+			cmd.SetOut(&o)
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+		}
+		cmd.SetContext(context.WithValue(cmd.Context(), key{}, cmd))
 		return nil
 	}
 }
 
-func (o *output) writeStructured(err error) {
-	response := object{
-		Cmd: o.cmd,
-	}
-
-	if buf := o.stdoutBuf; 0 < buf.Len() {
-		if o.stdoutIsJSON {
-			response.Stdout = json.RawMessage(buf.String())
-		} else {
-			response.Stdout = buf.String()
-		}
-	}
-	if buf := o.stderrBuf; 0 < buf.Len() {
-		if o.stderrIsJSON {
-			response.Stderr = json.RawMessage(buf.String())
-		} else {
-			response.Stderr = buf.String()
-		}
-	}
-	if err != nil {
-		response.Err = err.Error()
-	}
-
-	// dont print out the "zero" object
-	if response.hasCmdOnly() {
-		return
-	}
-
-	_ = o.jsonEncoder.Encode(response)
+// WantsFormatted returns true if the value of the global `--output` flag is set to a valid
+// format different from "default".
+func WantsFormatted(cmd *cobra.Command) bool {
+	f, _ := validateFlag(cmd)
+	return f != formatDefault
 }
 
-func WantsJSONOutput(flags *pflag.FlagSet) bool {
-	flagValue, _ := flags.GetString("output")
-	return strings.ToLower(flagValue) == "json"
+func validateFlag(cmd *cobra.Command) (format, error) {
+	if of := cmd.Flags().Lookup("output"); of != nil && of.DefValue == "default" {
+		fmt := strings.ToLower(of.Value.String())
+		switch fmt {
+		case "json":
+			return formatJSON, nil
+		case "default":
+			return formatDefault, nil
+		default:
+			return formatDefault, errcat.User.Newf("invalid output format %q", fmt)
+		}
+	}
+	return formatDefault, nil
 }
 
-type object struct {
-	Cmd    string `json:"cmd"`
-	Err    string `json:"err,omitempty"`
-	Stdout any    `json:"stdout,omitempty"`
-	Stderr any    `json:"stderr,omitempty"`
+type (
+	format int
+	key    struct{}
+	output struct {
+		bytes.Buffer
+		format         format
+		obj            any
+		override       bool
+		originalStdout io.Writer
+	}
+	object struct {
+		Cmd    string `json:"cmd"`
+		Stdout any    `json:"stdout,omitempty"`
+		Stderr any    `json:"stderr,omitempty"`
+		Err    string `json:"err,omitempty"`
+	}
+)
+
+const (
+	formatDefault = format(iota)
+	formatJSON
+)
+
+func (o *output) Write(data []byte) (int, error) {
+	if o.obj != nil {
+		panic("Stdout cannot be used together with output.Object")
+	}
+	return o.Buffer.Write(data)
 }
 
 func (o *object) hasCmdOnly() bool {
-	x := o.Err == ""
-	x = x && o.Stdout == nil
-	x = x && o.Stderr == nil
-	return x
+	return o.Stdout == nil && o.Stderr == nil && o.Err == ""
 }

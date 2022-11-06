@@ -20,8 +20,7 @@ import (
 )
 
 func launchDaemon(ctx context.Context) error {
-	stdout, _ := output.Structured(ctx)
-	fmt.Fprintln(stdout, "Launching Telepresence Root Daemon")
+	fmt.Fprintln(output.Info(ctx), "Launching Telepresence Root Daemon")
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.

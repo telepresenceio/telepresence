@@ -4,7 +4,14 @@
 
 - Feature: The traffic-manager can now configure all clients that connect through the `client:` map in
   the `values.yaml` file.
+
 - Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
+
+- Bugfix: Informational messages that don't really originate from the command, such as "Launching Telepresence Root Daemon",
+  or "An update of telepresence ...", are discarded instead of being printed as plain text before the actual formatted
+  output when using the `--output=json`.
+
+- Bugfix: An attempt to use an invalid value for the global `--output` flag now renders a proper error message.
 
 ### 2.8.5 (November 2, 2022)
 
