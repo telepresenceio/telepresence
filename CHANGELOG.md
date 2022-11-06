@@ -7,6 +7,8 @@
 
 - Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
 
+- Feature: The telepresence flag `--output` now accepts `yaml` as a valid format.
+
 - Bugfix: Informational messages that don't really originate from the command, such as "Launching Telepresence Root Daemon",
   or "An update of telepresence ...", are discarded instead of being printed as plain text before the actual formatted
   output when using the `--output=json`.

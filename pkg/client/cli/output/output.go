@@ -1,16 +1,18 @@
 // Package output provides structured output for *cobra.Command.
-// Formatted output is enabled by setting the --output=json flag.
+// Formatted output is enabled by setting the --output=[json|yaml] flag.
 package output
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -112,6 +114,16 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 		if encErr := json.NewEncoder(o.originalStdout).Encode(obj); encErr != nil {
 			panic(encErr)
 		}
+	case formatYAML:
+		ym, encErr := yaml.Marshal(obj)
+		if encErr == nil {
+			_, encErr = o.originalStdout.Write(ym)
+		}
+		if encErr != nil {
+			panic(encErr)
+		}
+	default:
+		fmt.Fprintf(o.originalStdout, "%+v", obj)
 	}
 	return cmd, true, err
 }
@@ -151,6 +163,8 @@ func validateFlag(cmd *cobra.Command) (format, error) {
 	if of := cmd.Flags().Lookup("output"); of != nil && of.DefValue == "default" {
 		fmt := strings.ToLower(of.Value.String())
 		switch fmt {
+		case "yaml":
+			return formatYAML, nil
 		case "json":
 			return formatJSON, nil
 		case "default":
@@ -183,6 +197,7 @@ type (
 const (
 	formatDefault = format(iota)
 	formatJSON
+	formatYAML
 )
 
 func (o *output) Write(data []byte) (int, error) {

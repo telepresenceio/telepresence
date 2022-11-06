@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 func TestWithOutput(t *testing.T) {
@@ -66,6 +67,7 @@ func TestWithOutput(t *testing.T) {
 		stderr := errBuf.String()
 		require.Empty(t, stderr, "expected empty stderr, got: %s", stderr)
 	})
+
 	t.Run("json output with error", func(t *testing.T) {
 		expectedErr := "ERROR"
 		cmd, outBuf, _ := newCmdWithBufs()
@@ -79,6 +81,22 @@ func TestWithOutput(t *testing.T) {
 		stdout := outBuf.String()
 		m := map[string]string{}
 		require.NoError(t, json.Unmarshal([]byte(stdout), &m), "did not get json as stdout, got: %s", stdout)
+		require.Equal(t, expectedErr, m["err"], "did not get expected err, got: %s", m["err"])
+	})
+
+	t.Run("yaml output with error", func(t *testing.T) {
+		expectedErr := "ERROR"
+		cmd, outBuf, _ := newCmdWithBufs()
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			return errors.New(expectedErr)
+		}
+		cmd.SetArgs([]string{"--output=yaml"})
+		_, _, err := Execute(cmd)
+		require.Error(t, err)
+
+		stdout := outBuf.String()
+		m := map[string]string{}
+		require.NoError(t, yaml.Unmarshal([]byte(stdout), &m), "did not get yaml as stdout, got: %s", stdout)
 		require.Equal(t, expectedErr, m["err"], "did not get expected err, got: %s", m["err"])
 	})
 

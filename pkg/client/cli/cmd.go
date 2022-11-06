@@ -271,7 +271,7 @@ func GlobalFlags() *pflag.FlagSet {
 	)
 	flags.String(
 		"output", "default",
-		"set the output format, supported values are 'json' and 'default'",
+		"set the output format, supported values are 'json', 'yaml', and 'default'",
 	)
 	return flags
 }
