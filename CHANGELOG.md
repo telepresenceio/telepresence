@@ -4,7 +4,11 @@
 
 - Feature: The traffic-manager can now configure all clients that connect through the `client:` map in
   the `values.yaml` file.
+
 - Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
+
+- Feature: The traffic-manager can be configured to disable Personal intercepts using the
+  Helm chart setting `intercept.disablePersonal`.
 
 ### 2.8.5 (November 2, 2022)
 
@@ -46,7 +50,7 @@
 - Feature: A new `client` struct was added to the Helm chart. It contains a `connectionTTL` that controls
   how long the traffic manager will retain a client connection without seeing any sign of life from the client.
 
-- Feature: A `dns` struct container the fields `includeSuffixes` and `excludeSuffixes` was added to the Helm 
+- Feature: A `dns` struct container the fields `includeSuffixes` and `excludeSuffixes` was added to the Helm
   chart `client` struct, making those values configurable per cluster.
 
 - Feature: The API port used by the traffic-manager is now configurable using the Helm chart value `apiPort`.
@@ -58,7 +62,7 @@
 - Change: The Helm chart `agentInjector.agentImage` was moved to `agent.image`. The old value is deprecated but
   retained for backward compatibility.
 
-- Change: The Helm chart `agentInjector.appProtocolStrategy` was moved to `agent.appProtocolStrategy`. The old 
+- Change: The Helm chart `agentInjector.appProtocolStrategy` was moved to `agent.appProtocolStrategy`. The old
   value is deprecated but retained for backward compatibility.
 
 - Change: The Helm chart `dnsServiceName`, `dnsServiceNamespace`, and `dnsServiceIP` has been removed, because
