@@ -67,7 +67,7 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		}
 	}
 	if env.InterceptDisablePersonal {
-		if cr.InterceptSpec.Mechanism == "http" {
+		if cr.InterceptSpec.Mechanism != "tcp" {
 			return interceptError(errcat.User.New("Personal intercepts are not allowed"))
 		}
 	}
