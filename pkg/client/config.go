@@ -99,42 +99,6 @@ func stringKey(n *yaml.Node) (string, error) {
 	return s, nil
 }
 
-func (c *Config) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("config must be an object", node))
-	}
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		switch {
-		case kv == "timeouts":
-			err = ms[i+1].Decode(&c.Timeouts)
-		case kv == "logLevels":
-			err = ms[i+1].Decode(&c.LogLevels)
-		case kv == "images":
-			err = ms[i+1].Decode(&c.Images)
-		case kv == "cloud":
-			err = ms[i+1].Decode(&c.Cloud)
-		case kv == "grpc":
-			err = ms[i+1].Decode(&c.Grpc)
-		case kv == "telepresenceAPI":
-			err = ms[i+1].Decode(&c.TelepresenceAPI)
-		case kv == "intercept":
-			err = ms[i+1].Decode(&c.Intercept)
-		case parseContext != nil:
-			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type Timeouts struct {
 	// These all nave names starting with "Private" because we "want" them to be unexported in
 	// order to force you to use .TimeoutContext(), but (1) we dont' want them to be hidden from
