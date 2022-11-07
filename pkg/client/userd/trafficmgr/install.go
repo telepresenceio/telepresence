@@ -3,6 +3,7 @@ package trafficmgr
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	"github.com/pkg/errors"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -40,9 +40,9 @@ func managerImageName(ctx context.Context) string {
 // AgentImageFromSystemA returns the systemA preferred agent
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
 func AgentImageFromSystemA(ctx context.Context, v semver.Version) (string, error) {
-	systemaPool, err := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
-	if err != nil {
-		return "", err
+	systemaPool, ok := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
+	if !ok {
+		return "", errors.New("unable to contact SystemA")
 	}
 	systemaClient, err := systemaPool.Get(ctx)
 	if err != nil {
@@ -270,7 +270,7 @@ func useAutoInstall(podTpl *core.PodTemplateSpec) (bool, error) {
 
 // exploreSvc finds the matching service, its containers, and their ports
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
-func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*serviceProps, error) {
+func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.Workload) (*interceptInfo, error) {
 	podTemplate := obj.GetPodTemplate()
 	cns := podTemplate.Spec.Containers
 	namespace := obj.GetNamespace()
@@ -288,15 +288,14 @@ func exploreSvc(c context.Context, portNameOrNumber, svcName string, obj k8sapi.
 	}
 
 	if err := checkSvcSame(c, obj, svcName, portNameOrNumber); err != nil {
-		msg := fmt.Sprintf(
+		return nil, fmt.Errorf(
 			`%s already being used for intercept with a different service
 configuration. To intercept this with your new configuration, please use
 telepresence uninstall --agent %s This will cancel any intercepts that
 already exist for this service`, kind, name)
-		return nil, errors.Wrap(err, msg)
 	}
 
-	return &serviceProps{
+	return &interceptInfo{
 		service:            matchingSvc,
 		servicePort:        servicePort,
 		workload:           obj,
@@ -314,7 +313,7 @@ func legacyEnsureAgent(
 	c context.Context,
 	kl *k8s.Cluster,
 	obj k8sapi.Workload,
-	svcProps *serviceProps,
+	svcProps *interceptInfo,
 	agentImageName string,
 	telepresenceAPIPort uint16,
 ) (string, string, error) {
@@ -583,7 +582,7 @@ func undoServiceMods(c context.Context, svc k8sapi.Object) error {
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
 func addAgentToWorkload(
 	c context.Context,
-	svcProps *serviceProps,
+	svcProps *interceptInfo,
 	agentImageName string,
 	trafficManagerNamespace string,
 	telepresenceAPIPort uint16,

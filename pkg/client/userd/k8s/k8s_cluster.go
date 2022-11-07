@@ -15,12 +15,11 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const supportedKubeAPIVersion = "1.17.0"
-
-type NamespaceListener func(context.Context)
 
 // Cluster is a Kubernetes cluster reference.
 type Cluster struct {
@@ -42,7 +41,7 @@ type Cluster struct {
 	currentMappedNamespaces map[string]bool
 
 	// Namespace listener. Notified when the currentNamespaces changes
-	namespaceListeners []NamespaceListener
+	namespaceListeners []userd.NamespaceListener
 }
 
 func (kc *Cluster) ActualNamespace(namespace string) string {

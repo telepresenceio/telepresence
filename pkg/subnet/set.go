@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 type setKey struct {
@@ -102,11 +103,7 @@ func (s Set) Delete(subnet *net.IPNet) bool {
 
 // Clone returns a copy of this Set.
 func (s Set) Clone() Set {
-	c := make(Set, len(s))
-	for k, v := range s {
-		c[k] = v
-	}
-	return c
+	return maps.Copy(s)
 }
 
 func (s Set) String() string {

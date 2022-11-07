@@ -91,6 +91,7 @@ linters:
     - execinquery
     - exportloopref
     - forbidigo
+    - gochecknoglobals
     - gocognit
     - gocritic
     - gocyclo
@@ -133,7 +134,6 @@ linters:
     - forcetypeassert
     - funlen
     - gci
-    - gochecknoglobals
     - gochecknoinits
     - goconst
     - goerr113

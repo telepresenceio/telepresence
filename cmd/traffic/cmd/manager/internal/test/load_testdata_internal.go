@@ -24,7 +24,7 @@ func callerPackage(skip int) string {
 	return name[:dot]
 }
 
-var thispackage = callerPackage(0)
+var thispackage = callerPackage(0) //nolint:gochecknoglobals // unit tests only
 
 func GetTestMechanisms(t *testing.T) map[string]*rpc.AgentInfo_Mechanism {
 	basedir, err := filepath.Rel(callerPackage(2), thispackage)

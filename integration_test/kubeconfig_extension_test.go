@@ -90,6 +90,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 
 	svcName := "echo-never-proxy"
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
+	defer itest.DeleteSvcAndWorkload(ctx, "deploy", svcName, s.AppNamespace())
 	ip, err := itest.Output(ctx, "kubectl",
 		"--namespace", s.AppNamespace(),
 		"get", "svc", svcName,

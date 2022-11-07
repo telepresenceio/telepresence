@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	dns2 "github.com/miekg/dns"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -23,6 +22,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cliconfig"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
@@ -35,18 +36,22 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
+const clientConfigPath = "/var/run/config/cli"
+
 // Clock is the mechanism used by the Manager state to get the current time.
 type Clock interface {
 	Now() time.Time
 }
 
 type Manager struct {
-	ctx         context.Context
-	clock       Clock
-	ID          string
-	state       *state.State
-	clusterInfo cluster.Info
-	cloudConfig *rpc.AmbassadorCloudConfig
+	ctx          context.Context
+	clock        Clock
+	ID           string
+	state        *state.State
+	clusterInfo  cluster.Info
+	cloudConfig  *rpc.AmbassadorCloudConfig
+	cliConfig    cliconfig.Watcher
+	tokenService cloudtoken.Service
 
 	rpc.UnsafeManagerServer
 }
@@ -89,18 +94,24 @@ func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
 func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &Manager{
-		clock: wall{},
-		ID:    uuid.New().String(),
+		clock:        wall{},
+		ID:           uuid.New().String(),
+		tokenService: cloudtoken.NewPatchConfigmapIfNotPresent(ctx),
 	}
 	cloudConfig, err := getCloudConfig(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if cloudConfig != nil {
+	if cloudConfig != nil && cloudConfig.Host != "" && cloudConfig.Port != "" {
 		ret.cloudConfig = cloudConfig
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
+	w, err := cliconfig.NewWatcher(clientConfigPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to start cli config watcher: %w", err)
+	}
+	ret.cliConfig = w
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
@@ -173,6 +184,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	}
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
+	m.MaybeAddToken(ctx, client.GetApiKey())
 
 	installId := client.GetInstallId()
 	return &rpc.SessionInfo{
@@ -198,10 +210,24 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 	}, nil
 }
 
+func (m *Manager) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLIConfig, error) {
+	dlog.Debug(ctx, "GetClientConfig called")
+
+	cfg, err := m.cliConfig.GetConfigJson()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	ret := &rpc.CLIConfig{
+		ConfigJson: cfg,
+	}
+	return ret, nil
+}
+
 // Remain indicates that the session is still valid.
-func (m *Manager) Remain(_ context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
+func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	// ctx = WithSessionInfo(ctx, req.GetSession())
 	// dlog.Debug(ctx, "Remain called")
+	m.MaybeAddToken(ctx, req.GetApiKey())
 
 	if ok := m.state.MarkSession(req, m.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", req.GetSession().GetSessionId())
@@ -483,9 +509,9 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		if interceptInfo.ApiKey == "" {
 			return nil
 		}
-		sysa, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-		if err != nil {
-			return err
+		sysa, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+		if !ok {
+			return nil
 		}
 		if sa, err := sysa.Get(ctx); err != nil {
 			dlog.Errorln(ctx, "systema: acquire connection:", err)
@@ -562,15 +588,15 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 		}
 		return intercept, nil
 	default:
-		panic(errors.Errorf("Unimplemented UpdateInterceptRequest action: %T", action))
+		panic(fmt.Errorf("unimplemented UpdateInterceptRequest action: %T", action))
 	}
 }
 
 func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string) (*rpc.InterceptInfo, error) {
 	var domain string
-	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-	if err != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if !ok {
+		return nil, status.Errorf(codes.FailedPrecondition, "access to Ambassador Cloud is not configured")
 	}
 
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
@@ -607,11 +633,12 @@ func (m *Manager) removeInterceptDomain(ctx context.Context, interceptID string)
 func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
 	var domain string
 	var sa systema.SystemACRUDClient
-	systemaPool, err := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-	if err != nil {
-		return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
+	if !ok {
+		return nil, status.Errorf(codes.FailedPrecondition, "access to Ambassador Cloud is not configured")
 	}
 
+	var err error
 	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain != "" {
 			return
@@ -620,7 +647,7 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 		if sa == nil {
 			sa, err = systemaPool.Get(ctx)
 			if err != nil {
-				err = errors.Wrap(err, "systema: acquire connection")
+				err = fmt.Errorf("systema: acquire connection: %w", err)
 				return
 			}
 		}
@@ -638,7 +665,7 @@ func (m *Manager) addInterceptDomain(ctx context.Context, interceptID string, ac
 				AddRequestHeaders: action.AddPreviewDomain.AddRequestHeaders,
 			})
 			if err != nil {
-				err = errors.Wrap(err, "systema: create domain")
+				err = status.Errorf(status.Code(err), fmt.Sprintf("systema: create domain: %v", err))
 				return
 			}
 			domain = resp.Domain
@@ -987,4 +1014,13 @@ const agentSessionTTL = 15 * time.Second
 func (m *Manager) expire(ctx context.Context) {
 	now := m.clock.Now()
 	m.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
+}
+
+// MaybeAddToken maybe adds apikey to the cluster so that the ambassador agent can login.
+func (m *Manager) MaybeAddToken(ctx context.Context, apikey string) {
+	if apikey != "" && m.tokenService != nil {
+		if err := m.tokenService.MaybeAddToken(ctx, apikey); err != nil {
+			dlog.Errorf(ctx, "error creating cloud token: %s", err)
+		}
+	}
 }

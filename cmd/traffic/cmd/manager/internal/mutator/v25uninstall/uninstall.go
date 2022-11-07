@@ -146,7 +146,7 @@ func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
 		return false, k8sapi.ObjErrorf(obj, "annotations[%q]: unable to parse semantic version %q: %w",
 			annTelepresenceActions, ajs, err)
 	}
-	ourV := version.Structured()
+	ourV := version.Structured
 
 	// Compare major and minor versions. 100% backward compatibility is assumed and greater patch versions are allowed
 	if ourV.Major < annV.Major || ourV.Major == annV.Major && ourV.Minor < annV.Minor {

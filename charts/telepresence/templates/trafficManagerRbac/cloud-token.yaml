@@ -1,0 +1,39 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: {{ include "traffic-manager.namespace" . }}
+  name: traffic-manager-cloud-token
+  labels: {{- include "telepresence.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+      - patch
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-manager-cloud-token
+  namespace: {{ include "traffic-manager.namespace" . }}
+  labels: {{- include "telepresence.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traffic-manager-cloud-token
+subjects:
+  - kind: ServiceAccount
+    name: traffic-manager
+    namespace: {{ include "traffic-manager.namespace" . }}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traffic-manager-agent-cloud-token
+  namespace: {{ include "traffic-manager.namespace" . }}
+  labels: {{- include "telepresence.labels" . | nindent 4 }}

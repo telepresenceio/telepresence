@@ -15,7 +15,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-var ClusterIDZero = "00000000-0000-0000-0000-000000000000"
+const ClusterIDZero = "00000000-0000-0000-0000-000000000000"
 
 type Info struct {
 	ValidLicense bool

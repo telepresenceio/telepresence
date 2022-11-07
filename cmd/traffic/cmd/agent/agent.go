@@ -35,6 +35,13 @@ func AppEnvironment(ctx context.Context, ag *agentconfig.Container) (map[string]
 	prefix := agentconfig.EnvPrefixApp + ag.EnvPrefix
 	fullEnv := make(map[string]string, len(osEnv))
 
+	// Keys that aren't useful when running on the local machine.
+	skipKeys := map[string]bool{
+		"HOME":     true,
+		"PATH":     true,
+		"HOSTNAME": true,
+	}
+
 	// Add prefixed variables separately last, so that we can
 	// ensure that they have higher precedence.
 	for _, env := range osEnv {

@@ -11,6 +11,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 type profileKey struct{}
@@ -105,12 +106,8 @@ func (e envCtxLookuper) Lookup(key string) (string, bool) {
 func WithEnv(ctx context.Context, env map[string]string) context.Context {
 	if prevEnv := getEnv(ctx); prevEnv != nil {
 		merged := make(map[string]string, len(prevEnv)+len(env))
-		for k, v := range prevEnv {
-			merged[k] = v
-		}
-		for k, v := range env {
-			merged[k] = v
-		}
+		maps.Merge(merged, prevEnv)
+		maps.Merge(merged, env)
 		env = merged
 	}
 	ctx = context.WithValue(ctx, envContextKey{}, env)

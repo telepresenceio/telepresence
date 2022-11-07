@@ -33,7 +33,6 @@ type Config struct {
 	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
 	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
 	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
-	Daemons         Daemons         `json:"daemons,omitempty" yaml:"daemons,omitempty"`
 	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
 }
 
@@ -45,7 +44,6 @@ func (c *Config) Merge(o *Config) {
 	c.Cloud.merge(&o.Cloud)
 	c.Grpc.merge(&o.Grpc)
 	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
-	c.Daemons.merge(&o.Daemons)
 	c.Intercept.merge(&o.Intercept)
 }
 
@@ -125,8 +123,6 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 			err = ms[i+1].Decode(&c.Grpc)
 		case kv == "telepresenceAPI":
 			err = ms[i+1].Decode(&c.TelepresenceAPI)
-		case kv == "daemons":
-			err = ms[i+1].Decode(&c.Daemons)
 		case kv == "intercept":
 			err = ms[i+1].Decode(&c.Intercept)
 		case parseContext != nil:
@@ -378,14 +374,14 @@ const (
 	defaultTimeoutsConnectivityCheck     = 500 * time.Millisecond
 	defaultTimeoutsEndpointDial          = 3 * time.Second
 	defaultTimeoutsHelm                  = 30 * time.Second
-	defaultTimeoutsIntercept             = 5 * time.Second
+	defaultTimeoutsIntercept             = 30 * time.Second
 	defaultTimeoutsProxyDial             = 5 * time.Second
 	defaultTimeoutsRoundtripLatency      = 2 * time.Second
 	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
 	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
 )
 
-var defaultTimeouts = Timeouts{
+var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
 	PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 	PrivateApply:                 defaultTimeoutsApply,
 	PrivateClusterConnect:        defaultTimeoutsClusterConnect,
@@ -485,7 +481,7 @@ const (
 	defaultLogLevelsRootDaemon = logrus.InfoLevel
 )
 
-var defaultLogLevels = LogLevels{
+var defaultLogLevels = LogLevels{ //nolint:gochecknoglobals // constant
 	UserDaemon: defaultLogLevelsUserDaemon,
 	RootDaemon: defaultLogLevelsRootDaemon,
 }
@@ -668,7 +664,7 @@ const (
 	defaultCloudRefreshMessages = 24 * 7 * time.Hour
 )
 
-var defaultCloud = Cloud{
+var defaultCloud = Cloud{ //nolint:gochecknoglobals // constant
 	SkipLogin:       false,
 	RefreshMessages: defaultCloudRefreshMessages,
 	SystemaHost:     defaultCloudSystemAHost,
@@ -775,19 +771,9 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 	}
 }
 
-type Daemons struct {
-	UserDaemonBinary string `json:"userDaemonBinary,omitempty" yaml:"userDaemonBinary,omitempty"`
-}
-
-func (d *Daemons) merge(o *Daemons) {
-	if o.UserDaemonBinary != "" {
-		d.UserDaemonBinary = o.UserDaemonBinary
-	}
-}
-
 const defaultInterceptDefaultPort = 8080
 
-var defaultIntercept = Intercept{
+var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
 	DefaultPort: defaultInterceptDefaultPort,
 }
 
@@ -829,7 +815,7 @@ func (ic Intercept) MarshalYAML() (any, error) {
 	return im, nil
 }
 
-var parseContext context.Context
+var parseContext context.Context //nolint:gochecknoglobals // cannot be propagated in any other way
 
 type parsedFile struct{}
 
@@ -897,7 +883,6 @@ func GetDefaultConfig() Config {
 		},
 		Grpc:            Grpc{},
 		TelepresenceAPI: TelepresenceAPI{},
-		Daemons:         Daemons{},
 		Intercept: Intercept{
 			DefaultPort: defaultInterceptDefaultPort,
 		},

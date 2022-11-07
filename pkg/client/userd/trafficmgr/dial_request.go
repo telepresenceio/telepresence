@@ -6,11 +6,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-func (tm *TrafficManager) dialRequestWatcher(ctx context.Context) error {
+func (s *session) dialRequestWatcher(ctx context.Context) error {
 	// Deal with dial requests from the manager
-	dialerStream, err := tm.managerClient.WatchDial(ctx, tm.sessionInfo)
+	dialerStream, err := s.managerClient.WatchDial(ctx, s.sessionInfo)
 	if err != nil {
 		return err
 	}
-	return tunnel.DialWaitLoop(ctx, tm.managerClient, dialerStream, tm.sessionInfo.SessionId)
+	return tunnel.DialWaitLoop(ctx, s.managerClient, dialerStream, s.sessionInfo.SessionId)
 }
