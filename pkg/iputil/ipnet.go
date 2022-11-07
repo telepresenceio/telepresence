@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -22,6 +24,7 @@ func IPNetFromRPC(r *manager.IPNet) *net.IPNet {
 	}
 }
 
+// Subnet is a net.IPNet that can be marshalled/unmarshalled as yaml or json.
 type Subnet net.IPNet
 
 func (s *Subnet) MarshalJSON() ([]byte, error) {
@@ -31,6 +34,23 @@ func (s *Subnet) MarshalJSON() ([]byte, error) {
 func (s *Subnet) UnmarshalJSON(data []byte) error {
 	var str string
 	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	_, ipNet, err := net.ParseCIDR(str)
+	if err != nil {
+		return err
+	}
+	*s = *(*Subnet)(ipNet)
+	return nil
+}
+
+func (s *Subnet) MarshalYAML() (any, error) {
+	return (*net.IPNet)(s).String(), nil
+}
+
+func (s *Subnet) UnmarshalYAML(node *yaml.Node) error {
+	var str string
+	if err := node.Decode(&str); err != nil {
 		return err
 	}
 	_, ipNet, err := net.ParseCIDR(str)
