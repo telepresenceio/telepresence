@@ -269,8 +269,8 @@ func GlobalFlags() *pflag.FlagSet {
 		"no-report", false,
 		"turn off anonymous crash reports and log submission on failure",
 	)
-	flags.String(
-		"output", "default",
+	flags.StringP(
+		"output", "o", "default",
 		"set the output format, supported values are 'json', 'yaml', and 'default'",
 	)
 	return flags
