@@ -13,9 +13,10 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/datawire/dlib/dlog"
-
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
@@ -179,28 +180,34 @@ func (kf *Config) GetRestConfig() *rest.Config {
 	return kf.RestConfig
 }
 
-func (kf *Config) AddRemoteKubeConfigExtension(ctx context.Context, cfgJson string) error {
-	dlog.Debugf(ctx, "Applying remote kubeconfig: %s", cfgJson)
-	remote := &client.KubeconfigExtension{}
-	if err := json.Unmarshal([]byte(cfgJson), &remote); err != nil {
+func (kf *Config) AddRemoteKubeConfigExtension(ctx context.Context, cfgJson []byte) error {
+	dlog.Debugf(ctx, "Applying remote dns and routing: %s", cfgJson)
+	remote := struct {
+		DNS     *userd.DNS     `json:"dns,omitempty"`
+		Routing *userd.Routing `json:"routing,omitempty"`
+	}{}
+	if err := json.Unmarshal(cfgJson, &remote); err != nil {
 		return fmt.Errorf("unable to parse remote kubeconfig: %w", err)
 	}
 	if kf.DNS == nil {
-		kf.DNS = remote.DNS
-	} else {
+		kf.DNS = &client.DnsConfig{}
+	}
+	if dns := remote.DNS; dns != nil {
 		if kf.DNS.LocalIP == "" {
-			kf.DNS.LocalIP = remote.DNS.LocalIP
+			kf.DNS.LocalIP = iputil.IPKey(dns.LocalIP)
 		}
 		if kf.DNS.RemoteIP == "" {
-			kf.DNS.RemoteIP = remote.DNS.RemoteIP
+			kf.DNS.RemoteIP = iputil.IPKey(dns.RemoteIP)
 		}
-		kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, remote.DNS.ExcludeSuffixes...)
-		kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, remote.DNS.IncludeSuffixes...)
+		kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, dns.ExcludeSuffixes...)
+		kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, dns.IncludeSuffixes...)
 		if kf.DNS.LookupTimeout.Duration == 0 {
-			kf.DNS.LookupTimeout = remote.DNS.LookupTimeout
+			kf.DNS.LookupTimeout.Duration = dns.LookupTimeout
 		}
 	}
-	kf.AlsoProxy = append(kf.AlsoProxy, remote.AlsoProxy...)
-	kf.NeverProxy = append(kf.NeverProxy, remote.NeverProxy...)
+	if routing := remote.Routing; routing != nil {
+		kf.AlsoProxy = append(kf.AlsoProxy, routing.AlsoProxy...)
+		kf.NeverProxy = append(kf.NeverProxy, routing.NeverProxy...)
+	}
 	return nil
 }

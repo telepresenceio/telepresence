@@ -195,7 +195,7 @@ func NewSession(
 		if err := yaml.Unmarshal(bs, &tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
 		}
-		if err := cluster.AddRemoteKubeConfigExtension(ctx, cliCfg.ConfigJson); err != nil {
+		if err := cluster.AddRemoteKubeConfigExtension(ctx, bs); err != nil {
 			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
 		}
 	}
