@@ -5,6 +5,7 @@
 - Feature: The traffic-manager can now configure all clients that connect through the `client:` map in
   the `values.yaml` file.
 - Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
+- Feature: add `podLabels` values to Helm Chart to add extra labels to deployment.
 
 ### 2.8.5 (November 2, 2022)
 

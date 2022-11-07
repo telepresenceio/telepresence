@@ -1,9 +1,5 @@
 # Change Log
 
-### v2.8.5
-
-- Feature: add `podLabels` values to helm-chart.
-
 ### 2.6.8 (TBD)
 
 - Feature: The helm-chart now supports settings resources, securityContext and podSecurityContext for use with chart hooks.
