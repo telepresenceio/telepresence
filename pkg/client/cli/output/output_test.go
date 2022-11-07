@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 func TestWithOutput(t *testing.T) {
@@ -33,93 +34,70 @@ func TestWithOutput(t *testing.T) {
 		cmd.Use = expectedName
 		cmd.SetOut(&stdoutBuf)
 		cmd.SetErr(&stderrBuf)
+		cmd.SetContext(context.Background())
 		cmd.RunE = re
 
-		cmd.Flags().String("output", "default", "")
+		cmd.PersistentFlags().String("output", "default", "")
 
 		return &cmd, &stdoutBuf, &stderrBuf
 	}
 
 	t.Run("non-json output", func(t *testing.T) {
 		cmd, outBuf, errBuf := newCmdWithBufs()
-		ctx := WithStructure(context.Background(), cmd)
+		_, _, err := Execute(cmd)
+		require.NoError(t, err)
 
-		err := cmd.ExecuteContext(ctx)
-		if err != nil {
-			t.Errorf("expected nil err, instead got: %s", err.Error())
-		}
-
-		stdout := outBuf.String()
-		expectedStdout := expectedREStdout
-		if stdout != expectedStdout {
-			t.Errorf("did not get expected stdout, got: %s", stdout)
-		}
-
-		stderr := errBuf.String()
-		expectedStderr := expectedREStderr
-		if stderr != expectedStderr {
-			t.Errorf("did not get expected stderr, got: %s", stderr)
-		}
+		require.Equal(t, expectedREStdout, outBuf.String(), "did not get expected stdout")
+		require.Equal(t, expectedREStderr, errBuf.String(), "did not get expected stderr")
 	})
 
 	t.Run("json output no error", func(t *testing.T) {
 		cmd, outBuf, errBuf := newCmdWithBufs()
-		ctx := WithStructure(context.Background(), cmd)
-
 		cmd.SetArgs([]string{"--output=json"})
-
-		err := cmd.ExecuteContext(ctx)
-		if err != nil {
-			t.Errorf("expected nil err, instead got: %s", err.Error())
-		}
+		_, _, err := Execute(cmd)
+		require.NoError(t, err)
 
 		stdout := outBuf.String()
 		m := map[string]string{}
-		if err := json.Unmarshal([]byte(stdout), &m); err != nil {
-			t.Errorf("did not get json as stdout, got: %s", stdout)
-		}
-
-		if m["stdout"] != expectedREStdout {
-			t.Errorf("did not get expected stdout, got: %s", m["stdout"])
-		}
-
-		if m["stderr"] != expectedREStderr {
-			t.Errorf("did not get expected stderr, got: %s", m["stderr"])
-		}
-
-		if m["cmd"] != expectedName {
-			t.Errorf("did not get expected cmd name, got: %s", m["cmd"])
-		}
+		require.NoError(t, json.Unmarshal([]byte(stdout), &m), "did not get json as stdout, got: %s", stdout)
+		require.Equal(t, expectedREStdout, m["stdout"], "did not get expected stdout, got: %s", m["stdout"])
+		require.Equal(t, expectedREStderr, m["stderr"], "did not get expected stderr, got: %s", m["stderr"])
+		require.Equal(t, expectedName, m["cmd"], "did not get expected cmd name, got: %s", m["cmd"])
 
 		stderr := errBuf.String()
-		if stderr != "" {
-			t.Errorf("expected empty stderr, got: %s", stderr)
-		}
+		require.Empty(t, stderr, "expected empty stderr, got: %s", stderr)
 	})
+
 	t.Run("json output with error", func(t *testing.T) {
 		expectedErr := "ERROR"
 		cmd, outBuf, _ := newCmdWithBufs()
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			return errors.New(expectedErr)
 		}
-		ctx := WithStructure(context.Background(), cmd)
-
 		cmd.SetArgs([]string{"--output=json"})
-
-		err := cmd.ExecuteContext(ctx)
-		if err != nil {
-			t.Errorf("expected nil err, instead got: %s", err.Error())
-		}
+		_, _, err := Execute(cmd)
+		require.Error(t, err)
 
 		stdout := outBuf.String()
 		m := map[string]string{}
-		if err := json.Unmarshal([]byte(stdout), &m); err != nil {
-			t.Errorf("did not get json as stdout, got: %s", stdout)
-		}
+		require.NoError(t, json.Unmarshal([]byte(stdout), &m), "did not get json as stdout, got: %s", stdout)
+		require.Equal(t, expectedErr, m["err"], "did not get expected err, got: %s", m["err"])
+	})
 
-		if m["err"] != expectedErr {
-			t.Errorf("did not get expected err, got: %s", m["err"])
+	t.Run("yaml output with error", func(t *testing.T) {
+		expectedErr := "ERROR"
+		cmd, outBuf, _ := newCmdWithBufs()
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			return errors.New(expectedErr)
 		}
+		cmd.SetArgs([]string{"--output=yaml"})
+		_, _, err := Execute(cmd)
+		require.Error(t, err)
+
+		stdout := outBuf.String()
+		m := map[string]string{}
+		require.NoError(t, yaml.Unmarshal([]byte(stdout), &m), "did not get yaml as stdout, got: %s", stdout)
+		require.Equal(t, expectedErr, m["err"], "did not get expected err, got: %s", m["err"])
 	})
 
 	t.Run("json output with native json", func(t *testing.T) {
@@ -127,122 +105,111 @@ func TestWithOutput(t *testing.T) {
 			"a": 1,
 		}
 		cmd, outBuf, errBuf := newCmdWithBufs()
-		cmd.LocalFlags().Bool("json", false, "")
-		_ = cmd.LocalFlags().Set("json", "true")
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			SetJSONStdout(ctx)
-
-			stdout := cmd.OutOrStdout()
-			_ = json.NewEncoder(stdout).Encode(expectedNativeJSONMap)
+			Object(cmd.Context(), expectedNativeJSONMap, false)
 			return nil
 		}
-		ctx := WithStructure(context.Background(), cmd)
-
 		cmd.SetArgs([]string{"--output=json"})
-
-		err := cmd.ExecuteContext(ctx)
-		if err != nil {
-			t.Errorf("expected nil err, instead got: %s", err.Error())
-		}
+		_, _, err := Execute(cmd)
+		require.NoError(t, err)
 
 		stdout := outBuf.String()
 		m := map[string]any{}
-		if err := json.Unmarshal([]byte(stdout), &m); err != nil {
-			t.Errorf("did not get json as stdout, got: %s", stdout)
-		}
-
+		require.NoError(t, json.Unmarshal([]byte(stdout), &m), "did not get json as stdout, got: %s", stdout)
 		jsonOutputBytes, err := json.Marshal(m["stdout"])
-		if err != nil {
-			t.Errorf("did not get json stdout as expected")
-		}
+		require.NoError(t, err, "did not get json stdout as expected")
 		expectedJSONOutputBytes, _ := json.Marshal(expectedNativeJSONMap)
 
-		if string(jsonOutputBytes) != string(expectedJSONOutputBytes) {
-			fmt.Printf("expected: %s", expectedJSONOutputBytes)
-			t.Errorf("did not get expected stdout json, got: %s", jsonOutputBytes)
-		}
-
+		require.Equal(t, expectedJSONOutputBytes, jsonOutputBytes, "did not get expected stdout json")
 		stderr := errBuf.String()
-		if stderr != "" {
-			t.Errorf("expected empty stderr, got: %s", stderr)
-		}
+		require.Empty(t, stderr, "expected empty stderr, got: %s", stderr)
 	})
 
-	t.Run("PersistentPreRun", func(t *testing.T) {
+	t.Run("json output with native json and other output", func(t *testing.T) {
+		expectedNativeJSONMap := map[string]float64{
+			"a": 1,
+		}
 		cmd, _, _ := newCmdWithBufs()
-		pprRan := false
-		cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-			pprRan = true
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			Object(cmd.Context(), expectedNativeJSONMap, false)
+			fmt.Fprintln(cmd.OutOrStdout(), "hello")
+			return nil
 		}
-		ctx := WithStructure(context.Background(), cmd)
-
-		err := cmd.ExecuteContext(ctx)
-		if err != nil {
-			t.Errorf("expected nil err, instead got: %s", err.Error())
-		}
-
-		if !pprRan {
-			t.Error("PersistentPreRun did not run")
-		}
+		cmd.SetArgs([]string{"--output=json"})
+		require.Panics(t, func() {
+			_, _, _ = Execute(cmd)
+		})
 	})
 
-	t.Run("no RunE", func(t *testing.T) {
-		cmd, outBuf, errBuf := newCmdWithBufs()
-		cmd.RunE = nil
-		cmd.Run = func(cmd *cobra.Command, args []string) {
-			_ = re(cmd, args)
+	t.Run("json output with other output and native json", func(t *testing.T) {
+		expectedNativeJSONMap := map[string]float64{
+			"a": 1,
 		}
-		ctx := WithStructure(context.Background(), cmd)
-
+		cmd, _, _ := newCmdWithBufs()
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(cmd.OutOrStdout(), "hello")
+			Object(cmd.Context(), expectedNativeJSONMap, false)
+			return nil
+		}
 		cmd.SetArgs([]string{"--output=json"})
+		require.Panics(t, func() {
+			_, _, _ = Execute(cmd)
+		})
+	})
 
-		err := cmd.ExecuteContext(ctx)
-		if err != nil {
-			t.Errorf("expected nil err, instead got: %s", err.Error())
+	t.Run("json output with multiple native json", func(t *testing.T) {
+		expectedNativeJSONMap := map[string]float64{
+			"a": 1,
 		}
+		cmd, _, _ := newCmdWithBufs()
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			Object(cmd.Context(), expectedNativeJSONMap, false)
+			Object(cmd.Context(), expectedNativeJSONMap, false)
+			return nil
+		}
+		cmd.SetArgs([]string{"--output=json"})
+		require.Panics(t, func() {
+			_, _, _ = Execute(cmd)
+		})
+	})
+
+	t.Run("json output with overriding native json", func(t *testing.T) {
+		expectedNativeJSONMap := map[string]float64{
+			"a": 1,
+		}
+		cmd, outBuf, _ := newCmdWithBufs()
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			Object(cmd.Context(), expectedNativeJSONMap, true)
+			return nil
+		}
+		cmd.SetArgs([]string{"--output=json"})
+		_, _, err := Execute(cmd)
+		require.NoError(t, err)
 
 		stdout := outBuf.String()
-		if stdout != expectedREStdout {
-			t.Errorf("did not get expected stdout, got: %s", stdout)
-		}
-
-		stderr := errBuf.String()
-		if stderr != expectedREStderr {
-			t.Errorf("did not get expected stderr, got: %s", stderr)
-		}
+		m := map[string]any{}
+		require.NoError(t, json.Unmarshal([]byte(stdout), &m), "did not get json as stdout, got: %s", stdout)
+		require.Equal(t, 1.0, m["a"])
 	})
-}
 
-func TestStructuredStreamer(t *testing.T) {
-	ctx := context.Background()
-	stdoutBuf := strings.Builder{}
-	o := output{
-		originalStdout: &stdoutBuf,
-		originalStderr: os.Stderr,
-		jsonEncoder:    json.NewEncoder(&stdoutBuf),
-	}
-	o.stdout = &streamerWriter{
-		output: &o,
-	}
-	o.stderr = &streamerWriter{
-		output: &o,
-	}
+	t.Run("json output with overriding native json and error", func(t *testing.T) {
+		expectedNativeMap := map[string]any{
+			"a": 1.0,
+		}
+		cmd, outBuf, _ := newCmdWithBufs()
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			Object(cmd.Context(), expectedNativeMap, true)
+			return errors.New("this went south")
+		}
+		cmd.SetArgs([]string{"--output=json"})
+		_, _, err := Execute(cmd)
+		require.Error(t, err)
 
-	ctx = context.WithValue(ctx, key{}, &o)
-	stdout, stderr := Structured(ctx)
-
-	ss, ok := stdout.(StructuredStreamer)
-	if !ok {
-		t.Errorf("expected StructuredStreamer stdout")
-	}
-	_, ok = stderr.(StructuredStreamer)
-	if !ok {
-		t.Errorf("expected StructuredStreamer stdout")
-	}
-
-	ss.StructuredStream(map[string]string{"key": "value"}, errors.New("ERROR"))
-	if stdoutBuf.String() == "" {
-		t.Errorf("expected non empty output")
-	}
+		stdout := outBuf.String()
+		m := map[string]any{}
+		require.NoError(t, json.Unmarshal([]byte(stdout), &m), "did not get json as stdout, got: %s", stdout)
+		require.Equal(t, m["stdout"], expectedNativeMap, "did not get expected stdout")
+		require.Empty(t, m["stderr"], "did not get empty stderr")
+		require.Equal(t, m["err"], "this went south")
+	})
 }

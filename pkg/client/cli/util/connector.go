@@ -123,7 +123,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 }
 
 func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
-	stdout, _ := output.Structured(ctx)
+	stdout := output.Out(ctx)
 	fmt.Fprint(stdout, "Telepresence Daemons ")
 	ud := GetUserDaemon(ctx)
 	if ud == nil {
@@ -178,8 +178,7 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if errors.Is(err, os.ErrNotExist) {
 		err = ErrNoUserDaemon
 		if required {
-			stdout, _ := output.Structured(ctx)
-			fmt.Fprintln(stdout, "Launching Telepresence User Daemon")
+			fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")
 			if _, err = ensureAppUserConfigDir(ctx); err != nil {
 				return nil, err
 			}
@@ -260,8 +259,7 @@ func connect(ctx context.Context, userD *UserDaemon, request *connector.ConnectR
 	cat := errcat.Unknown
 	switch ci.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
-		stdout, _ := output.Structured(ctx)
-		fmt.Fprintf(stdout, "Connected to context %s (%s)\n", ci.ClusterContext, ci.ClusterServer)
+		fmt.Fprintf(output.Info(ctx), "Connected to context %s (%s)\n", ci.ClusterContext, ci.ClusterServer)
 		return &Session{
 			UserDaemon: *userD,
 			Info:       ci,

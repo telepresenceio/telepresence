@@ -83,7 +83,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
-		jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
+		jsonStdout := itest.TelepresenceOk(ctx, "status", "--output", "json")
 		var status statusResponse
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
 		if len(status.RootDaemon.NeverProxySubnets) != neverProxiedCount {

@@ -52,7 +52,7 @@ func (s *connectedSuite) Test_Status() {
 }
 
 func (s *connectedSuite) Test_StatusWithJSON() {
-	stdout := itest.TelepresenceOk(s.Context(), "status", "--json")
+	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
 	var status statusResponse
 	s.NoError(json.Unmarshal([]byte(stdout), &status))
 	s.True(status.RootDaemon.Running)

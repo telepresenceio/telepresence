@@ -235,6 +235,9 @@ func Command(ctx context.Context) *cobra.Command {
 	}
 	rootCmd.SetContext(ctx)
 	AddSubCommands(rootCmd)
+	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return errcat.User.New(err)
+	})
 	return rootCmd
 }
 
@@ -266,9 +269,9 @@ func GlobalFlags() *pflag.FlagSet {
 		"no-report", false,
 		"turn off anonymous crash reports and log submission on failure",
 	)
-	flags.String(
-		"output", "default",
-		"set the output format, supported values are 'json' and 'default'",
+	flags.StringP(
+		"output", "o", "default",
+		"set the output format, supported values are 'json', 'yaml', and 'default'",
 	)
 	return flags
 }
