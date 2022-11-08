@@ -4,14 +4,7 @@ following Free and Open Source software:
     Name                                                                         Version                                   License(s)
     ----                                                                         -------                                   ----------
     the Go language standard library ("std")                                     v1.19                                     3-clause BSD license
-    cloud.google.com/go/compute                                                  v1.10.0                                   Apache License 2.0
     github.com/Azure/go-ansiterm                                                 v0.0.0-20210617225240-d185dfc1b5a1        MIT license
-    github.com/Azure/go-autorest                                                 v14.2.0+incompatible                      Apache License 2.0
-    github.com/Azure/go-autorest/autorest                                        v0.11.28                                  Apache License 2.0
-    github.com/Azure/go-autorest/autorest/adal                                   v0.9.21                                   Apache License 2.0
-    github.com/Azure/go-autorest/autorest/date                                   v0.3.0                                    Apache License 2.0
-    github.com/Azure/go-autorest/logger                                          v0.2.1                                    Apache License 2.0
-    github.com/Azure/go-autorest/tracing                                         v0.6.0                                    Apache License 2.0
     github.com/BurntSushi/toml                                                   v1.2.0                                    MIT license
     github.com/MakeNowJust/heredoc                                               v1.0.0                                    MIT license
     github.com/Masterminds/goutils                                               v1.1.1                                    Apache License 2.0
@@ -61,7 +54,6 @@ following Free and Open Source software:
     github.com/gobwas/glob                                                       v0.2.3                                    MIT license
     github.com/godbus/dbus/v5                                                    v5.1.0                                    2-clause BSD license
     github.com/gogo/protobuf                                                     v1.3.2                                    3-clause BSD license
-    github.com/golang-jwt/jwt/v4                                                 v4.4.2                                    MIT license
     github.com/golang/mock                                                       v1.6.0                                    Apache License 2.0
     github.com/golang/protobuf                                                   v1.5.2                                    3-clause BSD license
     github.com/google/btree                                                      v1.1.2                                    Apache License 2.0
