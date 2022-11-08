@@ -191,11 +191,10 @@ func NewSession(
 	if err != nil {
 		dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
 	} else {
-		bs := []byte(cliCfg.ConfigJson)
-		if err := yaml.Unmarshal(bs, &tmgr.sessionConfig); err != nil {
+		if err := yaml.Unmarshal(cliCfg.ConfigYaml, &tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
 		}
-		if err := cluster.AddRemoteKubeConfigExtension(ctx, bs); err != nil {
+		if err := cluster.AddRemoteKubeConfigExtension(ctx, cliCfg.ConfigYaml); err != nil {
 			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
 		}
 	}

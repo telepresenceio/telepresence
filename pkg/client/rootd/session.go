@@ -222,13 +222,12 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	if err != nil {
 		dlog.Warnf(c, "Failed to get remote config from traffic manager: %v", err)
 	} else {
-		bs := []byte(cliCfg.ConfigJson)
-		err := yaml.Unmarshal(bs, &cfg)
+		err := yaml.Unmarshal(cliCfg.ConfigYaml, &cfg)
 		if err != nil {
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}
 	}
-	dlog.Debugf(c, "Traffic manager gave config %s", cliCfg.ConfigJson)
+	dlog.Debugf(c, "Traffic manager gave config %s", string(cliCfg.ConfigYaml))
 
 	as := convertSubnets(mi.AlsoProxySubnets)
 	ns := convertSubnets(mi.NeverProxySubnets)
