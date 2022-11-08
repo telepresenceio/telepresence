@@ -8,12 +8,11 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-func (s *session) GetConfig(ctx context.Context) (*userd.SessionConfig, error) {
+func (s *session) GetConfig(ctx context.Context) (*client.SessionConfig, error) {
 	nc, err := s.rootDaemon.GetNetworkConfig(ctx, &empty.Empty{})
 	if err != nil {
 		return nil, err
@@ -31,17 +30,17 @@ func (s *session) GetConfig(ctx context.Context) (*userd.SessionConfig, error) {
 		}
 		return ss
 	}
-	return &userd.SessionConfig{
+	return &client.SessionConfig{
 		ClientFile: filepath.Join(cfgDir, client.ConfigFile),
 		Config:     s.GetSessionConfig(),
-		DNS: userd.DNS{
+		DNS: client.DNS{
 			LocalIP:         dns.LocalIp,
 			RemoteIP:        dns.RemoteIp,
 			IncludeSuffixes: dns.IncludeSuffixes,
 			ExcludeSuffixes: dns.ExcludeSuffixes,
 			LookupTimeout:   dns.LookupTimeout.AsDuration(),
 		},
-		Routing: userd.Routing{
+		Routing: client.Routing{
 			Subnets:    subnets(nc.Subnets),
 			AlsoProxy:  subnets(oi.AlsoProxySubnets),
 			NeverProxy: subnets(oi.NeverProxySubnets),

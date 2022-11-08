@@ -11,7 +11,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -36,7 +35,7 @@ func configViewCommand() *cobra.Command {
 }
 
 func configView(cmd *cobra.Command, _ []string) error {
-	var cfg userd.SessionConfig
+	var cfg client.SessionConfig
 	clientOnly, _ := cmd.Flags().GetBool("client-only")
 	if clientOnly {
 		// Unable to establish a session, so try to convey the local config instead. It

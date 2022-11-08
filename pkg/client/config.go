@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -916,4 +918,26 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 	}
 
 	return cfg, nil
+}
+
+type Routing struct {
+	Subnets    []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
+	AlsoProxy  []*iputil.Subnet `json:"alsoProxy,omitempty" yaml:"alsoProxy,omitempty"`
+	NeverProxy []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
+}
+
+type DNS struct {
+	LocalIP         net.IP        `json:"localIP,omitempty" yaml:"localIP,omitempty"`
+	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
+	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
+	ExcludeSuffixes []string      `json:"excludeSuffixes,omitempty" yaml:"excludeSuffixes,omitempty"`
+	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty" yaml:"lookupTimeout,omitempty"`
+}
+
+type SessionConfig struct {
+	ClientFile       string `json:"clientFile,omitempty" yaml:"clientFile,omitempty"`
+	*Config          `json:"clientConfig" yaml:",inline"`
+	DNS              DNS     `json:"dns,omitempty" yaml:"dns,omitempty"`
+	Routing          Routing `json:"routing,omitempty" yaml:"routing,omitempty"`
+	ManagerNamespace string  `json:"managerNamespace,omitempty" yaml:"managerNamespace,omitempty"`
 }

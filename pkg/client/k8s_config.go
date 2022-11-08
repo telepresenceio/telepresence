@@ -1,4 +1,4 @@
-package k8s
+package client
 
 import (
 	"context"
@@ -8,21 +8,57 @@ import (
 
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
-type Config struct {
-	client.KubeconfigExtension
+// The DnsConfig is part of the KubeconfigExtension struct.
+type DnsConfig struct {
+	// LocalIP is the address of the local DNS server. This entry is only
+	// used on Linux system that are not configured to use systemd-resolved and
+	// can be overridden by using the option --dns on the command line and defaults
+	// to the first line of /etc/resolv.conf
+	LocalIP iputil.IPKey `json:"local-ip,omitempty"`
+
+	// RemoteIP is the address of the cluster's DNS service. It will default
+	// to the IP of the kube-dns.kube-system or the dns-default.openshift-dns service.
+	RemoteIP iputil.IPKey `json:"remote-ip,omitempty"`
+
+	// ExcludeSuffixes are suffixes for which the DNS resolver will always return
+	// NXDOMAIN (or fallback in case of the overriding resolver).
+	ExcludeSuffixes []string `json:"exclude-suffixes,omitempty"`
+
+	// IncludeSuffixes are suffixes for which the DNS resolver will always attempt to do
+	// a lookup. Includes have higher priority than excludes.
+	IncludeSuffixes []string `json:"include-suffixes,omitempty"`
+
+	// The maximum time to wait for a cluster side host lookup.
+	LookupTimeout v1.Duration `json:"lookup-timeout,omitempty"`
+}
+
+// The ManagerConfig is part of the KubeconfigExtension struct. It configures discovery of the traffic manager.
+type ManagerConfig struct {
+	// Namespace is the name of the namespace where the traffic manager is to be found
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// KubeconfigExtension is an extension read from the selected kubeconfig Cluster.
+type KubeconfigExtension struct {
+	DNS        *DnsConfig       `json:"dns,omitempty"`
+	AlsoProxy  []*iputil.Subnet `json:"also-proxy,omitempty"`
+	NeverProxy []*iputil.Subnet `json:"never-proxy,omitempty"`
+	Manager    *ManagerConfig   `json:"manager,omitempty"`
+}
+
+type Kubeconfig struct {
+	KubeconfigExtension
 	Namespace   string // default cluster namespace.
 	Context     string
 	Server      string
@@ -33,7 +69,7 @@ type Config struct {
 
 const configExtension = "telepresence.io"
 
-func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
+func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -97,7 +133,7 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 		namespace = "default"
 	}
 
-	k := &Config{
+	k := &Kubeconfig{
 		Context:     ctxName,
 		Server:      cluster.Server,
 		Namespace:   namespace,
@@ -113,18 +149,18 @@ func NewConfig(c context.Context, flagMap map[string]string) (*Config, error) {
 	}
 
 	if k.KubeconfigExtension.Manager == nil {
-		k.KubeconfigExtension.Manager = &client.ManagerConfig{}
+		k.KubeconfigExtension.Manager = &ManagerConfig{}
 	}
 
 	if k.KubeconfigExtension.Manager.Namespace == "" {
-		k.KubeconfigExtension.Manager.Namespace = client.GetEnv(c).ManagerNamespace
+		k.KubeconfigExtension.Manager.Namespace = GetEnv(c).ManagerNamespace
 	}
 
 	return k, nil
 }
 
 // This represents an inClusterConfig.
-func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Config, error) {
+func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -149,16 +185,16 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Config, 
 		namespace = "default"
 	}
 
-	return &Config{
+	return &Kubeconfig{
 		Namespace:   namespace,
 		Server:      restConfig.Host,
 		flagMap:     flagMap,
 		ConfigFlags: configFlags,
 		RestConfig:  restConfig,
 		// it may be empty, but we should avoid nil deref
-		KubeconfigExtension: client.KubeconfigExtension{
-			Manager: &client.ManagerConfig{
-				Namespace: client.GetEnv(c).ManagerNamespace,
+		KubeconfigExtension: KubeconfigExtension{
+			Manager: &ManagerConfig{
+				Namespace: GetEnv(c).ManagerNamespace,
 			},
 		},
 	}, nil
@@ -166,32 +202,32 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Config, 
 
 // ContextServiceAndFlagsEqual determines if this instance is equal to the given instance with respect to context,
 // server, and flag arguments.
-func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
+func (kf *Kubeconfig) ContextServiceAndFlagsEqual(okf *Kubeconfig) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
 		maps.Equal(kf.flagMap, okf.flagMap)
 }
 
-func (kf *Config) GetManagerNamespace() string {
+func (kf *Kubeconfig) GetManagerNamespace() string {
 	return kf.KubeconfigExtension.Manager.Namespace
 }
 
-func (kf *Config) GetRestConfig() *rest.Config {
+func (kf *Kubeconfig) GetRestConfig() *rest.Config {
 	return kf.RestConfig
 }
 
-func (kf *Config) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml []byte) error {
+func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml []byte) error {
 	dlog.Debugf(ctx, "Applying remote dns and routing: %s", cfgYaml)
 	remote := struct {
-		DNS     *userd.DNS     `yaml:"dns,omitempty"`
-		Routing *userd.Routing `yaml:"routing,omitempty"`
+		DNS     *DNS     `yaml:"dns,omitempty"`
+		Routing *Routing `yaml:"routing,omitempty"`
 	}{}
 	if err := yaml.Unmarshal(cfgYaml, &remote); err != nil {
 		return fmt.Errorf("unable to parse remote kubeconfig: %w", err)
 	}
 	if kf.DNS == nil {
-		kf.DNS = &client.DnsConfig{}
+		kf.DNS = &DnsConfig{}
 	}
 	if dns := remote.DNS; dns != nil {
 		if kf.DNS.LocalIP == "" {

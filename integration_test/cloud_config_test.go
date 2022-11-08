@@ -18,7 +18,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -87,7 +86,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		}
 
 		jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
-		var view userd.SessionConfig
+		var view client.SessionConfig
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 		if len(view.Routing.NeverProxy) != neverProxiedCount {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets in json status", neverProxiedCount)
@@ -195,7 +194,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	}
 	require.False(levelSet, "Root log level not respected when set in config file")
 
-	var view userd.SessionConfig
+	var view client.SessionConfig
 	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
 	require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 	require.Equal(view.LogLevels.RootDaemon, logrus.DebugLevel)

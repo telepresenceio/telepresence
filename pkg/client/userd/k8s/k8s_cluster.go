@@ -23,7 +23,7 @@ const supportedKubeAPIVersion = "1.17.0"
 
 // Cluster is a Kubernetes cluster reference.
 type Cluster struct {
-	*Config
+	*client.Kubeconfig
 	mappedNamespaces []string
 
 	// Main
@@ -116,7 +116,7 @@ func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 	return ok
 }
 
-func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Cluster, error) {
+func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []string) (*Cluster, error) {
 	rs, err := kubeFlags.ConfigFlags.ToRESTConfig()
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func NewCluster(c context.Context, kubeFlags *Config, namespaces []string) (*Clu
 	}
 
 	ret := &Cluster{
-		Config:           kubeFlags,
+		Kubeconfig:       kubeFlags,
 		mappedNamespaces: namespaces,
 		ki:               cs,
 	}
