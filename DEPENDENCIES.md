@@ -27,7 +27,6 @@ following Free and Open Source software:
     github.com/chai2010/gettext-go                                               v1.0.2                                    3-clause BSD license
     github.com/containerd/containerd                                             v1.6.8                                    Apache License 2.0
     github.com/coreos/go-iptables                                                v0.6.0                                    Apache License 2.0
-    github.com/creack/pty                                                        v1.1.18                                   MIT license
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                    3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20220715022530-b09ab2e017e1      Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f        Apache License 2.0
@@ -110,7 +109,6 @@ following Free and Open Source software:
     github.com/opencontainers/go-digest                                          v1.0.0                                    Apache License 2.0
     github.com/opencontainers/image-spec                                         v1.1.0-rc1                                Apache License 2.0
     github.com/peterbourgon/diskv                                                v2.0.1+incompatible                       MIT license
-    github.com/pkg/browser                                                       v0.0.0-20210911075715-681adbf594b8        2-clause BSD license
     github.com/pkg/errors                                                        v0.9.1                                    2-clause BSD license
     github.com/pkg/sftp                                                          v1.13.5                                   2-clause BSD license
     github.com/pmezard/go-difflib                                                v1.0.0                                    3-clause BSD license
@@ -146,6 +144,7 @@ following Free and Open Source software:
     go.opentelemetry.io/proto/otlp                                               v0.19.0                                   Apache License 2.0
     go.starlark.net                                                              v0.0.0-20220817180228-f738f5508c12        3-clause BSD license
     golang.org/x/crypto                                                          v0.0.0-20220924013350-4ba4fb4dd9e7        3-clause BSD license
+    golang.org/x/exp                                                             v0.0.0-20221006183845-316c7553db56        3-clause BSD license
     golang.org/x/mod                                                             v0.6.0-dev.0.20220419223038-86c51ed26bb4  3-clause BSD license
     golang.org/x/net                                                             v0.0.0-20220923203811-8be639271d50        3-clause BSD license
     golang.org/x/oauth2                                                          v0.0.0-20220909003341-f21342109be1        3-clause BSD license

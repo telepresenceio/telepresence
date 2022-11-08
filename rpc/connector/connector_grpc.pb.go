@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.5
-// source: rpc/connector/connector.proto
+// source: connector/connector.proto
 
 package connector
 
@@ -11,7 +11,6 @@ import (
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	daemon "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	userdaemon "github.com/telepresenceio/telepresence/rpc/v2/userdaemon"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -63,32 +62,22 @@ type ConnectorClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(ctx context.Context, in *WatchWorkloadsRequest, opts ...grpc.CallOption) (Connector_WatchWorkloadsClient, error)
-	// Returns a stream of messages to display to the user.  Does NOT
-	// require having called anything else first.
-	UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
 	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
 	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
-	GetIngressInfos(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*IngressInfos, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
 	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
-	ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error)
-	// RunCommand executes a CLI command.
-	RunCommand(ctx context.Context, opts ...grpc.CallOption) (Connector_RunCommandClient, error)
-	// ValidArgsForCommand handles autocompletion
-	ValidArgsForCommand(ctx context.Context, in *ValidArgsForCommandRequest, opts ...grpc.CallOption) (*ValidArgsForCommandResponse, error)
-	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
-	// the cloud for default ingress values
-	ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error)
 	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
 	GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
+	// GatherTraces will acquire traces for the various Telepresence components in kubernetes
+	// (pending the request) and save them in a file.
+	GatherTraces(ctx context.Context, in *TracesRequest, opts ...grpc.CallOption) (*Result, error)
 	// AddInterceptor tells the connector that a given process is serving a specific
 	// intercept. The connector must kill this process when the intercept ends
 	AddInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -96,6 +85,9 @@ type ConnectorClient interface {
 	RemoveInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetNamespaces gets the mapped namespaces with an optional prefix
 	GetNamespaces(ctx context.Context, in *GetNamespacesRequest, opts ...grpc.CallOption) (*GetNamespacesResponse, error)
+	// RemoteMountAvailability checks if remote mounts are possible using the given
+	// mount type and returns an error if its not.
+	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*Result, error)
 }
 
 type connectorClient struct {
@@ -246,38 +238,6 @@ func (x *connectorWatchWorkloadsClient) Recv() (*WorkloadInfoSnapshot, error) {
 	return m, nil
 }
 
-func (c *connectorClient) UserNotifications(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[1], "/telepresence.connector.Connector/UserNotifications", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &connectorUserNotificationsClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type Connector_UserNotificationsClient interface {
-	Recv() (*Notification, error)
-	grpc.ClientStream
-}
-
-type connectorUserNotificationsClient struct {
-	grpc.ClientStream
-}
-
-func (x *connectorUserNotificationsClient) Recv() (*Notification, error) {
-	m := new(Notification)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (c *connectorClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error) {
 	out := new(LoginResult)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Login", in, out, opts...)
@@ -323,15 +283,6 @@ func (c *connectorClient) GetCloudLicense(ctx context.Context, in *LicenseReques
 	return out, nil
 }
 
-func (c *connectorClient) GetIngressInfos(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*IngressInfos, error) {
-	out := new(IngressInfos)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetIngressInfos", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *connectorClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/SetLogLevel", in, out, opts...)
@@ -350,67 +301,18 @@ func (c *connectorClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...g
 	return out, nil
 }
 
-func (c *connectorClient) ListCommands(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CommandGroups, error) {
-	out := new(CommandGroups)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ListCommands", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) RunCommand(ctx context.Context, opts ...grpc.CallOption) (Connector_RunCommandClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Connector_ServiceDesc.Streams[2], "/telepresence.connector.Connector/RunCommand", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &connectorRunCommandClient{stream}
-	return x, nil
-}
-
-type Connector_RunCommandClient interface {
-	Send(*RunCommandRequest) error
-	Recv() (*StreamResult, error)
-	grpc.ClientStream
-}
-
-type connectorRunCommandClient struct {
-	grpc.ClientStream
-}
-
-func (x *connectorRunCommandClient) Send(m *RunCommandRequest) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *connectorRunCommandClient) Recv() (*StreamResult, error) {
-	m := new(StreamResult)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func (c *connectorClient) ValidArgsForCommand(ctx context.Context, in *ValidArgsForCommandRequest, opts ...grpc.CallOption) (*ValidArgsForCommandResponse, error) {
-	out := new(ValidArgsForCommandResponse)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ValidArgsForCommand", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) ResolveIngressInfo(ctx context.Context, in *userdaemon.IngressInfoRequest, opts ...grpc.CallOption) (*userdaemon.IngressInfoResponse, error) {
-	out := new(userdaemon.IngressInfoResponse)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ResolveIngressInfo", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *connectorClient) GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error) {
 	out := new(LogsResponse)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GatherLogs", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) GatherTraces(ctx context.Context, in *TracesRequest, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GatherTraces", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -438,6 +340,15 @@ func (c *connectorClient) RemoveInterceptor(ctx context.Context, in *Interceptor
 func (c *connectorClient) GetNamespaces(ctx context.Context, in *GetNamespacesRequest, opts ...grpc.CallOption) (*GetNamespacesResponse, error) {
 	out := new(GetNamespacesResponse)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetNamespaces", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*Result, error) {
+	out := new(Result)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RemoteMountAvailability", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -484,32 +395,22 @@ type ConnectorServer interface {
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error
-	// Returns a stream of messages to display to the user.  Does NOT
-	// require having called anything else first.
-	UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error
 	Login(context.Context, *LoginRequest) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
 	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
 	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
-	GetIngressInfos(context.Context, *emptypb.Empty) (*IngressInfos, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
 	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
-	// ListCommands returns a list of CLI commands that are implemented remotely by this daemon.
-	ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error)
-	// RunCommand executes a CLI command.
-	RunCommand(Connector_RunCommandServer) error
-	// ValidArgsForCommand handles autocompletion
-	ValidArgsForCommand(context.Context, *ValidArgsForCommandRequest) (*ValidArgsForCommandResponse, error)
-	// ResolveIngressInfo is a temporary rpc intended to allow the cli to ask
-	// the cloud for default ingress values
-	ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error)
 	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
 	GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error)
+	// GatherTraces will acquire traces for the various Telepresence components in kubernetes
+	// (pending the request) and save them in a file.
+	GatherTraces(context.Context, *TracesRequest) (*Result, error)
 	// AddInterceptor tells the connector that a given process is serving a specific
 	// intercept. The connector must kill this process when the intercept ends
 	AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
@@ -517,6 +418,9 @@ type ConnectorServer interface {
 	RemoveInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
 	// GetNamespaces gets the mapped namespaces with an optional prefix
 	GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error)
+	// RemoteMountAvailability checks if remote mounts are possible using the given
+	// mount type and returns an error if its not.
+	RemoteMountAvailability(context.Context, *emptypb.Empty) (*Result, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -563,9 +467,6 @@ func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*Worklo
 func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
 }
-func (UnimplementedConnectorServer) UserNotifications(*emptypb.Empty, Connector_UserNotificationsServer) error {
-	return status.Errorf(codes.Unimplemented, "method UserNotifications not implemented")
-}
 func (UnimplementedConnectorServer) Login(context.Context, *LoginRequest) (*LoginResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
 }
@@ -581,29 +482,17 @@ func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest)
 func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
 }
-func (UnimplementedConnectorServer) GetIngressInfos(context.Context, *emptypb.Empty) (*IngressInfos, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetIngressInfos not implemented")
-}
 func (UnimplementedConnectorServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedConnectorServer) ListCommands(context.Context, *emptypb.Empty) (*CommandGroups, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListCommands not implemented")
-}
-func (UnimplementedConnectorServer) RunCommand(Connector_RunCommandServer) error {
-	return status.Errorf(codes.Unimplemented, "method RunCommand not implemented")
-}
-func (UnimplementedConnectorServer) ValidArgsForCommand(context.Context, *ValidArgsForCommandRequest) (*ValidArgsForCommandResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ValidArgsForCommand not implemented")
-}
-func (UnimplementedConnectorServer) ResolveIngressInfo(context.Context, *userdaemon.IngressInfoRequest) (*userdaemon.IngressInfoResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ResolveIngressInfo not implemented")
-}
 func (UnimplementedConnectorServer) GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GatherLogs not implemented")
+}
+func (UnimplementedConnectorServer) GatherTraces(context.Context, *TracesRequest) (*Result, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GatherTraces not implemented")
 }
 func (UnimplementedConnectorServer) AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddInterceptor not implemented")
@@ -613,6 +502,9 @@ func (UnimplementedConnectorServer) RemoveInterceptor(context.Context, *Intercep
 }
 func (UnimplementedConnectorServer) GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNamespaces not implemented")
+}
+func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*Result, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoteMountAvailability not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -864,27 +756,6 @@ func (x *connectorWatchWorkloadsServer) Send(m *WorkloadInfoSnapshot) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Connector_UserNotifications_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(emptypb.Empty)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ConnectorServer).UserNotifications(m, &connectorUserNotificationsServer{stream})
-}
-
-type Connector_UserNotificationsServer interface {
-	Send(*Notification) error
-	grpc.ServerStream
-}
-
-type connectorUserNotificationsServer struct {
-	grpc.ServerStream
-}
-
-func (x *connectorUserNotificationsServer) Send(m *Notification) error {
-	return x.ServerStream.SendMsg(m)
-}
-
 func _Connector_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LoginRequest)
 	if err := dec(in); err != nil {
@@ -975,24 +846,6 @@ func _Connector_GetCloudLicense_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_GetIngressInfos_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).GetIngressInfos(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/GetIngressInfos",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetIngressInfos(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Connector_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(manager.LogLevelRequest)
 	if err := dec(in); err != nil {
@@ -1029,86 +882,6 @@ func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_ListCommands_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).ListCommands(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/ListCommands",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).ListCommands(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_RunCommand_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ConnectorServer).RunCommand(&connectorRunCommandServer{stream})
-}
-
-type Connector_RunCommandServer interface {
-	Send(*StreamResult) error
-	Recv() (*RunCommandRequest, error)
-	grpc.ServerStream
-}
-
-type connectorRunCommandServer struct {
-	grpc.ServerStream
-}
-
-func (x *connectorRunCommandServer) Send(m *StreamResult) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *connectorRunCommandServer) Recv() (*RunCommandRequest, error) {
-	m := new(RunCommandRequest)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func _Connector_ValidArgsForCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ValidArgsForCommandRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).ValidArgsForCommand(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/ValidArgsForCommand",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).ValidArgsForCommand(ctx, req.(*ValidArgsForCommandRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_ResolveIngressInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(userdaemon.IngressInfoRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).ResolveIngressInfo(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/ResolveIngressInfo",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).ResolveIngressInfo(ctx, req.(*userdaemon.IngressInfoRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Connector_GatherLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LogsRequest)
 	if err := dec(in); err != nil {
@@ -1123,6 +896,24 @@ func _Connector_GatherLogs_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).GatherLogs(ctx, req.(*LogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_GatherTraces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TracesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GatherTraces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GatherTraces",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GatherTraces(ctx, req.(*TracesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1177,6 +968,24 @@ func _Connector_GetNamespaces_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).GetNamespaces(ctx, req.(*GetNamespacesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_RemoteMountAvailability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RemoteMountAvailability(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/RemoteMountAvailability",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RemoteMountAvailability(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1257,10 +1066,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_GetCloudLicense_Handler,
 		},
 		{
-			MethodName: "GetIngressInfos",
-			Handler:    _Connector_GetIngressInfos_Handler,
-		},
-		{
 			MethodName: "SetLogLevel",
 			Handler:    _Connector_SetLogLevel_Handler,
 		},
@@ -1269,20 +1074,12 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_Quit_Handler,
 		},
 		{
-			MethodName: "ListCommands",
-			Handler:    _Connector_ListCommands_Handler,
-		},
-		{
-			MethodName: "ValidArgsForCommand",
-			Handler:    _Connector_ValidArgsForCommand_Handler,
-		},
-		{
-			MethodName: "ResolveIngressInfo",
-			Handler:    _Connector_ResolveIngressInfo_Handler,
-		},
-		{
 			MethodName: "GatherLogs",
 			Handler:    _Connector_GatherLogs_Handler,
+		},
+		{
+			MethodName: "GatherTraces",
+			Handler:    _Connector_GatherTraces_Handler,
 		},
 		{
 			MethodName: "AddInterceptor",
@@ -1296,6 +1093,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetNamespaces",
 			Handler:    _Connector_GetNamespaces_Handler,
 		},
+		{
+			MethodName: "RemoteMountAvailability",
+			Handler:    _Connector_RemoteMountAvailability_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1303,17 +1104,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Connector_WatchWorkloads_Handler,
 			ServerStreams: true,
 		},
-		{
-			StreamName:    "UserNotifications",
-			Handler:       _Connector_UserNotifications_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "RunCommand",
-			Handler:       _Connector_RunCommand_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
 	},
-	Metadata: "rpc/connector/connector.proto",
+	Metadata: "connector/connector.proto",
 }

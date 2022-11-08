@@ -18,7 +18,7 @@ func Version() string {
 }
 
 func Semver() semver.Version {
-	return version.Structured()
+	return version.Structured
 }
 
 func Executable() (string, error) {

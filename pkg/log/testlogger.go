@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 type tbWrapper struct {
@@ -41,9 +42,7 @@ func (w *tbWrapper) WithField(key string, value any) dlog.Logger {
 		TB:     w.TB,
 		fields: make(map[string]any, len(w.fields)+1),
 	}
-	for k, v := range w.fields {
-		ret.fields[k] = v
-	}
+	maps.Merge(ret.fields, w.fields)
 	ret.fields[key] = value
 	return &ret
 }

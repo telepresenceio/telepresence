@@ -90,6 +90,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 
 	svcName := "echo-never-proxy"
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
+	defer itest.DeleteSvcAndWorkload(ctx, "deploy", svcName, s.AppNamespace())
 	ip, err := itest.Output(ctx, "kubectl",
 		"--namespace", s.AppNamespace(),
 		"get", "svc", svcName,
@@ -114,7 +115,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {
-		jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
+		jsonStdout := itest.TelepresenceOk(ctx, "status", "--output", "json")
 		var status statusResponse
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
 		return len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount

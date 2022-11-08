@@ -24,6 +24,9 @@ spec:
     {{- end }}
       labels:
         {{- include "telepresence.selectorLabels" $ | nindent 8 }}
+    {{- with .podLabels }}
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
     spec:
       {{- with .image.imagePullSecrets }}
       imagePullSecrets:
@@ -248,6 +251,11 @@ spec:
           - name: tls
             mountPath: /var/run/secrets/tls
             readOnly: true
+          {{- if .client }}
+          - name: client-config
+            mountPath: /var/run/config/cli
+            readOnly: true
+          {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -264,6 +272,11 @@ spec:
       priorityClassName: {{ . | quote }}
       {{- end }}
       volumes:
+      {{- if .client }}
+      - name: client-config
+        configMap:
+          name: {{ include "traffic-manager.name" $ }}-clients
+      {{- end }}
       {{- if .licenseKey.create }}
       - name: license
         secret:

@@ -42,7 +42,6 @@ else
 CGO_ENABLED=0
 endif
 
-# Build using CGO_ENABLED=1 on all platforms except windows.
 ifeq ($(GOOS),windows)
 BEXE=.exe
 else
@@ -62,6 +61,7 @@ generate: generate-clean
 generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	$(tools/protoc) \
+	  -I rpc \
 	  \
 	  --go_out=./rpc \
 	  --go_opt=module=github.com/telepresenceio/telepresence/rpc/v2 \
@@ -118,14 +118,14 @@ endif
 
 FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
 
-pkg/client/userd/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
+pkg/client/userd/daemon/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
 	cp $< $@
 
 $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
 	mkdir -p $(BUILDDIR)
 	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
 
-build-deps: pkg/client/userd/fuseftp.bits
+build-deps: pkg/client/userd/daemon/fuseftp.bits
 
 ifeq ($(GOHOSTOS),windows)
 WINTUN_VERSION=0.14.1
@@ -287,7 +287,7 @@ check-integration: build-deps $(tools/helm) ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -timeout=39m ./integration_test/...
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -v -timeout=55m ./integration_test/...
 
 .PHONY: _login
 _login:

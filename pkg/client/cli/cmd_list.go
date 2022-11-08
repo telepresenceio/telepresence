@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -11,8 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
 type listInfo struct {
@@ -46,12 +47,12 @@ func listCommand() *cobra.Command {
 
 	_ = cmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		shellCompDir := cobra.ShellCompDirectiveNoFileComp
-		if err := cliutil.InitCommand(cmd); err != nil {
+		if err := util.InitCommand(cmd); err != nil {
 			shellCompDir |= cobra.ShellCompDirectiveError
 			return nil, shellCompDir
 		}
 		ctx := cmd.Context()
-		userD := cliutil.GetUserDaemon(ctx)
+		userD := util.GetUserDaemon(ctx)
 		resp, err := userD.GetNamespaces(ctx, &connector.GetNamespacesRequest{
 			ForClientAccess: false,
 			Prefix:          toComplete,
@@ -68,12 +69,12 @@ func listCommand() *cobra.Command {
 
 // list requests a list current intercepts from the daemon.
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
-	if err := cliutil.InitCommand(cmd); err != nil {
+	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
 	stdout := cmd.OutOrStdout()
 	ctx := cmd.Context()
-	userD := cliutil.GetUserDaemon(ctx)
+	userD := util.GetUserDaemon(ctx)
 	var filter connector.ListRequest_Filter
 	switch {
 	case s.onlyIntercepts:
@@ -96,13 +97,13 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	jsonOut := output.WantsJSONOutput(cmd.Flags())
+	formattedOutput := output.WantsFormatted(cmd)
 	if !s.watch {
 		r, err := userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 		if err != nil {
 			return err
 		}
-		s.printList(r.Workloads, stdout, jsonOut)
+		s.printList(ctx, r.Workloads, stdout, formattedOutput)
 		return nil
 	}
 
@@ -126,7 +127,7 @@ looper:
 	for {
 		select {
 		case r := <-ch:
-			s.printList(r.Workloads, stdout, jsonOut)
+			s.printList(ctx, r.Workloads, stdout, formattedOutput)
 		case <-ctx.Done():
 			break looper
 		}
@@ -134,19 +135,10 @@ looper:
 	return nil
 }
 
-func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writer, jsonOut bool) {
-	var streamerOut output.StructuredStreamer
-
-	if jsonOut {
-		streamerOut, _ = stdout.(output.StructuredStreamer)
-		if streamerOut == nil {
-			panic("writer not output.StructuredStreamer")
-		}
-	}
-
+func (s *listInfo) printList(ctx context.Context, workloads []*connector.WorkloadInfo, stdout io.Writer, formattedOut bool) {
 	if len(workloads) == 0 {
-		if jsonOut {
-			streamerOut.StructuredStream([]struct{}{}, nil)
+		if formattedOut {
+			output.Object(ctx, []struct{}{}, false)
 		} else {
 			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 		}
@@ -155,7 +147,7 @@ func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writ
 
 	state := func(workload *connector.WorkloadInfo) string {
 		if iis := workload.InterceptInfos; len(iis) > 0 {
-			return cliutil.DescribeIntercepts(iis, nil, s.debug)
+			return util.DescribeIntercepts(iis, nil, s.debug)
 		}
 		ai := workload.AgentInfo
 		if ai != nil {
@@ -168,8 +160,8 @@ func (s *listInfo) printList(workloads []*connector.WorkloadInfo, stdout io.Writ
 		}
 	}
 
-	if jsonOut {
-		streamerOut.StructuredStream(workloads, nil)
+	if formattedOut {
+		output.Object(ctx, workloads, false)
 	} else {
 		includeNs := false
 		ns := s.namespace

@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -101,7 +101,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	if !s.prePushed {
 		s.testVersion = "v2.8.0-gotest.z" + s.suffix
 	}
-	version.Version = s.testVersion
+	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
 
 	t := getT(ctx)
 	s.agentImageName = "tel2"
@@ -515,22 +515,11 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
-	for k, v := range getEnv(ctx) {
-		env[k] = v
+	maps.Merge(env, getEnv(ctx))
+	for k, v := range env {
+		env[k] = k + "=" + v
 	}
-	keys := make([]string, len(env))
-	i := 0
-	for k := range env {
-		keys[i] = k
-		i++
-	}
-	sort.Strings(keys)
-
-	// reuse the keys slice for complete key=value strings
-	for i, k := range keys {
-		keys[i] = k + "=" + env[k]
-	}
-	cmd.Env = keys
+	cmd.Env = maps.ToSortedSlice(env)
 	cmd.Dir = GetWorkingDir(ctx)
 	return cmd
 }

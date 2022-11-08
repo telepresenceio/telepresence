@@ -149,8 +149,8 @@ const tel2SubDomainDot = tel2SubDomain + "."
 const wpadDot = "wpad."
 
 var (
-	localhostIPv4 = net.IP{127, 0, 0, 1}
-	localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	localhostIPv4 = net.IP{127, 0, 0, 1}                                   //nolint:gochecknoglobals // constant
+	localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1} //nolint:gochecknoglobals // constant
 )
 
 func (s *Server) shouldDoClusterLookup(query string) bool {

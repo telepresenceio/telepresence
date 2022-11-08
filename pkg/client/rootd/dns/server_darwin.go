@@ -13,6 +13,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -204,9 +205,7 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 
 	// All namespaces and include suffixes become domains
 	domains := make(map[string]struct{}, len(namespaces)+len(s.config.IncludeSuffixes))
-	for ns, v := range namespaces {
-		domains[ns] = v
-	}
+	maps.Merge(domains, namespaces)
 	for _, sfx := range s.config.IncludeSuffixes {
 		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
 	}

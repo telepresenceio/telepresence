@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/spf13/pflag"
@@ -12,9 +13,12 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
 
+	"github.com/datawire/dlib/dlog"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 // The dnsConfig is part of the kubeconfigExtension struct.
@@ -53,11 +57,6 @@ type kubeconfigExtension struct {
 	AlsoProxy  []*iputil.Subnet `json:"also-proxy,omitempty"`
 	NeverProxy []*iputil.Subnet `json:"never-proxy,omitempty"`
 	Manager    *managerConfig   `json:"manager,omitempty"`
-}
-
-type KubeConfig interface {
-	GetRestConfig() *rest.Config
-	GetManagerNamespace() string
 }
 
 type Config struct {
@@ -209,7 +208,7 @@ func (kf *Config) ContextServiceAndFlagsEqual(okf *Config) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
-		mapEqual(kf.flagMap, okf.flagMap)
+		maps.Equal(kf.flagMap, okf.flagMap)
 }
 
 func (kf *Config) GetManagerNamespace() string {
@@ -220,14 +219,28 @@ func (kf *Config) GetRestConfig() *rest.Config {
 	return kf.RestConfig
 }
 
-func mapEqual(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
+func (kf *Config) AddRemoteKubeConfigExtension(ctx context.Context, cfgJson string) error {
+	dlog.Debugf(ctx, "Applying remote kubeconfig: %s", cfgJson)
+	remote := &kubeconfigExtension{}
+	if err := json.Unmarshal([]byte(cfgJson), &remote); err != nil {
+		return fmt.Errorf("unable to parse remote kubeconfig: %w", err)
 	}
-	for k, v := range a {
-		if v != b[k] {
-			return false
+	if kf.DNS == nil {
+		kf.DNS = remote.DNS
+	} else {
+		if kf.DNS.LocalIP == "" {
+			kf.DNS.LocalIP = remote.DNS.LocalIP
+		}
+		if kf.DNS.RemoteIP == "" {
+			kf.DNS.RemoteIP = remote.DNS.RemoteIP
+		}
+		kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, remote.DNS.ExcludeSuffixes...)
+		kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, remote.DNS.IncludeSuffixes...)
+		if kf.DNS.LookupTimeout.Duration == 0 {
+			kf.DNS.LookupTimeout = remote.DNS.LookupTimeout
 		}
 	}
-	return true
+	kf.AlsoProxy = append(kf.AlsoProxy, remote.AlsoProxy...)
+	kf.NeverProxy = append(kf.NeverProxy, remote.NeverProxy...)
+	return nil
 }

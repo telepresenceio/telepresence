@@ -100,6 +100,15 @@ message InterceptSpec {
   // optionally followed by a "/TCP" or "/UDP"
   string service_port_identifier = 10;
 
+  // The resolved service port name
+  string service_port_name = 19;
+
+  // The resolved service port
+  int32 service_port = 20;
+
+  // The resolved protocol used by the service port
+  string protocol = 21; // TCP or UDP
+
   // .uid.metadata of service associated with intercept
   string service_uid = 12;
 
@@ -530,6 +539,11 @@ message DNS {
   string cluster_domain = 4;
 }
 
+message CLIConfig {
+  // config_json is a yaml blob containing the client config.
+  string config_json = 1;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -545,6 +559,9 @@ service Manager {
   // GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
   // by the agents.
   rpc GetCloudConfig(google.protobuf.Empty) returns (AmbassadorCloudConfig);
+
+  // GetClientConfig returns the config that connected clients should use for this manager.
+  rpc GetClientConfig(google.protobuf.Empty) returns (CLIConfig);
 
   // GetTelepresenceAPI returns information about the TelepresenceAPI server
   rpc GetTelepresenceAPI(google.protobuf.Empty) returns (TelepresenceAPIInfo);

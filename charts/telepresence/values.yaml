@@ -29,6 +29,8 @@ apiPort: 8081
 
 podAnnotations: {}
 
+podLabels: {}
+
 podSecurityContext: {}
   # fsGroup: 2000
 

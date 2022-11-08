@@ -1,12 +1,35 @@
 # Changelog
 
-### 2.9.0 (TDB)
+### 2.9.0 (TBD)
 
 - Feature: Include the optional Ambassador Agent which enables an actionable view of your cluster in the Ambassador Cloud Developer Control Plane and team features.
+
+- Feature: The traffic-manager can now configure all clients that connect through the `client:` map in
+  the `values.yaml` file.
 
 ### 2.8.4 (TBD)
 
 - Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
+- Feature: add `podLabels` values to Helm Chart to add extra labels to deployment.
+
+- Feature: The telepresence flag `--output` now accepts `yaml` as a valid format.
+
+- Change: The `telepresence status --json` flag is deprecated. Use `telepresence status --output=json` instead.
+
+- Bugfix: Informational messages that don't really originate from the command, such as "Launching Telepresence Root Daemon",
+  or "An update of telepresence ...", are discarded instead of being printed as plain text before the actual formatted
+  output when using the `--output=json`.
+
+- Bugfix: An attempt to use an invalid value for the global `--output` flag now renders a proper error message.
+
+### 2.8.5 (November 2, 2022)
+
+- Change: This is a security release. It's identical with 2.8.3 but built using Go 1.19.3 to address
+  [CVE-2022-41716 and Go issue https://go.dev/issue/56284](https://github.com/golang/go/issues/56284).
+
+### 2.8.4 (November 2, 2022)
+
+- Change: Failed security release. Use 2.8.5.
 
 ### 2.8.3 (October 27, 2022)
 

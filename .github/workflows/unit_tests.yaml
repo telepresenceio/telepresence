@@ -9,35 +9,24 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-
-      - name: Get last run
-        uses: ./.github/actions/rerun-cache
-        id: get_last_run
-
       - uses: actions/setup-go@v2
         with:
           go-version: '1.19'
             #- uses: azure/setup-kubectl@v1
-            #if: steps.get_last_run.outputs.passed != 'success'
             #with:
             #version: 'v1.19.3'
             #id: kubectl
       - name: "Install dependencies"
-        if: steps.get_last_run.outputs.passed != 'success'
         run: |
           brew update
           brew install --cask macfuse
       - name: Lint
-        if: steps.get_last_run.outputs.passed != 'success'
         run: make lint
       - name: "Test arm64 build"
-        if: steps.get_last_run.outputs.passed != 'success'
         run: GOARCH=arm64 make build
       - name: "Test amd64 build"
-        if: steps.get_last_run.outputs.passed != 'success'
         run: make build
       - name: Run tests
-        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
@@ -47,9 +36,6 @@ jobs:
             # points to a broken IP
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             make check-unit
-      - name: Mark test as successful
-        run: echo "::set-output name=run_result::success" > run_result
-
   "windows":
     runs-on: windows-2019
     steps:
@@ -57,42 +43,30 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-
-      - name: Get last run
-        uses: ./.github/actions/rerun-cache
-        id: get_last_run
-
       - uses: actions/setup-go@v2
         with:
           go-version: '1.19'
       - name: "Download winfsp"
-        if: steps.get_last_run.outputs.passed != 'success'
         shell: bash
         run: |
           curl -L -o winfsp.msi https://github.com/winfsp/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
       - name: "Install winfsp"
-        if: steps.get_last_run.outputs.passed != 'success'
         shell: powershell
         run: |
           Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
           [Environment]::SetEnvironmentVariable("Path", "C:\\Program Files (x86)\\WinFsp\\inc\\fuse;$ENV:Path", "Machine")
       - name: install make
-        if: steps.get_last_run.outputs.passed != 'success'
         run: choco install make
       - name: Build
-        if: steps.get_last_run.outputs.passed != 'success'
         run: make build
       - name: Update etc\hosts
-        if: steps.get_last_run.outputs.passed != 'success'
         run: |
           # We want to validate that tests still pass, even if the metrics host
           # points to a broken IP
           echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
       - name: Lint
-        if: steps.get_last_run.outputs.passed != 'success'
         run: make lint
       - name: Run tests
-        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
@@ -101,8 +75,6 @@ jobs:
             $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
             $ENV:DTEST_REGISTRY = "docker.io/datawire"
             make check-unit
-      - name: Mark test as successful
-        run: echo "::set-output name=run_result::success" > run_result
   "linux":
     runs-on: ubuntu-latest
     steps:
@@ -110,11 +82,6 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-
-      - name: Get last run
-        uses: ./.github/actions/rerun-cache
-        id: get_last_run
-
       - uses: actions/setup-go@v2
         with:
           go-version: '1.19'
@@ -123,16 +90,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y socat gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - name: Lint
-        if: steps.get_last_run.outputs.passed != 'success'
         run: make lint
       - name: "Test arm64 build"
-        if: steps.get_last_run.outputs.passed != 'success'
         run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
       - name: "Test amd64 build"
         run: make build
-        if: steps.get_last_run.outputs.passed != 'success'
       - name: Run tests
-        if: steps.get_last_run.outputs.passed != 'success'
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
@@ -142,5 +105,3 @@ jobs:
             # points to a broken IP
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             make check-unit
-      - name: Mark test as successful
-        run: echo "::set-output name=run_result::success" > run_result

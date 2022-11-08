@@ -45,6 +45,13 @@ func WithAppUserConfigDir(ctx context.Context, configDir string) context.Context
 	return context.WithValue(ctx, configCtxKey{}, configDir)
 }
 
+type cacheCtxKey struct{}
+
+// WithAppUserCacheDir spoofs the AppUserCacheDir.  This is useful for testing.
+func WithAppUserCacheDir(ctx context.Context, cacheDir string) context.Context {
+	return context.WithValue(ctx, cacheCtxKey{}, cacheDir)
+}
+
 type sysConfigsCtxKey struct{}
 
 // WithAppSystemConfigDirs spoofs the AppSystemConfigDirs.  This is useful for testing.

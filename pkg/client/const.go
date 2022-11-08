@@ -3,6 +3,9 @@ package client
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 const (
@@ -15,23 +18,36 @@ func DisplayVersion() string {
 	return fmt.Sprintf("%s (api v%d)", Version(), APIVersion)
 }
 
-var exeName string
-
 // GetExe returns the name of the running executable.
 func GetExe() string {
-	if exeName == "" {
-		// Figure out our executable
-		var err error
-		exeName, err = os.Executable()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Internal error: %v", err)
-			os.Exit(1)
-		}
+	// Figure out our executable
+	exeName, err := os.Executable()
+	if err != nil {
+		panic(err)
 	}
 	return exeName
 }
 
-// SetExe defines the name of the executable (for testing purposes only).
-func SetExe(executable string) {
-	exeName = executable
+func IsDaemon() bool {
+	const fg = "-foreground"
+	a := os.Args
+	return len(a) > 1 && strings.HasSuffix(a[1], fg) || len(a) > 2 && strings.HasSuffix(a[2], fg) && a[1] == "help"
+}
+
+func ProcessName() string {
+	const fg = "-foreground"
+	a := os.Args
+	var pn string
+	switch {
+	case len(a) > 2 && a[1] == "help":
+		pn = a[2]
+	case len(a) > 1:
+		pn = a[1]
+	default:
+		pn = filepath.Base(a[0])
+		if runtime.GOOS == "windows" {
+			pn = strings.TrimSuffix(pn, ".exe")
+		}
+	}
+	return strings.TrimSuffix(pn, fg)
 }
