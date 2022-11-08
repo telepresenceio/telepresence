@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
@@ -23,14 +25,23 @@ func configCommand() *cobra.Command {
 }
 
 func configViewCommand() *cobra.Command {
+	var kubeFlags *pflag.FlagSet
+	var request *connector.ConnectRequest
+
 	cmd := &cobra.Command{
 		Use:               "view",
 		Args:              cobra.NoArgs,
 		PersistentPreRunE: output.DefaultYAML,
 		Short:             "View current Telepresence configuration",
-		RunE:              configView,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			request.KubeFlags = kubeFlagMap(kubeFlags)
+			util.AddKubeconfigEnv(request)
+			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
+			return configView(cmd, args)
+		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
+	request, kubeFlags = initConnectRequest(cmd)
 	return cmd
 }
 
@@ -47,7 +58,24 @@ func configView(cmd *cobra.Command, _ []string) error {
 		}
 		cfg.Config = client.GetConfig(cmd.Context())
 		cfg.ClientFile = filepath.Join(cfgDir, client.ConfigFile)
-		// TODO: Also retrieve kubeconfig extension
+
+		rq := util.GetConnectRequest(ctx)
+		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags)
+		if err != nil {
+			return err
+		}
+		cfg.Routing.AlsoProxy = kc.AlsoProxy
+		cfg.Routing.NeverProxy = kc.NeverProxy
+		if dns := kc.DNS; dns != nil {
+			cfg.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
+			cfg.DNS.IncludeSuffixes = dns.IncludeSuffixes
+			cfg.DNS.LookupTimeout = dns.LookupTimeout.Duration
+			cfg.DNS.LocalIP = dns.LocalIP.IP()
+			cfg.DNS.RemoteIP = dns.RemoteIP.IP()
+		}
+		if mgr := kc.Manager; mgr != nil {
+			cfg.ManagerNamespace = mgr.Namespace
+		}
 		output.Object(ctx, &cfg, true)
 		return nil
 	}
