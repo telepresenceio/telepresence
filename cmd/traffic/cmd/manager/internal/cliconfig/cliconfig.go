@@ -3,18 +3,20 @@ package cliconfig
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
-	"path"
-	"path/filepath"
 	"sync"
 
-	"github.com/fsnotify/fsnotify"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-const cfgFileName = "client.yaml"
+const (
+	cfgFileName      = "client.yaml"
+	cfgConfigMapName = "traffic-manager-clients"
+)
 
 type Watcher interface {
 	Run(ctx context.Context) error
@@ -22,80 +24,74 @@ type Watcher interface {
 }
 
 type config struct {
-	mountPath string
-	mu        sync.RWMutex
+	sync.RWMutex
+	namespace string
 	cfgYaml   []byte
 }
 
-func NewWatcher(mountPath string) (Watcher, error) {
-	watcher := &config{
-		mountPath: mountPath,
-	}
-	return watcher, nil
+func NewWatcher(namespace string) Watcher {
+	return &config{namespace: namespace}
 }
 
 func (c *config) Run(ctx context.Context) error {
-	w, err := fsnotify.NewWatcher()
-	if err != nil {
-		return err
+	dlog.Infof(ctx, "Started watcher for ConfigMap %s", cfgConfigMapName)
+	defer dlog.Infof(ctx, "Ended watcher for ConfigMap %s", cfgConfigMapName)
+
+	// The Watch will perform a http GET call to the kubernetes API server, and that connection will not remain open forever
+	// so when it closes, the watch must start over. This goes on until the context is cancelled.
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	for ctx.Err() == nil {
+		w, err := api.ConfigMaps(c.namespace).Watch(ctx, meta.SingleObject(meta.ObjectMeta{Name: cfgConfigMapName}))
+		if err != nil {
+			return fmt.Errorf("unable to create configmap watcher: %v", err)
+		}
+		if !c.configMapEventHandler(ctx, w.ResultChan()) {
+			return nil
+		}
 	}
-	defer w.Close()
-	// For some reason if we watch the directory itself no events are received for the file.
-	// If we watch the file instead, we'll see it be deleted and re-created when kubernetes
-	// updates the symlink.
-	path := path.Join(c.mountPath, cfgFileName)
-	dlog.Debugf(ctx, "Setting up watcher for %s", path)
-	if err = w.Add(path); err != nil {
-		return fmt.Errorf("failed to watch %s: %v", path, err)
-	}
-	if err := c.refreshFile(ctx); err != nil {
-		return fmt.Errorf("failed to read initial config: %w", err)
-	}
+	return nil
+}
+
+func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Event) bool {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		case err := <-w.Errors:
-			dlog.Error(ctx, err)
-		case event := <-w.Events:
-			dlog.Debugf(ctx, "Received event on configmap mount: %s", event)
-			if event.Op&(fsnotify.Remove) != 0 {
-				if err := w.Add(path); err != nil {
-					return fmt.Errorf("failed to watch %s: %v", path, err)
+			return false
+		case event, ok := <-evCh:
+			if !ok {
+				return true // restart watcher
+			}
+			switch event.Type {
+			case watch.Deleted:
+				if m, ok := event.Object.(*core.ConfigMap); ok {
+					dlog.Debugf(ctx, "%s %s", event.Type, m.Name)
+					c.refreshFile(ctx, nil)
 				}
-				if err := c.refreshFile(ctx); err != nil {
-					return err
-				}
-			} else if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
-				if err := c.refreshFile(ctx); err != nil {
-					return err
+			case watch.Added, watch.Modified:
+				if m, ok := event.Object.(*core.ConfigMap); ok {
+					dlog.Debugf(ctx, "%s %s", event.Type, m.Name)
+					c.refreshFile(ctx, m.Data)
 				}
 			}
 		}
 	}
 }
 
-func (c *config) refreshFile(ctx context.Context) error {
-	f, err := os.Open(filepath.Join(c.mountPath, cfgFileName))
-	if err != nil {
-		return fmt.Errorf("failed to open client config file: %w", err)
+func (c *config) refreshFile(ctx context.Context, data map[string]string) {
+	c.Lock()
+	if yml, ok := data[cfgFileName]; ok {
+		c.cfgYaml = []byte(yml)
+		dlog.Debugf(ctx, "Refreshed client config: %s", yml)
+	} else {
+		c.cfgYaml = nil
+		dlog.Debugf(ctx, "Cleared client config")
 	}
-	defer f.Close()
-	b, err := io.ReadAll(f)
-	if err != nil {
-		return fmt.Errorf("failed to read client config file: %w", err)
-	}
-
-	c.mu.Lock()
-	c.cfgYaml = b
-	dlog.Debugf(ctx, "Refreshed client config: %s", c.cfgYaml)
-	c.mu.Unlock()
-	return nil
+	c.Unlock()
 }
 
 func (c *config) GetConfigYaml() (ret []byte) {
-	c.mu.RLock()
+	c.RLock()
 	ret = c.cfgYaml
-	c.mu.RUnlock()
+	c.RUnlock()
 	return
 }

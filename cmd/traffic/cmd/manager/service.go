@@ -36,8 +36,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-const clientConfigPath = "/var/run/config/cli"
-
 // Clock is the mechanism used by the Manager state to get the current time.
 type Clock interface {
 	Now() time.Time
@@ -107,11 +105,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
-	w, err := cliconfig.NewWatcher(clientConfigPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to start cli config watcher: %w", err)
-	}
-	ret.cliConfig = w
+	ret.cliConfig = cliconfig.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)

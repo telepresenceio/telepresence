@@ -100,7 +100,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		}
 
 		return true
-	}, 125*time.Second, 5*time.Second, "never-proxy not updated in 2 minutes")
+	}, 20*time.Second, 5*time.Second, "never-proxy not updated in 20 seconds")
 }
 
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
@@ -161,7 +161,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 			currentLine++
 		}
 		return levelSet
-	}, 125*time.Second, 5*time.Second, "Root log level not updated in 2 minutes")
+	}, 20*time.Second, 5*time.Second, "Root log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	rootLog, err = os.Open(rootLogName)
@@ -259,7 +259,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 			currentLine++
 		}
 		return levelSet
-	}, 125*time.Second, 5*time.Second, "Connector log level not updated in 2 minutes")
+	}, 20*time.Second, 5*time.Second, "Connector log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	logF, err = os.Open(logName)
