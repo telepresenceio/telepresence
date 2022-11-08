@@ -39,7 +39,7 @@ clobber-tools:
 # Install protoc under $TOOLSDIR. A protoc that is already installed locally
 # cannot be trusted since this must be the exact same version as used when
 # running CI. If it isn't, the generate-check will fail.
-PROTOC_VERSION=21.5
+PROTOC_VERSION=21.9
 ifeq ($(GOHOSTARCH),arm64)
   PROTOC_ARCH=aarch_64
 else ifeq ($(GOHOSTARCH),amd64)
@@ -67,7 +67,7 @@ $(TOOLSDIR)/$(PROTOC_ZIP):
 # ===============
 #
 tools/protolint = $(TOOLSBINDIR)/protolint$(EXE)
-PROTOLINT_VERSION=0.39.0
+PROTOLINT_VERSION=0.42.0
 PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(GOHOSTOS)_$(PROTOC_ARCH).tar.gz
 $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
@@ -81,7 +81,7 @@ ifneq ($(GOHOSTOS),windows)
 # ==========
 #
 tools/shellcheck = $(TOOLSBINDIR)/shellcheck
-SHELLCHECK_VERSION=0.7.2
+SHELLCHECK_VERSION=0.8.0
 SHELLCHECK_ARCH=$(shell uname -m)
 # shellcheck uses the same binary on Intel and Apple Silicon macs
 ifeq ($(GOHOSTOS),darwin)
