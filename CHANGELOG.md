@@ -6,6 +6,7 @@
   the `values.yaml` file.
 
 - Feature: The traffic-manager version is now included in the output from the `telepresence version` command.
+- Feature: add `podLabels` values to Helm Chart to add extra labels to deployment.
 
 - Feature: The telepresence flag `--output` now accepts `yaml` as a valid format.
 
