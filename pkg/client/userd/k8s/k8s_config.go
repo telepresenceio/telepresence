@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/spf13/pflag"
+	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
@@ -180,13 +181,13 @@ func (kf *Config) GetRestConfig() *rest.Config {
 	return kf.RestConfig
 }
 
-func (kf *Config) AddRemoteKubeConfigExtension(ctx context.Context, cfgJson []byte) error {
-	dlog.Debugf(ctx, "Applying remote dns and routing: %s", cfgJson)
+func (kf *Config) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml []byte) error {
+	dlog.Debugf(ctx, "Applying remote dns and routing: %s", cfgYaml)
 	remote := struct {
-		DNS     *userd.DNS     `json:"dns,omitempty"`
-		Routing *userd.Routing `json:"routing,omitempty"`
+		DNS     *userd.DNS     `yaml:"dns,omitempty"`
+		Routing *userd.Routing `yaml:"routing,omitempty"`
 	}{}
-	if err := json.Unmarshal(cfgJson, &remote); err != nil {
+	if err := yaml.Unmarshal(cfgYaml, &remote); err != nil {
 		return fmt.Errorf("unable to parse remote kubeconfig: %w", err)
 	}
 	if kf.DNS == nil {

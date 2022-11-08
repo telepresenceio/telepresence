@@ -540,8 +540,8 @@ message DNS {
 }
 
 message CLIConfig {
-  // config_json is a yaml blob containing the client config.
-  string config_json = 1;
+  // config_yaml is a yaml blob containing the client config.
+  bytes config_yaml = 1;
 }
 
 service Manager {

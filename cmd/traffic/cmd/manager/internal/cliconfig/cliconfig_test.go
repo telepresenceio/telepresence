@@ -18,10 +18,13 @@ func TestCliConfigWatcher(t *testing.T) {
 	ctx := dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelDebug))
 
 	tmpdir := t.TempDir()
-	expected := `{"velvet": "underground", "one": {"two": false}}`
+	expected := `
+velvet: underground
+one:
+  two: false`
 
 	writeFile := func(expected string) error {
-		f, err := os.Create(path.Join(tmpdir, "client.json"))
+		f, err := os.Create(path.Join(tmpdir, "client.yaml"))
 		if err != nil {
 			return err
 		}
@@ -50,11 +53,7 @@ func TestCliConfigWatcher(t *testing.T) {
 		close(errCh)
 	}()
 	require.Eventually(t, func() bool {
-		result, err := watcher.GetConfigJson()
-		if err != nil {
-			t.Error(err)
-			return false
-		}
+		result := string(watcher.GetConfigYaml())
 		if result != expected {
 			t.Errorf("Expected %s got %s", expected, result)
 			return false
@@ -62,17 +61,18 @@ func TestCliConfigWatcher(t *testing.T) {
 		return true
 	}, 1*time.Second, 50*time.Millisecond)
 
-	expected = `{"the": ["smiths", "doors", "stones"], "minute": 22}`
+	expected = `
+the:
+  - smiths
+  - doors
+  - stones
+minute: 22`
 	if err := writeFile(expected); err != nil {
 		t.Fatal(err)
 	}
 
 	require.Eventually(t, func() bool {
-		result, err := watcher.GetConfigJson()
-		if err != nil {
-			t.Error(err)
-			return false
-		}
+		result := string(watcher.GetConfigYaml())
 		if result != expected {
 			t.Errorf("Expected %s got %s", expected, result)
 			return false

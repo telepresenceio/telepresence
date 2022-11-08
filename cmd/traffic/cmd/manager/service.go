@@ -213,14 +213,9 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 func (m *Manager) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLIConfig, error) {
 	dlog.Debug(ctx, "GetClientConfig called")
 
-	cfg, err := m.cliConfig.GetConfigJson()
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	ret := &rpc.CLIConfig{
-		ConfigJson: cfg,
-	}
-	return ret, nil
+	return &rpc.CLIConfig{
+		ConfigYaml: m.cliConfig.GetConfigYaml(),
+	}, nil
 }
 
 // Remain indicates that the session is still valid.

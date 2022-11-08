@@ -14,17 +14,17 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-const cfgFileName = "client.json"
+const cfgFileName = "client.yaml"
 
 type Watcher interface {
 	Run(ctx context.Context) error
-	GetConfigJson() (string, error)
+	GetConfigYaml() []byte
 }
 
 type config struct {
 	mountPath string
 	mu        sync.RWMutex
-	cfgJson   string
+	cfgYaml   []byte
 }
 
 func NewWatcher(mountPath string) (Watcher, error) {
@@ -87,14 +87,15 @@ func (c *config) refreshFile(ctx context.Context) error {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cfgJson = string(b)
-	dlog.Debugf(ctx, "Refreshed client config: %s", c.cfgJson)
+	c.cfgYaml = b
+	dlog.Debugf(ctx, "Refreshed client config: %s", c.cfgYaml)
+	c.mu.Unlock()
 	return nil
 }
 
-func (c *config) GetConfigJson() (string, error) {
+func (c *config) GetConfigYaml() (ret []byte) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.cfgJson, nil
+	ret = c.cfgYaml
+	c.mu.RUnlock()
+	return
 }
