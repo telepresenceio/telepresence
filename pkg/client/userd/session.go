@@ -16,6 +16,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
@@ -83,6 +84,7 @@ type Session interface {
 	SessionInfo() *manager.SessionInfo
 
 	ApplyConfig(context.Context) error
+	GetConfig(context.Context) (*client.SessionConfig, error)
 	StartServices(g *dgroup.Group)
 	Epilog(ctx context.Context)
 	Done() <-chan struct{}

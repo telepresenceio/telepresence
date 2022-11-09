@@ -99,6 +99,9 @@ service Connector {
   // RemoteMountAvailability checks if remote mounts are possible using the given
   // mount type and returns an error if its not.
   rpc RemoteMountAvailability(google.protobuf.Empty) returns (Result);
+
+  // GetConfig returns the current configuration
+  rpc GetConfig(google.protobuf.Empty) returns (ClientConfig);
 }
 
 message Interceptor {
@@ -390,4 +393,8 @@ message GetNamespacesRequest {
 
 message GetNamespacesResponse {
   repeated string namespaces = 2;
+}
+
+message ClientConfig {
+  bytes json = 1;
 }

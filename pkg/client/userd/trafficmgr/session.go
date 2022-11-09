@@ -189,13 +189,14 @@ func NewSession(
 	tmgr.sessionConfig = client.GetDefaultConfig()
 	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
 	if err != nil {
-		dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
+		if status.Code(err) != codes.Unimplemented {
+			dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
+		}
 	} else {
-		bs := []byte(cliCfg.ConfigJson)
-		if err := yaml.Unmarshal(bs, &tmgr.sessionConfig); err != nil {
+		if err := yaml.Unmarshal(cliCfg.ConfigYaml, &tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
 		}
-		if err := cluster.AddRemoteKubeConfigExtension(ctx, cliCfg.ConfigJson); err != nil {
+		if err := cluster.AddRemoteKubeConfigExtension(ctx, cliCfg.ConfigYaml); err != nil {
 			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
 		}
 	}
@@ -224,8 +225,8 @@ func NewSession(
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
-		ClusterContext: cluster.Config.Context,
-		ClusterServer:  cluster.Config.Server,
+		ClusterContext: cluster.Kubeconfig.Context,
+		ClusterServer:  cluster.Kubeconfig.Server,
 		ClusterId:      cluster.GetClusterId(ctx),
 		SessionInfo:    tmgr.SessionInfo(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
@@ -256,18 +257,18 @@ func (s *session) ManagerVersion() semver.Version {
 	return s.managerVersion
 }
 
-func (s *session) GetSessionConfig() client.Config {
-	return s.sessionConfig
+func (s *session) GetSessionConfig() *client.Config {
+	return &s.sessionConfig
 }
 
 // connectCluster returns a configured cluster instance.
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
-	var config *k8s.Config
+	var config *client.Kubeconfig
 	var err error
 	if cr.IsPodDaemon {
-		config, err = k8s.NewInClusterConfig(c, cr.KubeFlags)
+		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = k8s.NewConfig(c, cr.KubeFlags)
+		config, err = client.NewKubeconfig(c, cr.KubeFlags)
 	}
 
 	if err != nil {
@@ -352,7 +353,7 @@ func connectMgr(
 	}
 
 	dlog.Debug(ctx, "creating port-forward")
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(ctx, cluster.Config.RestConfig, k8sapi.GetK8sInterface(ctx))
+	grpcDialer, err := dnet.NewK8sPortForwardDialer(ctx, cluster.Kubeconfig.RestConfig, k8sapi.GetK8sInterface(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -394,8 +395,9 @@ func connectMgr(
 	if err != nil {
 		return nil, client.CheckTimeout(ctx, fmt.Errorf("unable to parse manager.Version: %w", err))
 	}
+	dlog.Infof(ctx, "Connected to traffic-manager %s", managerVersion)
 
-	clusterHost := cluster.Config.RestConfig.Host
+	clusterHost := cluster.Kubeconfig.RestConfig.Host
 	si, err := LoadSessionInfoFromUserCache(ctx, clusterHost)
 	if err != nil {
 		return nil, err
@@ -811,22 +813,22 @@ func (s *session) remain(c context.Context) error {
 }
 
 func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	var config *k8s.Config
+	var config *client.Kubeconfig
 	var err error
 	if cr.IsPodDaemon {
-		config, err = k8s.NewInClusterConfig(c, cr.KubeFlags)
+		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = k8s.NewConfig(c, cr.KubeFlags)
+		config, err = client.NewKubeconfig(c, cr.KubeFlags)
 	}
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
-	if !cr.IsPodDaemon && !s.Config.ContextServiceAndFlagsEqual(config) {
+	if !cr.IsPodDaemon && !s.Kubeconfig.ContextServiceAndFlagsEqual(config) {
 		return &rpc.ConnectInfo{
 			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterContext: s.Config.Context,
-			ClusterServer:  s.Config.Server,
+			ClusterContext: s.Kubeconfig.Context,
+			ClusterServer:  s.Kubeconfig.Server,
 			ClusterId:      s.GetClusterId(c),
 		}
 	}
@@ -840,7 +842,7 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 }
 
 func (s *session) Status(c context.Context) *rpc.ConnectInfo {
-	cfg := s.Config
+	cfg := s.Kubeconfig
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
 		ClusterContext: cfg.Context,

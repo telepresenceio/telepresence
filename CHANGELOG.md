@@ -2,6 +2,8 @@
 
 ### 2.9.0 (TBD)
 
+- Feature: A new `telepresence config view` command was added that shows how the client is currently configured.
+
 - Feature: The traffic-manager can now configure all clients that connect through the `client:` map in
   the `values.yaml` file.
 

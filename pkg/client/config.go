@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,10 +21,11 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-const configFile = "config.yml"
+const ConfigFile = "config.yml"
 
 // Config contains all configuration values for the telepresence CLI.
 type Config struct {
@@ -97,42 +99,6 @@ func stringKey(n *yaml.Node) (string, error) {
 		return "", errors.New(withLoc("key must be a string", n))
 	}
 	return s, nil
-}
-
-func (c *Config) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("config must be an object", node))
-	}
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		switch {
-		case kv == "timeouts":
-			err = ms[i+1].Decode(&c.Timeouts)
-		case kv == "logLevels":
-			err = ms[i+1].Decode(&c.LogLevels)
-		case kv == "images":
-			err = ms[i+1].Decode(&c.Images)
-		case kv == "cloud":
-			err = ms[i+1].Decode(&c.Cloud)
-		case kv == "grpc":
-			err = ms[i+1].Decode(&c.Grpc)
-		case kv == "telepresenceAPI":
-			err = ms[i+1].Decode(&c.TelepresenceAPI)
-		case kv == "intercept":
-			err = ms[i+1].Decode(&c.Intercept)
-		case parseContext != nil:
-			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type Timeouts struct {
@@ -852,7 +818,7 @@ func ReplaceConfig(ctx context.Context, config *Config) {
 // GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
 func GetConfigFile(c context.Context) string {
 	dir, _ := filelocation.AppUserConfigDir(c)
-	return filepath.Join(dir, configFile)
+	return filepath.Join(dir, ConfigFile)
 }
 
 // GetDefaultConfig returns the default configuration settings.
@@ -910,7 +876,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
 		}
-		fileName := filepath.Join(dir, configFile)
+		fileName := filepath.Join(dir, ConfigFile)
 		bs, err := os.ReadFile(fileName)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -952,4 +918,26 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 	}
 
 	return cfg, nil
+}
+
+type Routing struct {
+	Subnets    []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
+	AlsoProxy  []*iputil.Subnet `json:"alsoProxy,omitempty" yaml:"alsoProxy,omitempty"`
+	NeverProxy []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
+}
+
+type DNS struct {
+	LocalIP         net.IP        `json:"localIP,omitempty" yaml:"localIP,omitempty"`
+	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
+	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
+	ExcludeSuffixes []string      `json:"excludeSuffixes,omitempty" yaml:"excludeSuffixes,omitempty"`
+	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty" yaml:"lookupTimeout,omitempty"`
+}
+
+type SessionConfig struct {
+	ClientFile       string `json:"clientFile,omitempty" yaml:"clientFile,omitempty"`
+	*Config          `json:"clientConfig" yaml:",inline"`
+	DNS              DNS     `json:"dns,omitempty" yaml:"dns,omitempty"`
+	Routing          Routing `json:"routing,omitempty" yaml:"routing,omitempty"`
+	ManagerNamespace string  `json:"managerNamespace,omitempty" yaml:"managerNamespace,omitempty"`
 }
