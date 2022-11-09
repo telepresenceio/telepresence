@@ -22,6 +22,8 @@ BUILDDIR=build-output
 
 BINDIR=$(BUILDDIR)/bin
 
+RELEASEDIR=$(BUILDDIR)/release
+
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
 # DOCKER_BUILDKIT is _required_ by our Dockerfile, since we use
@@ -146,6 +148,11 @@ endif
 	mkdir -p $(@D)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 
+.PHONY: release-binary
+release-binary: $(TELEPRESENCE)
+	mkdir -p $(RELEASEDIR)
+	cp $(TELEPRESENCE) $(RELEASEDIR)/telepresence-$(GOOS)-$(GOARCH)$(BEXE)
+
 .PHONY: tel2
 tel2: build-deps
 	mkdir -p $(BUILDDIR)
@@ -196,12 +203,12 @@ ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
 		--body $(BINDIR)/telepresence.zip
 else
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
 endif
 
@@ -218,7 +225,7 @@ promote-to-stable: ## (Release) Update stable.txt in S3
 	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/stable.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOARCH)/stable.txt \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
 ifeq ($(GOHOSTOS), darwin)
 	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION)) $(GOARCH)
@@ -233,7 +240,7 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/nightly.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOARCH)/nightly.txt \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/nightly.txt \
 		--body $(BUILDDIR)/nightly.txt
 
 # Quality Assurance: Make sure things are good

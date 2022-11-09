@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"sigs.k8s.io/yaml"
+	"gopkg.in/yaml.v3"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 )
@@ -72,6 +72,29 @@ func Object(ctx context.Context, obj any, override bool) {
 			o.override = override
 		}
 	}
+}
+
+// DefaultYAML is a PersistentPRERunE function that will change the default output
+// format to "yaml" for the command that invokes it.
+func DefaultYAML(cmd *cobra.Command, _ []string) error {
+	fmt, err := validateFlag(cmd)
+	if err != nil {
+		return err
+	}
+	rootCmd := cmd
+	for {
+		p := rootCmd.Parent()
+		if p == nil {
+			break
+		}
+		rootCmd = p
+	}
+	if fmt == formatDefault {
+		if err = rootCmd.PersistentFlags().Set("output", "yaml"); err != nil {
+			return err
+		}
+	}
+	return rootCmd.PersistentPreRunE(cmd, cmd.Flags().Args())
 }
 
 // Execute will call ExecuteC on the given command, optionally print all formatted

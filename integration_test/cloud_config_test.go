@@ -58,9 +58,11 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	f, err := os.Create(values)
 	require.NoError(err)
 	b, err := yaml.Marshal(
-		map[string]map[string][]string{
+		map[string]map[string]map[string][]string{
 			"client": {
-				"never-proxy": {fmt.Sprintf("%s/32", ip)},
+				"routing": {
+					"neverProxySubnets": {fmt.Sprintf("%s/32", ip)},
+				},
 			},
 		},
 	)
@@ -83,10 +85,10 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
-		jsonStdout := itest.TelepresenceOk(ctx, "status", "--output", "json")
-		var status statusResponse
-		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
-		if len(status.RootDaemon.NeverProxySubnets) != neverProxiedCount {
+		jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
+		var view client.SessionConfig
+		require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
+		if len(view.Routing.NeverProxy) != neverProxiedCount {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets in json status", neverProxiedCount)
 			return false
 		}
@@ -97,7 +99,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		}
 
 		return true
-	}, 125*time.Second, 5*time.Second, "never-proxy not updated in 2 minutes")
+	}, 20*time.Second, 5*time.Second, "never-proxy not updated in 20 seconds")
 }
 
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
@@ -120,25 +122,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	}
 	rootLog.Close()
 
-	tmpdir := s.T().TempDir()
-	values := path.Join(tmpdir, "values.yaml")
-	f, err := os.Create(values)
-	require.NoError(err)
-	b, err := yaml.Marshal(
-		map[string]map[string]map[string]string{
-			"client": {
-				"logLevels": {
-					"rootDaemon": "trace",
-				},
-			},
-		},
-	)
-	require.NoError(err)
-	_, err = f.Write(b)
-	require.NoError(err)
-	require.NoError(f.Close())
-
-	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
+	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
 	defer s.rollbackTM()
 
 	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,
@@ -176,7 +160,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 			currentLine++
 		}
 		return levelSet
-	}, 125*time.Second, 5*time.Second, "Root log level not updated in 2 minutes")
+	}, 20*time.Second, 5*time.Second, "Root log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	rootLog, err = os.Open(rootLogName)
@@ -209,6 +193,11 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)
 	}
 	require.False(levelSet, "Root log level not respected when set in config file")
+
+	var view client.SessionConfig
+	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
+	require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
+	require.Equal(view.LogLevels.RootDaemon, logrus.DebugLevel)
 }
 
 func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
@@ -231,25 +220,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	}
 	logF.Close()
 
-	tmpdir := s.T().TempDir()
-	values := path.Join(tmpdir, "values.yaml")
-	f, err := os.Create(values)
-	require.NoError(err)
-	b, err := yaml.Marshal(
-		map[string]map[string]map[string]string{
-			"client": {
-				"logLevels": {
-					"userDaemon": "trace",
-				},
-			},
-		},
-	)
-	require.NoError(err)
-	_, err = f.Write(b)
-	require.NoError(err)
-	require.NoError(f.Close())
-
-	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
+	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
 	defer s.rollbackTM()
 
 	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,
@@ -287,7 +258,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 			currentLine++
 		}
 		return levelSet
-	}, 125*time.Second, 5*time.Second, "Connector log level not updated in 2 minutes")
+	}, 20*time.Second, 5*time.Second, "Connector log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	logF, err = os.Open(logName)

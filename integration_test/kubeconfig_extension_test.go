@@ -196,6 +196,10 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	require.NoError(err)
 	logFile := filepath.Join(logDir, "daemon.log")
 
+	// Check that config view -c includes the includeSuffixes
+	stdout := itest.TelepresenceOk(ctx, "config", "--context", "extra", "view", "--client-only")
+	require.Contains(stdout, "    includeSuffixes:\n        - .org")
+
 	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
 	defer itest.TelepresenceQuitOk(ctx)
 

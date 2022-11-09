@@ -529,7 +529,7 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
 	stdout, stderr, err := Telepresence(ctx, args...)
-	require.NoError(t, err, "telepresence was unable to run")
+	require.NoError(t, err, "telepresence was unable to run, stdout %s, stderr: %s", stdout, stderr)
 	require.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
 	return stdout
 }
@@ -566,7 +566,7 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		"DEV_TELEPRESENCE_LOG_DIR":    logDir,
 	})
 
-	if len(args) > 0 && args[0] == "connect" {
+	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
 		if user := GetUser(ctx); user != "default" {
 			na := make([]string, len(args)+2)
 			na[0] = "--as"

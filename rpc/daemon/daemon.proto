@@ -29,6 +29,9 @@ service Daemon {
   // GetClusterSubnets gets the outbound info that has been set on daemon
   rpc GetClusterSubnets(google.protobuf.Empty) returns (ClusterSubnets);
 
+  // GetNetworkConfig returns the current network configuration
+  rpc GetNetworkConfig(google.protobuf.Empty) returns (NetworkConfig);
+
   // SetDnsSearchPath sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
 
@@ -66,10 +69,10 @@ message DNSConfig {
   // Suffixes to include. Has higher prio than the excludes
   repeated string include_suffixes = 4;
 
-  reserved 5;
-
   // The maximum time wait for a cluster side host lookup.
   google.protobuf.Duration lookup_timeout = 6;
+
+  reserved 5;
 }
 
 // OutboundInfo contains all information that the root daemon needs in order to
@@ -87,11 +90,11 @@ message OutboundInfo {
   // also_proxy are user-added subnets.
   repeated manager.IPNet also_proxy_subnets = 5;
 
-  reserved 4;
-
   // never_proxy_subnets are subnets that the daemon should not proxy but resolve
   // via the underlying network interface.
   repeated manager.IPNet never_proxy_subnets = 6;
+
+  reserved 4;
 }
 
 // ClusterSubnets are the cluster subnets that the daemon has detected that need to be
@@ -101,4 +104,9 @@ message ClusterSubnets {
   repeated manager.IPNet pod_subnets = 1;
   // svc_subnets are subnets that services go into
   repeated manager.IPNet svc_subnets = 2;
+}
+
+message NetworkConfig {
+  repeated manager.IPNet subnets = 1;
+  OutboundInfo outbound_info = 2;
 }

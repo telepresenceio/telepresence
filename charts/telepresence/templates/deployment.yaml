@@ -251,11 +251,6 @@ spec:
           - name: tls
             mountPath: /var/run/secrets/tls
             readOnly: true
-          {{- if .client }}
-          - name: client-config
-            mountPath: /var/run/config/cli
-            readOnly: true
-          {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -272,11 +267,6 @@ spec:
       priorityClassName: {{ . | quote }}
       {{- end }}
       volumes:
-      {{- if .client }}
-      - name: client-config
-        configMap:
-          name: {{ include "traffic-manager.name" $ }}-clients
-      {{- end }}
       {{- if .licenseKey.create }}
       - name: license
         secret:

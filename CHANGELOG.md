@@ -4,6 +4,8 @@
 
 - Feature: Include the optional Ambassador Agent which enables an actionable view of your cluster in the Ambassador Cloud Developer Control Plane and team features.
 
+- Feature: A new `telepresence config view` command was added that shows how the client is currently configured.
+
 - Feature: The traffic-manager can now configure all clients that connect through the `client:` map in
   the `values.yaml` file.
 

@@ -139,7 +139,7 @@ func (s *Service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 		},
 	}
 	if s.session != nil {
-		r.OutboundConfig = s.session.getInfo()
+		r.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
 	}
 	return r, nil
 }
@@ -217,6 +217,14 @@ func (s *Service) WithSession(f func(context.Context, *Session) error) error {
 		return status.Error(codes.Unavailable, "no active session")
 	}
 	return f(s.sessionContext, s.session)
+}
+
+func (s *Service) GetNetworkConfig(ctx context.Context, e *empty.Empty) (nc *rpc.NetworkConfig, err error) {
+	err = s.WithSession(func(ctx context.Context, session *Session) error {
+		nc = session.getNetworkConfig()
+		return nil
+	})
+	return
 }
 
 func (s *Service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
@@ -299,7 +307,7 @@ nextSession:
 				},
 			}
 			if s.session != nil {
-				reply.status.OutboundConfig = s.session.getInfo()
+				reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
 				session, reply.err = GetNewSessionFunc(c)(sCtx, s.scout, oi)
@@ -311,7 +319,7 @@ nextSession:
 						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
 					}
 
-					reply.status.OutboundConfig = s.session.getInfo()
+					reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
 				} else {
 					sCancel()
 				}
@@ -333,7 +341,7 @@ nextSession:
 			continue
 		}
 
-		// Run the session asynchronously. We must be able to respond to connect (with getInfo) while
+		// Run the session asynchronously. We must be able to respond to connect (with getNetworkConfig) while
 		// the session is running. The d.session.cancel is called from Disconnect
 		wg.Add(1)
 		go func() {

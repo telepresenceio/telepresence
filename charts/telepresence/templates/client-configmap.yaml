@@ -5,5 +5,6 @@ metadata:
   name: {{ include "traffic-manager.name" $ }}-clients
   namespace:  {{ include "traffic-manager.namespace" . }}
 data:
-  client.json: {{ toJson .Values.client | quote }}
+  client.yaml: |
+    {{- toYaml .Values.client | nindent 4 }}
 {{- end }}

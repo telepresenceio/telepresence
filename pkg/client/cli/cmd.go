@@ -249,6 +249,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		loglevelCommand(), gatherLogsCommand(),
 		GatherTracesCommand(), PushTracesCommand(),
 		versionCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand(),
+		configCommand(),
 	)
 }
 
