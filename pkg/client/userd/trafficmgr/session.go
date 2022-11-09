@@ -189,7 +189,9 @@ func NewSession(
 	tmgr.sessionConfig = client.GetDefaultConfig()
 	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
 	if err != nil {
-		dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
+		if status.Code(err) != codes.Unimplemented {
+			dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
+		}
 	} else {
 		if err := yaml.Unmarshal(cliCfg.ConfigYaml, &tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
@@ -393,6 +395,7 @@ func connectMgr(
 	if err != nil {
 		return nil, client.CheckTimeout(ctx, fmt.Errorf("unable to parse manager.Version: %w", err))
 	}
+	dlog.Infof(ctx, "Connected to traffic-manager %s", managerVersion)
 
 	clusterHost := cluster.Kubeconfig.RestConfig.Host
 	si, err := LoadSessionInfoFromUserCache(ctx, clusterHost)
