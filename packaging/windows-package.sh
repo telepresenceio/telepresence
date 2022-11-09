@@ -31,7 +31,9 @@ curl -L -o "${ZIPDIR}"/winfsp.msi "https://github.com/billziss-gh/winfsp/release
 curl -L -o "${ZIPDIR}"/sshfs-win.msi "https://github.com/billziss-gh/sshfs-win/releases/download/v${SSHFS_WIN_VERSION}/sshfs-win-${SSHFS_WIN_VERSION}-x64.msi"
 
 # Download wintun
-curl -L "https://www.wintun.net/builds/wintun-${WINTUN_VERSION}.zip" | tar -vf - -Ox wintun/bin/amd64/wintun.dll > "${ZIPDIR}/wintun.dll"
+curl -L -o "${BINDIR}"/wintun.zip "https://www.wintun.net/builds/wintun-${WINTUN_VERSION}.zip"
+unzip -c "${BINDIR}"/wintun.zip wintun/bin/amd64/wintun.dll > "${ZIPDIR}/wintun.dll"
+
 cp "${BINDIR}/telepresence.exe" "${ZIPDIR}/telepresence.exe"
 
 # Copy powershell install script into $ZIPDIR
