@@ -1,0 +1,44 @@
+name: Releases
+
+on:
+  push:
+    tags:
+      # These aren't regexps. They are "Workflow Filter patterns"
+      - v[0-9]+.[0-9]+.[0-9]
+      - v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+
+
+jobs:
+  build-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        runners:
+          - ubuntu-latest
+          - macos-latest
+          - macOS-arm64
+          - windows-2019
+    runs-on: ${{ matrix.runners }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/install-dependencies
+        name: install dependencies
+      - run: make release-binary
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: build-output/release
+          retention-days: 1
+  release:
+    runs-on: ubuntu-latest
+    needs: build-release
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "binaries/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
