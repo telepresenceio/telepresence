@@ -20,6 +20,8 @@
 
 - Bugfix: An attempt to use an invalid value for the global `--output` flag now renders a proper error message.
 
+- Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager deployment so that the pod automatically restarts if it doesnt respond.
+
 ### 2.8.5 (November 2, 2022)
 
 - Change: This is a security release. It's identical with 2.8.3 but built using Go 1.19.3 to address
