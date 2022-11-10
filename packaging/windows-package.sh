@@ -37,7 +37,7 @@ unzip -c "${BINDIR}"/wintun.zip wintun/bin/amd64/wintun.dll > "${ZIPDIR}/wintun.
 cp "${BINDIR}/telepresence.exe" "${ZIPDIR}/telepresence.exe"
 
 # Copy powershell install script into $ZIPDIR
-cp packaging/install-telepresence.ps1 "${ZIPDIR}/install-telepresence.ps1"
+cp $( dirname -- "${BASH_SOURCE[0]}")/install-telepresence.ps1 "${ZIPDIR}/install-telepresence.ps1"
 
 zip -r -j "${BINDIR}/telepresence.zip" "${ZIPDIR}"
 
