@@ -47,8 +47,19 @@ verify_logout() {
     # We care about the error here, so we redirect stderr to stdout
     local output
     output=$($TELEPRESENCE logout 2>&1)
-    if [[ $output != *"not logged in"* ]]; then
+    if [[ $output != "" ]]; then
         echo "Logout Failed in step: ${STEP}"
+        exit 1
+    fi
+}
+
+# Verify that the user isn't logged in.
+verify_logged_out() {
+    # We care about the error here, so we redirect stderr to stdout
+    local output
+    output=$($TELEPRESENCE logout 2>&1)
+    if [[ $output != *"not logged in"* ]]; then
+        echo "User should not be logged in in step: ${STEP}"
         exit 1
     fi
 }
@@ -553,7 +564,7 @@ is_prop_traffic_agent false
 
 output=$(curl "${curl_opts[@]}" $VERYLARGEJAVASERVICE | grep 'blue')
 verify_output_empty "${output}" false
-verify_logout
+verify_logged_out
 
 finish_step
 
@@ -636,7 +647,7 @@ if [[ -n "$USE_CHART" ]]; then
 else
     $TELEPRESENCE helm uninstall > "$output_location"
 fi
-verify_logout
+verify_logged_out
 
 restore_config
 prepare_license_config_systema_enabled
@@ -816,7 +827,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --preview-url=false --http-header=auto)
     sleep 15
     # Ensure we aren't logged in since we are testing air-gapped license support
-    verify_logout
+    verify_logged_out
     has_intercept_id true
     has_preview_url false
     get_intercept_id
@@ -859,7 +870,7 @@ if [[ -n $TELEPRESENCE_LICENSE ]]; then
     sleep 1
 
     # Ensure we aren't logged in since we are testing air-gapped license support
-    verify_logout
+    verify_logged_out
     error_present=$(echo "$output" | grep 'intercept was made from an unauthenticated client')
     if [[ -z $error_present ]]; then
         echo "Intercept should have errored since the license is invalid"
