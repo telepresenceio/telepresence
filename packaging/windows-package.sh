@@ -32,12 +32,12 @@ curl -L -o "${ZIPDIR}"/sshfs-win.msi "https://github.com/billziss-gh/sshfs-win/r
 
 # Download wintun
 curl -L -o "${BINDIR}"/wintun.zip "https://www.wintun.net/builds/wintun-${WINTUN_VERSION}.zip"
-unzip -c "${BINDIR}"/wintun.zip wintun/bin/amd64/wintun.dll > "${ZIPDIR}/wintun.dll"
+unzip -C "${BINDIR}"/wintun.zip wintun/bin/amd64/wintun.dll -p > "${ZIPDIR}/wintun.dll"
 
 cp "${BINDIR}/telepresence.exe" "${ZIPDIR}/telepresence.exe"
 
 # Copy powershell install script into $ZIPDIR
-cp $( dirname -- "${BASH_SOURCE[0]}")/install-telepresence.ps1 "${ZIPDIR}/install-telepresence.ps1"
+cp "$( dirname -- "${BASH_SOURCE[0]}")/install-telepresence.ps1" "${ZIPDIR}/install-telepresence.ps1"
 
 zip -r -j "${BINDIR}/telepresence.zip" "${ZIPDIR}"
 
