@@ -23,11 +23,11 @@ type StatusInfo struct {
 }
 
 type rootDaemonStatus struct {
-	Running         bool        `json:"running,omitempty" yaml:"running,omitempty"`
-	Version         string      `json:"version,omitempty" yaml:"version,omitempty"`
-	APIVersion      int32       `json:"api_version,omitempty" yaml:"api_version,omitempty"`
-	DNS             *client.DNS `json:"dns,omitempty" yaml:"dns,omitempty"`
-	*client.Routing `yaml:",inline"`
+	Running              bool             `json:"running,omitempty" yaml:"running,omitempty"`
+	Version              string           `json:"version,omitempty" yaml:"version,omitempty"`
+	APIVersion           int32            `json:"api_version,omitempty" yaml:"api_version,omitempty"`
+	DNS                  *client.DNSSnake `json:"dns,omitempty" yaml:"dns,omitempty"`
+	*client.RoutingSnake `yaml:",inline"`
 }
 
 type userDaemonStatus struct {
@@ -161,7 +161,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		rs.Version = rStatus.Version.Version
 		rs.APIVersion = rStatus.Version.ApiVersion
 		if obc := rStatus.OutboundConfig; obc != nil {
-			rs.DNS = &client.DNS{}
+			rs.DNS = &client.DNSSnake{}
 			dns := obc.Dns
 			if dns.LocalIp != nil {
 				// Local IP is only set when the overriding resolver is used
@@ -171,12 +171,12 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 			rs.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
 			rs.DNS.IncludeSuffixes = dns.IncludeSuffixes
 			rs.DNS.LookupTimeout = dns.LookupTimeout.AsDuration()
-			rs.Routing = &client.Routing{}
+			rs.RoutingSnake = &client.RoutingSnake{}
 			for _, subnet := range obc.AlsoProxySubnets {
-				rs.Routing.AlsoProxy = append(rs.Routing.AlsoProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
+				rs.RoutingSnake.AlsoProxy = append(rs.RoutingSnake.AlsoProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
 			}
 			for _, subnet := range obc.NeverProxySubnets {
-				rs.Routing.NeverProxy = append(rs.Routing.NeverProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
+				rs.RoutingSnake.NeverProxy = append(rs.RoutingSnake.NeverProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
 			}
 		}
 	}
@@ -195,8 +195,8 @@ func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		if ds.DNS != nil {
 			n += printDNS(out, ds.DNS)
 		}
-		if ds.Routing != nil {
-			n += printRouting(out, ds.Routing)
+		if ds.RoutingSnake != nil {
+			n += printRouting(out, ds.RoutingSnake)
 		}
 	} else {
 		n += ioutil.Println(out, "Root Daemon: Not running")
@@ -204,7 +204,7 @@ func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	return int64(n), nil
 }
 
-func printDNS(out io.Writer, d *client.DNS) int {
+func printDNS(out io.Writer, d *client.DNSSnake) int {
 	n := ioutil.Printf(out, "  DNS    :\n")
 	if len(d.LocalIP) > 0 {
 		n += ioutil.Printf(out, "    Local IP        : %v\n", d.LocalIP)
@@ -216,7 +216,7 @@ func printDNS(out io.Writer, d *client.DNS) int {
 	return n
 }
 
-func printRouting(out io.Writer, r *client.Routing) int {
+func printRouting(out io.Writer, r *client.RoutingSnake) int {
 	n := ioutil.Printf(out, "  Also Proxy : (%d subnets)\n", len(r.AlsoProxy))
 	for _, subnet := range r.AlsoProxy {
 		n += ioutil.Printf(out, "    - %s\n", subnet)
