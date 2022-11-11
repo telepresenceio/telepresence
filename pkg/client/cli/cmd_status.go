@@ -18,9 +18,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-type statusInfo struct {
-	json bool
-	out  io.Writer
+type StatusInfo struct {
+	Json bool
+	Out  io.Writer
 }
 
 type statusOutput struct {
@@ -64,26 +64,26 @@ type connectStatusIntercept struct {
 }
 
 func statusCommand() *cobra.Command {
-	s := &statusInfo{}
+	s := &StatusInfo{}
 	cmd := &cobra.Command{
 		Use:  "status",
 		Args: cobra.NoArgs,
 
 		Short:             "Show connectivity status",
 		RunE:              s.status,
-		PersistentPreRunE: fixFlag,
+		PersistentPreRunE: FixFlag,
 		Annotations: map[string]string{
 			ann.RootDaemon: ann.Optional,
 			ann.UserDaemon: ann.Optional,
 		},
 	}
 	flags := cmd.Flags()
-	flags.BoolVarP(&s.json, "json", "j", false, "output as json object")
+	flags.BoolVarP(&s.Json, "json", "j", false, "output as json object")
 	flags.Lookup("json").Hidden = true
 	return cmd
 }
 
-func fixFlag(cmd *cobra.Command, _ []string) error {
+func FixFlag(cmd *cobra.Command, _ []string) error {
 	flags := cmd.Flags()
 	json, err := flags.GetBool("json")
 	if err != nil {
@@ -99,14 +99,14 @@ func fixFlag(cmd *cobra.Command, _ []string) error {
 }
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
-func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
+func (s *StatusInfo) status(cmd *cobra.Command, _ []string) error {
 	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
-	s.out = cmd.OutOrStdout()
+	s.Out = cmd.OutOrStdout()
 	ctx := cmd.Context()
 
-	ds, cs, err := s.connectorStatus(ctx)
+	ds, cs, err := s.ConnectorStatus(ctx)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (s *statusInfo) status(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *connectorStatus, error) {
+func (s *StatusInfo) ConnectorStatus(ctx context.Context) (*daemonStatus, *connectorStatus, error) {
 	cs := &connectorStatus{}
 	ds := &daemonStatus{}
 	userD := util.GetUserDaemon(ctx)
@@ -191,19 +191,19 @@ func (s *statusInfo) connectorStatus(ctx context.Context) (*daemonStatus, *conne
 	return ds, cs, nil
 }
 
-func (s *statusInfo) printJSON(ctx context.Context, ds *daemonStatus, cs *connectorStatus) {
+func (s *StatusInfo) printJSON(ctx context.Context, ds *daemonStatus, cs *connectorStatus) {
 	output.Object(ctx, statusOutput{
 		DaemonStatus: *ds,
 		UserDaemon:   *cs,
 	}, true)
 }
 
-func (s *statusInfo) printText(ds *daemonStatus, cs *connectorStatus) {
-	s.printDaemonText(ds)
-	s.printConnectorText(cs)
+func (s *StatusInfo) printText(ds *daemonStatus, cs *connectorStatus) {
+	s.PrintDaemonText(ds)
+	s.PrintConnectorText(cs)
 }
 
-func (s *statusInfo) printDaemonText(ds *daemonStatus) {
+func (s *StatusInfo) PrintDaemonText(ds *daemonStatus) {
 	if ds.Running {
 		s.println("Root Daemon: Running")
 		s.printf("  Version   : %s (api %d)\n", ds.Version, ds.APIVersion)
@@ -230,7 +230,7 @@ func (s *statusInfo) printDaemonText(ds *daemonStatus) {
 	}
 }
 
-func (s *statusInfo) printConnectorText(cs *connectorStatus) {
+func (s *StatusInfo) PrintConnectorText(cs *connectorStatus) {
 	if cs.Running {
 		s.println("User Daemon: Running")
 		s.printf("  Version         : %s (api %d)\n", cs.Version, cs.APIVersion)
@@ -251,10 +251,10 @@ func (s *statusInfo) printConnectorText(cs *connectorStatus) {
 	}
 }
 
-func (s *statusInfo) printf(format string, a ...any) {
-	_, _ = fmt.Fprintf(s.out, format, a...)
+func (s *StatusInfo) printf(format string, a ...any) {
+	_, _ = fmt.Fprintf(s.Out, format, a...)
 }
 
-func (s *statusInfo) println(a ...any) {
-	_, _ = fmt.Fprintln(s.out, a...)
+func (s *StatusInfo) println(a ...any) {
+	_, _ = fmt.Fprintln(s.Out, a...)
 }
