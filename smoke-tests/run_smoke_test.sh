@@ -789,7 +789,7 @@ finish_step
 ##########################################################
 
 # We should be able to uninstall via this command even if the helm chart was used,
-# and this should log the user out.
+# and this should not log the user out.
 $TELEPRESENCE helm uninstall > "$output_location"
 verify_logout
 
