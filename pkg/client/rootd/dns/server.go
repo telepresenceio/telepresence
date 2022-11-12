@@ -182,8 +182,8 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 }
 
 func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
-	query := q.Name
-	query = strings.ToLower(query)
+	origQuery := q.Name
+	query := strings.ToLower(origQuery)
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
 	q.Name = query
 
@@ -226,6 +226,9 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	// intercepted or the namespaces change.
 	for _, rr := range result {
 		if h := rr.Header(); h != nil {
+			if h.Name == query {
+				h.Name = origQuery
+			}
 			h.Ttl = dnsTTL
 		}
 	}
@@ -508,6 +511,18 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	var err error
 	var rCode int
 	var answer dnsproxy.RRs
+
+	var pfx dfs = func() string { return "" }
+	var txt dfs = func() string { return "" }
+	var rct dfs = func() string { return dns.RcodeToString[rCode] }
+
+	var msg *dns.Msg
+
+	defer func() {
+		dlog.Debugf(c, "%s%5d %-6s %s -> %s %s", pfx, r.Id, qts, q.Name, rct, txt)
+		_ = w.WriteMsg(msg)
+	}()
+
 	if s.onlyNames {
 		switch q.Qtype {
 		case dns.TypeA:
@@ -525,21 +540,18 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 				answer = nil
 			}
 		default:
-			rCode = dns.RcodeNameError
+			msg = new(dns.Msg)
+			msg.SetRcode(r, dns.RcodeNotImplemented)
+			return
 		}
 	} else {
+		if !dnsproxy.SupportedType(q.Qtype) {
+			msg = new(dns.Msg)
+			msg.SetRcode(r, dns.RcodeNotImplemented)
+			return
+		}
 		answer, rCode, err = s.cacheResolve(q)
 	}
-	var pfx dfs = func() string { return "" }
-	var txt dfs = func() string { return "" }
-	var rct dfs = func() string { return dns.RcodeToString[rCode] }
-
-	var msg *dns.Msg
-
-	defer func() {
-		dlog.Debugf(c, "%s%5d %-6s %s -> %s %s", pfx, r.Id, qts, q.Name, rct, txt)
-		_ = w.WriteMsg(msg)
-	}()
 
 	if err == nil && rCode == dns.RcodeSuccess {
 		msg = new(dns.Msg)
