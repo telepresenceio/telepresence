@@ -926,7 +926,7 @@ type Routing struct {
 	NeverProxy []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
 }
 
-// RoutingSnake is the same as Routing but with snake_case json/yaml names
+// RoutingSnake is the same as Routing but with snake_case json/yaml names.
 type RoutingSnake struct {
 	Subnets    []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
 	AlsoProxy  []*iputil.Subnet `json:"also_proxy_subnets,omitempty" yaml:"also_proxy_subnets,omitempty"`
@@ -941,7 +941,7 @@ type DNS struct {
 	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty" yaml:"lookupTimeout,omitempty"`
 }
 
-// DNSSnake is the same as DNS but with snake_case json/yaml names
+// DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
 	LocalIP         net.IP        `json:"local_ip,omitempty" yaml:"local_ip,omitempty"`
 	RemoteIP        net.IP        `json:"remote_ip,omitempty" yaml:"remote_ip,omitempty"`
