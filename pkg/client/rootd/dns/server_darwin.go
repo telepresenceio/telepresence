@@ -149,6 +149,11 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		return err
 	}
 
+	// Ensure lingering all telepresence.* files are removed.
+	if err := s.removeResolverFiles(c, resolverDirName); err != nil {
+		return err
+	}
+
 	kubernetesZone := s.clusterDomain
 	kubernetesZone = kubernetesZone[:len(kubernetesZone)-1] // strip trailing dot
 	rf := resolveFile{
@@ -176,13 +181,31 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		// Server will close the listener, so no need to close it here.
 		s.processSearchPaths(g, func(c context.Context, paths []string, device vif.Device) error {
 			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
 		}, dev)
+		// Server will close the listener, so no need to close it here.
 		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
 	})
 	return g.Wait()
+}
+
+// removeResolverFiles performs rm -f /etc/resolver/telepresence.*
+func (s *Server) removeResolverFiles(c context.Context, resolverDirName string) error {
+	files, err := os.ReadDir(resolverDirName)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if n := file.Name(); strings.HasPrefix(n, "telepresence.") {
+			fn := filepath.Join(resolverDirName, n)
+			dlog.Debugf(c, "Removing file %q", fn)
+			if err := os.Remove(fn); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
@@ -218,6 +241,7 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 	// is named "telepresence.<domain>.local"
 	var removals []string
 	var additions []string
+
 	for domain := range s.domains {
 		if _, ok := domains[domain]; !ok {
 			removals = append(removals, domain)
