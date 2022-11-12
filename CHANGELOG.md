@@ -20,6 +20,10 @@
 
 - Bugfix: An attempt to use an invalid value for the global `--output` flag now renders a proper error message.
 
+- Bugfix: Unqualified service names now resolves OK when using `telepresence intercept --docker-run`.
+
+- Bugfix: Files lingering under /etc/resolver on macOS are now removed when a new root daemon starts.
+
 ### 2.8.5 (November 2, 2022)
 
 - Change: This is a security release. It's identical with 2.8.3 but built using Go 1.19.3 to address
