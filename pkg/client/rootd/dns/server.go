@@ -647,6 +647,7 @@ func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []ne
 				dlog.Debugf(c, "Shutting down DNS server")
 				_ = srv.ShutdownContext(dcontext.HardContext(c))
 			}()
+			dlog.Debugf(c, "Starting the DNS server")
 			return srv.ActivateAndServe()
 		})
 	}
