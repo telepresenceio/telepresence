@@ -190,7 +190,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	return g.Wait()
 }
 
-// removeResolverFiles performs rm -f /etc/resolver/telepresence.*
+// removeResolverFiles performs rm -f /etc/resolver/telepresence.*.
 func (s *Server) removeResolverFiles(c context.Context, resolverDirName string) error {
 	files, err := os.ReadDir(resolverDirName)
 	if err != nil {
