@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.9.0 (TBD)
+### 2.9.0 (November 15, 2022)
 
 - Feature: A new `telepresence config view` command was added that shows how the client is currently configured.
 
