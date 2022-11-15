@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.9.1 (TBD)
+
+- Bugfix: Fix regression in 2.9.0 causing `no Auth Provider found for name “gcp”` when connecting.
+
 ### 2.9.0 (November 15, 2022)
 
 - Feature: A new `telepresence config view` command was added that shows how the client is currently configured.
