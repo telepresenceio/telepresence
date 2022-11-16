@@ -26,8 +26,9 @@ func versionCommand() *cobra.Command {
 		PreRunE: util.ForcedUpdateCheck,
 		RunE:    PrintVersion,
 		Annotations: map[string]string{
-			ann.RootDaemon: ann.Optional,
-			ann.UserDaemon: ann.Optional,
+			ann.RootDaemon:        ann.Optional,
+			ann.UserDaemon:        ann.Optional,
+			ann.UpdateCheckFormat: ann.Tel2,
 		},
 	}
 }
