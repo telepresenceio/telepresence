@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.9.2 (TBD)
+
+- Bugfix: Fix panic when connecting to an older traffic-manager.
+
 ### 2.9.1 (November 15, 2022)
 
 - Bugfix: Fix regression in 2.9.0 causing `no Auth Provider found for name “gcp”` when connecting.
