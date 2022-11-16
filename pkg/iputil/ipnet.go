@@ -28,7 +28,7 @@ func IPNetFromRPC(r *manager.IPNet) *net.IPNet {
 type Subnet net.IPNet
 
 func (s *Subnet) MarshalJSON() ([]byte, error) {
-	return json.Marshal((*net.IPNet)(s).String())
+	return json.Marshal(s.String())
 }
 
 func (s *Subnet) UnmarshalJSON(data []byte) error {
@@ -45,7 +45,7 @@ func (s *Subnet) UnmarshalJSON(data []byte) error {
 }
 
 func (s *Subnet) MarshalYAML() (any, error) {
-	return (*net.IPNet)(s).String(), nil
+	return s.String(), nil
 }
 
 func (s *Subnet) UnmarshalYAML(node *yaml.Node) error {
@@ -59,4 +59,8 @@ func (s *Subnet) UnmarshalYAML(node *yaml.Node) error {
 	}
 	*s = *(*Subnet)(ipNet)
 	return nil
+}
+
+func (s *Subnet) String() string {
+	return (*net.IPNet)(s).String()
 }

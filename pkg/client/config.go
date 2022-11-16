@@ -926,12 +926,28 @@ type Routing struct {
 	NeverProxy []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
 }
 
+// RoutingSnake is the same as Routing but with snake_case json/yaml names.
+type RoutingSnake struct {
+	Subnets    []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
+	AlsoProxy  []*iputil.Subnet `json:"also_proxy_subnets,omitempty" yaml:"also_proxy_subnets,omitempty"`
+	NeverProxy []*iputil.Subnet `json:"never_proxy_subnets,omitempty" yaml:"never_proxy_subnets,omitempty"`
+}
+
 type DNS struct {
 	LocalIP         net.IP        `json:"localIP,omitempty" yaml:"localIP,omitempty"`
 	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
 	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
 	ExcludeSuffixes []string      `json:"excludeSuffixes,omitempty" yaml:"excludeSuffixes,omitempty"`
 	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty" yaml:"lookupTimeout,omitempty"`
+}
+
+// DNSSnake is the same as DNS but with snake_case json/yaml names.
+type DNSSnake struct {
+	LocalIP         net.IP        `json:"local_ip,omitempty" yaml:"local_ip,omitempty"`
+	RemoteIP        net.IP        `json:"remote_ip,omitempty" yaml:"remote_ip,omitempty"`
+	IncludeSuffixes []string      `json:"include_suffixes,omitempty" yaml:"include_suffixes,omitempty"`
+	ExcludeSuffixes []string      `json:"exclude_suffixes,omitempty" yaml:"exclude_suffixes,omitempty"`
+	LookupTimeout   time.Duration `json:"lookup_timeout,omitempty" yaml:"lookup_timeout,omitempty"`
 }
 
 type SessionConfig struct {

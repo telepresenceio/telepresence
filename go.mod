@@ -30,7 +30,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.0
-	github.com/telepresenceio/telepresence/rpc/v2 v2.8.5
+	github.com/telepresenceio/telepresence/rpc/v2 v2.9.1
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.36.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.36.0
 	go.opentelemetry.io/otel v1.10.0
@@ -182,5 +182,15 @@ require (
 )
 
 require golang.org/x/exp v0.0.0-20221006183845-316c7553db56
+
+require (
+	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
+	github.com/Azure/go-autorest/autorest v0.11.27 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.20 // indirect
+	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
+	github.com/Azure/go-autorest/logger v0.2.1 // indirect
+	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
+)
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
