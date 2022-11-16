@@ -4,6 +4,9 @@
 
 - Bugfix: Fix panic when connecting to an older traffic-manager.
 
+- Bugfix: Fix `http-header` flag sometimes wouldn't propigate correctly.
+
+
 ### 2.9.1 (November 15, 2022)
 
 - Bugfix: Fix regression in 2.9.0 causing `no Auth Provider found for name “gcp”` when connecting.
