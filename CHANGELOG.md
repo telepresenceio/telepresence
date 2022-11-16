@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.9.2 (TBD)
+### 2.9.2 (November 16, 2022)
 
 - Bugfix: Fix panic when connecting to an older traffic-manager.
 
