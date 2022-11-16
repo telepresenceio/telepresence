@@ -63,7 +63,7 @@ type Kubeconfig struct {
 	Namespace   string // default cluster namespace.
 	Context     string
 	Server      string
-	flagMap     map[string]string
+	FlagMap     map[string]string
 	ConfigFlags *genericclioptions.ConfigFlags
 	RestConfig  *rest.Config
 }
@@ -83,12 +83,14 @@ func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, e
 		if err := os.Setenv("KUBECONFIG", kcEnv); err != nil {
 			return nil, err
 		}
+		dlog.Debugf(c, "Using KUBECONFIG %s", kcEnv)
 	} else {
 		// If user unsets the KUBECONFIG, we need to do that too
 		if err := os.Unsetenv("KUBECONFIG"); err != nil {
 			return nil, err
 		}
 	}
+	dlog.Debugf(c, "Using kubernetes flags %v", flagMap)
 
 	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
@@ -138,7 +140,7 @@ func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, e
 		Context:     ctxName,
 		Server:      cluster.Server,
 		Namespace:   namespace,
-		flagMap:     flagMap,
+		FlagMap:     flagMap,
 		ConfigFlags: configFlags,
 		RestConfig:  restConfig,
 	}
@@ -189,7 +191,7 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 	return &Kubeconfig{
 		Namespace:   namespace,
 		Server:      restConfig.Host,
-		flagMap:     flagMap,
+		FlagMap:     flagMap,
 		ConfigFlags: configFlags,
 		RestConfig:  restConfig,
 		// it may be empty, but we should avoid nil deref
@@ -207,7 +209,7 @@ func (kf *Kubeconfig) ContextServiceAndFlagsEqual(okf *Kubeconfig) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
-		maps.Equal(kf.flagMap, okf.flagMap)
+		maps.Equal(kf.FlagMap, okf.FlagMap)
 }
 
 func (kf *Kubeconfig) GetManagerNamespace() string {

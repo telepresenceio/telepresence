@@ -94,6 +94,15 @@ message OutboundInfo {
   // via the underlying network interface.
   repeated manager.IPNet never_proxy_subnets = 6;
 
+  // Users home directory
+  string home_dir = 7;
+
+  // Traffic manager namespace
+  string manager_namespace = 8;
+
+  // Kubernetes flags
+  map<string, string> kube_flags = 9;
+
   reserved 4;
 }
 

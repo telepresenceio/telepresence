@@ -41,11 +41,13 @@ type k8sPortForwardDialer struct {
 	spdyStreams   map[string]httpstream.Connection // key is "podname.namespace"
 }
 
+type DialerFunc func(context.Context, string) (net.Conn, error)
+
 // NewK8sPortForwardDialer returns a dialer function (matching the signature required by
 // grpc.WithContextDialer) that dials to a port on a Kubernetes Pod, in the manor of `kubectl
 // port-forward`.  It returns the direct connection to the apiserver; it does not establish a local
 // port being forwarded from or otherwise pump data over the connection.
-func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (func(context.Context, string) (net.Conn, error), error) {
+func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (DialerFunc, error) {
 	if err := setKubernetesDefaults(kubeConfig); err != nil {
 		return nil, err
 	}
