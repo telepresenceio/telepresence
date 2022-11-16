@@ -24,6 +24,8 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/install-dependencies
         name: install dependencies
+      - name: set version
+        run: echo "TELEPRESENCE_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
       - run: make release-binary
       - name: Upload binaries
         uses: actions/upload-artifact@v3

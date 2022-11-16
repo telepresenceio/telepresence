@@ -1,6 +1,10 @@
 # Changelog
 
-### 2.9.0 (TBD)
+### 2.9.1 (November 15, 2022)
+
+- Bugfix: Fix regression in 2.9.0 causing `no Auth Provider found for name “gcp”` when connecting.
+
+### 2.9.0 (November 15, 2022)
 
 - Feature: A new `telepresence config view` command was added that shows how the client is currently configured.
 
@@ -19,6 +23,10 @@
   output when using the `--output=json`.
 
 - Bugfix: An attempt to use an invalid value for the global `--output` flag now renders a proper error message.
+
+- Bugfix: Unqualified service names now resolves OK when using `telepresence intercept --docker-run`.
+
+- Bugfix: Files lingering under /etc/resolver on macOS are now removed when a new root daemon starts.
 
 ### 2.8.5 (November 2, 2022)
 

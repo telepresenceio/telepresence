@@ -25,6 +25,15 @@ const (
 
 type RRs []dns.RR
 
+func SupportedType(qType uint16) bool {
+	switch qType {
+	case dns.TypeA, dns.TypeAAAA, dns.TypePTR, dns.TypeCNAME, dns.TypeMX, dns.TypeNS, dns.TypeSRV, dns.TypeTXT:
+		return true
+	default:
+		return false
+	}
+}
+
 func writeRR(rr dns.RR, bf *strings.Builder) {
 	switch rr := rr.(type) {
 	case *dns.A:

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,10 +31,6 @@ import (
 )
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
-
-func managerImageName(ctx context.Context) string {
-	return fmt.Sprintf("%s/tel2:%s", client.GetConfig(ctx).Images.Registry(ctx), strings.TrimPrefix(client.Version(), "v"))
-}
 
 // AgentImageFromSystemA returns the systemA preferred agent
 // Deprecated: not used with traffic-manager versions >= 2.6.0.

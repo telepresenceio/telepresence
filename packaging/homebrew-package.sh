@@ -21,7 +21,7 @@ curl -fL "https://app.getambassador.io/download/tel2/darwin/${ARCH}/${VERSION}/t
 # Clone blackbird-homebrew:
 BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
 echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
-git clone git@github.com:datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
+git clone https://github.com/datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
 if [ "$ARCH" == "amd64" ]; then
     FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
     FORMULA_NAME="Telepresence"

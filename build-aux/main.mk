@@ -186,9 +186,6 @@ prepare-release: generate
 	rm -f charts/telepresence/CHANGELOG.md.bak
 	git add charts/telepresence/CHANGELOG.md
 
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,cp -a pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/cur pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
-	$(if $(findstring -,$(TELEPRESENCE_VERSION)),,git add pkg/client/userd/trafficmgr/testdata/addAgentToWorkload/$(TELEPRESENCE_VERSION))
-
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)

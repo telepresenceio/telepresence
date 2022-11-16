@@ -21,7 +21,7 @@ func ValidatePort(s string) error {
 	if err == ErrNotInteger {
 		err = nil
 		if errs := validation.IsDNS1035Label(s); len(errs) > 0 {
-			err = fmt.Errorf(strings.Join(append([]string{err.Error()}, errs...), " and "))
+			err = fmt.Errorf(strings.Join(errs, " and "))
 		}
 	}
 	return err
