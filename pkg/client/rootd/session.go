@@ -532,7 +532,6 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	if dns == nil {
 		// Older traffic-manager. Use deprecated mgrInfo fields for DNS
 		dns = &manager.DNS{
-			KubeIp:        mgrInfo.KubeDnsIp,
 			ClusterDomain: mgrInfo.ClusterDomain,
 		}
 	}
@@ -544,7 +543,7 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	dnsIP := net.IP(mgrInfo.ManagerPodIp)
 	dlog.Infof(ctx, "Setting cluster DNS to %s", dnsIP)
 	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
-	s.dnsServer.SetClusterDNS(dns)
+	s.dnsServer.SetClusterDNS(dns, dnsIP)
 
 	if r := mgrInfo.Routing; r != nil {
 		as := subnet.Unique(append(s.alsoProxySubnets, convertSubnets(r.AlsoProxySubnets)...))
