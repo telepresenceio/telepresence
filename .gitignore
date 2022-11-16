@@ -44,3 +44,4 @@ fuseftp.bits
 
 # Don't accidentally add binaries built byintegration tests
 /integration_test/testdata/echo-server/echo-server
+/build-aux/genversion/genversion
