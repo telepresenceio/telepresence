@@ -57,11 +57,12 @@ $(BUILDDIR)/go1%.src.tar.gz:
 	mkdir -p $(BUILDDIR)
 	curl -o $@ --fail -L https://dl.google.com/go/$(@F)
 
-.PHONY: generate
-generate: ## (Generate) Update generated files that get checked in to Git
-generate: generate-clean
-generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
-generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
+.PHONY: protoc-clean
+protoc-clean:
+	find ./rpc -name '*.go' -delete
+
+.PHONY: protoc
+protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 	$(tools/protoc) \
 	  -I rpc \
 	  \
@@ -73,6 +74,11 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 	  \
 	  --proto_path=. \
 	  $$(find ./rpc/ -name '*.proto')
+
+.PHONY: generate
+generate: ## (Generate) Update generated files that get checked in to Git
+generate: generate-clean
+generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
@@ -93,8 +99,6 @@ generate: $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files
 	rm -rf ./rpc/vendor
-	find ./rpc -name '*.go' -delete
-
 	rm -rf ./vendor
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
