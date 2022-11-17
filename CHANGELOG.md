@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.9.2 (TBD)
+
+- Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager deployment so that the pod automatically restarts if it doesnt respond.
+
 ### 2.9.1 (November 15, 2022)
 
 - Bugfix: Fix regression in 2.9.0 causing `no Auth Provider found for name “gcp”` when connecting.
