@@ -10,6 +10,8 @@
 
 - Bugfix: Using `telepresence loglevel LEVEL` now also sets the log level in the root daemon.
 
+- Bugfix: Multi valued kubernetes flags such as `--as-group` are now propagated correctly.
+
 - Bugfix: The root daemon would sometimes hang indefinetily when quit and connect were called
   in rapid succession.
 
