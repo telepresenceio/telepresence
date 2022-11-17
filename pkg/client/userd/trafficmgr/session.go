@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/user"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -27,6 +25,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/homedir"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -40,12 +39,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
@@ -357,45 +358,12 @@ func connectMgr(
 	if err != nil {
 		return nil, err
 	}
-	grpcAddr := net.JoinHostPort("svc/traffic-manager."+cluster.GetManagerNamespace(), "api")
-
-	// First check. Establish connection
-	opts := []grpc.DialOption{
-		grpc.WithContextDialer(grpcDialer),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.WithReturnConnectionError(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+	conn, mClient, managerVersion, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), grpcDialer)
+	if err != nil {
+		return nil, err
 	}
-
-	var conn *grpc.ClientConn
-	if conn, err = grpc.DialContext(ctx, grpcAddr, opts...); err != nil {
-		return nil, client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
-	}
-	defer func() {
-		if err != nil {
-			conn.Close()
-		}
-	}()
 
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
-	mClient := manager.NewManagerClient(conn)
-
-	// At this point, we are connected to the traffic-manager. We use the shorter API timeout
-	ctx, cancelAPI := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
-	defer cancelAPI()
-
-	vi, err := mClient.Version(ctx, &empty.Empty{})
-	if err != nil {
-		return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.Version: %w", err))
-	}
-	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
-	if err != nil {
-		return nil, client.CheckTimeout(ctx, fmt.Errorf("unable to parse manager.Version: %w", err))
-	}
-	dlog.Infof(ctx, "Connected to traffic-manager %s", managerVersion)
 
 	clusterHost := cluster.Kubeconfig.RestConfig.Host
 	si, err := LoadSessionInfoFromUserCache(ctx, clusterHost)
@@ -1075,9 +1043,17 @@ func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	for _, np := range s.NeverProxy {
 		neverProxy = append(neverProxy, iputil.IPNetToRPC((*net.IPNet)(np)))
 	}
+	kubeFlags := s.FlagMap
+	if kc, ok := os.LookupEnv("KUBECONFIG"); ok {
+		kubeFlags = maps.Copy(s.FlagMap)
+		kubeFlags["KUBECONFIG"] = kc
+	}
 	info := &daemon.OutboundInfo{
 		Session:           s.sessionInfo,
 		NeverProxySubnets: neverProxy,
+		HomeDir:           homedir.HomeDir(),
+		ManagerNamespace:  s.GetManagerNamespace(),
+		KubeFlags:         kubeFlags,
 	}
 
 	if s.DNS != nil {

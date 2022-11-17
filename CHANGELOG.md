@@ -5,9 +5,15 @@
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager
   deployment, so that the pod automatically restarts if it doesn't respond.
 
+- Change: The root daemon now communicates directly with the traffic-manager instead of routing all
+  outbound traffic through the user daemon.
+
 - Bugfix: Using `telepresence loglevel LEVEL` now also sets the log level in the root daemon.
 
 - Bugfix: Multi valued kubernetes flags such as `--as-group` are now propagated correctly.
+
+- Bugfix: The root daemon would sometimes hang indefinetily when quit and connect were called
+  in rapid succession.
 
 ### 2.9.2 (November 16, 2022)
 

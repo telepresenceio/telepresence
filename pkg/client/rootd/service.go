@@ -146,10 +146,10 @@ func (s *Service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 
 func (s *Service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
+	s.sessionLock.RLock()
+	defer s.sessionLock.RUnlock()
+	s.cancelSessionReadLocked()
 	s.quit()
-	s.sessionLock.Lock()
-	defer s.sessionLock.Unlock()
-	s.session = nil
 	return &empty.Empty{}, nil
 }
 
@@ -192,17 +192,23 @@ func (s *Service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Em
 	return &empty.Empty{}, err
 }
 
+func (s *Service) cancelSessionReadLocked() {
+	if s.sessionCancel != nil {
+		s.sessionCancel()
+	}
+}
+
 func (s *Service) cancelSession() {
 	if !atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
 		return
 	}
 	s.sessionLock.RLock()
-	s.sessionCancel()
+	s.cancelSessionReadLocked()
 	s.sessionLock.RUnlock()
 
 	s.sessionLock.Lock()
 	s.session = nil
-	s.sessionCancel()
+	s.sessionCancel = nil
 	atomic.StoreInt32(&s.sessionQuitting, 0)
 	s.sessionLock.Unlock()
 }
@@ -314,14 +320,18 @@ nextSession:
 				if reply.err == nil {
 					s.session = session
 					s.sessionContext = sCtx
-					s.sessionCancel = sCancel
 					if err := s.session.applyConfig(c); err != nil {
 						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
 					}
 
 					reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+					s.sessionCancel = func() {
+						sCancel()
+						<-session.Done()
+					}
 				} else {
 					sCancel()
+					s.sessionCancel = nil
 				}
 			}
 		}

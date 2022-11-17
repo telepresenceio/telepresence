@@ -131,9 +131,13 @@ func (s *Service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	return result, err
 }
 
-func (s *Service) Disconnect(c context.Context, _ *empty.Empty) (*empty.Empty, error) {
-	s.logCall(c, "Disconnect", func(c context.Context) {
+func (s *Service) Disconnect(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
+	s.logCall(ctx, "Disconnect", func(ctx context.Context) {
 		s.cancelSession()
+		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+			_, err := rd.Disconnect(ctx, ex)
+			return err
+		})
 	})
 	return &empty.Empty{}, nil
 }
