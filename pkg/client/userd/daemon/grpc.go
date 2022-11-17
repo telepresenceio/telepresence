@@ -382,6 +382,7 @@ func (s *Service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (res
 }
 
 func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
+	result = &empty.Empty{}
 	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
 		duration := time.Duration(0)
 		if request.Duration != nil {
@@ -390,12 +391,11 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 		if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
 			err = status.Error(codes.Internal, err.Error())
 		} else {
-			result = &empty.Empty{}
+			err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+				_, err := rd.SetLogLevel(ctx, request)
+				return err
+			})
 		}
-		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
-			_, _ = rd.SetLogLevel(ctx, request)
-			return nil
-		})
 	})
 	return
 }
@@ -519,9 +519,12 @@ func (s *Service) GetClusterSubnets(ctx context.Context, empty *empty.Empty) (cs
 
 func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
 	conn, err := client.DialSocket(ctx, client.DaemonSocketName)
-	if err != nil {
-		return err
+	if err == nil {
+		defer conn.Close()
+		err = f(ctx, daemon.NewDaemonClient(conn))
 	}
-	defer conn.Close()
-	return f(ctx, daemon.NewDaemonClient(conn))
+	if err != nil {
+		err = status.Errorf(status.Code(err), "root daemon: %s", err.Error())
+	}
+	return err
 }
