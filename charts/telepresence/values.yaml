@@ -39,6 +39,19 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
+livenessProbe: {}
+  # httpGet:
+  #   path: /
+  #   port: api
+  # initialDelaySeconds: 10
+  # periodSeconds: 5
+readinessProbe: {}
+  # httpGet:
+  #   path: /
+  #   port: api
+  # initialDelaySeconds: 10
+  # periodSeconds: 5
+
 resources: {}
   # limits:
   #   cpu: 100m
