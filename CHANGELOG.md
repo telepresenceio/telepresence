@@ -3,7 +3,9 @@
 ### 2.9.3 (TBD)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager
-  deployment so that the pod automatically restarts if it doesnt respond.
+  deployment, so that the pod automatically restarts if it doesn't respond.
+
+- Bugfix: Using `telepresence loglevel LEVEL` now also sets the log level in the root daemon.
 
 ### 2.9.2 (November 16, 2022)
 
