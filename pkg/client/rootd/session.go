@@ -227,7 +227,6 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}
 	}
-	dlog.Debugf(c, "Traffic manager gave config %s", string(cliCfg.ConfigYaml))
 
 	as := convertSubnets(mi.AlsoProxySubnets)
 	ns := convertSubnets(mi.NeverProxySubnets)
