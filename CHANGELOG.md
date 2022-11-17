@@ -10,6 +10,9 @@
 
 - Bugfix: Using `telepresence loglevel LEVEL` now also sets the log level in the root daemon.
 
+- Bugfix: The root daemon would sometimes hang indefinetily when quit and connect were called
+  in rapid succession.
+
 ### 2.9.2 (November 16, 2022)
 
 - Bugfix: Fix panic when connecting to an older traffic-manager.

@@ -141,6 +141,9 @@ type Session struct {
 
 	// config is the session config given by the traffic manager
 	config client.Config
+
+	// done is closed when the session ends
+	done chan struct{}
 }
 
 type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.OutboundInfo) (*Session, error)
@@ -266,6 +269,7 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		proxyCluster:     true,
 		vifReady:         make(chan error, 2),
 		config:           cfg,
+		done:             make(chan struct{}),
 	}
 
 	s.dev, err = vif.OpenTun(c)
@@ -648,7 +652,10 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 }
 
 func (s *Session) run(c context.Context) error {
-	defer dlog.Info(c, "-- Session ended")
+	defer func() {
+		dlog.Info(c, "-- Session ended")
+		close(s.done)
+	}()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
@@ -750,4 +757,8 @@ func (s *Session) applyConfig(ctx context.Context) error {
 		sCfg = &s.config
 	}
 	return client.MergeAndReplace(ctx, sCfg, cfg, true)
+}
+
+func (s *Session) Done() chan struct{} {
+	return s.done
 }
