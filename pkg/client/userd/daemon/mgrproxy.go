@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -12,7 +11,6 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dlog"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -218,91 +216,8 @@ func (p *mgrProxy) AgentTunnel(managerrpc.Manager_AgentTunnelServer) error {
 	return status.Error(codes.Unimplemented, "AgentTunnel was deprecated in 2.4.5 and has since been removed")
 }
 
-type tmReceiver interface {
-	Recv() (*managerrpc.TunnelMessage, error)
-}
-
-type tmSender interface {
-	Send(*managerrpc.TunnelMessage) error
-}
-
-func recvLoop(ctx context.Context, who string, in tmReceiver, out chan<- *managerrpc.TunnelMessage, wg *sync.WaitGroup) {
-	defer func() {
-		dlog.Debugf(ctx, "%s Recv loop ended", who)
-		close(out)
-		wg.Done()
-	}()
-	dlog.Debugf(ctx, "%s Recv loop started", who)
-	for {
-		payload, err := in.Recv()
-		if err != nil {
-			if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
-				dlog.Errorf(ctx, "Tunnel %s.Recv() failed: %v", who, err)
-			}
-			return
-		}
-		dlog.Tracef(ctx, "<- %s %d", who, len(payload.Payload))
-		select {
-		case <-ctx.Done():
-			return
-		case out <- payload:
-		}
-	}
-}
-
-func sendLoop(ctx context.Context, who string, out tmSender, in <-chan *managerrpc.TunnelMessage, wg *sync.WaitGroup) {
-	defer func() {
-		dlog.Debugf(ctx, "%s Send loop ended", who)
-		wg.Done()
-	}()
-	dlog.Debugf(ctx, "%s Send loop started", who)
-	if outC, ok := out.(interface{ CloseSend() error }); ok {
-		defer func() {
-			if err := outC.CloseSend(); err != nil {
-				dlog.Errorf(ctx, "CloseSend() failed: %v", err)
-			}
-		}()
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case payload, ok := <-in:
-			if !ok {
-				return
-			}
-			if err := out.Send(payload); err != nil {
-				if !errors.Is(err, net.ErrClosed) {
-					dlog.Errorf(ctx, "Tunnel %s.Send() failed: %v", who, err)
-				}
-				return
-			}
-			dlog.Tracef(ctx, "-> %s %d", who, len(payload.Payload))
-		}
-	}
-}
-
-func (p *mgrProxy) Tunnel(fhClient managerrpc.Manager_TunnelServer) error {
-	client, callOptions, err := p.get()
-	if err != nil {
-		return err
-	}
-	ctx := fhClient.Context()
-	fhManager, err := client.Tunnel(ctx, callOptions...)
-	if err != nil {
-		return err
-	}
-	mgrToClient := make(chan *managerrpc.TunnelMessage)
-	clientToMgr := make(chan *managerrpc.TunnelMessage)
-
-	wg := sync.WaitGroup{}
-	wg.Add(4)
-	go recvLoop(ctx, "manager", fhManager, mgrToClient, &wg)
-	go sendLoop(ctx, "manager", fhManager, clientToMgr, &wg)
-	go recvLoop(ctx, "client", fhClient, clientToMgr, &wg)
-	go sendLoop(ctx, "client", fhClient, mgrToClient, &wg)
-	wg.Wait()
-	return nil
+func (p *mgrProxy) Tunnel(managerrpc.Manager_TunnelServer) error {
+	return status.Error(codes.Unimplemented, "Tunnel must be called from the root daemon")
 }
 
 func (p *mgrProxy) WatchDial(arg *managerrpc.SessionInfo, srv managerrpc.Manager_WatchDialServer) error {

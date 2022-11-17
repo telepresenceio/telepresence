@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,7 +14,6 @@ import (
 
 	"github.com/blang/semver"
 	dns2 "github.com/miekg/dns"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -25,6 +24,8 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -36,6 +37,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -138,6 +141,9 @@ type Session struct {
 
 	// config is the session config given by the traffic manager
 	config client.Config
+
+	// done is closed when the session ends
+	done chan struct{}
 }
 
 type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.OutboundInfo) (*Session, error)
@@ -155,42 +161,61 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 	panic("No User daemon Session creator has been registered")
 }
 
+func getKubeConfig(ctx context.Context, homeDir string, flags map[string]string) (*client.Kubeconfig, error) {
+	if kcEnv := flags["KUBECONFIG"]; kcEnv == "" {
+		if flags == nil {
+			flags = make(map[string]string, 1)
+		}
+		flags["KUBECONFIG"] = filepath.Join(homeDir, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
+	} else {
+		// Ensure that all paths are absolute
+		files := filepath.SplitList(kcEnv)
+		rejoin := false
+		for i, file := range files {
+			if !filepath.IsAbs(file) {
+				files[i] = filepath.Join(homeDir, file)
+				rejoin = true
+			}
+		}
+		if rejoin {
+			flags["KUBECONFIG"] = strings.Join(files, string(filepath.ListSeparator))
+		}
+	}
+	return client.NewKubeconfig(ctx, flags)
+}
+
+func createPortForwardDialer(ctx context.Context, homeDir string, flags map[string]string) (func(context.Context, string) (net.Conn, error), error) {
+	kc, err := getKubeConfig(ctx, homeDir, flags)
+	if err != nil {
+		return nil, err
+	}
+	rs, err := kc.ConfigFlags.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	cs, err := kubernetes.NewForConfig(rs)
+	if err != nil {
+		return nil, err
+	}
+	return dnet.NewK8sPortForwardDialer(ctx, kc.RestConfig, cs)
+}
+
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
-func connectToManager(c context.Context) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
-	// First check. Establish connection
-	clientConfig := client.GetConfig(c)
+func connectToManager(ctx context.Context, homeDir, namespace string, flags map[string]string) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
+	dlog.Debug(ctx, "creating port-forward")
+	clientConfig := client.GetConfig(ctx)
 	tos := &clientConfig.Timeouts
-	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
+
+	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	var conn *grpc.ClientConn
-	conn, err := client.DialSocket(tc, client.ConnectorSocketName,
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	var mgrVer semver.Version
+	grpcDialer, err := createPortForwardDialer(ctx, homeDir, flags)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			// The connector called us, and then it died which means we will die too. This is
-			// a race, but it's not an error.
-			return nil, nil, mgrVer, nil
-		}
-		return nil, nil, mgrVer, client.CheckTimeout(tc, err)
+		return nil, nil, semver.Version{}, err
 	}
-
-	mc := manager.NewManagerClient(conn)
-	ver, err := mc.Version(c, &empty.Empty{})
+	conn, mc, mgrVer, err := tm.ConnectToManager(ctx, namespace, grpcDialer)
 	if err != nil {
-		conn.Close()
-		return nil, nil, mgrVer, fmt.Errorf("failed to retrieve manager version: %w", err)
-	}
-
-	verStr := strings.TrimPrefix(ver.Version, "v")
-	dlog.Infof(c, "Connected to Manager %s", verStr)
-	mgrVer, err = semver.Parse(verStr)
-	if err != nil {
-		conn.Close()
-		return nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+		return nil, nil, semver.Version{}, err
 	}
 
 	if mgrVer.LE(semver.MustParse("2.4.4")) {
@@ -212,7 +237,7 @@ func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
 // NewSession returns a new properly initialized session object.
 func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
-	conn, mc, ver, err := connectToManager(c)
+	conn, mc, ver, err := connectToManager(c, mi.HomeDir, mi.ManagerNamespace, mi.KubeFlags)
 	if mc == nil || err != nil {
 		return nil, err
 	}
@@ -244,6 +269,7 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		proxyCluster:     true,
 		vifReady:         make(chan error, 2),
 		config:           cfg,
+		done:             make(chan struct{}),
 	}
 
 	s.dev, err = vif.OpenTun(c)
@@ -626,7 +652,10 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 }
 
 func (s *Session) run(c context.Context) error {
-	defer dlog.Info(c, "-- Session ended")
+	defer func() {
+		dlog.Info(c, "-- Session ended")
+		close(s.done)
+	}()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
@@ -728,4 +757,8 @@ func (s *Session) applyConfig(ctx context.Context) error {
 		sCfg = &s.config
 	}
 	return client.MergeAndReplace(ctx, sCfg, cfg, true)
+}
+
+func (s *Session) Done() chan struct{} {
+	return s.done
 }
