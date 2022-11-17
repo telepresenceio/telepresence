@@ -2,9 +2,11 @@ package client
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
@@ -94,7 +96,20 @@ func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, e
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
 	for k, v := range flagMap {
-		if err := flags.Set(k, v); err != nil {
+		f := flags.Lookup(k)
+		if f == nil {
+			continue
+		}
+		var err error
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			var vs []string
+			if vs, err = csv.NewReader(strings.NewReader(v)).Read(); err == nil {
+				err = sv.Replace(vs)
+			}
+		} else {
+			err = flags.Set(k, v)
+		}
+		if err != nil {
 			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
 		}
 	}

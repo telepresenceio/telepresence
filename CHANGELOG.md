@@ -7,6 +7,8 @@
 
 - Bugfix: Using `telepresence loglevel LEVEL` now also sets the log level in the root daemon.
 
+- Bugfix: Multi valued kubernetes flags such as `--as-group` are now propagated correctly.
+
 ### 2.9.2 (November 16, 2022)
 
 - Bugfix: Fix panic when connecting to an older traffic-manager.
