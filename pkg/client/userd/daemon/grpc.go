@@ -392,6 +392,10 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 		} else {
 			result = &empty.Empty{}
 		}
+		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+			_, _ = rd.SetLogLevel(ctx, request)
+			return nil
+		})
 	})
 	return
 }
