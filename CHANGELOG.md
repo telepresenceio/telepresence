@@ -12,8 +12,10 @@
 
 - Bugfix: Multi valued kubernetes flags such as `--as-group` are now propagated correctly.
 
-- Bugfix: The root daemon would sometimes hang indefinetily when quit and connect were called
+- Bugfix: The root daemon would sometimes hang indefinitely when quit and connect were called
   in rapid succession.
+
+- Bugfix: Don't use `systemd.resolved` base DNS resolver unless cluster is proxied.
 
 ### 2.9.2 (November 16, 2022)
 

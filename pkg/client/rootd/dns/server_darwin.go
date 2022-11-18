@@ -130,7 +130,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //	man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, configureDNS func(net.IP, *net.UDPAddr)) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
@@ -185,7 +185,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
 		}, dev)
 		// Server will close the listener, so no need to close it here.
-		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
+		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster, proxyCluster)
 	})
 	return g.Wait()
 }
