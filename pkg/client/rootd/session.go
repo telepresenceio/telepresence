@@ -698,7 +698,7 @@ func (s *Session) run(c context.Context) error {
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
-		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
+		return s.dnsServer.Worker(ctx, s.dev, s.proxyCluster, s.configureDNS)
 	})
 
 	g.Go("stack", func(_ context.Context) error {

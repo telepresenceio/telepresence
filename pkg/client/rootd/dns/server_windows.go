@@ -10,7 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, configureDNS func(net.IP, *net.UDPAddr)) error {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return err
@@ -26,7 +26,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	g.Go("Server", func(c context.Context) error {
 		// No need to close listener. It's closed by the dns server.
 		s.processSearchPaths(g, s.updateRouterDNS, dev)
-		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
+		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster, proxyCluster)
 	})
 	return g.Wait()
 }
