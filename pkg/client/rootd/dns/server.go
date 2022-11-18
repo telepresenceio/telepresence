@@ -259,13 +259,13 @@ func (s *Server) Stop() {
 	}
 }
 
-func (s *Server) SetClusterDNS(dns *manager.DNS) {
+func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
 	s.clusterDomain = dns.ClusterDomain
 	if s.config == nil {
 		s.config = &rpc.DNSConfig{}
 	}
 	if s.config.RemoteIp == nil {
-		s.config.RemoteIp = dns.KubeIp
+		s.config.RemoteIp = remoteIP
 	}
 	contains := func(s []string, a string) bool {
 		for _, x := range s {
