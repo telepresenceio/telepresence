@@ -14,7 +14,7 @@ runs:
       uses: nick-invision/retry@v2.8.2
       with:
         max_attempts: 1
-        timeout_minutes: 30
+        timeout_minutes: 3000
         shell: bash
         command: |
           set -ex
