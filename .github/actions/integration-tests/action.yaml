@@ -13,7 +13,7 @@ runs:
         DTEST_REGISTRY: "docker.io/datawire"
       uses: nick-invision/retry@v2.8.2
       with:
-        max_attempts: 3
+        max_attempts: 1
         timeout_minutes: 30
         shell: bash
         command: |
@@ -30,4 +30,5 @@ runs:
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
           fi
 
-          make check-integration
+          #make check-integration
+          sleep 18000
