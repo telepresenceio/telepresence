@@ -12,6 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
+var DisplayName = "Telepresence" //nolint:gochecknoglobals // extension point
+
 // Version returns the version of this executable.
 func Version() string {
 	return version.Version
@@ -30,7 +32,7 @@ func GetInstallMechanism() (string, error) {
 	execPath, err := os.Executable()
 	mechanism := "undetermined"
 	if err != nil {
-		wrapErr := fmt.Errorf("Unable to get exec path: %w", err)
+		wrapErr := fmt.Errorf("unable to get exec path: %w", err)
 		return mechanism, wrapErr
 	}
 

@@ -28,6 +28,7 @@ func InitContext(ctx context.Context) context.Context {
 		ctx = rootd.WithNewServiceFunc(ctx, rootd.NewService)
 		ctx = rootd.WithNewSessionFunc(ctx, rootd.NewSession)
 	default:
+		client.DisplayName = "Client"
 		ctx = util.WithCommandInitializer(ctx, util.CommandInitializer)
 		ctx = WithSubCommands(ctx)
 	}

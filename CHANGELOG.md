@@ -8,6 +8,8 @@
 - Change: The root daemon now communicates directly with the traffic-manager instead of routing all
   outbound traffic through the user daemon.
 
+- Change: The output of `telepresence version` is now aligned and no longer contains "(api v3)"
+
 - Bugfix: Using `telepresence loglevel LEVEL` now also sets the log level in the root daemon.
 
 - Bugfix: Multi valued kubernetes flags such as `--as-group` are now propagated correctly.
