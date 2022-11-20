@@ -12,7 +12,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: telepresence-role
+  name: telepresence-test-developer
 rules:
 # For gather-logs command
 - apiGroups: [""]
@@ -36,12 +36,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: telepresence-clusterrolebinding
+  name: telepresence-test-developer
 subjects:
 - name: telepresence-test-developer
   kind: ServiceAccount
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  name: telepresence-role
+  name: telepresence-test-developer
   kind: ClusterRole

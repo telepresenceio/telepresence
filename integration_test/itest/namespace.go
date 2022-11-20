@@ -13,7 +13,6 @@ import (
 type NamespacePair interface {
 	Harness
 	ApplyApp(ctx context.Context, name, workload string)
-	ApplyTestApp(ctx context.Context, name, workload string)
 	ApplyEchoService(ctx context.Context, name string, port int)
 	AppNamespace() string
 	DeleteSvcAndWorkload(ctx context.Context, workload, name string)
@@ -50,7 +49,7 @@ const purposeLabel = "tp-cli-testing"
 
 func (s *nsPair) setup(ctx context.Context) bool {
 	CreateNamespaces(ctx, s.namespace, s.managerNamespace)
-	err := Run(WithModuleRoot(ctx), "kubectl", "apply", "-n", s.managerNamespace, "-f", filepath.Join("k8s", "client_connect_rbac.yaml"))
+	err := Run(ctx, "kubectl", "apply", "-n", s.managerNamespace, "-f", filepath.Join("testdata", "k8s", "client_connect_rbac.yaml"))
 	require.NoError(getT(ctx), err, "failed to create connect Role/RoleBinding", TestUser)
 	return true
 }
@@ -89,14 +88,11 @@ func (s *nsPair) ApplyEchoService(ctx context.Context, name string, port int) {
 	ApplyEchoService(ctx, name, s.namespace, port)
 }
 
+// ApplyApp calls kubectl apply -n <namespace> -f on the given app + .yaml found in testdata/k8s relative
+// to the directory returned by GetCurrentDirectory.
 func (s *nsPair) ApplyApp(ctx context.Context, name, workload string) {
 	getT(ctx).Helper()
 	ApplyApp(ctx, name, s.namespace, workload)
-}
-
-func (s *nsPair) ApplyTestApp(ctx context.Context, name, workload string) {
-	getT(ctx).Helper()
-	ApplyTestApp(ctx, name, s.namespace, workload)
 }
 
 func (s *nsPair) RolloutStatusWait(ctx context.Context, workload string) error {

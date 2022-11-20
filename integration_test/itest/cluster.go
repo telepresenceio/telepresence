@@ -78,7 +78,6 @@ type cluster struct {
 	executable       string
 	testVersion      string
 	registry         string
-	moduleRoot       string
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
@@ -99,7 +98,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
 	if !s.prePushed {
-		s.testVersion = "v2.8.0-gotest.z" + s.suffix
+		s.testVersion = "v2.9.0-gotest.z" + s.suffix
 	}
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
 
@@ -120,17 +119,15 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
-	mrCtx := WithModuleRoot(ctx)
-	s.moduleRoot = GetWorkingDir(mrCtx)
 	if s.prePushed {
-		s.executable = filepath.Join(s.moduleRoot, "build-output", "bin", "telepresence")
+		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
 	}
 	errs := make(chan error, 10)
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
-	go s.ensureExecutable(mrCtx, errs, wg)
-	go s.ensureDockerImage(mrCtx, errs, wg)
-	go s.ensureCluster(mrCtx, wg)
+	go s.ensureExecutable(ctx, errs, wg)
+	go s.ensureDockerImage(ctx, errs, wg)
+	go s.ensureCluster(ctx, wg)
 	wg.Wait()
 	close(errs)
 	for err := range errs {
@@ -147,7 +144,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 func (s *cluster) tearDown(ctx context.Context) {
 	s.ensureQuitAndLoggedOut(ctx)
 	if s.kubeConfig != "" {
-		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join(s.moduleRoot, "k8s", "client_rbac.yaml"))
+		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml"))
 		_ = Run(ctx, "kubectl", "delete", "--wait=false", "ns", "-l", "purpose=tp-cli-testing")
 	}
 }
@@ -169,14 +166,15 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 		return
 	}
 
+	ctx = WithModuleRoot(ctx)
 	exe := "telepresence"
+	env := make(map[string]string)
+	env["TELEPRESENCE_VERSION"] = s.testVersion
 	if runtime.GOOS == "windows" {
-		ctx = WithEnv(ctx, map[string]string{"CGO_ENABLED": "0"})
+		env["CGO_ENABLED"] = "0"
 		exe += ".exe"
 	}
-	err := Run(ctx, "go", "build", "-ldflags",
-		fmt.Sprintf("-X=github.com/telepresenceio/telepresence/v2/pkg/version.Version=%s", s.testVersion),
-		"-o", filepath.Join("build-output", "bin", exe), "./cmd/telepresence")
+	err := Run(WithEnv(ctx, env), "make", "build")
 	if err != nil {
 		errs <- err
 		return
@@ -207,7 +205,7 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 	}
 
 	runMake := func(target string) {
-		out, err := Command(ctx, makeExe, target).CombinedOutput()
+		out, err := Command(WithOSSRoot(ctx), makeExe, target).CombinedOutput()
 		if err != nil {
 			errs <- RunError(err, out)
 		}
@@ -239,8 +237,9 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.
 	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,clusterrole,clusterrolebinding", "-l", "app=traffic-manager")
 
-	err := Run(ctx, "kubectl", "apply", "-f", filepath.Join("k8s", "client_rbac.yaml"))
-	require.NoError(t, err, "failed to create %s service account", TestUser)
+	require.NoError(t, Run(ctx, "kubectl", "apply", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml")),
+		"failed to create %s service account", TestUser)
+	require.NoError(t, Run(ctx, "kubectl", "label", "serviceaccount,clusterrole,clusterrolebinding", TestUser, "purpose="+purposeLabel))
 }
 
 // PodCreateTimeout will return a timeout suitable for operations that create pods.
@@ -472,12 +471,12 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 	}
 	settings := s.GetValuesForHelm(values, managerNamespace, appNamespaces...)
 
-	helmValues := filepath.Join("integration_test", "testdata", "namespaced-values.yaml")
+	helmValues := filepath.Join("testdata", "namespaced-values.yaml")
 	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)
 
-	err = Run(WithModuleRoot(ctx), "helm", args...)
+	err = Run(ctx, "helm", args...)
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {
@@ -519,6 +518,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	}
 	cmd.Env = maps.ToSortedSlice(env)
 	cmd.Dir = GetWorkingDir(ctx)
+	cmd.Stdin = getStdin(ctx)
 	return cmd
 }
 
@@ -690,15 +690,9 @@ func DeleteSvcAndWorkload(ctx context.Context, workload, name, namespace string)
 		"failed to delete service and %s %s", workload, name)
 }
 
+// ApplyApp calls kubectl apply -n <namespace> -f on the given app + .yaml found in testdata/k8s relative
+// to the directory returned by GetWorkingDir.
 func ApplyApp(ctx context.Context, name, namespace, workload string) {
-	t := getT(ctx)
-	t.Helper()
-	manifest := fmt.Sprintf("k8s/%s.yaml", name)
-	require.NoError(t, Kubectl(WithModuleRoot(ctx), namespace, "apply", "-f", manifest), "failed to apply %s", manifest)
-	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
-}
-
-func ApplyTestApp(ctx context.Context, name, namespace, workload string) {
 	t := getT(ctx)
 	t.Helper()
 	manifest := filepath.Join("testdata", "k8s", name+".yaml")

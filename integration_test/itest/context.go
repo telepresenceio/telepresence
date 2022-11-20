@@ -2,6 +2,7 @@ package itest
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -46,10 +47,12 @@ func GetProfile(ctx context.Context) Profile {
 
 type tContextKey struct{}
 
-func TestContext(t *testing.T) context.Context {
+func TestContext(t *testing.T, ossRoot, moduleRoot string) context.Context {
 	ctx := context.Background()
 	ctx = dlog.WithLogger(ctx, log.NewTestLogger(t, dlog.LogLevelDebug))
 	ctx = client.WithEnv(ctx, &client.Env{})
+	ctx = SetOSSRoot(ctx, ossRoot)
+	ctx = SetModuleRoot(ctx, moduleRoot)
 	ctx = withProfile(ctx)
 	return withT(ctx, t)
 }
@@ -67,13 +70,52 @@ func getT(ctx context.Context) *testing.T {
 	panic("No *testing.T in context")
 }
 
+type ossRootKey struct{}
+
+func GetOSSRoot(ctx context.Context) string {
+	if dir, ok := ctx.Value(ossRootKey{}).(string); ok {
+		return dir
+	}
+	moduleRoot, err := os.Getwd()
+	if err != nil {
+		panic("failed to get current directory")
+	}
+	return filepath.Dir(moduleRoot)
+}
+
+// SetOSSRoot sets the OSS module root for the given context to dir.
+func SetOSSRoot(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, ossRootKey{}, dir)
+}
+
+// WithOSSRoot set the working directory for the Command function to the
+// OSS module root.
+func WithOSSRoot(ctx context.Context) context.Context {
+	return WithWorkingDir(ctx, GetOSSRoot(ctx))
+}
+
+type moduleRootKey struct{}
+
+func GetModuleRoot(ctx context.Context) string {
+	if dir, ok := ctx.Value(moduleRootKey{}).(string); ok {
+		return dir
+	}
+	moduleRoot, err := os.Getwd()
+	if err != nil {
+		panic("failed to get current directory")
+	}
+	return filepath.Dir(moduleRoot)
+}
+
+// SetModuleRoot sets the module root for the given context to dir.
+func SetModuleRoot(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, moduleRootKey{}, dir)
+}
+
 // WithModuleRoot set the working directory for the Command function to the
 // module root.
 func WithModuleRoot(ctx context.Context) context.Context {
-	t := getT(ctx)
-	moduleRoot, err := filepath.Abs("..")
-	require.NoError(t, err, "failed to resolver module root")
-	return WithWorkingDir(ctx, moduleRoot)
+	return WithWorkingDir(ctx, GetModuleRoot(ctx))
 }
 
 type dirContextKey struct{}
@@ -143,6 +185,19 @@ func getEnv(ctx context.Context) map[string]string {
 		return env
 	}
 	return nil
+}
+
+type stdinKey struct{}
+
+func WithStdin(ctx context.Context, rdr io.Reader) context.Context {
+	return context.WithValue(ctx, stdinKey{}, rdr)
+}
+
+func getStdin(ctx context.Context) io.Reader {
+	if rdr, ok := ctx.Value(stdinKey{}).(io.Reader); ok {
+		return rdr
+	}
+	return os.Stdin
 }
 
 type globalHarnessContextKey struct{}

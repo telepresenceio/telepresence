@@ -2,6 +2,7 @@ package itest
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,8 +32,8 @@ func (h *helmAndService) setup(ctx context.Context) bool {
 	t := getT(ctx)
 	TelepresenceQuitOk(ctx)
 
-	// Destroy the telepresence-clusterrolebinding so that we actually test the RBAC set up in the helm chart
-	require.NoError(t, Kubectl(ctx, "", "delete", "clusterrolebinding", "telepresence-clusterrolebinding"))
+	// Destroy the telepresence-test-developer binding so that we actually test the RBAC set up in the helm chart
+	require.NoError(t, Kubectl(ctx, "", "delete", "clusterrolebinding", "telepresence-test-developer"))
 	require.NoError(t, h.InstallTrafficManager(ctx, nil, h.ManagerNamespace(), h.AppNamespace()))
 
 	stdout := TelepresenceOk(ctx, "connect")
@@ -54,5 +55,6 @@ func (h *helmAndService) tearDown(ctx context.Context) {
 	}, 20*time.Second, 2*time.Second, "User still has permissions to get namespaces")
 
 	// Restore the rbac we blew up in the setup
-	require.NoError(t, Kubectl(WithModuleRoot(ctx), "", "apply", "-f", "k8s/client_rbac.yaml"))
+	require.NoError(t, Kubectl(ctx, "", "apply", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml")))
+	require.NoError(t, Run(ctx, "kubectl", "label", "clusterrolebinding", TestUser, "purpose="+purposeLabel))
 }

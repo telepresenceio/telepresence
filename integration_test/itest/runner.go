@@ -2,7 +2,6 @@ package itest
 
 import (
 	"context"
-	"testing"
 
 	"github.com/stretchr/testify/suite"
 
@@ -16,7 +15,7 @@ type Runner interface {
 	AddHelmAndServiceSuite(suffix, name string, f func(HelmAndService) suite.TestingSuite)
 	AddMultipleServicesSuite(suffix, name string, f func(MultipleServices) suite.TestingSuite)
 	AddSingleServiceSuite(suffix, name string, f func(SingleService) suite.TestingSuite)
-	RunTests(*testing.T)
+	RunTests(context.Context)
 }
 
 type namedRunner struct {
@@ -131,17 +130,16 @@ func (r *runner) AddHelmAndServiceSuite(suffix, name string, f func(services Hel
 	nr.withHelmAndService = append(nr.withHelmAndService, f)
 }
 
-func RunTests(t *testing.T) {
-	defaultRunner.RunTests(t)
+func RunTests(c context.Context) {
+	defaultRunner.RunTests(c)
 }
 
 // RunTests creates all suites using the added constructors and runs them.
-func (r *runner) RunTests(t *testing.T) { //nolint:gocognit
-	c := TestContext(t)
+func (r *runner) RunTests(c context.Context) { //nolint:gocognit
 	dtest.WithMachineLock(c, func(c context.Context) {
 		WithCluster(c, func(c context.Context) {
 			for _, f := range r.withCluster {
-				suite.Run(t, f(c))
+				suite.Run(getT(c), f(c))
 			}
 			for s, sr := range r.withSuffix {
 				WithNamespacePair(c, GetGlobalHarness(c).Suffix()+s, func(np NamespacePair) {

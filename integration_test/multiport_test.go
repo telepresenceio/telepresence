@@ -16,7 +16,7 @@ import (
 func (s *connectedSuite) Test_MultipleUnnamedServicePorts() {
 	ctx := s.Context()
 	dep := "echo-double-one-unnamed"
-	s.ApplyTestApp(ctx, dep, "deploy/"+dep)
+	s.ApplyApp(ctx, dep, "deploy/"+dep)
 	defer s.KubectlOk(ctx, "delete", "deploy", dep)
 
 	require := s.Require()
@@ -62,7 +62,7 @@ func (s *connectedSuite) Test_MultipleUnnamedServicePorts() {
 func (s *connectedSuite) Test_NoContainerPort() {
 	ctx := s.Context()
 	dep := "echo-no-containerport"
-	s.ApplyTestApp(ctx, dep, "deploy/"+dep)
+	s.ApplyApp(ctx, dep, "deploy/"+dep)
 	defer s.KubectlOk(ctx, "delete", "deploy", dep)
 	require := s.Require()
 	require.NoError(s.Kubectl(ctx, "expose", "deploy", dep, "--port", "80", "--target-port", "8080", "--name", dep+"-"+"80"))
@@ -91,7 +91,7 @@ func (s *connectedSuite) Test_NoContainerPort() {
 func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 	ctx := s.Context()
 	dep := "echo-udp-tcp-unnamed"
-	s.ApplyTestApp(ctx, dep, "deploy/"+dep)
+	s.ApplyApp(ctx, dep, "deploy/"+dep)
 	defer s.KubectlOk(ctx, "delete", "deploy", dep)
 
 	require := s.Require()
