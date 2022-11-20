@@ -11,7 +11,6 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
@@ -56,7 +55,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	switch {
 	case err == nil:
 		kvf.Add("User Daemon", version.Version)
-		var mgrVer *manager.VersionInfo2
+		var mgrVer *common.VersionInfo
 		mgrVer, err = managerVersion(ctx)
 		switch {
 		case err == nil:
@@ -92,10 +91,9 @@ func connectorVersion(ctx context.Context) (*common.VersionInfo, error) {
 	return nil, util.ErrNoUserDaemon
 }
 
-func managerVersion(ctx context.Context) (*manager.VersionInfo2, error) {
-	userD := util.GetUserDaemon(ctx)
-	if userD == nil {
-		return nil, util.ErrNoUserDaemon
+func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
+	if userD := util.GetUserDaemon(ctx); userD != nil {
+		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
 	}
-	return manager.NewManagerClient(userD.Conn).Version(ctx, &empty.Empty{})
+	return nil, util.ErrNoUserDaemon
 }

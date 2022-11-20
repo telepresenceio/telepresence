@@ -30,6 +30,10 @@ type ConnectorClient interface {
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Returns version information from the Root Daemon
 	RootDaemonVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
+	// Returns version information from the Root Daemon
+	TrafficManagerVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
+	// GetIntercept gets info from intercept name
+	GetIntercept(ctx context.Context, in *manager.GetInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
 	// the daemon process) to the cluster's network.  A result code of
 	// UNSPECIFIED indicates that the connection was successfully
@@ -52,6 +56,7 @@ type ConnectorClient interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
+	UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
 	Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*Result, error)
 	// Uninstalls traffic-agents from the cluster.
@@ -68,8 +73,8 @@ type ConnectorClient interface {
 	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
 	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
 	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
-	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
-	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
+	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
@@ -112,6 +117,24 @@ func (c *connectorClient) Version(ctx context.Context, in *emptypb.Empty, opts .
 func (c *connectorClient) RootDaemonVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
 	out := new(common.VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RootDaemonVersion", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) TrafficManagerVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
+	out := new(common.VersionInfo)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/TrafficManagerVersion", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) GetIntercept(ctx context.Context, in *manager.GetInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error) {
+	out := new(manager.InterceptInfo)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +198,15 @@ func (c *connectorClient) CreateIntercept(ctx context.Context, in *CreateInterce
 func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error) {
 	out := new(InterceptResult)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RemoveIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error) {
+	out := new(manager.InterceptInfo)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/UpdateIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +317,7 @@ func (c *connectorClient) GetCloudLicense(ctx context.Context, in *LicenseReques
 	return out, nil
 }
 
-func (c *connectorClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *connectorClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/SetLogLevel", in, out, opts...)
 	if err != nil {
@@ -374,6 +406,10 @@ type ConnectorServer interface {
 	Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
 	// Returns version information from the Root Daemon
 	RootDaemonVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
+	// Returns version information from the Root Daemon
+	TrafficManagerVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
+	// GetIntercept gets info from intercept name
+	GetIntercept(context.Context, *manager.GetInterceptRequest) (*manager.InterceptInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
 	// the daemon process) to the cluster's network.  A result code of
 	// UNSPECIFIED indicates that the connection was successfully
@@ -396,6 +432,7 @@ type ConnectorServer interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
+	UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
 	Helm(context.Context, *HelmRequest) (*Result, error)
 	// Uninstalls traffic-agents from the cluster.
@@ -412,8 +449,8 @@ type ConnectorServer interface {
 	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
 	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
 	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
-	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
-	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
+	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
+	SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
@@ -447,6 +484,12 @@ func (UnimplementedConnectorServer) Version(context.Context, *emptypb.Empty) (*c
 func (UnimplementedConnectorServer) RootDaemonVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RootDaemonVersion not implemented")
 }
+func (UnimplementedConnectorServer) TrafficManagerVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TrafficManagerVersion not implemented")
+}
+func (UnimplementedConnectorServer) GetIntercept(context.Context, *manager.GetInterceptRequest) (*manager.InterceptInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetIntercept not implemented")
+}
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
@@ -467,6 +510,9 @@ func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInte
 }
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
+}
+func (UnimplementedConnectorServer) UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
 func (UnimplementedConnectorServer) Helm(context.Context, *HelmRequest) (*Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Helm not implemented")
@@ -495,7 +541,7 @@ func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest)
 func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
 }
-func (UnimplementedConnectorServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error) {
+func (UnimplementedConnectorServer) SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
@@ -567,6 +613,42 @@ func _Connector_RootDaemonVersion_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).RootDaemonVersion(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_TrafficManagerVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).TrafficManagerVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/TrafficManagerVersion",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).TrafficManagerVersion(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_GetIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.GetInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GetIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/GetIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GetIntercept(ctx, req.(*manager.GetInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -693,6 +775,24 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*manager.RemoveInterceptRequest2))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_UpdateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.UpdateInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).UpdateIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.connector.Connector/UpdateIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).UpdateIntercept(ctx, req.(*manager.UpdateInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -863,7 +963,7 @@ func _Connector_GetCloudLicense_Handler(srv interface{}, ctx context.Context, de
 }
 
 func _Connector_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.LogLevelRequest)
+	in := new(LogLevelRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -875,7 +975,7 @@ func _Connector_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec fu
 		FullMethod: "/telepresence.connector.Connector/SetLogLevel",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).SetLogLevel(ctx, req.(*manager.LogLevelRequest))
+		return srv.(ConnectorServer).SetLogLevel(ctx, req.(*LogLevelRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1040,6 +1140,14 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_RootDaemonVersion_Handler,
 		},
 		{
+			MethodName: "TrafficManagerVersion",
+			Handler:    _Connector_TrafficManagerVersion_Handler,
+		},
+		{
+			MethodName: "GetIntercept",
+			Handler:    _Connector_GetIntercept_Handler,
+		},
+		{
 			MethodName: "Connect",
 			Handler:    _Connector_Connect_Handler,
 		},
@@ -1066,6 +1174,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveIntercept",
 			Handler:    _Connector_RemoveIntercept_Handler,
+		},
+		{
+			MethodName: "UpdateIntercept",
+			Handler:    _Connector_UpdateIntercept_Handler,
 		},
 		{
 			MethodName: "Helm",

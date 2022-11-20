@@ -4,6 +4,7 @@ package telepresence.connector;
 import "common/errors.proto";
 import "common/version.proto";
 import "daemon/daemon.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "manager/manager.proto";
 
@@ -17,6 +18,12 @@ service Connector {
 
   // Returns version information from the Root Daemon
   rpc RootDaemonVersion(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
+
+  // Returns version information from the Root Daemon
+  rpc TrafficManagerVersion(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
+
+  // GetIntercept gets info from intercept name
+  rpc GetIntercept(manager.GetInterceptRequest) returns (manager.InterceptInfo);
 
   // Connects to the cluster and connects the laptop's network (via
   // the daemon process) to the cluster's network.  A result code of
@@ -47,6 +54,8 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
+  rpc UpdateIntercept(telepresence.manager.UpdateInterceptRequest) returns (telepresence.manager.InterceptInfo);
+
   // Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
   rpc Helm(HelmRequest) returns (Result);
 
@@ -72,8 +81,8 @@ service Connector {
 
   rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
 
-  // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined by the request.
-  rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
+  // SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
+  rpc SetLogLevel(LogLevelRequest) returns (google.protobuf.Empty);
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -350,6 +359,22 @@ message LicenseRequest {
 message LicenseData {
   string license = 1;
   string host_domain = 2;
+}
+
+message LogLevelRequest {
+  enum Scope {
+    UNSPECIFIED = 0;
+    LOCAL_ONLY = 1; // applies only to the local daemon processes
+    REMOTE_ONLY = 2; // applies only to traffic-manager and traffic-agents
+  }
+
+  string log_level = 1;
+
+  // The time that this log-level will be in effect before
+  // falling back to the configured log-level.
+  google.protobuf.Duration duration = 2;
+
+  Scope scope = 3;
 }
 
 message LogsRequest {
