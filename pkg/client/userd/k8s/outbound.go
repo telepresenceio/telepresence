@@ -31,7 +31,12 @@ func (kc *Cluster) startNamespaceWatcher(c context.Context) {
 
 	ready := sync.WaitGroup{}
 	ready.Add(1)
-	go kc.nsWatcher.Watch(c, &ready)
+	go func() {
+		err := kc.nsWatcher.Watch(c, &ready)
+		if err != nil {
+			dlog.Errorf(c, "error watching namespaces: %s", err)
+		}
+	}()
 	ready.Wait()
 	cache.WaitForCacheSync(c.Done(), kc.nsWatcher.HasSynced)
 

@@ -283,7 +283,10 @@ func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string
 	// Starting the svcWatcher will set it to active and also trigger its state listener
 	// which means a) that the set of active namespaces will change, and b) that the
 	// WatchAgentsNS will restart with that namespace included.
-	nw.svcWatcher.EnsureStarted(c, cb)
+	err := nw.svcWatcher.EnsureStarted(c, cb)
+	if err != nil {
+		dlog.Errorf(c, "error starting service watchers: %s", err)
+	}
 }
 
 func (w *workloadsAndServicesWatcher) getActiveNamespaces() []string {
