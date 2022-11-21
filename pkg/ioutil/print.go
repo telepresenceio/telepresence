@@ -22,3 +22,12 @@ func Printf(out io.Writer, format string, args ...any) int {
 	}
 	return n
 }
+
+// WriteString is like io.WriteString but panics on error.
+func WriteString(out io.Writer, s string) int {
+	n, err := io.WriteString(out, s)
+	if err != nil {
+		panic(err)
+	}
+	return n
+}
