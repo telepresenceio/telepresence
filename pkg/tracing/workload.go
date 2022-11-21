@@ -30,7 +30,7 @@ func RecordWorkloadInfo(span trace.Span, wl k8sapi.Workload) {
 //
 // The first match is returned.
 func GetWorkload(c context.Context, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
-	c, span := otel.GetTracerProvider().Tracer("").Start(c, "tracing.GetWorkload",
+	c, span := otel.GetTracerProvider().Tracer("").Start(c, "k8sapi.GetWorkload",
 		trace.WithAttributes(
 			attribute.String("tel2.workload-name", name),
 			attribute.String("tel2.workload-namespace", namespace),
