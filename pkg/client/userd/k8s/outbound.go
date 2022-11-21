@@ -8,13 +8,12 @@ import (
 	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	typedAuth "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // nsWatcher runs a Kubernetes Watcher that provide information about the cluster's namespaces'.
@@ -26,9 +25,9 @@ import (
 func (kc *Cluster) startNamespaceWatcher(c context.Context) {
 	cond := sync.Cond{}
 	cond.L = &kc.nsLock
-	kc.nsWatcher = k8sapi.NewWatcher("namespaces", "", kc.ki.CoreV1().RESTClient(), &core.Namespace{}, &cond, func(a, b runtime.Object) bool {
-		return a.(*core.Namespace).Name == b.(*core.Namespace).Name
-	})
+	kc.nsWatcher = k8sapi.NewWatcher("namespaces", kc.ki.CoreV1().RESTClient(), &cond, k8sapi.WithEquals[*core.Namespace](func(a, b *core.Namespace) bool {
+		return a.Name == b.Name
+	}))
 
 	ready := sync.WaitGroup{}
 	ready.Add(1)
@@ -127,10 +126,14 @@ func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.Name
 
 func (kc *Cluster) refreshNamespacesLocked(c context.Context) {
 	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
-	cns := kc.nsWatcher.List(c)
+	cns, err := kc.nsWatcher.List(c)
+	if err != nil {
+		dlog.Errorf(c, "error listing namespaces: %s", err)
+		return
+	}
 	namespaces := make(map[string]bool, len(cns))
 	for _, o := range cns {
-		ns := o.(*core.Namespace).Name
+		ns := o.Name
 		if kc.shouldBeWatched(ns) {
 			accessOk, ok := kc.currentMappedNamespaces[ns]
 			if !ok {

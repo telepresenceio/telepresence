@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 )
 
 // FilterServicePorts iterates through a list of ports in a service and

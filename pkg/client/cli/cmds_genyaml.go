@@ -18,11 +18,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 type genYAMLInfo struct {
@@ -134,7 +135,7 @@ func (i *genYAMLInfo) loadWorkload(ctx context.Context) (k8sapi.Workload, error)
 		if i.workloadName == "" {
 			return nil, errcat.User.New("either --input or --workload must be provided")
 		}
-		return k8sapi.GetWorkload(ctx, i.workloadName, i.namespace, "")
+		return tracing.GetWorkload(ctx, i.workloadName, i.namespace, "")
 	}
 	b, err := getInput(i.inputFile)
 	if err != nil {

@@ -22,12 +22,13 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 type Map interface {
@@ -62,7 +63,7 @@ func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Work
 	if err := decode(e.value, ac); err != nil {
 		return nil, nil, fmt.Errorf("failed to decode ConfigMap entry %q into an agent config", e.value)
 	}
-	wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+	wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -72,7 +73,7 @@ func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Work
 func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.triggerRollout")
 	defer span.End()
-	k8sapi.RecordWorkloadInfo(span, wl)
+	tracing.RecordWorkloadInfo(span, wl)
 	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
 		triggerRolloutReplicaSet(ctx, wl, rs, span)
 		return
@@ -265,7 +266,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 	dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
 	ac, wl, err := e.workload(ctx)
 	ac.RecordInSpan(span)
-	k8sapi.RecordWorkloadInfo(span, wl)
+	tracing.RecordWorkloadInfo(span, wl)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			dlog.Error(ctx, err)
@@ -306,7 +307,7 @@ func (*configWatcher) handleDelete(ctx context.Context, e entry) {
 	defer span.End()
 	dlog.Debugf(ctx, "del %s.%s", e.name, e.namespace)
 	ac, wl, err := e.workload(ctx)
-	k8sapi.RecordWorkloadInfo(span, wl)
+	tracing.RecordWorkloadInfo(span, wl)
 	ac.RecordInSpan(span)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -640,7 +641,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		return
 	}
 	for _, ac := range c.affectedConfigs(ctx, svc, isDelete) {
-		wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+		wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
