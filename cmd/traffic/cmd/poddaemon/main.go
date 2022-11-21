@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	user_daemon "github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 )
 
@@ -197,12 +199,20 @@ func main(ctx context.Context, args *Args) error {
 		dlog.Infof(ctx, "Created intercept")
 
 		// Watch the intercept so that we can report errors.
-		var prevSummary string
-		var mgrProxy rpc_manager.ManagerServer
-		userdService.As(&mgrProxy)
-		return mgrProxy.WatchIntercepts(session, &interceptWatcher{
-			ctx: ctx,
-			handler: func(snapshot *rpc_manager.InterceptInfoSnapshot) error {
+		return userdCoreImpl.WithSession(ctx, "WatchIntercepts", func(ctx context.Context, us userd.Session) error {
+			var prevSummary string
+			wcl, err := us.ManagerClient().WatchIntercepts(ctx, session)
+			if err != nil {
+				return err
+			}
+			for {
+				snapshot, err := wcl.Recv()
+				if err != nil {
+					if err == io.EOF || ctx.Err() != nil {
+						err = nil
+					}
+					return err
+				}
 				switch len(snapshot.Intercepts) {
 				case 0:
 					return fmt.Errorf("intercept vanished; restarting")
@@ -215,11 +225,10 @@ func main(ctx context.Context, args *Args) error {
 						return errors.New(nextSummary)
 					}
 					prevSummary = nextSummary
-					return nil
 				default:
 					return fmt.Errorf("this %v has multiple intercepts associated with it... that doesn't make sense", processName)
 				}
-			},
+			}
 		})
 	})
 
@@ -254,18 +263,4 @@ func summarizeIntercept(icept *rpc_manager.InterceptInfo) (summary string, icept
 		summary += ": " + icept.Message
 	}
 	return
-}
-
-type interceptWatcher struct {
-	ctx     context.Context
-	handler func(*rpc_manager.InterceptInfoSnapshot) error
-	shamServerStream
-}
-
-func (iw *interceptWatcher) Context() context.Context {
-	return iw.ctx
-}
-
-func (iw *interceptWatcher) Send(arg *rpc_manager.InterceptInfoSnapshot) error {
-	return iw.handler(arg)
 }

@@ -176,17 +176,6 @@ func NewSession(
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 
-	// Must call SetManagerClient before calling daemon.Connect which tells the
-	// daemon to use the proxy.
-	var opts []grpc.CallOption
-	cfg := client.GetConfig(ctx)
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-		}
-	}
-	svc.SetManagerClient(tmgr.managerClient, opts...)
-
 	tmgr.sessionConfig = client.GetDefaultConfig()
 	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
 	if err != nil {

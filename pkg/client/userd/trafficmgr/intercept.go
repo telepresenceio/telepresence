@@ -815,6 +815,17 @@ func (s *session) GetInterceptSpec(name string) *manager.InterceptSpec {
 	return nil
 }
 
+// GetInterceptInfo returns the InterceptInfo for the given name, or nil if no such info exists.
+func (s *session) GetInterceptInfo(name string) *manager.InterceptInfo {
+	if _, ok := s.localIntercepts[name]; ok {
+		return nil
+	}
+	if ic := s.getInterceptByName(name); ic != nil {
+		return ic.InterceptInfo
+	}
+	return nil
+}
+
 // GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists.
 func (s *session) getInterceptByName(name string) (found *intercept) {
 	s.currentInterceptsLock.Lock()
