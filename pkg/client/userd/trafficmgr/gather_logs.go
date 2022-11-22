@@ -16,9 +16,9 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // getPodLog obtains the log and optionally the YAML for a given pod and stores it in

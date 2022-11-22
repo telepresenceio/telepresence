@@ -10,14 +10,15 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload, error) {
 	refs := obj.GetOwnerReferences()
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			wl, err := k8sapi.GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
+			wl, err := tracing.GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
 			if err != nil {
 				var uwkErr k8sapi.UnsupportedWorkloadKindError
 				if errors.As(err, &uwkErr) {

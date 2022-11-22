@@ -9,14 +9,15 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 const supportedKubeAPIVersion = "1.17.0"
@@ -32,7 +33,7 @@ type Cluster struct {
 	// Current Namespace snapshot, get set by namespace Watcher.
 	// The boolean value indicates if this client is allowed to
 	// watch services and retrieve workloads in the namespace
-	nsWatcher *k8sapi.Watcher
+	nsWatcher *k8sapi.Watcher[*corev1.Namespace]
 
 	// nsLock protects currentMappedNamespaces and namespaceListeners
 	nsLock sync.Mutex

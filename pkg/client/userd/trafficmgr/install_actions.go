@@ -16,8 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // Public interface-y pieces ///////////////////////////////////////////////////

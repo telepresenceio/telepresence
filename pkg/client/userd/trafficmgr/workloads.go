@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 )
 
 type workloadsAndServicesWatcher struct {
@@ -34,8 +34,8 @@ const (
 
 // namespacedWASWatcher is watches Workloads And Services (WAS) for a namespace.
 type namespacedWASWatcher struct {
-	svcWatcher *k8sapi.Watcher
-	wlWatchers [3]*k8sapi.Watcher
+	svcWatcher *k8sapi.Watcher[*core.Service]
+	wlWatchers [3]*k8sapi.Watcher[runtime.Object]
 }
 
 // svcEquals compare only the Service fields that are of interest to Telepresence. They are
@@ -45,9 +45,7 @@ type namespacedWASWatcher struct {
 //   - Namespace
 //   - Spec.Ports
 //   - Spec.Type
-func svcEquals(oa, ob runtime.Object) bool {
-	a := oa.(*core.Service)
-	b := ob.(*core.Service)
+func svcEquals(a, b *core.Service) bool {
 	aPorts := a.Spec.Ports
 	bPorts := b.Spec.Ports
 	if len(aPorts) != len(bPorts) {
@@ -145,11 +143,11 @@ func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond) *
 	ki := k8sapi.GetK8sInterface(c)
 	appsGetter := ki.AppsV1().RESTClient()
 	w := &namespacedWASWatcher{
-		svcWatcher: k8sapi.NewWatcher("services", namespace, ki.CoreV1().RESTClient(), &core.Service{}, cond, svcEquals),
-		wlWatchers: [3]*k8sapi.Watcher{
-			k8sapi.NewWatcher("deployments", namespace, appsGetter, &apps.Deployment{}, cond, workloadEquals),
-			k8sapi.NewWatcher("replicasets", namespace, appsGetter, &apps.ReplicaSet{}, cond, workloadEquals),
-			k8sapi.NewWatcher("statefulsets", namespace, appsGetter, &apps.StatefulSet{}, cond, workloadEquals),
+		svcWatcher: k8sapi.NewWatcher("services", ki.CoreV1().RESTClient(), cond, k8sapi.WithEquals(svcEquals), k8sapi.WithNamespace[*core.Service](namespace)),
+		wlWatchers: [3]*k8sapi.Watcher[runtime.Object]{
+			k8sapi.NewWatcher("deployments", appsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace)),
+			k8sapi.NewWatcher("replicasets", appsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace)),
+			k8sapi.NewWatcher("statefulsets", appsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace)),
 		},
 	}
 	return w
@@ -195,8 +193,12 @@ func (w *workloadsAndServicesWatcher) eachService(c context.Context, tmns string
 		nw, ok := w.nsWatchers[ns]
 		w.Unlock()
 		if ok {
-			for _, o := range nw.svcWatcher.List(c) {
-				svc := o.(*core.Service)
+			svcs, err := nw.svcWatcher.List(c)
+			if err != nil {
+				dlog.Errorf(c, "error listing services: %s", err)
+				return
+			}
+			for _, svc := range svcs {
 				// If this is our traffic-manager namespace, then exclude the traffic-manager service.
 				if !(ns == tmns && svc.Labels["app"] == "traffic-manager" && svc.Labels["telepresence"] == "manager") {
 					f(svc)
@@ -234,21 +236,7 @@ func (w *workloadsAndServicesWatcher) waitForSync(c context.Context) {
 // subscribe writes to the given channel whenever relevant information has changed
 // in the current snapshot.
 func (w *workloadsAndServicesWatcher) subscribe(c context.Context) <-chan struct{} {
-	ch := make(chan struct{})
-	go func() {
-		for {
-			w.Lock()
-			w.cond.Wait()
-			w.Unlock()
-			select {
-			case <-c.Done():
-				close(ch)
-				return
-			case ch <- struct{}{}:
-			}
-		}
-	}()
-	return ch
+	return k8sapi.Subscribe(c, &w.cond)
 }
 
 // setNamespacesToWatch starts new watchers or kills old ones to make the current
@@ -295,7 +283,10 @@ func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string
 	// Starting the svcWatcher will set it to active and also trigger its state listener
 	// which means a) that the set of active namespaces will change, and b) that the
 	// WatchAgentsNS will restart with that namespace included.
-	nw.svcWatcher.EnsureStarted(c, cb)
+	err := nw.svcWatcher.EnsureStarted(c, cb)
+	if err != nil {
+		dlog.Errorf(c, "error starting service watchers: %s", err)
+	}
 }
 
 func (w *workloadsAndServicesWatcher) getActiveNamespaces() []string {
@@ -362,7 +353,11 @@ func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *co
 
 	var allWls []k8sapi.Workload
 	for i, wlw := range nw.wlWatchers {
-		for _, o := range wlw.List(c) {
+		wls, err := wlw.List(c)
+		if err != nil {
+			return nil, err
+		}
+		for _, o := range wls {
 			var wl k8sapi.Workload
 			switch i {
 			case deployments:

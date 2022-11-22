@@ -11,6 +11,7 @@ require (
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/datawire/go-ftpserver v0.1.1
 	github.com/datawire/go-fuseftp/rpc v0.2.0
+	github.com/datawire/k8sapi v0.1.1
 	github.com/datawire/metriton-go-client v0.1.1
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/godbus/dbus/v5 v5.1.0
@@ -58,6 +59,8 @@ require (
 	k8s.io/utils v0.0.0-20220922133306-665eaaec4324
 	sigs.k8s.io/yaml v1.3.0
 )
+
+require github.com/moby/sys/mountinfo v0.6.0 // indirect
 
 require (
 	cloud.google.com/go/compute v1.10.0 // indirect

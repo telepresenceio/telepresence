@@ -20,6 +20,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
@@ -27,7 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
@@ -77,7 +78,7 @@ func legacyRemoveAgents(c context.Context, agents []*manager.AgentInfo) error {
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := k8sapi.GetWorkload(c, ai.Name, ai.Namespace, "")
+			agent, err := tracing.GetWorkload(c, ai.Name, ai.Namespace, "")
 			if err != nil {
 				if !errors2.IsNotFound(err) {
 					addError(err)
