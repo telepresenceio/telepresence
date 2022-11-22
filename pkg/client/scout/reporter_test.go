@@ -345,11 +345,12 @@ func TestReport(t *testing.T) {
 	type testcase struct {
 		InputEnv         map[string]string
 		Input            []Entry
-		ExpectedMetadata map[string]string
+		ExpectedMetadata map[string]any
+		ReportAnnotators []ReportAnnotator
 	}
 	testcases := map[string]testcase{
 		"without-additional-meta": {
-			ExpectedMetadata: map[string]string{
+			ExpectedMetadata: map[string]any{
 				"action": mockAction,
 				"mode":   mockMode,
 				"goos":   mockOS,
@@ -367,7 +368,7 @@ func TestReport(t *testing.T) {
 					Value: "extra value 2",
 				},
 			},
-			ExpectedMetadata: map[string]string{
+			ExpectedMetadata: map[string]any{
 				"action":        mockAction,
 				"mode":          mockMode,
 				"goos":          mockOS,
@@ -381,7 +382,7 @@ func TestReport(t *testing.T) {
 				"TELEPRESENCE_REPORT_EXTRA_FIELD_1": "extra value 1",
 				"TELEPRESENCE_REPORT_EXTRA_FIELD_2": "extra value 2",
 			},
-			ExpectedMetadata: map[string]string{
+			ExpectedMetadata: map[string]any{
 				"action":        mockAction,
 				"mode":          mockMode,
 				"goos":          mockOS,
@@ -401,7 +402,7 @@ func TestReport(t *testing.T) {
 					Value: "extra value 1",
 				},
 			},
-			ExpectedMetadata: map[string]string{
+			ExpectedMetadata: map[string]any{
 				"action":        mockAction,
 				"mode":          mockMode,
 				"goos":          mockOS,
@@ -416,11 +417,38 @@ func TestReport(t *testing.T) {
 					Value: "overridden mode",
 				},
 			},
-			ExpectedMetadata: map[string]string{
+			ExpectedMetadata: map[string]any{
 				"action": mockAction,
 				"mode":   "overridden mode",
 				"goos":   mockOS,
 				"goarch": mockARCH,
+			},
+		},
+		"with-report-annotators": {
+			Input: []Entry{
+				{
+					Key:   "mode",
+					Value: "overridden mode",
+				},
+				{
+					Key:   "extra_field",
+					Value: "extra value",
+				},
+			},
+			ReportAnnotators: []ReportAnnotator{
+				func(data map[string]any) {
+					data["action"] = "overridden action"
+					data["annotation"] = "annotated value"
+					data["extra_field"] = "annotated extra value"
+				},
+			},
+			ExpectedMetadata: map[string]any{
+				"action":      "overridden action",
+				"mode":        "overridden mode",
+				"goos":        mockOS,
+				"goarch":      mockARCH,
+				"extra_field": "extra value", // Not overridden by annotation
+				"annotation":  "annotated value",
 			},
 		},
 	}
@@ -469,6 +497,7 @@ func TestReport(t *testing.T) {
 					},
 					Endpoint: testServer.URL,
 				},
+				reportAnnotators: tcData.ReportAnnotators,
 			}
 			scout.initialize(ctx, mockMode, mockOS, mockARCH)
 
@@ -489,8 +518,21 @@ func TestReport(t *testing.T) {
 			// And expect...
 			require.Len(t, capturedRequestBodies, 1)
 			metadata := capturedRequestBodies[0]["metadata"].(map[string]any)
-			for expectedKey, expectedValue := range tcData.ExpectedMetadata {
+
+			expMeta := make(map[string]any)
+			expMeta["index"] = 1.0
+			for k, v := range scout.reporter.BaseMetadata {
+				expMeta[k] = v
+			}
+			for k, v := range tcData.ExpectedMetadata {
+				expMeta[k] = v
+			}
+			for expectedKey, expectedValue := range expMeta {
 				assert.Equal(t, expectedValue, metadata[expectedKey])
+			}
+			for actualKey, actualValue := range metadata {
+				_, ok := expMeta[actualKey]
+				assert.True(t, ok, "%s = %v is unexpected", actualKey, actualValue)
 			}
 		})
 	}
