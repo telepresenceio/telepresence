@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.9.3 (TBD)
+### 2.9.3 (November 23, 2022)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager
   deployment, so that the pod automatically restarts if it doesn't respond.
