@@ -4,7 +4,7 @@
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name:  telepresence-test-connect
+  name:  telepresence-test-developer
 rules:
   - apiGroups: [""]
     resources: ["pods"]
@@ -16,12 +16,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: telepresence-test-connect
+  name: telepresence-test-developer
 subjects:
   - name: telepresence-test-developer
     kind: ServiceAccount
     namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  name: telepresence-test-connect
+  name: telepresence-test-developer
   kind: Role

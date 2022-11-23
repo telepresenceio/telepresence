@@ -20,7 +20,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 	assert := s.Assert()
 	ctx := s.Context()
 
-	k8sDir := filepath.Join(itest.GetWorkingDir(itest.WithModuleRoot(ctx)), "k8s")
+	k8sDir := filepath.Join("testdata", "k8s")
 	require.NoError(itest.Kubectl(ctx, s.AppNamespace(), "apply", "-f", filepath.Join(k8sDir, "echo-manual-inject-svc.yaml")))
 
 	agentImage := s.Registry() + "/tel2:" + strings.TrimPrefix(s.TelepresenceVersion(), "v")

@@ -28,7 +28,7 @@ func (s *helmSuite) limitedRangeTest(origCtx context.Context, policy, limitedNS 
 	s.CapturePodLogs(ctx, "app=traffic-manager", "", limitedNS)
 
 	require := s.Require()
-	require.NoError(itest.Kubectl(itest.WithModuleRoot(ctx), limitedNS, "apply", "-f", filepath.Join("k8s", "memory-constraints.yaml")))
+	require.NoError(itest.Kubectl(ctx, limitedNS, "apply", "-f", filepath.Join("testdata", "k8s", "memory-constraints.yaml")))
 	itest.ApplyEchoService(ctx, svc, limitedNS, 8083)
 	defer func() {
 		s.NoError(itest.Kubectl(ctx, limitedNS, "delete", "svc,deploy", svc))

@@ -193,7 +193,7 @@ nextSession:
 			s.cancelSession()
 			continue
 		}
-		if rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
+		if session == nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 			continue
 		}
 
