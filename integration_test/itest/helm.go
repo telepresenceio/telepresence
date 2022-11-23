@@ -55,6 +55,7 @@ func (h *helmAndService) tearDown(ctx context.Context) {
 	}, 20*time.Second, 2*time.Second, "User still has permissions to get namespaces")
 
 	// Restore the rbac we blew up in the setup
+	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	require.NoError(t, Kubectl(ctx, "", "apply", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml")))
 	require.NoError(t, Run(ctx, "kubectl", "label", "clusterrolebinding", TestUser, "purpose="+purposeLabel))
 }

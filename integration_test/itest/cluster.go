@@ -144,6 +144,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 func (s *cluster) tearDown(ctx context.Context) {
 	s.ensureQuitAndLoggedOut(ctx)
 	if s.kubeConfig != "" {
+		ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml"))
 		_ = Run(ctx, "kubectl", "delete", "--wait=false", "ns", "-l", "purpose=tp-cli-testing")
 	}
@@ -237,6 +238,7 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.
 	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,clusterrole,clusterrolebinding", "-l", "app=traffic-manager")
 
+	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	require.NoError(t, Run(ctx, "kubectl", "apply", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml")),
 		"failed to create %s service account", TestUser)
 	require.NoError(t, Run(ctx, "kubectl", "label", "serviceaccount,clusterrole,clusterrolebinding", TestUser, "purpose="+purposeLabel))
@@ -471,6 +473,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 	}
 	settings := s.GetValuesForHelm(values, managerNamespace, appNamespaces...)
 
+	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	helmValues := filepath.Join("testdata", "namespaced-values.yaml")
 	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
 	args = append(args, settings...)
