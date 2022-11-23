@@ -190,13 +190,13 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 	return r
 }
 
-// ReportAnnotators are the default annotator functions that the NewReporter function will pass to NewReporterForInstallType.
-var ReportAnnotators []ReportAnnotator //nolint:gochecknoglobals // extension point
+// DefaultReportAnnotators are the default annotator functions that the NewReporter function will pass to NewReporterForInstallType.
+var DefaultReportAnnotators []ReportAnnotator //nolint:gochecknoglobals // extension point
 
 // NewReporter creates a new initialized Reporter instance that can be used to
 // send telepresence reports to Metriton.
 func NewReporter(ctx context.Context, mode string) *Reporter {
-	return NewReporterForInstallType(ctx, mode, CLI, ReportAnnotators)
+	return NewReporterForInstallType(ctx, mode, CLI, DefaultReportAnnotators)
 }
 
 // initialization broken out or constructor for the benefit of testing.
@@ -207,7 +207,7 @@ func (r *Reporter) initialize(ctx context.Context, mode, goos, goarch string) {
 	// Fixed (growing) metadata passed with every report
 	baseMeta := getOsMetadata(ctx)
 	baseMeta["mode"] = mode
-	baseMeta["trace_id"] = uuid.New().String() //  It's sent as JSON so might as well convert it to a string once here.
+	baseMeta["trace_id"] = uuid.NewString() //  It's sent as JSON so might as well convert it to a string once here.
 	baseMeta["goos"] = goos
 	baseMeta["goarch"] = goarch
 
