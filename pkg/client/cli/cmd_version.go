@@ -11,10 +11,10 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func versionCommand() *cobra.Command {
@@ -24,7 +24,7 @@ func versionCommand() *cobra.Command {
 
 		Short:   "Show version",
 		PreRunE: util.ForcedUpdateCheck,
-		RunE:    PrintVersion,
+		RunE:    printVersion,
 		Annotations: map[string]string{
 			ann.RootDaemon:        ann.Optional,
 			ann.UserDaemon:        ann.Optional,
@@ -33,44 +33,46 @@ func versionCommand() *cobra.Command {
 	}
 }
 
-// PrintVersion requests version info from the daemon and prints both client and daemon version.
-func PrintVersion(cmd *cobra.Command, _ []string) error {
+func printVersion(cmd *cobra.Command, _ []string) error {
 	if err := util.InitCommand(cmd); err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Client: %s\n",
-		client.DisplayVersion())
+	kvf := ioutil.DefaultKeyValueFormatter()
+	kvf.Add(client.DisplayName, client.Version())
 
 	ctx := cmd.Context()
 	version, err := daemonVersion(ctx)
 	switch {
 	case err == nil:
-		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: %s (api v%d)\n", version.Version, version.ApiVersion)
+		kvf.Add("Root Daemon", version.Version)
 	case err == util.ErrNoRootDaemon:
-		fmt.Fprintln(cmd.OutOrStdout(), "Root Daemon: not running")
+		kvf.Add("Root Daemon", "not running")
 	default:
-		fmt.Fprintf(cmd.OutOrStdout(), "Root Daemon: error: %v\n", err)
+		kvf.Add("Root Daemon", fmt.Sprintf("error: %v", err))
 	}
 
 	version, err = connectorVersion(ctx)
 	switch {
 	case err == nil:
-		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: %s (api v%d)\n", version.Version, version.ApiVersion)
-		var mgrVer *manager.VersionInfo2
+		kvf.Add("User Daemon", version.Version)
+		var mgrVer *common.VersionInfo
 		mgrVer, err = managerVersion(ctx)
 		switch {
 		case err == nil:
-			fmt.Fprintf(cmd.OutOrStdout(), "Traffic Manager: %s\n", mgrVer.Version)
+			kvf.Add("Traffic Manager", mgrVer.Version)
 		case status.Code(err) == codes.Unavailable:
-			fmt.Fprintln(cmd.OutOrStdout(), "Traffic Manager: not connected")
+			kvf.Add("Traffic Manager", "not connected")
 		default:
-			fmt.Fprintf(cmd.OutOrStdout(), "Traffic Manager: error: %v\n", err)
+			kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
 		}
 	case err == util.ErrNoUserDaemon:
-		fmt.Fprintln(cmd.OutOrStdout(), "User Daemon: not running")
+		kvf.Add("User Daemon", "not running")
 	default:
-		fmt.Fprintf(cmd.OutOrStdout(), "User Daemon: error: %v\n", err)
+		kvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
 	}
+	out := cmd.OutOrStdout()
+	_, _ = kvf.WriteTo(out)
+	ioutil.WriteString(out, "\n")
 	return nil
 }
 
@@ -89,10 +91,9 @@ func connectorVersion(ctx context.Context) (*common.VersionInfo, error) {
 	return nil, util.ErrNoUserDaemon
 }
 
-func managerVersion(ctx context.Context) (*manager.VersionInfo2, error) {
-	userD := util.GetUserDaemon(ctx)
-	if userD == nil {
-		return nil, util.ErrNoUserDaemon
+func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
+	if userD := util.GetUserDaemon(ctx); userD != nil {
+		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
 	}
-	return manager.NewManagerClient(userD.Conn).Version(ctx, &empty.Empty{})
+	return nil, util.ErrNoUserDaemon
 }

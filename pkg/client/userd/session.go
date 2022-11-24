@@ -55,6 +55,7 @@ type Session interface {
 	RemoveInterceptor(string) error
 	ClearIntercepts(context.Context) error
 
+	GetInterceptInfo(string) *manager.InterceptInfo
 	GetInterceptSpec(string) *manager.InterceptSpec
 	InterceptsForWorkload(string, string) []*manager.InterceptSpec
 

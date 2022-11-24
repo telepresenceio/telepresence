@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 
 	"github.com/stretchr/testify/suite"
 
@@ -27,12 +28,12 @@ func (s *cliSuite) Test_Version() {
 		s.Require().NoError(err)
 	}
 	s.Empty(stderr)
-	s.Contains(stdout, fmt.Sprintf("Client: %s", s.TelepresenceVersion()))
+	s.Regexp(fmt.Sprintf(`Client\s*: %s`, regexp.QuoteMeta(s.TelepresenceVersion())), stdout)
 }
 
 func (s *cliSuite) Test_Help() {
 	// TODO: Fix these tests
-	s.T().Skip("these test doesn't work")
+	s.T().Skip("these tests don't work")
 	const (
 		helpHead  = `Telepresence can connect to a cluster and route all outbound traffic`
 		usageHead = `Usage:`

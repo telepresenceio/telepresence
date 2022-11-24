@@ -138,11 +138,12 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
 	ctx, err = client.SetConfig(ctx, configDir, configYamlStr)
 	require.NoError(err)
+	itest.TelepresenceQuitOk(ctx) // Because context changed
 
 	var currentLine int64
 	s.Eventually(func() bool {
 		itest.TelepresenceOk(ctx, "connect")
-		defer itest.TelepresenceQuitOk(ctx)
+		itest.TelepresenceDisconnectOk(ctx)
 
 		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
@@ -186,7 +187,9 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 			RootDaemon: logrus.DebugLevel,
 		},
 	})
+	itest.TelepresenceQuitOk(ctx) // Because context changed
 	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceDisconnectOk(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 	levelSet = false
 	for scn.Scan() && !levelSet {
@@ -236,11 +239,12 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
 	ctx, err = client.SetConfig(ctx, configDir, configYamlStr)
 	require.NoError(err)
+	itest.TelepresenceQuitOk(ctx) // Because context changed
 
 	var currentLine int64
 	s.Eventually(func() bool {
 		itest.TelepresenceOk(ctx, "connect")
-		defer itest.TelepresenceQuitOk(ctx)
+		itest.TelepresenceDisconnectOk(ctx)
 
 		logF, err := os.Open(logName)
 		require.NoError(err)
@@ -284,7 +288,11 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 			UserDaemon: logrus.DebugLevel,
 		},
 	})
+	itest.TelepresenceQuitOk(ctx) // Because context changed
+
 	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceDisconnectOk(ctx)
+
 	defer itest.TelepresenceQuitOk(ctx)
 	levelSet = false
 	for scn.Scan() && !levelSet {

@@ -50,7 +50,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 		ManagerNamespace: "default",
 		AgentRegistry:    "docker.io/datawire",
-		AgentImage:       "tel2:2.8.0",
+		AgentImage:       "tel2:2.9.0",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)

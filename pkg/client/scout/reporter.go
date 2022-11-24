@@ -25,12 +25,15 @@ type bufEntry struct {
 	entries []Entry
 }
 
+type ReportAnnotator func(map[string]any)
+
 // Reporter is a Metriton reported.
 type Reporter struct {
-	index    int
-	buffer   chan bufEntry
-	done     chan struct{}
-	reporter *metriton.Reporter
+	index            int
+	buffer           chan bufEntry
+	done             chan struct{}
+	reportAnnotators []ReportAnnotator
+	reporter         *metriton.Reporter
 }
 
 // Entry is a key/value association used when reporting.
@@ -166,7 +169,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 // before entries are discarded.
 const bufferSize = 40
 
-func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType) *Reporter {
+func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType, reportAnnotators []ReportAnnotator) *Reporter {
 	r := &Reporter{
 		reporter: &metriton.Reporter{
 			Application: "telepresence2",
@@ -181,15 +184,19 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 				return id, nil
 			},
 		},
+		reportAnnotators: reportAnnotators,
 	}
 	r.initialize(ctx, mode, runtime.GOOS, runtime.GOARCH)
 	return r
 }
 
+// DefaultReportAnnotators are the default annotator functions that the NewReporter function will pass to NewReporterForInstallType.
+var DefaultReportAnnotators []ReportAnnotator //nolint:gochecknoglobals // extension point
+
 // NewReporter creates a new initialized Reporter instance that can be used to
 // send telepresence reports to Metriton.
 func NewReporter(ctx context.Context, mode string) *Reporter {
-	return NewReporterForInstallType(ctx, mode, CLI)
+	return NewReporterForInstallType(ctx, mode, CLI, DefaultReportAnnotators)
 }
 
 // initialization broken out or constructor for the benefit of testing.
@@ -200,7 +207,7 @@ func (r *Reporter) initialize(ctx context.Context, mode, goos, goarch string) {
 	// Fixed (growing) metadata passed with every report
 	baseMeta := getOsMetadata(ctx)
 	baseMeta["mode"] = mode
-	baseMeta["trace_id"] = uuid.New()
+	baseMeta["trace_id"] = uuid.NewString() //  It's sent as JSON so might as well convert it to a string once here.
 	baseMeta["goos"] = goos
 	baseMeta["goarch"] = goarch
 
@@ -307,6 +314,9 @@ func (r *Reporter) doReport(ctx context.Context, be *bufEntry) {
 	metadata := make(map[string]any, 4+len(be.entries))
 	metadata["action"] = be.action
 	metadata["index"] = r.index
+	for _, ra := range r.reportAnnotators {
+		ra(metadata)
+	}
 	for _, metaItem := range be.entries {
 		metadata[metaItem.Key] = metaItem.Value
 	}

@@ -347,7 +347,8 @@ nextSession:
 			s.cancelSession()
 			continue
 		}
-		if reply.err != nil {
+		// If no session was created, then this interaction just returns the OutboundInfo.
+		if session == nil || reply.err != nil {
 			continue
 		}
 

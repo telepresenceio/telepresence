@@ -1,12 +1,14 @@
 # Changelog
 
-### 2.9.3 (TBD)
+### 2.9.3 (November 23, 2022)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager
   deployment, so that the pod automatically restarts if it doesn't respond.
 
 - Change: The root daemon now communicates directly with the traffic-manager instead of routing all
   outbound traffic through the user daemon.
+
+- Change: The output of `telepresence version` is now aligned and no longer contains "(api v3)"
 
 - Bugfix: Using `telepresence loglevel LEVEL` now also sets the log level in the root daemon.
 

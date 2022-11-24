@@ -52,7 +52,7 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 func (s *connectedSuite) Test_ToPodUDPPortForwarding() {
 	const svc = "echo-extra-udp"
 	ctx := s.Context()
-	s.ApplyTestApp(ctx, svc, "deploy/"+svc)
+	s.ApplyApp(ctx, svc, "deploy/"+svc)
 	defer func() {
 		_ = s.Kubectl(ctx, "delete", "svc,deploy", svc)
 	}()

@@ -307,6 +307,14 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return result, err
 }
 
+func (s *Service) UpdateIntercept(c context.Context, rr *manager.UpdateInterceptRequest) (result *manager.InterceptInfo, err error) {
+	err = s.WithSession(c, "UpdateIntercept", func(c context.Context, session userd.Session) error {
+		result, err = session.ManagerClient().UpdateIntercept(c, rr)
+		return err
+	})
+	return
+}
+
 func (s *Service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
 	return &empty.Empty{}, s.WithSession(ctx, "AddInterceptor", func(_ context.Context, session userd.Session) error {
 		return session.AddInterceptor(interceptor.InterceptId, int(interceptor.Pid))
@@ -385,23 +393,45 @@ func (s *Service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (res
 	return
 }
 
-func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (result *empty.Empty, err error) {
-	result = &empty.Empty{}
+func (s *Service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (result *empty.Empty, err error) {
 	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
-		duration := time.Duration(0)
-		if request.Duration != nil {
-			duration = request.Duration.AsDuration()
+		mrq := &manager.LogLevelRequest{
+			LogLevel: request.LogLevel,
+			Duration: request.Duration,
 		}
-		if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
-			err = status.Error(codes.Internal, err.Error())
-		} else {
-			err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
-				_, err := rd.SetLogLevel(ctx, request)
+		setLocal := func() {
+			duration := time.Duration(0)
+			if request.Duration != nil {
+				duration = request.Duration.AsDuration()
+			}
+			if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
+				err = status.Error(codes.Internal, err.Error())
+			} else {
+				err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+					_, err := rd.SetLogLevel(ctx, mrq)
+					return err
+				})
+			}
+		}
+		setRemote := func() {
+			err = s.WithSession(ctx, "SetLogLevel", func(ctx context.Context, session userd.Session) error {
+				_, err := session.ManagerClient().SetLogLevel(ctx, mrq)
 				return err
 			})
 		}
+		switch request.Scope {
+		case rpc.LogLevelRequest_LOCAL_ONLY:
+			setLocal()
+		case rpc.LogLevelRequest_REMOTE_ONLY:
+			setRemote()
+		default:
+			setLocal()
+			if err == nil {
+				setRemote()
+			}
+		}
 	})
-	return
+	return &empty.Empty{}, err
 }
 
 func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
@@ -505,6 +535,14 @@ func (s *Service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) 
 	return
 }
 
+func (s *Service) TrafficManagerVersion(ctx context.Context, _ *empty.Empty) (vi *common.VersionInfo, err error) {
+	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+		vi = &common.VersionInfo{Version: "v" + session.ManagerVersion().String()}
+		return nil
+	})
+	return
+}
+
 func (s *Service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi *common.VersionInfo, err error) {
 	err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
 		vi, err = rd.Version(ctx, empty)
@@ -519,6 +557,17 @@ func (s *Service) GetClusterSubnets(ctx context.Context, empty *empty.Empty) (cs
 		return err
 	})
 	return cs, err
+}
+
+func (s *Service) GetIntercept(ctx context.Context, request *manager.GetInterceptRequest) (ii *manager.InterceptInfo, err error) {
+	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+		ii = session.GetInterceptInfo(request.Name)
+		if ii == nil {
+			return status.Errorf(codes.NotFound, "found no intercept named %s", request.Name)
+		}
+		return nil
+	})
+	return ii, err
 }
 
 func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {

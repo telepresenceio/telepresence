@@ -20,7 +20,6 @@ import (
 	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -50,7 +49,6 @@ to troubleshoot problems.
 type Service struct {
 	rpc.UnsafeConnectorServer
 	srv           *grpc.Server
-	managerProxy  *mgrProxy
 	procName      string
 	timedLogLevel log.TimedLevel
 	ucn           int64
@@ -76,13 +74,11 @@ func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *c
 		scout:           sr,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
-		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 	}
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
-		manager.RegisterManagerServer(srv, s.managerProxy)
 		tracer, err := tracing.NewTraceServer(ctx, "user-daemon")
 		if err != nil {
 			return nil, err
@@ -96,8 +92,6 @@ func (s *Service) As(ptr any) {
 	switch ptr := ptr.(type) {
 	case **Service:
 		*ptr = s
-	case *manager.ManagerServer:
-		*ptr = s.managerProxy
 	default:
 		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
 	}
@@ -113,10 +107,6 @@ func (s *Service) Reporter() *scout.Reporter {
 
 func (s *Service) Server() *grpc.Server {
 	return s.srv
-}
-
-func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
-	s.managerProxy.setClient(managerClient, callOptions...)
 }
 
 // Command returns the CLI sub-command for "connector-foreground".
@@ -203,7 +193,7 @@ nextSession:
 			s.cancelSession()
 			continue
 		}
-		if rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
+		if session == nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 			continue
 		}
 
@@ -212,7 +202,6 @@ nextSession:
 		wg.Add(1)
 		go func(cr *rpc.ConnectRequest) {
 			defer wg.Done()
-			defer s.SetManagerClient(nil)
 			if err := userd.RunSession(s.sessionContext, session); err != nil {
 				if errors.Is(err, trafficmgr.ErrSessionExpired) {
 					// Session has expired. We need to cancel the owner session and reconnect
