@@ -30,5 +30,5 @@ runs:
             echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
           fi
 
-          #make check-integration
-          sleep 18000
+          make check-integration
+#          sleep 18000
