@@ -96,12 +96,12 @@ func TestEnvconfig(t *testing.T) {
 				"AGENT_RUN_AS_NON_ROOT": "true",
 			},
 			Output: func(e *managerutil.Env) {
-				var user1000 = int64(1001)
-				var group1000 = int64(2002)
+				var userValue = int64(1001)
+				var groupValue = int64(2002)
 				var falseVal = true
 
-				e.AgentRunAsUser = &user1000
-				e.AgentRunAsGroup = &group1000
+				e.AgentRunAsUser = &userValue
+				e.AgentRunAsGroup = &groupValue
 				e.AgentRunAsNonRoot = &falseVal
 			},
 		},
