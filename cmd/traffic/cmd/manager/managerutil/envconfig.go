@@ -3,21 +3,19 @@ package managerutil
 import (
 	"context"
 	"encoding/json"
-	"net"
-	"reflect"
-	"strconv"
-	"strings"
-	"time"
-
-	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/envconfig"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"net"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // Env is the traffic-manager's environment. It does not define any defaults because all
@@ -60,6 +58,9 @@ type Env struct {
 	AgentEnvoyLogLevel       string                     `env:"AGENT_ENVOY_LOG_LEVEL,    parser=logLevel,       defaultFrom=AgentLogLevel"`
 	AgentEnvoyServerPort     uint16                     `env:"AGENT_ENVOY_SERVER_PORT,  parser=port-number"`
 	AgentEnvoyAdminPort      uint16                     `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
+	AgentRunAsUser           *int64                     `env:"AGENT_RUN_AS_USER,        parser=maybe-int64,    default="`
+	AgentRunAsGroup          *int64                     `env:"AGENT_RUN_AS_GROUP,       parser=maybe-int64,    default="`
+	AgentRunAsNonRoot        *bool                      `env:"AGENT_RUN_AS_NON_ROOT,    parser=maybe-bool,     default="`
 
 	ClientRoutingAlsoProxySubnets  []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, parser=split-ipnet, default="`
@@ -84,6 +85,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		EnvoyServerPort:     e.AgentEnvoyServerPort,
 		EnvoyAdminPort:      e.AgentEnvoyAdminPort,
 		EnvoyLogLevel:       e.AgentEnvoyLogLevel,
+		RunAsUser:           e.AgentRunAsUser,
 	}, nil
 }
 
@@ -111,6 +113,44 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.SetUint(uint64(src.(uint16))) },
 	}
+
+	var int64Example = int64(0)
+	fhs[reflect.TypeOf(&int64Example)] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"maybe-int64": func(str string) (any, error) {
+				if str == "" {
+					return nil, nil
+				}
+				pn, err := strconv.ParseUint(str, 10, 64)
+				i64val := int64(pn)
+				return &i64val, err
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) {
+			if src != nil {
+				dst.Set(reflect.ValueOf(src))
+			}
+		},
+	}
+
+	var boolExample = true
+	fhs[reflect.TypeOf(&boolExample)] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"maybe-bool": func(str string) (any, error) {
+				if str == "" {
+					return nil, nil
+				}
+				b, err := strconv.ParseBool(str)
+				return &b, err
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) {
+			if src != nil {
+				dst.Set(reflect.ValueOf(src))
+			}
+		},
+	}
+
 	fhs[reflect.TypeOf(k8sapi.AppProtocolStrategy(0))] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){
 			"app-proto-strategy": func(str string) (any, error) {

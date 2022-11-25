@@ -150,6 +150,11 @@ type Sidecar struct {
 
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`
+
+	// Security Context to apply to the container
+	RunAsNonRoot *bool  `json:"runAsNonRoot,omitempty"`
+	RunAsUser    *int64 `json:"runAsUser,omitempty"`
+	RunAsGroup   *int64 `json:"runAsGroup,omitempty"`
 }
 
 func (s *Sidecar) RecordInSpan(span trace.Span) {

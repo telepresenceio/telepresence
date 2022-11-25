@@ -101,6 +101,11 @@ func AgentContainer(
 		Env:          evs,
 		EnvFrom:      efs,
 		VolumeMounts: mounts,
+		SecurityContext: &core.SecurityContext{
+			RunAsNonRoot: config.RunAsNonRoot,
+			RunAsUser:    config.RunAsUser,
+			RunAsGroup:   config.RunAsGroup,
+		},
 		ReadinessProbe: &core.Probe{
 			ProbeHandler: core.ProbeHandler{
 				Exec: &core.ExecAction{

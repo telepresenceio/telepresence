@@ -77,6 +77,34 @@ func TestEnvconfig(t *testing.T) {
 				e.ClientRoutingNeverProxySubnets = []*net.IPNet{a, b}
 			},
 		},
+		"references": {
+			Input: map[string]string{
+				"AGENT_RUN_AS_USER":     "",
+				"AGENT_RUN_AS_GROUP":    "",
+				"AGENT_RUN_AS_NON_ROOT": "",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AgentRunAsUser = nil
+				e.AgentRunAsGroup = nil
+				e.AgentRunAsNonRoot = nil
+			},
+		},
+		"references-2": {
+			Input: map[string]string{
+				"AGENT_RUN_AS_USER":     "1000",
+				"AGENT_RUN_AS_GROUP":    "",
+				"AGENT_RUN_AS_NON_ROOT": "false",
+			},
+			Output: func(e *managerutil.Env) {
+				var user1000 = int64(1000)
+				var group1000 = int64(1000)
+				var falseVal = false
+
+				e.AgentRunAsUser = &user1000
+				e.AgentRunAsGroup = &group1000
+				e.AgentRunAsNonRoot = &falseVal
+			},
+		},
 	}
 
 	for tcName, tc := range testcases {
@@ -97,7 +125,7 @@ func TestEnvconfig(t *testing.T) {
 			ctx, err := managerutil.LoadEnv(context.Background(), lookup)
 			require.NoError(t, err)
 			actual := managerutil.GetEnv(ctx)
-			assert.Equal(t, &expected, actual)
+			assert.EqualValues(t, &expected, actual) // Pointers are different here
 			assert.Equal(t, "", actual.QualifiedAgentImage())
 		})
 	}

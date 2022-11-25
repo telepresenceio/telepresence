@@ -33,6 +33,9 @@ type GeneratorConfig struct {
 	EnvoyLogLevel       string
 	EnvoyServerPort     uint16
 	EnvoyAdminPort      uint16
+	RunAsUser           *int64
+	RunAsGroup          *int64
+	RunAsNonRoot        *bool
 }
 
 func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc *agentconfig.Sidecar, err error) {
@@ -101,6 +104,9 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc
 		Containers:      ccs,
 		InitResources:   cfg.InitResources,
 		Resources:       cfg.Resources,
+		RunAsUser:       cfg.RunAsUser,
+		RunAsGroup:      cfg.RunAsGroup,
+		RunAsNonRoot:    cfg.RunAsNonRoot,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil

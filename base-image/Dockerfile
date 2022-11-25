@@ -1,5 +1,3 @@
-# syntax = docker/dockerfile:1.3
-
 # Copyright 2020-2022 Datawire. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +17,7 @@ FROM golang:alpine3.15 as tel2-build
 RUN apk add --no-cache gcc musl-dev fuse-dev libcap
 
 WORKDIR telepresence
-COPY go.mod go.sum .
+COPY go.mod go.sum ./
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 COPY rpc/ rpc/
