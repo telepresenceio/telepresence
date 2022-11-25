@@ -91,14 +91,14 @@ func TestEnvconfig(t *testing.T) {
 		},
 		"references-2": {
 			Input: map[string]string{
-				"AGENT_RUN_AS_USER":     "1000",
-				"AGENT_RUN_AS_GROUP":    "",
-				"AGENT_RUN_AS_NON_ROOT": "false",
+				"AGENT_RUN_AS_USER":     "1001",
+				"AGENT_RUN_AS_GROUP":    "2002",
+				"AGENT_RUN_AS_NON_ROOT": "true",
 			},
 			Output: func(e *managerutil.Env) {
-				var user1000 = int64(1000)
-				var group1000 = int64(1000)
-				var falseVal = false
+				var user1000 = int64(1001)
+				var group1000 = int64(2002)
+				var falseVal = true
 
 				e.AgentRunAsUser = &user1000
 				e.AgentRunAsGroup = &group1000
