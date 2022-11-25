@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         runners:
-          - ubuntu-latest
+#          - ubuntu-latest
           - ubuntu-arm64
 #          - macos-latest
 #          - windows-2019
