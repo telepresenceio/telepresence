@@ -36,6 +36,8 @@ type GeneratorConfig struct {
 	RunAsUser           *int64
 	RunAsGroup          *int64
 	RunAsNonRoot        *bool
+	CapabilitiesAdd     []core.Capability
+	CapabilitiesDrop    []core.Capability
 }
 
 func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc *agentconfig.Sidecar, err error) {
@@ -88,25 +90,27 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc
 	}
 
 	ag := &agentconfig.Sidecar{
-		AgentImage:      cfg.QualifiedAgentImage,
-		AgentName:       wl.GetName(),
-		LogLevel:        cfg.LogLevel,
-		Namespace:       wl.GetNamespace(),
-		WorkloadName:    wl.GetName(),
-		WorkloadKind:    wl.GetKind(),
-		ManagerHost:     ManagerAppName + "." + cfg.ManagerNamespace,
-		ManagerPort:     cfg.ManagerPort,
-		APIPort:         cfg.APIPort,
-		TracingPort:     cfg.TracingPort,
-		EnvoyLogLevel:   cfg.EnvoyLogLevel,
-		EnvoyServerPort: cfg.EnvoyServerPort,
-		EnvoyAdminPort:  cfg.EnvoyAdminPort,
-		Containers:      ccs,
-		InitResources:   cfg.InitResources,
-		Resources:       cfg.Resources,
-		RunAsUser:       cfg.RunAsUser,
-		RunAsGroup:      cfg.RunAsGroup,
-		RunAsNonRoot:    cfg.RunAsNonRoot,
+		AgentImage:       cfg.QualifiedAgentImage,
+		AgentName:        wl.GetName(),
+		LogLevel:         cfg.LogLevel,
+		Namespace:        wl.GetNamespace(),
+		WorkloadName:     wl.GetName(),
+		WorkloadKind:     wl.GetKind(),
+		ManagerHost:      ManagerAppName + "." + cfg.ManagerNamespace,
+		ManagerPort:      cfg.ManagerPort,
+		APIPort:          cfg.APIPort,
+		TracingPort:      cfg.TracingPort,
+		EnvoyLogLevel:    cfg.EnvoyLogLevel,
+		EnvoyServerPort:  cfg.EnvoyServerPort,
+		EnvoyAdminPort:   cfg.EnvoyAdminPort,
+		Containers:       ccs,
+		InitResources:    cfg.InitResources,
+		Resources:        cfg.Resources,
+		RunAsUser:        cfg.RunAsUser,
+		RunAsGroup:       cfg.RunAsGroup,
+		RunAsNonRoot:     cfg.RunAsNonRoot,
+		CapabilitiesAdd:  cfg.CapabilitiesAdd,
+		CapabilitiesDrop: cfg.CapabilitiesDrop,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil

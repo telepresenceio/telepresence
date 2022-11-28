@@ -155,6 +155,9 @@ type Sidecar struct {
 	RunAsNonRoot *bool  `json:"runAsNonRoot,omitempty"`
 	RunAsUser    *int64 `json:"runAsUser,omitempty"`
 	RunAsGroup   *int64 `json:"runAsGroup,omitempty"`
+
+	CapabilitiesAdd  []core.Capability `json:"capabilitiesAdd"`
+	CapabilitiesDrop []core.Capability `json:"capabilitiesDrop"`
 }
 
 func (s *Sidecar) RecordInSpan(span trace.Span) {

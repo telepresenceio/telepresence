@@ -61,6 +61,8 @@ type Env struct {
 	AgentRunAsUser           *int64                     `env:"AGENT_RUN_AS_USER,        parser=maybe-int64,    default="`
 	AgentRunAsGroup          *int64                     `env:"AGENT_RUN_AS_GROUP,       parser=maybe-int64,    default="`
 	AgentRunAsNonRoot        *bool                      `env:"AGENT_RUN_AS_NON_ROOT,    parser=maybe-bool,     default="`
+	AgentCapabilitiesAdd     []core.Capability          `env:"AGENT_CAPABILITIES_ADD,   parser=capability,     default="`
+	AgentCapabilitiesDrop    []core.Capability          `env:"AGENT_CAPABILITIES_DROP,  parser=capability,     default="`
 
 	ClientRoutingAlsoProxySubnets  []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, parser=split-ipnet, default="`
@@ -86,6 +88,10 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		EnvoyAdminPort:      e.AgentEnvoyAdminPort,
 		EnvoyLogLevel:       e.AgentEnvoyLogLevel,
 		RunAsUser:           e.AgentRunAsUser,
+		RunAsGroup:          e.AgentRunAsGroup,
+		RunAsNonRoot:        e.AgentRunAsNonRoot,
+		CapabilitiesAdd:     e.AgentCapabilitiesAdd,
+		CapabilitiesDrop:    e.AgentCapabilitiesDrop,
 	}, nil
 }
 
@@ -231,6 +237,28 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 			},
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(*core.ResourceRequirements))) },
+	}
+	fhs[reflect.TypeOf([]core.Capability{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"capability": func(capabilityEnv string) (any, error) {
+				if capabilityEnv == "" {
+					return nil, nil
+				}
+				var caps []core.Capability
+				capsString := strings.Split(capabilityEnv, ",")
+				for _, v := range capsString {
+					caps = append(
+						caps,
+						core.Capability(
+							strings.TrimSpace(v),
+						),
+					)
+				}
+
+				return caps, nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]core.Capability))) },
 	}
 	return fhs
 }

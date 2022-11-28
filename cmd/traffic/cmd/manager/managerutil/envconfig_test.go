@@ -2,6 +2,7 @@ package managerutil_test
 
 import (
 	"context"
+	core "k8s.io/api/core/v1"
 	"net"
 	"testing"
 	"time"
@@ -103,6 +104,21 @@ func TestEnvconfig(t *testing.T) {
 				e.AgentRunAsUser = &userValue
 				e.AgentRunAsGroup = &groupValue
 				e.AgentRunAsNonRoot = &falseVal
+			},
+		},
+		"capabilities": {
+			Input: map[string]string{
+				"AGENT_CAPABILITIES_ADD":  "SYS_TIME, NET_ADMIN",
+				"AGENT_CAPABILITIES_DROP": "ALL",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AgentCapabilitiesAdd = []core.Capability{
+					"SYS_TIME",
+					"NET_ADMIN",
+				}
+				e.AgentCapabilitiesDrop = []core.Capability{
+					"ALL",
+				}
 			},
 		},
 	}

@@ -105,7 +105,12 @@ func AgentContainer(
 			RunAsNonRoot: config.RunAsNonRoot,
 			RunAsUser:    config.RunAsUser,
 			RunAsGroup:   config.RunAsGroup,
+			Capabilities: &core.Capabilities{
+				Add:  config.CapabilitiesAdd,
+				Drop: config.CapabilitiesDrop,
+			},
 		},
+
 		ReadinessProbe: &core.Probe{
 			ProbeHandler: core.ProbeHandler{
 				Exec: &core.ExecAction{
