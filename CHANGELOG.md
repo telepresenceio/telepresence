@@ -17,6 +17,12 @@
 - Bugfix: The port-forward that is created when Telepresence connects to a cluster is now properly
   closed when `telepresence quit` is called.
 
+- Bugfix: The user daemon no longer panics when the `config.yml` is modified at a time when the user daemon
+  is running but no session is active.
+
+- Bugfix: Fix race condition that would occur when `telepresence connect` `telepresence leave` was called
+  several times in rapid succession.
+
 ### 2.9.3 (November 23, 2022)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager

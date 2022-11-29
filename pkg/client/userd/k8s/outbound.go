@@ -25,6 +25,11 @@ import (
 func (kc *Cluster) startNamespaceWatcher(c context.Context) {
 	cond := sync.Cond{}
 	cond.L = &kc.nsLock
+	go func() {
+		<-c.Done()
+		cond.Broadcast()
+	}()
+
 	kc.nsWatcher = k8sapi.NewWatcher("namespaces", kc.ki.CoreV1().RESTClient(), &cond, k8sapi.WithEquals[*core.Namespace](func(a, b *core.Namespace) bool {
 		return a.Name == b.Name
 	}))

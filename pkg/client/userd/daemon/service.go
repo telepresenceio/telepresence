@@ -131,7 +131,10 @@ func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(ctx context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
-		return s.session.ApplyConfig(ctx)
+		if s.session == nil {
+			return client.RestoreDefaults(c, false)
+		}
+		return s.session.ApplyConfig(c)
 	})
 }
 
@@ -139,98 +142,91 @@ func (s *Service) configReload(c context.Context) error {
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
 func ManageSessions(c context.Context, si userd.Service) error {
-	// The d.quit is called when we receive a Quit. Since it
-	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
 	var s *Service
 	si.As(&s)
-nextSession:
+
 	for {
 		// Wait for a connection request
-		var cr *rpc.ConnectRequest
 		select {
 		case <-c.Done():
-			break nextSession
-		case cr = <-s.connectRequest:
-		}
-
-		var session userd.Session
-		var rsp *rpc.ConnectInfo
-
-		s.sessionLock.Lock() // Locked during creation
-		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
-			if s.session != nil {
-				// UpdateStatus sets rpc.ConnectInfo_ALREADY_CONNECTED if successful
-				rsp = s.session.UpdateStatus(s.sessionContext, cr)
-			} else {
-				sCtx, sCancel := context.WithCancel(c)
-				sCtx = userd.WithService(sCtx, si)
-				sCtx, session, rsp = userd.GetNewSessionFunc(c)(sCtx, s.scout, cr)
-				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
-					s.sessionContext = session.WithK8sInterface(sCtx)
-					s.session = session
-					if err := s.session.ApplyConfig(c); err != nil {
-						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
-					}
-					s.sessionCancel = func() {
-						sCancel()
-						<-session.Done()
-					}
-				} else {
-					sCancel()
-					s.sessionCancel = nil
-				}
+			return nil
+		case cr := <-s.connectRequest:
+			rsp := startSession(c, si, cr, &wg)
+			select {
+			case <-c.Done():
+				return nil
+			case s.connectResponse <- rsp:
+			default:
+				// Nobody left to read the response? That's fine really. Just means that
+				// whoever wanted to start the session terminated early.
+				s.cancelSession()
 			}
 		}
-		s.sessionLock.Unlock()
+	}
+}
 
-		select {
-		case <-c.Done():
-			break nextSession
-		case s.connectResponse <- rsp:
-		default:
-			// Nobody there to read the response? That's fine. The user may have got
-			// impatient.
-			s.sessionLock.RLock()
-			if err := client.RestoreDefaults(c, false); err != nil {
-				dlog.Warn(c, err)
-			}
-			s.sessionLock.RUnlock()
-			s.cancelSession()
-			continue
-		}
-		if session == nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
-			continue
-		}
+func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
+	var s *Service
+	si.As(&s)
+	s.sessionLock.Lock() // Locked during creation
+	defer s.sessionLock.Unlock()
 
-		// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
-		// the session is running. The s.sessionCancel is called from Disconnect
-		wg.Add(1)
-		go func(cr *rpc.ConnectRequest) {
-			defer wg.Done()
-			if err := userd.RunSession(s.sessionContext, session); err != nil {
-				if errors.Is(err, trafficmgr.ErrSessionExpired) {
-					// Session has expired. We need to cancel the owner session and reconnect
-					dlog.Info(c, "refreshing session")
-					s.cancelSession()
-					select {
-					case <-c.Done():
-					case s.connectRequest <- cr:
-					}
-					return
-				}
+	if s.session != nil {
+		// UpdateStatus sets rpc.ConnectInfo_ALREADY_CONNECTED if successful
+		return s.session.UpdateStatus(s.sessionContext, cr)
+	}
 
-				dlog.Error(c, err)
-			}
+	ctx, cancel := context.WithCancel(ctx)
+	ctx = userd.WithService(ctx, si)
+	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, s.scout, cr)
+	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
+		cancel()
+		return rsp
+	}
+
+	s.session = session
+	s.sessionContext = session.WithK8sInterface(ctx)
+	s.sessionCancel = func() {
+		cancel()
+		<-session.Done()
+	}
+	if err := s.session.ApplyConfig(ctx); err != nil {
+		dlog.Warnf(ctx, "failed to apply config from traffic-manager: %v", err)
+	}
+
+	// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
+	// the session is running. The s.sessionCancel is called from Disconnect
+	wg.Add(1)
+	go func(cr *rpc.ConnectRequest) {
+		defer func() {
 			s.sessionLock.Lock()
-			if err := client.RestoreDefaults(c, false); err != nil {
-				dlog.Warn(c, err)
+			s.session = nil
+			s.sessionCancel = nil
+			if err := client.RestoreDefaults(ctx, false); err != nil {
+				dlog.Warn(ctx, err)
 			}
 			s.sessionLock.Unlock()
-		}(cr)
-	}
-	wg.Wait()
-	return nil
+			wg.Done()
+		}()
+		if err := userd.RunSession(s.sessionContext, session); err != nil {
+			if errors.Is(err, trafficmgr.ErrSessionExpired) {
+				// Session has expired. We need to cancel the owner session and reconnect
+				dlog.Info(ctx, "refreshing session")
+				s.cancelSession()
+				select {
+				case <-ctx.Done():
+				case s.connectRequest <- cr:
+				}
+				return
+			}
+
+			dlog.Error(ctx, err)
+		}
+	}(cr)
+	return rsp
 }
 
 func (s *Service) cancelSessionReadLocked() {
