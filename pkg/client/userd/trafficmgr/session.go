@@ -68,6 +68,9 @@ type session struct {
 	installID   string // telepresence's install ID
 	userAndHost string // "laptop-username@laptop-hostname"
 
+	// Kubernetes Port Forward Dialer
+	pfDialer dnet.PortForwardDialer
+
 	// manager client
 	managerClient manager.ManagerClient
 
@@ -334,11 +337,11 @@ func connectMgr(
 	}
 
 	dlog.Debug(ctx, "creating port-forward")
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(ctx, cluster.Kubeconfig.RestConfig, k8sapi.GetK8sInterface(ctx))
+	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, cluster.Kubeconfig.RestConfig, k8sapi.GetK8sInterface(ctx))
 	if err != nil {
 		return nil, err
 	}
-	conn, mClient, managerVersion, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), grpcDialer)
+	conn, mClient, managerVersion, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
 	if err != nil {
 		return nil, err
 	}
@@ -394,6 +397,7 @@ func connectMgr(
 		userAndHost:      userAndHost,
 		managerClient:    mClient,
 		managerConn:      conn,
+		pfDialer:         pfDialer,
 		managerVersion:   managerVersion,
 		sessionInfo:      si,
 		localIntercepts:  make(map[string]struct{}),
@@ -471,6 +475,7 @@ func (s *session) Epilog(ctx context.Context) {
 	if s.rootDaemon != nil {
 		_, _ = s.rootDaemon.Disconnect(ctx, &empty.Empty{})
 	}
+	_ = s.pfDialer.Close()
 	dlog.Info(ctx, "-- Session ended")
 	close(s.done)
 }

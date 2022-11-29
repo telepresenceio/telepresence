@@ -155,12 +155,12 @@ func TestKubectlPortForward(t *testing.T) {
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		dial, err := dnet.NewK8sPortForwardDialer(ctx, kubeConfig, ki)
+		dialer, err := dnet.NewK8sPortForwardDialer(ctx, kubeConfig, ki)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 
-		cliConn, err = dial(ctx, fmt.Sprintf("pods/SOMEPODNAME.SOMENAMESPACE:%d", podListener.Addr().(*net.TCPAddr).Port))
+		cliConn, err = dialer.Dial(ctx, fmt.Sprintf("pods/SOMEPODNAME.SOMENAMESPACE:%d", podListener.Addr().(*net.TCPAddr).Port))
 		t.Log("dialed")
 		if err != nil {
 			return nil, nil, nil, err

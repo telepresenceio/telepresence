@@ -14,6 +14,9 @@
 - Bugfix: Initialization of FTP type file sharing is delayed, so that setting it using the Helm chart
   value `intercept.useFtp=true` works as expected.
 
+- Bugfix: The port-forward that is created when Telepresence connects to a cluster is now properly
+  closed when `telepresence quit` is called.
+
 ### 2.9.3 (November 23, 2022)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager
