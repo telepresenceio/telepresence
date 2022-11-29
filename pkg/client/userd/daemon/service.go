@@ -131,7 +131,10 @@ func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(ctx context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
-		return s.session.ApplyConfig(ctx)
+		if s.session == nil {
+			return client.RestoreDefaults(c, false)
+		}
+		return s.session.ApplyConfig(c)
 	})
 }
 

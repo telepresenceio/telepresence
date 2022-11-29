@@ -277,6 +277,9 @@ func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(c context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
+		if s.session == nil {
+			return client.RestoreDefaults(c, true)
+		}
 		return s.session.applyConfig(c)
 	})
 }

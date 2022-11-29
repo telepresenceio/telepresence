@@ -757,11 +757,7 @@ func (s *Session) applyConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var sCfg *client.Config
-	if s != nil {
-		sCfg = &s.config
-	}
-	return client.MergeAndReplace(ctx, sCfg, cfg, true)
+	return client.MergeAndReplace(ctx, &s.config, cfg, true)
 }
 
 func (s *Session) Done() chan struct{} {
