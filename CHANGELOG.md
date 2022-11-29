@@ -5,6 +5,9 @@
 - Feature: The traffic-manager can automatically detect that the node subnets are different from the
   pod subnets, and switch detection strategy to instead use subnets that cover the pod IPs.
 
+- Bugfix: The `telepresence helm` command `--set x=y` flag didn't correctly set values of other types
+  than `string`. The code now uses standard Helm semantics for this flag.
+
 - Bugfix: Telepresence now uses the correct `agent.image` properties in the Helm chart when copying
   agent image settings from the `config.yml` file.
 
