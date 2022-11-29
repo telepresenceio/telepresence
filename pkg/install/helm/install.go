@@ -56,28 +56,27 @@ func getValues(ctx context.Context) map[string]any {
 			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
-	apc := clientConfig.Intercept.AppProtocolStrategy
-	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
-		agentImage := make(map[string]any)
+	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" {
+		image := make(map[string]any)
 		if wai != "" {
 			parts := strings.Split(wai, ":")
-			image := wai
+			name := wai
 			tag := ""
 			if len(parts) > 1 {
-				image = parts[0]
+				name = parts[0]
 				tag = parts[1]
 			}
-			agentImage["name"] = image
-			agentImage["tag"] = tag
+			image["name"] = name
+			image["tag"] = tag
 		}
 		if wr != "" {
-			agentImage["registry"] = wr
+			image["registry"] = wr
 		}
-		agentInjector := map[string]any{"agentImage": agentImage}
-		values["agentInjector"] = agentInjector
-		if apc != k8sapi.Http2Probe {
-			agentInjector["appProtocolStrategy"] = apc.String()
-		}
+		values["agent"] = map[string]any{"image": image}
+	}
+
+	if apc := clientConfig.Intercept.AppProtocolStrategy; apc != k8sapi.Http2Probe {
+		values["agentInjector"] = map[string]any{"appProtocolStrategy": apc.String()}
 	}
 	if clientConfig.TelepresenceAPI.Port != 0 {
 		values["telepresenceAPI"] = map[string]any{

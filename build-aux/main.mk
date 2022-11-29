@@ -315,5 +315,6 @@ install: build ## (Install) Installs the telepresence binary to $(bindir)
 .PHONY: all test images push-images
 all:         build image     ## (ZAlias) Alias for 'build image'
 test:        check-all       ## (ZAlias) Alias for 'check-all'
-images:      image           ## (ZAlias) Alias for 'image'
+images:      tel2            ## (ZAlias) Alias for 'tel2'
+image:       tel2            ## (ZAlias) Alias for 'tel2'
 push-images: push-image      ## (ZAlias) Alias for 'push-image'
