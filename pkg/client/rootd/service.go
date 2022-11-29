@@ -291,90 +291,84 @@ func (s *Service) manageSessions(c context.Context) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
+	defer wg.Wait()
 	c, s.quit = context.WithCancel(c)
-nextSession:
+
 	for {
 		// Wait for a connection request
-		var oi *rpc.OutboundInfo
 		select {
 		case <-c.Done():
-			break nextSession
-		case oi = <-s.connectCh:
-		}
-
-		var session *Session
-		reply := sessionReply{}
-
-		s.sessionLock.Lock() // Locked during creation
-		if c.Err() == nil {  // If by the time we've got the session lock we're cancelled, then don't create the session and just leave by way of the select below
-			// Respond by setting the session and returning the error (or nil
-			// if everything is ok)
-			reply.status = &rpc.DaemonStatus{
-				Version: &common.VersionInfo{
-					ApiVersion: client.APIVersion,
-					Version:    client.Version(),
-				},
-			}
-			if s.session != nil {
-				reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
-			} else {
-				sCtx, sCancel := context.WithCancel(c)
-				session, reply.err = GetNewSessionFunc(c)(sCtx, s.scout, oi)
-				if reply.err == nil {
-					s.session = session
-					s.sessionContext = sCtx
-					if err := s.session.applyConfig(c); err != nil {
-						dlog.Warnf(c, "failed to apply config from traffic-manager: %v", err)
-					}
-
-					reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
-					s.sessionCancel = func() {
-						sCancel()
-						<-session.Done()
-					}
-				} else {
-					sCancel()
-					s.sessionCancel = nil
-				}
+			return nil
+		case oi := <-s.connectCh:
+			reply := s.startSession(c, oi, &wg)
+			select {
+			case <-c.Done():
+				return nil
+			case s.connectReplyCh <- reply:
+			default:
+				// Nobody left to read the response? That's fine really. Just means that
+				// whoever wanted to start the session terminated early.
+				s.cancelSession()
 			}
 		}
-		s.sessionLock.Unlock()
-
-		select {
-		case <-c.Done():
-			break nextSession
-		case s.connectReplyCh <- reply:
-		default:
-			// Nobody left to read the response? That's fine really. Just means that
-			// whoever wanted to start the session terminated early.
-			s.cancelSession()
-			continue
-		}
-		// If no session was created, then this interaction just returns the OutboundInfo.
-		if session == nil || reply.err != nil {
-			continue
-		}
-
-		// Run the session asynchronously. We must be able to respond to connect (with getNetworkConfig) while
-		// the session is running. The d.session.cancel is called from Disconnect
-		wg.Add(1)
-		go func() {
-			defer func() {
-				s.sessionLock.Lock()
-				s.session = nil
-				if err := client.RestoreDefaults(c, true); err != nil {
-					dlog.Warn(c, err)
-				}
-				s.sessionLock.Unlock()
-				wg.Done()
-			}()
-			if err := s.session.run(s.sessionContext); err != nil {
-				dlog.Error(c, err)
-			}
-		}()
 	}
-	wg.Wait()
-	return nil
+}
+
+func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sync.WaitGroup) sessionReply {
+	s.sessionLock.Lock() // Locked during creation
+	defer s.sessionLock.Unlock()
+	reply := sessionReply{
+		status: &rpc.DaemonStatus{
+			Version: &common.VersionInfo{
+				ApiVersion: client.APIVersion,
+				Version:    client.Version(),
+			},
+		},
+	}
+	if s.session != nil {
+		reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+		return reply
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	session, err := GetNewSessionFunc(ctx)(ctx, s.scout, oi)
+	if ctx.Err() != nil || err != nil {
+		cancel()
+		reply.err = err
+		return reply
+	}
+
+	s.session = session
+	s.sessionContext = ctx
+	s.sessionCancel = func() {
+		cancel()
+		<-session.Done()
+	}
+	if err := s.session.applyConfig(ctx); err != nil {
+		dlog.Warnf(ctx, "failed to apply config from traffic-manager: %v", err)
+	}
+
+	reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+
+	// Run the session asynchronously. We must be able to respond to connect (with getNetworkConfig) while
+	// the session is running. The d.session.cancel is called from Disconnect
+	wg.Add(1)
+	go func() {
+		defer func() {
+			s.sessionLock.Lock()
+			s.session = nil
+			s.sessionCancel = nil
+			if err := client.RestoreDefaults(ctx, true); err != nil {
+				dlog.Warn(ctx, err)
+			}
+			s.sessionLock.Unlock()
+			wg.Done()
+		}()
+		if err := s.session.run(s.sessionContext); err != nil {
+			dlog.Error(ctx, err)
+		}
+	}()
+	return reply
 }
 
 func (s *Service) serveGrpc(c context.Context, l net.Listener, tracer common.TracingServer) error {
