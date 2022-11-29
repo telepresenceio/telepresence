@@ -6,6 +6,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
@@ -25,6 +26,8 @@ type Service interface {
 
 	// GetAPIKey returns the current API key
 	GetAPIKey(context.Context) (string, error)
+
+	GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient
 }
 
 type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)
@@ -40,4 +43,17 @@ func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
 		return f
 	}
 	panic("No User daemon Service creator has been registered")
+}
+
+type serviceKey struct{}
+
+func WithService(ctx context.Context, s Service) context.Context {
+	return context.WithValue(ctx, serviceKey{}, s)
+}
+
+func GetService(ctx context.Context) Service {
+	if f, ok := ctx.Value(serviceKey{}).(Service); ok {
+		return f
+	}
+	panic("No User daemon Service has been registered")
 }
