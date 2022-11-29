@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
@@ -100,11 +101,21 @@ func (w *nodeWatcher) viable(ctx context.Context) bool {
 	}
 	w.changed = time.Now()
 	if changed {
-		dlog.Infof(ctx, "Found %d subnets", len(w.subnets))
+		// Don't consider the node subnets viable unless they contain the IP Of the traffic manager pod.
+		podIP := managerutil.GetEnv(ctx).PodIP
+		w.subnets.AppendSortedTo(nil)
+		for _, sn := range w.subnets.AppendSortedTo(nil) {
+			if sn.Contains(podIP) {
+				dlog.Infof(ctx, "Found %d subnets", len(w.subnets))
+				return true
+			}
+		}
+		w.subnets = make(subnet.Set)
+		dlog.Errorf(ctx, "no node subnet contains traffic-manager IP %s", podIP)
 	} else {
 		dlog.Info(ctx, "No subnets found")
 	}
-	return changed
+	return false
 }
 
 func (w *nodeWatcher) onNodeAdded(ctx context.Context, node *corev1.Node) {

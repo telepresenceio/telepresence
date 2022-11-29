@@ -2,6 +2,9 @@
 
 ### 2.9.4 (TBD)
 
+- Feature: The traffic-manager can automatically detect that the node subnets are different from the
+  pod subnets, and switch detection strategy to instead use subnets that cover the pod IPs.
+
 - Bugfix: Initialization of FTP type file sharing is delayed, so that setting it using the Helm chart
   value `intercept.useFtp=true` works as expected.
 
