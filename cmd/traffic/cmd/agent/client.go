@@ -28,24 +28,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-func GetAmbassadorCloudConnectionInfo(ctx context.Context, address string) (*rpc.AmbassadorCloudConnection, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	if err != nil {
-		return &rpc.AmbassadorCloudConnection{}, err
-	}
-	defer conn.Close()
-
-	manager := rpc.NewManagerClient(conn)
-	cloudConnectInfo, err := manager.CanConnectAmbassadorCloud(ctx, &empty.Empty{})
-	if err != nil {
-		return &rpc.AmbassadorCloudConnection{}, err
-	}
-	return cloudConnectInfo, nil
-}
-
 type interceptsStringer []*rpc.InterceptInfo
 
 func (is interceptsStringer) String() string {
