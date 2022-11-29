@@ -35,6 +35,7 @@ echo "Checking that chart hasn't already been pushed by looking in ${bucket} / $
 # to see if it exists or not, so this is better than requesting
 # the whole tar file.
 if aws s3api head-object \
+		--region us-east-1 \
     --bucket "$bucket" \
     --key "${prefix}/${package_file##*/}"
 then
@@ -49,6 +50,7 @@ fi
 echo "Pushing chart to S3 bucket $bucket"
 echo "Pushing ${prefix}/${package_file##*/}"
 aws s3api put-object \
+		--region us-east-1 \
     --bucket "$bucket" \
     --key "${prefix}/${package_file##*/}" \
     --body "$package_file"
