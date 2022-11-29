@@ -17,7 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	rpc2 "github.com/datawire/go-fuseftp/rpc"
+	fuseftp "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -66,6 +66,9 @@ type Service struct {
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
+
+	fuseFtpCh   chan fuseftp.FuseFTPClient
+	startFuseCh chan struct{}
 }
 
 func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
@@ -75,6 +78,8 @@ func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *c
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+		fuseFtpCh:       make(chan fuseftp.FuseFTPClient, 1),
+		startFuseCh:     make(chan struct{}),
 	}
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
@@ -133,7 +138,7 @@ func (s *Service) configReload(c context.Context) error {
 // ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func ManageSessions(c context.Context, si userd.Service, fuseFtp rpc2.FuseFTPClient) error {
+func ManageSessions(c context.Context, si userd.Service) error {
 	// The d.quit is called when we receive a Quit. Since it
 	// terminates this function, it terminates the whole process.
 	wg := sync.WaitGroup{}
@@ -159,7 +164,8 @@ nextSession:
 				rsp = s.session.UpdateStatus(s.sessionContext, cr)
 			} else {
 				sCtx, sCancel := context.WithCancel(c)
-				sCtx, session, rsp = userd.GetNewSessionFunc(c)(sCtx, s.scout, cr, si, fuseFtp)
+				sCtx = userd.WithService(sCtx, si)
+				sCtx, session, rsp = userd.GetNewSessionFunc(c)(sCtx, s.scout, cr)
 				if sCtx.Err() == nil && rsp.Error == rpc.ConnectInfo_UNSPECIFIED {
 					s.sessionContext = session.WithK8sInterface(sCtx)
 					s.session = session
@@ -332,15 +338,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	fuseFtpCh := make(chan rpc2.FuseFTPClient)
-	if cfg.Intercept.UseFtp {
-		g.Go("fuseftp-server", func(c context.Context) error {
-			s.fuseFTPError = runFuseFTPServer(c, fuseFtpCh)
-			return nil
-		})
-	} else {
-		close(fuseFtpCh)
-	}
+	g.Go("fuseftp-server", s.deferFuseFtpInit)
 
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		sc := &dhttp.ServerConfig{Handler: s.srv}
@@ -359,7 +357,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	g.Go("config-reload", s.configReload)
 	g.Go("session", func(c context.Context) error {
 		c, s.quit = context.WithCancel(c)
-		return ManageSessions(c, si, <-fuseFtpCh)
+		return ManageSessions(c, si)
 	})
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to

@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.9.4 (TBD)
+
+- Bugfix: Initialization of FTP type file sharing is delayed, so that setting it using the Helm chart
+  value `intercept.useFtp=true` works as expected.
+
 ### 2.9.3 (November 23, 2022)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager

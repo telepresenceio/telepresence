@@ -16,12 +16,51 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/go-fuseftp/rpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 //go:embed fuseftp.bits
 var fuseftpBits []byte
+
+func (s *Service) deferFuseFtpInit(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-s.startFuseCh:
+	}
+	if client.GetConfig(ctx).Intercept.UseFtp {
+		if err := runFuseFTPServer(ctx, s.fuseFtpCh); err != nil {
+			dlog.Errorf(ctx, "Unable to start FuseFTP server: %v", err)
+		}
+	} else {
+		close(s.fuseFtpCh)
+	}
+	return nil
+}
+
+func (s *Service) GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient {
+	// Close startFuseFtp unless it's already closed. This will kick
+	// the deferFuseFtpInit to either make the client available on
+	// the fuseFtpCh or close that channel
+	select {
+	case <-s.startFuseCh:
+	default:
+		close(s.startFuseCh)
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+	case c, ok := <-s.fuseFtpCh:
+		if ok {
+			// Put the client back onto the queue for the next caller to read
+			s.fuseFtpCh <- c
+		}
+		return c
+	}
+}
 
 // runFuseFtpServer ensures that the fuseftp gRPC server is downloaded into the
 // user cache, and starts it. Once the socket is created by the server, a
@@ -83,13 +122,14 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 }
 
 func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- rpc.FuseFTPClient) {
-	defer close(cCh)
 	giveUp := time.After(3 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
+			close(cCh)
 			return
 		case <-giveUp:
+			close(cCh)
 			dlog.Error(ctx, "timeout waiting for fuseftp socket")
 			return
 		default:

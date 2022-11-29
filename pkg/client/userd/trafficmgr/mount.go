@@ -18,6 +18,7 @@ import (
 	"github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -29,16 +30,19 @@ func (ic *intercept) shouldMount() bool {
 
 // startMount starts the mount for the given podInterceptKey.
 // It assumes that the user has called shouldMount and is sure that something will be started.
-func (ic *intercept) startMount(ctx context.Context, fuseftp rpc.FuseFTPClient, podWG *sync.WaitGroup) {
+func (ic *intercept) startMount(ctx context.Context, podWG *sync.WaitGroup) {
+	var fuseftp rpc.FuseFTPClient
 	useFtp := client.GetConfig(ctx).Intercept.UseFtp
-	switch {
-	case ic.FtpPort == 0 && useFtp:
-		dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
-		return
-	case fuseftp == nil && useFtp:
-		dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
-		return
-	case ic.SftpPort == 0 && !useFtp:
+	if useFtp {
+		if ic.FtpPort == 0 {
+			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
+			return
+		}
+		if fuseftp = userd.GetService(ctx).GetFuseFTPClient(ctx); fuseftp == nil {
+			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
+			return
+		}
+	} else if ic.SftpPort == 0 {
 		dlog.Errorf(ctx, "Client is configured to perform remote mounts using SFTP, but only FTP is provided by the traffic-agent")
 		return
 	}
