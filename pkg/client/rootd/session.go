@@ -79,6 +79,9 @@ type Session struct {
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
 
+	// Kubernetes Port Forward Dialer
+	pfDialer dnet.PortForwardDialer
+
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient manager.ManagerClient
 
@@ -184,7 +187,7 @@ func getKubeConfig(ctx context.Context, homeDir string, flags map[string]string)
 	return client.NewKubeconfig(ctx, flags)
 }
 
-func createPortForwardDialer(ctx context.Context, homeDir string, flags map[string]string) (func(context.Context, string) (net.Conn, error), error) {
+func createPortForwardDialer(ctx context.Context, homeDir string, flags map[string]string) (dnet.PortForwardDialer, error) {
 	kc, err := getKubeConfig(ctx, homeDir, flags)
 	if err != nil {
 		return nil, err
@@ -201,18 +204,13 @@ func createPortForwardDialer(ctx context.Context, homeDir string, flags map[stri
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
-func connectToManager(ctx context.Context, homeDir, namespace string, flags map[string]string) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
+func connectToManager(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
 	dlog.Debug(ctx, "creating port-forward")
 	clientConfig := client.GetConfig(ctx)
 	tos := &clientConfig.Timeouts
 
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
-
-	grpcDialer, err := createPortForwardDialer(ctx, homeDir, flags)
-	if err != nil {
-		return nil, nil, semver.Version{}, err
-	}
 	conn, mc, mgrVer, err := tm.ConnectToManager(ctx, namespace, grpcDialer)
 	if err != nil {
 		return nil, nil, semver.Version{}, err
@@ -237,7 +235,13 @@ func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
 // NewSession returns a new properly initialized session object.
 func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
-	conn, mc, ver, err := connectToManager(c, mi.HomeDir, mi.ManagerNamespace, mi.KubeFlags)
+
+	pfDialer, err := createPortForwardDialer(c, mi.HomeDir, mi.KubeFlags)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, pfDialer.Dial)
 	if mc == nil || err != nil {
 		return nil, err
 	}
@@ -261,6 +265,7 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		fragmentMap:      make(map[uint16][]*buffer.Data),
 		rndSource:        rand.NewSource(time.Now().UnixNano()),
 		session:          mi.Session,
+		pfDialer:         pfDialer,
 		managerClient:    mc,
 		managerVersion:   ver,
 		clientConn:       conn,
@@ -653,6 +658,7 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 func (s *Session) run(c context.Context) error {
 	defer func() {
 		dlog.Info(c, "-- Session ended")
+		_ = s.pfDialer.Close()
 		close(s.done)
 	}()
 
