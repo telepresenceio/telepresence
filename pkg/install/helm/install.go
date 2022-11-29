@@ -10,6 +10,7 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/strvals"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
@@ -262,37 +263,8 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 func makeMapFromValuePairs(valuePairs []string) (map[string]any, error) {
 	vls := make(map[string]any)
 	for _, v := range valuePairs {
-		kv := strings.SplitN(v, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("%s is not in the form key=value", v)
-		}
-		keys := strings.Split(kv[0], ".")
-		val := kv[1]
-		vm := vls
-		nk := len(keys) - 1
-		for i := 0; i <= nk; i++ {
-			key := keys[i]
-			ov, ok := vm[key]
-			if !ok {
-				if i == nk {
-					vm[key] = val
-					break
-				}
-				m := make(map[string]any)
-				vm[key] = m
-				vm = m
-				continue
-			}
-			om, ok := ov.(map[string]any)
-			if ok {
-				if i < nk {
-					vm = om
-					continue
-				}
-			} else if i == nk {
-				return nil, fmt.Errorf("%s was defined as both %v and %v", kv[0], ov, kv[1])
-			}
-			return nil, fmt.Errorf("%s cannot be both a map and a scalar value", strings.Join(keys[:i+1], "."))
+		if err := strvals.ParseInto(v, vls); err != nil {
+			return nil, err
 		}
 	}
 	return vls, nil
