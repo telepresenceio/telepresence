@@ -7,6 +7,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
@@ -15,8 +16,10 @@ import (
 
 const (
 	cfgFileName      = "client.yaml"
-	cfgConfigMapName = "traffic-manager-clients"
+	cfgConfigMapName = "traffic-manager"
 )
+
+type WatcherCallback func(watch.EventType, runtime.Object) error
 
 type Watcher interface {
 	Run(ctx context.Context) error
@@ -27,10 +30,15 @@ type config struct {
 	sync.RWMutex
 	namespace string
 	cfgYaml   []byte
+
+	callbacks []WatcherCallback
 }
 
-func NewWatcher(namespace string) Watcher {
-	return &config{namespace: namespace}
+func NewWatcher(namespace string, callbacks ...WatcherCallback) Watcher {
+	return &config{
+		namespace: namespace,
+		callbacks: callbacks,
+	}
 }
 
 func (c *config) Run(ctx context.Context) error {
@@ -71,6 +79,12 @@ func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Ev
 				if m, ok := event.Object.(*core.ConfigMap); ok {
 					dlog.Debugf(ctx, "%s %s", event.Type, m.Name)
 					c.refreshFile(ctx, m.Data)
+				}
+			}
+
+			for _, cb := range c.callbacks {
+				if err := cb(event.Type, event.Object); err != nil {
+					dlog.Debugf(ctx, "watcher callback error: %s", err.Error())
 				}
 			}
 		}

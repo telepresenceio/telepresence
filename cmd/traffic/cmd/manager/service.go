@@ -105,7 +105,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
-	ret.cliConfig = cliconfig.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
+	ret.cliConfig = cliconfig.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace, ret.configMapEventHandler)
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)

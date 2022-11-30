@@ -12,6 +12,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -101,6 +103,16 @@ func Main(ctx context.Context, _ ...string) error {
 
 	// Wait for exit
 	return g.Wait()
+}
+
+func (m *Manager) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
+	// TODO(raphaelreyna): read configmap to determine mode
+	switch eventType {
+	case watch.Added, watch.Modified:
+	case watch.Deleted:
+	}
+
+	return nil
 }
 
 // Serve Prometheus metrics if env.PrometheusPort != 0.
