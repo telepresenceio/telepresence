@@ -1,4 +1,4 @@
-package cliconfig
+package config
 
 import (
 	"context"
@@ -15,21 +15,25 @@ import (
 )
 
 const (
-	cfgFileName      = "client.yaml"
-	cfgConfigMapName = "traffic-manager"
+	clientConfigFileName         = "client.yaml"
+	trafficManagerConfigFileName = "traffic-manager.yaml"
+	cfgConfigMapName             = "traffic-manager"
 )
 
 type WatcherCallback func(watch.EventType, runtime.Object) error
 
 type Watcher interface {
 	Run(ctx context.Context) error
-	GetConfigYaml() []byte
+	GetClientConfigYaml() []byte
+	GetTrafficManagerConfigYaml() []byte
 }
 
 type config struct {
 	sync.RWMutex
 	namespace string
-	cfgYaml   []byte
+
+	clientYAML         []byte
+	trafficManagerYAML []byte
 
 	callbacks []WatcherCallback
 }
@@ -93,19 +97,34 @@ func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Ev
 
 func (c *config) refreshFile(ctx context.Context, data map[string]string) {
 	c.Lock()
-	if yml, ok := data[cfgFileName]; ok {
-		c.cfgYaml = []byte(yml)
+	if yml, ok := data[clientConfigFileName]; ok {
+		c.clientYAML = []byte(yml)
 		dlog.Debugf(ctx, "Refreshed client config: %s", yml)
 	} else {
-		c.cfgYaml = nil
+		c.clientYAML = nil
 		dlog.Debugf(ctx, "Cleared client config")
+	}
+
+	if yml, ok := data[trafficManagerConfigFileName]; ok {
+		c.trafficManagerYAML = []byte(yml)
+		dlog.Debugf(ctx, "Refreshed traffic-manager config: %s", yml)
+	} else {
+		c.trafficManagerYAML = nil
+		dlog.Debugf(ctx, "Cleared traffic-manager config")
 	}
 	c.Unlock()
 }
 
-func (c *config) GetConfigYaml() (ret []byte) {
+func (c *config) GetClientConfigYaml() (ret []byte) {
 	c.RLock()
-	ret = c.cfgYaml
+	ret = c.clientYAML
+	c.RUnlock()
+	return
+}
+
+func (c *config) GetTrafficManagerConfigYaml() (ret []byte) {
+	c.RLock()
+	ret = c.trafficManagerYAML
 	c.RUnlock()
 	return
 }

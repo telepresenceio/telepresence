@@ -23,8 +23,8 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cliconfig"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -42,14 +42,16 @@ type Clock interface {
 }
 
 type Manager struct {
-	ctx          context.Context
-	clock        Clock
-	ID           string
-	state        *state.State
-	clusterInfo  cluster.Info
-	cloudConfig  *rpc.AmbassadorCloudConfig
-	cliConfig    cliconfig.Watcher
-	tokenService cloudtoken.Service
+	ctx           context.Context
+	clock         Clock
+	ID            string
+	state         *state.State
+	clusterInfo   cluster.Info
+	cloudConfig   *rpc.AmbassadorCloudConfig
+	configWatcher config.Watcher
+	tokenService  cloudtoken.Service
+
+	config config.TrafficManager
 
 	rpc.UnsafeManagerServer
 }
@@ -105,7 +107,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
-	ret.cliConfig = cliconfig.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace, ret.configMapEventHandler)
+	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace, ret.configMapEventHandler)
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
@@ -173,6 +175,17 @@ func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
 
+	var (
+		mode               config.Mode
+		currentClientCount = m.state.CountAllClients()
+	)
+	m.config.RLock()
+	mode = m.config.Mode
+	m.config.RUnlock()
+	if 0 < currentClientCount && mode == config.ModeSingle {
+		return nil, status.Errorf(codes.FailedPrecondition, "additional client connections require the traffic-manager to be set to team mode")
+	}
+
 	if val := validateClient(client); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
@@ -208,7 +221,7 @@ func (m *Manager) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 	dlog.Debug(ctx, "GetClientConfig called")
 
 	return &rpc.CLIConfig{
-		ConfigYaml: m.cliConfig.GetConfigYaml(),
+		ConfigYaml: m.configWatcher.GetClientConfigYaml(),
 	}, nil
 }
 

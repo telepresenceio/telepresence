@@ -23,13 +23,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-type Mode uint8
-
-const (
-	ModeSingle Mode = iota
-	ModeTeam
-)
-
 // State is the total state of the Traffic Manager.  A zero State is invalid; you must call
 // NewState.
 type State struct {
@@ -60,8 +53,6 @@ type State struct {
 	timedLogLevel   log.TimedLevel
 	llSubs          *loglevelSubscribers
 	cfgMapLocks     map[string]*sync.Mutex
-
-	mode Mode
 }
 
 func NewState(ctx context.Context) *State {
@@ -164,18 +155,6 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	}
 
 	return false
-}
-
-func (s *State) SetMode(m Mode) {
-	s.mu.Lock()
-	s.mode = m
-	s.mu.Unlock()
-}
-
-func (s *State) GetMode() Mode {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.mode
 }
 
 // RemoveSession removes a session from the set of present session IDs.

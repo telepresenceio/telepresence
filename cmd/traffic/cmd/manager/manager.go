@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -80,7 +81,7 @@ func Main(ctx context.Context, _ ...string) error {
 		SoftShutdownTimeout:  5 * time.Second,
 	})
 
-	g.Go("cli-config", mgr.cliConfig.Run)
+	g.Go("cli-config", mgr.configWatcher.Run)
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
@@ -106,10 +107,14 @@ func Main(ctx context.Context, _ ...string) error {
 }
 
 func (m *Manager) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
-	// TODO(raphaelreyna): read configmap to determine mode
-	switch eventType {
-	case watch.Added, watch.Modified:
-	case watch.Deleted:
+	if eventType == watch.Added || eventType == watch.Modified {
+		yamlBytes := m.configWatcher.GetTrafficManagerConfigYaml()
+		m.config.Lock()
+		defer m.config.Unlock()
+		if err := yaml.Unmarshal(yamlBytes, &m.config); err != nil {
+			dlog.Errorf(m.ctx, "unable to unmarshal traffic-manager config: %s", err.Error())
+			return err
+		}
 	}
 
 	return nil
