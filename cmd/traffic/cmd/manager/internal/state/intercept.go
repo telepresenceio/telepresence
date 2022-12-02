@@ -24,6 +24,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -61,9 +62,13 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	}
 
 	env := managerutil.GetEnv(ctx)
-	if env.InterceptDisableGlobal {
-		if cr.InterceptSpec.Mechanism != "http" {
+	if cr.InterceptSpec.Mechanism != "http" {
+		if env.InterceptDisableGlobal {
 			return interceptError(errcat.User.New("Global intercepts are not allowed. Please log in and use http intercepts"))
+		}
+		if s.config.Mode == config.ModeTeam {
+			// TODO(raphaelreyna): come up with a better error message
+			return interceptError(errcat.User.New("use the `telepresence intercept-multi` command"))
 		}
 	}
 

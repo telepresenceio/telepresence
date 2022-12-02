@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +28,4 @@ func (m *Mode) UnmarshalYAML(value *yaml.Node) error {
 
 type TrafficManager struct {
 	Mode Mode
-
-	sync.RWMutex `yaml:"-"`
 }

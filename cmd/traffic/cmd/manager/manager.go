@@ -27,6 +27,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -108,13 +109,17 @@ func Main(ctx context.Context, _ ...string) error {
 
 func (m *Manager) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
 	if eventType == watch.Added || eventType == watch.Modified {
-		yamlBytes := m.configWatcher.GetTrafficManagerConfigYaml()
-		m.config.Lock()
-		defer m.config.Unlock()
-		if err := yaml.Unmarshal(yamlBytes, &m.config); err != nil {
+		var (
+			tmConf    config.TrafficManager
+			yamlBytes = m.configWatcher.GetTrafficManagerConfigYaml()
+		)
+
+		if err := yaml.Unmarshal(yamlBytes, &tmConf); err != nil {
 			dlog.Errorf(m.ctx, "unable to unmarshal traffic-manager config: %s", err.Error())
 			return err
 		}
+
+		m.state.SetConfig(tmConf)
 	}
 
 	return nil

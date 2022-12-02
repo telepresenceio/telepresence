@@ -17,6 +17,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -53,6 +54,7 @@ type State struct {
 	timedLogLevel   log.TimedLevel
 	llSubs          *loglevelSubscribers
 	cfgMapLocks     map[string]*sync.Mutex
+	config          config.TrafficManager
 }
 
 func NewState(ctx context.Context) *State {
@@ -629,4 +631,24 @@ func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
 // of the last request that was made.
 func (s *State) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
 	return s.llSubs.subscriberLoop(stream.Context(), stream)
+}
+
+func (s *State) SetConfig(c config.TrafficManager) {
+	s.mu.Lock()
+	s.config = c
+	s.mu.Unlock()
+}
+
+// modeCheck checks the current mode and returns either a warning or error based on number of current users
+func (s *State) ModeCheck() (string, error) {
+	currentClientCount := s.CountAllClients()
+	s.mu.RLock()
+	mode := s.config.Mode
+	s.mu.RUnlock()
+
+	if 0 < currentClientCount && mode == config.ModeSingle {
+		return "additional client connections require the traffic-manager to be set to team mode", nil
+	}
+
+	return "", nil
 }

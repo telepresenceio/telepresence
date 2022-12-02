@@ -175,19 +175,17 @@ func (m *Manager) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
 
-	var (
-		mode               config.Mode
-		currentClientCount = m.state.CountAllClients()
-	)
-	m.config.RLock()
-	mode = m.config.Mode
-	m.config.RUnlock()
-	if 0 < currentClientCount && mode == config.ModeSingle {
-		return nil, status.Errorf(codes.FailedPrecondition, "additional client connections require the traffic-manager to be set to team mode")
-	}
-
 	if val := validateClient(client); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
+	}
+
+	warnMsg, err := m.state.ModeCheck()
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if warnMsg != "" {
+		// TODO(raphaelreyna): send this to the client
+		dlog.Warn(ctx, warnMsg)
 	}
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
@@ -472,9 +470,25 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.Session)
 	dlog.Debugf(ctx, "PrepareIntercept called")
+
+	pi, err := m.state.PrepareIntercept(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	warnMsg, err := m.state.ModeCheck()
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if warnMsg != "" {
+		// TODO(raphaelreyna): send this to the client
+		dlog.Warn(ctx, warnMsg)
+	}
+
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
-	return m.state.PrepareIntercept(ctx, request)
+
+	return pi, nil
 }
 
 // CreateIntercept lets a client create an intercept.
