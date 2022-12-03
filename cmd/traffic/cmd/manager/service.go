@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	dns2 "github.com/miekg/dns"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -29,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -180,12 +182,22 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	}
 
 	warnMsg, err := m.state.ModeCheck()
+	dlog.Debugf(ctx, "modeCheck: %s %+v", warnMsg, err)
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
+
+	var warning error
 	if warnMsg != "" {
-		// TODO(raphaelreyna): send this to the client
-		dlog.Warn(ctx, warnMsg)
+		// TODO(raphaelreyna): should probably use a custom proto here
+		msg := errdetails.LocalizedMessage{
+			Message: warnMsg,
+		}
+		stat, err := status.New(codes.FailedPrecondition, warnMsg).WithDetails(&msg)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "error creating warning status: %s", err.Error())
+		}
+		warning = stat.Err()
 	}
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
@@ -196,7 +208,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		SessionId: sessionID,
 		ClusterId: m.clusterInfo.GetClusterID(),
 		InstallId: &installId,
-	}, nil
+	}, warning
 }
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
@@ -481,14 +493,13 @@ func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	if warnMsg != "" {
-		// TODO(raphaelreyna): send this to the client
-		dlog.Warn(ctx, warnMsg)
+		err = errcat.ModeWarning.New(warnMsg)
 	}
 
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
 
-	return pi, nil
+	return pi, err
 }
 
 // CreateIntercept lets a client create an intercept.

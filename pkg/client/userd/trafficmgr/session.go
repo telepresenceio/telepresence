@@ -170,10 +170,16 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
+	var warning error
 	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon, fuseFtp, svc.GetAPIKey)
 	if err != nil {
-		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
-		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
+		if errcat.GetCategory(err) == errcat.ModeWarning {
+			warning = err
+			err = nil
+		} else {
+			dlog.Errorf(ctx, "Unable to connect to session: %s", err)
+			return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
+		}
 	}
 
 	tmgr.sessionConfig = client.GetDefaultConfig()
@@ -221,6 +227,12 @@ func NewSession(
 		SessionInfo:    tmgr.SessionInfo(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 	}
+
+	if warning != nil {
+		ret.ErrorCategory = int32(errcat.GetCategory(err))
+		ret.ErrorText = warning.Error()
+	}
+
 	return ctx, tmgr, ret
 }
 
@@ -381,6 +393,7 @@ func connectMgr(
 		}
 	}
 
+	var warning error
 	if si == nil {
 		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
 		si, err = mClient.ArriveAsClient(ctx, &manager.ClientInfo{
@@ -390,7 +403,15 @@ func connectMgr(
 			Version:   client.Version(),
 		})
 		if err != nil {
-			return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
+			stat, ok := status.FromError(err)
+			if !ok {
+				return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
+			}
+			if len(stat.Details()) == 0 {
+				return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
+			}
+			warning = errcat.ModeWarning.New(err)
+			err = nil
 		}
 		if err = SaveSessionInfoToUserCache(ctx, clusterHost, si); err != nil {
 			return nil, err
@@ -413,7 +434,7 @@ func connectMgr(
 		apiKeyFunc:       apiKeyFunc,
 		sr:               sr,
 		done:             make(chan struct{}),
-	}, nil
+	}, warning
 }
 
 func CheckTrafficManagerService(ctx context.Context, namespace string) error {

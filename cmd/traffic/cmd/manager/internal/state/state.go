@@ -647,6 +647,7 @@ func (s *State) ModeCheck() (string, error) {
 	s.mu.RUnlock()
 
 	if 0 < currentClientCount && mode == config.ModeSingle {
+		// TODO(raphaelreyna): come up with a better message here
 		return "additional client connections require the traffic-manager to be set to team mode", nil
 	}
 

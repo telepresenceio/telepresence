@@ -61,14 +61,15 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
+	if s.config.Mode == config.ModeTeam && cr.ApiKey == "" {
+		// TODO(raphaelreyna): come up with a new error code here (and a better message)
+		return interceptError(errcat.APIKeyRequired.New("login required to create an intercept in team mode"))
+	}
+
 	env := managerutil.GetEnv(ctx)
 	if cr.InterceptSpec.Mechanism != "http" {
 		if env.InterceptDisableGlobal {
 			return interceptError(errcat.User.New("Global intercepts are not allowed. Please log in and use http intercepts"))
-		}
-		if s.config.Mode == config.ModeTeam {
-			// TODO(raphaelreyna): come up with a better error message
-			return interceptError(errcat.User.New("use the `telepresence intercept-multi` command"))
 		}
 	}
 
