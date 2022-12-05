@@ -8,6 +8,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
@@ -37,6 +38,8 @@ type userDaemonStatus struct {
 	Executable        string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
 	InstallID         string                   `json:"install_id,omitempty" yaml:"install_id,omitempty"`
 	Status            string                   `json:"status,omitempty" yaml:"status,omitempty"`
+	Mode              int32                    `json:"mode,omitempty" yaml:"status,omitempty"`
+	ClientCount       int32                    `json:"client_count,omitempty" yaml:"status,omitempty"`
 	Error             string                   `json:"error,omitempty" yaml:"error,omitempty"`
 	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
 	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
@@ -135,6 +138,8 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	switch status.Error {
 	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
 		us.Status = "Connected"
+		us.Mode = status.Status.Mode
+		us.ClientCount = status.Status.ClientCount
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
@@ -236,6 +241,8 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		n += ioutil.Printf(out, "  Executable        : %s\n", cs.Executable)
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
 		n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
+		n += ioutil.Printf(out, "    Mode            : %s\n", modeToString(cs.Mode))
+		n += ioutil.Printf(out, "    Client Count    : %s\n", cs.ClientCount)
 		if cs.Error != "" {
 			n += ioutil.Printf(out, "  Error             : %s\n", cs.Error)
 		}
@@ -249,4 +256,15 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		n += ioutil.Println(out, "User Daemon: Not running")
 	}
 	return int64(n), nil
+}
+
+func modeToString(mode int32) string {
+	switch mode {
+	case int32(config.ModeSingle):
+		return "single-user"
+	case int32(config.ModeTeam):
+		return "team"
+	default:
+		return "unknown"
+	}
 }

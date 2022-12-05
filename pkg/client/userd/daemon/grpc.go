@@ -142,8 +142,8 @@ func (s *Service) Disconnect(ctx context.Context, ex *empty.Empty) (*empty.Empty
 	return &empty.Empty{}, nil
 }
 
-func (s *Service) Status(c context.Context, ex *empty.Empty) (result *rpc.ConnectInfo, err error) {
-	s.logCall(c, "Status", func(c context.Context) {
+func (s *Service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.ConnectInfo, err error) {
+	s.logCall(ctx, "Status", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
@@ -154,6 +154,14 @@ func (s *Service) Status(c context.Context, ex *empty.Empty) (result *rpc.Connec
 			})
 		} else {
 			result = s.session.Status(s.sessionContext)
+			err = s.WithSession(c, "status", func(ctx context.Context, session userd.Session) error {
+				status, err := session.ManagerClient().Status(c, &empty.Empty{})
+				if err != nil {
+					return err
+				}
+				result.Status = status
+				return nil
+			})
 		}
 	})
 	return
