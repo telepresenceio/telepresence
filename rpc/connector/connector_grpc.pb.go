@@ -57,10 +57,10 @@ type ConnectorClient interface {
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
-	Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*Result, error)
+	Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*common.Result, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
-	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*Result, error)
+	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*common.Result, error)
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
@@ -81,7 +81,7 @@ type ConnectorClient interface {
 	GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
 	// GatherTraces will acquire traces for the various Telepresence components in kubernetes
 	// (pending the request) and save them in a file.
-	GatherTraces(ctx context.Context, in *TracesRequest, opts ...grpc.CallOption) (*Result, error)
+	GatherTraces(ctx context.Context, in *TracesRequest, opts ...grpc.CallOption) (*common.Result, error)
 	// AddInterceptor tells the connector that a given process is serving a specific
 	// intercept. The connector must kill this process when the intercept ends
 	AddInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -91,7 +91,7 @@ type ConnectorClient interface {
 	GetNamespaces(ctx context.Context, in *GetNamespacesRequest, opts ...grpc.CallOption) (*GetNamespacesResponse, error)
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
-	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*Result, error)
+	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.Result, error)
 	// GetConfig returns the current configuration
 	GetConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClientConfig, error)
 }
@@ -212,8 +212,8 @@ func (c *connectorClient) UpdateIntercept(ctx context.Context, in *manager.Updat
 	return out, nil
 }
 
-func (c *connectorClient) Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*Result, error) {
-	out := new(Result)
+func (c *connectorClient) Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*common.Result, error) {
+	out := new(common.Result)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Helm", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -221,8 +221,8 @@ func (c *connectorClient) Helm(ctx context.Context, in *HelmRequest, opts ...grp
 	return out, nil
 }
 
-func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*Result, error) {
-	out := new(Result)
+func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*common.Result, error) {
+	out := new(common.Result)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Uninstall", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -343,8 +343,8 @@ func (c *connectorClient) GatherLogs(ctx context.Context, in *LogsRequest, opts 
 	return out, nil
 }
 
-func (c *connectorClient) GatherTraces(ctx context.Context, in *TracesRequest, opts ...grpc.CallOption) (*Result, error) {
-	out := new(Result)
+func (c *connectorClient) GatherTraces(ctx context.Context, in *TracesRequest, opts ...grpc.CallOption) (*common.Result, error) {
+	out := new(common.Result)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GatherTraces", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -379,8 +379,8 @@ func (c *connectorClient) GetNamespaces(ctx context.Context, in *GetNamespacesRe
 	return out, nil
 }
 
-func (c *connectorClient) RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*Result, error) {
-	out := new(Result)
+func (c *connectorClient) RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.Result, error) {
+	out := new(common.Result)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RemoteMountAvailability", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -433,10 +433,10 @@ type ConnectorServer interface {
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
 	UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
-	Helm(context.Context, *HelmRequest) (*Result, error)
+	Helm(context.Context, *HelmRequest) (*common.Result, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
-	Uninstall(context.Context, *UninstallRequest) (*Result, error)
+	Uninstall(context.Context, *UninstallRequest) (*common.Result, error)
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
@@ -457,7 +457,7 @@ type ConnectorServer interface {
 	GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error)
 	// GatherTraces will acquire traces for the various Telepresence components in kubernetes
 	// (pending the request) and save them in a file.
-	GatherTraces(context.Context, *TracesRequest) (*Result, error)
+	GatherTraces(context.Context, *TracesRequest) (*common.Result, error)
 	// AddInterceptor tells the connector that a given process is serving a specific
 	// intercept. The connector must kill this process when the intercept ends
 	AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
@@ -467,7 +467,7 @@ type ConnectorServer interface {
 	GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error)
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
-	RemoteMountAvailability(context.Context, *emptypb.Empty) (*Result, error)
+	RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error)
 	// GetConfig returns the current configuration
 	GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -513,10 +513,10 @@ func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.Re
 func (UnimplementedConnectorServer) UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
-func (UnimplementedConnectorServer) Helm(context.Context, *HelmRequest) (*Result, error) {
+func (UnimplementedConnectorServer) Helm(context.Context, *HelmRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Helm not implemented")
 }
-func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*Result, error) {
+func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
 }
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
@@ -549,7 +549,7 @@ func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*empt
 func (UnimplementedConnectorServer) GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GatherLogs not implemented")
 }
-func (UnimplementedConnectorServer) GatherTraces(context.Context, *TracesRequest) (*Result, error) {
+func (UnimplementedConnectorServer) GatherTraces(context.Context, *TracesRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GatherTraces not implemented")
 }
 func (UnimplementedConnectorServer) AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error) {
@@ -561,7 +561,7 @@ func (UnimplementedConnectorServer) RemoveInterceptor(context.Context, *Intercep
 func (UnimplementedConnectorServer) GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNamespaces not implemented")
 }
-func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*Result, error) {
+func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoteMountAvailability not implemented")
 }
 func (UnimplementedConnectorServer) GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error) {
