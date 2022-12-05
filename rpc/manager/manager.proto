@@ -544,6 +544,11 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+enum ManagerMode {
+  SINGLE = 0;
+  TEAM = 1;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);

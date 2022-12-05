@@ -635,20 +635,11 @@ func (s *State) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) erro
 
 func (s *State) SetConfig(c config.TrafficManager) {
 	s.mu.Lock()
+	oldMode := s.config.Mode
 	s.config = c
 	s.mu.Unlock()
-}
 
-// modeCheck checks the current mode and returns either a warning or error based on number of current users
-func (s *State) ModeCheck() (string, error) {
-	currentClientCount := s.CountAllClients()
-	s.mu.RLock()
-	mode := s.config.Mode
-	s.mu.RUnlock()
-
-	if 0 < currentClientCount && mode == config.ModeSingle {
-		return "additional client connections require the traffic-manager to be set to team mode", nil
+	if oldMode != c.Mode {
+		dlog.Infof(s.ctx, "mode changed from %s to %s", oldMode, c.Mode)
 	}
-
-	return "", nil
 }

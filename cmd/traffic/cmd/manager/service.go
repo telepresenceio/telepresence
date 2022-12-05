@@ -179,15 +179,6 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	warnMsg, err := m.state.ModeCheck()
-	if err != nil {
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
-	}
-	if warnMsg != "" {
-		// TODO(raphaelreyna): send this to the client
-		dlog.Warn(ctx, warnMsg)
-	}
-
 	sessionID := m.state.AddClient(client, m.clock.Now())
 	m.MaybeAddToken(ctx, client.GetApiKey())
 
@@ -474,15 +465,6 @@ func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	pi, err := m.state.PrepareIntercept(ctx, request)
 	if err != nil {
 		return nil, err
-	}
-
-	warnMsg, err := m.state.ModeCheck()
-	if err != nil {
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
-	}
-	if warnMsg != "" {
-		// TODO(raphaelreyna): send this to the client
-		dlog.Warn(ctx, warnMsg)
 	}
 
 	span := trace.SpanFromContext(ctx)
