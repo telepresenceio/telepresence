@@ -83,12 +83,16 @@ func AddKubeconfigEnv(cr *connector.ConnectRequest) {
 	// and since those files can be specified, both as a --kubeconfig flag and in the KUBECONFIG setting, and since the flag won't
 	// accept multiple path entries, we need to pass the environment setting to the connector daemon so that it can set it every
 	// time it receives a new config.
-	if cfg, ok := os.LookupEnv("KUBECONFIG"); ok {
-		if cr.KubeFlags == nil {
-			cr.KubeFlags = make(map[string]string)
+	addEnv := func(key string) {
+		if cfg, ok := os.LookupEnv(key); ok {
+			if cr.KubeFlags == nil {
+				cr.KubeFlags = make(map[string]string)
+			}
+			cr.KubeFlags[key] = cfg
 		}
-		cr.KubeFlags["KUBECONFIG"] = cfg
 	}
+	addEnv("KUBECONFIG")
+	addEnv("GOOGLE_APPLICATION_CREDENTIALS")
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (conn *grpc.ClientConn, err error) {

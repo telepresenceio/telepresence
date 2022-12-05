@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.9.5 (TBD)
+
+- Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
+  having a config element present in the gce configuration in the kubeconfig, has been fixed.
+
 ### 2.9.4 (December 5, 2022)
 
 - Feature: The traffic-manager can automatically detect that the node subnets are different from the
