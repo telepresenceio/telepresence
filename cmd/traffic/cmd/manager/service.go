@@ -122,6 +122,13 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 	return &rpc.VersionInfo2{Version: version.Version}, nil
 }
 
+func (m *Manager) Status(context.Context, *empty.Empty) (*rpc.StatusInfo, error) {
+	return &rpc.StatusInfo{
+		Mode:        int32(m.state.GetMode()),
+		ClientCount: int32(m.state.CountAllClients()),
+	}, nil
+}
+
 // GetLicense returns the license for the cluster. This directory is mounted
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager.

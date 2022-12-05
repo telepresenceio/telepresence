@@ -544,9 +544,18 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+message StatusInfo {
+  VersionInfo2 version = 1;
+  int32 mode = 2;
+  int32 client_count = 3;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
+
+  // Status returns traffic manager state information.
+  rpc Status(google.protobuf.Empty) returns (StatusInfo);
 
   // GetLicense returns the License information (the license itself and
   // domain that granted it) known to the manager.

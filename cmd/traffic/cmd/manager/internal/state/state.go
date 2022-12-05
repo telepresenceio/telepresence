@@ -653,3 +653,9 @@ func (s *State) ModeCheck() (string, error) {
 
 	return "", nil
 }
+
+func (s *State) GetMode() config.Mode {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config.Mode
+}
