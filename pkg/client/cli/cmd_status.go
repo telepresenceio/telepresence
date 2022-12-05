@@ -8,7 +8,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
@@ -260,9 +259,9 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 
 func modeToString(mode int32) string {
 	switch mode {
-	case int32(config.ModeSingle):
+	case 0:
 		return "single-user"
-	case int32(config.ModeTeam):
+	case 1:
 		return "team"
 	default:
 		return "unknown"
