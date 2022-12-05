@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.9.4 (TBD)
+### 2.9.4 (December 5, 2022)
 
 - Feature: The traffic-manager can automatically detect that the node subnets are different from the
   pod subnets, and switch detection strategy to instead use subnets that cover the pod IPs.
