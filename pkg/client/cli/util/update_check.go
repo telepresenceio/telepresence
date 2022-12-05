@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
 const (
@@ -75,7 +76,7 @@ func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 		return uc.StoreNextCheck(cmd.Context(), time.Hour)
 	}
 	if update != nil {
-		fmt.Fprintf(cmd.OutOrStdout(),
+		fmt.Fprintf(output.Info(cmd.Context()),
 			"An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/telepresence/latest/install/upgrade/ for more info.\n",
 			binaryName, &ourVersion, update)
 	}
