@@ -544,9 +544,10 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
-enum ManagerMode {
-  SINGLE = 0;
-  TEAM = 1;
+enum Mode {
+  MODE_UNSPECIFIED = 0;
+  MODE_SINGLE = 1;
+  MODE_TEAM = 2;
 }
 
 service Manager {

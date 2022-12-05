@@ -88,7 +88,7 @@ func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Ev
 
 			for _, cb := range c.callbacks {
 				if err := cb(event.Type, event.Object); err != nil {
-					dlog.Debugf(ctx, "watcher callback error: %s", err.Error())
+					dlog.Errorf(ctx, "watcher callback error: %s", err.Error())
 				}
 			}
 		}

@@ -61,7 +61,7 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
-	teamMode := s.config.Mode == config.Mode(managerrpc.ManagerMode_TEAM)
+	teamMode := s.config.Mode == config.Mode(managerrpc.Mode_MODE_TEAM)
 	if teamMode && cr.ApiKey == "" {
 		return interceptError(errcat.User.New("A login is required to intercept while in Team mode."))
 	}

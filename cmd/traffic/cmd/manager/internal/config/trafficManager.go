@@ -10,7 +10,8 @@ import (
 type Mode int32
 
 const (
-	ModeSingle Mode = iota
+	ModeUnspecified Mode = iota
+	ModeSingle
 	ModeTeam
 )
 
@@ -29,8 +30,10 @@ func (m *Mode) UnmarshalYAML(value *yaml.Node) error {
 func (m Mode) String() string {
 	switch m {
 	case 0:
-		return "single"
+		return "unspecified"
 	case 1:
+		return "single"
+	case 2:
 		return "team"
 	}
 	return "INVALID_MODE"

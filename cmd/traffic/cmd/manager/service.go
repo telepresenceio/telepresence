@@ -51,8 +51,6 @@ type Manager struct {
 	configWatcher config.Watcher
 	tokenService  cloudtoken.Service
 
-	config config.TrafficManager
-
 	rpc.UnsafeManagerServer
 }
 
