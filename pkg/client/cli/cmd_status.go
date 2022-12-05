@@ -241,7 +241,7 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
 		n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
 		n += ioutil.Printf(out, "    Mode            : %s\n", modeToString(cs.Mode))
-		n += ioutil.Printf(out, "    Client Count    : %s\n", cs.ClientCount)
+		n += ioutil.Printf(out, "    Client Count    : %d\n", cs.ClientCount)
 		if cs.Error != "" {
 			n += ioutil.Printf(out, "  Error             : %s\n", cs.Error)
 		}
