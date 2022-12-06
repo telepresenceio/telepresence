@@ -544,9 +544,15 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+enum Mode {
+  MODE_UNSPECIFIED = 0;
+  MODE_SINGLE = 1;
+  MODE_TEAM = 2;
+}
+
 message StatusInfo {
   VersionInfo2 version = 1;
-  int32 mode = 2;
+  Mode mode = 2;
   int32 client_count = 3;
 }
 

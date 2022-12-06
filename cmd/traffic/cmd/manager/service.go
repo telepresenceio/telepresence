@@ -124,7 +124,7 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 
 func (m *Manager) Status(context.Context, *empty.Empty) (*rpc.StatusInfo, error) {
 	return &rpc.StatusInfo{
-		Mode:        int32(m.state.GetMode()),
+		Mode:        m.state.GetModeRPC(),
 		ClientCount: int32(m.state.CountAllClients()),
 	}, nil
 }

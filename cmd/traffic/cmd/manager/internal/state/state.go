@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
@@ -654,8 +655,15 @@ func (s *State) ModeCheck() (string, error) {
 	return "", nil
 }
 
-func (s *State) GetMode() config.Mode {
+func (s *State) GetModeRPC() manager.Mode {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.config.Mode
+	switch s.config.Mode {
+	case config.ModeTeam:
+		return manager.Mode_MODE_TEAM
+	case config.ModeSingle:
+		return manager.Mode_MODE_SINGLE
+	default:
+		return manager.Mode_MODE_UNSPECIFIED
+	}
 }
