@@ -1,5 +1,10 @@
 # Changelog
 
+### (TBD)
+
+- Feature: The traffic-manager can now be set to either team mode or single user mode.
+  When in team mode, intercepts will default to http intercepts.
+
 ### 2.9.3 (November 23, 2022)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager
