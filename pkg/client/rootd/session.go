@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -165,11 +167,35 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 }
 
 func getKubeConfig(ctx context.Context, homeDir string, flags map[string]string) (*client.Kubeconfig, error) {
-	if kcEnv := flags["KUBECONFIG"]; kcEnv == "" {
+	// We're root here, so we need to set up some environment variables to find files in the non-root users
+	// home directory using the supplied homeDir.
+	const gAppCredKey = "GOOGLE_APPLICATION_CREDENTIALS"
+	if flags[gAppCredKey] == "" {
+		// When this key is not set, gce will search for the default. So if the default exists,
+		// then we set the key to point to that so that it is found using the correct path.
+		var config string
+		if runtime.GOOS == "windows" {
+			config = flags["APPDATA"]
+			if config == "" {
+				config = filepath.Join(homeDir, "AppData")
+			} else {
+				delete(flags, "APPDATA")
+			}
+		} else {
+			// Google doesn't care about macOS conventions with ~/Library
+			config = filepath.Join(homeDir, ".config")
+		}
+		path := filepath.Join(config, "gcloud", "application_default_credentials.json")
+		if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
+			flags[gAppCredKey] = path
+		}
+	}
+	const k8sCfgKey = "KUBECONFIG"
+	if kcEnv := flags[k8sCfgKey]; kcEnv == "" {
 		if flags == nil {
 			flags = make(map[string]string, 1)
 		}
-		flags["KUBECONFIG"] = filepath.Join(homeDir, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
+		flags[k8sCfgKey] = filepath.Join(homeDir, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
 	} else {
 		// Ensure that all paths are absolute
 		files := filepath.SplitList(kcEnv)
@@ -181,7 +207,7 @@ func getKubeConfig(ctx context.Context, homeDir string, flags map[string]string)
 			}
 		}
 		if rejoin {
-			flags["KUBECONFIG"] = strings.Join(files, string(filepath.ListSeparator))
+			flags[k8sCfgKey] = strings.Join(files, string(filepath.ListSeparator))
 		}
 	}
 	return client.NewKubeconfig(ctx, flags)

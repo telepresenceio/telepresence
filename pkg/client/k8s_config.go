@@ -77,20 +77,28 @@ func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, e
 	// respect to this option.
 	delete(flagMap, "namespace")
 
-	// The KUBECONFIG entry is a copy of the KUBECONFIG environment variable sent to us from the CLI to give
-	// this long-running daemon a chance to update it. Using the --kubeconfig flag to send the info isn't
-	// sufficient because that flag doesn't allow for multiple path entries like the KUBECONFIG does.
-	if kcEnv, ok := flagMap["KUBECONFIG"]; ok {
-		delete(flagMap, "KUBECONFIG")
-		if err := os.Setenv("KUBECONFIG", kcEnv); err != nil {
-			return nil, err
+	// The GOOGLE_APPLICATION_CREDENTIALS and KUBECONFIG entries are copies of the environment variables
+	// sent to us from the CLI to give this long-running daemon a chance to update them. Here we set/unset
+	// our them in our environment accordingly and remove them from the flagMap
+	transferEnvFlag := func(key string) error {
+		if env, ok := flagMap[key]; ok {
+			delete(flagMap, key)
+			if err := os.Setenv(key, env); err != nil {
+				return err
+			}
+			dlog.Debugf(c, "Using %s %s", key, env)
+			return nil
 		}
-		dlog.Debugf(c, "Using KUBECONFIG %s", kcEnv)
-	} else {
-		// If user unsets the KUBECONFIG, we need to do that too
-		if err := os.Unsetenv("KUBECONFIG"); err != nil {
-			return nil, err
-		}
+		// If user unsets the env, we need to do that too
+		return os.Unsetenv(key)
+	}
+	if err := transferEnvFlag("GOOGLE_APPLICATION_CREDENTIALS"); err != nil {
+		return nil, err
+	}
+	// Using the --kubeconfig flag to send the info isn't sufficient because that flag doesn't allow for multiple
+	// path entries like the KUBECONFIG does.
+	if err := transferEnvFlag("KUBECONFIG"); err != nil {
+		return nil, err
 	}
 	dlog.Debugf(c, "Using kubernetes flags %v", flagMap)
 
