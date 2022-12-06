@@ -8,9 +8,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -58,7 +56,7 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 		fmt.Fprint(stdout, "quitting...")
 	} else {
 		fmt.Fprint(stdout, "disconnecting...")
-		if _, err = ud.Disconnect(ctx, &empty.Empty{}); status.Code(err) != codes.Unimplemented {
+		if _, err = ud.Disconnect(ctx, &empty.Empty{}); grpcStatus.Code(err) != grpcCodes.Unimplemented {
 			// nil or not unimplemented
 			return err
 		}
