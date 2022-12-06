@@ -5,6 +5,8 @@
 - Feature: The traffic-manager can now be set to either team mode or single user mode.
   When in team mode, intercepts will default to http intercepts.
 
+- Change: The configmap `traffic-manager-clients` has been renamed to `traffic-manager`.
+
 ### 2.9.5 (TBD)
 
 - Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
