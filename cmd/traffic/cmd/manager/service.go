@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	dns2 "github.com/miekg/dns"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -30,7 +29,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -52,8 +50,6 @@ type Manager struct {
 	cloudConfig   *rpc.AmbassadorCloudConfig
 	configWatcher config.Watcher
 	tokenService  cloudtoken.Service
-
-	config config.TrafficManager
 
 	rpc.UnsafeManagerServer
 }
@@ -188,25 +184,6 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	warnMsg, err := m.state.ModeCheck()
-	dlog.Debugf(ctx, "modeCheck: %s %+v", warnMsg, err)
-	if err != nil {
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	var warning error
-	if warnMsg != "" {
-		// TODO(raphaelreyna): should probably use a custom proto here
-		msg := errdetails.LocalizedMessage{
-			Message: warnMsg,
-		}
-		stat, err := status.New(codes.FailedPrecondition, warnMsg).WithDetails(&msg)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "error creating warning status: %s", err.Error())
-		}
-		warning = stat.Err()
-	}
-
 	sessionID := m.state.AddClient(client, m.clock.Now())
 	m.MaybeAddToken(ctx, client.GetApiKey())
 
@@ -215,7 +192,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		SessionId: sessionID,
 		ClusterId: m.clusterInfo.GetClusterID(),
 		InstallId: &installId,
-	}, warning
+	}, nil
 }
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
@@ -495,18 +472,10 @@ func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 		return nil, err
 	}
 
-	warnMsg, err := m.state.ModeCheck()
-	if err != nil {
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
-	}
-	if warnMsg != "" {
-		err = errcat.ModeWarning.New(warnMsg)
-	}
-
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
 
-	return pi, err
+	return pi, nil
 }
 
 // CreateIntercept lets a client create an intercept.

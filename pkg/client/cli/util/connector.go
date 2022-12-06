@@ -156,10 +156,7 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 
 func connect(ctx context.Context, userD *UserDaemon, request *connector.ConnectRequest, required bool) (*Session, error) {
 	var ci *connector.ConnectInfo
-	var (
-		err     error
-		warning string
-	)
+	var err error
 	if request == nil {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
 		ci, err = userD.Status(ctx, &empty.Empty{})
@@ -179,9 +176,6 @@ func connect(ctx context.Context, userD *UserDaemon, request *connector.ConnectR
 	switch ci.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
 		fmt.Fprintf(output.Info(ctx), "Connected to context %s (%s)\n", ci.ClusterContext, ci.ClusterServer)
-		if warning != "" {
-			fmt.Fprintf(output.Info(ctx), "WARNING: %s\n", warning)
-		}
 		return &Session{
 			UserDaemon: *userD,
 			Info:       ci,

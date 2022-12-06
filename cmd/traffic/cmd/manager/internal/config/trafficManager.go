@@ -7,10 +7,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Mode uint8
+type Mode int32
 
 const (
-	ModeSingle Mode = iota
+	ModeUnspecified Mode = iota
+	ModeSingle
 	ModeTeam
 )
 
@@ -24,6 +25,18 @@ func (m *Mode) UnmarshalYAML(value *yaml.Node) error {
 		return fmt.Errorf("invalid mode %s, must be 'team' or 'single'", value.Value)
 	}
 	return nil
+}
+
+func (m Mode) String() string {
+	switch m {
+	case 0:
+		return "unspecified"
+	case 1:
+		return "single"
+	case 2:
+		return "team"
+	}
+	return "INVALID_MODE"
 }
 
 type TrafficManager struct {
