@@ -5,6 +5,34 @@
 - Feature: The traffic-manager can now be set to either team mode or single user mode.
   When in team mode, intercepts will default to http intercepts.
 
+### 2.9.5 (TBD)
+
+- Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
+  having a config element present in the gce configuration in the kubeconfig, has been fixed.
+
+### 2.9.4 (December 5, 2022)
+
+- Feature: The traffic-manager can automatically detect that the node subnets are different from the
+  pod subnets, and switch detection strategy to instead use subnets that cover the pod IPs.
+
+- Bugfix: The `telepresence helm` command `--set x=y` flag didn't correctly set values of other types
+  than `string`. The code now uses standard Helm semantics for this flag.
+
+- Bugfix: Telepresence now uses the correct `agent.image` properties in the Helm chart when copying
+  agent image settings from the `config.yml` file.
+
+- Bugfix: Initialization of FTP type file sharing is delayed, so that setting it using the Helm chart
+  value `intercept.useFtp=true` works as expected.
+
+- Bugfix: The port-forward that is created when Telepresence connects to a cluster is now properly
+  closed when `telepresence quit` is called.
+
+- Bugfix: The user daemon no longer panics when the `config.yml` is modified at a time when the user daemon
+  is running but no session is active.
+
+- Bugfix: Fix race condition that would occur when `telepresence connect` `telepresence leave` was called
+  several times in rapid succession.
+
 ### 2.9.3 (November 23, 2022)
 
 - Feature: The helm chart now supports `livenessProbe` and `readinessProbe` for the traffic-manager

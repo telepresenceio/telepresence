@@ -23,12 +23,10 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 )
 
 type traceCollector struct {
@@ -131,10 +129,6 @@ func (c *traceCollector) rootdTraces(ctx context.Context, tCh chan<- []byte) err
 
 func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session, tCh chan<- []byte, remotePort string) error {
 	span := trace.SpanFromContext(ctx)
-	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
-	if err != nil {
-		return err
-	}
 	host := "svc/traffic-manager." + sess.GetManagerNamespace()
 	grpcAddr := net.JoinHostPort(host, remotePort)
 	span.SetAttributes(attribute.String("traffic-manager.host", host), attribute.String("traffic-manager.port", remotePort))
@@ -142,7 +136,7 @@ func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session
 	defer tCancel()
 
 	opts := []grpc.DialOption{
-		grpc.WithContextDialer(kpf),
+		grpc.WithContextDialer(sess.pfDialer.Dial),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
@@ -150,18 +144,14 @@ func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session
 		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 	}
 
-	var conn *grpc.ClientConn
-	if conn, err = grpc.DialContext(tc, grpcAddr, opts...); err != nil {
+	conn, err := grpc.DialContext(tc, grpcAddr, opts...)
+	if err != nil {
 		return err
 	}
 	return c.tracesFor(ctx, conn, tCh, "traffic-manager")
 }
 
 func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh chan<- []byte, remotePort string) error {
-	kpf, err := dnet.NewK8sPortForwardDialer(ctx, sess.GetRestConfig(), k8sapi.GetK8sInterface(ctx))
-	if err != nil {
-		return err
-	}
 	return sess.ForeachAgentPod(ctx, func(ctx context.Context, pi typed.PodInterface, pod *core.Pod) {
 		span := trace.SpanFromContext(ctx)
 		name := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
@@ -170,7 +160,7 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 		defer tCancel()
 
 		opts := []grpc.DialOption{
-			grpc.WithContextDialer(kpf),
+			grpc.WithContextDialer(sess.pfDialer.Dial),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
@@ -178,8 +168,8 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 		}
 
-		var conn *grpc.ClientConn
-		if conn, err = grpc.DialContext(tc, addr, opts...); err != nil {
+		conn, err := grpc.DialContext(tc, addr, opts...)
+		if err != nil {
 			err := fmt.Errorf("error getting traffic-agent traces for %s: %v", name, err)
 			span.RecordError(err, trace.WithAttributes(
 				attribute.String("host", name),
@@ -189,7 +179,7 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 			return
 		}
 		defer conn.Close()
-		err := c.tracesFor(tc, conn, tCh, "traffic-agent")
+		err = c.tracesFor(tc, conn, tCh, "traffic-agent")
 		if err != nil {
 			err := fmt.Errorf("error getting traffic-agent traces for %s: %v", name, err)
 			span.RecordError(err, trace.WithAttributes(

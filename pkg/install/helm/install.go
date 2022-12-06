@@ -10,6 +10,7 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/strvals"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
@@ -56,28 +57,27 @@ func getValues(ctx context.Context) map[string]any {
 			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
 		}
 	}
-	apc := clientConfig.Intercept.AppProtocolStrategy
-	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" || apc != k8sapi.Http2Probe {
-		agentImage := make(map[string]any)
+	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" {
+		image := make(map[string]any)
 		if wai != "" {
 			parts := strings.Split(wai, ":")
-			image := wai
+			name := wai
 			tag := ""
 			if len(parts) > 1 {
-				image = parts[0]
+				name = parts[0]
 				tag = parts[1]
 			}
-			agentImage["name"] = image
-			agentImage["tag"] = tag
+			image["name"] = name
+			image["tag"] = tag
 		}
 		if wr != "" {
-			agentImage["registry"] = wr
+			image["registry"] = wr
 		}
-		agentInjector := map[string]any{"agentImage": agentImage}
-		values["agentInjector"] = agentInjector
-		if apc != k8sapi.Http2Probe {
-			agentInjector["appProtocolStrategy"] = apc.String()
-		}
+		values["agent"] = map[string]any{"image": image}
+	}
+
+	if apc := clientConfig.Intercept.AppProtocolStrategy; apc != k8sapi.Http2Probe {
+		values["agentInjector"] = map[string]any{"appProtocolStrategy": apc.String()}
 	}
 	if clientConfig.TelepresenceAPI.Port != 0 {
 		values["telepresenceAPI"] = map[string]any{
@@ -263,37 +263,8 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 func makeMapFromValuePairs(valuePairs []string) (map[string]any, error) {
 	vls := make(map[string]any)
 	for _, v := range valuePairs {
-		kv := strings.SplitN(v, "=", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("%s is not in the form key=value", v)
-		}
-		keys := strings.Split(kv[0], ".")
-		val := kv[1]
-		vm := vls
-		nk := len(keys) - 1
-		for i := 0; i <= nk; i++ {
-			key := keys[i]
-			ov, ok := vm[key]
-			if !ok {
-				if i == nk {
-					vm[key] = val
-					break
-				}
-				m := make(map[string]any)
-				vm[key] = m
-				vm = m
-				continue
-			}
-			om, ok := ov.(map[string]any)
-			if ok {
-				if i < nk {
-					vm = om
-					continue
-				}
-			} else if i == nk {
-				return nil, fmt.Errorf("%s was defined as both %v and %v", kv[0], ov, kv[1])
-			}
-			return nil, fmt.Errorf("%s cannot be both a map and a scalar value", strings.Join(keys[:i+1], "."))
+		if err := strvals.ParseInto(v, vls); err != nil {
+			return nil, err
 		}
 	}
 	return vls, nil

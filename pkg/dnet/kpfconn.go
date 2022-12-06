@@ -43,11 +43,16 @@ type k8sPortForwardDialer struct {
 
 type DialerFunc func(context.Context, string) (net.Conn, error)
 
+type PortForwardDialer interface {
+	io.Closer
+	Dial(ctx context.Context, addr string) (net.Conn, error)
+}
+
 // NewK8sPortForwardDialer returns a dialer function (matching the signature required by
 // grpc.WithContextDialer) that dials to a port on a Kubernetes Pod, in the manor of `kubectl
 // port-forward`.  It returns the direct connection to the apiserver; it does not establish a local
 // port being forwarded from or otherwise pump data over the connection.
-func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (DialerFunc, error) {
+func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (PortForwardDialer, error) {
 	if err := setKubernetesDefaults(kubeConfig); err != nil {
 		return nil, err
 	}
@@ -63,7 +68,7 @@ func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8
 
 		spdyStreams: make(map[string]httpstream.Connection),
 	}
-	return dialer.Dial, nil
+	return dialer, nil
 }
 
 // Dial dials a port of something in the cluster.  The address format is
@@ -81,6 +86,18 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (net.Conn
 		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
 	}
 	return conn, err
+}
+
+func (pf *k8sPortForwardDialer) Close() error {
+	pf.spdyStreamsMu.Lock()
+	defer pf.spdyStreamsMu.Unlock()
+	for k, s := range pf.spdyStreams {
+		dlog.Errorf(pf.logCtx, "closing spdyStream: %s", k)
+		if err := s.Close(); err != nil {
+			dlog.Errorf(pf.logCtx, "failed to close spdyStream: %v", err)
+		}
+	}
+	return nil
 }
 
 func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (pod *core.Pod, podPortNumber uint16, err error) {

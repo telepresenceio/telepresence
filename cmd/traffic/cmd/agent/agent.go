@@ -71,10 +71,10 @@ func AppEnvironment(ctx context.Context, ag *agentconfig.Container) (map[string]
 	return fullEnv, nil
 }
 
-// SftpServer creates a listener on the next available port, writes that port on the
+// sftpServer creates a listener on the next available port, writes that port on the
 // given channel, and then starts accepting connections on that port. Each connection
 // starts a sftp-server that communicates with that connection using its stdin and stdout.
-func SftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
+func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 	defer close(sftpPortCh)
 
 	// start an sftp-server for remote sshfs mounts
@@ -120,6 +120,24 @@ func SftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 	}
 }
 
+func StartFileSharing(ctx context.Context, g *dgroup.Group, config Config) (<-chan uint16, <-chan uint16) {
+	sftpPortCh := make(chan uint16)
+	ftpPortCh := make(chan uint16)
+	if config.HasMounts(ctx) {
+		g.Go("sftp-server", func(ctx context.Context) error {
+			return sftpServer(ctx, sftpPortCh)
+		})
+		g.Go("ftp-server", func(ctx context.Context) error {
+			return ftp.Start(ctx, config.PodIP(), agentconfig.ExportsMountPoint, ftpPortCh)
+		})
+	} else {
+		close(sftpPortCh)
+		close(ftpPortCh)
+		dlog.Info(ctx, "Not starting sftp-server because there's nothing to mount")
+	}
+	return sftpPortCh, ftpPortCh
+}
+
 func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Agent %s", version.Version)
 
@@ -162,20 +180,7 @@ func Main(ctx context.Context, args ...string) error {
 		defer tracer.Shutdown(ctx)
 	}
 
-	sftpPortCh := make(chan uint16)
-	ftpPortCh := make(chan uint16)
-	if config.HasMounts(ctx) {
-		g.Go("sftp-server", func(ctx context.Context) error {
-			return SftpServer(ctx, sftpPortCh)
-		})
-		g.Go("ftp-server", func(ctx context.Context) error {
-			return ftp.Start(ctx, config.PodIP(), agentconfig.ExportsMountPoint, ftpPortCh)
-		})
-	} else {
-		close(sftpPortCh)
-		close(ftpPortCh)
-		dlog.Info(ctx, "Not starting sftp-server because there's nothing to mount")
-	}
+	sftpPortCh, ftpPortCh := StartFileSharing(ctx, g, config)
 
 	// Talk to the Traffic Manager
 	g.Go("client", func(ctx context.Context) error {

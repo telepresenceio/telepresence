@@ -30,7 +30,6 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -69,6 +68,9 @@ type session struct {
 	installID   string // telepresence's install ID
 	userAndHost string // "laptop-username@laptop-hostname"
 
+	// Kubernetes Port Forward Dialer
+	pfDialer dnet.PortForwardDialer
+
 	// manager client
 	managerClient manager.ManagerClient
 
@@ -79,8 +81,6 @@ type session struct {
 	managerVersion semver.Version
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
-
-	apiKeyFunc func(context.Context) (string, error) // Function that returns the API Key to use, if any
 
 	wlWatcher *workloadsAndServicesWatcher
 
@@ -128,8 +128,6 @@ type session struct {
 
 	isPodDaemon bool
 
-	fuseFtp rpc2.FuseFTPClient
-
 	sessionConfig client.Config
 
 	// done is closed when the session ends
@@ -143,8 +141,6 @@ func NewSession(
 	ctx context.Context,
 	sr *scout.Reporter,
 	cr *rpc.ConnectRequest,
-	svc userd.Service,
-	fuseFtp rpc2.FuseFTPClient,
 ) (context.Context, userd.Session, *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 	sr.Report(ctx, "connect")
@@ -170,7 +166,7 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon, fuseFtp, svc.GetAPIKey)
+	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -319,8 +315,6 @@ func connectMgr(
 	cluster *k8s.Cluster,
 	installID string,
 	isPodDaemon bool,
-	fuseFtp rpc2.FuseFTPClient,
-	apiKeyFunc func(context.Context) (string, error),
 ) (*session, error) {
 	clientConfig := client.GetConfig(ctx)
 	tos := &clientConfig.Timeouts
@@ -343,11 +337,11 @@ func connectMgr(
 	}
 
 	dlog.Debug(ctx, "creating port-forward")
-	grpcDialer, err := dnet.NewK8sPortForwardDialer(ctx, cluster.Kubeconfig.RestConfig, k8sapi.GetK8sInterface(ctx))
+	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, cluster.Kubeconfig.RestConfig, k8sapi.GetK8sInterface(ctx))
 	if err != nil {
 		return nil, err
 	}
-	conn, mClient, managerVersion, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), grpcDialer)
+	conn, mClient, managerVersion, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +356,7 @@ func connectMgr(
 
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
-		apiKey, err := apiKeyFunc(ctx)
+		apiKey, err := userd.GetService(ctx).GetAPIKey(ctx)
 		if err != nil {
 			dlog.Errorf(ctx, "failed to retrieve API key: %v", err)
 		}
@@ -403,14 +397,13 @@ func connectMgr(
 		userAndHost:      userAndHost,
 		managerClient:    mClient,
 		managerConn:      conn,
+		pfDialer:         pfDialer,
 		managerVersion:   managerVersion,
 		sessionInfo:      si,
 		localIntercepts:  make(map[string]struct{}),
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      isPodDaemon,
-		fuseFtp:          fuseFtp,
-		apiKeyFunc:       apiKeyFunc,
 		sr:               sr,
 		done:             make(chan struct{}),
 	}, nil
@@ -482,6 +475,7 @@ func (s *session) Epilog(ctx context.Context) {
 	if s.rootDaemon != nil {
 		_, _ = s.rootDaemon.Disconnect(ctx, &empty.Empty{})
 	}
+	_ = s.pfDialer.Close()
 	dlog.Info(ctx, "-- Session ended")
 	close(s.done)
 }
@@ -750,7 +744,7 @@ func (s *session) remain(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			apiKey, err := s.apiKeyFunc(c)
+			apiKey, err := userd.GetService(c).GetAPIKey(c)
 			if err != nil {
 				dlog.Errorf(c, "failed to retrieve API key: %v", err)
 			}

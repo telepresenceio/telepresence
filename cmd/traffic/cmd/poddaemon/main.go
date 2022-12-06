@@ -154,7 +154,7 @@ func main(ctx context.Context, args *Args) error {
 		// TODO: perhaps provide the real thing if we decide to embed the fuseftp binary
 		fuseftpCh := make(chan rpc.FuseFTPClient)
 		close(fuseftpCh)
-		return user_daemon.ManageSessions(ctx, userdService, <-fuseftpCh)
+		return user_daemon.ManageSessions(ctx, userdService)
 	})
 	grp.Go("main", func(ctx context.Context) error {
 		dlog.Infof(ctx, "Connecting to traffic manager...")

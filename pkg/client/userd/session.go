@@ -11,7 +11,6 @@ import (
 	"github.com/blang/semver"
 
 	"github.com/datawire/dlib/dgroup"
-	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -91,7 +90,7 @@ type Session interface {
 	Done() <-chan struct{}
 }
 
-type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest, Service, rpc2.FuseFTPClient) (context.Context, Session, *connector.ConnectInfo)
+type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest) (context.Context, Session, *connector.ConnectInfo)
 
 type newSessionKey struct{}
 

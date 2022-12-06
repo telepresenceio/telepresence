@@ -23,7 +23,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	rpc2 "github.com/datawire/go-fuseftp/rpc"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -164,7 +163,7 @@ func newPodIntercepts() *podIntercepts {
 }
 
 // start a port forward for the given intercept and remembers that it's alive.
-func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, fuseftp rpc2.FuseFTPClient) {
+func (lpf *podIntercepts) start(ctx context.Context, ic *intercept) {
 	if !ic.shouldForward() && !ic.shouldMount() {
 		return
 	}
@@ -191,7 +190,7 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, fuseftp rpc2
 	ctx, cancel := context.WithCancel(ctx)
 	lp := &podIntercept{cancelPod: cancel}
 	if ic.shouldMount() {
-		ic.startMount(ctx, fuseftp, &lp.wg)
+		ic.startMount(ctx, &lp.wg)
 	}
 	if ic.shouldForward() {
 		ic.startForwards(ctx, &lp.wg)
@@ -316,7 +315,7 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 			ic.FtpPort = 0
 			ic.SftpPort = 0
 		}
-		podIcepts.start(ctx, ic, s.fuseFtp)
+		podIcepts.start(ctx, ic)
 	}
 	if active == 0 {
 		ins = ""

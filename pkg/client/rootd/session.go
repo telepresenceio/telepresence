@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -78,6 +80,9 @@ type Session struct {
 
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
+
+	// Kubernetes Port Forward Dialer
+	pfDialer dnet.PortForwardDialer
 
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient manager.ManagerClient
@@ -162,11 +167,35 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 }
 
 func getKubeConfig(ctx context.Context, homeDir string, flags map[string]string) (*client.Kubeconfig, error) {
-	if kcEnv := flags["KUBECONFIG"]; kcEnv == "" {
+	// We're root here, so we need to set up some environment variables to find files in the non-root users
+	// home directory using the supplied homeDir.
+	const gAppCredKey = "GOOGLE_APPLICATION_CREDENTIALS"
+	if flags[gAppCredKey] == "" {
+		// When this key is not set, gce will search for the default. So if the default exists,
+		// then we set the key to point to that so that it is found using the correct path.
+		var config string
+		if runtime.GOOS == "windows" {
+			config = flags["APPDATA"]
+			if config == "" {
+				config = filepath.Join(homeDir, "AppData")
+			} else {
+				delete(flags, "APPDATA")
+			}
+		} else {
+			// Google doesn't care about macOS conventions with ~/Library
+			config = filepath.Join(homeDir, ".config")
+		}
+		path := filepath.Join(config, "gcloud", "application_default_credentials.json")
+		if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
+			flags[gAppCredKey] = path
+		}
+	}
+	const k8sCfgKey = "KUBECONFIG"
+	if kcEnv := flags[k8sCfgKey]; kcEnv == "" {
 		if flags == nil {
 			flags = make(map[string]string, 1)
 		}
-		flags["KUBECONFIG"] = filepath.Join(homeDir, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
+		flags[k8sCfgKey] = filepath.Join(homeDir, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
 	} else {
 		// Ensure that all paths are absolute
 		files := filepath.SplitList(kcEnv)
@@ -178,13 +207,13 @@ func getKubeConfig(ctx context.Context, homeDir string, flags map[string]string)
 			}
 		}
 		if rejoin {
-			flags["KUBECONFIG"] = strings.Join(files, string(filepath.ListSeparator))
+			flags[k8sCfgKey] = strings.Join(files, string(filepath.ListSeparator))
 		}
 	}
 	return client.NewKubeconfig(ctx, flags)
 }
 
-func createPortForwardDialer(ctx context.Context, homeDir string, flags map[string]string) (func(context.Context, string) (net.Conn, error), error) {
+func createPortForwardDialer(ctx context.Context, homeDir string, flags map[string]string) (dnet.PortForwardDialer, error) {
 	kc, err := getKubeConfig(ctx, homeDir, flags)
 	if err != nil {
 		return nil, err
@@ -201,18 +230,13 @@ func createPortForwardDialer(ctx context.Context, homeDir string, flags map[stri
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
-func connectToManager(ctx context.Context, homeDir, namespace string, flags map[string]string) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
+func connectToManager(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
 	dlog.Debug(ctx, "creating port-forward")
 	clientConfig := client.GetConfig(ctx)
 	tos := &clientConfig.Timeouts
 
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
-
-	grpcDialer, err := createPortForwardDialer(ctx, homeDir, flags)
-	if err != nil {
-		return nil, nil, semver.Version{}, err
-	}
 	conn, mc, mgrVer, err := tm.ConnectToManager(ctx, namespace, grpcDialer)
 	if err != nil {
 		return nil, nil, semver.Version{}, err
@@ -237,7 +261,13 @@ func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
 // NewSession returns a new properly initialized session object.
 func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
-	conn, mc, ver, err := connectToManager(c, mi.HomeDir, mi.ManagerNamespace, mi.KubeFlags)
+
+	pfDialer, err := createPortForwardDialer(c, mi.HomeDir, mi.KubeFlags)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, pfDialer.Dial)
 	if mc == nil || err != nil {
 		return nil, err
 	}
@@ -261,6 +291,7 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		fragmentMap:      make(map[uint16][]*buffer.Data),
 		rndSource:        rand.NewSource(time.Now().UnixNano()),
 		session:          mi.Session,
+		pfDialer:         pfDialer,
 		managerClient:    mc,
 		managerVersion:   ver,
 		clientConn:       conn,
@@ -653,6 +684,7 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 func (s *Session) run(c context.Context) error {
 	defer func() {
 		dlog.Info(c, "-- Session ended")
+		_ = s.pfDialer.Close()
 		close(s.done)
 	}()
 
@@ -751,11 +783,7 @@ func (s *Session) applyConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var sCfg *client.Config
-	if s != nil {
-		sCfg = &s.config
-	}
-	return client.MergeAndReplace(ctx, sCfg, cfg, true)
+	return client.MergeAndReplace(ctx, &s.config, cfg, true)
 }
 
 func (s *Session) Done() chan struct{} {
