@@ -1,7 +1,7 @@
 {{- if .Values.trafficManager }}
   {{- if ne .Values.trafficManager.mode "team" }}
     {{- if .Values.intercept.disableGlobal }}
-      {{- fail "intercept.disableGlobal=true requires that traffic-manager.mode be set to 'team'" }}
+      {{- fail "intercept.disableGlobal=true requires that trafficManager.mode be set to 'team'" }}
     {{- end }}
   {{- end }}
 {{- end }}
