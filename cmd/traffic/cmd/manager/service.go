@@ -467,13 +467,13 @@ func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	ctx = managerutil.WithSessionInfo(ctx, request.Session)
 	dlog.Debugf(ctx, "PrepareIntercept called")
 
+	span := trace.SpanFromContext(ctx)
+	tracing.RecordInterceptSpec(span, request.InterceptSpec)
+
 	pi, err := m.state.PrepareIntercept(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-
-	span := trace.SpanFromContext(ctx)
-	tracing.RecordInterceptSpec(span, request.InterceptSpec)
 
 	return pi, nil
 }

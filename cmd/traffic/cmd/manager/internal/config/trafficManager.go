@@ -4,23 +4,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"gopkg.in/yaml.v3"
 )
 
-type Mode int32
-
-const (
-	ModeUnspecified Mode = iota
-	ModeSingle
-	ModeTeam
-)
+type Mode manager.Mode
 
 func (m *Mode) UnmarshalYAML(value *yaml.Node) error {
 	switch strings.ToLower(value.Value) {
 	case "single":
-		*m = ModeSingle
+		*m = Mode(manager.Mode_MODE_SINGLE)
 	case "team":
-		*m = ModeTeam
+		*m = Mode(manager.Mode_MODE_TEAM)
 	default:
 		return fmt.Errorf("invalid mode %s, must be 'team' or 'single'", value.Value)
 	}
@@ -37,6 +32,10 @@ func (m Mode) String() string {
 		return "team"
 	}
 	return "INVALID_MODE"
+}
+
+func (m Mode) IsTeam() bool {
+	return m == Mode(manager.Mode_MODE_TEAM)
 }
 
 type TrafficManager struct {

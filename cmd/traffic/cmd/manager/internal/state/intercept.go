@@ -24,7 +24,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -61,25 +60,14 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
-	teamMode := s.config.Mode == config.Mode(managerrpc.Mode_MODE_TEAM)
-	if teamMode && cr.ApiKey == "" {
+	if s.config.Mode.IsTeam() && cr.ApiKey == "" {
 		return interceptError(errcat.User.New("A login is required to intercept while in Team mode."))
 	}
 
 	env := managerutil.GetEnv(ctx)
-	// if intercept is global
 	if cr.InterceptSpec.Mechanism != "http" {
-		// and global intercepts are disabled in the environment
 		if env.InterceptDisableGlobal {
-			// block
 			return interceptError(errcat.User.New("Global intercepts are not allowed. Please log in and use http intercepts"))
-		}
-
-		// or if not in team mode another intercept is being created
-		if !teamMode && 1 < s.CountAllClients() {
-			// suggest switching to team mode
-			// TODO(raphaelreyna): swap this out for a better err message
-			dlog.Info(ctx, "Ambassador Labs recommends switching to Team mode when using multiple accounts")
 		}
 	}
 
