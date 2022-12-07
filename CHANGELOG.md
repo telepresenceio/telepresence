@@ -7,6 +7,8 @@
 
 - Change: The configmap `traffic-manager-clients` has been renamed to `traffic-manager`.
 
+- Change: The helm installation will now fail if `intercept.disableGlobal=true` and `traffiManager.mode` is not set to `team`.
+
 ### 2.9.5 (TBD)
 
 - Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
