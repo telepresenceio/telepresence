@@ -138,8 +138,8 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	switch status.Error {
 	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
 		us.Status = "Connected"
-		us.Mode = modeToString(status.Status.Mode.Enum())
-		us.ClientCount = status.Status.ClientCount
+		us.Mode = modeToString(status.ManagerStatus.Mode.Enum())
+		us.ClientCount = status.ManagerStatus.ClientCount
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
 		for _, icept := range status.GetIntercepts().GetIntercepts() {

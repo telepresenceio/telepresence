@@ -159,7 +159,7 @@ func (s *Service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 				if err != nil {
 					return err
 				}
-				result.Status = status
+				result.ManagerStatus = status
 				return nil
 			})
 		}
