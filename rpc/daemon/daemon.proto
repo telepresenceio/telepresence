@@ -26,9 +26,6 @@ service Daemon {
   // Disconnect disconnects the current session.
   rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  // GetClusterSubnets gets the outbound info that has been set on daemon
-  rpc GetClusterSubnets(google.protobuf.Empty) returns (ClusterSubnets);
-
   // GetNetworkConfig returns the current network configuration
   rpc GetNetworkConfig(google.protobuf.Empty) returns (NetworkConfig);
 
@@ -104,15 +101,6 @@ message OutboundInfo {
   map<string, string> kube_flags = 9;
 
   reserved 4;
-}
-
-// ClusterSubnets are the cluster subnets that the daemon has detected that need to be
-// routed
-message ClusterSubnets {
-  // pod_subnets are the subnets that pods go into
-  repeated manager.IPNet pod_subnets = 1;
-  // svc_subnets are subnets that services go into
-  repeated manager.IPNet svc_subnets = 2;
 }
 
 message NetworkConfig {

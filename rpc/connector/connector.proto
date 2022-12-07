@@ -37,7 +37,7 @@ service Connector {
   rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
 
   // GetClusterSubnets gets the outbound info that has been set on daemon
-  rpc GetClusterSubnets(google.protobuf.Empty) returns (daemon.ClusterSubnets);
+  rpc GetClusterSubnets(google.protobuf.Empty) returns (ClusterSubnets);
 
   // Status returns the status of the current connection or DISCONNECTED
   // if no connection has been established.
@@ -111,6 +111,39 @@ service Connector {
 
   // GetConfig returns the current configuration
   rpc GetConfig(google.protobuf.Empty) returns (ClientConfig);
+}
+
+// ManagerProxy is a small subset of the traffic-manager API that the
+// user daemon makes available to the root daemon. This API is intended
+// for the root daemon only and should not be used by other external
+// processes.
+service ManagerProxy {
+  // Version returns the version information of the Manager.
+  rpc Version(google.protobuf.Empty) returns (manager.VersionInfo2);
+
+  // GetClientConfig returns the config that connected clients should use for this manager.
+  rpc GetClientConfig(google.protobuf.Empty) returns (manager.CLIConfig);
+
+  // WatchClusterInfo returns information needed when establishing
+  // connectivity to the cluster.
+  rpc WatchClusterInfo(manager.SessionInfo) returns (stream manager.ClusterInfo);
+
+  // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
+  // active, the lookup will be performed from the intercepted pods.
+  rpc LookupDNS(manager.DNSRequest) returns (manager.DNSResponse);
+
+  // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
+  // active, the lookup will be performed from the intercepted pods.
+  // Deprecated: Retained for backward compatibility. Replaced by LookupDNS
+  rpc LookupHost(manager.LookupHostRequest) returns (manager.LookupHostResponse);
+
+  // A Tunnel represents one single connection where the client or
+  // traffic-agent represents one end (the client-side) and the
+  // traffic-manager represents the other (the server side). The first
+  // message that a client sends when the tunnel is established is will
+  // always contain the session ID, connection ID, and timeouts used by
+  // the dialer endpoints.
+  rpc Tunnel(stream manager.TunnelMessage) returns (stream manager.TunnelMessage);
 }
 
 message Interceptor {
@@ -422,4 +455,13 @@ message GetNamespacesResponse {
 
 message ClientConfig {
   bytes json = 1;
+}
+
+// ClusterSubnets are the cluster subnets that the daemon has detected that need to be
+// routed
+message ClusterSubnets {
+  // pod_subnets are the subnets that pods go into
+  repeated manager.IPNet pod_subnets = 1;
+  // svc_subnets are subnets that services go into
+  repeated manager.IPNet svc_subnets = 2;
 }

@@ -2,9 +2,7 @@ package rootd
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"os"
@@ -231,38 +229,6 @@ func (s *Service) GetNetworkConfig(ctx context.Context, e *empty.Empty) (nc *rpc
 		return nil
 	})
 	return
-}
-
-func (s *Service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (*rpc.ClusterSubnets, error) {
-	podSubnets := []*manager.IPNet{}
-	svcSubnets := []*manager.IPNet{}
-	err := s.WithSession(func(ctx context.Context, session *Session) error {
-		// The manager can sometimes send the different subnets in different Sends,
-		// but after 5 seconds of listening to it, we should expect to have everything
-		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
-		defer tCancel()
-		infoStream, err := session.managerClient.WatchClusterInfo(tCtx, session.session)
-		if err != nil {
-			return err
-		}
-		for {
-			mgrInfo, err := infoStream.Recv()
-			if err != nil {
-				if tCtx.Err() != nil || errors.Is(err, io.EOF) {
-					err = nil
-				}
-				return err
-			}
-			if mgrInfo.ServiceSubnet != nil {
-				svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
-			}
-			podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
-		}
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
 }
 
 func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
