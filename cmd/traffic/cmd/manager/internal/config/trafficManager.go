@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"gopkg.in/yaml.v3"
+
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 type Mode manager.Mode
