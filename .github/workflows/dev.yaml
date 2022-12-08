@@ -19,14 +19,17 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: '1.19'
-      - name: Build dev image
-        run: |
-          make tel2-image
-      - name: Upload image
-        uses: actions/upload-artifact@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
         with:
-          name: image
-          path: build-output/tel2-image.tar
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+      - name: Build and push dev image
+        env:
+          TELEPRESENCE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+        run: |
+          make push-image
   run_tests:
     strategy:
       fail-fast: false
@@ -48,15 +51,11 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: ./.github/actions/install-dependencies
         name: install dependencies
-      - uses: actions/download-artifact@v3
-        with:
-          name: image
       - run: make build
       - uses: ./.github/actions/prepare-cluster
         with:
           kubeception-token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           gke-credentials: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          tel-image: tel2-image.tar
           cluster-distribution: ${{ matrix.clusters.distribution }}
           cluster-version: ${{ matrix.clusters.version }}
         id: kluster

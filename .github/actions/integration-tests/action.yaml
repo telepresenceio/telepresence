@@ -10,7 +10,8 @@ runs:
     - name: Run tests
       env:
         DTEST_KUBECONFIG: "${{ inputs.kubeconfig }}"
-        DTEST_REGISTRY: "docker.io/datawire"
+        DTEST_REGISTRY: ghcr.io/${{ github.repository_owner }}
+        DTEST_PULL_SECRET: ghcr-pull-secret
       uses: nick-invision/retry@v2.8.2
       with:
         max_attempts: 3

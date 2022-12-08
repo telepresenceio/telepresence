@@ -43,4 +43,4 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: "binaries/*"
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
