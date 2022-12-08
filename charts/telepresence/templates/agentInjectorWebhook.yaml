@@ -38,7 +38,7 @@ webhooks:
     scope: '*'
   failurePolicy: {{ .Values.agentInjector.webhook.failurePolicy }}
   reinvocationPolicy: {{ .Values.agentInjector.webhook.reinvocationPolicy }}
-  name: agent-injector.getambassador.io
+  name: agent-injector-{{ include "traffic-manager.namespace" . }}.getambassador.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
 {{- if .Values.managerRbac.namespaced }}
