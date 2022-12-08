@@ -2,6 +2,8 @@
 
 ### 2.9.5 (TBD)
 
+- Security: Update golang to 1.19.4 to address [CVE-2022-41720 and CVE-2022-41717](https://groups.google.com/g/golang-announce/c/L_3rmdT0BMU).
+
 - Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
   having a config element present in the gce configuration in the kubeconfig, has been fixed.
 
