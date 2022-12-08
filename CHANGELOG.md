@@ -1,5 +1,14 @@
 # Changelog
 
+### 2.9.6 (TBD)
+
+- Change: If the cluster is Kubernetes 1.21 or later, the mutating webhook will find the correct namespace
+  using the label `kubernetes.io/metadata.name` rather than `app.kuberenetes.io/name`.
+
+- Change: The name of the mutating webhook now contains the namespace of the traffic-manager so that
+  the webhook is easier to identify when there are multiple namespace scoped telepresence installations
+  in the cluster.
+
 ### 2.9.5 (December 8, 2022)
 
 - Security: Update golang to 1.19.4 to address [CVE-2022-41720 and CVE-2022-41717](https://groups.google.com/g/golang-announce/c/L_3rmdT0BMU).
