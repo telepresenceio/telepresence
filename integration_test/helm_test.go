@@ -30,7 +30,7 @@ func (s *helmSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	itest.TelepresenceQuitOk(ctx)
-	itest.CreateNamespaces(ctx, s.appSpace2, s.mgrSpace2)
+	s.CreateNamespaces(ctx, s.appSpace2, s.mgrSpace2)
 	itest.ApplyEchoService(ctx, s.ServiceName(), s.appSpace2, 80)
 	itest.TelepresenceOk(ctx, "connect")
 }

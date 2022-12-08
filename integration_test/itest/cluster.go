@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -51,10 +53,12 @@ const (
 type Cluster interface {
 	AgentImageName() string
 	CapturePodLogs(ctx context.Context, app, container, ns string)
+	CreateNamespaces(ctx context.Context, namespaces ...string)
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
 	InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error
+	TelepresenceHelmInstall(ctx context.Context, upgrade bool, valuesFile string, values map[string]string) string
 	IsCI() bool
 	Registry() string
 	SetGeneralError(error)
@@ -81,6 +85,7 @@ type cluster struct {
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
+	pullSecret       string
 	agentImageName   string
 	agentImageTag    string
 }
@@ -103,6 +108,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
 
 	t := getT(ctx)
+	s.pullSecret = os.Getenv("DTEST_PULL_SECRET")
 	s.agentImageName = "tel2"
 	s.agentImageTag = s.testVersion[1:]
 	if agentImageQN, ok := os.LookupEnv("DEV_AGENT_IMAGE"); ok {
@@ -451,19 +457,44 @@ func (s *cluster) GetValuesForHelm(values map[string]string, managerNamespace st
 	settings := []string{
 		"--set", "logLevel=debug",
 		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
-		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
-		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
-		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
+		"--set", fmt.Sprintf("agent.image.registry=%s", s.Registry()),
+		"--set", fmt.Sprintf("agent.image.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
+		"--set", fmt.Sprintf("agent.image.tag=%s", s.agentImageTag),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
 		"--set", "systemaHost=127.0.0.1",
+	}
+	if s.pullSecret != "" {
+		settings = append(settings, "--set", fmt.Sprintf("image.imagePullSecrets[0].name=%s", s.pullSecret))
+		settings = append(settings, "--set", fmt.Sprintf("agent.image.pullSecrets[0].name=%s", s.pullSecret))
 	}
 
 	for k, v := range values {
 		settings = append(settings, "--set", k+"="+v)
 	}
 	return settings
+}
+
+func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, valuesFile string, values map[string]string) string {
+	args := []string{
+		"helm",
+		"install",
+	}
+	if upgrade {
+		args = append(args, "--upgrade")
+	}
+	if valuesFile != "" {
+		args = append(args, "-f", valuesFile)
+	}
+	if s.pullSecret != "" {
+		args = append(args, "--set", fmt.Sprintf("image.imagePullSecrets[0].name=%s", s.pullSecret))
+		args = append(args, "--set", fmt.Sprintf("agent.image.pullSecrets[0].name=%s", s.pullSecret))
+	}
+	for k, v := range values {
+		args = append(args, "--set", k+"="+v)
+	}
+	return TelepresenceOk(ctx, args...)
 }
 
 func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
@@ -731,16 +762,34 @@ func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
 	return Kubectl(ctx, namespace, "rollout", "status", "-w", workload)
 }
 
-func CreateNamespaces(ctx context.Context, namespaces ...string) {
+func (s *cluster) CreateNamespaces(ctx context.Context, namespaces ...string) {
 	t := getT(ctx)
 	t.Helper()
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
+	var pullSecret *core.Secret
+	if s.pullSecret != "" {
+		psJSON, err := Output(ctx, "kubectl", "get", "secret", "-n", "default", s.pullSecret, "-o", "json")
+		require.NoErrorf(t, err, "failed to export secret %s", s.pullSecret)
+		pullSecret = &core.Secret{}
+		require.NoErrorf(t, json.Unmarshal([]byte(psJSON), pullSecret), "failed to parse secret %s", s.pullSecret)
+		pullSecret.ManagedFields = nil
+		pullSecret.UID = ""
+		pullSecret.CreationTimestamp = meta.Time{}
+		pullSecret.GetObjectMeta().SetLabels(map[string]string{"purpose": purposeLabel})
+	}
 	for _, ns := range namespaces {
 		go func(ns string) {
 			defer wg.Done()
 			assert.NoError(t, Kubectl(ctx, "", "create", "namespace", ns), "failed to create namespace %q", ns)
 			assert.NoError(t, Kubectl(ctx, "", "label", "namespace", ns, "purpose="+purposeLabel, fmt.Sprintf("app.kubernetes.io/name=%s", ns)))
+			if pullSecret != nil {
+				pullSecret.Namespace = ns
+				psJSON, err := json.Marshal(pullSecret)
+				require.NoErrorf(t, err, "failed to unmarshal secret %s", s.pullSecret)
+				require.NoErrorf(t, Run(WithStdin(ctx, bytes.NewReader(psJSON)), "kubectl", "apply", "-n", ns, "-f", "-"),
+					"failed to apply secret %s in namespace %s", s.pullSecret, ns)
+			}
 		}(ns)
 	}
 	wg.Wait()

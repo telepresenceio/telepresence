@@ -49,7 +49,7 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	// Restore the traffic-manager at the end of this function
 	ctx := itest.WithUser(s.Context(), "default")
 	defer func() {
-		itest.TelepresenceOk(ctx, "helm", "install")
+		s.TelepresenceHelmInstall(ctx, false, "", nil)
 		itest.TelepresenceOk(ctx, "connect")
 		itest.TelepresenceDisconnectOk(ctx)
 	}()
@@ -78,7 +78,7 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	uninstallEverything()
 
 	// And reinstall it
-	itest.TelepresenceOk(ctxAI, "helm", "install")
+	s.TelepresenceHelmInstall(ctxAI, false, "", nil)
 	itest.TelepresenceOk(ctxAI, "connect")
 
 	// When this function ends we uninstall the manager

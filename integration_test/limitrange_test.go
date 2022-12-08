@@ -77,7 +77,7 @@ func (s *helmSuite) TestLimitRange() {
 	}()
 
 	limitedNS := fmt.Sprintf("limited-ns-%s", s.Suffix())
-	itest.CreateNamespaces(ctx, limitedNS)
+	s.CreateNamespaces(ctx, limitedNS)
 	defer itest.DeleteNamespaces(ctx, limitedNS)
 
 	s.Run("Never", func() {

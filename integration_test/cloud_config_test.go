@@ -70,7 +70,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	_, err = f.Write(b)
 	require.NoError(err)
 
-	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
+	s.TelepresenceHelmInstall(ctx, true, values, map[string]string{"logLevel": "debug", "agent.logLevel": "debug"})
 	defer s.rollbackTM()
 
 	s.Eventually(func() bool {
@@ -122,7 +122,11 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	}
 	rootLog.Close()
 
-	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
+	s.TelepresenceHelmInstall(ctx, true, "", map[string]string{
+		"logLevel":                    "debug",
+		"agent.logLevel":              "debug",
+		"client.logLevels.rootDaemon": "trace",
+	})
 	defer s.rollbackTM()
 
 	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,
@@ -223,7 +227,11 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	}
 	logF.Close()
 
-	itest.TelepresenceOk(ctx, "helm", "install", "--upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
+	s.TelepresenceHelmInstall(ctx, true, "", map[string]string{
+		"logLevel":                    "debug",
+		"agent.logLevel":              "debug",
+		"client.logLevels.userDaemon": "trace",
+	})
 	defer s.rollbackTM()
 
 	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,

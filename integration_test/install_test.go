@@ -325,7 +325,7 @@ func (is *installSuite) Test_No_Upgrade() {
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	ctx := is.Context()
 	customNamespace := fmt.Sprintf("custom-%d", os.Getpid())
-	itest.CreateNamespaces(ctx, customNamespace)
+	is.CreateNamespaces(ctx, customNamespace)
 	defer itest.DeleteNamespaces(ctx, customNamespace)
 	defer is.UninstallTrafficManager(ctx, customNamespace)
 	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": customNamespace})

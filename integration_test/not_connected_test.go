@@ -21,7 +21,7 @@ func init() {
 }
 
 func (s *notConnectedSuite) installTelepresence(ctx context.Context) {
-	itest.TelepresenceOk(ctx, "helm", "install", "--set", "logLevel=debug,agent.logLevel=debug")
+	s.TelepresenceHelmInstall(ctx, false, "", map[string]string{"logLevel": "debug", "agent.logLevel": "debug"})
 }
 
 func (s *notConnectedSuite) SetupSuite() {

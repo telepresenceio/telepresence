@@ -48,7 +48,7 @@ func WithNamespacePair(ctx context.Context, suffix string, f func(NamespacePair)
 const purposeLabel = "tp-cli-testing"
 
 func (s *nsPair) setup(ctx context.Context) bool {
-	CreateNamespaces(ctx, s.namespace, s.managerNamespace)
+	s.CreateNamespaces(ctx, s.namespace, s.managerNamespace)
 	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	err := Run(ctx, "kubectl", "apply", "-n", s.managerNamespace, "-f", filepath.Join("testdata", "k8s", "client_connect_rbac.yaml"))
 	require.NoError(getT(ctx), err, "failed to create connect Role/RoleBinding", TestUser)
