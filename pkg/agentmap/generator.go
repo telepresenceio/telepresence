@@ -30,6 +30,7 @@ type GeneratorConfig struct {
 	LogLevel            string
 	InitResources       *core.ResourceRequirements
 	Resources           *core.ResourceRequirements
+	PullSecrets         []core.LocalObjectReference
 	EnvoyLogLevel       string
 	EnvoyServerPort     uint16
 	EnvoyAdminPort      uint16
@@ -101,6 +102,7 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc
 		Containers:      ccs,
 		InitResources:   cfg.InitResources,
 		Resources:       cfg.Resources,
+		PullSecrets:     cfg.PullSecrets,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil
