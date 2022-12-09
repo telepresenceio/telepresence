@@ -64,4 +64,6 @@ jobs:
         with:
           kubeconfig: "${{ steps.kluster.outputs.kubeconfig }}"
       - uses: ./.github/actions/upload-logs
+        env:
+          LOG_SUFFIX: "-${{ runner.os }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
         if: always()
