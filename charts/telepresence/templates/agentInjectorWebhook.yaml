@@ -38,13 +38,17 @@ webhooks:
     scope: '*'
   failurePolicy: {{ .Values.agentInjector.webhook.failurePolicy }}
   reinvocationPolicy: {{ .Values.agentInjector.webhook.reinvocationPolicy }}
-  name: agent-injector.getambassador.io
+  name: agent-injector-{{ include "traffic-manager.namespace" . }}.getambassador.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
 {{- if .Values.managerRbac.namespaced }}
   namespaceSelector:
     matchExpressions:
+{{- if and (eq (int .Capabilities.KubeVersion.Major)  1) (lt (int .Capabilities.KubeVersion.Minor) 21) }}
       - key: app.kubernetes.io/name
+{{- else }}
+      - key: kubernetes.io/metadata.name
+{{- end }}
         operator: In
         values:
 {{- range .Values.managerRbac.namespaces }}
