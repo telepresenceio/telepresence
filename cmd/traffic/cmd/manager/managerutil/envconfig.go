@@ -49,17 +49,18 @@ type Env struct {
 	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
 	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
 
-	AgentRegistry            string                     `env:"AGENT_REGISTRY,           parser=nonempty-string"`
-	AgentImage               string                     `env:"AGENT_IMAGE,              parser=string,         default="`
-	AgentInjectPolicy        agentconfig.InjectPolicy   `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
-	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
-	AgentLogLevel            string                     `env:"AGENT_LOG_LEVEL,          parser=logLevel,       defaultFrom=LogLevel"`
-	AgentPort                uint16                     `env:"AGENT_PORT,               parser=port-number"`
-	AgentResources           *core.ResourceRequirements `env:"AGENT_RESOURCES,          parser=json-resources, default="`
-	AgentInitResources       *core.ResourceRequirements `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
-	AgentEnvoyLogLevel       string                     `env:"AGENT_ENVOY_LOG_LEVEL,    parser=logLevel,       defaultFrom=AgentLogLevel"`
-	AgentEnvoyServerPort     uint16                     `env:"AGENT_ENVOY_SERVER_PORT,  parser=port-number"`
-	AgentEnvoyAdminPort      uint16                     `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
+	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=nonempty-string"`
+	AgentImage               string                      `env:"AGENT_IMAGE,              parser=string,         default="`
+	AgentImagePullSecrets    []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`
+	AgentInjectPolicy        agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
+	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
+	AgentLogLevel            string                      `env:"AGENT_LOG_LEVEL,          parser=logLevel,       defaultFrom=LogLevel"`
+	AgentPort                uint16                      `env:"AGENT_PORT,               parser=port-number"`
+	AgentResources           *core.ResourceRequirements  `env:"AGENT_RESOURCES,          parser=json-resources, default="`
+	AgentInitResources       *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
+	AgentEnvoyLogLevel       string                      `env:"AGENT_ENVOY_LOG_LEVEL,    parser=logLevel,       defaultFrom=AgentLogLevel"`
+	AgentEnvoyServerPort     uint16                      `env:"AGENT_ENVOY_SERVER_PORT,  parser=port-number"`
+	AgentEnvoyAdminPort      uint16                      `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
 
 	ClientRoutingAlsoProxySubnets  []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, parser=split-ipnet, default="`
@@ -81,6 +82,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		LogLevel:            e.AgentLogLevel,
 		InitResources:       e.AgentInitResources,
 		Resources:           e.AgentResources,
+		PullSecrets:         e.AgentImagePullSecrets,
 		EnvoyServerPort:     e.AgentEnvoyServerPort,
 		EnvoyAdminPort:      e.AgentEnvoyAdminPort,
 		EnvoyLogLevel:       e.AgentEnvoyLogLevel,
@@ -176,6 +178,21 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 			},
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]*net.IPNet))) },
+	}
+	fhs[reflect.TypeOf([]core.LocalObjectReference{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"json-local-refs": func(js string) (any, error) {
+				if js == "" {
+					return nil, nil
+				}
+				var rr []core.LocalObjectReference
+				if err := json.Unmarshal([]byte(js), &rr); err != nil {
+					return nil, err
+				}
+				return rr, nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]core.LocalObjectReference))) },
 	}
 	fhs[reflect.TypeOf(&core.ResourceRequirements{})] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){

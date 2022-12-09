@@ -2,6 +2,9 @@
 
 ### 2.9.6 (TBD)
 
+- Feature: Image pull secrets for the traffic-agent can now be added using the Helm chart setting
+  `agent.image.pullSecrets`.
+
 - Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
   hang when there is no running traffic-manager.
 

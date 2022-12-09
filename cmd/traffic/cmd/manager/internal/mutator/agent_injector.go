@@ -175,6 +175,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	var patches patchOps
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
+	patches = addPullSecrets(pod, config, patches)
 	patches = addAgentVolumes(pod, config, patches)
 	patches = hidePorts(pod, config, patches)
 	patches = addPodAnnotations(ctx, pod, patches)
@@ -390,6 +391,41 @@ func addAgentContainer(
 		Path:  "/spec/containers/-",
 		Value: acn,
 	})
+}
+
+// addAgentContainer creates a patch operation to add the traffic-agent container.
+func addPullSecrets(
+	pod *core.Pod,
+	config *agentconfig.Sidecar,
+	patches patchOps,
+) patchOps {
+	if len(config.PullSecrets) == 0 {
+		return patches
+	}
+	if len(pod.Spec.ImagePullSecrets) == 0 {
+		return append(patches, patchOperation{
+			Op:    "replace",
+			Path:  "/spec/imagePullSecrets",
+			Value: config.PullSecrets,
+		})
+	}
+	for _, nps := range config.PullSecrets {
+		found := false
+		for _, ips := range pod.Spec.ImagePullSecrets {
+			if nps.Name == ips.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			patches = append(patches, patchOperation{
+				Op:    "add",
+				Path:  "/spec/imagePullSecrets/-",
+				Value: nps,
+			})
+		}
+	}
+	return patches
 }
 
 // addTPEnv adds telepresence specific environment variables to all interceptable app containers.

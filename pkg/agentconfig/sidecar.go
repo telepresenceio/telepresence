@@ -106,6 +106,9 @@ type Sidecar struct {
 	// The fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.5.4"
 	AgentImage string `json:"agentImage,omitempty"`
 
+	// Secrets used when pulling the agent image from a private registry
+	PullSecrets []core.LocalObjectReference `json:"pullSecrets,omitempty"`
+
 	// The name of the traffic-agent instance. Typically, the same as the name of the workload owner
 	AgentName string `json:"agentName,omitempty"`
 
