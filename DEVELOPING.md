@@ -67,6 +67,15 @@ The output of `make help` has a bit more information.
  - You will need to have [mockgen](https://github.com/golang/mock) installed
    to generate new or updated testing mocks for interfaces.
 
+## Blocking Ambassador telemetry
+Telemetry from dev builds to Ambassador Labs can be disabled by having your os resolve the `metriton.datawire.io` to `127.0.0.1`.
+
+### Windows
+`echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts`
+
+### Linux and MacOS
+`echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts`
+
 ## Build the binary, push the image
 
 The easiest thing to do to get going:
