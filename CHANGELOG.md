@@ -2,6 +2,9 @@
 
 ### 2.9.6 (TBD)
 
+- Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
+  hang when there is no running traffic-manager.
+
 - Change: If the cluster is Kubernetes 1.21 or later, the mutating webhook will find the correct namespace
   using the label `kubernetes.io/metadata.name` rather than `app.kuberenetes.io/name`.
 
