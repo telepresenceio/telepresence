@@ -68,7 +68,7 @@ The output of `make help` has a bit more information.
    to generate new or updated testing mocks for interfaces.
 
 ## Blocking Ambassador telemetry
-Telemetry from dev builds to Ambassador Labs can be disabled by having your os resolve the `metriton.datawire.io` to `127.0.0.1`.
+Telemetry to Ambassador Labs can be disabled by having your os resolve the `metriton.datawire.io` to `127.0.0.1`.
 
 ### Windows
 `echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts`
