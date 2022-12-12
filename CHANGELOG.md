@@ -9,7 +9,24 @@
 
 - Change: The helm installation will now fail if `intercept.disableGlobal=true` and `traffiManager.mode` is not set to `team`.
 
-### 2.9.5 (TBD)
+### 2.9.6 (TBD)
+
+- Feature: Image pull secrets for the traffic-agent can now be added using the Helm chart setting
+  `agent.image.pullSecrets`.
+
+- Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
+  hang when there is no running traffic-manager.
+
+- Change: If the cluster is Kubernetes 1.21 or later, the mutating webhook will find the correct namespace
+  using the label `kubernetes.io/metadata.name` rather than `app.kuberenetes.io/name`.
+
+- Change: The name of the mutating webhook now contains the namespace of the traffic-manager so that
+  the webhook is easier to identify when there are multiple namespace scoped telepresence installations
+  in the cluster.
+
+### 2.9.5 (December 8, 2022)
+
+- Security: Update golang to 1.19.4 to address [CVE-2022-41720 and CVE-2022-41717](https://groups.google.com/g/golang-announce/c/L_3rmdT0BMU).
 
 - Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
   having a config element present in the gce configuration in the kubeconfig, has been fixed.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -559,12 +560,36 @@ func (s *Service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi
 	return vi, err
 }
 
-func (s *Service) GetClusterSubnets(ctx context.Context, empty *empty.Empty) (cs *daemon.ClusterSubnets, err error) {
-	err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
-		cs, err = rd.GetClusterSubnets(ctx, empty)
-		return err
+func (s *Service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rpc.ClusterSubnets, err error) {
+	podSubnets := []*manager.IPNet{}
+	svcSubnets := []*manager.IPNet{}
+	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+		// The manager can sometimes send the different subnets in different Sends,
+		// but after 5 seconds of listening to it, we should expect to have everything
+		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer tCancel()
+		infoStream, err := session.ManagerClient().WatchClusterInfo(tCtx, session.SessionInfo())
+		if err != nil {
+			return err
+		}
+		for {
+			mgrInfo, err := infoStream.Recv()
+			if err != nil {
+				if tCtx.Err() != nil || errors.Is(err, io.EOF) {
+					err = nil
+				}
+				return err
+			}
+			if mgrInfo.ServiceSubnet != nil {
+				svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
+			}
+			podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
+		}
 	})
-	return cs, err
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
 }
 
 func (s *Service) GetIntercept(ctx context.Context, request *manager.GetInterceptRequest) (ii *manager.InterceptInfo, err error) {

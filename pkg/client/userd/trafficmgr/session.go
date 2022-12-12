@@ -354,9 +354,10 @@ func connectMgr(
 		return nil, err
 	}
 
+	svc := userd.GetService(ctx)
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
-		apiKey, err := userd.GetService(ctx).GetAPIKey(ctx)
+		apiKey, err := svc.GetAPIKey(ctx)
 		if err != nil {
 			dlog.Errorf(ctx, "failed to retrieve API key: %v", err)
 		}
@@ -390,6 +391,15 @@ func connectMgr(
 			return nil, err
 		}
 	}
+
+	var opts []grpc.CallOption
+	cfg := client.GetConfig(ctx)
+	if !cfg.Grpc.MaxReceiveSize.IsZero() {
+		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
+			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
+		}
+	}
+	svc.SetManagerClient(mClient, opts...)
 
 	return &session{
 		Cluster:          cluster,

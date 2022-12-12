@@ -7,8 +7,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +14,7 @@ import (
 
 	"github.com/blang/semver"
 	dns2 "github.com/miekg/dns"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -26,21 +25,18 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
-	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -81,11 +77,8 @@ type Session struct {
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
 
-	// Kubernetes Port Forward Dialer
-	pfDialer dnet.PortForwardDialer
-
 	// managerClient provides the gRPC tunnel to the traffic-manager
-	managerClient manager.ManagerClient
+	managerClient connector.ManagerProxyClient
 
 	// managerVersion is the version of the connected traffic-manager
 	managerVersion semver.Version
@@ -166,80 +159,42 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 	panic("No User daemon Session creator has been registered")
 }
 
-func getKubeConfig(ctx context.Context, homeDir string, flags map[string]string) (*client.Kubeconfig, error) {
-	// We're root here, so we need to set up some environment variables to find files in the non-root users
-	// home directory using the supplied homeDir.
-	const gAppCredKey = "GOOGLE_APPLICATION_CREDENTIALS"
-	if flags[gAppCredKey] == "" {
-		// When this key is not set, gce will search for the default. So if the default exists,
-		// then we set the key to point to that so that it is found using the correct path.
-		var config string
-		if runtime.GOOS == "windows" {
-			config = flags["APPDATA"]
-			if config == "" {
-				config = filepath.Join(homeDir, "AppData")
-			} else {
-				delete(flags, "APPDATA")
-			}
-		} else {
-			// Google doesn't care about macOS conventions with ~/Library
-			config = filepath.Join(homeDir, ".config")
-		}
-		path := filepath.Join(config, "gcloud", "application_default_credentials.json")
-		if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
-			flags[gAppCredKey] = path
-		}
-	}
-	const k8sCfgKey = "KUBECONFIG"
-	if kcEnv := flags[k8sCfgKey]; kcEnv == "" {
-		if flags == nil {
-			flags = make(map[string]string, 1)
-		}
-		flags[k8sCfgKey] = filepath.Join(homeDir, clientcmd.RecommendedHomeDir, clientcmd.RecommendedFileName)
-	} else {
-		// Ensure that all paths are absolute
-		files := filepath.SplitList(kcEnv)
-		rejoin := false
-		for i, file := range files {
-			if !filepath.IsAbs(file) {
-				files[i] = filepath.Join(homeDir, file)
-				rejoin = true
-			}
-		}
-		if rejoin {
-			flags[k8sCfgKey] = strings.Join(files, string(filepath.ListSeparator))
-		}
-	}
-	return client.NewKubeconfig(ctx, flags)
-}
-
-func createPortForwardDialer(ctx context.Context, homeDir string, flags map[string]string) (dnet.PortForwardDialer, error) {
-	kc, err := getKubeConfig(ctx, homeDir, flags)
-	if err != nil {
-		return nil, err
-	}
-	rs, err := kc.ConfigFlags.ToRESTConfig()
-	if err != nil {
-		return nil, err
-	}
-	cs, err := kubernetes.NewForConfig(rs)
-	if err != nil {
-		return nil, err
-	}
-	return dnet.NewK8sPortForwardDialer(ctx, kc.RestConfig, cs)
-}
-
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
-func connectToManager(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
-	dlog.Debug(ctx, "creating port-forward")
-	clientConfig := client.GetConfig(ctx)
+func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
+	// First check. Establish connection
+	clientConfig := client.GetConfig(c)
 	tos := &clientConfig.Timeouts
-
-	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
-	conn, mc, mgrVer, err := tm.ConnectToManager(ctx, namespace, grpcDialer)
+
+	var conn *grpc.ClientConn
+	conn, err := client.DialSocket(tc, client.ConnectorSocketName,
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+	)
+	var mgrVer semver.Version
 	if err != nil {
-		return nil, nil, semver.Version{}, err
+		if errors.Is(err, os.ErrNotExist) {
+			// The connector called us, and then it died which means we will die too. This is
+			// a race, but it's not an error.
+			return nil, nil, mgrVer, nil
+		}
+		return nil, nil, mgrVer, client.CheckTimeout(tc, err)
+	}
+
+	mc := connector.NewManagerProxyClient(conn)
+	ver, err := mc.Version(c, &empty.Empty{})
+	if err != nil {
+		conn.Close()
+		return nil, nil, mgrVer, fmt.Errorf("failed to retrieve manager version: %w", err)
+	}
+
+	verStr := strings.TrimPrefix(ver.Version, "v")
+	dlog.Infof(c, "Connected to Manager %s", verStr)
+	mgrVer, err = semver.Parse(verStr)
+	if err != nil {
+		conn.Close()
+		return nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
 
 	if mgrVer.LE(semver.MustParse("2.4.4")) {
@@ -262,12 +217,7 @@ func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
 func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
 
-	pfDialer, err := createPortForwardDialer(c, mi.HomeDir, mi.KubeFlags)
-	if err != nil {
-		return nil, err
-	}
-
-	conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, pfDialer.Dial)
+	conn, mc, ver, err := connectToUserDaemon(c)
 	if mc == nil || err != nil {
 		return nil, err
 	}
@@ -291,7 +241,6 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		fragmentMap:      make(map[uint16][]*buffer.Data),
 		rndSource:        rand.NewSource(time.Now().UnixNano()),
 		session:          mi.Session,
-		pfDialer:         pfDialer,
 		managerClient:    mc,
 		managerVersion:   ver,
 		clientConn:       conn,
@@ -684,7 +633,7 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 func (s *Session) run(c context.Context) error {
 	defer func() {
 		dlog.Info(c, "-- Session ended")
-		_ = s.pfDialer.Close()
+		_ = s.clientConn.Close()
 		close(s.done)
 	}()
 

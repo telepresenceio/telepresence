@@ -35,8 +35,6 @@ type DaemonClient interface {
 	Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*DaemonStatus, error)
 	// Disconnect disconnects the current session.
 	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// GetClusterSubnets gets the outbound info that has been set on daemon
-	GetClusterSubnets(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClusterSubnets, error)
 	// GetNetworkConfig returns the current network configuration
 	GetNetworkConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*NetworkConfig, error)
 	// SetDnsSearchPath sets a new search path.
@@ -100,15 +98,6 @@ func (c *daemonClient) Disconnect(ctx context.Context, in *emptypb.Empty, opts .
 	return out, nil
 }
 
-func (c *daemonClient) GetClusterSubnets(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClusterSubnets, error) {
-	out := new(ClusterSubnets)
-	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/GetClusterSubnets", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *daemonClient) GetNetworkConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*NetworkConfig, error) {
 	out := new(NetworkConfig)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/GetNetworkConfig", in, out, opts...)
@@ -159,8 +148,6 @@ type DaemonServer interface {
 	Connect(context.Context, *OutboundInfo) (*DaemonStatus, error)
 	// Disconnect disconnects the current session.
 	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
-	// GetClusterSubnets gets the outbound info that has been set on daemon
-	GetClusterSubnets(context.Context, *emptypb.Empty) (*ClusterSubnets, error)
 	// GetNetworkConfig returns the current network configuration
 	GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error)
 	// SetDnsSearchPath sets a new search path.
@@ -190,9 +177,6 @@ func (UnimplementedDaemonServer) Connect(context.Context, *OutboundInfo) (*Daemo
 }
 func (UnimplementedDaemonServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
-}
-func (UnimplementedDaemonServer) GetClusterSubnets(context.Context, *emptypb.Empty) (*ClusterSubnets, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetClusterSubnets not implemented")
 }
 func (UnimplementedDaemonServer) GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNetworkConfig not implemented")
@@ -309,24 +293,6 @@ func _Daemon_Disconnect_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Daemon_GetClusterSubnets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).GetClusterSubnets(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.daemon.Daemon/GetClusterSubnets",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).GetClusterSubnets(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Daemon_GetNetworkConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
@@ -425,10 +391,6 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Disconnect",
 			Handler:    _Daemon_Disconnect_Handler,
-		},
-		{
-			MethodName: "GetClusterSubnets",
-			Handler:    _Daemon_GetClusterSubnets_Handler,
 		},
 		{
 			MethodName: "GetNetworkConfig",

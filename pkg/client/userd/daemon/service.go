@@ -20,6 +20,7 @@ import (
 	fuseftp "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -49,6 +50,7 @@ to troubleshoot problems.
 type Service struct {
 	rpc.UnsafeConnectorServer
 	srv           *grpc.Server
+	managerProxy  *mgrProxy
 	procName      string
 	timedLogLevel log.TimedLevel
 	ucn           int64
@@ -77,6 +79,7 @@ func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *c
 		scout:           sr,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
+		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
 		fuseFtpCh:       make(chan fuseftp.FuseFTPClient, 1),
 		startFuseCh:     make(chan struct{}),
@@ -84,6 +87,7 @@ func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *c
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
+		rpc.RegisterManagerProxyServer(srv, s.managerProxy)
 		tracer, err := tracing.NewTraceServer(ctx, "user-daemon")
 		if err != nil {
 			return nil, err
@@ -112,6 +116,10 @@ func (s *Service) Reporter() *scout.Reporter {
 
 func (s *Service) Server() *grpc.Server {
 	return s.srv
+}
+
+func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
+	s.managerProxy.setClient(managerClient, callOptions...)
 }
 
 // Command returns the CLI sub-command for "connector-foreground".
@@ -203,6 +211,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 	go func(cr *rpc.ConnectRequest) {
 		defer func() {
 			s.sessionLock.Lock()
+			s.SetManagerClient(nil)
 			s.session = nil
 			s.sessionCancel = nil
 			if err := client.RestoreDefaults(ctx, false); err != nil {

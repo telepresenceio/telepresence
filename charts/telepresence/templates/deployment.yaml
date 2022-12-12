@@ -147,6 +147,10 @@ spec:
             value: {{ .agent.image.registry }}
           {{- end }}
           {{- end }}
+          {{- with .agent.image.pullSecrets }}
+          - name: AGENT_IMAGE_PULL_SECRETS
+            value: '{{ toJson . }}'
+          {{- end }}
           {{- with .agent.envoy }}
           {{- if .logLevel }}
           - name: AGENT_ENVOY_LOG_LEVEL

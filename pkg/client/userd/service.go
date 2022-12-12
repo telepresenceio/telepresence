@@ -7,6 +7,7 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/go-fuseftp/rpc"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
@@ -23,6 +24,10 @@ type Service interface {
 	Reporter() *scout.Reporter
 
 	Server() *grpc.Server
+
+	// SetManagerClient will assign the manager client that this Service will use when acting as
+	// a ManagerServer proxy
+	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 
 	// GetAPIKey returns the current API key
 	GetAPIKey(context.Context) (string, error)

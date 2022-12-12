@@ -21,6 +21,7 @@ runs:
     - name: Upload logs
       uses: actions/upload-artifact@v2
       with:
-        name: test-logs-${{ runner.os }}
+        # If an environment variable LOG_SUFFIX is set, it will be appended to the log filename.
+        name: ${{github.job}}-logs-${{ env.LOG_SUFFIX }}
         path: |
           test-logs/${{ runner.os }}/*
