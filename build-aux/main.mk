@@ -24,6 +24,8 @@ BINDIR=$(BUILDDIR)/bin
 
 RELEASEDIR=$(BUILDDIR)/release
 
+CHARTDIR=$(BUILDDIR)/chart
+
 bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 
 # DOCKER_BUILDKIT is _required_ by our Dockerfile, since we use
@@ -212,6 +214,13 @@ else
 		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
 endif
+
+.PHONY: build-chart
+build-chart: $(tools/helm) ## Builds the helm chart
+	set -e
+	mkdir -p "$(CHARTDIR)"
+	rm $(CHARTDIR)/* || true
+	packaging/build_chart.sh "$(CHARTDIR)"
 
 .PHONY: push-chart
 push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart
