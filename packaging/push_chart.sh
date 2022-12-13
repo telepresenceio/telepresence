@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -ex
 
 # This will be running in automation so we don't want the
 # interactive pager to pop up
@@ -12,11 +12,8 @@ TOP_DIR="$( git rev-parse --show-toplevel)"
 echo "$TOP_DIR"
 
 tmpdir=$(mktemp -d)
+package_file=$("${TOP_DIR}/packaging/build_chart.sh" "${tmpdir}")
 
-go run "$TOP_DIR/packaging/gen_chart.go" "$tmpdir" "${TELEPRESENCE_VERSION}"
-
-package_files=("$tmpdir"/telepresence-*.tgz)
-package_file=${package_files[0]}
 echo "PACKAGE_FILE is here: ${package_file}"
 
 bucket=${AWS_BUCKET:-datawire-static-files}
