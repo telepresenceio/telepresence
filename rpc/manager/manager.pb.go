@@ -1328,6 +1328,7 @@ type UpdateInterceptRequest struct {
 	Session *SessionInfo `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	Name    string       `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Types that are assignable to PreviewDomainAction:
+	//
 	//	*UpdateInterceptRequest_AddPreviewDomain
 	//	*UpdateInterceptRequest_RemovePreviewDomain
 	PreviewDomainAction isUpdateInterceptRequest_PreviewDomainAction `protobuf_oneof:"preview_domain_action"`
@@ -2153,7 +2154,6 @@ func (x *AmbassadorCloudConfig) GetProxyCa() []byte {
 	return nil
 }
 
-//
 type AmbassadorCloudConnection struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

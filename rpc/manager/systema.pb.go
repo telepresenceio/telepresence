@@ -26,6 +26,7 @@ type ConnectionChunk struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to Value:
+	//
 	//	*ConnectionChunk_InterceptId
 	//	*ConnectionChunk_Data
 	//	*ConnectionChunk_Error
