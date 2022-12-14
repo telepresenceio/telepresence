@@ -15,6 +15,10 @@
   the webhook is easier to identify when there are multiple namespace scoped telepresence installations
   in the cluster.
 
+- Change: The OSS Helm chart is no longer pushed to the datawire Helm repository. It will instead be pushed
+  from the telepresence proprietary repository. The OSS Helm chart is still what's embedded in the OSS
+  telepresence client.
+
 ### 2.9.5 (December 8, 2022)
 
 - Security: Update golang to 1.19.4 to address [CVE-2022-41720 and CVE-2022-41717](https://groups.google.com/g/golang-announce/c/L_3rmdT0BMU).

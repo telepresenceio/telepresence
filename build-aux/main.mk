@@ -213,10 +213,6 @@ else
 		--body $(BINDIR)/telepresence
 endif
 
-.PHONY: push-chart
-push-chart: $(tools/helm) ## (Release) Run script that publishes our Helm chart
-	packaging/push_chart.sh
-
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
@@ -251,7 +247,6 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 lint-deps: build-deps ## (QA) Everything necessary to lint
 lint-deps: $(tools/golangci-lint)
 lint-deps: $(tools/protolint)
-lint-deps: $(tools/helm)
 ifneq ($(GOHOSTOS), windows)
 lint-deps: $(tools/shellcheck)
 endif
@@ -262,7 +257,6 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./smoke-tests/run_smoke_test.sh
-shellscripts += ./packaging/push_chart.sh
 shellscripts += ./packaging/windows-package.sh
 .PHONY: lint lint-rpc
 lint: lint-rpc ## (QA) Run the linter
@@ -273,7 +267,6 @@ lint-rpc: lint-deps ## (QA) Run rpc linter
 ifneq ($(GOHOSTOS), windows)
 	$(tools/shellcheck) $(shellscripts)
 endif
-	tmpdir=$$(mktemp -d) && trap 'rm -rf "$$tmpdir"' EXIT && go run ./packaging/gen_chart.go "$$tmpdir" && $(tools/helm) lint "$$tmpdir"/*.tgz --set isCI=true
 
 .PHONY: format
 format: build-deps $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints
@@ -291,7 +284,7 @@ check-unit: build-deps ## (QA) Run the test suite
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -timeout=20m ./cmd/... ./pkg/...
 
 .PHONY: check-integration
-check-integration: build-deps $(tools/helm) ## (QA) Run the test suite
+check-integration: build-deps ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
