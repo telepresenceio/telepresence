@@ -27,11 +27,11 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -342,7 +342,7 @@ func (s *Service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Conne
 	})
 }
 
-func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.Result, err error) {
+func (s *Service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *common.Result, err error) {
 	err = s.WithSession(c, "Uninstall", func(c context.Context, session userd.Session) error {
 		result, err = session.Uninstall(c, ur)
 		return err
@@ -449,8 +449,8 @@ func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, erro
 	return ex, nil
 }
 
-func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, error) {
-	result := &rpc.Result{}
+func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Result, error) {
+	result := &common.Result{}
 	s.logCall(ctx, "Helm", func(c context.Context) {
 		sr := s.scout
 		if req.Type == rpc.HelmRequest_UNINSTALL {
@@ -474,7 +474,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*rpc.Result, 
 	return result, nil
 }
 
-func (s *Service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (*rpc.Result, error) {
+func (s *Service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (*common.Result, error) {
 	if client.GetConfig(ctx).Intercept.UseFtp {
 		return errcat.ToResult(s.FuseFTPError()), nil
 	}
@@ -528,7 +528,7 @@ func (s *Service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	return &resp, nil
 }
 
-func (s *Service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) (result *rpc.Result, err error) {
+func (s *Service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) (result *common.Result, err error) {
 	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
 		result = session.GatherTraces(ctx, request)
 		return nil

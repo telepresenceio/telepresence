@@ -3,6 +3,19 @@ package telepresence.common;
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/common";
 
+message Result {
+  enum ErrorCategory {
+    UNSPECIFIED = 0; // No error
+    USER = 1;
+    CONFIG = 2;
+    NO_DAEMON_LOGS = 3;
+    UNKNOWN = 4;
+  }
+
+  bytes data = 1;
+  ErrorCategory error_category = 2;
+}
+
 // InterceptError is a common error type used by the intercept call family (add,
 // remove, list, available).
 enum InterceptError {

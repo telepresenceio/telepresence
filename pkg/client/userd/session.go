@@ -11,6 +11,7 @@ import (
 	"github.com/blang/semver"
 
 	"github.com/datawire/dlib/dgroup"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -65,7 +66,7 @@ type Session interface {
 	Status(context.Context) *rpc.ConnectInfo
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
 
-	Uninstall(context.Context, *rpc.UninstallRequest) (*rpc.Result, error)
+	Uninstall(context.Context, *rpc.UninstallRequest) (*common.Result, error)
 
 	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
@@ -78,7 +79,7 @@ type Session interface {
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
 
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)
-	GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result
+	GatherTraces(ctx context.Context, tr *connector.TracesRequest) *common.Result
 
 	Reporter() *scout.Reporter
 	SessionInfo() *manager.SessionInfo

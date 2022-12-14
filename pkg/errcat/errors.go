@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 )
 
 // The Category is used for categorizing errors so that we can know when
@@ -70,7 +70,7 @@ func GetCategory(err error) Category {
 	}
 }
 
-func FromResult(r *connector.Result) error {
+func FromResult(r *common.Result) error {
 	if r == nil {
 		return nil
 	}
@@ -81,11 +81,11 @@ func FromResult(r *connector.Result) error {
 	return &categorized{error: errors.New(string(r.Data)), category: c}
 }
 
-func ToResult(err error) *connector.Result {
-	r := &connector.Result{}
+func ToResult(err error) *common.Result {
+	r := &common.Result{}
 	if err != nil {
 		r.Data = []byte(err.Error())
-		r.ErrorCategory = connector.Result_ErrorCategory(GetCategory(err))
+		r.ErrorCategory = common.Result_ErrorCategory(GetCategory(err))
 	}
 	return r
 }

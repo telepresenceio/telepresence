@@ -31,18 +31,19 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -842,8 +843,8 @@ func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*
 }
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
-func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
-	result := &rpc.Result{}
+func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
+	result := &common.Result{}
 	agents := s.getCurrentAgents()
 
 	// Since workloads can have more than one replica, we get a slice of agents
@@ -892,7 +893,7 @@ func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (
 // a `helm uninstall traffic-manager`.
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
-func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*rpc.Result, error) {
+func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
 	if s.managerVersion.LT(firstAgentConfigMapVersion) {
 		// fall back traffic-manager behaviour prior to 2.6
 		return s.legacyUninstall(ctx, ur)
