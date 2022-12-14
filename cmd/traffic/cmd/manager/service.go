@@ -470,12 +470,7 @@ func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
 
-	pi, err := m.state.PrepareIntercept(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	return pi, nil
+	return m.state.PrepareIntercept(ctx, request)
 }
 
 // CreateIntercept lets a client create an intercept.

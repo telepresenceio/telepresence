@@ -138,7 +138,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	switch status.Error {
 	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
 		us.Status = "Connected"
-		us.Mode = modeToString(status.ManagerStatus.Mode.Enum())
+		us.Mode = ModeToString(status.ManagerStatus.Mode.Enum())
 		us.ClientCount = status.ManagerStatus.ClientCount
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
@@ -258,7 +258,7 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	return int64(n), nil
 }
 
-func modeToString(mode *manager.Mode) string {
+func ModeToString(mode *manager.Mode) string {
 	switch mode {
 	case manager.Mode_MODE_SINGLE.Enum():
 		return "single-user"

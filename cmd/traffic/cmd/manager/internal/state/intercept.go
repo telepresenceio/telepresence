@@ -65,8 +65,8 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	}
 
 	env := managerutil.GetEnv(ctx)
-	if cr.InterceptSpec.Mechanism != "http" {
-		if env.InterceptDisableGlobal {
+	if env.InterceptDisableGlobal {
+		if cr.InterceptSpec.Mechanism != "http" {
 			return interceptError(errcat.User.New("Global intercepts are not allowed. Please log in and use http intercepts"))
 		}
 	}
