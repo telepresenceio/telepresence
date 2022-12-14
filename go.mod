@@ -50,7 +50,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/yaml.v3 v3.0.1
 	gvisor.dev/gvisor v0.0.0-20220925003544-1e2f1a11bf64
-	helm.sh/helm/v3 v3.10.0
+	helm.sh/helm/v3 v3.10.3
 	k8s.io/api v0.25.2
 	k8s.io/apimachinery v0.25.2
 	k8s.io/cli-runtime v0.25.2
@@ -60,7 +60,10 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
-require github.com/moby/sys/mountinfo v0.6.0 // indirect
+require (
+	github.com/moby/sys/mountinfo v0.6.0 // indirect
+	go.etcd.io/etcd/api/v3 v3.5.4 // indirect
+)
 
 require (
 	cloud.google.com/go/compute v1.10.0 // indirect
