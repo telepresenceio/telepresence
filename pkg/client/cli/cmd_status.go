@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/mod/semver"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -44,13 +43,7 @@ type userDaemonStatus struct {
 	KubernetesServer     string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
 	KubernetesContext    string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
 	Intercepts           []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
-	TrafficManagerStatus *trafficManagerStatus    `json:"trafficManagerStatus,omitempty" yaml:"trafficManagerStatus,omitempty"`
-}
-
-type trafficManagerStatus manager.StatusInfo
-
-func (tms *trafficManagerStatus) validVersion() bool {
-	return 0 < semver.Compare(tms.Version.GetVersion(), "v2.9.5")
+	TrafficManagerStatus *manager.StatusInfo      `json:"trafficManagerStatus,omitempty" yaml:"trafficManagerStatus,omitempty"`
 }
 
 type connectStatusIntercept struct {
@@ -147,7 +140,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		us.Status = "Connected"
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
-		us.TrafficManagerStatus = (*trafficManagerStatus)(status.GetManagerStatus())
+		us.TrafficManagerStatus = status.GetManagerStatus()
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
 			us.Intercepts = append(us.Intercepts, connectStatusIntercept{
 				Name:   icept.Spec.Name,
@@ -247,9 +240,9 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		n += ioutil.Printf(out, "  Executable        : %s\n", cs.Executable)
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
 		if tms := cs.TrafficManagerStatus; tms != nil {
-			n += ioutil.Println(out, "Traffic Manager: Running")
+			n += ioutil.Println(out, "Traffic Manager: Connected")
 			n += ioutil.Printf(out, "  Version: %s\n", tms.Version.Version)
-			if tms.validVersion() {
+			if tms.Mode != manager.Mode_MODE_UNSPECIFIED {
 				n += ioutil.Printf(out, "  Mode            : %s\n", tpstrings.FromMode(tms.Mode))
 				n += ioutil.Printf(out, "  Client Count    : %d\n", tms.ClientCount)
 			}

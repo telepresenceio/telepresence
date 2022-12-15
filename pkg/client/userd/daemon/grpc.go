@@ -158,11 +158,7 @@ func (s *Service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 			var stts *manager.StatusInfo
 			stts, err = s.session.ManagerClient().Status(c, &empty.Empty{})
 			if err != nil {
-				stat, ok := status.FromError(err)
-				if !ok {
-					return
-				}
-				if stat.Code() == codes.Unimplemented {
+				if status.Code(err) == codes.Unimplemented {
 					err = nil
 					stts = &manager.StatusInfo{
 						Version: &manager.VersionInfo2{

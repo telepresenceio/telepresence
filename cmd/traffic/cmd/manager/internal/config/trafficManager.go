@@ -36,7 +36,7 @@ func (m Mode) MarshalYAML() (any, error) {
 }
 
 func (m Mode) String() string {
-	return tpstrings.FromMode(m)
+	return tpstrings.FromMode(manager.Mode(m))
 }
 
 func (m Mode) IsTeam() bool {
