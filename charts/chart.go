@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spf13/afero"
 	"helm.sh/helm/v3/pkg/chart"
 	"sigs.k8s.io/yaml"
 )
@@ -58,12 +59,25 @@ func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content []byte) 
 	return nil
 }
 
+// ChartOverlayFunc can be used by module extensions to add or overwrite the charts directory.
+var ChartOverlayFunc func(base afero.Fs) (afero.Fs, error) //nolint:gochecknoglobals // extension point
+
 // WriteChart is a minimal `helm package`.
-func WriteChart(out io.Writer, version string) error {
+func WriteChart(out io.Writer, version string, overlays ...fs.FS) error {
+	var baseDir fs.FS = helmDir
+	if ChartOverlayFunc != nil {
+		base := afero.FromIOFS{FS: helmDir}
+		ovl, err := ChartOverlayFunc(base)
+		if err != nil {
+			return err
+		}
+		baseDir = afero.NewIOFS(afero.NewCopyOnWriteFs(base, ovl))
+	}
+
 	version = strings.TrimPrefix(version, "v")
 
 	var filenames []string
-	if err := fs.WalkDir(helmDir, ".", func(filename string, dirent fs.DirEntry, err error) error {
+	if err := fs.WalkDir(baseDir, ".", func(filename string, dirent fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -98,7 +112,7 @@ func WriteChart(out io.Writer, version string) error {
 	for _, filename := range filenames {
 		switch filename {
 		case "telepresence/Chart.yaml":
-			content, err := fs.ReadFile(helmDir, filename)
+			content, err := fs.ReadFile(baseDir, filename)
 			if err != nil {
 				return err
 			}
@@ -112,15 +126,15 @@ func WriteChart(out io.Writer, version string) error {
 			if err != nil {
 				return err
 			}
-			if err := addFile(tarWriter, helmDir, filename, content); err != nil {
+			if err := addFile(tarWriter, baseDir, filename, content); err != nil {
 				return err
 			}
 		default:
-			content, err := fs.ReadFile(helmDir, filename)
+			content, err := fs.ReadFile(baseDir, filename)
 			if err != nil {
 				return err
 			}
-			if err := addFile(tarWriter, helmDir, filename, content); err != nil {
+			if err := addFile(tarWriter, baseDir, filename, content); err != nil {
 				return err
 			}
 		}

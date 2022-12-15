@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 func PrepareMount(_ string, mountPoint string) (string, error) {

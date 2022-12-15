@@ -133,6 +133,7 @@ following Free and Open Source software:
     github.com/xeipuuv/gojsonreference                                           v0.0.0-20180127040603-bd5ef7bd5415        Apache License 2.0
     github.com/xeipuuv/gojsonschema                                              v1.2.0                                    Apache License 2.0
     github.com/xlab/treeprint                                                    v1.1.0                                    MIT license
+    go.etcd.io/etcd/api/v3                                                       v3.5.4                                    Apache License 2.0
     go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc  v0.36.0                                   Apache License 2.0
     go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp                v0.36.0                                   Apache License 2.0
     go.opentelemetry.io/otel                                                     v1.10.0                                   Apache License 2.0
@@ -167,7 +168,7 @@ following Free and Open Source software:
     gopkg.in/yaml.v2                                                             v2.4.0                                    Apache License 2.0, MIT license
     gopkg.in/yaml.v3                                                             v3.0.1                                    Apache License 2.0, MIT license
     gvisor.dev/gvisor                                                            v0.0.0-20220925003544-1e2f1a11bf64        Apache License 2.0, MIT license
-    helm.sh/helm/v3                                                              v3.10.0                                   Apache License 2.0
+    helm.sh/helm/v3                                                              v3.10.3                                   Apache License 2.0
     k8s.io/api                                                                   v0.25.2                                   Apache License 2.0
     k8s.io/apiextensions-apiserver                                               v0.25.2                                   Apache License 2.0
     k8s.io/apimachinery                                                          v0.25.2                                   3-clause BSD license, Apache License 2.0

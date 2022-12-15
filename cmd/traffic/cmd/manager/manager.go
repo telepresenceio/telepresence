@@ -34,9 +34,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
+var DisplayName = "Traffic Manager" //nolint:gochecknoglobals // extension point
+
 // Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
-	dlog.Infof(ctx, "Traffic Manager %s [uid:%d,gid:%d]", version.Version, os.Getuid(), os.Getgid())
+	dlog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
 
 	ctx, err := managerutil.LoadEnv(ctx, os.LookupEnv)
 	if err != nil {

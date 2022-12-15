@@ -57,11 +57,11 @@ service Connector {
   rpc UpdateIntercept(telepresence.manager.UpdateInterceptRequest) returns (telepresence.manager.InterceptInfo);
 
   // Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
-  rpc Helm(HelmRequest) returns (Result);
+  rpc Helm(HelmRequest) returns (telepresence.common.Result);
 
   // Uninstalls traffic-agents from the cluster.
   // Requires having already called Connect.
-  rpc Uninstall(UninstallRequest) returns (Result);
+  rpc Uninstall(UninstallRequest) returns (telepresence.common.Result);
 
   // Returns a list of workloads and their current intercept status.
   // Requires having already called Connect.
@@ -93,7 +93,7 @@ service Connector {
 
   // GatherTraces will acquire traces for the various Telepresence components in kubernetes
   // (pending the request) and save them in a file.
-  rpc GatherTraces(TracesRequest) returns (Result);
+  rpc GatherTraces(TracesRequest) returns (telepresence.common.Result);
 
   // AddInterceptor tells the connector that a given process is serving a specific
   // intercept. The connector must kill this process when the intercept ends
@@ -107,7 +107,7 @@ service Connector {
 
   // RemoteMountAvailability checks if remote mounts are possible using the given
   // mount type and returns an error if its not.
-  rpc RemoteMountAvailability(google.protobuf.Empty) returns (Result);
+  rpc RemoteMountAvailability(google.protobuf.Empty) returns (telepresence.common.Result);
 
   // GetConfig returns the current configuration
   rpc GetConfig(google.protobuf.Empty) returns (ClientConfig);
@@ -152,19 +152,6 @@ message Interceptor {
 
   // The pid of the interceptor process
   int32  pid = 2;
-}
-
-message Result {
-  enum ErrorCategory {
-    UNSPECIFIED = 0; // No error
-    USER = 1;
-    CONFIG = 2;
-    NO_DAEMON_LOGS = 3;
-    UNKNOWN = 4;
-  }
-
-  bytes data = 1;
-  ErrorCategory error_category = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.

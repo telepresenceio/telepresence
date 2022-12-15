@@ -26,7 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 type traceCollector struct {
@@ -192,7 +192,7 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 	}, nil)
 }
 
-func (s *session) GatherTraces(ctx context.Context, tr *connector.TracesRequest) *connector.Result {
+func (s *session) GatherTraces(ctx context.Context, tr *connector.TracesRequest) *common.Result {
 	return errcat.ToResult((&traceCollector{tr}).gatherTraces(ctx, s))
 }
 
