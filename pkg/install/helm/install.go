@@ -123,11 +123,11 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 	})
 }
 
-func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, namespace string, reuseValues bool, values map[string]any) error {
-	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, namespace, client.Version())
+func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, ns string, reuseValues bool, values map[string]any) error {
+	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
-	upgrade.Namespace = namespace
+	upgrade.Namespace = ns
 	upgrade.ReuseValues = reuseValues
 	return timedRun(ctx, func(timeout time.Duration) error {
 		upgrade.Timeout = timeout
