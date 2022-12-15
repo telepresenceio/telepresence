@@ -1,12 +1,12 @@
-package common
+package strings
 
 import "github.com/telepresenceio/telepresence/rpc/v2/manager"
 
-func ModeToString(mode *manager.Mode) string {
+func FromMode[M ~int32](mode M) string {
 	switch mode {
-	case manager.Mode_MODE_SINGLE.Enum():
+	case M(manager.Mode_MODE_SINGLE):
 		return "single-user"
-	case manager.Mode_MODE_TEAM.Enum():
+	case M(manager.Mode_MODE_TEAM):
 		return "team"
 	default:
 		return "unknown"

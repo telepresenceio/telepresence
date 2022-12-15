@@ -5,17 +5,19 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/semver"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/common"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	tpstrings "github.com/telepresenceio/telepresence/v2/pkg/strings"
 )
 
 type StatusInfo struct {
@@ -45,9 +47,10 @@ type userDaemonStatus struct {
 	TrafficManagerStatus *trafficManagerStatus    `json:"trafficManagerStatus,omitempty" yaml:"trafficManagerStatus,omitempty"`
 }
 
-type trafficManagerStatus struct {
-	Mode        string `json:"mode,omitempty" yaml:"mode,omitempty"`
-	ClientCount int32  `json:"client_count,omitempty" yaml:"client_count,omitempty"`
+type trafficManagerStatus manager.StatusInfo
+
+func (tms *trafficManagerStatus) validVersion() bool {
+	return 0 < semver.Compare(tms.Version.GetVersion(), "v2.9.5")
 }
 
 type connectStatusIntercept struct {
@@ -144,17 +147,12 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		us.Status = "Connected"
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
+		us.TrafficManagerStatus = (*trafficManagerStatus)(status.GetManagerStatus())
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
 			us.Intercepts = append(us.Intercepts, connectStatusIntercept{
 				Name:   icept.Spec.Name,
 				Client: icept.Spec.Client,
 			})
-		}
-		if ms := status.ManagerStatus; ms != nil {
-			us.TrafficManagerStatus = &trafficManagerStatus{
-				Mode:        common.ModeToString(ms.Mode.Enum()),
-				ClientCount: ms.ClientCount,
-			}
 		}
 	case connector.ConnectInfo_MUST_RESTART:
 		us.Status = "Connected, but must restart"
@@ -250,9 +248,13 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
 		if tms := cs.TrafficManagerStatus; tms != nil {
 			n += ioutil.Println(out, "Traffic Manager: Running")
-			n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
-			n += ioutil.Printf(out, "    Mode            : %s\n", tms.Mode)
-			n += ioutil.Printf(out, "    Client Count    : %d\n", tms.Mode)
+			n += ioutil.Printf(out, "  Version: %s\n", tms.Version.Version)
+			if tms.validVersion() {
+				n += ioutil.Printf(out, "  Mode            : %s\n", tpstrings.FromMode(tms.Mode))
+				n += ioutil.Printf(out, "  Client Count    : %d\n", tms.ClientCount)
+			}
+		} else {
+			n += ioutil.Println(out, "Traffic Manager: Not connected")
 		}
 		if cs.Error != "" {
 			n += ioutil.Printf(out, "  Error             : %s\n", cs.Error)
