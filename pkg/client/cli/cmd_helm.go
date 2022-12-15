@@ -118,11 +118,20 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 		ConnectRequest: ha.request,
 	}
 
-	switch ha.mode {
-	case manager.Mode_MODE_SINGLE:
-		request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=single")
-	case manager.Mode_MODE_TEAM:
-		request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=team")
+	if ha.mode != manager.Mode_MODE_UNSPECIFIED {
+		switch ha.mode {
+		case manager.Mode_MODE_SINGLE:
+			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=single")
+		case manager.Mode_MODE_TEAM:
+			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=team")
+		}
+
+		upgrade := ha.cmdType == connector.HelmRequest_UPGRADE
+		setFlagUsed := 0 < len(ha.valuePairs)
+		valuesFlagUsed := 0 < len(ha.values)
+		if upgrade && !setFlagUsed && !valuesFlagUsed {
+			request.ReuseValues = true
+		}
 	}
 
 	util.AddKubeconfigEnv(request.ConnectRequest)

@@ -123,11 +123,12 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 	})
 }
 
-func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, namespace string, values map[string]any) error {
+func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, namespace string, reuseValues bool, values map[string]any) error {
 	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, namespace, client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Namespace = namespace
+	upgrade.ReuseValues = reuseValues
 	return timedRun(ctx, func(timeout time.Duration) error {
 		upgrade.Timeout = timeout
 		_, err := upgrade.Run(releaseName, chrt, values)
@@ -251,7 +252,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	case req.Type == connector.HelmRequest_UPGRADE: // replace existing install
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
 			namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, values)
+		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, req.ReuseValues, values)
 	default:
 		err = errcat.User.Newf("traffic manager version %q is already installed, use the '--upgrade' flag to replace it", releaseVer(existing))
 	}

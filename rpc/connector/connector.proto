@@ -235,6 +235,7 @@ message HelmRequest {
   Type type = 2;
   repeated string value_paths = 3;
   repeated string value_pairs = 4;
+  bool reuse_values = 5;
 }
 
 message UninstallRequest {
