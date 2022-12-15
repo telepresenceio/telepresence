@@ -96,19 +96,6 @@ $(TOOLSDIR)/$(notdir $(SHELLCHECK_TXZ)):
 	tar -C $(@D) -Jxmf $< --strip-components=1 shellcheck-v$(SHELLCHECK_VERSION)/shellcheck
 endif
 
-# Helm
-# ====
-#
-tools/helm = $(TOOLSBINDIR)/helm$(EXE)
-HELM_VERSION=$(shell go mod edit -json | jq -r '.Require[] | select (.Path == "helm.sh/helm/v3") | .Version')
-HELM_TGZ = https://get.helm.sh/helm-$(HELM_VERSION)-$(GOHOSTOS)-$(GOHOSTARCH).tar.gz
-$(TOOLSDIR)/$(notdir $(HELM_TGZ)):
-	mkdir -p $(@D)
-	curl -sfL $(HELM_TGZ) -o $@
-%/bin/helm$(EXE): %/$(notdir $(HELM_TGZ))
-	mkdir -p $(@D)
-	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm$(EXE)
-
 # `go get`-able things
 # ====================
 #
