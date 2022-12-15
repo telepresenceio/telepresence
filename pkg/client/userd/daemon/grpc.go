@@ -155,14 +155,20 @@ func (s *Service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 			})
 		} else {
 			result = s.session.Status(s.sessionContext)
-			err = s.WithSession(c, "status", func(ctx context.Context, session userd.Session) error {
-				status, err := session.ManagerClient().Status(c, &empty.Empty{})
-				if err != nil {
-					return err
+			stts, err := s.session.ManagerClient().Status(c, &empty.Empty{})
+			if err != nil {
+				stat, ok := status.FromError(err)
+				if !ok {
+					return
 				}
-				result.ManagerStatus = status
-				return nil
-			})
+				if stat.Code() == codes.Unimplemented {
+					err = nil
+				} else {
+					return
+				}
+			}
+			result.ManagerStatus = stts
+			return
 		}
 	})
 	return

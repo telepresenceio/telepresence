@@ -560,7 +560,8 @@ service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
 
-  // Status returns traffic manager state information.
+  // Status returns some of the traffic manager's state information.
+  // Includes version, mode and client count.
   rpc Status(google.protobuf.Empty) returns (StatusInfo);
 
   // GetLicense returns the License information (the license itself and

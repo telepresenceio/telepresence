@@ -8,12 +8,12 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/common"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
@@ -32,18 +32,22 @@ type rootDaemonStatus struct {
 }
 
 type userDaemonStatus struct {
-	Running           bool                     `json:"running,omitempty" yaml:"running,omitempty"`
-	Version           string                   `json:"version,omitempty" yaml:"version,omitempty"`
-	APIVersion        int32                    `json:"api_version,omitempty" yaml:"api_version,omitempty"`
-	Executable        string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
-	InstallID         string                   `json:"install_id,omitempty" yaml:"install_id,omitempty"`
-	Status            string                   `json:"status,omitempty" yaml:"status,omitempty"`
-	Mode              string                   `json:"mode,omitempty" yaml:"mode,omitempty"`
-	ClientCount       int32                    `json:"client_count,omitempty" yaml:"client_count,omitempty"`
-	Error             string                   `json:"error,omitempty" yaml:"error,omitempty"`
-	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
-	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
-	Intercepts        []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
+	Running              bool                     `json:"running,omitempty" yaml:"running,omitempty"`
+	Version              string                   `json:"version,omitempty" yaml:"version,omitempty"`
+	APIVersion           int32                    `json:"api_version,omitempty" yaml:"api_version,omitempty"`
+	Executable           string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
+	InstallID            string                   `json:"install_id,omitempty" yaml:"install_id,omitempty"`
+	Status               string                   `json:"status,omitempty" yaml:"status,omitempty"`
+	Error                string                   `json:"error,omitempty" yaml:"error,omitempty"`
+	KubernetesServer     string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
+	KubernetesContext    string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
+	Intercepts           []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
+	TrafficManagerStatus *trafficManagerStatus    `json:"trafficManagerStatus,omitempty" yaml:"trafficManagerStatus,omitempty"`
+}
+
+type trafficManagerStatus struct {
+	Mode        string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	ClientCount int32  `json:"client_count,omitempty" yaml:"client_count,omitempty"`
 }
 
 type connectStatusIntercept struct {
@@ -138,8 +142,6 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	switch status.Error {
 	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
 		us.Status = "Connected"
-		us.Mode = ModeToString(status.ManagerStatus.Mode.Enum())
-		us.ClientCount = status.ManagerStatus.ClientCount
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
@@ -147,6 +149,12 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 				Name:   icept.Spec.Name,
 				Client: icept.Spec.Client,
 			})
+		}
+		if ms := status.ManagerStatus; ms != nil {
+			us.TrafficManagerStatus = &trafficManagerStatus{
+				Mode:        common.ModeToString(ms.Mode.Enum()),
+				ClientCount: ms.ClientCount,
+			}
 		}
 	case connector.ConnectInfo_MUST_RESTART:
 		us.Status = "Connected, but must restart"
@@ -240,9 +248,12 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		n += ioutil.Printf(out, "  Version           : %s (api %d)\n", cs.Version, cs.APIVersion)
 		n += ioutil.Printf(out, "  Executable        : %s\n", cs.Executable)
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
-		n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
-		n += ioutil.Printf(out, "    Mode            : %s\n", cs.Mode)
-		n += ioutil.Printf(out, "    Client Count    : %d\n", cs.ClientCount)
+		if tms := cs.TrafficManagerStatus; tms != nil {
+			n += ioutil.Println(out, "Traffic Manager: Running")
+			n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
+			n += ioutil.Printf(out, "    Mode            : %s\n", tms.Mode)
+			n += ioutil.Printf(out, "    Client Count    : %d\n", tms.Mode)
+		}
 		if cs.Error != "" {
 			n += ioutil.Printf(out, "  Error             : %s\n", cs.Error)
 		}
@@ -256,15 +267,4 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		n += ioutil.Println(out, "User Daemon: Not running")
 	}
 	return int64(n), nil
-}
-
-func ModeToString(mode *manager.Mode) string {
-	switch mode {
-	case manager.Mode_MODE_SINGLE.Enum():
-		return "single-user"
-	case manager.Mode_MODE_TEAM.Enum():
-		return "team"
-	default:
-		return "unknown"
-	}
 }

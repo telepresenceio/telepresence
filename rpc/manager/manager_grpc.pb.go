@@ -25,7 +25,8 @@ const _ = grpc.SupportPackageIsVersion7
 type ManagerClient interface {
 	// Version returns the version information of the Manager.
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
-	// Status returns traffic manager state information.
+	// Status returns some of the traffic manager's state information.
+	// Includes version, mode and client count.
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*StatusInfo, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
@@ -706,7 +707,8 @@ func (x *managerWatchDialClient) Recv() (*DialRequest, error) {
 type ManagerServer interface {
 	// Version returns the version information of the Manager.
 	Version(context.Context, *emptypb.Empty) (*VersionInfo2, error)
-	// Status returns traffic manager state information.
+	// Status returns some of the traffic manager's state information.
+	// Includes version, mode and client count.
 	Status(context.Context, *emptypb.Empty) (*StatusInfo, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.

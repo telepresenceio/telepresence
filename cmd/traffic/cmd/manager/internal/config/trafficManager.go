@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	"github.com/telepresenceio/telepresence/v2/pkg/common"
 )
 
 type Mode manager.Mode
@@ -37,7 +37,7 @@ func (m Mode) MarshalYAML() (any, error) {
 
 func (m Mode) String() string {
 	mm := manager.Mode(m)
-	return cli.ModeToString(&mm)
+	return common.ModeToString(&mm)
 }
 
 func (m Mode) IsTeam() bool {
