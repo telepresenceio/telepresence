@@ -25,9 +25,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	state2 "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -45,7 +45,7 @@ type Manager struct {
 	ctx           context.Context
 	clock         Clock
 	ID            string
-	state         *state.State
+	state         *state2.State
 	clusterInfo   cluster.Info
 	cloudConfig   *rpc.AmbassadorCloudConfig
 	configWatcher config.Watcher
@@ -109,7 +109,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
-	ret.state = state.NewState(ctx)
+	ret.state = state2.NewState(ctx)
 	return ret, ctx, nil
 }
 
@@ -931,14 +931,14 @@ func (m *Manager) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.
 	rrs, rCode, err := m.state.AgentsLookupDNS(ctx, request.GetSession().GetSessionId(), request)
 	if err != nil {
 		dlog.Errorf(ctx, "AgentsLookupDNS %s %s: %v", request.Name, qtn, err)
-	} else if rCode != state.RcodeNoAgents {
+	} else if rCode != state2.RcodeNoAgents {
 		if len(rrs) == 0 {
 			dlog.Debugf(ctx, "LookupDNS on agents: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
 		} else {
 			dlog.Debugf(ctx, "LookupDNS on agents: %s %s -> %s", request.Name, qtn, rrs)
 		}
 	}
-	if rCode == state.RcodeNoAgents {
+	if rCode == state2.RcodeNoAgents {
 		rrs, rCode, err = dnsproxy.Lookup(ctx, qType, request.Name)
 		if err != nil {
 			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s %s", request.Name, qtn, dns2.RcodeToString[rCode], err)
