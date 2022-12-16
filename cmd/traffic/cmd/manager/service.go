@@ -43,7 +43,8 @@ type Clock interface {
 }
 
 type Service interface {
-	RegisterServers(ctx context.Context, grpcHandler *grpc.Server)
+	rpc.ManagerServer
+	RegisterServers(grpcHandler *grpc.Server)
 	RunConfigWatcher(context.Context) error
 	ServePrometheus(context.Context) error
 	RunSessionGCLoop(context.Context) error

@@ -668,7 +668,7 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	if err != nil {
 		t.Fatalf("failed to build manager: %v", err)
 	}
-	mgr.RegisterServers(ctx, s)
+	mgr.RegisterServers(s)
 
 	errCh := make(chan error)
 	go func() {

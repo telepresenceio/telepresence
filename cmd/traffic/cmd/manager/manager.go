@@ -34,7 +34,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-var DisplayName = "Traffic Manager" //nolint:gochecknoglobals // extension point
+var (
+	DisplayName                                                            = "Traffic Manager" //nolint:gochecknoglobals // extension point
+	NewServiceFunc func(context.Context) (Service, context.Context, error) = NewService        //nolint:gochecknoglobals // extension point
+)
 
 // Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
@@ -73,7 +76,7 @@ func Main(ctx context.Context, _ ...string) error {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
-	mgr, ctx, err := NewService(ctx)
+	mgr, ctx, err := NewServiceFunc(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
@@ -176,11 +179,11 @@ func serveHTTP(ctx context.Context, m Service) error {
 			}
 		}),
 	}
-	m.RegisterServers(ctx, grpcHandler)
+	m.RegisterServers(grpcHandler)
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
-func (m *service) RegisterServers(ctx context.Context, grpcHandler *grpc.Server) {
+func (m *service) RegisterServers(grpcHandler *grpc.Server) {
 	rpc.RegisterManagerServer(grpcHandler, m)
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 }
