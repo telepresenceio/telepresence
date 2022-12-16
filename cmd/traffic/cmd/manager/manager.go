@@ -109,7 +109,7 @@ func Main(ctx context.Context, _ ...string) error {
 	return g.Wait()
 }
 
-func (m *Manager) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
+func (m *Service) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
 	if eventType == watch.Added || eventType == watch.Modified {
 		var (
 			tmConf    config.TrafficManager
@@ -128,7 +128,7 @@ func (m *Manager) configMapEventHandler(eventType watch.EventType, obj runtime.O
 }
 
 // Serve Prometheus metrics if env.PrometheusPort != 0.
-func (m *Manager) servePrometheus(ctx context.Context) error {
+func (m *Service) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	port := env.PrometheusPort
 	if env.PrometheusPort != 0 {
@@ -149,7 +149,7 @@ func (m *Manager) servePrometheus(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) serveHTTP(ctx context.Context) error {
+func (m *Service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
@@ -181,7 +181,7 @@ func (m *Manager) serveHTTP(ctx context.Context) error {
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
-func (m *Manager) runSessionGCLoop(ctx context.Context) error {
+func (m *Service) runSessionGCLoop(ctx context.Context) error {
 	// Loop calling Expire
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()

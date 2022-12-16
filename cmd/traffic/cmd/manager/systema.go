@@ -17,7 +17,7 @@ import (
 )
 
 type ReverseConnProvider struct {
-	mgr *Manager
+	mgr *Service
 }
 
 type reverseConnClient struct {
@@ -75,7 +75,7 @@ func (c *reverseConnClient) Close(ctx context.Context) error {
 	return c.wait()
 }
 
-func (m *Manager) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
+func (m *Service) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
 	intercept, _ := m.state.GetIntercept(interceptID)
 	if intercept == nil || intercept.PreviewSpec.Ingress == nil {
 		return nil, fmt.Errorf("missing ingress information for intercept %s", interceptID)
