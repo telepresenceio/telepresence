@@ -60,6 +60,10 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
+	if s.config.Mode.IsTeam() && cr.ApiKey == "" {
+		return interceptError(errcat.User.New("A login is required to intercept while in Team mode."))
+	}
+
 	env := managerutil.GetEnv(ctx)
 	if env.InterceptDisableGlobal {
 		if cr.InterceptSpec.Mechanism != "http" {

@@ -12,6 +12,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -80,7 +84,7 @@ func Main(ctx context.Context, _ ...string) error {
 		SoftShutdownTimeout:  5 * time.Second,
 	})
 
-	g.Go("cli-config", mgr.cliConfig.Run)
+	g.Go("cli-config", mgr.configWatcher.Run)
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
@@ -103,6 +107,24 @@ func Main(ctx context.Context, _ ...string) error {
 
 	// Wait for exit
 	return g.Wait()
+}
+
+func (m *Manager) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
+	if eventType == watch.Added || eventType == watch.Modified {
+		var (
+			tmConf    config.TrafficManager
+			yamlBytes = m.configWatcher.GetTrafficManagerConfigYaml()
+		)
+
+		if err := yaml.Unmarshal(yamlBytes, &tmConf); err != nil {
+			dlog.Errorf(m.ctx, "unable to unmarshal traffic-manager config: %s", err.Error())
+			return err
+		}
+
+		m.state.SetConfig(tmConf)
+	}
+
+	return nil
 }
 
 // Serve Prometheus metrics if env.PrometheusPort != 0.

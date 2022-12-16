@@ -1,5 +1,14 @@
 # Changelog
 
+### (TBD)
+
+- Feature: The traffic-manager can now be set to either team mode or single user mode.
+  When in team mode, intercepts will default to http intercepts.
+
+- Change: The configmap `traffic-manager-clients` has been renamed to `traffic-manager`.
+
+- Change: The helm installation will now fail if `intercept.disableGlobal=true` and `traffiManager.mode` is not set to `team`.
+
 ### 2.9.6 (TBD)
 
 - Feature: Image pull secrets for the traffic-agent can now be added using the Helm chart setting

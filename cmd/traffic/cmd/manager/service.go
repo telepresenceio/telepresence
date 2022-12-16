@@ -23,8 +23,8 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cliconfig"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/cluster"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -42,14 +42,14 @@ type Clock interface {
 }
 
 type Manager struct {
-	ctx          context.Context
-	clock        Clock
-	ID           string
-	state        *state.State
-	clusterInfo  cluster.Info
-	cloudConfig  *rpc.AmbassadorCloudConfig
-	cliConfig    cliconfig.Watcher
-	tokenService cloudtoken.Service
+	ctx           context.Context
+	clock         Clock
+	ID            string
+	state         *state.State
+	clusterInfo   cluster.Info
+	cloudConfig   *rpc.AmbassadorCloudConfig
+	configWatcher config.Watcher
+	tokenService  cloudtoken.Service
 
 	rpc.UnsafeManagerServer
 }
@@ -105,7 +105,7 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
-	ret.cliConfig = cliconfig.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
+	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace, ret.configMapEventHandler)
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
@@ -116,6 +116,14 @@ func NewManager(ctx context.Context) (*Manager, context.Context, error) {
 // Version returns the version information of the Manager.
 func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Version: version.Version}, nil
+}
+
+func (m *Manager) Status(context.Context, *empty.Empty) (*rpc.StatusInfo, error) {
+	return &rpc.StatusInfo{
+		Version:     &rpc.VersionInfo2{Version: version.Version},
+		Mode:        m.state.GetModeRPC(),
+		ClientCount: int32(m.state.CountAllClients()),
+	}, nil
 }
 
 // GetLicense returns the license for the cluster. This directory is mounted
@@ -208,7 +216,7 @@ func (m *Manager) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 	dlog.Debug(ctx, "GetClientConfig called")
 
 	return &rpc.CLIConfig{
-		ConfigYaml: m.cliConfig.GetConfigYaml(),
+		ConfigYaml: m.configWatcher.GetClientConfigYaml(),
 	}, nil
 }
 
@@ -459,8 +467,10 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 func (m *Manager) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.Session)
 	dlog.Debugf(ctx, "PrepareIntercept called")
+
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
+
 	return m.state.PrepareIntercept(ctx, request)
 }
 
