@@ -73,7 +73,7 @@ func Main(ctx context.Context, _ ...string) error {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
-	mgr, ctx, err := NewManager(ctx)
+	mgr, ctx, err := NewService(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
@@ -84,12 +84,14 @@ func Main(ctx context.Context, _ ...string) error {
 		SoftShutdownTimeout:  5 * time.Second,
 	})
 
-	g.Go("cli-config", mgr.configWatcher.Run)
+	g.Go("cli-config", mgr.RunConfigWatcher)
 
 	// Serve HTTP (including gRPC)
-	g.Go("httpd", mgr.serveHTTP)
+	g.Go("httpd", func(ctx context.Context) error {
+		return serveHTTP(ctx, mgr)
+	})
 
-	g.Go("prometheus", mgr.servePrometheus)
+	g.Go("prometheus", mgr.ServePrometheus)
 
 	if imgRetErr != nil {
 		dlog.Errorf(ctx, "unable to initialize agent injector: %v", imgRetErr)
@@ -97,7 +99,7 @@ func Main(ctx context.Context, _ ...string) error {
 		g.Go("agent-injector", mutator.ServeMutator)
 	}
 
-	g.Go("session-gc", mgr.runSessionGCLoop)
+	g.Go("session-gc", mgr.RunSessionGCLoop)
 
 	if tracer != nil {
 		g.Go("tracer-grpc", func(c context.Context) error {
@@ -109,7 +111,7 @@ func Main(ctx context.Context, _ ...string) error {
 	return g.Wait()
 }
 
-func (m *Service) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
+func (m *service) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
 	if eventType == watch.Added || eventType == watch.Modified {
 		var (
 			tmConf    state.TrafficManager
@@ -127,8 +129,8 @@ func (m *Service) configMapEventHandler(eventType watch.EventType, obj runtime.O
 	return nil
 }
 
-// Serve Prometheus metrics if env.PrometheusPort != 0.
-func (m *Service) servePrometheus(ctx context.Context) error {
+// ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.
+func (m *service) ServePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	port := env.PrometheusPort
 	if env.PrometheusPort != 0 {
@@ -149,7 +151,7 @@ func (m *Service) servePrometheus(ctx context.Context) error {
 	return nil
 }
 
-func (m *Service) serveHTTP(ctx context.Context) error {
+func serveHTTP(ctx context.Context, m Service) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
@@ -174,14 +176,16 @@ func (m *Service) serveHTTP(ctx context.Context) error {
 			}
 		}),
 	}
-
-	rpc.RegisterManagerServer(grpcHandler, m)
-	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
-
+	m.RegisterServers(ctx, grpcHandler)
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
-func (m *Service) runSessionGCLoop(ctx context.Context) error {
+func (m *service) RegisterServers(ctx context.Context, grpcHandler *grpc.Server) {
+	rpc.RegisterManagerServer(grpcHandler, m)
+	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
+}
+
+func (m *service) RunSessionGCLoop(ctx context.Context) error {
 	// Loop calling Expire
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
