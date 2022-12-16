@@ -591,6 +591,11 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		}
 
 		s.clusterSubnets = subnet.Unique(subnets)
+	}
+	// NOTE: When we can access traffic manager by pod ip, we set proxyCluster to false.
+	// Howevery, if you need and can't access cluster by service,
+	// you can use alsProxySubnets to enable proxy service subnets.
+	if s.proxyCluster || len(s.alsoProxySubnets) > 0 {
 		if err := s.refreshSubnets(ctx); err != nil {
 			dlog.Error(ctx, err)
 		}
@@ -626,6 +631,7 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 		return
 	}
 	conn.Close()
+	// NOTE: we can access pod, but can we access service?
 	s.proxyCluster = false
 	dlog.Info(ctx, "Already connected to cluster, will not map cluster subnets")
 }
