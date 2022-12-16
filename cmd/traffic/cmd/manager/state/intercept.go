@@ -60,17 +60,6 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
-	if s.config.Mode.IsTeam() && cr.ApiKey == "" {
-		return interceptError(errcat.User.New("A login is required to intercept while in Team mode."))
-	}
-
-	env := managerutil.GetEnv(ctx)
-	if env.InterceptDisableGlobal {
-		if cr.InterceptSpec.Mechanism != "http" {
-			return interceptError(errcat.User.New("Global intercepts are not allowed. Please log in and use http intercepts"))
-		}
-	}
-
 	spec := cr.InterceptSpec
 	wl, err := tracing.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {

@@ -158,6 +158,10 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	return false
 }
 
+func (s *State) Mode() Mode {
+	return s.config.Mode
+}
+
 // RemoveSession removes a session from the set of present session IDs.
 func (s *State) RemoveSession(ctx context.Context, sessionID string) {
 	s.mu.Lock()
