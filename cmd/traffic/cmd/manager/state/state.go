@@ -53,7 +53,6 @@ type State struct {
 	timedLogLevel   log.TimedLevel
 	llSubs          *loglevelSubscribers
 	cfgMapLocks     map[string]*sync.Mutex
-	config          TrafficManager
 }
 
 func NewState(ctx context.Context) *State {
@@ -156,10 +155,6 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	}
 
 	return false
-}
-
-func (s *State) Mode() Mode {
-	return s.config.Mode
 }
 
 // RemoveSession removes a session from the set of present session IDs.
@@ -634,21 +629,4 @@ func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
 // of the last request that was made.
 func (s *State) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
 	return s.llSubs.subscriberLoop(stream.Context(), stream)
-}
-
-func (s *State) SetConfig(c TrafficManager) {
-	s.mu.Lock()
-	oldMode := s.config.Mode
-	s.config = c
-	s.mu.Unlock()
-
-	if oldMode != c.Mode {
-		dlog.Infof(s.ctx, "mode changed from %s to %s", oldMode, c.Mode)
-	}
-}
-
-func (s *State) GetModeRPC() rpc.Mode {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return rpc.Mode(s.config.Mode)
 }

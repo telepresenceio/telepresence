@@ -44,10 +44,12 @@ type Clock interface {
 
 type Service interface {
 	rpc.ManagerServer
+	InstallID() string
 	RegisterServers(grpcHandler *grpc.Server)
 	RunConfigWatcher(context.Context) error
 	ServePrometheus(context.Context) error
 	RunSessionGCLoop(context.Context) error
+	TrafficManagerConfig() []byte
 	State() *state.State
 }
 
@@ -115,7 +117,7 @@ func NewService(ctx context.Context) (Service, context.Context, error) {
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
 		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
 	}
-	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace, ret.configMapEventHandler)
+	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
@@ -127,6 +129,14 @@ func (m *service) State() *state.State {
 	return m.state
 }
 
+func (m *service) InstallID() string {
+	return m.clusterInfo.GetClusterID()
+}
+
+func (m *service) TrafficManagerConfig() []byte {
+	return m.configWatcher.GetTrafficManagerConfigYaml()
+}
+
 func (m *service) RunConfigWatcher(ctx context.Context) error {
 	return m.configWatcher.Run(ctx)
 }
@@ -134,14 +144,6 @@ func (m *service) RunConfigWatcher(ctx context.Context) error {
 // Version returns the version information of the Manager.
 func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Version: version.Version}, nil
-}
-
-func (m *service) Status(context.Context, *empty.Empty) (*rpc.StatusInfo, error) {
-	return &rpc.StatusInfo{
-		Version:     &rpc.VersionInfo2{Version: version.Version},
-		Mode:        m.state.GetModeRPC(),
-		ClientCount: int32(m.state.CountAllClients()),
-	}, nil
 }
 
 // GetLicense returns the license for the cluster. This directory is mounted

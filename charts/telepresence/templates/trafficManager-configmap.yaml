@@ -1,19 +1,14 @@
-{{- if .Values.trafficManager }}
-  {{- if ne .Values.trafficManager.mode "team" }}
-    {{- if .Values.intercept.disableGlobal }}
-      {{- fail "intercept.disableGlobal=true requires that trafficManager.mode be set to 'team'" }}
-    {{- end }}
-  {{- end }}
-{{- end }}
-{{- if .Values.client }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "traffic-manager.name" $ }}
   namespace:  {{ include "traffic-manager.namespace" . }}
 data:
+{{- if .Values.client }}
   client.yaml: |
     {{- toYaml .Values.client | nindent 4 }}
+{{- end }}
+{{- if .Values.trafficManager }}
   traffic-manager.yaml: |
     {{- toYaml .Values.trafficManager | nindent 4 }}
 {{- end }}

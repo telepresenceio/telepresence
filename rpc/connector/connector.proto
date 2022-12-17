@@ -202,9 +202,6 @@ message ConnectInfo {
 
   daemon.DaemonStatus daemon_status = 13;
 
-  // traffic manager details
-  telepresence.manager.StatusInfo manager_status = 14;
-
   reserved 5;
   reserved 6;
   reserved 7;

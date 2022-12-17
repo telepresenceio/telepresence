@@ -341,6 +341,3 @@ client:
 
     # Tell client's DNS resolver to always send names with these suffixes to the cluster side resolver
     includeSuffixes: []
-
-trafficManager:
-  mode: single-user

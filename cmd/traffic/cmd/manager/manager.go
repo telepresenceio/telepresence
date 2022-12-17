@@ -12,9 +12,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"gopkg.in/yaml.v3"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -29,7 +26,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -112,24 +108,6 @@ func Main(ctx context.Context, _ ...string) error {
 
 	// Wait for exit
 	return g.Wait()
-}
-
-func (m *service) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
-	if eventType == watch.Added || eventType == watch.Modified {
-		var (
-			tmConf    state.TrafficManager
-			yamlBytes = m.configWatcher.GetTrafficManagerConfigYaml()
-		)
-
-		if err := yaml.Unmarshal(yamlBytes, &tmConf); err != nil {
-			dlog.Errorf(m.ctx, "unable to unmarshal traffic-manager config: %s", err.Error())
-			return err
-		}
-
-		m.state.SetConfig(tmConf)
-	}
-
-	return nil
 }
 
 // ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.

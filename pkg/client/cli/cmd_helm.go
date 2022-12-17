@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -28,7 +27,6 @@ type helmArgs struct {
 	valuePairs []string
 	request    *connector.ConnectRequest
 	kubeFlags  *pflag.FlagSet
-	mode       manager.Mode
 }
 
 func helmInstallCommand() *cobra.Command {
@@ -44,14 +42,6 @@ func helmInstallCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if upgrade {
 				ha.cmdType = connector.HelmRequest_UPGRADE
-			}
-			switch {
-			case teamMode && singleUserMode:
-				return fmt.Errorf("flags `--team-mode` and `--single-user-mode` are mutually exclusive")
-			case teamMode:
-				ha.mode = manager.Mode_MODE_TEAM
-			case singleUserMode:
-				ha.mode = manager.Mode_MODE_SINGLE_USER
 			}
 			return ha.run(cmd, args)
 		},
@@ -113,22 +103,6 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 		ValuePaths:     ha.values,
 		ValuePairs:     ha.valuePairs,
 		ConnectRequest: ha.request,
-	}
-
-	if ha.mode != manager.Mode_MODE_UNSPECIFIED {
-		switch ha.mode {
-		case manager.Mode_MODE_SINGLE_USER:
-			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=single-user")
-		case manager.Mode_MODE_TEAM:
-			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=team")
-		}
-
-		upgrade := ha.cmdType == connector.HelmRequest_UPGRADE
-		setFlagUsed := 0 < len(ha.valuePairs)
-		valuesFlagUsed := 0 < len(ha.values)
-		if upgrade && !setFlagUsed && !valuesFlagUsed {
-			request.ReuseValues = true
-		}
 	}
 
 	util.AddKubeconfigEnv(request.ConnectRequest)

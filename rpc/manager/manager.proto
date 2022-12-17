@@ -544,25 +544,9 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
-enum Mode {
-  MODE_UNSPECIFIED = 0;
-  MODE_SINGLE_USER = 1;
-  MODE_TEAM = 2;
-}
-
-message StatusInfo {
-  VersionInfo2 version = 1;
-  Mode mode = 2;
-  int32 client_count = 3;
-}
-
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
-
-  // Status returns some of the traffic manager's state information.
-  // Includes version, mode and client count.
-  rpc Status(google.protobuf.Empty) returns (StatusInfo);
 
   // GetLicense returns the License information (the license itself and
   // domain that granted it) known to the manager.
