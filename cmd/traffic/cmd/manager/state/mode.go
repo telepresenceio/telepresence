@@ -15,11 +15,11 @@ type Mode manager.Mode
 func (m *Mode) UnmarshalYAML(value *yaml.Node) error {
 	switch strings.ToLower(value.Value) {
 	case "single-user":
-		*m = Mode(manager.Mode_MODE_SINGLE)
+		*m = Mode(manager.Mode_MODE_SINGLE_USER)
 	case "team":
 		*m = Mode(manager.Mode_MODE_TEAM)
 	default:
-		return fmt.Errorf("invalid mode %s, must be 'team' or 'single'", value.Value)
+		return fmt.Errorf("invalid mode %s, must be 'team' or 'single-user'", value.Value)
 	}
 	return nil
 }

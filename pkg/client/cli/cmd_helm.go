@@ -32,10 +32,7 @@ type helmArgs struct {
 }
 
 func helmInstallCommand() *cobra.Command {
-	var (
-		upgrade              bool
-		teamMode, singleMode bool
-	)
+	var upgrade, teamMode, singleUserMode bool
 
 	ha := &helmArgs{
 		cmdType: connector.HelmRequest_INSTALL,
@@ -49,12 +46,12 @@ func helmInstallCommand() *cobra.Command {
 				ha.cmdType = connector.HelmRequest_UPGRADE
 			}
 			switch {
-			case teamMode && singleMode:
-				return fmt.Errorf("flags `--team-mode` and `--single-mode` are mutually exclusive")
+			case teamMode && singleUserMode:
+				return fmt.Errorf("flags `--team-mode` and `--single-user-mode` are mutually exclusive")
 			case teamMode:
 				ha.mode = manager.Mode_MODE_TEAM
-			case singleMode:
-				ha.mode = manager.Mode_MODE_SINGLE
+			case singleUserMode:
+				ha.mode = manager.Mode_MODE_SINGLE_USER
 			}
 			return ha.run(cmd, args)
 		},
@@ -68,7 +65,7 @@ func helmInstallCommand() *cobra.Command {
 	flags.StringSliceVarP(&ha.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 	flags.StringSliceVarP(&ha.valuePairs, "set", "", []string{}, "specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)")
 	flags.BoolVarP(&teamMode, "team-mode", "", false, "set the traffic-manager to team mode")
-	flags.BoolVarP(&singleMode, "single-mode", "", false, "set the traffic-manager to single user mode")
+	flags.BoolVarP(&singleUserMode, "single-user-mode", "", false, "set the traffic-manager to single user mode")
 
 	ha.request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd
@@ -120,8 +117,8 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 
 	if ha.mode != manager.Mode_MODE_UNSPECIFIED {
 		switch ha.mode {
-		case manager.Mode_MODE_SINGLE:
-			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=single")
+		case manager.Mode_MODE_SINGLE_USER:
+			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=single-user")
 		case manager.Mode_MODE_TEAM:
 			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=team")
 		}

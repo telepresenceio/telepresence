@@ -546,7 +546,7 @@ message CLIConfig {
 
 enum Mode {
   MODE_UNSPECIFIED = 0;
-  MODE_SINGLE = 1;
+  MODE_SINGLE_USER = 1;
   MODE_TEAM = 2;
 }
 

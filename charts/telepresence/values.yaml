@@ -343,4 +343,4 @@ client:
     includeSuffixes: []
 
 trafficManager:
-  mode: single
+  mode: single-user
