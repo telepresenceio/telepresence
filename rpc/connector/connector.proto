@@ -194,6 +194,7 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
+  common.VersionInfo version = 5;
 
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
 
@@ -202,7 +203,6 @@ message ConnectInfo {
 
   daemon.DaemonStatus daemon_status = 13;
 
-  reserved 5;
   reserved 6;
   reserved 7;
   reserved 9;

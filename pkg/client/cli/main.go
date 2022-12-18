@@ -22,13 +22,15 @@ import (
 func InitContext(ctx context.Context) context.Context {
 	switch client.ProcessName() {
 	case userd.ProcessName:
+		client.DisplayName = "OSS User Daemon"
 		ctx = userd.WithNewServiceFunc(ctx, userDaemon.NewService)
 		ctx = userd.WithNewSessionFunc(ctx, trafficmgr.NewSession)
 	case rootd.ProcessName:
+		client.DisplayName = "OSS Root Daemon"
 		ctx = rootd.WithNewServiceFunc(ctx, rootd.NewService)
 		ctx = rootd.WithNewSessionFunc(ctx, rootd.NewSession)
 	default:
-		client.DisplayName = "Client"
+		client.DisplayName = "OSS Client"
 		ctx = util.WithCommandInitializer(ctx, util.CommandInitializer)
 		ctx = WithSubCommands(ctx)
 	}

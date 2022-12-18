@@ -143,7 +143,7 @@ func (m *service) RunConfigWatcher(ctx context.Context) error {
 
 // Version returns the version information of the Manager.
 func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
-	return &rpc.VersionInfo2{Version: version.Version}, nil
+	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
 }
 
 // GetLicense returns the license for the cluster. This directory is mounted

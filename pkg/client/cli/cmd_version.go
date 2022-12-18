@@ -44,7 +44,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	version, err := daemonVersion(ctx)
 	switch {
 	case err == nil:
-		kvf.Add("Root Daemon", version.Version)
+		kvf.Add(version.Name, version.Version)
 	case err == util.ErrNoRootDaemon:
 		kvf.Add("Root Daemon", "not running")
 	default:
@@ -54,12 +54,11 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	version, err = connectorVersion(ctx)
 	switch {
 	case err == nil:
-		kvf.Add("User Daemon", version.Version)
-		var mgrVer *common.VersionInfo
-		mgrVer, err = managerVersion(ctx)
+		kvf.Add(version.Name, version.Version)
+		version, err = managerVersion(ctx)
 		switch {
 		case err == nil:
-			kvf.Add("Traffic Manager", mgrVer.Version)
+			kvf.Add(version.Name, version.Version)
 		case status.Code(err) == codes.Unavailable:
 			kvf.Add("Traffic Manager", "not connected")
 		default:

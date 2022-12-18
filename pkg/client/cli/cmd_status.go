@@ -24,6 +24,7 @@ type StatusInfo struct {
 
 type rootDaemonStatus struct {
 	Running              bool             `json:"running,omitempty" yaml:"running,omitempty"`
+	Name                 string           `json:"name,omitempty" yaml:"name,omitempty"`
 	Version              string           `json:"version,omitempty" yaml:"version,omitempty"`
 	APIVersion           int32            `json:"api_version,omitempty" yaml:"api_version,omitempty"`
 	DNS                  *client.DNSSnake `json:"dns,omitempty" yaml:"dns,omitempty"`
@@ -32,6 +33,7 @@ type rootDaemonStatus struct {
 
 type userDaemonStatus struct {
 	Running           bool                     `json:"running,omitempty" yaml:"running,omitempty"`
+	Name              string                   `json:"name,omitempty" yaml:"name,omitempty"`
 	Version           string                   `json:"version,omitempty" yaml:"version,omitempty"`
 	APIVersion        int32                    `json:"api_version,omitempty" yaml:"api_version,omitempty"`
 	Executable        string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
@@ -124,6 +126,10 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	if err != nil {
 		return nil, err
 	}
+	us.Name = version.Name
+	if us.Name == "" {
+		us.Name = "User Daemon"
+	}
 	us.Version = version.Version
 	us.APIVersion = version.ApiVersion
 	us.Executable = version.Executable
@@ -158,6 +164,10 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	rStatus := status.DaemonStatus
 	if rStatus != nil {
 		rs.Running = true
+		rs.Name = rStatus.Version.Name
+		if rs.Name == "" {
+			rs.Name = "User Daemon"
+		}
 		rs.Version = rStatus.Version.Version
 		rs.APIVersion = rStatus.Version.ApiVersion
 		if obc := rStatus.OutboundConfig; obc != nil {
@@ -190,7 +200,7 @@ func (s *StatusInfo) WriterTos() []io.WriterTo {
 func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ds.Running {
-		n += ioutil.Println(out, "Root Daemon: Running")
+		n += ioutil.Printf(out, "%s: Running\n", ds.Name)
 		n += ioutil.Printf(out, "  Version: %s (api %d)\n", ds.Version, ds.APIVersion)
 		if ds.DNS != nil {
 			n += printDNS(out, ds.DNS)
@@ -231,7 +241,7 @@ func printRouting(out io.Writer, r *client.RoutingSnake) int {
 func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if cs.Running {
-		n += ioutil.Println(out, "User Daemon: Running")
+		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
 		n += ioutil.Printf(out, "  Version           : %s (api %d)\n", cs.Version, cs.APIVersion)
 		n += ioutil.Printf(out, "  Executable        : %s\n", cs.Executable)
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)

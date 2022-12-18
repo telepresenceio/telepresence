@@ -35,4 +35,7 @@ message VersionInfo {
  
   // Executable is the path to the executable for the process.
   string executable = 3;
+
+  // Name of the process (Client, User Daemon, Root Daemon, Traffic Manager)
+  string name = 4;
 }

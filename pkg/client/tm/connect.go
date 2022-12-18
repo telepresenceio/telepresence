@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 
-	"github.com/blang/semver"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -18,8 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 )
 
-func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, semver.Version, error) {
-	var version semver.Version
+func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, *manager.VersionInfo2, error) {
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
 
 	// First check. Establish connection
@@ -35,7 +32,7 @@ func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.Dia
 
 	conn, err := grpc.DialContext(ctx, grpcAddr, opts...)
 	if err != nil {
-		return nil, nil, version, client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
+		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
 	}
 	defer func() {
 		if err != nil {
@@ -53,12 +50,8 @@ func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.Dia
 
 	vi, err := mClient.Version(ctx, &empty.Empty{})
 	if err != nil {
-		return nil, nil, version, client.CheckTimeout(ctx, fmt.Errorf("manager.Version: %w", err))
+		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("manager.Version: %w", err))
 	}
-	version, err = semver.Parse(strings.TrimPrefix(vi.Version, "v"))
-	if err != nil {
-		return nil, nil, version, client.CheckTimeout(ctx, fmt.Errorf("unable to parse manager.Version: %w", err))
-	}
-	dlog.Infof(ctx, "Connected to traffic-manager %s", version)
-	return conn, mClient, version, nil
+	dlog.Infof(ctx, "Connected to traffic-manager %s", vi.Version)
+	return conn, mClient, vi, nil
 }

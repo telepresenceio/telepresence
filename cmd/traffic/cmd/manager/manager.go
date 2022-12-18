@@ -31,8 +31,8 @@ import (
 )
 
 var (
-	DisplayName                                                            = "Traffic Manager" //nolint:gochecknoglobals // extension point
-	NewServiceFunc func(context.Context) (Service, context.Context, error) = NewService        //nolint:gochecknoglobals // extension point
+	DisplayName                                                            = "OSS Traffic Manager" //nolint:gochecknoglobals // extension point
+	NewServiceFunc func(context.Context) (Service, context.Context, error) = NewService            //nolint:gochecknoglobals // extension point
 )
 
 // Main starts up the traffic manager and blocks until it ends.

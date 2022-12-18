@@ -387,8 +387,9 @@ message TelepresenceAPIInfo {
 }
 
 // VersionInfo2 is different than telepresence.common.VersionInfo in
-// that it does not contain an 'api_version' integer.
+// that it is limited to just name and version.
 message VersionInfo2 {
+  string name = 1;
   string version = 2;
 }
 
