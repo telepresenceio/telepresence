@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -29,8 +30,13 @@ type helmArgs struct {
 	kubeFlags  *pflag.FlagSet
 }
 
+var (
+	HelmInstallExtendFlagsFunc func(*pflag.FlagSet)                                                //nolint:gochecknoglobals // extension point
+	HelmInstallPrologFunc      func(context.Context, *pflag.FlagSet, *connector.HelmRequest) error //nolint:gochecknoglobals // extension point
+)
+
 func helmInstallCommand() *cobra.Command {
-	var upgrade, teamMode, singleUserMode bool
+	var upgrade bool
 
 	ha := &helmArgs{
 		cmdType: connector.HelmRequest_INSTALL,
@@ -54,8 +60,9 @@ func helmInstallCommand() *cobra.Command {
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
 	flags.StringSliceVarP(&ha.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
 	flags.StringSliceVarP(&ha.valuePairs, "set", "", []string{}, "specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)")
-	flags.BoolVarP(&teamMode, "team-mode", "", false, "set the traffic-manager to team mode")
-	flags.BoolVarP(&singleUserMode, "single-user-mode", "", false, "set the traffic-manager to single user mode")
+	if HelmInstallExtendFlagsFunc != nil {
+		HelmInstallExtendFlagsFunc(flags)
+	}
 
 	ha.request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd
@@ -91,13 +98,7 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 		ha.values[i] = absPath
 	}
 
-	// always disconnect to ensure that there are no running intercepts etc.
-	ctx := cmd.Context()
-	_ = util.Disconnect(ctx, false)
-
-	doQuit := false
-	userD := util.GetUserDaemon(ctx)
-
+	util.AddKubeconfigEnv(ha.request)
 	request := &connector.HelmRequest{
 		Type:           ha.cmdType,
 		ValuePaths:     ha.values,
@@ -105,8 +106,18 @@ func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
 		ConnectRequest: ha.request,
 	}
 
-	util.AddKubeconfigEnv(request.ConnectRequest)
-	resp, err := userD.Helm(ctx, request)
+	ctx := cmd.Context()
+	if HelmInstallPrologFunc != nil {
+		if err := HelmInstallPrologFunc(ctx, cmd.Flags(), request); err != nil {
+			return err
+		}
+	}
+
+	// always disconnect to ensure that there are no running intercepts etc.
+	_ = util.Disconnect(ctx, false)
+
+	doQuit := false
+	resp, err := util.GetUserDaemon(ctx).Helm(ctx, request)
 	if err != nil {
 		return err
 	}
