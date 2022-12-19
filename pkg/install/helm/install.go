@@ -2,6 +2,7 @@ package helm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/strvals"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
@@ -123,11 +123,21 @@ func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Confi
 	})
 }
 
-func upgradeExisting(ctx context.Context, existingVer string, chrt *chart.Chart, helmConfig *action.Configuration, ns string, reuseValues bool, values map[string]any) error {
+func upgradeExisting(
+	ctx context.Context,
+	existingVer string,
+	chrt *chart.Chart,
+	helmConfig *action.Configuration,
+	ns string,
+	resetValues bool,
+	reuseValues bool,
+	values map[string]any,
+) error {
 	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Namespace = ns
+	upgrade.ResetValues = resetValues
 	upgrade.ReuseValues = reuseValues
 	return timedRun(ctx, func(timeout time.Duration) error {
 		upgrade.Timeout = timeout
@@ -216,24 +226,14 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 	}
 
 	// OK, now install things.
-	values := getValues(ctx)
-
-	for _, path := range req.ValuePaths {
-		dlog.Debugf(ctx, "Reading values from %q", path)
-		vals, err := chartutil.ReadValuesFile(path)
-		if err != nil {
-			return errcat.User.Newf("--values path %q not readable: %v", path, err)
+	var vals map[string]any
+	if len(req.ValuesJson) > 0 {
+		if err := json.Unmarshal(req.ValuesJson, &vals); err != nil {
+			return fmt.Errorf("unable to parse values JSON: %w", err)
 		}
-
-		values = chartutil.CoalesceTables(vals.AsMap(), values)
-	}
-
-	if vl := len(req.ValuePairs); vl > 0 {
-		vls, err := makeMapFromValuePairs(req.ValuePairs)
-		if err != nil {
-			return errcat.User.Newf("--set flag error: %v", err)
-		}
-		values = chartutil.CoalesceTables(vls, values)
+		vals = chartutil.CoalesceTables(vals, getValues(ctx))
+	} else {
+		vals = getValues(ctx)
 	}
 
 	switch {
@@ -248,27 +248,17 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		}
 
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
-		err = installNew(ctx, chrt, helmConfig, namespace, values)
+		err = installNew(ctx, chrt, helmConfig, namespace, vals)
 	case req.Type == connector.HelmRequest_UPGRADE: // replace existing install
 		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
 			namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, req.ReuseValues, values)
+		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, req.ResetValues, req.ReuseValues, vals)
 	default:
-		err = errcat.User.Newf("traffic manager version %q is already installed, use the '--upgrade' flag to replace it", releaseVer(existing))
+		err = errcat.User.Newf(
+			"traffic manager version %q is already installed, use 'telepresence helm upgrade' instead to replace it",
+			releaseVer(existing))
 	}
 	return err
-}
-
-// makeMapFromValuePairs turns a slice of strings in the form x.y.z=v into
-// a map like {x: {y: {z: v}}} and returns it.
-func makeMapFromValuePairs(valuePairs []string) (map[string]any, error) {
-	vls := make(map[string]any)
-	for _, v := range valuePairs {
-		if err := strvals.ParseInto(v, vls); err != nil {
-			return nil, err
-		}
-	}
-	return vls, nil
 }
 
 // DeleteTrafficManager deletes the traffic manager.

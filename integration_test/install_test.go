@@ -8,14 +8,18 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"helm.sh/helm/v3/pkg/cli/values"
+	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dlog"
@@ -307,19 +311,25 @@ func (is *installSuite) Test_No_Upgrade() {
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 	// first install
 	require.NoError(ensureTrafficManager(ctx, kc))
-	// errors and asks for --upgrade
-	/*
-		require.Error(ensureTrafficManager(ctx, kc))
-		// using --upgrade and --values replaces TM with values
-		helmValues := filepath.Join("integration_test", "testdata", "routing-values.yaml")
-		require.NoError(helm.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &connector.HelmRequest{
-			Type:       connector.HelmRequest_UPGRADE,
-			ValuePaths: []string{helmValues},
-		}))
-		// check that dns values were propigated from values file to to traffic manager
-		is.CapturePodLogs(ctx, "AlsoProxySubnet:", "traffic-manager", is.ManagerNamespace())
-		is.CapturePodLogs(ctx, "NeverProxySubnet:", "traffic-manager", is.ManagerNamespace())
-	*/
+
+	// errors and asks for telepresence upgrade
+	require.Error(ensureTrafficManager(ctx, kc))
+
+	// using upgrade and --values replaces TM with values
+	helmValues := filepath.Join("testdata", "routing-values.yaml")
+	opts := values.Options{ValueFiles: []string{helmValues}}
+	vp, err := opts.MergeValues(getter.Providers{})
+	require.NoError(err)
+	jvp, err := json.Marshal(vp)
+	require.NoError(err)
+
+	require.NoError(helm.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &connector.HelmRequest{
+		Type:       connector.HelmRequest_UPGRADE,
+		ValuesJson: jvp,
+	}))
+	// check that dns values were propagated from values file to traffic manager
+	is.CapturePodLogs(ctx, "AlsoProxySubnet:", "traffic-manager", is.ManagerNamespace())
+	is.CapturePodLogs(ctx, "NeverProxySubnet:", "traffic-manager", is.ManagerNamespace())
 }
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
