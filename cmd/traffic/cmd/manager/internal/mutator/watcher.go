@@ -473,9 +473,7 @@ func (c *configWatcher) watchConfigMap(ctx context.Context, ns string) {
 			dlog.Errorf(ctx, "unable to create configmap watcher: %v", err)
 			return
 		}
-		if !c.configMapEventHandler(ctx, w.ResultChan()) {
-			return
-		}
+		c.configMapEventHandler(ctx, w.ResultChan())
 	}
 }
 
@@ -492,9 +490,7 @@ func (c *configWatcher) watchServices(ctx context.Context, ns string) {
 			dlog.Errorf(ctx, "unable to create service watcher: %v", err)
 			return
 		}
-		if !c.svcEventHandler(ctx, w.ResultChan()) {
-			return
-		}
+		c.svcEventHandler(ctx, w.ResultChan())
 	}
 }
 
@@ -515,15 +511,15 @@ func (c *configWatcher) Start(ctx context.Context) (modCh <-chan entry, delCh <-
 	return c.modCh, c.delCh, nil
 }
 
-func (c *configWatcher) configMapEventHandler(ctx context.Context, evCh <-chan watch.Event) bool {
+func (c *configWatcher) configMapEventHandler(ctx context.Context, evCh <-chan watch.Event) {
 	for {
 		select {
 		case <-ctx.Done():
-			return false
+			return
 		case event, ok := <-evCh:
 			{
 				if !ok {
-					return true // restart watcher
+					return // restart watcher
 				}
 				ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.configMapEventHandler",
 					trace.WithNewRoot(), // Because the watcher is long lived, if we put these spans under it there's a high chance they don't get collected.
@@ -665,14 +661,14 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 	}
 }
 
-func (c *configWatcher) svcEventHandler(ctx context.Context, evCh <-chan watch.Event) bool {
+func (c *configWatcher) svcEventHandler(ctx context.Context, evCh <-chan watch.Event) {
 	for {
 		select {
 		case <-ctx.Done():
-			return false
+			return
 		case event, ok := <-evCh:
 			if !ok {
-				return true // restart watcher
+				return // restart watcher
 			}
 			switch event.Type {
 			case watch.Deleted:
