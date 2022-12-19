@@ -111,6 +111,7 @@ func (s *Service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 		Executable: executable,
+		Name:       client.DisplayName,
 	}, nil
 }
 
@@ -155,19 +156,6 @@ func (s *Service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 			})
 		} else {
 			result = s.session.Status(s.sessionContext)
-			var stts *manager.StatusInfo
-			stts, err = s.session.ManagerClient().Status(c, &empty.Empty{})
-			if err != nil {
-				if status.Code(err) == codes.Unimplemented {
-					err = nil
-					stts = &manager.StatusInfo{
-						Version: &manager.VersionInfo2{
-							Version: s.session.ManagerVersion().String(),
-						},
-					}
-				}
-			}
-			result.ManagerStatus = stts
 		}
 	})
 	return
@@ -551,7 +539,7 @@ func (s *Service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) 
 
 func (s *Service) TrafficManagerVersion(ctx context.Context, _ *empty.Empty) (vi *common.VersionInfo, err error) {
 	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
-		vi = &common.VersionInfo{Version: "v" + session.ManagerVersion().String()}
+		vi = &common.VersionInfo{Name: session.ManagerName(), Version: "v" + session.ManagerVersion().String()}
 		return nil
 	})
 	return

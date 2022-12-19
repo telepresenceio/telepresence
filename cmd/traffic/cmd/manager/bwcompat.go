@@ -49,7 +49,7 @@ func muxExchangeVersion(origin string, version uint16, server interface {
 // ClientTunnel just reports that the version of this traffic-manager. Mux tunnels are no longer supported but
 // still used by for version exchange by clients prior to 2.5.0
 // Deprecated.
-func (m *Manager) ClientTunnel(server manager.Manager_ClientTunnelServer) error {
+func (m *service) ClientTunnel(server manager.Manager_ClientTunnelServer) error {
 	_, err := server.Recv() // client session
 	if err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to read client session info message: %v", err)
@@ -63,7 +63,7 @@ func (m *Manager) ClientTunnel(server manager.Manager_ClientTunnelServer) error 
 // AgentTunnel just reports that the version of this traffic-manager. Mux tunnels are no longer supported but
 // still used by for version exchange by clients prior to 2.5.0
 // Deprecated.
-func (m *Manager) AgentTunnel(server manager.Manager_AgentTunnelServer) error {
+func (m *service) AgentTunnel(server manager.Manager_AgentTunnelServer) error {
 	var err error
 	if _, err = server.Recv(); err != nil { // agent session
 		return status.Errorf(codes.FailedPrecondition, "failed to read agent session info message: %v", err)

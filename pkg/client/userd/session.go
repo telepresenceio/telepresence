@@ -61,6 +61,7 @@ type Session interface {
 
 	ManagerClient() manager.ManagerClient
 	ManagerConn() *grpc.ClientConn
+	ManagerName() string
 	ManagerVersion() semver.Version
 
 	Status(context.Context) *rpc.ConnectInfo

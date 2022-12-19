@@ -1,14 +1,17 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/cli/values"
+	"helm.sh/helm/v3/pkg/getter"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -18,26 +21,29 @@ func helmCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
-	cmd.AddCommand(helmInstallCommand(), helmUninstallCommand())
+	cmd.AddCommand(helmInstallCommand(), helmUpgradeCommand(), helmUninstallCommand())
 	return cmd
 }
 
-type helmArgs struct {
-	cmdType    connector.HelmRequest_Type
-	values     []string
-	valuePairs []string
-	request    *connector.ConnectRequest
-	kubeFlags  *pflag.FlagSet
-	mode       manager.Mode
+type HelmOpts struct {
+	values.Options
+	AllValues   map[string]any
+	ReuseValues bool
+	ResetValues bool
+	Request     *connector.ConnectRequest
+	cmdType     connector.HelmRequest_Type
+	kubeFlags   *pflag.FlagSet
 }
 
-func helmInstallCommand() *cobra.Command {
-	var (
-		upgrade              bool
-		teamMode, singleMode bool
-	)
+var (
+	HelmInstallExtendFlagsFunc func(*pflag.FlagSet)                                   //nolint:gochecknoglobals // extension point
+	HelmInstallPrologFunc      func(context.Context, *pflag.FlagSet, *HelmOpts) error //nolint:gochecknoglobals // extension point
+)
 
-	ha := &helmArgs{
+func helmInstallCommand() *cobra.Command {
+	var upgrade bool
+
+	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_INSTALL,
 	}
 	cmd := &cobra.Command{
@@ -48,14 +54,6 @@ func helmInstallCommand() *cobra.Command {
 			if upgrade {
 				ha.cmdType = connector.HelmRequest_UPGRADE
 			}
-			switch {
-			case teamMode && singleMode:
-				return fmt.Errorf("flags `--team-mode` and `--single-mode` are mutually exclusive")
-			case teamMode:
-				ha.mode = manager.Mode_MODE_TEAM
-			case singleMode:
-				ha.mode = manager.Mode_MODE_SINGLE
-			}
 			return ha.run(cmd, args)
 		},
 		Annotations: map[string]string{
@@ -65,17 +63,56 @@ func helmInstallCommand() *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
-	flags.StringSliceVarP(&ha.values, "values", "f", []string{}, "specify values in a YAML file or a URL (can specify multiple)")
-	flags.StringSliceVarP(&ha.valuePairs, "set", "", []string{}, "specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)")
-	flags.BoolVarP(&teamMode, "team-mode", "", false, "set the traffic-manager to team mode")
-	flags.BoolVarP(&singleMode, "single-mode", "", false, "set the traffic-manager to single user mode")
-
-	ha.request, ha.kubeFlags = initConnectRequest(cmd)
+	ha.addValueSettingFlags(flags)
+	uf := flags.Lookup("upgrade")
+	uf.Hidden = true
+	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
+	ha.Request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd
 }
 
+func helmUpgradeCommand() *cobra.Command {
+	ha := &HelmOpts{
+		cmdType: connector.HelmRequest_UPGRADE,
+	}
+	cmd := &cobra.Command{
+		Use:   "upgrade",
+		Args:  cobra.NoArgs,
+		Short: "Upgrade telepresence traffic manager",
+		RunE:  ha.run,
+		Annotations: map[string]string{
+			ann.UserDaemon: ann.Required,
+		},
+	}
+
+	flags := cmd.Flags()
+	ha.addValueSettingFlags(flags)
+	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false,
+		"when upgrading, reset the values to the ones built into the chart")
+	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
+		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
+	ha.Request, ha.kubeFlags = initConnectRequest(cmd)
+	return cmd
+}
+
+func (ha *HelmOpts) addValueSettingFlags(flags *pflag.FlagSet) {
+	flags.StringSliceVarP(&ha.ValueFiles, "values", "f", []string{},
+		"specify values in a YAML file or a URL (can specify multiple)")
+	flags.StringSliceVarP(&ha.Values, "set", "", []string{},
+		"specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)")
+	flags.StringSliceVarP(&ha.FileValues, "set-file", "", []string{},
+		"set values from respective files specified via the command line (can specify multiple or separate values with commas: key1=path1,key2=path2)")
+	flags.StringSliceVarP(&ha.JSONValues, "set-json", "", []string{},
+		"set JSON values on the command line (can specify multiple or separate values with commas: a.b=jsonval1,a.c=jsonval2)")
+	flags.StringSliceVarP(&ha.StringValues, "set-string", "", []string{},
+		"set STRING values on the command line (can specify multiple or separate values with commas: a.b=val1,a.c=val2)")
+	if HelmInstallExtendFlagsFunc != nil {
+		HelmInstallExtendFlagsFunc(flags)
+	}
+}
+
 func helmUninstallCommand() *cobra.Command {
-	ha := &helmArgs{
+	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_UNINSTALL,
 	}
 	cmd := &cobra.Command{
@@ -84,58 +121,57 @@ func helmUninstallCommand() *cobra.Command {
 		Short: "Uninstall telepresence traffic manager",
 		RunE:  ha.run,
 		Annotations: map[string]string{
-			ann.UserDaemon: ann.Required,
+			ann.UserDaemon:   ann.Required,
+			ann.VersionCheck: ann.Required,
 		},
 	}
-	ha.request, ha.kubeFlags = initConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = initConnectRequest(cmd)
 	return cmd
 }
 
-func (ha *helmArgs) run(cmd *cobra.Command, _ []string) error {
-	if err := util.InitCommand(cmd); err != nil {
+func (ha *HelmOpts) Type() connector.HelmRequest_Type {
+	return ha.cmdType
+}
+
+func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
+	if ha.ReuseValues && ha.ResetValues {
+		return errcat.User.New("--reset-values and --reuse-values are mutually exclusive")
+	}
+	var err error
+	if ha.AllValues, err = ha.MergeValues(getter.All(cli.New())); err != nil {
 		return err
 	}
-	ha.request.KubeFlags = kubeFlagMap(ha.kubeFlags)
-	for i, path := range ha.values {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			return fmt.Errorf("--values path %q not valid: %w", path, err)
+	flags := cmd.Flags()
+	if err = util.InitCommand(cmd); err != nil {
+		return err
+	}
+	ha.Request.KubeFlags = kubeFlagMap(ha.kubeFlags)
+
+	util.AddKubeconfigEnv(ha.Request)
+
+	ctx := cmd.Context()
+	if HelmInstallPrologFunc != nil {
+		if err := HelmInstallPrologFunc(ctx, flags, ha); err != nil {
+			return err
 		}
-		ha.values[i] = absPath
 	}
 
-	// always disconnect to ensure that there are no running intercepts etc.
-	ctx := cmd.Context()
+	// always disconnect to ensure that there is no active session.
 	_ = util.Disconnect(ctx, false)
 
+	valuesJSON, err := json.Marshal(ha.AllValues)
+	if err != nil {
+		return err
+	}
 	doQuit := false
-	userD := util.GetUserDaemon(ctx)
-
 	request := &connector.HelmRequest{
 		Type:           ha.cmdType,
-		ValuePaths:     ha.values,
-		ValuePairs:     ha.valuePairs,
-		ConnectRequest: ha.request,
+		ValuesJson:     valuesJSON,
+		ReuseValues:    ha.ReuseValues,
+		ResetValues:    ha.ResetValues,
+		ConnectRequest: ha.Request,
 	}
-
-	if ha.mode != manager.Mode_MODE_UNSPECIFIED {
-		switch ha.mode {
-		case manager.Mode_MODE_SINGLE:
-			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=single")
-		case manager.Mode_MODE_TEAM:
-			request.ValuePairs = append(request.ValuePairs, "trafficManager.mode=team")
-		}
-
-		upgrade := ha.cmdType == connector.HelmRequest_UPGRADE
-		setFlagUsed := 0 < len(ha.valuePairs)
-		valuesFlagUsed := 0 < len(ha.values)
-		if upgrade && !setFlagUsed && !valuesFlagUsed {
-			request.ReuseValues = true
-		}
-	}
-
-	util.AddKubeconfigEnv(request.ConnectRequest)
-	resp, err := userD.Helm(ctx, request)
+	resp, err := util.GetUserDaemon(ctx).Helm(ctx, request)
 	if err != nil {
 		return err
 	}

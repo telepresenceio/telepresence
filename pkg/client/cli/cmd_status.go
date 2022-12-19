@@ -8,7 +8,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
@@ -16,7 +15,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	tpstrings "github.com/telepresenceio/telepresence/v2/pkg/strings"
 )
 
 type StatusInfo struct {
@@ -26,6 +24,7 @@ type StatusInfo struct {
 
 type rootDaemonStatus struct {
 	Running              bool             `json:"running,omitempty" yaml:"running,omitempty"`
+	Name                 string           `json:"name,omitempty" yaml:"name,omitempty"`
 	Version              string           `json:"version,omitempty" yaml:"version,omitempty"`
 	APIVersion           int32            `json:"api_version,omitempty" yaml:"api_version,omitempty"`
 	DNS                  *client.DNSSnake `json:"dns,omitempty" yaml:"dns,omitempty"`
@@ -33,17 +32,17 @@ type rootDaemonStatus struct {
 }
 
 type userDaemonStatus struct {
-	Running              bool                     `json:"running,omitempty" yaml:"running,omitempty"`
-	Version              string                   `json:"version,omitempty" yaml:"version,omitempty"`
-	APIVersion           int32                    `json:"api_version,omitempty" yaml:"api_version,omitempty"`
-	Executable           string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
-	InstallID            string                   `json:"install_id,omitempty" yaml:"install_id,omitempty"`
-	Status               string                   `json:"status,omitempty" yaml:"status,omitempty"`
-	Error                string                   `json:"error,omitempty" yaml:"error,omitempty"`
-	KubernetesServer     string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
-	KubernetesContext    string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
-	Intercepts           []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
-	TrafficManagerStatus *manager.StatusInfo      `json:"trafficManagerStatus,omitempty" yaml:"trafficManagerStatus,omitempty"`
+	Running           bool                     `json:"running,omitempty" yaml:"running,omitempty"`
+	Name              string                   `json:"name,omitempty" yaml:"name,omitempty"`
+	Version           string                   `json:"version,omitempty" yaml:"version,omitempty"`
+	APIVersion        int32                    `json:"api_version,omitempty" yaml:"api_version,omitempty"`
+	Executable        string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
+	InstallID         string                   `json:"install_id,omitempty" yaml:"install_id,omitempty"`
+	Status            string                   `json:"status,omitempty" yaml:"status,omitempty"`
+	Error             string                   `json:"error,omitempty" yaml:"error,omitempty"`
+	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
+	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
+	Intercepts        []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
 }
 
 type connectStatusIntercept struct {
@@ -127,6 +126,10 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	if err != nil {
 		return nil, err
 	}
+	us.Name = version.Name
+	if us.Name == "" {
+		us.Name = "User Daemon"
+	}
 	us.Version = version.Version
 	us.APIVersion = version.ApiVersion
 	us.Executable = version.Executable
@@ -140,7 +143,6 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		us.Status = "Connected"
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
-		us.TrafficManagerStatus = status.GetManagerStatus()
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
 			us.Intercepts = append(us.Intercepts, connectStatusIntercept{
 				Name:   icept.Spec.Name,
@@ -162,6 +164,10 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	rStatus := status.DaemonStatus
 	if rStatus != nil {
 		rs.Running = true
+		rs.Name = rStatus.Version.Name
+		if rs.Name == "" {
+			rs.Name = "User Daemon"
+		}
 		rs.Version = rStatus.Version.Version
 		rs.APIVersion = rStatus.Version.ApiVersion
 		if obc := rStatus.OutboundConfig; obc != nil {
@@ -194,8 +200,8 @@ func (s *StatusInfo) WriterTos() []io.WriterTo {
 func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ds.Running {
-		n += ioutil.Println(out, "Root Daemon: Running")
-		n += ioutil.Printf(out, "  Version: %s (api %d)\n", ds.Version, ds.APIVersion)
+		n += ioutil.Printf(out, "%s: Running\n", ds.Name)
+		n += ioutil.Printf(out, "  Version: %s\n", ds.Version)
 		if ds.DNS != nil {
 			n += printDNS(out, ds.DNS)
 		}
@@ -235,20 +241,11 @@ func printRouting(out io.Writer, r *client.RoutingSnake) int {
 func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if cs.Running {
-		n += ioutil.Println(out, "User Daemon: Running")
-		n += ioutil.Printf(out, "  Version           : %s (api %d)\n", cs.Version, cs.APIVersion)
+		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
+		n += ioutil.Printf(out, "  Version           : %s\n", cs.Version)
 		n += ioutil.Printf(out, "  Executable        : %s\n", cs.Executable)
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
-		if tms := cs.TrafficManagerStatus; tms != nil {
-			n += ioutil.Println(out, "Traffic Manager: Connected")
-			n += ioutil.Printf(out, "  Version: %s\n", tms.Version.Version)
-			if tms.Mode != manager.Mode_MODE_UNSPECIFIED {
-				n += ioutil.Printf(out, "  Mode            : %s\n", tpstrings.FromMode(tms.Mode))
-				n += ioutil.Printf(out, "  Client Count    : %d\n", tms.ClientCount)
-			}
-		} else {
-			n += ioutil.Println(out, "Traffic Manager: Not connected")
-		}
+		n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
 		if cs.Error != "" {
 			n += ioutil.Printf(out, "  Error             : %s\n", cs.Error)
 		}

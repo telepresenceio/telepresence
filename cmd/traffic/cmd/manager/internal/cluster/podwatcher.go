@@ -39,7 +39,7 @@ func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.S
 		subnets:   make(subnet.Set),
 	}
 	for _, informer := range informers {
-		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				w.onPodAdded(ctx, obj.(*corev1.Pod))
 			},
@@ -50,6 +50,9 @@ func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.S
 				w.onPodUpdated(ctx, oldObj.(*corev1.Pod), newObj.(*corev1.Pod))
 			},
 		})
+		if err != nil {
+			dlog.Errorf(ctx, "failed to create pod watcher : %v", err)
+		}
 	}
 	return w
 }

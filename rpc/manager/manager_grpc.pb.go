@@ -25,9 +25,6 @@ const _ = grpc.SupportPackageIsVersion7
 type ManagerClient interface {
 	// Version returns the version information of the Manager.
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
-	// Status returns some of the traffic manager's state information.
-	// Includes version, mode and client count.
-	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*StatusInfo, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*License, error)
@@ -148,15 +145,6 @@ func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
 func (c *managerClient) Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error) {
 	out := new(VersionInfo2)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Version", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*StatusInfo, error) {
-	out := new(StatusInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Status", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -707,9 +695,6 @@ func (x *managerWatchDialClient) Recv() (*DialRequest, error) {
 type ManagerServer interface {
 	// Version returns the version information of the Manager.
 	Version(context.Context, *emptypb.Empty) (*VersionInfo2, error)
-	// Status returns some of the traffic manager's state information.
-	// Includes version, mode and client count.
-	Status(context.Context, *emptypb.Empty) (*StatusInfo, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(context.Context, *emptypb.Empty) (*License, error)
@@ -826,9 +811,6 @@ type UnimplementedManagerServer struct {
 
 func (UnimplementedManagerServer) Version(context.Context, *emptypb.Empty) (*VersionInfo2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
-}
-func (UnimplementedManagerServer) Status(context.Context, *emptypb.Empty) (*StatusInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
 func (UnimplementedManagerServer) GetLicense(context.Context, *emptypb.Empty) (*License, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLicense not implemented")
@@ -953,24 +935,6 @@ func _Manager_Version_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).Version(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).Status(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.manager.Manager/Status",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).Status(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1609,10 +1573,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Version",
 			Handler:    _Manager_Version_Handler,
-		},
-		{
-			MethodName: "Status",
-			Handler:    _Manager_Status_Handler,
 		},
 		{
 			MethodName: "GetLicense",

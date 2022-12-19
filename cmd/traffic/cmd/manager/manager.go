@@ -12,9 +12,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"gopkg.in/yaml.v3"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -27,14 +24,16 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-var DisplayName = "Traffic Manager" //nolint:gochecknoglobals // extension point
+var (
+	DisplayName                                                            = "OSS Traffic Manager" //nolint:gochecknoglobals // extension point
+	NewServiceFunc func(context.Context) (Service, context.Context, error) = NewService            //nolint:gochecknoglobals // extension point
+)
 
 // Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
@@ -73,7 +72,7 @@ func Main(ctx context.Context, _ ...string) error {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
-	mgr, ctx, err := NewManager(ctx)
+	mgr, ctx, err := NewServiceFunc(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
@@ -84,12 +83,14 @@ func Main(ctx context.Context, _ ...string) error {
 		SoftShutdownTimeout:  5 * time.Second,
 	})
 
-	g.Go("cli-config", mgr.configWatcher.Run)
+	g.Go("cli-config", mgr.RunConfigWatcher)
 
 	// Serve HTTP (including gRPC)
-	g.Go("httpd", mgr.serveHTTP)
+	g.Go("httpd", func(ctx context.Context) error {
+		return serveHTTP(ctx, mgr)
+	})
 
-	g.Go("prometheus", mgr.servePrometheus)
+	g.Go("prometheus", mgr.ServePrometheus)
 
 	if imgRetErr != nil {
 		dlog.Errorf(ctx, "unable to initialize agent injector: %v", imgRetErr)
@@ -97,7 +98,7 @@ func Main(ctx context.Context, _ ...string) error {
 		g.Go("agent-injector", mutator.ServeMutator)
 	}
 
-	g.Go("session-gc", mgr.runSessionGCLoop)
+	g.Go("session-gc", mgr.RunSessionGCLoop)
 
 	if tracer != nil {
 		g.Go("tracer-grpc", func(c context.Context) error {
@@ -109,26 +110,8 @@ func Main(ctx context.Context, _ ...string) error {
 	return g.Wait()
 }
 
-func (m *Manager) configMapEventHandler(eventType watch.EventType, obj runtime.Object) error {
-	if eventType == watch.Added || eventType == watch.Modified {
-		var (
-			tmConf    config.TrafficManager
-			yamlBytes = m.configWatcher.GetTrafficManagerConfigYaml()
-		)
-
-		if err := yaml.Unmarshal(yamlBytes, &tmConf); err != nil {
-			dlog.Errorf(m.ctx, "unable to unmarshal traffic-manager config: %s", err.Error())
-			return err
-		}
-
-		m.state.SetConfig(tmConf)
-	}
-
-	return nil
-}
-
-// Serve Prometheus metrics if env.PrometheusPort != 0.
-func (m *Manager) servePrometheus(ctx context.Context) error {
+// ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.
+func (m *service) ServePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	port := env.PrometheusPort
 	if env.PrometheusPort != 0 {
@@ -149,7 +132,7 @@ func (m *Manager) servePrometheus(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) serveHTTP(ctx context.Context) error {
+func serveHTTP(ctx context.Context, m Service) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
@@ -174,14 +157,16 @@ func (m *Manager) serveHTTP(ctx context.Context) error {
 			}
 		}),
 	}
-
-	rpc.RegisterManagerServer(grpcHandler, m)
-	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
-
+	m.RegisterServers(grpcHandler)
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
-func (m *Manager) runSessionGCLoop(ctx context.Context) error {
+func (m *service) RegisterServers(grpcHandler *grpc.Server) {
+	rpc.RegisterManagerServer(grpcHandler, m)
+	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
+}
+
+func (m *service) RunSessionGCLoop(ctx context.Context) error {
 	// Loop calling Expire
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()

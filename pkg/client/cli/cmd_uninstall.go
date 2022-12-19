@@ -45,9 +45,9 @@ func uninstallCommand() *cobra.Command {
 
 func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 	if u.everything {
-		ha := &helmArgs{
+		ha := &HelmOpts{
 			cmdType: connector.HelmRequest_UNINSTALL,
-			request: &connector.ConnectRequest{},
+			Request: &connector.ConnectRequest{},
 		}
 		fmt.Fprintln(cmd.OutOrStderr(), "--everything is deprecated. Please use telepresence helm uninstall")
 		return ha.run(cmd, args)

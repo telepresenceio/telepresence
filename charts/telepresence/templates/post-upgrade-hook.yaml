@@ -49,10 +49,12 @@ spec:
           been done. Therefore, a retry is needed here to ensure proper upgrade.
           */}}
           args:
+            - '--connect-timeout'
+            - '5'
             - '--retry'
             - '5'
             - '--retry-delay'
-            - '0'
+            - '2'
             - '--retry-max-time'
             - '20'
             - '--retry-all-errors'

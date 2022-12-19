@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,6 +78,9 @@ type session struct {
 
 	// manager client connection
 	managerConn *grpc.ClientConn
+
+	// name reported by the manager
+	managerName string
 
 	// version reported by the manager
 	managerVersion semver.Version
@@ -240,6 +244,10 @@ func (s *session) ManagerConn() *grpc.ClientConn {
 	return s.managerConn
 }
 
+func (s *session) ManagerName() string {
+	return s.managerName
+}
+
 func (s *session) ManagerVersion() semver.Version {
 	return s.managerVersion
 }
@@ -342,9 +350,13 @@ func connectMgr(
 	if err != nil {
 		return nil, err
 	}
-	conn, mClient, managerVersion, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
+	conn, mClient, vi, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
 	if err != nil {
 		return nil, err
+	}
+	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
 	}
 
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
@@ -402,6 +414,12 @@ func connectMgr(
 	}
 	svc.SetManagerClient(mClient, opts...)
 
+	managerName := vi.Name
+	if managerName == "" {
+		// Older traffic-managers doesn't distinguish between OSS and pro versions
+		managerName = "Traffic Manager"
+	}
+
 	return &session{
 		Cluster:          cluster,
 		installID:        installID,
@@ -409,6 +427,7 @@ func connectMgr(
 		managerClient:    mClient,
 		managerConn:      conn,
 		pfDialer:         pfDialer,
+		managerName:      managerName,
 		managerVersion:   managerVersion,
 		sessionInfo:      si,
 		localIntercepts:  make(map[string]struct{}),
@@ -812,6 +831,12 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterId:      s.GetClusterId(c),
 		SessionInfo:    s.SessionInfo(),
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
+		Version: &common.VersionInfo{
+			ApiVersion: client.APIVersion,
+			Version:    client.Version(),
+			Executable: client.GetExe(),
+			Name:       client.DisplayName,
+		},
 	}
 	if s.rootDaemon != nil {
 		var err error

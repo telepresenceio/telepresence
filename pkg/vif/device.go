@@ -170,7 +170,7 @@ func (d *device) dispatchToTun(ctx context.Context) {
 	buf := buffer.NewData(0x10000)
 	for {
 		pb := d.ReadContext(ctx)
-		if pb == nil {
+		if pb.IsNil() {
 			break
 		}
 		buf.Resize(pb.Size())

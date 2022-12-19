@@ -124,6 +124,7 @@ func (s *Service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
+		Name:       client.DisplayName,
 	}, nil
 }
 
@@ -134,6 +135,7 @@ func (s *Service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
+			Name:       client.DisplayName,
 		},
 	}
 	if s.session != nil {

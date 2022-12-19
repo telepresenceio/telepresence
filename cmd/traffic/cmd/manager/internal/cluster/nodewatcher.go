@@ -24,13 +24,13 @@ type nodeWatcher struct {
 	lock     sync.Mutex // Protects all access to subnets
 }
 
-func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer cache.SharedIndexInformer) *nodeWatcher {
+func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer cache.SharedIndexInformer) (*nodeWatcher, error) {
 	w := &nodeWatcher{
 		lister:   lister,
 		informer: informer,
 		subnets:  make(subnet.Set),
 	}
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			w.onNodeAdded(ctx, obj.(*corev1.Node))
 		},
@@ -41,7 +41,10 @@ func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer ca
 			w.onNodeUpdated(ctx, oldObj.(*corev1.Node), newObj.(*corev1.Node))
 		},
 	})
-	return w
+	if err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func(set subnet.Set)) {

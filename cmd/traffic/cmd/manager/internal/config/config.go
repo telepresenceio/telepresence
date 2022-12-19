@@ -34,14 +34,11 @@ type config struct {
 
 	clientYAML         []byte
 	trafficManagerYAML []byte
-
-	callbacks []WatcherCallback
 }
 
-func NewWatcher(namespace string, callbacks ...WatcherCallback) Watcher {
+func NewWatcher(namespace string) Watcher {
 	return &config{
 		namespace: namespace,
-		callbacks: callbacks,
 	}
 }
 
@@ -83,12 +80,6 @@ func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Ev
 				if m, ok := event.Object.(*core.ConfigMap); ok {
 					dlog.Debugf(ctx, "%s %s", event.Type, m.Name)
 					c.refreshFile(ctx, m.Data)
-				}
-			}
-
-			for _, cb := range c.callbacks {
-				if err := cb(event.Type, event.Object); err != nil {
-					dlog.Errorf(ctx, "watcher callback error: %s", err.Error())
 				}
 			}
 		}

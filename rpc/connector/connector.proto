@@ -194,6 +194,7 @@ message ConnectInfo {
 
   string cluster_server = 3;
   string cluster_context = 4;
+  common.VersionInfo version = 5;
 
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
 
@@ -202,10 +203,6 @@ message ConnectInfo {
 
   daemon.DaemonStatus daemon_status = 13;
 
-  // traffic manager details
-  telepresence.manager.StatusInfo manager_status = 14;
-
-  reserved 5;
   reserved 6;
   reserved 7;
   reserved 9;
@@ -220,9 +217,9 @@ message HelmRequest {
   }
   ConnectRequest connect_request = 1;
   Type type = 2;
-  repeated string value_paths = 3;
-  repeated string value_pairs = 4;
-  bool reuse_values = 5;
+  bytes values_json = 3;
+  bool reuse_values = 4;
+  bool reset_values = 5;
 }
 
 message UninstallRequest {
