@@ -1,15 +1,21 @@
 # Changelog
 
-### (TBD)
+### 2.10.0 (TBD)
 
-- Feature: The traffic-manager can now be set to either team mode or single user mode.
+- Feature: The Traffic Manager can now be set to either "team" mode or "single user" mode.
   When in team mode, intercepts will default to http intercepts.
+
+- Feature: The `telepresence helm` sub-commands `insert` and `upgrade` now accepts all types
+  of helm `--set-XXX` flags.
+
+- Feature: A new `telepresence helm upgrade` command was added with the additional flags
+  `--reuse-values` and `--reset-values`. This means that the `telpresence helm install --upgrade`
+  flag has been deprecated.
 
 - Change: The configmap `traffic-manager-clients` has been renamed to `traffic-manager`.
 
-- Change: The helm installation will now fail if `intercept.disableGlobal=true` and `traffiManager.mode` is not set to `team`.
-
-### 2.9.6 (TBD)
+- Change: The Helm installation will now fail if `intercept.disableGlobal=true` and `traffiManager.mode`
+  is not set to `team`.
 
 - Feature: Image pull secrets for the traffic-agent can now be added using the Helm chart setting
   `agent.image.pullSecrets`.
@@ -20,17 +26,18 @@
 - Change: If the cluster is Kubernetes 1.21 or later, the mutating webhook will find the correct namespace
   using the label `kubernetes.io/metadata.name` rather than `app.kuberenetes.io/name`.
 
-- Change: The name of the mutating webhook now contains the namespace of the traffic-manager so that
-  the webhook is easier to identify when there are multiple namespace scoped telepresence installations
-  in the cluster.
+- Change: The name of the mutating webhook now contains the namespace of the traffic-manager so
+  that the webhook is easier to identify when there are multiple namespace scoped telepresence
+  installations in the cluster.
 
-- Change: The OSS Helm chart is no longer pushed to the datawire Helm repository. It will instead be pushed
-  from the telepresence proprietary repository. The OSS Helm chart is still what's embedded in the OSS
-  telepresence client.
+- Change: The OSS Helm chart is no longer pushed to the datawire Helm repository. It will
+  instead be pushed from the telepresence proprietary repository. The OSS Helm chart is still
+  what's embedded in the OSS telepresence client.
 
 ### 2.9.5 (December 8, 2022)
 
-- Security: Update golang to 1.19.4 to address [CVE-2022-41720 and CVE-2022-41717](https://groups.google.com/g/golang-announce/c/L_3rmdT0BMU).
+- Security: Update golang to 1.19.4 to address
+  [CVE-2022-41720 and CVE-2022-41717](https://groups.google.com/g/golang-announce/c/L_3rmdT0BMU).
 
 - Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
   having a config element present in the gce configuration in the kubeconfig, has been fixed.

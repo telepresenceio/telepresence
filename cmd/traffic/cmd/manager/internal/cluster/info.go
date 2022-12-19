@@ -223,7 +223,13 @@ func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
 	informerFactory.Start(ctx.Done())
 	informerFactory.WaitForCacheSync(ctx.Done())
 
-	retriever := newNodeWatcher(ctx, nodeLister, nodeInformer)
+	retriever, err := newNodeWatcher(ctx, nodeLister, nodeInformer)
+	if err != nil {
+		if mustSucceed {
+			dlog.Errorf(ctx, "failed to create node watcher: %v", err)
+		}
+		return false
+	}
 	if !retriever.viable(ctx) {
 		if mustSucceed {
 			dlog.Errorf(ctx, "Unable to derive subnets from nodes")
