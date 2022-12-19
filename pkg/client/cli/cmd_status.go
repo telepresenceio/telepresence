@@ -201,7 +201,7 @@ func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ds.Running {
 		n += ioutil.Printf(out, "%s: Running\n", ds.Name)
-		n += ioutil.Printf(out, "  Version: %s (api %d)\n", ds.Version, ds.APIVersion)
+		n += ioutil.Printf(out, "  Version: %s\n", ds.Version)
 		if ds.DNS != nil {
 			n += printDNS(out, ds.DNS)
 		}
@@ -242,7 +242,7 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if cs.Running {
 		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
-		n += ioutil.Printf(out, "  Version           : %s (api %d)\n", cs.Version, cs.APIVersion)
+		n += ioutil.Printf(out, "  Version           : %s\n", cs.Version)
 		n += ioutil.Printf(out, "  Executable        : %s\n", cs.Executable)
 		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
 		n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
