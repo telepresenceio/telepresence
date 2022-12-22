@@ -12,16 +12,13 @@
   `--reuse-values` and `--reset-values`. This means that the `telpresence helm install --upgrade`
   flag has been deprecated.
 
+- Feature: Image pull secrets for the traffic-agent can now be added using the Helm chart setting
+  `agent.image.pullSecrets`.
+
 - Change: The configmap `traffic-manager-clients` has been renamed to `traffic-manager`.
 
 - Change: The Helm installation will now fail if `intercept.disableGlobal=true` and `traffiManager.mode`
   is not set to `team`.
-
-- Feature: Image pull secrets for the traffic-agent can now be added using the Helm chart setting
-  `agent.image.pullSecrets`.
-
-- Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
-  hang when there is no running traffic-manager.
 
 - Change: If the cluster is Kubernetes 1.21 or later, the mutating webhook will find the correct namespace
   using the label `kubernetes.io/metadata.name` rather than `app.kuberenetes.io/name`.
@@ -33,6 +30,9 @@
 - Change: The OSS Helm chart is no longer pushed to the datawire Helm repository. It will
   instead be pushed from the telepresence proprietary repository. The OSS Helm chart is still
   what's embedded in the OSS telepresence client.
+
+- Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
+  hang when there is no running traffic-manager.
 
 ### 2.9.5 (December 8, 2022)
 
