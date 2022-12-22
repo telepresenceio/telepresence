@@ -201,7 +201,7 @@ func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ds.Running {
 		n += ioutil.Printf(out, "%s: Running\n", ds.Name)
-		n += ioutil.Printf(out, "  Version: %s\n", ds.Version)
+		n += ioutil.Printf(out, "  Version    : %s\n", ds.Version)
 		if ds.DNS != nil {
 			n += printDNS(out, ds.DNS)
 		}
@@ -215,7 +215,7 @@ func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 }
 
 func printDNS(out io.Writer, d *client.DNSSnake) int {
-	n := ioutil.Printf(out, "  DNS    :\n")
+	n := ioutil.Printf(out, "  DNS        :\n")
 	if len(d.LocalIP) > 0 {
 		n += ioutil.Printf(out, "    Local IP        : %v\n", d.LocalIP)
 	}
