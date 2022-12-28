@@ -21,7 +21,7 @@
   is not set to `team`.
 
 - Change: If the cluster is Kubernetes 1.21 or later, the mutating webhook will find the correct namespace
-  using the label `kubernetes.io/metadata.name` rather than `app.kuberenetes.io/name`.
+  using the label `kubernetes.io/metadata.name` rather than `app.kuberenetes.io/name`. Ticket [2913](https://github.com/telepresenceio/telepresence/issues/2913).
 
 - Change: The name of the mutating webhook now contains the namespace of the traffic-manager so
   that the webhook is easier to identify when there are multiple namespace scoped telepresence
@@ -29,13 +29,13 @@
 
 - Change: The OSS Helm chart is no longer pushed to the datawire Helm repository. It will
   instead be pushed from the telepresence proprietary repository. The OSS Helm chart is still
-  what's embedded in the OSS telepresence client.
+  what's embedded in the OSS telepresence client. PR [2943](https://github.com/telepresenceio/telepresence/pull/2943).
 
 - Bugfix: Telepresence no longer panics when `--docker-run` is combined with `--name <name>` instead of
   `--name=<name>`. Ticket [2953](https://github.com/telepresenceio/telepresence/issues/2953).
 
 - Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
-  hang when there is no running traffic-manager.
+  hang when there is no running traffic-manager. PR [2937](https://github.com/telepresenceio/telepresence/pull/2937).
 
 ### 2.9.5 (December 8, 2022)
 
