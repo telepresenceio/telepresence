@@ -31,6 +31,9 @@
   instead be pushed from the telepresence proprietary repository. The OSS Helm chart is still
   what's embedded in the OSS telepresence client.
 
+- Bugfix: Telepresence no longer panics when `--docker-run` is combined with `--name <name>` instead of
+  `--name=<name>`. Ticket [2953](https://github.com/telepresenceio/telepresence/issues/2953).
+
 - Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
   hang when there is no running traffic-manager.
 
