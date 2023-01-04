@@ -57,13 +57,13 @@ func Test_getArg(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, "_"), func(t *testing.T) {
-			gotV, err := getArg(tt.args, tt.flag)
+			gotV, err := getUnparsedFlagValue(tt.args, tt.flag)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getArg() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("getUnparsedFlagValue() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if gotV != tt.wantV {
-				t.Errorf("getArg() gotV = %v, want %v", gotV, tt.wantV)
+				t.Errorf("getUnparsedFlagValue() gotV = %v, want %v", gotV, tt.wantV)
 			}
 		})
 	}

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -329,7 +328,11 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	return ir, nil
 }
 
-func getArg(args []string, flag string) (string, error) {
+// getUnparsedFlagValue returns the value of a flag that has been provided after a "--" on the command
+// line, and hence hasn't been parsed as a normal flag. Typical use case is:
+//
+//	telepresence intercept --docker-run ... -- --name <name>
+func getUnparsedFlagValue(args []string, flag string) (string, error) {
 	feq := flag + "="
 	for i, arg := range args {
 		var v string
@@ -347,7 +350,7 @@ func getArg(args []string, flag string) (string, error) {
 			continue
 		}
 		if v == "" {
-			return "", errors.New("docker flag `--name` requires a value")
+			return "", fmt.Errorf("flag %q requires a value", flag)
 		}
 		return v, nil
 	}
@@ -361,7 +364,7 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		"--dns-search", "tel2-search",
 	}
 
-	name, err := getArg(args, "--name")
+	name, err := getUnparsedFlagValue(args, "--name")
 	if err != nil {
 		return nil, err
 	}
