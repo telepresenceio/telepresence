@@ -31,6 +31,9 @@
   instead be pushed from the telepresence proprietary repository. The OSS Helm chart is still
   what's embedded in the OSS telepresence client.
 
+- Bugfix: Telepresence traffic-manager extracts the cluster domain (e.g. "cluster.local") using a CNAME lookup for "kubernetes.default"
+  instead of "kubernetes.default.svc".
+
 - Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
   hang when there is no running traffic-manager.
 
