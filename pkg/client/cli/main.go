@@ -87,21 +87,24 @@ func Main(ctx context.Context) {
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			if errcat.GetCategory(err) > errcat.NoDaemonLogs {
-				summarizeLogs(ctx, cmd)
-				// If the user gets here, it might be an actual bug that they found, so
-				// point them to the `gather-logs` command in case they want to open an
-				// issue.
-				fmt.Fprintln(cmd.ErrOrStderr(), "If you think you have encountered a bug"+
-					", please run `telepresence gather-logs` and attach the "+
-					"telepresence_logs.zip to your github issue or create a new one: "+
-					"https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md .")
+				if summarizeLogs(ctx, cmd) {
+					// If the user gets here, it might be an actual bug that they found, so
+					// point them to the `gather-logs` command in case they want to open an
+					// issue.
+					fmt.Fprintln(cmd.ErrOrStderr(), "If you think you have encountered a bug"+
+						", please run `telepresence gather-logs` and attach the "+
+						"telepresence_logs.zip to your github issue or create a new one: "+
+						"https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md .")
+				}
 			}
 			os.Exit(1)
 		}
 	}
 }
 
-func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
+// summarizeLogs outputs the logs from the root and user daemons. It returns true
+// if output were produced, false otherwise (might happen if no logs exist yet).
+func summarizeLogs(ctx context.Context, cmd *cobra.Command) bool {
 	w := cmd.ErrOrStderr()
 	first := true
 	for _, proc := range []string{rootd.ProcessName, userd.ProcessName} {
@@ -110,8 +113,10 @@ func summarizeLogs(ctx context.Context, cmd *cobra.Command) {
 		} else if summary != "" {
 			if first {
 				fmt.Fprintln(w)
+				first = false
 			}
 			fmt.Fprintln(w, summary)
 		}
 	}
+	return !first
 }
