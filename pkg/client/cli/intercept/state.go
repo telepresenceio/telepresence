@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -329,6 +328,35 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	return ir, nil
 }
 
+// getUnparsedFlagValue returns the value of a flag that has been provided after a "--" on the command
+// line, and hence hasn't been parsed as a normal flag. Typical use case is:
+//
+//	telepresence intercept --docker-run ... -- --name <name>
+func getUnparsedFlagValue(args []string, flag string) (string, error) {
+	feq := flag + "="
+	for i, arg := range args {
+		var v string
+		switch {
+		case arg == flag:
+			i++
+			if i < len(args) {
+				if v = args[i]; strings.HasPrefix(v, "-") {
+					v = ""
+				}
+			}
+		case strings.HasPrefix(arg, feq):
+			v = arg[len(feq):]
+		default:
+			continue
+		}
+		if v == "" {
+			return "", fmt.Errorf("flag %q requires a value", flag)
+		}
+		return v, nil
+	}
+	return "", nil
+}
+
 func (s *state) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
 	ourArgs := []string{
 		"run",
@@ -336,27 +364,11 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		"--dns-search", "tel2-search",
 	}
 
-	getArg := func(s string) (string, bool) {
-		for i, arg := range args {
-			if strings.Contains(arg, s) {
-				parts := strings.Split(arg, "=")
-				if len(parts) == 2 {
-					return parts[1], true
-				}
-				if i+1 < len(args) {
-					return parts[i+1], true
-				}
-				return "", true
-			}
-		}
-		return "", false
+	name, err := getUnparsedFlagValue(args, "--name")
+	if err != nil {
+		return nil, err
 	}
-
-	name, hasName := getArg("--name")
-	if hasName && name == "" {
-		return nil, errors.New("no value found for docker flag `--name`")
-	}
-	if !hasName {
+	if name == "" {
 		name = fmt.Sprintf("intercept-%s-%d", s.Name(), s.localPort)
 		ourArgs = append(ourArgs, "--name", name)
 	}
@@ -381,8 +393,7 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 	cmd.Stderr = s.cmd.ErrOrStderr()
 	cmd.Stdin = s.cmd.InOrStdin()
 	dlog.Debugf(ctx, shellquote.ShellString("docker", args))
-	err := cmd.Start()
-	if err != nil {
+	if err = cmd.Start(); err != nil {
 		return nil, err
 	}
 	return cmd, err
