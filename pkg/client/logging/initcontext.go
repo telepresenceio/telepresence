@@ -91,6 +91,9 @@ func SummarizeLog(ctx context.Context, name string) (string, error) {
 	filename := filepath.Join(dir, name+".log")
 	file, err := os.Open(filename)
 	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
 		return "", err
 	}
 	defer file.Close()
