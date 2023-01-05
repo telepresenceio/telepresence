@@ -49,7 +49,7 @@ spec:
             - sh
             - -c
           args:
-            - 'curl --fail --connect-timeout 5 --max-time 60 --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" . }}/uninstall || exit 0'
+            - 'curl --fail --connect-timeout 5 --max-time 60 --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" . }}/uninstall?revision={{ .Release.Revision }} || exit 0'
       volumes:
         - name: secret-volume
           secret:

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -71,6 +72,8 @@ func ServeMutator(ctx context.Context) error {
 		return nil
 	}
 
+	env := managerutil.GetEnv(ctx)
+
 	var ai *agentInjector
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +93,15 @@ func ServeMutator(ctx context.Context) error {
 	})
 	mux.HandleFunc("/uninstall", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		dlog.Debug(ctx, "Received uninstall request...")
+		dlog.Info(ctx, "Received uninstall request...")
+		q := r.URL.Query()
+		if rev, err := strconv.Atoi(q.Get("revision")); err != nil || rev != env.HelmRevision {
+			dlog.Warn(ctx, "uninstall request discarded. Helm revisions don't match")
+			// Request is accepted to prevent the delete-hook from retrying the request
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+
 		statusCode, err := serveRequest(ctx, r, http.MethodDelete, ai.uninstall)
 		if err != nil {
 			dlog.Errorf(ctx, "error handling uninstall request: %v", err)
@@ -103,7 +114,14 @@ func ServeMutator(ctx context.Context) error {
 	})
 	mux.HandleFunc("/upgrade-legacy", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		dlog.Debug(ctx, "Received upgrade-legacy request...")
+		dlog.Info(ctx, "Received upgrade-legacy request...")
+		q := r.URL.Query()
+		if rev, err := strconv.Atoi(q.Get("revision")); err != nil || rev != env.HelmRevision {
+			dlog.Warn(ctx, "upgrade-legacy request discarded. Helm revisions don't match")
+			// Request is accepted to prevent the post-upgrade-hook from retrying the request
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		statusCode, err := serveRequest(ctx, r, http.MethodPost, func(ctx context.Context) {
 			ai.upgradeLegacy(ctx)
 		})

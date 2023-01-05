@@ -49,6 +49,8 @@ type Env struct {
 	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
 	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
 
+	HelmRevision int `env:"HELM_REVISION, parser=strconv.ParseInt, default=0"`
+
 	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=nonempty-string"`
 	AgentImage               string                      `env:"AGENT_IMAGE,              parser=string,         default="`
 	AgentImagePullSecrets    []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`

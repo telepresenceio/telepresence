@@ -224,6 +224,8 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+          - name: HELM_REVISION
+            value: {{ $.Release.Revision | quote }}
           ports:
           - name: api
             containerPort: {{ .apiPort }}
