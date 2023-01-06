@@ -675,12 +675,38 @@ verify_output_empty "${output}" true
 finish_step
 
 ###############################################
-#### Step 8 - Verify login on own works    ####
+#### Step 8a - Verify login on own works   ####
 ###############################################
 
 login
 $TELEPRESENCE connect > "$output_location"
 sleep 5 # avoid known agent mechanism-args race
+
+#####################################################
+#### Step 8b - Test default logged-in behavior   ####
+#####################################################
+
+# Since the manager is in single-user mode, the default intercept will still be global
+output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default)
+sleep 1
+has_preview_url false
+is_prop_traffic_agent true
+
+###############################################
+#### Step 8c - Test upgrade to team-mode  #####
+###############################################
+
+$TELEPRESENCE helm upgrade --team-mode >"$output_location"
+sleep 1
+
+# Test that the existing intercept was not destroyed by the upgrade
+$TELEPRESENCE leave dataprocessingservice >"$output_location"
+# Logout so we can test default behavior
+output=$($TELEPRESENCE logout)
+verify_output_empty "${output}" true
+
+# Since the manager is in team-user mode, the default intercept will now be personal
+# Since we are logged out, this should also trigger a login
 output=$($TELEPRESENCE intercept dataprocessingservice --port 3000 --ingress-host verylargejavaservice.default --ingress-port 8080 --ingress-l5 verylargejavaservice.default)
 sleep 1
 has_preview_url true
