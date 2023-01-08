@@ -11,7 +11,7 @@ their services.
 ## Install
 
 ```sh
-helm repo add datawire https://getambassador.io
+helm repo add datawire https://app.getambassador.io
 helm install traffic-manager -n ambassador datawire/telepresence \
 --create-namespace \
 ```
