@@ -9,6 +9,5 @@ docs/
 integration_test/
 k8s/
 packaging/
-smoke-tests/
 test-infra/
 tools/
