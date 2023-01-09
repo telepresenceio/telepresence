@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"math"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -17,6 +18,10 @@ import (
 func WatchUserCache(ctx context.Context, onChange func(context.Context) error, files ...string) error {
 	dir, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
+		return err
+	}
+	// Ensure that the user cache directory exists.
+	if err = os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 	watcher, err := fsnotify.NewWatcher()
