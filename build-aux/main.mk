@@ -256,7 +256,6 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 	go list ./... | xargs -n1 go test -c -o /dev/null
 
 shellscripts += ./packaging/homebrew-package.sh
-shellscripts += ./smoke-tests/run_smoke_test.sh
 shellscripts += ./packaging/windows-package.sh
 .PHONY: lint lint-rpc
 lint: lint-rpc ## (QA) Run the linter
