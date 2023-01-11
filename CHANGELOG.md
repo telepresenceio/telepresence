@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.10.0 (TBD)
+### 2.10.0 (January 11, 2023)
 
 - Feature: The Traffic Manager can now be set to either "team" mode or "single user" mode.
   When in team mode, intercepts will default to http intercepts.
