@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.10.2 (TBD)
+
+- Bugfix: Ensure that CLI and user-daemon binaries are the same version when running `telepresence helm install`
+  or `telepresence helm upgrade`.
+
 ### 2.10.1 (January 11, 2023)
 
 - Bugfix: Fixed a regex in our release process.

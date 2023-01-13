@@ -57,7 +57,8 @@ func helmInstallCommand() *cobra.Command {
 			return ha.run(cmd, args)
 		},
 		Annotations: map[string]string{
-			ann.UserDaemon: ann.Required,
+			ann.UserDaemon:   ann.Required,
+			ann.VersionCheck: ann.Required,
 		},
 	}
 
@@ -81,7 +82,8 @@ func helmUpgradeCommand() *cobra.Command {
 		Short: "Upgrade telepresence traffic manager",
 		RunE:  ha.run,
 		Annotations: map[string]string{
-			ann.UserDaemon: ann.Required,
+			ann.UserDaemon:   ann.Required,
+			ann.VersionCheck: ann.Required,
 		},
 	}
 
