@@ -115,6 +115,7 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	s.scout.SetMetadatum(ctx, "cluster_id", status.ClusterId)
 	s.scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
 	s.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
+	s.scout.SetMetadatum(ctx, "http-headers", len(s.HttpHeader))
 
 	ir, err := sif.CreateRequest(ctx)
 	if err != nil {
@@ -141,6 +142,7 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	}()
 
 	// Submit the request
+	// TODO: pogledaj implementaciju ovog vraga
 	r, err := ud.CreateIntercept(ctx, ir)
 	if err = Result(r, err); err != nil {
 		return false, fmt.Errorf("connector.CreateIntercept: %w", err)
@@ -279,8 +281,10 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		spec.ServiceName = s.ServiceName
 	}
 
+	// TODO: ovdje bi moglo ici ovo sa headerima
 	spec.Mechanism = s.Mechanism
 	spec.MechanismArgs = s.MechanismArgs
+	spec.HttpHeaders = s.HttpHeader
 	spec.Agent = s.AgentName
 	spec.TargetHost = "127.0.0.1"
 

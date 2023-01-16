@@ -91,6 +91,10 @@ message InterceptSpec {
   // to control what these values are.
   repeated string mechanism_args = 9;
 
+  // Matching only intercept traffic which matches this http_header field (valid for http and grpc services)
+  // augumentation of OSS telepresence made by @jukomericki from happening
+  repeated string http_headers = 22;
+
   string target_host = 6;
 
   // The port on the workstation that the intercept is redirected to

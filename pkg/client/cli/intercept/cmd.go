@@ -26,6 +26,8 @@ type Args struct {
 	ServiceName string // --service // only valid if !localOnly
 	LocalOnly   bool   // --local-only
 
+	HttpHeader []string // --http-header
+
 	EnvFile  string   // --env-file
 	EnvJSON  string   // --env-json
 	Mount    string   // --mount // "true", "false", or desired mount point // only valid if !localOnly
@@ -36,7 +38,7 @@ type Args struct {
 	DockerMount string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 	Cmdline     []string // Args[1:]
 
-	Mechanism     string // --mechanism tcp
+	Mechanism     string // --mechanism tcp or http
 	MechanismArgs []string
 	ExtendedInfo  []byte
 }
@@ -56,8 +58,6 @@ func Command() *cobra.Command {
 		SilenceErrors:     true,
 		RunE:              a.Run,
 		ValidArgsFunction: a.ValidArgs,
-		PreRunE:           util.UpdateCheckIfDue,
-		PostRunE:          util.RaiseCloudMessage,
 	}
 	a.AddFlags(cmd.Flags())
 	if err := cmd.RegisterFlagCompletionFunc("namespace", a.AutocompleteNamespace); err != nil {
@@ -103,7 +103,11 @@ func (a *Args) AddFlags(flags *pflag.FlagSet) {
 
 	flags.StringVarP(&a.Namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
-	flags.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
+	flags.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use (http and tcp supported)")
+
+	flags.StringArrayVar(&a.HttpHeader, "http-header", []string{"auto"}, "Only intercept traffic that matches this \"HTTP2_HEADER=REGEXP\" specifier."+
+		" Instead of a \"--http-header=HTTP2_HEADER=REGEXP\" pair, you may say \"--http-header=auto\", "+
+		"which will automatically select a unique matcher for your intercept.")
 }
 
 func (a *Args) Validate(cmd *cobra.Command, positional []string) error {

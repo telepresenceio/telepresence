@@ -54,6 +54,8 @@ func describeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 		kvf.Add("Metadata", fmt.Sprintf("%q", ii.Metadata))
 	}
 
+	kvf.Add("Http-Headers", fmt.Sprintf("%q", ii.Spec.HttpHeaders))
+
 	if ii.ClientMountPoint != "" {
 		kvf.Add("Volume Mount Point", ii.ClientMountPoint)
 	} else if volumeMountsPrevented != nil {
