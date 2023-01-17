@@ -71,7 +71,7 @@ jobs:
           chmod a+x telepresence-server
 
       # Provision cluster as late as possible so we don't waste resources if any prior steps fail.
-      - uses: datawire/infra-actions/provision-cluster@v0.2.0
+      - uses: datawire/infra-actions/provision-cluster@v0.2.4
         with:
           distribution: Kubeception
           version: 1.23
