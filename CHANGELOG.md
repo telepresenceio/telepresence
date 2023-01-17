@@ -44,13 +44,10 @@
   `--name=<name>`. Ticket [2953](https://github.com/telepresenceio/telepresence/issues/2953).
 
 - Bugfix: Telepresence traffic-manager extracts the cluster domain (e.g. "cluster.local") using a CNAME lookup for "kubernetes.default"
-  instead of "kubernetes.default.svc". [PR 2959](https://github.com/telepresenceio/telepresence/pull/2959).
+  instead of "kubernetes.default.svc".
 
 - Bugfix: A timeout was added to the pre-delete hook `uninstall-agents`, so that a helm uninstall doesn't
   hang when there is no running traffic-manager. PR [2937](https://github.com/telepresenceio/telepresence/pull/2937).
-
-- Bugfix: The `Helm.Revision` is now used to prevent that Helm hook calls are served by the wrong revision of
-  the traffic-manager. [Issue 2954](https://github.com/telepresenceio/telepresence/issues/2954).
 
 ### 2.9.5 (December 8, 2022)
 
