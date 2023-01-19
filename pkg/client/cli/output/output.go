@@ -74,6 +74,18 @@ func Object(ctx context.Context, obj any, override bool) {
 	}
 }
 
+// StreamObject prints an object immediately.
+func StreamObject(ctx context.Context, obj any, override bool) {
+	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
+		if o, ok := cmd.OutOrStdout().(*output); ok {
+			if !o.override {
+				obj = o.shapeObjInfo(cmd, obj)
+			}
+			o.write(obj)
+		}
+	}
+}
+
 // DefaultYAML is a PersistentPRERunE function that will change the default output
 // format to "yaml" for the command that invokes it.
 func DefaultYAML(cmd *cobra.Command, _ []string) error {
@@ -112,17 +124,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	if err == nil && o.override {
 		obj = o.obj
 	} else {
-		response := &object{
-			Cmd: cmd.Name(),
-		}
-		if buf := o.Buffer; buf.Len() > 0 {
-			response.Stdout = buf.String()
-		} else if o.obj != nil {
-			response.Stdout = o.obj
-		}
-		if buf, ok := cmd.ErrOrStderr().(*bytes.Buffer); ok && buf.Len() > 0 {
-			response.Stderr = buf.String()
-		}
+		response := o.shapeObjInfo(cmd, o.obj)
 		if err != nil {
 			response.Err = err.Error()
 		}
@@ -132,23 +134,52 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 		}
 		obj = response
 	}
-	switch o.format {
+
+	o.write(obj)
+	return cmd, true, err
+}
+
+func (o *output) shapeObjInfo(cmd *cobra.Command, obj any) *object {
+	response := &object{
+		Cmd: cmd.Name(),
+	}
+	if buf := o.Buffer; buf.Len() > 0 {
+		response.Stdout = buf.String()
+	} else if obj != nil {
+		response.Stdout = obj
+	}
+	if buf, ok := cmd.ErrOrStderr().(*bytes.Buffer); ok && buf.Len() > 0 {
+		response.Stderr = buf.String()
+	}
+	return response
+}
+
+// makeWriterForFmt creates an appropriate writer for the given fmt
+func makeWriterForFmt(format format, originalStdout io.Writer) func(obj any) {
+	switch format {
 	case formatJSON:
-		if encErr := json.NewEncoder(o.originalStdout).Encode(obj); encErr != nil {
-			panic(encErr)
+		// create the encoder once
+		encoder := json.NewEncoder(originalStdout)
+		return func(obj any) {
+			if err := encoder.Encode(obj); err != nil {
+				panic(err)
+			}
 		}
 	case formatYAML:
-		ym, encErr := yaml.Marshal(obj)
-		if encErr == nil {
-			_, encErr = o.originalStdout.Write(ym)
-		}
-		if encErr != nil {
-			panic(encErr)
+		return func(obj any) {
+			ym, err := yaml.Marshal(obj)
+			if err == nil {
+				_, err = originalStdout.Write(ym)
+			}
+			if err != nil {
+				panic(err)
+			}
 		}
 	default:
-		fmt.Fprintf(o.originalStdout, "%+v", obj)
+		return func(obj any) {
+			fmt.Fprintf(originalStdout, "%+v", obj)
+		}
 	}
-	return cmd, true, err
 }
 
 // setFormat assigns a cobra.Command.PersistentPreRunE function that all sub commands will inherit. This
@@ -162,8 +193,7 @@ func setFormat(cmd *cobra.Command) {
 		}
 		if fmt != formatDefault {
 			o := output{
-				format:         fmt,
-				originalStdout: cmd.OutOrStdout(),
+				write: makeWriterForFmt(fmt, cmd.OutOrStdout()),
 			}
 			cmd.SetOut(&o)
 			cmd.SetErr(&bytes.Buffer{})
@@ -204,10 +234,9 @@ type (
 	key    struct{}
 	output struct {
 		bytes.Buffer
-		format         format
-		obj            any
-		override       bool
-		originalStdout io.Writer
+		write    func(obj any)
+		obj      any
+		override bool
 	}
 	object struct {
 		Cmd    string `json:"cmd"`

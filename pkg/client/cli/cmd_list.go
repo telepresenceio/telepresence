@@ -126,10 +126,10 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 looper:
 	for {
 		select {
-		case r := <-ch:
-			s.printList(ctx, r.Workloads, stdout, formattedOutput)
 		case <-ctx.Done():
 			break looper
+		case r := <-ch:
+			s.printList(ctx, r.Workloads, stdout, formattedOutput)
 		}
 	}
 	return nil
@@ -138,7 +138,7 @@ looper:
 func (s *listInfo) printList(ctx context.Context, workloads []*connector.WorkloadInfo, stdout io.Writer, formattedOut bool) {
 	if len(workloads) == 0 {
 		if formattedOut {
-			output.Object(ctx, []struct{}{}, false)
+			output.StreamObject(ctx, []struct{}{}, false)
 		} else {
 			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 		}
@@ -161,7 +161,7 @@ func (s *listInfo) printList(ctx context.Context, workloads []*connector.Workloa
 	}
 
 	if formattedOut {
-		output.Object(ctx, workloads, false)
+		output.StreamObject(ctx, workloads, false)
 	} else {
 		includeNs := false
 		ns := s.namespace
