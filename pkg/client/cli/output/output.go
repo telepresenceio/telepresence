@@ -78,7 +78,7 @@ func Object(ctx context.Context, obj any, override bool) {
 func StreamObject(ctx context.Context, obj any, override bool) {
 	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
 		if o, ok := cmd.OutOrStdout().(*output); ok {
-			if !o.override {
+			if !override {
 				obj = shapeObjInfo(cmd, obj)
 			}
 			o.write(obj)
