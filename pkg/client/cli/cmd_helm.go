@@ -68,7 +68,7 @@ func helmInstallCommand() *cobra.Command {
 	uf := flags.Lookup("upgrade")
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
-	ha.Request, ha.kubeFlags = initConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
 	return cmd
 }
 
@@ -93,7 +93,7 @@ func helmUpgradeCommand() *cobra.Command {
 		"when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
-	ha.Request, ha.kubeFlags = initConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
 	return cmd
 }
 
@@ -127,7 +127,7 @@ func helmUninstallCommand() *cobra.Command {
 			ann.VersionCheck: ann.Required,
 		},
 	}
-	ha.Request, ha.kubeFlags = initConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
 	return cmd
 }
 
@@ -147,7 +147,7 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	if err = util.InitCommand(cmd); err != nil {
 		return err
 	}
-	ha.Request.KubeFlags = kubeFlagMap(ha.kubeFlags)
+	ha.Request.KubeFlags = FlagMap(ha.kubeFlags)
 
 	util.AddKubeconfigEnv(ha.Request)
 

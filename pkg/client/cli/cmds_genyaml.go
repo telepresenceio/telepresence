@@ -252,7 +252,7 @@ func genConfigMapSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		Short: "Generate YAML for the agent's entry in the telepresence-agents configmap.",
 		Long:  "Generate YAML for the agent's entry in the telepresence-agents configmap. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, kubeFlagMap(kubeFlags))
+			return info.run(cmd, FlagMap(kubeFlags))
 		},
 	}
 	flags := cmd.Flags()
@@ -314,7 +314,7 @@ func genContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		Short: "Generate YAML for the traffic-agent container.",
 		Long:  "Generate YAML for the traffic-agent container. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, kubeFlagMap(kubeFlags))
+			return info.run(cmd, FlagMap(kubeFlags))
 		},
 	}
 	flags := cmd.Flags()
@@ -383,7 +383,7 @@ func genInitContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		Short: "Generate YAML for the traffic-agent init container.",
 		Long:  "Generate YAML for the traffic-agent init container. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, kubeFlagMap(kubeFlags))
+			return info.run(cmd, FlagMap(kubeFlags))
 		},
 	}
 	flags := cmd.Flags()
