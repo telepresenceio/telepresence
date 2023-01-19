@@ -79,7 +79,7 @@ func StreamObject(ctx context.Context, obj any, override bool) {
 	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
 		if o, ok := cmd.OutOrStdout().(*output); ok {
 			if !o.override {
-				obj = o.shapeObjInfo(cmd, obj)
+				obj = shapeObjInfo(cmd, obj)
 			}
 			o.write(obj)
 		}
@@ -131,7 +131,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 			stdoutobj = o.obj
 		}
 
-		response := o.shapeObjInfo(cmd, stdoutobj)
+		response := shapeObjInfo(cmd, stdoutobj)
 		if err != nil {
 			response.Err = err.Error()
 		}
@@ -146,7 +146,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	return cmd, true, err
 }
 
-func (o *output) shapeObjInfo(cmd *cobra.Command, obj any) *object {
+func shapeObjInfo(cmd *cobra.Command, obj any) *object {
 	response := &object{
 		Cmd: cmd.Name(),
 	}
@@ -156,6 +156,7 @@ func (o *output) shapeObjInfo(cmd *cobra.Command, obj any) *object {
 	if buf, ok := cmd.ErrOrStderr().(*bytes.Buffer); ok && buf.Len() > 0 {
 		response.Stderr = buf.String()
 	}
+
 	return response
 }
 
