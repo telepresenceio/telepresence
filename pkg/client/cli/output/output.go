@@ -154,8 +154,8 @@ func (o *output) shapeObjInfo(cmd *cobra.Command, obj any) *object {
 	return response
 }
 
-// makeWriterForFmt creates an appropriate writer for the given fmt
-func makeWriterForFmt(format format, originalStdout io.Writer) func(obj any) {
+// makeWriterForFormat creates an appropriate writer for the given format.
+func makeWriterForFormat(format format, originalStdout io.Writer) func(obj any) {
 	switch format {
 	case formatJSON:
 		// create the encoder once
@@ -193,7 +193,7 @@ func setFormat(cmd *cobra.Command) {
 		}
 		if fmt != formatDefault {
 			o := output{
-				write: makeWriterForFmt(fmt, cmd.OutOrStdout()),
+				write: makeWriterForFormat(fmt, cmd.OutOrStdout()),
 			}
 			cmd.SetOut(&o)
 			cmd.SetErr(&bytes.Buffer{})
