@@ -124,7 +124,14 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	if err == nil && o.override {
 		obj = o.obj
 	} else {
-		response := o.shapeObjInfo(cmd, o.obj)
+		var stdoutobj any
+		if buf := o.Buffer; buf.Len() > 0 {
+			stdoutobj = buf.String()
+		} else if obj != nil {
+			stdoutobj = o.obj
+		}
+
+		response := o.shapeObjInfo(cmd, stdoutobj)
 		if err != nil {
 			response.Err = err.Error()
 		}
@@ -143,11 +150,9 @@ func (o *output) shapeObjInfo(cmd *cobra.Command, obj any) *object {
 	response := &object{
 		Cmd: cmd.Name(),
 	}
-	if buf := o.Buffer; buf.Len() > 0 {
-		response.Stdout = buf.String()
-	} else if obj != nil {
-		response.Stdout = obj
-	}
+
+	response.Stdout = obj
+
 	if buf, ok := cmd.ErrOrStderr().(*bytes.Buffer); ok && buf.Len() > 0 {
 		response.Stderr = buf.String()
 	}
