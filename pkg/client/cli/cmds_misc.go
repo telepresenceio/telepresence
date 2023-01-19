@@ -66,7 +66,7 @@ func connectCommand() *cobra.Command {
 			ann.Session:    ann.Required,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request.KubeFlags = kubeFlagMap(kubeFlags)
+			request.KubeFlags = FlagMap(kubeFlags)
 			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
 			if err := util.InitCommand(cmd); err != nil {
 				return err
@@ -83,11 +83,15 @@ func connectCommand() *cobra.Command {
 			return proc.Run(ctx, nil, cmd, args[0], args[1:]...)
 		},
 	}
-	request, kubeFlags = initConnectRequest(cmd)
+	request, kubeFlags = InitConnectRequest(cmd)
 	return cmd
 }
 
-func initConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
+// InitConnectRequest adds the networking flags and Kubernetes flags to the given command and
+// returns a ConnectRequest and a FlagSet with the Kubernetes flags. The FlagSet is returned
+// here so that a map of flags that gets modified can be extracted using FlagMap once the flag
+// parsing has completed.
+func InitConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
 	cr := connector.ConnectRequest{}
 	flags := cmd.Flags()
 

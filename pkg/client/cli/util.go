@@ -20,9 +20,10 @@ func AsCSV(vs []string) string {
 	return strings.TrimSuffix(b.String(), "\n")
 }
 
-func kubeFlagMap(kubeFlags *pflag.FlagSet) map[string]string {
-	kubeFlagMap := make(map[string]string, kubeFlags.NFlag())
-	kubeFlags.VisitAll(func(flag *pflag.Flag) {
+// FlagMap returns a map of the flags that has been modified in the given FlagSet.
+func FlagMap(flags *pflag.FlagSet) map[string]string {
+	flagMap := make(map[string]string, flags.NFlag())
+	flags.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
 			var v string
 			if sv, ok := flag.Value.(pflag.SliceValue); ok {
@@ -30,8 +31,8 @@ func kubeFlagMap(kubeFlags *pflag.FlagSet) map[string]string {
 			} else {
 				v = flag.Value.String()
 			}
-			kubeFlagMap[flag.Name] = v
+			flagMap[flag.Name] = v
 		}
 	})
-	return kubeFlagMap
+	return flagMap
 }
