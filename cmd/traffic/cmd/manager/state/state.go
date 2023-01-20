@@ -589,7 +589,7 @@ func (s *State) getRandomAgentSession(clientSessionID string) (agent SessionStat
 	return
 }
 
-func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
+func (s *State) WatchDial(sessionID string) chan *rpc.DialRequest {
 	s.mu.RLock()
 	ss, ok := s.sessions[sessionID]
 	s.mu.RUnlock()
