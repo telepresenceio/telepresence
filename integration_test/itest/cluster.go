@@ -51,10 +51,12 @@ const (
 type Cluster interface {
 	AgentImageName() string
 	CapturePodLogs(ctx context.Context, app, container, ns string)
+	CompatVersion() string
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
 	InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error
+	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string, managerNamespace string, appNamespaces ...string) error
 	IsCI() bool
 	Registry() string
 	SetGeneralError(error)
@@ -62,7 +64,7 @@ type Cluster interface {
 	TelepresenceVersion() string
 	UninstallTrafficManager(ctx context.Context, managerNamespace string)
 	PackageHelmChart(ctx context.Context) (string, error)
-	GetValuesForHelm(values map[string]string, managerNamespace string, appNamespaces ...string) []string
+	GetValuesForHelm(values map[string]string, release bool, managerNamespace string, appNamespaces ...string) []string
 }
 
 // The cluster is created once and then reused by all tests. It ensures that:
@@ -77,6 +79,7 @@ type cluster struct {
 	prePushed        bool
 	executable       string
 	testVersion      string
+	compatVersion    string
 	registry         string
 	kubeConfig       string
 	generalError     error
@@ -101,6 +104,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		s.testVersion = "v2.9.0-gotest.z" + s.suffix
 	}
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
+	s.compatVersion = os.Getenv("DEV_COMPAT_VERSION")
 
 	t := getT(ctx)
 	s.agentImageName = "tel2"
@@ -368,6 +372,10 @@ func (s *cluster) TelepresenceVersion() string {
 	return s.testVersion
 }
 
+func (s *cluster) CompatVersion() string {
+	return s.compatVersion
+}
+
 func (s *cluster) AgentImageName() string {
 	return s.agentImageName
 }
@@ -447,17 +455,21 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	return filename, nil
 }
 
-func (s *cluster) GetValuesForHelm(values map[string]string, managerNamespace string, appNamespaces ...string) []string {
+func (s *cluster) GetValuesForHelm(values map[string]string, release bool, managerNamespace string, appNamespaces ...string) []string {
 	settings := []string{
 		"--set", "logLevel=debug",
-		"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
-		"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
 		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
 		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
 		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
 		"--set", "systemaHost=127.0.0.1",
+	}
+	if !release {
+		settings = append(settings,
+			"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
+			"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
+		)
 	}
 
 	for k, v := range values {
@@ -471,7 +483,31 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 	if err != nil {
 		return err
 	}
-	settings := s.GetValuesForHelm(values, managerNamespace, appNamespaces...)
+	return s.installChart(ctx, false, chartFilename, values, managerNamespace, appNamespaces...)
+}
+
+// InstallTrafficManagerVersion performs a helm install of a specific version of the traffic-manager using
+// the helm registry at https://app.getambassador.io. It is assumed that the image to use for the traffic-manager
+// can be pulled from the standard registry at docker.io/datawire, and that the traffic-manager image is
+// configured using DEV_AGENT_IMAGE.
+//
+// The intent is to simulate connection to an older cluster from the current client.
+func (s *cluster) InstallTrafficManagerVersion(
+	ctx context.Context,
+	version string,
+	values map[string]string,
+	managerNamespace string,
+	appNamespaces ...string,
+) error {
+	chartFilename, err := s.pullHelmChart(ctx, version)
+	if err != nil {
+		return err
+	}
+	return s.installChart(ctx, true, chartFilename, values, managerNamespace, appNamespaces...)
+}
+
+func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]string, managerNamespace string, appNamespaces ...string) error {
+	settings := s.GetValuesForHelm(values, release, managerNamespace, appNamespaces...)
 
 	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	helmValues := filepath.Join("testdata", "namespaced-values.yaml")
@@ -479,7 +515,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)
 
-	err = Run(ctx, "helm", args...)
+	err := Run(ctx, "helm", args...)
 	if err == nil {
 		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
 		if err == nil {
@@ -487,6 +523,20 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 		}
 	}
 	return err
+}
+
+func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, error) {
+	if err := Run(ctx, "helm", "repo", "add", "datawire", "https://app.getambassador.io"); err != nil {
+		return "", err
+	}
+	if err := Run(ctx, "helm", "repo", "update"); err != nil {
+		return "", err
+	}
+	dir := getT(ctx).TempDir()
+	if err := Run(WithWorkingDir(ctx, dir), "helm", "pull", "datawire/telepresence", "--version", version); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, fmt.Sprintf("telepresence-%s.tgz", version)), nil
 }
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
