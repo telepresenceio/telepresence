@@ -12,8 +12,6 @@ func (s *session) dialRequestWatcher(ctx context.Context) error {
 
 func (s *session) _dialRequestWatcher(ctx context.Context) error {
 	// Deal with dial requests from the manager
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	dialerStream, err := s.managerClient.WatchDial(ctx, s.sessionInfo)
 	if err != nil {
 		return err
