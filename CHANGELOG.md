@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.X.X (TBD)
+
+- Feature: Adds two parameters `--also-proxy` and `--never-proxy` to the `telepresence connect` command.
+  Ticket [2950](https://github.com/telepresenceio/telepresence/issues/2950).
+
 ### 2.10.4 (TBD)
 
 - Change: Depreciate `--watch` flag in `telepresence list` command. This is now covered by `--output json-stream`
@@ -64,7 +69,7 @@
 - Security: Update golang to 1.19.4 to address
   [CVE-2022-41720 and CVE-2022-41717](https://groups.google.com/g/golang-announce/c/L_3rmdT0BMU).
 
-- Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also 
+- Bugfix: A regression that was introduced in 2.9.3, preventing use of gce authentication without also
   having a config element present in the gce configuration in the kubeconfig, has been fixed.
 
 ### 2.9.4 (December 5, 2022)
@@ -183,7 +188,7 @@
 - Feature: A new `client` struct was added to the Helm chart. It contains a `connectionTTL` that controls
   how long the traffic manager will retain a client connection without seeing any sign of life from the client.
 
-- Feature: A `dns` struct container the fields `includeSuffixes` and `excludeSuffixes` was added to the Helm 
+- Feature: A `dns` struct container the fields `includeSuffixes` and `excludeSuffixes` was added to the Helm
   chart `client` struct, making those values configurable per cluster.
 
 - Feature: The API port used by the traffic-manager is now configurable using the Helm chart value `apiPort`.
@@ -195,7 +200,7 @@
 - Change: The Helm chart `agentInjector.agentImage` was moved to `agent.image`. The old value is deprecated but
   retained for backward compatibility.
 
-- Change: The Helm chart `agentInjector.appProtocolStrategy` was moved to `agent.appProtocolStrategy`. The old 
+- Change: The Helm chart `agentInjector.appProtocolStrategy` was moved to `agent.appProtocolStrategy`. The old
   value is deprecated but retained for backward compatibility.
 
 - Change: The Helm chart `dnsServiceName`, `dnsServiceNamespace`, and `dnsServiceIP` has been removed, because

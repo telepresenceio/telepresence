@@ -100,6 +100,15 @@ func InitConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.F
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
 			`Defaults to all namespaces`)
+
+	nwFlags.StringSliceVar(&cr.AlsoProxy,
+		"also-proxy", nil, ``+
+			`Additional comma separated list of CIDR to proxy`)
+
+	nwFlags.StringSliceVar(&cr.NeverProxy,
+		"never-proxy", nil, ``+
+			`Comma separated list of CIDR to never proxy`)
+
 	flags.AddFlagSet(nwFlags)
 
 	kubeConfig := genericclioptions.NewConfigFlags(false)
