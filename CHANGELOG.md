@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.10.4 (TBD)
+
+- Bugfix: Fix backward compatibility issue when using traffic-managers of version 2.9.5 or older.
+
 ### 2.10.2 (January 16, 2023)
 
 - Bugfix: Ensure that CLI and user-daemon binaries are the same version when running `telepresence helm install`
