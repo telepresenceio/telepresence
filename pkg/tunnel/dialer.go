@@ -315,9 +315,6 @@ func readLoop(ctx context.Context, h streamReader) {
 // attaches a dialer Endpoint to that tunnel is spawned for each request that arrives. The method blocks until
 // the dialStream is closed.
 func DialWaitLoop(ctx context.Context, manager rpc.ManagerClient, dialStream rpc.Manager_WatchDialClient, sessionID string) error {
-	// create ctx to cleanup leftover dialRespond if waitloop dies
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	for ctx.Err() == nil {
 		dr, err := dialStream.Recv()
 		if err != nil {
