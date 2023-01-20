@@ -57,7 +57,7 @@ func (is *installSuite) Test_NonHelmInstall() {
 
 	chart, err := is.PackageHelmChart(ctx)
 	require.NoError(err)
-	values := is.GetValuesForHelm(map[string]string{}, is.ManagerNamespace(), is.AppNamespace())
+	values := is.GetValuesForHelm(map[string]string{}, false, is.ManagerNamespace(), is.AppNamespace())
 	values = append([]string{"template", "traffic-manager", chart, "-n", is.ManagerNamespace()}, values...)
 	manifest, err := itest.Output(ctx, "helm", values...)
 	require.NoError(err)
