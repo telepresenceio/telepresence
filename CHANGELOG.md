@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.10.4 (TBD)
+### 2.10.4 (January 20, 2023)
 
 - Bugfix: Fix backward compatibility issue when using traffic-managers of version 2.9.5 or older.
 
