@@ -34,14 +34,14 @@ func configViewCommand() *cobra.Command {
 		PersistentPreRunE: output.DefaultYAML,
 		Short:             "View current Telepresence configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request.KubeFlags = kubeFlagMap(kubeFlags)
+			request.KubeFlags = FlagMap(kubeFlags)
 			util.AddKubeconfigEnv(request)
 			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
 			return configView(cmd, args)
 		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
-	request, kubeFlags = initConnectRequest(cmd)
+	request, kubeFlags = InitConnectRequest(cmd)
 	return cmd
 }
 
