@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.X.X (TBD)
+### 2.10.5 (TBD)
 
 - Bugfix: Fixes IPv6 support.
   Ticket [2978](https://github.com/telepresenceio/telepresence/issues/2978).
@@ -8,6 +8,7 @@
 - Feature: Adds two parameters `--also-proxy` and `--never-proxy` to the `telepresence connect` command.
   Ticket [2950](https://github.com/telepresenceio/telepresence/issues/2950).
 
+<<<<<<< HEAD
 - Feature: Add a parameter `--manager-namespace` to the `telepresence connect` command.
   Ticket [2968](https://github.com/telepresenceio/telepresence/issues/2968)
 
@@ -16,8 +17,6 @@
 
 - Change: The namespace of the connected manager is now displayed in the `telepresence status` output.
   Ticket [2968](https://github.com/telepresenceio/telepresence/issues/2968)
-
-### 2.10.4 (TBD)
 
 - Change: Depreciate `--watch` flag in `telepresence list` command. This is now covered by `--output json-stream`
 
