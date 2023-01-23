@@ -190,8 +190,7 @@ func WantsFormatted(cmd *cobra.Command) bool {
 	return f != formatDefault
 }
 
-// WantsFormatted returns true if the value of the global `--output` flag is set to a valid
-// format different from "default".
+// WantsStream returns true if the value of the global `--output` flag is set to "json-stream".
 func WantsStream(cmd *cobra.Command) bool {
 	f, _ := validateFlag(cmd)
 	return f == formatJSONStream
