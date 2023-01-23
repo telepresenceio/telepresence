@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,8 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+
 	"github.com/blang/semver"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,6 +28,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/datawire/dlib/dcontext"
@@ -51,6 +55,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/std"
 )
 
 type apiServer struct {
@@ -130,7 +135,7 @@ type session struct {
 	// and the slice is cleared when an agent snapshot arrives.
 	agentInitWaiters []chan<- struct{}
 
-	sr *scout.Reporter
+	sr userd.Reporter
 
 	isPodDaemon bool
 
@@ -143,16 +148,101 @@ type session struct {
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap.
 var firstAgentConfigMapVersion = semver.MustParse("2.6.0") //nolint:gochecknoglobals // constant
 
-func NewSession(
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/kubeconfigresolver_mock.go . KubeConfigResolver
+type KubeConfigResolver interface {
+	NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*client.Kubeconfig, error)
+	NewInClusterConfig(c context.Context, flagMap map[string]string) (*client.Kubeconfig, error)
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/portforwarddialerbuilder.go . PortForwardDialerBuilder
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/portforwarddialer.go github.com/telepresenceio/telepresence/v2/pkg/dnet PortForwardDialer
+type PortForwardDialerBuilder interface {
+	NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (dnet.PortForwardDialer, error)
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/managerconnector_mock.go . ManagerConnector
+type ManagerConnector interface {
+	Connect(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, *manager.VersionInfo2, error)
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/usersessioncache_mock.go . UserSessionCache
+type UserSessionCache interface {
+	DeleteSessionInfoFromUserCache(ctx context.Context) error
+	LoadSessionInfoFromUserCache(ctx context.Context, host string) (*manager.SessionInfo, error)
+	SaveSessionInfoToUserCache(ctx context.Context, host string, session *manager.SessionInfo) error
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/daemonmanager_mock.go . DaemonManager
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/daemonclient_mock.go github.com/telepresenceio/telepresence/rpc/v2/daemon DaemonClient
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/conn_mock.go io Closer
+type DaemonManager interface {
+	Client(ctx context.Context) (io.Closer, daemon.DaemonClient, error)
+	IsRunning(ctx context.Context) (bool, error)
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/clusterbuilder_mock.go . ClusterBuilder
+type ClusterBuilder interface {
+	NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []string) (*k8s.Cluster, error)
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/helminstaller_mock.go . HelmInstaller
+type HelmInstaller interface {
+	DeleteTrafficManager(
+		ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool,
+	) error
+	EnsureTrafficManager(
+		ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest,
+	) error
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/user_mock.go . User
+type User interface {
+	Current() (*user.User, error)
+}
+
+//go:generate mockgen -package=mock_trafficmgr -destination=mocks/os_mock.go . OS
+type OS interface {
+	Hostname() (string, error)
+}
+
+func NewSessionManager() *SessionManager {
+	return &SessionManager{
+		kcr: &client.KubeConfigResolver{},
+		p:   &dnet.PortForwardDialerBuilder{},
+		mc:  &tm.ManagerConnector{},
+		sc:  &userSessionCacheImpl{},
+		dm:  &client.DaemonManager{},
+		cb:  &k8s.ClusterBuilder{},
+		hi:  &helm.Installer{},
+
+		os:   &std.OS{},
+		user: &std.User{},
+	}
+}
+
+type SessionManager struct {
+	kcr KubeConfigResolver
+	p   PortForwardDialerBuilder
+	mc  ManagerConnector
+	sc  UserSessionCache
+	dm  DaemonManager
+	cb  ClusterBuilder
+	hi  HelmInstaller
+
+	os   OS
+	user User
+}
+
+func (s *SessionManager) NewSession(
 	ctx context.Context,
-	sr *scout.Reporter,
+	sr userd.Reporter,
 	cr *rpc.ConnectRequest,
 ) (context.Context, userd.Session, *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 	sr.Report(ctx, "connect")
 
 	dlog.Info(ctx, "Connecting to k8s cluster...")
-	cluster, err := connectCluster(ctx, cr)
+	cluster, err := s.connectCluster(ctx, cr)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
@@ -172,7 +262,7 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr)
+	tmgr, err := s.connectMgr(ctx, sr, cluster, sr.InstallID(), cr)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -194,12 +284,13 @@ func NewSession(
 	}
 
 	// Connect to the root daemon if it is running. It's the CLI that starts it initially
-	rdRunning, err := client.IsRunning(ctx, client.DaemonSocketName)
+	rdRunning, err := s.dm.IsRunning(ctx)
 	if err != nil {
 		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
+
 	if rdRunning {
-		tmgr.rootDaemon, err = connectRootDaemon(ctx, tmgr.getOutboundInfo(ctx))
+		tmgr.rootDaemon, err = s.connectRootDaemon(ctx, tmgr.getOutboundInfo(ctx))
 		if err != nil {
 			tmgr.managerConn.Close()
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
@@ -259,13 +350,14 @@ func (s *session) GetSessionConfig() *client.Config {
 }
 
 // connectCluster returns a configured cluster instance.
-func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
+func (s *SessionManager) connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
 	var config *client.Kubeconfig
 	var err error
+
 	if cr.IsPodDaemon {
-		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
+		config, err = s.kcr.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
+		config, err = s.kcr.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
 	}
 
 	if err != nil {
@@ -279,29 +371,29 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 		sort.Strings(mappedNamespaces)
 	}
 
-	cluster, err := k8s.NewCluster(c, config, mappedNamespaces)
+	cluster, err := s.cb.NewCluster(c, config, mappedNamespaces)
 	if err != nil {
 		return nil, err
 	}
 	return cluster, nil
 }
 
-func DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
+func (s *SessionManager) DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
 	cr := req.GetConnectRequest()
 	if cr == nil {
 		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
 		cr = &rpc.ConnectRequest{}
 	}
 
-	cluster, err := connectCluster(ctx, cr)
+	cluster, err := s.connectCluster(ctx, cr)
 	if err != nil {
 		return err
 	}
 
-	return helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false)
+	return s.hi.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false)
 }
 
-func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
+func (s *SessionManager) EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
 	// seg guard
 	cr := req.GetConnectRequest()
 	if cr == nil {
@@ -309,20 +401,20 @@ func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
 		cr = &rpc.ConnectRequest{}
 	}
 
-	cluster, err := connectCluster(ctx, cr)
+	cluster, err := s.connectCluster(ctx, cr)
 	if err != nil {
 		return err
 	}
 
 	dlog.Debug(ctx, "ensuring that traffic-manager exists")
 	c := cluster.WithK8sInterface(ctx)
-	return helm.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
+	return s.hi.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
-func connectMgr(
+func (s *SessionManager) connectMgr(
 	ctx context.Context,
-	sr *scout.Reporter,
+	sr userd.Reporter,
 	cluster *k8s.Cluster,
 	installID string,
 	cr *rpc.ConnectRequest,
@@ -333,11 +425,11 @@ func connectMgr(
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	userinfo, err := user.Current()
+	userinfo, err := s.user.Current()
 	if err != nil {
 		return nil, fmt.Errorf("unable to obtain current user: %w", err)
 	}
-	host, err := os.Hostname()
+	host, err := s.os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("unable to obtain hostname: %w", err)
 	}
@@ -348,11 +440,11 @@ func connectMgr(
 	}
 
 	dlog.Debug(ctx, "creating port-forward")
-	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, cluster.Kubeconfig.RestConfig, k8sapi.GetK8sInterface(ctx))
+	pfDialer, err := s.p.NewK8sPortForwardDialer(ctx, cluster.Kubeconfig.RestConfig, k8sapi.GetK8sInterface(ctx))
 	if err != nil {
 		return nil, err
 	}
-	conn, mClient, vi, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
+	conn, mClient, vi, err := s.mc.Connect(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +456,7 @@ func connectMgr(
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
 
 	clusterHost := cluster.Kubeconfig.RestConfig.Host
-	si, err := LoadSessionInfoFromUserCache(ctx, clusterHost)
+	si, err := s.sc.LoadSessionInfoFromUserCache(ctx, clusterHost)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +494,7 @@ func connectMgr(
 		if err != nil {
 			return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
 		}
-		if err = SaveSessionInfoToUserCache(ctx, clusterHost, si); err != nil {
+		if err = s.sc.SaveSessionInfoToUserCache(ctx, clusterHost, si); err != nil {
 			return nil, err
 		}
 	}
@@ -570,7 +662,7 @@ func (s *session) Done() <-chan struct{} {
 	return s.done
 }
 
-func (s *session) Reporter() *scout.Reporter {
+func (s *session) Reporter() userd.Reporter {
 	return s.sr
 }
 
@@ -811,7 +903,8 @@ func (s *session) remain(c context.Context) error {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded so the traffic-manager has dropped the session. We should too
-			if err = DeleteSessionInfoFromUserCache(c); err != nil {
+			sc := userSessionCacheImpl{}
+			if err = sc.DeleteSessionInfoFromUserCache(c); err != nil {
 				dlog.Errorf(c, "failed to delete session from user cache: %v", err)
 			}
 		}
@@ -843,12 +936,16 @@ func (s *session) remain(c context.Context) error {
 }
 
 func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	var config *client.Kubeconfig
-	var err error
+	var (
+		err    error
+		config *client.Kubeconfig
+		kcr    = client.KubeConfigResolver{}
+	)
+
 	if cr.IsPodDaemon {
-		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
+		config, err = kcr.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
+		config, err = kcr.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
 	}
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
@@ -1148,22 +1245,20 @@ func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	return info
 }
 
-func connectRootDaemon(ctx context.Context, oi *daemon.OutboundInfo) (daemon.DaemonClient, error) {
+func (s *SessionManager) connectRootDaemon(ctx context.Context, oi *daemon.OutboundInfo) (daemon.DaemonClient, error) {
 	// establish a connection to the root daemon gRPC grpcService
 	dlog.Info(ctx, "Connecting to root daemon...")
-	conn, err := client.DialSocket(ctx, client.DaemonSocketName,
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
+	var err error
+	conn, rd, err := s.dm.Client(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("unable open root daemon socket: %w", err)
+		return nil, err
 	}
+
 	defer func() {
 		if err != nil {
 			conn.Close()
 		}
 	}()
-	rd := daemon.NewDaemonClient(conn)
 
 	for attempt := 1; ; attempt++ {
 		var rootStatus *daemon.DaemonStatus
@@ -1195,7 +1290,7 @@ func connectRootDaemon(ctx context.Context, oi *daemon.OutboundInfo) (daemon.Dae
 	// responding at this point, so it shouldn't take too long.
 	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 	defer cancel()
-	if _, err = rd.WaitForNetwork(ctx, &empty.Empty{}); err != nil {
+	if _, err := rd.WaitForNetwork(ctx, &empty.Empty{}); err != nil {
 		if se, ok := status.FromError(err); ok {
 			err = se.Err()
 		}

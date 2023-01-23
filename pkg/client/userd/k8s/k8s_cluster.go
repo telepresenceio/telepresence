@@ -28,7 +28,7 @@ type Cluster struct {
 	mappedNamespaces []string
 
 	// Main
-	ki kubernetes.Interface
+	Ki kubernetes.Interface
 
 	// Current Namespace snapshot, get set by namespace Watcher.
 	// The boolean value indicates if this client is allowed to
@@ -43,6 +43,13 @@ type Cluster struct {
 
 	// Namespace listener. Notified when the currentNamespaces changes
 	namespaceListeners []userd.NamespaceListener
+}
+
+type ClusterBuilder struct{}
+
+func (cb *ClusterBuilder) GetClusterId(ctx context.Context) string {
+	clusterID, _ := k8sapi.GetClusterID(ctx)
+	return clusterID
 }
 
 func (kc *Cluster) ActualNamespace(namespace string) string {
@@ -117,7 +124,7 @@ func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 	return ok
 }
 
-func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []string) (*Cluster, error) {
+func (cb *ClusterBuilder) NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []string) (*Cluster, error) {
 	rs, err := kubeFlags.ConfigFlags.ToRESTConfig()
 	if err != nil {
 		return nil, err
@@ -136,8 +143,8 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 
 	ret := &Cluster{
 		Kubeconfig:       kubeFlags,
+		Ki:               cs,
 		mappedNamespaces: namespaces,
-		ki:               cs,
 	}
 
 	timedC, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
@@ -182,5 +189,5 @@ func (kc *Cluster) GetClusterId(ctx context.Context) string {
 }
 
 func (kc *Cluster) WithK8sInterface(c context.Context) context.Context {
-	return k8sapi.WithK8sInterface(c, kc.ki)
+	return k8sapi.WithK8sInterface(c, kc.Ki)
 }

@@ -48,11 +48,13 @@ type PortForwardDialer interface {
 	Dial(ctx context.Context, addr string) (net.Conn, error)
 }
 
+type PortForwardDialerBuilder struct{}
+
 // NewK8sPortForwardDialer returns a dialer function (matching the signature required by
 // grpc.WithContextDialer) that dials to a port on a Kubernetes Pod, in the manor of `kubectl
 // port-forward`.  It returns the direct connection to the apiserver; it does not establish a local
 // port being forwarded from or otherwise pump data over the connection.
-func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (PortForwardDialer, error) {
+func (p *PortForwardDialerBuilder) NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8sInterface kubernetes.Interface) (PortForwardDialer, error) {
 	if err := setKubernetesDefaults(kubeConfig); err != nil {
 		return nil, err
 	}

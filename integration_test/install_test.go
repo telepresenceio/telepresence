@@ -262,14 +262,15 @@ func (is *installSuite) Test_RemoveManager_canUninstall() {
 	require := is.Require()
 	ctx := is.Context()
 	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	hi := helm.Installer{}
 
 	require.NoError(ensureTrafficManager(ctx, kc))
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
+	require.NoError(hi.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
 	// We want to make sure that we can re-install the manager after it's been uninstalled,
 	// so try to ensureManager again.
 	require.NoError(ensureTrafficManager(ctx, kc))
 	// Uninstall the manager one last time -- this should behave the same way as the previous uninstall
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
+	require.NoError(hi.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
@@ -306,6 +307,7 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 func (is *installSuite) Test_No_Upgrade() {
 	ctx := is.Context()
 	require := is.Require()
+	hi := helm.Installer{}
 	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
@@ -323,7 +325,7 @@ func (is *installSuite) Test_No_Upgrade() {
 	jvp, err := json.Marshal(vp)
 	require.NoError(err)
 
-	require.NoError(helm.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &connector.HelmRequest{
+	require.NoError(hi.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &connector.HelmRequest{
 		Type:       connector.HelmRequest_UPGRADE,
 		ValuesJson: jvp,
 	}))
@@ -364,19 +366,22 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, 
 
 func (is *installSuite) cluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster) {
 	require := is.Require()
-	cfgAndFlags, err := client.NewKubeconfig(ctx, map[string]string{
+	kcr := &client.KubeConfigResolver{}
+	cfgAndFlags, err := kcr.NewKubeconfig(ctx, map[string]string{
 		"KUBECONFIG": itest.KubeConfig(ctx),
 		"context":    context,
 		"namespace":  managerNamespace,
 	}, managerNamespace)
 	require.NoError(err)
-	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
+	cb := &k8s.ClusterBuilder{}
+	kc, err := cb.NewCluster(ctx, cfgAndFlags, nil)
 	require.NoError(err)
 	return kc.WithK8sInterface(ctx), kc
 }
 
 func ensureTrafficManager(ctx context.Context, kc *k8s.Cluster) error {
-	return helm.EnsureTrafficManager(
+	hi := helm.Installer{}
+	return hi.EnsureTrafficManager(
 		ctx,
 		kc.ConfigFlags,
 		kc.GetManagerNamespace(),

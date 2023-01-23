@@ -16,6 +16,8 @@ const ProcessName = "connector"
 
 // A Service is one that runs during the entire lifecycle of the daemon.
 // This should be used to augment the daemon with GRPC services.
+//
+//go:generate mockgen -package=mock_userd -destination=mocks/service_mock.go . Service
 type Service interface {
 	// As will cast this instance to what the given ptr points to, and assign
 	// that to the pointer. It will panic if type is not implemented.

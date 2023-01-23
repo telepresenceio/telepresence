@@ -16,7 +16,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 )
 
-func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, *manager.VersionInfo2, error) {
+type ManagerConnector struct{}
+
+func (m *ManagerConnector) Connect(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, *manager.VersionInfo2, error) {
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
 
 	// First check. Establish connection

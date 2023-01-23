@@ -30,7 +30,7 @@ func (kc *Cluster) startNamespaceWatcher(c context.Context) {
 		cond.Broadcast()
 	}()
 
-	kc.nsWatcher = k8sapi.NewWatcher("namespaces", kc.ki.CoreV1().RESTClient(), &cond, k8sapi.WithEquals[*core.Namespace](func(a, b *core.Namespace) bool {
+	kc.nsWatcher = k8sapi.NewWatcher("namespaces", kc.Ki.CoreV1().RESTClient(), &cond, k8sapi.WithEquals[*core.Namespace](func(a, b *core.Namespace) bool {
 		return a.Name == b.Name
 	}))
 
@@ -135,7 +135,7 @@ func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.Name
 }
 
 func (kc *Cluster) refreshNamespacesLocked(c context.Context) {
-	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
+	authHandler := kc.Ki.AuthorizationV1().SelfSubjectAccessReviews()
 	cns, err := kc.nsWatcher.List(c)
 	if err != nil {
 		dlog.Errorf(c, "error listing namespaces: %s", err)

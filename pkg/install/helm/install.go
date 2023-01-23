@@ -26,6 +26,8 @@ const (
 	releaseName = "traffic-manager"
 )
 
+type Installer struct{}
+
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
 	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...any) {
@@ -201,7 +203,7 @@ func isTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed.
-func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest) error {
+func (i *Installer) EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest) error {
 	existing, helmConfig, err := isTrafficManager(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("err detecting traffic manager: %w", err)
@@ -262,7 +264,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 }
 
 // DeleteTrafficManager deletes the traffic manager.
-func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool) error {
+func (i *Installer) DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)

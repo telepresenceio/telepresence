@@ -75,7 +75,9 @@ const (
 	defaultManagerNamespace = "ambassador"
 )
 
-func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
+type KubeConfigResolver struct{}
+
+func (kc *KubeConfigResolver) NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -199,7 +201,7 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 }
 
 // This represents an inClusterConfig.
-func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
+func (kc *KubeConfigResolver) NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")

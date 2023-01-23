@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.10.5 (TBD)
+### 2.X.X (TBD)
 
 - Bugfix: Fixes IPv6 support.
   Ticket [2978](https://github.com/telepresenceio/telepresence/issues/2978).
@@ -8,7 +8,6 @@
 - Feature: Adds two parameters `--also-proxy` and `--never-proxy` to the `telepresence connect` command.
   Ticket [2950](https://github.com/telepresenceio/telepresence/issues/2950).
 
-<<<<<<< HEAD
 - Feature: Add a parameter `--manager-namespace` to the `telepresence connect` command.
   Ticket [2968](https://github.com/telepresenceio/telepresence/issues/2968)
 
