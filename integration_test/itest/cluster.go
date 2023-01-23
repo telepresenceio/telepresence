@@ -219,7 +219,7 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 	}
 
 	runMake := func(target string) {
-		out, err := Command(WithOSSRoot(ctx), makeExe, target).CombinedOutput()
+		out, err := Command(WithModuleRoot(ctx), makeExe, target).CombinedOutput()
 		if err != nil {
 			errs <- RunError(err, out)
 		}
@@ -228,7 +228,7 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 	wgs.Add(1)
 	go func() {
 		defer wgs.Done()
-		runMake("tel2")
+		runMake("image")
 	}()
 	wgs.Wait()
 
