@@ -157,17 +157,18 @@ release-binary: $(TELEPRESENCE)
 	mkdir -p $(RELEASEDIR)
 	cp $(TELEPRESENCE) $(RELEASEDIR)/telepresence-$(GOOS)-$(GOARCH)$(BEXE)
 
-.PHONY: tel2
-tel2: build-deps
+.PHONY: image
+image: build-deps
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
-	docker build --target $@ --tag $@ --tag $(TELEPRESENCE_REGISTRY)/$@:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
+	docker build --target tel2 --tag tel2 --tag $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
 
 .PHONY: push-image
-push-image: tel2 ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
+push-image: image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
-tel2-image: tel2
+.PHONY: save-image
+save-image: image
 	docker save $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
 
 .PHONY: clobber
@@ -307,6 +308,7 @@ install: build ## (Install) Installs the telepresence binary to $(bindir)
 .PHONY: all test images push-images
 all:         build image     ## (ZAlias) Alias for 'build image'
 test:        check-all       ## (ZAlias) Alias for 'check-all'
-images:      tel2            ## (ZAlias) Alias for 'tel2'
-image:       tel2            ## (ZAlias) Alias for 'tel2'
+images:      image           ## (ZAlias) Alias for 'tel2'
+tel2:        image           ## (ZAlias) Alias for 'tel2'
+tel2-image:  save-image      ## (ZAlias) Alias for 'tel2'
 push-images: push-image      ## (ZAlias) Alias for 'push-image'
