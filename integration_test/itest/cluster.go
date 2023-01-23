@@ -81,6 +81,7 @@ type cluster struct {
 	testVersion      string
 	compatVersion    string
 	registry         string
+	agentRegistry    string
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
@@ -110,7 +111,12 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s.agentImageName = "tel2"
 	s.agentImageTag = s.testVersion[1:]
 	if agentImageQN, ok := os.LookupEnv("DEV_AGENT_IMAGE"); ok {
-		i := strings.IndexByte(agentImageQN, ':')
+		i := strings.LastIndexByte(agentImageQN, '/')
+		if i >= 0 {
+			s.agentRegistry = agentImageQN[:i]
+			agentImageQN = agentImageQN[i+1:]
+		}
+		i = strings.IndexByte(agentImageQN, ':')
 		require.Greater(t, i, 0)
 		s.agentImageName = agentImageQN[:i]
 		s.agentImageTag = agentImageQN[i+1:]
@@ -119,6 +125,9 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s.registry = os.Getenv("DTEST_REGISTRY")
 	if s.registry == "" {
 		s.registry = "localhost:5000"
+	}
+	if s.agentRegistry == "" {
+		s.agentRegistry = s.registry
 	}
 	require.NoError(t, s.generalError)
 
@@ -278,9 +287,8 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerAPI = 120 * time.Second
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
-	registry := s.Registry()
-	config.Images.PrivateRegistry = registry
-	config.Images.PrivateWebhookRegistry = registry
+	config.Images.PrivateRegistry = s.Registry()
+	config.Images.PrivateWebhookRegistry = s.AgentRegistry()
 
 	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"
@@ -354,6 +362,10 @@ func (s *cluster) GeneralError() error {
 
 func (s *cluster) IsCI() bool {
 	return s.isCI
+}
+
+func (s *cluster) AgentRegistry() string {
+	return s.agentRegistry
 }
 
 func (s *cluster) Registry() string {
@@ -468,7 +480,7 @@ func (s *cluster) GetValuesForHelm(values map[string]string, release bool, manag
 	if !release {
 		settings = append(settings,
 			"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
-			"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.Registry()),
+			"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.AgentRegistry()),
 		)
 	}
 
