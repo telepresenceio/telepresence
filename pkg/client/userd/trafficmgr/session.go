@@ -463,7 +463,7 @@ func parseCIDR(cidr []string) ([]*iputil.Subnet, error) {
 	for i := range cidr {
 		_, ipNet, err := net.ParseCIDR(cidr[i])
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse CIDR: %w", err)
+			return nil, fmt.Errorf("failed to parse CIDR %s: %w", cidr[i], err)
 		}
 		result = append(result, (*iputil.Subnet)(ipNet))
 	}
