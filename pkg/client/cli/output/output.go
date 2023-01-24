@@ -153,6 +153,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 		if encErr != nil {
 			panic(encErr)
 		}
+	case formatJSONStream:
 	default:
 		fmt.Fprintf(o.originalStdout, "%+v", obj)
 	}
