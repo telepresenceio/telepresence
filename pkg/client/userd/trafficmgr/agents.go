@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -14,7 +13,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -182,18 +180,7 @@ func (s *session) watchAgents(ctx context.Context, opts []grpc.CallOption) error
 }
 
 func (s *session) agentInfoWatcher(ctx context.Context) error {
-	backoff := 100 * time.Millisecond
-	for ctx.Err() == nil {
-		if err := s.watchAgentsNS(ctx); err != nil {
-			dlog.Error(ctx, err)
-			dtime.SleepWithContext(ctx, backoff)
-			backoff *= 2
-			if backoff > 3*time.Second {
-				backoff = 3 * time.Second
-			}
-		}
-	}
-	return nil
+	return runWithRetry(ctx, s.watchAgentsNS)
 }
 
 // Deprecated.

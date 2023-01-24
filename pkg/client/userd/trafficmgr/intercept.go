@@ -224,18 +224,7 @@ func (s *session) watchInterceptsHandler(ctx context.Context) error {
 	//     their exit statuses is just a memory leak
 	//  3. because we want a per-worker cancel, we'd have to implement our own Context
 	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
-	backoff := 100 * time.Millisecond
-	for ctx.Err() == nil {
-		if err := s.watchInterceptsLoop(ctx); err != nil {
-			dlog.Error(ctx, err)
-			dtime.SleepWithContext(ctx, backoff)
-			backoff *= 2
-			if backoff > 3*time.Second {
-				backoff = 3 * time.Second
-			}
-		}
-	}
-	return nil
+	return runWithRetry(ctx, s.watchInterceptsLoop)
 }
 
 func (s *session) watchInterceptsLoop(ctx context.Context) error {
