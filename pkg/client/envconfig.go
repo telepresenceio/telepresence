@@ -19,7 +19,7 @@ type Env struct {
 	LoginTokenURL      *url.URL `env:"TELEPRESENCE_LOGIN_TOKEN_URL,     parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/token"`
 	LoginCompletionURL *url.URL `env:"TELEPRESENCE_LOGIN_COMPLETION_URL,parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/completion"`
 	UserInfoURL        *url.URL `env:"TELEPRESENCE_USER_INFO_URL,       parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
-	ManagerNamespace   string   `env:"TELEPRESENCE_MANAGER_NAMESPACE,   parser=nonempty-string,default=ambassador"`
+	ManagerNamespace   string   `env:"TELEPRESENCE_MANAGER_NAMESPACE,   parser=nonempty-string"`
 
 	// This environment variable becomes the default for the images.registry and images.webhookRegistry
 	Registry string `env:"TELEPRESENCE_REGISTRY,                        parser=nonempty-string,default=docker.io/datawire"`

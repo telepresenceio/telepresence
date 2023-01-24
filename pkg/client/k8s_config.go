@@ -181,7 +181,11 @@ func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, e
 	if k.KubeconfigExtension.Manager.Namespace == "" {
 		k.KubeconfigExtension.Manager.Namespace = GetEnv(c).ManagerNamespace
 	}
+	if k.KubeconfigExtension.Manager.Namespace == "" {
+		k.KubeconfigExtension.Manager.Namespace = GetConfig(c).Cluster.DefaultManagerNamespace
+	}
 
+	dlog.Infof(c, "Will look for traffic manager in namespace %s", k.KubeconfigExtension.Manager.Namespace)
 	return k, nil
 }
 
@@ -211,6 +215,11 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		namespace = "default"
 	}
 
+	managerNamespace := GetEnv(c).ManagerNamespace
+	if managerNamespace == "" {
+		managerNamespace = GetConfig(c).Cluster.DefaultManagerNamespace
+	}
+
 	return &Kubeconfig{
 		Namespace:   namespace,
 		Server:      restConfig.Host,
@@ -220,7 +229,7 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		// it may be empty, but we should avoid nil deref
 		KubeconfigExtension: KubeconfigExtension{
 			Manager: &ManagerConfig{
-				Namespace: GetEnv(c).ManagerNamespace,
+				Namespace: managerNamespace,
 			},
 		},
 	}, nil
