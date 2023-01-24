@@ -172,7 +172,7 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr.IsPodDaemon)
+	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -324,7 +324,7 @@ func connectMgr(
 	sr *scout.Reporter,
 	cluster *k8s.Cluster,
 	installID string,
-	isPodDaemon bool,
+	cr *rpc.ConnectRequest,
 ) (*session, error) {
 	clientConfig := client.GetConfig(ctx)
 	tos := &clientConfig.Timeouts
@@ -421,6 +421,19 @@ func connectMgr(
 		managerName = "Traffic Manager"
 	}
 
+	extraAlsoProxy, err := parseCIDR(cr.GetAlsoProxy())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse extra also proxy: %w", err)
+	}
+
+	extraNeverProxy, err := parseCIDR(cr.GetNeverProxy())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse extra never proxy: %w", err)
+	}
+
+	cluster.AlsoProxy = append(cluster.AlsoProxy, extraAlsoProxy...)
+	cluster.NeverProxy = append(cluster.NeverProxy, extraNeverProxy...)
+
 	return &session{
 		Cluster:          cluster,
 		installID:        installID,
@@ -434,10 +447,28 @@ func connectMgr(
 		localIntercepts:  make(map[string]struct{}),
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
-		isPodDaemon:      isPodDaemon,
+		isPodDaemon:      cr.IsPodDaemon,
 		sr:               sr,
 		done:             make(chan struct{}),
 	}, nil
+}
+
+func parseCIDR(cidr []string) ([]*iputil.Subnet, error) {
+	result := make([]*iputil.Subnet, 0)
+
+	if cidr == nil {
+		return result, nil
+	}
+
+	for i := range cidr {
+		_, ipNet, err := net.ParseCIDR(cidr[i])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse CIDR %s: %w", cidr[i], err)
+		}
+		result = append(result, (*iputil.Subnet)(ipNet))
+	}
+
+	return result, nil
 }
 
 func CheckTrafficManagerService(ctx context.Context, namespace string) error {
@@ -1049,12 +1080,12 @@ func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	// the cluster, since an open tunnel to the traffic-manager (via the API server) is itself required
 	// to communicate with the cluster.
 	neverProxy := []*manager.IPNet{}
-	url, err := url.Parse(s.Server)
+	serverURL, err := url.Parse(s.Server)
 	if err != nil {
 		// This really shouldn't happen as we are connected to the server
 		dlog.Errorf(ctx, "Unable to parse url for k8s server %s: %v", s.Server, err)
 	} else {
-		hostname := url.Hostname()
+		hostname := serverURL.Hostname()
 		rawIP := iputil.Parse(hostname)
 		ips := []net.IP{rawIP}
 		if rawIP == nil {
