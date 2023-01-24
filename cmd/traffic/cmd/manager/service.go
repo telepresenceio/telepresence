@@ -845,6 +845,14 @@ func (m *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDi
 			}
 			if err := stream.Send(lr); err != nil {
 				dlog.Errorf(ctx, "WatchDial.Send() failed: %v", err)
+				// We couldnt stream the dial request. This likely means
+				// that we lost connection. Pass lr to the next WatchDial call
+				select {
+				// If it has been longer than 30s, everyone has probably moved
+				// on with their lives.
+				case <-time.After(time.Second * 30):
+				case lrCh <- lr:
+				}
 				return nil
 			}
 		}
