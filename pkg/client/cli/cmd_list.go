@@ -43,7 +43,11 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+
 	flags.BoolVarP(&s.watch, "watch", "w", false, "watch a namespace. --agents and --intercepts are disabled if this flag is set")
+	wf := flags.Lookup("watch")
+	wf.Hidden = true
+	wf.Deprecated = `Use "--output json-stream" instead of "--watch"`
 
 	_ = cmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		shellCompDir := cobra.ShellCompDirectiveNoFileComp
@@ -98,7 +102,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	}
 
 	formattedOutput := output.WantsFormatted(cmd)
-	if !s.watch {
+	if !output.WantsStream(cmd) {
 		r, err := userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 		if err != nil {
 			return err

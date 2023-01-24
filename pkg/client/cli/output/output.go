@@ -68,7 +68,15 @@ func Object(ctx context.Context, obj any, override bool) {
 			if o.obj != nil {
 				panic("output.Object can only be used once")
 			}
-			o.obj = obj
+
+			if o.format == formatJSONStream {
+				if err := json.NewEncoder(o.originalStdout).Encode(obj); err != nil {
+					panic(err)
+				}
+			} else {
+				o.obj = obj
+			}
+
 			o.override = override
 		}
 	}
@@ -145,6 +153,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 		if encErr != nil {
 			panic(encErr)
 		}
+	case formatJSONStream:
 	default:
 		fmt.Fprintf(o.originalStdout, "%+v", obj)
 	}
@@ -182,6 +191,12 @@ func WantsFormatted(cmd *cobra.Command) bool {
 	return f != formatDefault
 }
 
+// WantsStream returns true if the value of the global `--output` flag is set to "json-stream".
+func WantsStream(cmd *cobra.Command) bool {
+	f, _ := validateFlag(cmd)
+	return f == formatJSONStream
+}
+
 func validateFlag(cmd *cobra.Command) (format, error) {
 	if of := cmd.Flags().Lookup("output"); of != nil && of.DefValue == "default" {
 		fmt := strings.ToLower(of.Value.String())
@@ -190,6 +205,8 @@ func validateFlag(cmd *cobra.Command) (format, error) {
 			return formatYAML, nil
 		case "json":
 			return formatJSON, nil
+		case "json-stream":
+			return formatJSONStream, nil
 		case "default":
 			return formatDefault, nil
 		default:
@@ -221,6 +238,7 @@ const (
 	formatDefault = format(iota)
 	formatJSON
 	formatYAML
+	formatJSONStream
 )
 
 func (o *output) Write(data []byte) (int, error) {

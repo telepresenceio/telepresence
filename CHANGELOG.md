@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.10.4 (TBD)
+
+- Change: Depreciate `--watch` flag in `telepresence list` command. This is now covered by `--output json-stream`
+
+- Change: Add `--output` option `json-stream`
+
 ### 2.10.4 (January 20, 2023)
 
 - Bugfix: Fix backward compatibility issue when using traffic-managers of version 2.9.5 or older.
