@@ -31,6 +31,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -515,6 +516,21 @@ func (s *session) StartServices(g *dgroup.Group) {
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
 	g.Go("agent-watcher", s.agentInfoWatcher)
 	g.Go("dial-request-watcher", s.dialRequestWatcher)
+}
+
+func runWithRetry(ctx context.Context, f func(context.Context) error) error {
+	backoff := 100 * time.Millisecond
+	for ctx.Err() == nil {
+		if err := f(ctx); err != nil {
+			dlog.Error(ctx, err)
+			dtime.SleepWithContext(ctx, backoff)
+			backoff *= 2
+			if backoff > 3*time.Second {
+				backoff = 3 * time.Second
+			}
+		}
+	}
+	return nil
 }
 
 func (s *session) Done() <-chan struct{} {
