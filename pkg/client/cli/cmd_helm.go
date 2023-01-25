@@ -147,7 +147,7 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	if err = util.InitCommand(cmd); err != nil {
 		return err
 	}
-	ha.Request.KubeFlags = FlagMap(ha.kubeFlags)
+	ha.Request.KubeFlags = util.FlagMap(ha.kubeFlags)
 
 	util.AddKubeconfigEnv(ha.Request)
 
