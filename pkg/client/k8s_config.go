@@ -72,7 +72,7 @@ type Kubeconfig struct {
 
 const configExtension = "telepresence.io"
 
-func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
+func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -177,6 +177,8 @@ func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, e
 	if k.KubeconfigExtension.Manager == nil {
 		k.KubeconfigExtension.Manager = &ManagerConfig{}
 	}
+
+	k.KubeconfigExtension.Manager.Namespace = managerNamespaceOverride
 
 	if k.KubeconfigExtension.Manager.Namespace == "" {
 		k.KubeconfigExtension.Manager.Namespace = GetEnv(c).ManagerNamespace

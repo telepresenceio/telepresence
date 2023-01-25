@@ -160,9 +160,9 @@ message ConnectRequest {
   repeated string mapped_namespaces = 2;
   reserved 3;
   bool is_pod_daemon = 4;
-
   repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+  string manager_namespace = 7;
 }
 
 message ConnectInfo {

@@ -100,7 +100,6 @@ func InitConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.F
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
 			`Defaults to all namespaces`)
-
 	nwFlags.StringSliceVar(&cr.AlsoProxy,
 		"also-proxy", nil, ``+
 			`Additional comma separated list of CIDR to proxy`)
@@ -108,7 +107,8 @@ func InitConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.F
 	nwFlags.StringSliceVar(&cr.NeverProxy,
 		"never-proxy", nil, ``+
 			`Comma separated list of CIDR to never proxy`)
-
+	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
+		`Overrides any other manager namespace set in config`)
 	flags.AddFlagSet(nwFlags)
 
 	kubeConfig := genericclioptions.NewConfigFlags(false)

@@ -60,7 +60,7 @@ func configView(cmd *cobra.Command, _ []string) error {
 		cfg.ClientFile = filepath.Join(cfgDir, client.ConfigFile)
 
 		rq := util.GetConnectRequest(ctx)
-		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags)
+		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
 		if err != nil {
 			return err
 		}

@@ -264,7 +264,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	if cr.IsPodDaemon {
 		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags)
+		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
 	}
 
 	if err != nil {
@@ -846,7 +846,7 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 	if cr.IsPodDaemon {
 		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags)
+		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
 	}
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
