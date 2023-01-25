@@ -3,8 +3,9 @@ package iputil
 import (
 	"encoding/json"
 	"net"
-	"sigs.k8s.io/kustomize/kyaml/yaml"
 	"strings"
+
+	"sigs.k8s.io/kustomize/kyaml/yaml"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )

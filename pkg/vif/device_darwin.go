@@ -155,8 +155,8 @@ type addrIfReq struct {
 // See https://www.unix.com/man-page/osx/4/netintro/
 
 type addrLifetime struct {
-	expire         float64 // nolint:unused
-	preferred      float64 // nolint:unused
+	expire         float64 //nolint:unused //not used
+	preferred      float64 //nolint:unused // not used
 	validLifeTime  uint32
 	prefixLifeTime uint32
 }
@@ -171,10 +171,12 @@ type addrIfReq6 struct {
 }
 
 // SIOCAIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCAIFADDR adjusted with size of addrIfReq6.
-const SIOCAIFADDR_IN6 = (unix.SIOCAIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
-const ND6_INFINITE_LIFETIME = 0xffffffff
-const IN6_IFF_NODAD = 0x0020
-const IN6_IFF_SECURED = 0x0400
+const (
+	SIOCAIFADDR_IN6       = (unix.SIOCAIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
+	ND6_INFINITE_LIFETIME = 0xffffffff
+	IN6_IFF_NODAD         = 0x0020
+	IN6_IFF_SECURED       = 0x0400
+)
 
 // SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6.
 const SIOCDIFADDR_IN6 = (unix.SIOCDIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
