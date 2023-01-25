@@ -216,12 +216,13 @@ func NewSession(
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
 	ret := &rpc.ConnectInfo{
-		Error:          rpc.ConnectInfo_UNSPECIFIED,
-		ClusterContext: cluster.Kubeconfig.Context,
-		ClusterServer:  cluster.Kubeconfig.Server,
-		ClusterId:      cluster.GetClusterId(ctx),
-		SessionInfo:    tmgr.SessionInfo(),
-		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
+		Error:            rpc.ConnectInfo_UNSPECIFIED,
+		ClusterContext:   cluster.Kubeconfig.Context,
+		ClusterServer:    cluster.Kubeconfig.Server,
+		ClusterId:        cluster.GetClusterId(ctx),
+		SessionInfo:      tmgr.SessionInfo(),
+		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
+		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
 	}
 	return ctx, tmgr, ret
 }
@@ -884,6 +885,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 			Executable: client.GetExe(),
 			Name:       client.DisplayName,
 		},
+		ManagerNamespace: cfg.GetManagerNamespace(),
 	}
 	if s.rootDaemon != nil {
 		var err error
