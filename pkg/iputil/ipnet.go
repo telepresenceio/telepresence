@@ -24,20 +24,6 @@ func IPNetFromRPC(r *manager.IPNet) *net.IPNet {
 	}
 }
 
-//func IPNetFromRPC(r *manager.IPNet) *net.IPNet {
-//	var mask net.IPMask
-//	if len(r.Ip) > 4 {
-//		mask = net.CIDRMask(int(r.Mask), 128)
-//	} else {
-//		mask = net.CIDRMask(int(r.Mask), len(r.Ip)*8)
-//	}
-//
-//	return &net.IPNet{
-//		IP:   r.Ip,
-//		Mask: mask,
-//	}
-//}
-
 func IsIpV6Addr(ipAddStr string) bool {
 	return strings.Count(ipAddStr, ":") >= 2
 }
