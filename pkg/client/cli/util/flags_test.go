@@ -1,11 +1,11 @@
-package intercept
+package util
 
 import (
 	"strings"
 	"testing"
 )
 
-func Test_getArg(t *testing.T) {
+func TestGetUnparsedFlagValue(t *testing.T) {
 	tests := []struct {
 		args    []string
 		flag    string
@@ -57,7 +57,7 @@ func Test_getArg(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, "_"), func(t *testing.T) {
-			gotV, err := getUnparsedFlagValue(tt.args, tt.flag)
+			gotV, err := GetUnparsedFlagValue(tt.args, tt.flag)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getUnparsedFlagValue() error = %v, wantErr %v", err, tt.wantErr)
 				return
