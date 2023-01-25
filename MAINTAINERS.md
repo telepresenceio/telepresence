@@ -8,8 +8,8 @@ maintainer responsibilities.
 Maintainers are listed in alphabetical order.
 
 * Jose Cortes, [josecv](https://github.com/josecv), <josecortes@datawire.io>
+* Kévin Lambert, [knlambert](https://github.com/knlambert), <klambert@datawire.io>
 * Nick Powell, [njayp](https://github.com/njayp), <nickpowell@datawire.io>
-* Raphael Reyna, [raphaelreyna](https://github.com/raphaelreyna), <rreyna@datawire.io>
 * Thomas Hallgren, [thallgren](https://github.com/thallgren), <thomas@datawire.io>
 
 ## Maintainers Emeriti
