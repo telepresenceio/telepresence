@@ -66,7 +66,7 @@ func connectCommand() *cobra.Command {
 			ann.Session:    ann.Required,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request.KubeFlags = FlagMap(kubeFlags)
+			request.KubeFlags = util.FlagMap(kubeFlags)
 			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
 			if err := util.InitCommand(cmd); err != nil {
 				return err
