@@ -154,20 +154,20 @@ type addrIfReq struct {
 //
 // See https://www.unix.com/man-page/osx/4/netintro/
 
-type in6_addrlifetime struct {
-	ia6t_expire    float64 // nolint:unused
-	ia6t_preferred float64 // nolint:unused
-	ia6t_vltime    uint32
-	ia6t_pltime    uint32
+type addrLifetime struct {
+	expire         float64 // nolint:unused
+	preferred      float64 // nolint:unused
+	validLifeTime  uint32
+	prefixLifeTime uint32
 }
 
 type addrIfReq6 struct {
-	name          [unix.IFNAMSIZ]byte
-	addr          unix.RawSockaddrInet6
-	dest          unix.RawSockaddrInet6
-	mask          unix.RawSockaddrInet6
-	flags         int32 //nolint:structcheck // this is the type returned by the kernel, not our own type
-	ifra_lifetime in6_addrlifetime
+	name         [unix.IFNAMSIZ]byte
+	addr         unix.RawSockaddrInet6
+	dest         unix.RawSockaddrInet6
+	mask         unix.RawSockaddrInet6
+	flags        int32 //nolint:structcheck // this is the type returned by the kernel, not our own type
+	addrLifetime addrLifetime
 }
 
 // SIOCAIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCAIFADDR adjusted with size of addrIfReq6.
@@ -213,8 +213,8 @@ func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
 				mask:  unix.RawSockaddrInet6{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET6},
 				flags: IN6_IFF_NODAD | IN6_IFF_SECURED,
 			}
-			ifreq.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME
-			ifreq.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME
+			ifreq.addrLifetime.validLifeTime = ND6_INFINITE_LIFETIME
+			ifreq.addrLifetime.prefixLifeTime = ND6_INFINITE_LIFETIME
 
 			copy(ifreq.name[:], t.name)
 			copy(ifreq.addr.Addr[:], subnet.IP.To16())
@@ -249,8 +249,8 @@ func (t *nativeDevice) removeAddr(subnet *net.IPNet, to net.IP) error {
 				dest: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
 				mask: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
 			}
-			ifreq.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME
-			ifreq.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME
+			ifreq.addrLifetime.validLifeTime = ND6_INFINITE_LIFETIME
+			ifreq.addrLifetime.prefixLifeTime = ND6_INFINITE_LIFETIME
 
 			copy(ifreq.name[:], t.name)
 			copy(ifreq.addr.Addr[:], subnet.IP.To16())
