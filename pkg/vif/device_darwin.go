@@ -153,21 +153,30 @@ type addrIfReq struct {
 // Address structure for the SIOCAIFADDR_IN6 ioctlHandle request
 //
 // See https://www.unix.com/man-page/osx/4/netintro/
-type addrIfReq6 struct {
-	name           [unix.IFNAMSIZ]byte
-	addr           unix.RawSockaddrInet6
-	dest           unix.RawSockaddrInet6
-	mask           unix.RawSockaddrInet6
-	flags          int32 //nolint:structcheck // this is the type returned by the kernel, not our own type
-	expire         int64 //nolint:structcheck // likewise
-	preferred      int64 //nolint:structcheck // likewise
+
+type addrLifetime struct {
+	expire         float64 //nolint:unused //not used
+	preferred      float64 //nolint:unused // not used
 	validLifeTime  uint32
 	prefixLifeTime uint32
 }
 
+type addrIfReq6 struct {
+	name         [unix.IFNAMSIZ]byte
+	addr         unix.RawSockaddrInet6
+	dest         unix.RawSockaddrInet6
+	mask         unix.RawSockaddrInet6
+	flags        int32 //nolint:structcheck // this is the type returned by the kernel, not our own type
+	addrLifetime addrLifetime
+}
+
 // SIOCAIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCAIFADDR adjusted with size of addrIfReq6.
-const SIOCAIFADDR_IN6 = (unix.SIOCAIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
-const ND6_INFINITE_LIFETIME = 0xffffffff
+const (
+	SIOCAIFADDR_IN6       = (unix.SIOCAIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
+	ND6_INFINITE_LIFETIME = 0xffffffff
+	IN6_IFF_NODAD         = 0x0020
+	IN6_IFF_SECURED       = 0x0400
+)
 
 // SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6.
 const SIOCDIFADDR_IN6 = (unix.SIOCDIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
@@ -187,9 +196,9 @@ func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
 	if sub4, to4, ok := addrToIp4(subnet, to); ok {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{
-				addr: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
-				dest: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
-				mask: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
+				addr: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet4, Family: unix.AF_INET},
+				dest: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet4, Family: unix.AF_INET},
+				mask: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet4, Family: unix.AF_INET},
 			}
 			copy(ifreq.name[:], t.name)
 			copy(ifreq.addr.Addr[:], sub4.IP)
@@ -202,16 +211,16 @@ func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
 	} else {
 		return withSocket(unix.AF_INET6, func(fd int) error {
 			ifreq := &addrIfReq6{
-				addr:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				dest:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				mask:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				validLifeTime:  ND6_INFINITE_LIFETIME,
-				prefixLifeTime: ND6_INFINITE_LIFETIME,
+				addr:  unix.RawSockaddrInet6{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET6},
+				mask:  unix.RawSockaddrInet6{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET6},
+				flags: IN6_IFF_NODAD | IN6_IFF_SECURED,
 			}
+			ifreq.addrLifetime.validLifeTime = ND6_INFINITE_LIFETIME
+			ifreq.addrLifetime.prefixLifeTime = ND6_INFINITE_LIFETIME
+
 			copy(ifreq.name[:], t.name)
 			copy(ifreq.addr.Addr[:], subnet.IP.To16())
 			copy(ifreq.mask.Addr[:], subnet.Mask)
-			copy(ifreq.dest.Addr[:], to.To16())
 			err := ioctl(fd, SIOCAIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err
@@ -223,9 +232,9 @@ func (t *nativeDevice) removeAddr(subnet *net.IPNet, to net.IP) error {
 	if sub4, to4, ok := addrToIp4(subnet, to); ok {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{
-				addr: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
-				dest: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
-				mask: unix.RawSockaddrInet4{Len: 16, Family: unix.AF_INET},
+				addr: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
+				dest: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
+				mask: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
 			}
 			copy(ifreq.name[:], t.name)
 			copy(ifreq.addr.Addr[:], sub4.IP)
@@ -238,16 +247,16 @@ func (t *nativeDevice) removeAddr(subnet *net.IPNet, to net.IP) error {
 	} else {
 		return withSocket(unix.AF_INET6, func(fd int) error {
 			ifreq := &addrIfReq6{
-				addr:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				dest:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				mask:           unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				validLifeTime:  ND6_INFINITE_LIFETIME,
-				prefixLifeTime: ND6_INFINITE_LIFETIME,
+				addr: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
+				dest: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
+				mask: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
 			}
+			ifreq.addrLifetime.validLifeTime = ND6_INFINITE_LIFETIME
+			ifreq.addrLifetime.prefixLifeTime = ND6_INFINITE_LIFETIME
+
 			copy(ifreq.name[:], t.name)
 			copy(ifreq.addr.Addr[:], subnet.IP.To16())
 			copy(ifreq.mask.Addr[:], subnet.Mask)
-			copy(ifreq.dest.Addr[:], to.To16())
 			err := ioctl(fd, SIOCDIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err

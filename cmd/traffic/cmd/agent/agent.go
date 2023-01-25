@@ -79,7 +79,7 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 
 	// start an sftp-server for remote sshfs mounts
 	lc := net.ListenConfig{}
-	l, err := lc.Listen(ctx, "tcp4", ":0")
+	l, err := lc.Listen(ctx, "tcp", ":0")
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,11 @@ func StartFileSharing(ctx context.Context, g *dgroup.Group, config Config) (<-ch
 			return sftpServer(ctx, sftpPortCh)
 		})
 		g.Go("ftp-server", func(ctx context.Context) error {
-			return ftp.Start(ctx, config.PodIP(), agentconfig.ExportsMountPoint, ftpPortCh)
+			if iputil.IsIpV6Addr(config.PodIP()) {
+				return ftp.Start(ctx, "", agentconfig.ExportsMountPoint, ftpPortCh)
+			} else {
+				return ftp.Start(ctx, config.PodIP(), agentconfig.ExportsMountPoint, ftpPortCh)
+			}
 		})
 	} else {
 		close(sftpPortCh)
