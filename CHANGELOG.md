@@ -2,6 +2,11 @@
 
 ### 2.X.X (TBD)
 
+- Bugfix: Fixes IPv6 support.
+  Ticket [2978](https://github.com/telepresenceio/telepresence/issues/2978).
+
+### 2.X.X (TBD)
+
 - Feature: Adds two parameters `--also-proxy` and `--never-proxy` to the `telepresence connect` command.
   Ticket [2950](https://github.com/telepresenceio/telepresence/issues/2950).
 
