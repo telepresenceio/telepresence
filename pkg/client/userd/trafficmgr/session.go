@@ -480,7 +480,8 @@ func CheckTrafficManagerService(ctx context.Context, namespace string) error {
 		se := &k8serrors.StatusError{}
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {
-				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'"
+				msg = ("traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in.")
 			}
 		}
 		return errcat.User.New(msg)
