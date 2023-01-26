@@ -70,8 +70,10 @@ type Kubeconfig struct {
 	RestConfig  *rest.Config
 }
 
-const configExtension = "telepresence.io"
-const defaultManagerNamespace = "ambassador"
+const (
+	configExtension         = "telepresence.io"
+	defaultManagerNamespace = "ambassador"
+)
 
 func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with

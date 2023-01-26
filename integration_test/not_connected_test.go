@@ -115,5 +115,4 @@ func (s *notConnectedSuite) Test_ConnectingToOtherNamespace() {
 		ctx := itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": mgrSpace2})
 		s.UninstallTrafficManager(ctx, mgrSpace2)
 	})
-
 }
