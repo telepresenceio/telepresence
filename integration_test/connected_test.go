@@ -52,6 +52,7 @@ func (s *connectedSuite) Test_Status() {
 	s.Contains(stdout, "Root Daemon: Running")
 	s.Contains(stdout, "User Daemon: Running")
 	s.Contains(stdout, "Kubernetes context:")
+	s.Regexp(`Manager namespace\s+: `+s.ManagerNamespace(), stdout)
 }
 
 func (s *connectedSuite) Test_StatusWithJSON() {
@@ -62,4 +63,5 @@ func (s *connectedSuite) Test_StatusWithJSON() {
 	s.True(status.UserDaemon.Running)
 	s.NotEmpty(status.UserDaemon.KubernetesContext)
 	s.NotEmpty(status.UserDaemon.InstallID)
+	s.Equal(status.UserDaemon.ManagerNamespace, s.ManagerNamespace())
 }
