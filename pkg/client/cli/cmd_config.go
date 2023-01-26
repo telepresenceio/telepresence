@@ -34,7 +34,7 @@ func configViewCommand() *cobra.Command {
 		PersistentPreRunE: output.DefaultYAML,
 		Short:             "View current Telepresence configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request.KubeFlags = FlagMap(kubeFlags)
+			request.KubeFlags = util.FlagMap(kubeFlags)
 			util.AddKubeconfigEnv(request)
 			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
 			return configView(cmd, args)
