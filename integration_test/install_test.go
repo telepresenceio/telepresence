@@ -368,7 +368,7 @@ func (is *installSuite) cluster(ctx context.Context, context, managerNamespace s
 		"KUBECONFIG": itest.KubeConfig(ctx),
 		"context":    context,
 		"namespace":  managerNamespace,
-	})
+	}, managerNamespace)
 	require.NoError(err)
 	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
 	require.NoError(err)

@@ -216,12 +216,13 @@ func NewSession(
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
 	ret := &rpc.ConnectInfo{
-		Error:          rpc.ConnectInfo_UNSPECIFIED,
-		ClusterContext: cluster.Kubeconfig.Context,
-		ClusterServer:  cluster.Kubeconfig.Server,
-		ClusterId:      cluster.GetClusterId(ctx),
-		SessionInfo:    tmgr.SessionInfo(),
-		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
+		Error:            rpc.ConnectInfo_UNSPECIFIED,
+		ClusterContext:   cluster.Kubeconfig.Context,
+		ClusterServer:    cluster.Kubeconfig.Server,
+		ClusterId:        cluster.GetClusterId(ctx),
+		SessionInfo:      tmgr.SessionInfo(),
+		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
+		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
 	}
 	return ctx, tmgr, ret
 }
@@ -264,7 +265,7 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, er
 	if cr.IsPodDaemon {
 		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags)
+		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
 	}
 
 	if err != nil {
@@ -479,7 +480,8 @@ func CheckTrafficManagerService(ctx context.Context, namespace string) error {
 		se := &k8serrors.StatusError{}
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {
-				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'"
+				msg = ("traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in.")
 			}
 		}
 		return errcat.User.New(msg)
@@ -846,7 +848,7 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 	if cr.IsPodDaemon {
 		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
 	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags)
+		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
 	}
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
@@ -884,6 +886,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 			Executable: client.GetExe(),
 			Name:       client.DisplayName,
 		},
+		ManagerNamespace: cfg.GetManagerNamespace(),
 	}
 	if s.rootDaemon != nil {
 		var err error
