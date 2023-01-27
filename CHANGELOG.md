@@ -5,10 +5,17 @@
 - Bugfix: Fixes IPv6 support.
   Ticket [2978](https://github.com/telepresenceio/telepresence/issues/2978).
 
-### 2.X.X (TBD)
-
 - Feature: Adds two parameters `--also-proxy` and `--never-proxy` to the `telepresence connect` command.
   Ticket [2950](https://github.com/telepresenceio/telepresence/issues/2950).
+
+- Feature: Add a parameter `--manager-namespace` to the `telepresence connect` command.
+  Ticket [2968](https://github.com/telepresenceio/telepresence/issues/2968)
+
+- Feature: Add a configuration `cluster.defaultManagerNamespace` for setting the default manager namespace.
+  Ticket [2968](https://github.com/telepresenceio/telepresence/issues/2968)
+
+- Change: The namespace of the connected manager is now displayed in the `telepresence status` output.
+  Ticket [2968](https://github.com/telepresenceio/telepresence/issues/2968)
 
 ### 2.10.4 (TBD)
 
