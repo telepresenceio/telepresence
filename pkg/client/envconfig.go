@@ -29,6 +29,9 @@ type Env struct {
 
 	Shell string `env:"SHELL, parser=nonempty-string,default=/bin/bash"`
 
+	// The address that the user daemon is listening to (unless it is started by the client and uses a named pipe or unix socket).
+	UserDaemonAddress string `env:"TELEPRESENCE_USER_DAEMON_ADDRESS, parser=possibly-empty-string,default="`
+
 	lookupFunc func(key string) (string, bool)
 }
 

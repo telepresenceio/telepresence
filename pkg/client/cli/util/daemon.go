@@ -52,6 +52,10 @@ func launchDaemon(ctx context.Context) error {
 
 // EnsureRootDaemonRunning ensures that the daemon is running.
 func EnsureRootDaemonRunning(ctx context.Context) error {
+	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
+		// Always assume that root daemon is running when a user daemon address is provided
+		return nil
+	}
 	running, err := client.IsRunning(ctx, client.DaemonSocketName)
 	if err != nil || running {
 		return err

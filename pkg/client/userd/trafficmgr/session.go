@@ -36,10 +36,11 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
@@ -65,7 +66,7 @@ type apiMatcher struct {
 
 type session struct {
 	*k8s.Cluster
-	rootDaemon daemon.DaemonClient
+	rootDaemon rootdRpc.DaemonClient
 
 	// local information
 	installID   string // telepresence's install ID
@@ -193,13 +194,17 @@ func NewSession(
 		}
 	}
 
-	// Connect to the root daemon if it is running. It's the CLI that starts it initially
-	rdRunning, err := client.IsRunning(ctx, client.DaemonSocketName)
-	if err != nil {
-		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+	rdRunning := userd.GetService(ctx).RootSessionInProcess()
+	if !rdRunning {
+		// Connect to the root daemon if it is running. It's the CLI that starts it initially
+		rdRunning, err = client.IsRunning(ctx, client.DaemonSocketName)
+		if err != nil {
+			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
 	}
+
 	if rdRunning {
-		tmgr.rootDaemon, err = connectRootDaemon(ctx, tmgr.getOutboundInfo(ctx))
+		tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, tmgr.getOutboundInfo(ctx))
 		if err != nil {
 			tmgr.managerConn.Close()
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
@@ -529,7 +534,7 @@ func (s *session) updateDaemonNamespaces(c context.Context) {
 	paths := s.GetCurrentNamespaces(false)
 	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
 
-	if _, err := s.rootDaemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
+	if _, err := s.rootDaemon.SetDnsSearchPath(c, &rootdRpc.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
 		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
 	}
 	dlog.Debug(c, "search paths posted successfully")
@@ -1076,7 +1081,7 @@ func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*com
 }
 
 // getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster.
-func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
+func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
 	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
@@ -1117,7 +1122,7 @@ func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 		kubeFlags = maps.Copy(s.FlagMap)
 		kubeFlags["KUBECONFIG"] = kc
 	}
-	info := &daemon.OutboundInfo{
+	info := &rootdRpc.OutboundInfo{
 		Session:           s.sessionInfo,
 		NeverProxySubnets: neverProxy,
 		HomeDir:           homedir.HomeDir(),
@@ -1126,7 +1131,7 @@ func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	}
 
 	if s.DNS != nil {
-		info.Dns = &daemon.DNSConfig{
+		info.Dns = &rootdRpc.DNSConfig{
 			ExcludeSuffixes: s.DNS.ExcludeSuffixes,
 			IncludeSuffixes: s.DNS.IncludeSuffixes,
 			LookupTimeout:   durationpb.New(s.DNS.LookupTimeout.Duration),
@@ -1148,45 +1153,57 @@ func (s *session) getOutboundInfo(ctx context.Context) *daemon.OutboundInfo {
 	return info
 }
 
-func connectRootDaemon(ctx context.Context, oi *daemon.OutboundInfo) (daemon.DaemonClient, error) {
+func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundInfo) (rd rootdRpc.DaemonClient, err error) {
 	// establish a connection to the root daemon gRPC grpcService
 	dlog.Info(ctx, "Connecting to root daemon...")
-	conn, err := client.DialSocket(ctx, client.DaemonSocketName,
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unable open root daemon socket: %w", err)
-	}
-	defer func() {
+	svc := userd.GetService(ctx)
+	if svc.RootSessionInProcess() {
+		// Just run the root session in-process.
+		rootSession, err := rootd.NewInProcSession(ctx, svc.Reporter(), oi, s.managerClient, s.managerVersion)
 		if err != nil {
-			conn.Close()
+			return nil, err
 		}
-	}()
-	rd := daemon.NewDaemonClient(conn)
+		dgroup.ParentGroup(ctx).Go("root-session", rootSession.Run)
+		rd = rootSession
+	} else {
+		var conn *grpc.ClientConn
+		conn, err = client.DialSocket(ctx, client.DaemonSocketName,
+			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable open root daemon socket: %w", err)
+		}
+		defer func() {
+			if err != nil {
+				conn.Close()
+			}
+		}()
+		rd = rootdRpc.NewDaemonClient(conn)
 
-	for attempt := 1; ; attempt++ {
-		var rootStatus *daemon.DaemonStatus
-		if rootStatus, err = rd.Connect(ctx, oi); err != nil {
-			return nil, fmt.Errorf("failed to connect to root daemon: %w", err)
-		}
-		oc := rootStatus.OutboundConfig
-		if oc == nil || oc.Session == nil {
-			// This is an internal error. Something is wrong with the root daemon.
-			return nil, errors.New("root daemon's OutboundConfig has no Session")
-		}
-		if oc.Session.SessionId == oi.Session.SessionId {
-			break
-		}
+		for attempt := 1; ; attempt++ {
+			var rootStatus *rootdRpc.DaemonStatus
+			if rootStatus, err = rd.Connect(ctx, oi); err != nil {
+				return nil, fmt.Errorf("failed to connect to root daemon: %w", err)
+			}
+			oc := rootStatus.OutboundConfig
+			if oc == nil || oc.Session == nil {
+				// This is an internal error. Something is wrong with the root daemon.
+				return nil, errors.New("root daemon's OutboundConfig has no Session")
+			}
+			if oc.Session.SessionId == oi.Session.SessionId {
+				break
+			}
 
-		// Root daemon was running an old session. This indicates that this daemon somehow
-		// crashed without disconnecting. So let's do that now, and then reconnect...
-		if attempt == 2 {
-			// ...or not, since we've already done it.
-			return nil, errors.New("unable to reconnect to root daemon")
-		}
-		if _, err = rd.Disconnect(ctx, &empty.Empty{}); err != nil {
-			return nil, fmt.Errorf("failed to disconnect from the root daemon: %w", err)
+			// Root daemon was running an old session. This indicates that this daemon somehow
+			// crashed without disconnecting. So let's do that now, and then reconnect...
+			if attempt == 2 {
+				// ...or not, since we've already done it.
+				return nil, errors.New("unable to reconnect to root daemon")
+			}
+			if _, err = rd.Disconnect(ctx, &empty.Empty{}); err != nil {
+				return nil, fmt.Errorf("failed to disconnect from the root daemon: %w", err)
+			}
 		}
 	}
 

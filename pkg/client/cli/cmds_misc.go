@@ -112,11 +112,16 @@ func InitConnectRequest(ctx context.Context, cmd *cobra.Command) (*connector.Con
 		`Overrides any other manager namespace set in config`)
 	flags.AddFlagSet(nwFlags)
 
-	kubeConfig := genericclioptions.NewConfigFlags(false)
-	kubeConfig.Namespace = nil // "connect", don't take --namespace
-	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
-	kubeConfig.AddFlags(kubeFlags)
-	flags.AddFlagSet(kubeFlags)
+	// Only include the kubernetes flags if the user daemon is started from the CLI. It's assumed that it is configured
+	// already using a default .kube/config if it is reachable using an address.
+	var kubeFlags *pflag.FlagSet
+	if client.GetEnv(ctx).UserDaemonAddress == "" {
+		kubeConfig := genericclioptions.NewConfigFlags(false)
+		kubeConfig.Namespace = nil // "connect", don't take --namespace
+		kubeFlags = pflag.NewFlagSet("Kubernetes flags", 0)
+		kubeConfig.AddFlags(kubeFlags)
+		flags.AddFlagSet(kubeFlags)
+	}
 	return &cr, kubeFlags
 }
 

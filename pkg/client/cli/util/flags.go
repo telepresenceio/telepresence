@@ -23,6 +23,9 @@ func AsCSV(vs []string) string {
 
 // FlagMap returns a map of the flags that has been modified in the given FlagSet.
 func FlagMap(flags *pflag.FlagSet) map[string]string {
+	if flags == nil {
+		return nil
+	}
 	flagMap := make(map[string]string, flags.NFlag())
 	flags.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {

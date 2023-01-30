@@ -33,6 +33,8 @@ type Service interface {
 	GetAPIKey(context.Context) (string, error)
 
 	GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient
+
+	RootSessionInProcess() bool
 }
 
 type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)
