@@ -17,5 +17,6 @@ Maintainers are listed in alphabetical order.
 * Abhay Saxena, [ark3](https://github.com/ark3), <ark3@email.com>
 * Donny Yung, [donnyyung](https://github.com/donnyyung), <donaldyung@datawire.io>
 * Luke Shumaker, [LukeShu](https://github.com/LukeShu), <lukeshu@datawire.io>
+* Raphael Reyna, [raphaelreyna](https://github.com/raphaelreyna), <rreyna@datawire.io>
 * Rafael Schloming, [rhs](https://github.com/rhs), <rhs@datawire.io>
 * Richard Li, [richarddli](https://github.com/richarddli), <richard@datawire.io>
