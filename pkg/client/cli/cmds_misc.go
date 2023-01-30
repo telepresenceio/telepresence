@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -53,7 +54,7 @@ func ClusterIdCommand() *cobra.Command {
 	return cmd
 }
 
-func connectCommand() *cobra.Command {
+func connectCommand(ctx context.Context) *cobra.Command {
 	var kubeFlags *pflag.FlagSet
 	var request *connector.ConnectRequest
 
@@ -83,7 +84,7 @@ func connectCommand() *cobra.Command {
 			return proc.Run(ctx, nil, cmd, args[0], args[1:]...)
 		},
 	}
-	request, kubeFlags = InitConnectRequest(cmd)
+	request, kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
@@ -91,7 +92,7 @@ func connectCommand() *cobra.Command {
 // returns a ConnectRequest and a FlagSet with the Kubernetes flags. The FlagSet is returned
 // here so that a map of flags that gets modified can be extracted using FlagMap once the flag
 // parsing has completed.
-func InitConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
+func InitConnectRequest(ctx context.Context, cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
 	cr := connector.ConnectRequest{}
 	flags := cmd.Flags()
 
