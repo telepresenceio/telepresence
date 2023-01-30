@@ -2,7 +2,10 @@
 
 ### 2.X.X (TBD)
 
-- Bugfix: Fixes IPv6 support.
+- Feature: The Telepresence daemon can now run as a long-lived process in a docker container so that CLI commands that
+  run in other containers can use a common daemon for network access and intercepts.
+
+- Feature: IPv6 support.
   Ticket [2978](https://github.com/telepresenceio/telepresence/issues/2978).
 
 - Feature: Adds two parameters `--also-proxy` and `--never-proxy` to the `telepresence connect` command.
