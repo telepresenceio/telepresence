@@ -1,11 +1,9 @@
 .circleci/
 .idea/
 .git/
-base-image/
 build-aux/
 build-output/
 !build-output/version.txt
-docs/
 integration_test/
 k8s/
 packaging/
