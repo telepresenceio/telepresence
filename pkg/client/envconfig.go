@@ -27,6 +27,8 @@ type Env struct {
 	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
 	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,                   parser=possibly-empty-string,default="`
 
+	Shell string `env:"SHELL, parser=nonempty-string,default=/bin/bash"`
+
 	lookupFunc func(key string) (string, bool)
 }
 
