@@ -422,22 +422,67 @@ type genVolumeInfo struct {
 
 func genVolumeSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 	info := genVolumeInfo{genYAMLInfo: yamlInfo}
+	kubeFlags := allKubeFlags()
 	cmd := &cobra.Command{
 		Use:   "volume",
 		Args:  cobra.NoArgs,
 		Short: "Generate YAML for the traffic-agent volume.",
 		Long:  "Generate YAML for the traffic-agent volume. See genyaml for more info on what this means",
-		RunE:  info.run,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return info.run(cmd, util.FlagMap(kubeFlags))
+		},
 	}
 	flags := cmd.Flags()
-	flags.StringVarP(&info.workloadName, "workload", "w", "", "Name of the workload.")
+	flags.StringVarP(&info.inputFile, "input", "i", "",
+		"Optional path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin. Loaded from cluster by default")
+	flags.StringVarP(&info.workloadName, "workload", "w", "",
+		"Name of the workload. If given, the configmap entry will be retrieved telepresence-agents configmap, mutually exclusive to --config")
+	flags.StringVarP(&info.configFile, "config", "c", "", "Path to the yaml containing the generated configmap entry, mutually exclusive to --workload")
+	flags.AddFlagSet(kubeFlags)
 	return cmd
 }
 
-func (g *genVolumeInfo) run(*cobra.Command, []string) error {
-	if g.workloadName == "" {
-		return errcat.User.New("missing required flag --workload")
+func (g *genVolumeInfo) run(cmd *cobra.Command, kubeFlags map[string]string) error {
+	ctx, err := g.withK8sInterface(cmd.Context(), kubeFlags)
+	if err != nil {
+		return err
 	}
-	volumes := agentconfig.AgentVolumes(g.workloadName)
+
+	cm, err := g.loadConfigMapEntry(ctx)
+	if err != nil {
+		return err
+	}
+	if g.inputFile == "" {
+		g.workloadName = cm.WorkloadName
+	}
+
+	wl, err := g.loadWorkload(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Sanity check
+	if wl.GetName() != cm.WorkloadName {
+		return errcat.User.Newf("name %q of loaded workload is different from %q loaded configmap entry", wl.GetName(), cm.WorkloadName)
+	}
+	if wl.GetKind() != cm.WorkloadKind {
+		return errcat.User.Newf("kind %q of loaded workload is different from %q loaded configmap entry", wl.GetKind(), cm.WorkloadKind)
+	}
+
+	podTpl := wl.GetPodTemplate()
+
+	if g.workloadName == "" {
+		g.workloadName = wl.GetName()
+	}
+
+	volumes := agentconfig.AgentVolumes(g.workloadName, &core.Pod{
+		TypeMeta: meta.TypeMeta{
+			Kind:       "pod",
+			APIVersion: "v1",
+		},
+		ObjectMeta: podTpl.ObjectMeta,
+		Spec:       podTpl.Spec,
+	})
+
 	return g.writeObjToOutput(&volumes)
 }
