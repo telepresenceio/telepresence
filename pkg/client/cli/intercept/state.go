@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -149,7 +150,10 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 		// local-only
 		return true, nil
 	}
-	fmt.Fprintf(s.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, s.AgentName)
+	detailedOutput := s.DetailedOutput && output.WantsFormatted(s.cmd)
+	if !detailedOutput {
+		fmt.Fprintf(s.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, s.AgentName)
+	}
 	var intercept *manager.InterceptInfo
 
 	// Add metadata to scout from InterceptResult
@@ -185,7 +189,15 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	if doMount || err != nil {
 		volumeMountProblem = s.checkMountCapability(ctx)
 	}
-	fmt.Fprintln(s.cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
+	if detailedOutput {
+		mountError := ""
+		if volumeMountProblem != nil {
+			mountError = volumeMountProblem.Error()
+		}
+		output.Object(ctx, NewInfo(intercept, mountError), true)
+	} else {
+		fmt.Fprintln(s.cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
+	}
 	return true, nil
 }
 

@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 )
 
 type interceptMountSuite struct {
@@ -122,6 +124,29 @@ func (s *singleServiceSuite) Test_InterceptMountRelative() {
 	st, err = os.Stat(filepath.Join(mountPoint, "var"))
 	require.NoError(err, "Stat on <mount point>/var failed")
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
+func (s *singleServiceSuite) Test_InterceptDetailedOutput() {
+	ctx := s.Context()
+	port, cancel := itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
+	defer cancel()
+	stdout := itest.TelepresenceOk(ctx, "intercept",
+		"--namespace", s.AppNamespace(),
+		"--mount", "false",
+		"--port", strconv.Itoa(port),
+		"--detailed-output",
+		"--output", "json",
+		s.ServiceName())
+	defer func() {
+		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+	}()
+	var iInfo intercept.Info
+	s.Require().NoError(json.Unmarshal([]byte(stdout), &iInfo))
+	s.Equal(iInfo.Name, fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+	s.Equal(iInfo.Disposition, "ACTIVE")
+	s.Equal(iInfo.WorkloadKind, "Deployment")
+	s.Equal(iInfo.TargetPort, int32(port))
+	s.Equal(iInfo.Environment["TELEPRESENCE_CONTAINER"], "echo-server")
 }
 
 func (s *singleServiceSuite) Test_NoInterceptorResponse() {
