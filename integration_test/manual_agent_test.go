@@ -24,12 +24,13 @@ func (s *connectedSuite) Test_ManualAgent() {
 	require.NoError(itest.Kubectl(ctx, s.AppNamespace(), "apply", "-f", filepath.Join(k8sDir, "echo-manual-inject-svc.yaml")))
 
 	agentImage := s.Registry() + "/tel2:" + strings.TrimPrefix(s.TelepresenceVersion(), "v")
+	inputFile := filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml")
 	cfgEntry := itest.TelepresenceOk(ctx, "genyaml", "config",
 		"--agent-image", agentImage,
 		"--output", "-",
 		"--manager-namespace", s.ManagerNamespace(),
 		"--namespace", s.AppNamespace(),
-		"--input", filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"),
+		"--input", inputFile,
 		"--loglevel", "debug")
 	var ac agentconfig.Sidecar
 	require.NoError(yaml.Unmarshal([]byte(cfgEntry), &ac))
@@ -65,7 +66,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 	var initContainer map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &initContainer))
 
-	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--workload", ac.WorkloadName)
+	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--namespace", s.AppNamespace(), "--config", configFile, "--input", inputFile)
 	var volumes []map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &volumes))
 

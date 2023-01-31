@@ -433,14 +433,16 @@ func genVolumeSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		},
 	}
 	flags := cmd.Flags()
-	flags.StringVarP(&info.workloadName, "workload", "w", "", "Name of the workload.")
+	flags.StringVarP(&info.inputFile, "input", "i", "",
+		"Optional path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin. Loaded from cluster by default")
+	flags.StringVarP(&info.workloadName, "workload", "w", "",
+		"Name of the workload. If given, the configmap entry will be retrieved telepresence-agents configmap, mutually exclusive to --config")
+	flags.StringVarP(&info.configFile, "config", "c", "", "Path to the yaml containing the generated configmap entry, mutually exclusive to --workload")
+	flags.AddFlagSet(kubeFlags)
 	return cmd
 }
 
 func (g *genVolumeInfo) run(cmd *cobra.Command, kubeFlags map[string]string) error {
-	if g.workloadName == "" {
-		return errcat.User.New("missing required flag --workload")
-	}
 	ctx, err := g.withK8sInterface(cmd.Context(), kubeFlags)
 	if err != nil {
 		return err
@@ -468,6 +470,10 @@ func (g *genVolumeInfo) run(cmd *cobra.Command, kubeFlags map[string]string) err
 	}
 
 	podTpl := wl.GetPodTemplate()
+
+	if g.workloadName == "" {
+		g.workloadName = wl.GetName()
+	}
 
 	volumes := agentconfig.AgentVolumes(g.workloadName, &core.Pod{
 		TypeMeta: meta.TypeMeta{
