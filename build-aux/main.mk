@@ -308,6 +308,18 @@ _login:
 install: build ## (Install) Installs the telepresence binary to $(bindir)
 	install -Dm755 $(BINDIR)/telepresence $(bindir)/telepresence
 
+.PHONY: private-registry
+private-registry: $(tools/helm) ## (Test) Add a private docker registry to the current k8s cluster and make it available on localhost:5000.
+	mkdir -p $(BUILDDIR)
+	$(tools/helm) repo add twuni https://helm.twun.io
+	$(tools/helm) repo update
+	$(tools/helm) install docker-registry twuni/docker-registry
+	kubectl apply -f k8s/private-reg-proxy.yaml
+	kubectl rollout status -w daemonset/private-registry-proxy
+	sleep 5
+	kubectl wait --for=condition=ready pod --all
+	kubectl port-forward daemonset/private-registry-proxy 5000:5000 > /dev/null &
+
 # Aliases
 # =======
 
