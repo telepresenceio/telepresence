@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: private-registry-proxy
+  labels:
+   app: private-registry-proxy
+spec:
+  selector:
+    matchLabels:
+      app: private-registry-proxy
+  template:
+    metadata:
+      labels:
+        app: private-registry-proxy
+    spec:
+      containers:
+        - name: tcp-proxy
+          image: quay.io/bentoml/proxy-to-service:v2
+          args:
+            - tcp
+            - "5000"
+            - docker-registry.default.svc.cluster.local
+          ports:
+            - containerPort: 5000
+              hostPort: 5000
+              name: tcp
+              protocol: TCP
