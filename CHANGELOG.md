@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.10.5 (TBD)
+
+- Change: mTLS Secrets will now be mounted into the traffic agent, instead of expected to be read by it from the API.
+
+- Bugfix: Fixed a bug that prevented the local daemons from automatically reconnecting to the traffic manager when the network connection was lost.
+
 ### 2.10.4 (January 20, 2023)
 
 - Bugfix: Fix backward compatibility issue when using traffic-managers of version 2.9.5 or older.
