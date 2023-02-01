@@ -17,11 +17,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func helmCommand() *cobra.Command {
+func helmCommand(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
-	cmd.AddCommand(helmInstallCommand(), helmUpgradeCommand(), helmUninstallCommand())
+	cmd.AddCommand(helmInstallCommand(ctx), helmUpgradeCommand(ctx), helmUninstallCommand(ctx))
 	return cmd
 }
 
@@ -40,7 +40,7 @@ var (
 	HelmInstallPrologFunc      func(context.Context, *pflag.FlagSet, *HelmOpts) error //nolint:gochecknoglobals // extension point
 )
 
-func helmInstallCommand() *cobra.Command {
+func helmInstallCommand(ctx context.Context) *cobra.Command {
 	var upgrade bool
 
 	ha := &HelmOpts{
@@ -68,11 +68,11 @@ func helmInstallCommand() *cobra.Command {
 	uf := flags.Lookup("upgrade")
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
-	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
-func helmUpgradeCommand() *cobra.Command {
+func helmUpgradeCommand(ctx context.Context) *cobra.Command {
 	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_UPGRADE,
 	}
@@ -93,7 +93,7 @@ func helmUpgradeCommand() *cobra.Command {
 		"when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
-	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
@@ -113,7 +113,7 @@ func (ha *HelmOpts) addValueSettingFlags(flags *pflag.FlagSet) {
 	}
 }
 
-func helmUninstallCommand() *cobra.Command {
+func helmUninstallCommand(ctx context.Context) *cobra.Command {
 	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_UNINSTALL,
 	}
@@ -127,7 +127,7 @@ func helmUninstallCommand() *cobra.Command {
 			ann.VersionCheck: ann.Required,
 		},
 	}
-	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 

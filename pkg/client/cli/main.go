@@ -20,6 +20,12 @@ import (
 )
 
 func InitContext(ctx context.Context) context.Context {
+	env, err := client.LoadEnv()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load environment: %v", err)
+		os.Exit(1)
+	}
+	ctx = client.WithEnv(ctx, env)
 	switch client.ProcessName() {
 	case userd.ProcessName:
 		client.DisplayName = "OSS User Daemon"
@@ -44,12 +50,6 @@ func Main(ctx context.Context) {
 	if dir := os.Getenv("DEV_TELEPRESENCE_LOG_DIR"); dir != "" {
 		ctx = filelocation.WithAppUserLogDir(ctx, dir)
 	}
-	env, err := client.LoadEnv()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load environment: %v", err)
-		os.Exit(1)
-	}
-	ctx = client.WithEnv(ctx, env)
 
 	if client.IsDaemon() {
 		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
