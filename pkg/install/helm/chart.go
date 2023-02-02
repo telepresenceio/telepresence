@@ -10,9 +10,17 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func loadChart() (*chart.Chart, error) {
+func loadCoreChart() (*chart.Chart, error) {
 	var buf bytes.Buffer
-	if err := telcharts.WriteChart(&buf, version.Version); err != nil {
+	if err := telcharts.WriteChart(telcharts.HelmChartDirCore, &buf, "telepresence", version.Version); err != nil {
+		return nil, err
+	}
+	return loader.LoadArchive(&buf)
+}
+
+func loadCRDChart() (*chart.Chart, error) {
+	var buf bytes.Buffer
+	if err := telcharts.WriteChart(telcharts.HelmChartDirCRD, &buf, "telepresence-crds", version.Version); err != nil {
 		return nil, err
 	}
 	return loader.LoadArchive(&buf)
