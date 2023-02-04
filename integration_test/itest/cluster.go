@@ -35,6 +35,7 @@ import (
 	"github.com/datawire/dtest"
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -583,7 +584,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	}
 	cmd.Env = maps.ToSortedSlice(env)
 	cmd.Dir = GetWorkingDir(ctx)
-	cmd.Stdin = getStdin(ctx)
+	cmd.Stdin = dos.Stdin(ctx)
 	return cmd
 }
 
