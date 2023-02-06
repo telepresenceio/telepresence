@@ -39,7 +39,7 @@ func filePriority(chartName, filename string) int {
 		// "telepresence/templates/**":    1,
 		// "otherwise":                    0,
 	}[filename]
-	if prio == 0 && strings.HasPrefix(filename, fmt.Sprintf("%s/templates/, chartName")) {
+	if prio == 0 && strings.HasPrefix(filename, fmt.Sprintf("%s/templates/", chartName)) {
 		prio = 1
 	}
 	return prio
@@ -75,7 +75,7 @@ func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content []byte) 
 type ChartOverlayFuncDef func(base afero.Fs) (afero.Fs, error)
 
 // ChartOverlayFunc can be used by module extensions to add or overwrite the charts directory.
-// type ChartOverlayFunc func(base afero.Fs) (afero.Fs, error)
+// type ChartOverlayFunc func(base afero.Fs) (afero.Fs, error).
 var ChartOverlayFunc map[HelmChartDir]ChartOverlayFuncDef //nolint:gochecknoglobals // extension point
 
 // WriteChart is a minimal `helm package`.
