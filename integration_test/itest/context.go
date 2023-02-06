@@ -2,7 +2,6 @@ package itest
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -185,19 +184,6 @@ func getEnv(ctx context.Context) map[string]string {
 		return env
 	}
 	return nil
-}
-
-type stdinKey struct{}
-
-func WithStdin(ctx context.Context, rdr io.Reader) context.Context {
-	return context.WithValue(ctx, stdinKey{}, rdr)
-}
-
-func getStdin(ctx context.Context) io.Reader {
-	if rdr, ok := ctx.Value(stdinKey{}).(io.Reader); ok {
-		return rdr
-	}
-	return os.Stdin
 }
 
 type globalHarnessContextKey struct{}

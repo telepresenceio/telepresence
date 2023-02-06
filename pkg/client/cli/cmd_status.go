@@ -42,6 +42,7 @@ type userDaemonStatus struct {
 	Error             string                   `json:"error,omitempty" yaml:"error,omitempty"`
 	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
 	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
+	ManagerNamespace  string                   `json:"manager_namespace,omitempty" yaml:"manager_namespace,omitempty"`
 	Intercepts        []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
 }
 
@@ -149,6 +150,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 				Client: icept.Spec.Client,
 			})
 		}
+		us.ManagerNamespace = status.ManagerNamespace
 	case connector.ConnectInfo_MUST_RESTART:
 		us.Status = "Connected, but must restart"
 	case connector.ConnectInfo_DISCONNECTED:
@@ -251,6 +253,7 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		}
 		n += ioutil.Printf(out, "  Kubernetes server : %s\n", cs.KubernetesServer)
 		n += ioutil.Printf(out, "  Kubernetes context: %s\n", cs.KubernetesContext)
+		n += ioutil.Printf(out, "  Manager namespace : %s\n", cs.ManagerNamespace)
 		n += ioutil.Printf(out, "  Intercepts        : %d total\n", len(cs.Intercepts))
 		for _, intercept := range cs.Intercepts {
 			n += ioutil.Printf(out, "    %s: %s\n", intercept.Name, intercept.Client)

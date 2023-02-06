@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -129,7 +130,18 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	if _, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
 		return ctx, nil
 	}
-	conn, err := launchConnectorDaemon(ctx, client.GetExe(), required)
+	var conn *grpc.ClientConn
+	var err error
+	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
+		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
+		conn, err = grpc.DialContext(ctx, addr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithNoProxy(),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true))
+	} else {
+		conn, err = launchConnectorDaemon(ctx, client.GetExe(), required)
+	}
 	if err != nil {
 		return ctx, err
 	}

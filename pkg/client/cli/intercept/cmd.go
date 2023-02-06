@@ -36,9 +36,10 @@ type Args struct {
 	DockerMount string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 	Cmdline     []string // Args[1:]
 
-	Mechanism     string // --mechanism tcp
-	MechanismArgs []string
-	ExtendedInfo  []byte
+	Mechanism      string // --mechanism tcp
+	MechanismArgs  []string
+	ExtendedInfo   []byte
+	DetailedOutput bool
 }
 
 func Command() *cobra.Command {
@@ -104,6 +105,9 @@ func (a *Args) AddFlags(flags *pflag.FlagSet) {
 	flags.StringVarP(&a.Namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
 	flags.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
+
+	flags.BoolVarP(&a.DetailedOutput, "detailed-output", "", false,
+		`Provide very detailed info about the intercept when used together with --output=json or --output=yaml'`)
 }
 
 func (a *Args) Validate(cmd *cobra.Command, positional []string) error {

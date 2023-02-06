@@ -70,9 +70,12 @@ type Kubeconfig struct {
 	RestConfig  *rest.Config
 }
 
-const configExtension = "telepresence.io"
+const (
+	configExtension         = "telepresence.io"
+	defaultManagerNamespace = "ambassador"
+)
 
-func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
+func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -178,10 +181,20 @@ func NewKubeconfig(c context.Context, flagMap map[string]string) (*Kubeconfig, e
 		k.KubeconfigExtension.Manager = &ManagerConfig{}
 	}
 
+	k.KubeconfigExtension.Manager.Namespace = managerNamespaceOverride
+
 	if k.KubeconfigExtension.Manager.Namespace == "" {
 		k.KubeconfigExtension.Manager.Namespace = GetEnv(c).ManagerNamespace
 	}
+	if k.KubeconfigExtension.Manager.Namespace == "" {
+		k.KubeconfigExtension.Manager.Namespace = GetConfig(c).Cluster.DefaultManagerNamespace
+	}
 
+	if k.KubeconfigExtension.Manager.Namespace == "" {
+		k.KubeconfigExtension.Manager.Namespace = defaultManagerNamespace
+	}
+
+	dlog.Infof(c, "Will look for traffic manager in namespace %s", k.KubeconfigExtension.Manager.Namespace)
 	return k, nil
 }
 
@@ -211,6 +224,11 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		namespace = "default"
 	}
 
+	managerNamespace := GetEnv(c).ManagerNamespace
+	if managerNamespace == "" {
+		managerNamespace = GetConfig(c).Cluster.DefaultManagerNamespace
+	}
+
 	return &Kubeconfig{
 		Namespace:   namespace,
 		Server:      restConfig.Host,
@@ -220,7 +238,7 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		// it may be empty, but we should avoid nil deref
 		KubeconfigExtension: KubeconfigExtension{
 			Manager: &ManagerConfig{
-				Namespace: GetEnv(c).ManagerNamespace,
+				Namespace: managerNamespace,
 			},
 		},
 	}, nil

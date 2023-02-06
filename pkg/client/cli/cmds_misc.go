@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -53,7 +55,7 @@ func ClusterIdCommand() *cobra.Command {
 	return cmd
 }
 
-func connectCommand() *cobra.Command {
+func connectCommand(ctx context.Context) *cobra.Command {
 	var kubeFlags *pflag.FlagSet
 	var request *connector.ConnectRequest
 
@@ -80,10 +82,10 @@ func connectCommand() *cobra.Command {
 					_ = util.Disconnect(ctx, false)
 				}()
 			}
-			return proc.Run(ctx, nil, cmd, args[0], args[1:]...)
+			return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 		},
 	}
-	request, kubeFlags = InitConnectRequest(cmd)
+	request, kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
@@ -91,7 +93,7 @@ func connectCommand() *cobra.Command {
 // returns a ConnectRequest and a FlagSet with the Kubernetes flags. The FlagSet is returned
 // here so that a map of flags that gets modified can be extracted using FlagMap once the flag
 // parsing has completed.
-func InitConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
+func InitConnectRequest(ctx context.Context, cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
 	cr := connector.ConnectRequest{}
 	flags := cmd.Flags()
 
@@ -100,13 +102,27 @@ func InitConnectRequest(cmd *cobra.Command) (*connector.ConnectRequest, *pflag.F
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
 			`Defaults to all namespaces`)
+	nwFlags.StringSliceVar(&cr.AlsoProxy,
+		"also-proxy", nil, ``+
+			`Additional comma separated list of CIDR to proxy`)
+
+	nwFlags.StringSliceVar(&cr.NeverProxy,
+		"never-proxy", nil, ``+
+			`Comma separated list of CIDR to never proxy`)
+	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
+		`Overrides any other manager namespace set in config`)
 	flags.AddFlagSet(nwFlags)
 
-	kubeConfig := genericclioptions.NewConfigFlags(false)
-	kubeConfig.Namespace = nil // "connect", don't take --namespace
-	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
-	kubeConfig.AddFlags(kubeFlags)
-	flags.AddFlagSet(kubeFlags)
+	// Only include the kubernetes flags if the user daemon is started from the CLI. It's assumed that it is configured
+	// already using a default .kube/config if it is reachable using an address.
+	var kubeFlags *pflag.FlagSet
+	if client.GetEnv(ctx).UserDaemonAddress == "" {
+		kubeConfig := genericclioptions.NewConfigFlags(false)
+		kubeConfig.Namespace = nil // "connect", don't take --namespace
+		kubeFlags = pflag.NewFlagSet("Kubernetes flags", 0)
+		kubeConfig.AddFlags(kubeFlags)
+		flags.AddFlagSet(kubeFlags)
+	}
 	return &cr, kubeFlags
 }
 

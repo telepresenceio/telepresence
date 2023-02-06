@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -24,7 +24,7 @@ func Out(ctx context.Context) io.Writer {
 	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
 		return cmd.OutOrStdout()
 	}
-	return os.Stdout
+	return dos.Stdout(ctx)
 }
 
 // Err returns an io.Writer that writes to the ErrOrStderr of the current *cobra.Command, or
@@ -34,7 +34,7 @@ func Err(ctx context.Context) io.Writer {
 	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
 		return cmd.ErrOrStderr()
 	}
-	return os.Stderr
+	return dos.Stderr(ctx)
 }
 
 // Info is similar to Out, but if formatted output is requested, the output will be discarded.
@@ -48,7 +48,7 @@ func Info(ctx context.Context) io.Writer {
 		}
 		return cmd.OutOrStdout()
 	}
-	return os.Stdout
+	return dos.Stdout(ctx)
 }
 
 // Object sets the object to be marshalled and printed on stdout when formatted output
@@ -68,7 +68,15 @@ func Object(ctx context.Context, obj any, override bool) {
 			if o.obj != nil {
 				panic("output.Object can only be used once")
 			}
-			o.obj = obj
+
+			if o.format == formatJSONStream {
+				if err := json.NewEncoder(o.originalStdout).Encode(obj); err != nil {
+					panic(err)
+				}
+			} else {
+				o.obj = obj
+			}
+
 			o.override = override
 		}
 	}
@@ -145,6 +153,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 		if encErr != nil {
 			panic(encErr)
 		}
+	case formatJSONStream:
 	default:
 		fmt.Fprintf(o.originalStdout, "%+v", obj)
 	}
@@ -182,6 +191,12 @@ func WantsFormatted(cmd *cobra.Command) bool {
 	return f != formatDefault
 }
 
+// WantsStream returns true if the value of the global `--output` flag is set to "json-stream".
+func WantsStream(cmd *cobra.Command) bool {
+	f, _ := validateFlag(cmd)
+	return f == formatJSONStream
+}
+
 func validateFlag(cmd *cobra.Command) (format, error) {
 	if of := cmd.Flags().Lookup("output"); of != nil && of.DefValue == "default" {
 		fmt := strings.ToLower(of.Value.String())
@@ -190,6 +205,8 @@ func validateFlag(cmd *cobra.Command) (format, error) {
 			return formatYAML, nil
 		case "json":
 			return formatJSON, nil
+		case "json-stream":
+			return formatJSONStream, nil
 		case "default":
 			return formatDefault, nil
 		default:
@@ -221,6 +238,7 @@ const (
 	formatDefault = format(iota)
 	formatJSON
 	formatYAML
+	formatJSONStream
 )
 
 func (o *output) Write(data []byte) (int, error) {

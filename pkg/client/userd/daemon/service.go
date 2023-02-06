@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -34,8 +35,7 @@ import (
 const titleName = "Connector"
 
 func help() string {
-	return `The Telepresence ` + titleName + ` is a background component that manages a connection. It
-requires that a daemon is already running.
+	return `The Telepresence ` + titleName + ` is a background component that manages a connection.
 
 Launch the Telepresence ` + titleName + `:
     telepresence connect
@@ -71,6 +71,9 @@ type Service struct {
 
 	fuseFtpCh   chan fuseftp.FuseFTPClient
 	startFuseCh chan struct{}
+
+	// Run root session in-process
+	rootSessionInProc bool
 }
 
 func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
@@ -114,6 +117,10 @@ func (s *Service) Reporter() *scout.Reporter {
 	return s.scout
 }
 
+func (s *Service) RootSessionInProcess() bool {
+	return s.rootSessionInProc
+}
+
 func (s *Service) Server() *grpc.Server {
 	return s.srv
 }
@@ -121,6 +128,11 @@ func (s *Service) Server() *grpc.Server {
 func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
 	s.managerProxy.setClient(managerClient, callOptions...)
 }
+
+const (
+	addressFlag      = "address"
+	embedNetworkFlag = "embed-network"
+)
 
 // Command returns the CLI sub-command for "connector-foreground".
 func Command() *cobra.Command {
@@ -132,10 +144,17 @@ func Command() *cobra.Command {
 		Long:   help(),
 		RunE:   run,
 	}
+	flags := c.Flags()
+	flags.String(addressFlag, "", "Address to listen to. Defaults to "+client.ConnectorSocketName)
+	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	return c
 }
 
 func (s *Service) configReload(c context.Context) error {
+	// Ensure that the directory to watch exists.
+	if err := os.MkdirAll(filepath.Dir(client.GetConfigFile(c)), 0o755); err != nil {
+		return err
+	}
 	return client.Watch(c, func(ctx context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
@@ -280,14 +299,26 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
-	// the socket/pipe to appear before it gives up.
-	grpcListener, err := client.ListenSocket(c, userd.ProcessName, client.ConnectorSocketName)
-	if err != nil {
-		return err
+	// the connection/socket/pipe to appear before it gives up.
+	var grpcListener net.Listener
+	flags := cmd.Flags()
+	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
+	if addr, _ := flags.GetString(addressFlag); addr != "" {
+		lc := net.ListenConfig{}
+		if grpcListener, err = lc.Listen(c, "tcp", addr); err != nil {
+			return err
+		}
+		defer func() {
+			_ = grpcListener.Close()
+		}()
+	} else {
+		if grpcListener, err = client.ListenSocket(c, userd.ProcessName, client.ConnectorSocketName); err != nil {
+			return err
+		}
+		defer func() {
+			_ = client.RemoveSocket(grpcListener)
+		}()
 	}
-	defer func() {
-		_ = client.RemoveSocket(grpcListener)
-	}()
 	dlog.Debug(c, "Listener opened")
 
 	dlog.Info(c, "---")
@@ -338,6 +369,7 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	var s *Service
 	si.As(&s)
+	s.rootSessionInProc = rootSessionInProc
 
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err

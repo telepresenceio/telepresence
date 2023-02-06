@@ -36,6 +36,7 @@ type Config struct {
 	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
 	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
 	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
+	Cluster         Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
 }
 
 // Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
@@ -47,6 +48,7 @@ func (c *Config) Merge(o *Config) {
 	c.Grpc.merge(&o.Grpc)
 	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
 	c.Intercept.merge(&o.Intercept)
+	c.Cluster.merge(&o.Cluster)
 }
 
 // Watch uses a file system watcher that receives events when the configuration changes
@@ -781,6 +783,38 @@ func (ic Intercept) MarshalYAML() (any, error) {
 	return im, nil
 }
 
+type Cluster struct {
+	DefaultManagerNamespace string `json:"defaultManagerNamespace,omitempty" yaml:"defaultManagerNamespace,omitempty"`
+}
+
+// This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
+// Hence we don't default to "ambassador" but to empty, so that it can check that no default has been given.
+const defaultDefaultManagerNamespace = ""
+
+func (cc *Cluster) merge(o *Cluster) {
+	if o.DefaultManagerNamespace != defaultDefaultManagerNamespace {
+		cc.DefaultManagerNamespace = o.DefaultManagerNamespace
+	}
+}
+
+var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
+	DefaultManagerNamespace: defaultDefaultManagerNamespace,
+}
+
+// IsZero controls whether this element will be included in marshalled output.
+func (cc Cluster) IsZero() bool {
+	return cc == defaultCluster
+}
+
+// MarshalYAML is not using pointer receiver here, because Cluster is not pointer in the Config struct.
+func (cc Cluster) MarshalYAML() (any, error) {
+	cm := make(map[string]any)
+	if cc.DefaultManagerNamespace != defaultDefaultManagerNamespace {
+		cm["defaultManagerNamespace"] = cc.DefaultManagerNamespace
+	}
+	return cm, nil
+}
+
 var parseContext context.Context //nolint:gochecknoglobals // cannot be propagated in any other way
 
 type parsedFile struct{}
@@ -851,6 +885,9 @@ func GetDefaultConfig() Config {
 		TelepresenceAPI: TelepresenceAPI{},
 		Intercept: Intercept{
 			DefaultPort: defaultInterceptDefaultPort,
+		},
+		Cluster: Cluster{
+			DefaultManagerNamespace: defaultDefaultManagerNamespace,
 		},
 	}
 }

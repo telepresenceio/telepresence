@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -133,7 +134,12 @@ func (ic *intercept) shouldForward() bool {
 // It assumes that the user has called shouldForward and is sure that something will be started.
 func (ic *intercept) startForwards(ctx context.Context, wg *sync.WaitGroup) {
 	for _, port := range ic.localPorts() {
-		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", ic.PodIp, port))
+		var pfCtx context.Context
+		if iputil.IsIpV6Addr(ic.PodIp) {
+			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("[/%s]:%s", ic.PodIp, port))
+		} else {
+			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", ic.PodIp, port))
+		}
 		wg.Add(1)
 		go ic.workerPortForward(pfCtx, port, wg)
 	}

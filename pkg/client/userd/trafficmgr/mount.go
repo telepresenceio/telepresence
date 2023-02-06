@@ -71,7 +71,12 @@ func (m *ftpMounter) start(_ context.Context, ic *intercept) error {
 	// The FTPClient and the NewHost must be controlled by the intercept context and not by the pod context that
 	// is passed as a parameter, because those services will survive pod changes.
 	ctx := ic.ctx
-	addr := netip.MustParseAddrPort(fmt.Sprintf("%s:%d", ic.PodIp, ic.FtpPort))
+	var addr netip.AddrPort
+	if iputil.IsIpV6Addr(ic.PodIp) {
+		addr = netip.MustParseAddrPort(fmt.Sprintf("[%s]:%d", ic.PodIp, ic.FtpPort))
+	} else {
+		addr = netip.MustParseAddrPort(fmt.Sprintf("%s:%d", ic.PodIp, ic.FtpPort))
+	}
 	if m.id == nil {
 		dlog.Infof(ctx, "Mounting FTP file system for intercept %q (address %s) at %q", ic.Id, addr, ic.ClientMountPoint)
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
@@ -120,7 +125,11 @@ type sftpMounter struct {
 }
 
 func (m *sftpMounter) start(ctx context.Context, ic *intercept) error {
-	ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", ic.PodIp, ic.SftpPort))
+	if iputil.IsIpV6Addr(ic.PodIp) {
+		ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("[/%s]:%d", ic.PodIp, ic.SftpPort))
+	} else {
+		ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", ic.PodIp, ic.SftpPort))
+	}
 
 	// The mount is terminated and restarted when the intercept pod changes, so we
 	// must set up a wait/done pair here to ensure that this happens synchronously
@@ -139,7 +148,13 @@ func (m *sftpMounter) start(ctx context.Context, ic *intercept) error {
 		// Retry mount in case it gets disconnected
 		err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
 			dl := &net.Dialer{Timeout: 3 * time.Second}
-			conn, err := dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", ic.PodIp, ic.SftpPort))
+			var conn net.Conn
+			var err error
+			if iputil.IsIpV6Addr(ic.PodIp) {
+				conn, err = dl.DialContext(ctx, "tcp", fmt.Sprintf("[%s]:%d", ic.PodIp, ic.SftpPort))
+			} else {
+				conn, err = dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", ic.PodIp, ic.SftpPort))
+			}
 			if err != nil {
 				return err
 			}

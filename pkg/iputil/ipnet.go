@@ -3,8 +3,9 @@ package iputil
 import (
 	"encoding/json"
 	"net"
+	"strings"
 
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/kustomize/kyaml/yaml"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
@@ -22,6 +23,10 @@ func IPNetFromRPC(r *manager.IPNet) *net.IPNet {
 		IP:   r.Ip,
 		Mask: net.CIDRMask(int(r.Mask), len(r.Ip)*8),
 	}
+}
+
+func IsIpV6Addr(ipAddStr string) bool {
+	return strings.Count(ipAddStr, ":") >= 2
 }
 
 // Subnet is a net.IPNet that can be marshalled/unmarshalled as yaml or json.
