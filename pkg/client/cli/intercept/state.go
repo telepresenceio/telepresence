@@ -195,7 +195,7 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 		if volumeMountProblem != nil {
 			mountError = volumeMountProblem.Error()
 		}
-		output.Object(ctx, NewInfo(intercept, mountError), true)
+		output.Object(ctx, NewInfo(ctx, intercept, mountError), true)
 	} else {
 		fmt.Fprintln(s.cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	}
