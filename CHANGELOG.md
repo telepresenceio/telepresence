@@ -20,11 +20,15 @@
 - Change: The namespace of the connected manager is now displayed in the `telepresence status` output.
   Ticket [2968](https://github.com/telepresenceio/telepresence/issues/2968)
 
-### 2.10.4 (TBD)
-
 - Change: Depreciate `--watch` flag in `telepresence list` command. This is now covered by `--output json-stream`
 
 - Change: Add `--output` option `json-stream`
+
+### 2.10.5 (February 6, 2023)
+
+- Change: mTLS Secrets will now be mounted into the traffic agent, instead of expected to be read by it from the API.
+
+- Bugfix: Fixed a bug that prevented the local daemons from automatically reconnecting to the traffic manager when the network connection was lost.
 
 ### 2.10.4 (January 20, 2023)
 
