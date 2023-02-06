@@ -1,4 +1,4 @@
-package daemon
+package remotefs
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/go-fuseftp/rpc"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -24,25 +23,35 @@ import (
 //go:embed fuseftp.bits
 var fuseftpBits []byte
 
-func (s *Service) deferFuseFtpInit(ctx context.Context) error {
+type fuseFtpMgr struct {
+	startFuseCh chan struct{}
+	fuseFtpCh   chan rpc.FuseFTPClient
+}
+
+type FuseFTPManager interface {
+	DeferInit(ctx context.Context) error
+	GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient
+}
+
+func NewFuseFTPManager() FuseFTPManager {
+	return &fuseFtpMgr{
+		startFuseCh: make(chan struct{}),
+		fuseFtpCh:   make(chan rpc.FuseFTPClient, 1),
+	}
+}
+
+func (s *fuseFtpMgr) DeferInit(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return nil
 	case <-s.startFuseCh:
 	}
-	if client.GetConfig(ctx).Intercept.UseFtp {
-		if err := runFuseFTPServer(ctx, s.fuseFtpCh); err != nil {
-			dlog.Errorf(ctx, "Unable to start FuseFTP server: %v", err)
-		}
-	} else {
-		close(s.fuseFtpCh)
-	}
-	return nil
+	return runFuseFTPServer(ctx, s.fuseFtpCh)
 }
 
-func (s *Service) GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient {
+func (s *fuseFtpMgr) GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient {
 	// Close startFuseFtp unless it's already closed. This will kick
-	// the deferFuseFtpInit to either make the client available on
+	// the DeferInit to either make the client available on
 	// the fuseFtpCh or close that channel
 	select {
 	case <-s.startFuseCh:

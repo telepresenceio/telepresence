@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -40,10 +41,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
-
-type mounter interface {
-	start(ctx context.Context, id, clientMountPoint, mountPoint, podIP string, port int32) error
-}
 
 // intercept tracks the life-cycle of an intercept, dictated by the intercepts
 // arrival and departure in the watchInterceptsLoop.
@@ -64,7 +61,7 @@ type intercept struct {
 	pid int
 
 	// The mounter of the remote file system.
-	mounter
+	remotefs.Mounter
 }
 
 // interceptResult is what gets written to the awaitIntercept's waitCh channel when the
