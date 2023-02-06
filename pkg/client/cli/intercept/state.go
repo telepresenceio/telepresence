@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -215,6 +216,7 @@ func runCommand(sif State, ctx context.Context) error {
 	var s *state
 	sif.As(&s)
 
+	ctx = dos.WithStdio(ctx, s.cmd)
 	var cmd *dexec.Cmd
 	var err error
 	if s.DockerRun {
@@ -233,7 +235,7 @@ func runCommand(sif State, ctx context.Context) error {
 		}
 		cmd, err = s.startInDocker(ctx, envFile, s.Cmdline)
 	} else {
-		cmd, err = proc.Start(ctx, s.env, s.cmd, s.Cmdline[0], s.Cmdline[1:]...)
+		cmd, err = proc.Start(ctx, s.env, s.Cmdline[0], s.Cmdline[1:]...)
 	}
 	if err != nil {
 		dlog.Errorf(ctx, "error interceptor starting process: %v", err)

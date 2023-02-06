@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -81,7 +82,7 @@ func connectCommand(ctx context.Context) *cobra.Command {
 					_ = util.Disconnect(ctx, false)
 				}()
 			}
-			return proc.Run(ctx, nil, cmd, args[0], args[1:]...)
+			return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 		},
 	}
 	request, kubeFlags = InitConnectRequest(ctx, cmd)

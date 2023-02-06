@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -24,7 +24,7 @@ func Out(ctx context.Context) io.Writer {
 	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
 		return cmd.OutOrStdout()
 	}
-	return os.Stdout
+	return dos.Stdout(ctx)
 }
 
 // Err returns an io.Writer that writes to the ErrOrStderr of the current *cobra.Command, or
@@ -34,7 +34,7 @@ func Err(ctx context.Context) io.Writer {
 	if cmd, ok := ctx.Value(key{}).(*cobra.Command); ok {
 		return cmd.ErrOrStderr()
 	}
-	return os.Stderr
+	return dos.Stderr(ctx)
 }
 
 // Info is similar to Out, but if formatted output is requested, the output will be discarded.
@@ -48,7 +48,7 @@ func Info(ctx context.Context) io.Writer {
 		}
 		return cmd.OutOrStdout()
 	}
-	return os.Stdout
+	return dos.Stdout(ctx)
 }
 
 // Object sets the object to be marshalled and printed on stdout when formatted output
