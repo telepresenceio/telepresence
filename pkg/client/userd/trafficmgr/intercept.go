@@ -42,7 +42,7 @@ import (
 )
 
 type mounter interface {
-	start(ctx context.Context, ic *intercept) error
+	start(ctx context.Context, id, clientMountPoint, mountPoint, podIP string, port int32) error
 }
 
 // intercept tracks the life-cycle of an intercept, dictated by the intercepts
