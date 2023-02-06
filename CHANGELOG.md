@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.10.5 (TBD)
+### 2.10.5 (February 6, 2023)
 
 - Change: mTLS Secrets will now be mounted into the traffic agent, instead of expected to be read by it from the API.
 
