@@ -5,6 +5,10 @@
 - Feature: The Telepresence daemon can now run as a long-lived process in a docker container so that CLI commands that
   run in other containers can use a common daemon for network access and intercepts.
 
+- Feature: A new boolean flag `--detailed-output` was added to the `telepresence intercept` command. It will output very
+  detailed information about an intercept when used together with `--output=[json|yaml]`.
+  Pull Request [3013](https://github.com/telepresenceio/telepresence/pull/3013).
+
 - Feature: IPv6 support.
   Ticket [2978](https://github.com/telepresenceio/telepresence/issues/2978).
 
