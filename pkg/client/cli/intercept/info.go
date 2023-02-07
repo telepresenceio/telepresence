@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	client2 "github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type Ingress struct {
@@ -71,7 +71,7 @@ func NewMount(ctx context.Context, ii *manager.InterceptInfo, mountError string)
 	}
 	if ii.MountPoint != "" {
 		var port int32
-		if client2.GetConfig(ctx).Intercept.UseFtp {
+		if client.GetConfig(ctx).Intercept.UseFtp {
 			port = ii.FtpPort
 		} else {
 			port = ii.SftpPort
