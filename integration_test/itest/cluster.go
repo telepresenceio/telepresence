@@ -102,8 +102,11 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		s.suffix = strconv.Itoa(os.Getpid())
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
-	if !s.prePushed {
+	if s.prePushed {
+		dlog.Infof(ctx, "Using pre-pushed binary %s", s.testVersion)
+	} else {
 		s.testVersion = "v2.9.0-gotest.z" + s.suffix
+		dlog.Infof(ctx, "Building temp binary %s", s.testVersion)
 	}
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
 	s.compatVersion = os.Getenv("DEV_COMPAT_VERSION")

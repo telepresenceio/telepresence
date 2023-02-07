@@ -1,9 +1,12 @@
 package intercept
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type Ingress struct {
@@ -11,6 +14,15 @@ type Ingress struct {
 	Port   int32  `json:"port,omitempty"    yaml:"port,omitempty"`
 	UseTLS bool   `json:"use_tls,omitempty" yaml:"use_tls,omitempty"`
 	L5Host string `json:"l5host,omitempty"  yaml:"l5host,omitempty"`
+}
+
+type Mount struct {
+	LocalDir  string   `json:"local_dir,omitempty"     yaml:"local_dir,omitempty"`
+	RemoteDir string   `json:"remote_dir,omitempty"    yaml:"remote_dir,omitempty"`
+	Error     string   `json:"error,omitempty"         yaml:"error,omitempty"`
+	PodIP     string   `json:"pod_ip,omitempty"        yaml:"pod_ip,omitempty"`
+	Port      int32    `json:"port,omitempty"          yaml:"port,omitempty"`
+	Mounts    []string `json:"mounts,omitempty"        yaml:"mounts,omitempty"`
 }
 
 type Info struct {
@@ -23,8 +35,7 @@ type Info struct {
 	TargetPort    int32             `json:"target_port,omitempty"     yaml:"target_port,omitempty"`
 	ServicePortID string            `json:"service_port_id,omitempty" yaml:"service_port_id,omitempty"`
 	Environment   map[string]string `json:"environment,omitempty"     yaml:"environment,omitempty"`
-	MountPoint    string            `json:"mount_point,omitempty"     yaml:"mount_point,omitempty"`
-	MountError    string            `json:"mount_error,omitempty"     yaml:"mount_error,omitempty"`
+	Mount         *Mount            `json:"mount,omitempty"           yaml:"mount,omitempty"`
 	HttpFilter    []string          `json:"http_filter,omitempty"     yaml:"http_filter,omitempty"`
 	Global        bool              `json:"global,omitempty"          yaml:"global,omitempty"`
 	PreviewURL    string            `json:"preview_url,omitempty"     yaml:"preview_url,omitempty"`
@@ -54,7 +65,29 @@ func PreviewURL(pu string) string {
 	return pu
 }
 
-func NewInfo(ii *manager.InterceptInfo, mountError string) *Info {
+func NewMount(ctx context.Context, ii *manager.InterceptInfo, mountError string) *Mount {
+	if mountError != "" {
+		return &Mount{Error: mountError}
+	}
+	if ii.MountPoint != "" {
+		var port int32
+		if client.GetConfig(ctx).Intercept.UseFtp {
+			port = ii.FtpPort
+		} else {
+			port = ii.SftpPort
+		}
+		return &Mount{
+			LocalDir:  ii.ClientMountPoint,
+			RemoteDir: ii.MountPoint,
+			PodIP:     ii.PodIp,
+			Port:      port,
+			Mounts:    filepath.SplitList(ii.Environment["TELEPRESENCE_MOUNTS"]),
+		}
+	}
+	return nil
+}
+
+func NewInfo(ctx context.Context, ii *manager.InterceptInfo, mountError string) *Info {
 	spec := ii.Spec
 	return &Info{
 		ID:            ii.Id,
@@ -64,10 +97,9 @@ func NewInfo(ii *manager.InterceptInfo, mountError string) *Info {
 		WorkloadKind:  spec.WorkloadKind,
 		TargetHost:    spec.TargetHost,
 		TargetPort:    spec.TargetPort,
+		Mount:         NewMount(ctx, ii, mountError),
 		ServicePortID: spec.ServicePortName,
 		Environment:   ii.Environment,
-		MountPoint:    ii.MountPoint,
-		MountError:    mountError,
 		HttpFilter:    spec.MechanismArgs,
 		Global:        spec.Mechanism == "tcp",
 		PreviewURL:    PreviewURL(ii.PreviewDomain),

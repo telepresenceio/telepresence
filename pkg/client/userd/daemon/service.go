@@ -18,12 +18,12 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	fuseftp "github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
@@ -69,8 +69,7 @@ type Service struct {
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
 
-	fuseFtpCh   chan fuseftp.FuseFTPClient
-	startFuseCh chan struct{}
+	fuseFtpMgr remotefs.FuseFTPManager
 
 	// Run root session in-process
 	rootSessionInProc bool
@@ -84,8 +83,7 @@ func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *c
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
-		fuseFtpCh:       make(chan fuseftp.FuseFTPClient, 1),
-		startFuseCh:     make(chan struct{}),
+		fuseFtpMgr:      remotefs.NewFuseFTPManager(),
 	}
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
@@ -111,6 +109,10 @@ func (s *Service) As(ptr any) {
 
 func (s *Service) GetAPIKey(_ context.Context) (string, error) {
 	return "", nil
+}
+
+func (s *Service) FuseFTPMgr() remotefs.FuseFTPManager {
+	return s.fuseFtpMgr
 }
 
 func (s *Service) Reporter() *scout.Reporter {
@@ -375,7 +377,9 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	g.Go("fuseftp-server", s.deferFuseFtpInit)
+	if cfg.Intercept.UseFtp {
+		g.Go("fuseftp-server", s.fuseFtpMgr.DeferInit)
+	}
 
 	g.Go("server-grpc", func(c context.Context) (err error) {
 		sc := &dhttp.ServerConfig{Handler: s.srv}

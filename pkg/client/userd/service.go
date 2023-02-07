@@ -6,9 +6,9 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
 
@@ -32,7 +32,8 @@ type Service interface {
 	// GetAPIKey returns the current API key
 	GetAPIKey(context.Context) (string, error)
 
-	GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient
+	// FuseFTPMgr returns the manager responsible for creating a client that can connect to the FuseFTP service.
+	FuseFTPMgr() remotefs.FuseFTPManager
 
 	RootSessionInProcess() bool
 }
