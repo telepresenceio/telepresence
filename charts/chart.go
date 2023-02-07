@@ -10,9 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"helm.sh/helm/v3/pkg/chart"
-
 	"github.com/spf13/afero"
+	"helm.sh/helm/v3/pkg/chart"
 	"sigs.k8s.io/yaml"
 )
 
