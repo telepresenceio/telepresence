@@ -1,6 +1,7 @@
 name: "License verification"
 on:
   pull_request:
+  workflow_dispatch:
 jobs:
   dependency_info_linux:
     name: "Linux: Verify use of forbidden licenses"
@@ -22,6 +23,16 @@ jobs:
       - name: "Generate dependency information"
         shell: bash
         run: make generate
+      - name: "Update dependency information after dependabot change"
+        uses: datawire/go-mkopensource/actions/save-dependabot-changes@v0.0.4
+        id: changed-by-dependabot
+        with:
+          branches_to_skip: 'release/v2'
+      - name: "Abort if dependencies changed"
+        if: steps.changed-by-dependabot.outputs.is_dirty == 'true'
+        run: |
+          echo "Dependabot triggered a dependency update. Aborting workflow."
+          exit 1
       - name: "Check dependency files are up-to-date"
         id: check
         shell: bash
