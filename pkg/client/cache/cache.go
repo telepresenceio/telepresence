@@ -36,13 +36,13 @@ func LoadFromUserCache(ctx context.Context, dest any, file string) error {
 	if err != nil {
 		return err
 	}
-	filePath := filepath.Join(dir, file)
-	jsonContent, err := os.ReadFile(filePath)
+	path := filepath.Join(dir, file)
+	jsonContent, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	if err := json.Unmarshal(jsonContent, &dest); err != nil {
-		return fmt.Errorf("failed to parse JSON from file %s: %w", filePath, err)
+		return fmt.Errorf("failed to parse JSON from file %s: %w", path, err)
 	}
 	return nil
 }
