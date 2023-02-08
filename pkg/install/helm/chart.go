@@ -12,7 +12,7 @@ import (
 
 func loadCoreChart() (*chart.Chart, error) {
 	var buf bytes.Buffer
-	if err := telcharts.WriteChart(telcharts.HelmChartDirCore, &buf, "telepresence", version.Version); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, &buf, "telepresence", version.Version); err != nil {
 		return nil, err
 	}
 	return loader.LoadArchive(&buf)
@@ -20,7 +20,7 @@ func loadCoreChart() (*chart.Chart, error) {
 
 func loadCRDChart() (*chart.Chart, error) {
 	var buf bytes.Buffer
-	if err := telcharts.WriteChart(telcharts.HelmChartDirCRD, &buf, "telepresence-crds", version.Version); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresenceCRDs, &buf, "telepresence-crds", version.Version); err != nil {
 		return nil, err
 	}
 	return loader.LoadArchive(&buf)

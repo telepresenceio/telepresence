@@ -461,7 +461,7 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := telcharts.WriteChart(telcharts.HelmChartDirCore, fh, "telepresence", s.TelepresenceVersion()[1:]); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.TelepresenceVersion()[1:]); err != nil {
 		_ = fh.Close()
 		return "", err
 	}

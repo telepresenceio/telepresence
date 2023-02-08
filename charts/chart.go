@@ -15,18 +15,18 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-type HelmChartDir int8
+type DirType int8
 
 const (
-	HelmChartDirCore HelmChartDir = iota
-	HelmChartDirCRD  HelmChartDir = iota
+	DirTypeTelepresence     DirType = iota
+	DirTypeTelepresenceCRDs DirType = iota
 )
 
 var (
 	//go:embed all:telepresence
-	helmDir embed.FS
+	TelepresenceFS embed.FS
 	//go:embed all:telepresence-crds
-	helmCRDDir embed.FS
+	TelepresenceCRDsFS embed.FS
 )
 
 // filePriority returns the sort-priority of a filename; higher priority files sorts earlier.
@@ -75,13 +75,13 @@ type ChartOverlayFuncDef func(base afero.Fs) (afero.Fs, error)
 
 // ChartOverlayFunc can be used by module extensions to add or overwrite the charts directory.
 // type ChartOverlayFunc func(base afero.Fs) (afero.Fs, error).
-var ChartOverlayFunc map[HelmChartDir]ChartOverlayFuncDef //nolint:gochecknoglobals // extension point
+var ChartOverlayFunc map[DirType]ChartOverlayFuncDef //nolint:gochecknoglobals // extension point
 
 // WriteChart is a minimal `helm package`.
-func WriteChart(helmChartDir HelmChartDir, out io.Writer, chartName, version string, overlays ...fs.FS) error {
-	embedChart := map[HelmChartDir]embed.FS{
-		HelmChartDirCore: helmDir,
-		HelmChartDirCRD:  helmCRDDir,
+func WriteChart(helmChartDir DirType, out io.Writer, chartName, version string, overlays ...fs.FS) error {
+	embedChart := map[DirType]embed.FS{
+		DirTypeTelepresence:     TelepresenceFS,
+		DirTypeTelepresenceCRDs: TelepresenceCRDsFS,
 	}[helmChartDir]
 
 	var baseDir fs.FS = embedChart
