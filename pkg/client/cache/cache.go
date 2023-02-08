@@ -16,11 +16,14 @@ func SaveToUserCache(ctx context.Context, object any, file string) error {
 		return err
 	}
 
+	// get base path of user cache
 	cacheDir, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
 		return err
 	}
+	// add file path (ex. "ispec/00-00-0000.json")
 	fullFilePath := filepath.Join(cacheDir, file)
+	// get dir of joined path
 	dir := filepath.Dir(fullFilePath)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
