@@ -34,10 +34,10 @@ func LoadFromUserCache(ctx context.Context, dest any, file string) error {
 		return err
 	}
 	filePath := filepath.Join(dir, file)
-	return loadFromFilePath(dest, filePath)
+	return LoadFromFilePath(dest, filePath)
 }
 
-func loadFromFilePath(dest any, filePath string) error {
+func LoadFromFilePath(dest any, filePath string) error {
 	jsonContent, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
