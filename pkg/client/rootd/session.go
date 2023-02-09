@@ -633,7 +633,13 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
 		return
 	}
-	conn.Close()
+	defer conn.Close()
+	mClient := manager.NewManagerClient(conn)
+	if _, err := mClient.Version(tCtx, &empty.Empty{}); err != nil {
+		dlog.Warnf(ctx, "Manager IP %s is connectable but not a traffic-manager instance (%v)."+
+			" Will proxy pods, but this may interfere with your VPN routes!!", info.ManagerPodIp, err)
+		return
+	}
 	s.proxyCluster = false
 	dlog.Info(ctx, "Already connected to cluster, will not map cluster subnets")
 }
