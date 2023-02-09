@@ -88,6 +88,7 @@ type cluster struct {
 	logCapturingPods sync.Map
 	agentImageName   string
 	agentImageTag    string
+	loginDomain      string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -132,6 +133,10 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	if s.agentRegistry == "" {
 		s.agentRegistry = s.registry
+	}
+	s.loginDomain = os.Getenv("DEV_LOGIN_DOMAIN")
+	if s.loginDomain == "" {
+		s.loginDomain = "localhost"
 	}
 	require.NoError(t, s.generalError)
 
@@ -315,7 +320,7 @@ func (s *cluster) GlobalEnv() map[string]string {
 		"TELEPRESENCE_VERSION":      s.testVersion,
 		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
-		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
+		"TELEPRESENCE_LOGIN_DOMAIN": s.loginDomain,
 		"KUBECONFIG":                s.kubeConfig,
 	}
 	yes := struct{}{}
