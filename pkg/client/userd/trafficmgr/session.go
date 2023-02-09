@@ -303,7 +303,8 @@ func DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
 		return err
 	}
 
-	return helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false)
+	return helm.DeleteTrafficManager(
+		ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req.Crds)
 }
 
 func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {

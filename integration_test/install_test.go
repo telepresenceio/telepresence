@@ -264,12 +264,12 @@ func (is *installSuite) Test_RemoveManager_canUninstall() {
 	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
 
 	require.NoError(ensureTrafficManager(ctx, kc))
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, false))
 	// We want to make sure that we can re-install the manager after it's been uninstalled,
 	// so try to ensureManager again.
 	require.NoError(ensureTrafficManager(ctx, kc))
 	// Uninstall the manager one last time -- this should behave the same way as the previous uninstall
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, false))
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades_and_values() {

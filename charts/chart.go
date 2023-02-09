@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"embed"
+	"fmt"
 	"io"
 	"io/fs"
 	"sort"
@@ -14,19 +15,30 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-//go:embed all:telepresence
-var helmDir embed.FS
+type DirType int8
+
+const (
+	DirTypeTelepresence     DirType = iota
+	DirTypeTelepresenceCRDs DirType = iota
+)
+
+var (
+	//go:embed all:telepresence
+	TelepresenceFS embed.FS
+	//go:embed all:telepresence-crds
+	TelepresenceCRDsFS embed.FS
+)
 
 // filePriority returns the sort-priority of a filename; higher priority files sorts earlier.
-func filePriority(filename string) int {
+func filePriority(chartName, filename string) int {
 	prio := map[string]int{
-		"telepresence/Chart.yaml":         4,
-		"telepresence/values.yaml":        3,
-		"telepresence/values.schema.json": 2,
+		fmt.Sprintf("%s/Chart.yaml)", chartName):        4,
+		fmt.Sprintf("%s/values.yaml)", chartName):       3,
+		fmt.Sprintf("%s/values.schema.json", chartName): 2,
 		// "telepresence/templates/**":    1,
 		// "otherwise":                    0,
 	}[filename]
-	if prio == 0 && strings.HasPrefix(filename, "telepresence/templates/") {
+	if prio == 0 && strings.HasPrefix(filename, fmt.Sprintf("%s/templates/", chartName)) {
 		prio = 1
 	}
 	return prio
@@ -59,15 +71,23 @@ func addFile(tarWriter *tar.Writer, vfs fs.FS, filename string, content []byte) 
 	return nil
 }
 
+type ChartOverlayFuncDef func(base afero.Fs) (afero.Fs, error)
+
 // ChartOverlayFunc can be used by module extensions to add or overwrite the charts directory.
-var ChartOverlayFunc func(base afero.Fs) (afero.Fs, error) //nolint:gochecknoglobals // extension point
+// type ChartOverlayFunc func(base afero.Fs) (afero.Fs, error).
+var ChartOverlayFunc map[DirType]ChartOverlayFuncDef //nolint:gochecknoglobals // extension point
 
 // WriteChart is a minimal `helm package`.
-func WriteChart(out io.Writer, version string, overlays ...fs.FS) error {
-	var baseDir fs.FS = helmDir
-	if ChartOverlayFunc != nil {
-		base := afero.FromIOFS{FS: helmDir}
-		ovl, err := ChartOverlayFunc(base)
+func WriteChart(helmChartDir DirType, out io.Writer, chartName, version string, overlays ...fs.FS) error {
+	embedChart := map[DirType]embed.FS{
+		DirTypeTelepresence:     TelepresenceFS,
+		DirTypeTelepresenceCRDs: TelepresenceCRDsFS,
+	}[helmChartDir]
+
+	var baseDir fs.FS = embedChart
+	if chartOverlayFunc, ok := ChartOverlayFunc[helmChartDir]; ok {
+		base := afero.FromIOFS{FS: embedChart}
+		ovl, err := chartOverlayFunc(base)
 		if err != nil {
 			return err
 		}
@@ -93,8 +113,8 @@ func WriteChart(out io.Writer, version string, overlays ...fs.FS) error {
 		jName := filenames[j]
 
 		// higher priority files sorts earlier.
-		iPrio := filePriority(iName)
-		jPrio := filePriority(jName)
+		iPrio := filePriority(chartName, iName)
+		jPrio := filePriority(chartName, jName)
 		if d := iPrio - jPrio; d != 0 {
 			return d > 0
 		}
@@ -111,7 +131,7 @@ func WriteChart(out io.Writer, version string, overlays ...fs.FS) error {
 
 	for _, filename := range filenames {
 		switch filename {
-		case "telepresence/Chart.yaml":
+		case fmt.Sprintf("%s/Chart.yaml", chartName):
 			content, err := fs.ReadFile(baseDir, filename)
 			if err != nil {
 				return err

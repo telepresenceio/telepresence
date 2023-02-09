@@ -224,6 +224,7 @@ message HelmRequest {
   bytes values_json = 3;
   bool reuse_values = 4;
   bool reset_values = 5;
+  bool crds = 6;
 }
 
 message UninstallRequest {
