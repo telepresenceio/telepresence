@@ -17,8 +17,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-// Environment variable prefix for additional metadata to be reported.
-const environmentMetadataPrefix = "TELEPRESENCE_REPORT_"
+// EnvironmentMetadataPrefix is the Environment variable prefix for additional metadata to be reported.
+const EnvironmentMetadataPrefix = "TELEPRESENCE_REPORT_"
 
 type bufEntry struct {
 	action  string
@@ -332,8 +332,8 @@ func getDefaultEnvironmentMetadata() map[string]string {
 	metadata := map[string]string{}
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
-		if strings.HasPrefix(pair[0], environmentMetadataPrefix) {
-			key := strings.ToLower(strings.TrimPrefix(pair[0], environmentMetadataPrefix))
+		if strings.HasPrefix(pair[0], EnvironmentMetadataPrefix) {
+			key := strings.ToLower(strings.TrimPrefix(pair[0], EnvironmentMetadataPrefix))
 			metadata[key] = pair[1]
 		}
 	}
