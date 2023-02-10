@@ -2,7 +2,6 @@ package remotefs
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"runtime"
 	"sync"
@@ -26,12 +25,8 @@ func NewSFTPMounter(wg *sync.WaitGroup) Mounter {
 	return &sftpMounter{podWG: wg}
 }
 
-func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint, podIP string, port int32) error {
-	if iputil.IsIpV6Addr(podIP) {
-		ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("[/%s]:%d", podIP, port))
-	} else {
-		ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", podIP, port))
-	}
+func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint string, podIP net.IP, port uint16) error {
+	ctx = dgroup.WithGoroutineName(ctx, iputil.JoinIpPort(podIP, port))
 
 	// The mount is terminated and restarted when the intercept pod changes, so we
 	// must set up a wait/done pair here to ensure that this happens synchronously
@@ -50,13 +45,7 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 		// Retry mount in case it gets disconnected
 		err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
 			dl := &net.Dialer{Timeout: 3 * time.Second}
-			var conn net.Conn
-			var err error
-			if iputil.IsIpV6Addr(podIP) {
-				conn, err = dl.DialContext(ctx, "tcp", fmt.Sprintf("[%s]:%d", podIP, port))
-			} else {
-				conn, err = dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", podIP, port))
-			}
+			conn, err := dl.DialContext(ctx, "tcp", iputil.JoinIpPort(podIP, port))
 			if err != nil {
 				return err
 			}

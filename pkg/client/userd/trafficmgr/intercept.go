@@ -133,7 +133,7 @@ func (ic *intercept) startForwards(ctx context.Context, wg *sync.WaitGroup) {
 	for _, port := range ic.localPorts() {
 		var pfCtx context.Context
 		if iputil.IsIpV6Addr(ic.PodIp) {
-			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("[/%s]:%s", ic.PodIp, port))
+			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/[%s]:%s", ic.PodIp, port))
 		} else {
 			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", ic.PodIp, port))
 		}
