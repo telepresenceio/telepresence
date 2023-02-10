@@ -12,6 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -169,7 +170,7 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 
 	spec := iCept.Spec
 	destIp := iputil.Parse(spec.TargetHost)
-	id := tunnel.NewConnID(tunnel.IPProto(addr.Network()), srcIp, destIp, srcPort, uint16(spec.TargetPort))
+	id := tunnel.NewConnID(ipproto.Parse(addr.Network()), srcIp, destIp, srcPort, uint16(spec.TargetPort))
 	id.SpanRecord(span)
 
 	ms, err := f.manager.Tunnel(ctx)

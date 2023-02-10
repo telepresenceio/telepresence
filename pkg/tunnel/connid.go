@@ -158,38 +158,6 @@ func (id ConnID) SpanRecord(span trace.Span) {
 	)
 }
 
-// IPProto returns the IP protocol for the given network. Currently only supports
-// TCP, UDP, and ICMP.
-func IPProto(network string) int {
-	switch network {
-	case "tcp", "tcp4":
-		return ipproto.TCP
-	case "udp", "udp4", "udp6":
-		return ipproto.UDP
-	case "icmp":
-		return ipproto.ICMP
-	case "icmpv6":
-		return ipproto.ICMPV6
-	default:
-		return -1
-	}
-}
-
-func protoString(proto int) string {
-	switch proto {
-	case ipproto.ICMP:
-		return "icmp"
-	case ipproto.TCP:
-		return "tcp"
-	case ipproto.UDP:
-		return "udp"
-	case ipproto.ICMPV6:
-		return "icmpv6"
-	default:
-		return fmt.Sprintf("IP-protocol %d", proto)
-	}
-}
-
 // Reply returns a copy of this ConnID with swapped source and destination properties.
 func (id ConnID) Reply() ConnID {
 	return NewConnID(id.Protocol(), id.Destination(), id.Source(), id.DestinationPort(), id.SourcePort())
@@ -197,7 +165,7 @@ func (id ConnID) Reply() ConnID {
 
 // ReplyString returns a formatted string suitable for logging showing the destination:destinationPort -> source:sourcePort.
 func (id ConnID) ReplyString() string {
-	return fmt.Sprintf("%s %s:%d -> %s:%d", protoString(id.Protocol()), id.Destination(), id.DestinationPort(), id.Source(), id.SourcePort())
+	return fmt.Sprintf("%s %s:%d -> %s:%d", ipproto.String(id.Protocol()), id.Destination(), id.DestinationPort(), id.Source(), id.SourcePort())
 }
 
 // String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort.
@@ -205,5 +173,5 @@ func (id ConnID) String() string {
 	if len(id) < 13 {
 		return "bogus ConnID"
 	}
-	return fmt.Sprintf("%s %s:%d -> %s:%d", protoString(id.Protocol()), id.Source(), id.SourcePort(), id.Destination(), id.DestinationPort())
+	return fmt.Sprintf("%s %s:%d -> %s:%d", ipproto.String(id.Protocol()), id.Source(), id.SourcePort(), id.Destination(), id.DestinationPort())
 }
