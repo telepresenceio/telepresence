@@ -411,7 +411,7 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 
 	state := newInterceptState(cept.Id)
 	s.interceptStates[interceptID] = state
-
+	sess.lockFileServerIP(cept)
 	return cept, nil
 }
 
@@ -424,6 +424,24 @@ func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 	}
 	state.addFinalizer(finalizer)
 	return nil
+}
+
+func (s *State) LockFileServerIPs(sessionID string, cepts []*rpc.InterceptInfo) {
+	s.mu.RLock()
+	sess, ok := s.sessions[sessionID].(*clientSessionState)
+	s.mu.RUnlock()
+	if ok {
+		sess.lockFileServerIPs(cepts)
+	}
+}
+
+func (s *State) LockFileServerIP(sessionID string, cept *rpc.InterceptInfo) {
+	s.mu.RLock()
+	sess, ok := s.sessions[sessionID].(*clientSessionState)
+	s.mu.RUnlock()
+	if ok {
+		sess.lockFileServerIP(cept)
+	}
 }
 
 // getAgentsInterceptedByClient returns the session IDs for each agent that are currently
@@ -463,7 +481,7 @@ func (s *State) getAgentsInterceptedByClient(clientSessionID string) []string {
 // This does not lock; but instead uses CAS and may therefore call the mutator function multiple
 // times.  So: it is safe to perform blocking operations in your mutator function, but you must take
 // care that it is safe to call your mutator function multiple times.
-func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInfo)) *rpc.InterceptInfo {
+func (s *State) UpdateIntercept(sessionID, interceptID string, apply func(*rpc.InterceptInfo)) *rpc.InterceptInfo {
 	for {
 		cur, ok := s.intercepts.Load(interceptID)
 		if !ok || cur == nil {
@@ -477,6 +495,9 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 		swapped := s.intercepts.CompareAndSwap(newInfo.Id, cur, newInfo)
 		if swapped {
 			// Success!
+			if sessionID != "" {
+				s.LockFileServerIP(sessionID, newInfo)
+			}
 			return newInfo
 		}
 	}
@@ -516,7 +537,8 @@ func (s *State) WatchIntercepts(
 func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	ctx, span := otel.Tracer("").Start(ctx, "state.Tunnel")
 	defer span.End()
-	stream.ID().SpanRecord(span)
+	sid := stream.ID()
+	sid.SpanRecord(span)
 
 	sessionID := stream.SessionID()
 	s.mu.RLock()
@@ -564,12 +586,15 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	} else {
 		span.SetAttributes(attribute.String("session-type", "userd"))
 		peerSession = s.getRandomAgentSession(sessionID)
+		if sid = ss.(*clientSessionState).mappedID(sid); sid == "" {
+			return status.Errorf(codes.FailedPrecondition, "mapping for %s has no active endpoint", stream.ID().SourceAddr())
+		}
 	}
 
 	var endPoint tunnel.Endpoint
 	if peerSession != nil {
 		var err error
-		if endPoint, err = peerSession.EstablishBidiPipe(ctx, stream); err != nil {
+		if endPoint, err = peerSession.EstablishBidiPipe(ctx, stream, sid); err != nil {
 			return err
 		}
 	} else {

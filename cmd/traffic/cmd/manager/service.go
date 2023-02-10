@@ -464,12 +464,13 @@ func (m *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 			for _, intercept := range snapshot.State {
 				intercepts = append(intercepts, intercept)
 			}
-			resp := &rpc.InterceptInfoSnapshot{
-				Intercepts: intercepts,
-			}
 			sort.Slice(intercepts, func(i, j int) bool {
 				return intercepts[i].Id < intercepts[j].Id
 			})
+			m.state.LockFileServerIPs(sessionID, intercepts)
+			resp := &rpc.InterceptInfoSnapshot{
+				Intercepts: intercepts,
+			}
 			if err := stream.Send(resp); err != nil {
 				dlog.Debugf(ctx, "WatchIntercepts encountered a write error: %v", err)
 				return err
@@ -520,6 +521,7 @@ func (m *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 	if interceptInfo != nil {
 		tracing.RecordInterceptInfo(span, interceptInfo)
+		dlog.Debugf(ctx, "Create Intercept FTP %s", net.JoinHostPort(interceptInfo.PodIp, strconv.Itoa(int(interceptInfo.FtpPort))))
 	}
 	if m.cloudConfig == nil {
 		return interceptInfo, nil
@@ -577,9 +579,11 @@ func (m *service) makeinterceptID(_ context.Context, sessionID string, name stri
 
 const systemaCallTimeout = 3 * time.Second
 
-func (m *service) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
-	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
-	interceptID, err := m.makeinterceptID(ctx, req.GetSession().GetSessionId(), req.GetName())
+func (m *service) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {
+	session := req.GetSession() //nolint:gocognit
+	sessionID := session.GetSessionId()
+	ctx = managerutil.WithSessionInfo(ctx, session)
+	interceptID, err := m.makeinterceptID(ctx, sessionID, req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -593,32 +597,34 @@ func (m *service) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 		// Have SystemA create the preview domain.
 		// Apply that to the intercept.
 		// Oh no, something went wrong.  Clean up.
-		intercept, err := m.addInterceptDomain(ctx, interceptID, action)
+		intercept, err := m.addInterceptDomain(ctx, sessionID, interceptID, action)
 		if err != nil {
 			return nil, err
 		}
+		dlog.Debugf(ctx, "AddPreview Intercept FTP %s", net.JoinHostPort(intercept.PodIp, strconv.Itoa(int(intercept.FtpPort))))
 		return intercept, nil
 	case *rpc.UpdateInterceptRequest_RemovePreviewDomain:
 		// Check if this is already done.
 		// Remove the domain
-		intercept, err := m.removeInterceptDomain(ctx, interceptID)
+		intercept, err := m.removeInterceptDomain(ctx, sessionID, interceptID)
 		if err != nil {
 			return nil, err
 		}
+		dlog.Debugf(ctx, "Remove Preview Intercept FTP %s", net.JoinHostPort(intercept.PodIp, strconv.Itoa(int(intercept.FtpPort))))
 		return intercept, nil
 	default:
 		panic(fmt.Errorf("unimplemented UpdateInterceptRequest action: %T", action))
 	}
 }
 
-func (m *service) removeInterceptDomain(ctx context.Context, interceptID string) (*rpc.InterceptInfo, error) {
+func (m *service) removeInterceptDomain(ctx context.Context, sessionID, interceptID string) (*rpc.InterceptInfo, error) {
 	var domain string
 	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
 	if !ok {
 		return nil, status.Errorf(codes.FailedPrecondition, "access to Ambassador Cloud is not configured")
 	}
 
-	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
+	intercept := m.state.UpdateIntercept(sessionID, interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain == "" {
 			return
 		}
@@ -649,7 +655,7 @@ func (m *service) removeInterceptDomain(ctx context.Context, interceptID string)
 	return intercept, nil
 }
 
-func (m *service) addInterceptDomain(ctx context.Context, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
+func (m *service) addInterceptDomain(ctx context.Context, sessionID, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
 	var domain string
 	var sa systema.SystemACRUDClient
 	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
@@ -658,7 +664,7 @@ func (m *service) addInterceptDomain(ctx context.Context, interceptID string, ac
 	}
 
 	var err error
-	intercept := m.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
+	intercept := m.state.UpdateIntercept(sessionID, interceptID, func(intercept *rpc.InterceptInfo) {
 		if intercept.PreviewDomain != "" {
 			return
 		}
@@ -793,7 +799,7 @@ func (m *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
 	}
 
-	intercept := m.state.UpdateIntercept(ceptID, func(intercept *rpc.InterceptInfo) {
+	intercept := m.state.UpdateIntercept("", ceptID, func(intercept *rpc.InterceptInfo) {
 		// Sanity check: The reviewing agent must be an agent for the intercept.
 		if intercept.Spec.Namespace != agent.Namespace || intercept.Spec.Agent != agent.Name {
 			return

@@ -93,11 +93,15 @@ func NewInfo(ctx context.Context) Info {
 
 	apiSvc := "kubernetes.default"
 	var clusterDomain string
-	if cn, err := net.LookupCNAME(apiSvc); err != nil {
+	if cn, err := net.LookupCNAME(apiSvc); err == nil {
+		apiSvcX := apiSvc + ".svc."
+		if strings.HasPrefix(cn, apiSvcX) {
+			clusterDomain = cn[len(apiSvcX):]
+		}
+	}
+	if clusterDomain == "" {
 		dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s: %v"`, err, apiSvc)
 		clusterDomain = "cluster.local."
-	} else {
-		clusterDomain = cn[len(apiSvc)+5:]
 	}
 	dlog.Infof(ctx, "Using cluster domain %q", clusterDomain)
 
