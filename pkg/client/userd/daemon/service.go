@@ -217,7 +217,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 	}
 
 	s.session = session
-	s.sessionContext = session.WithK8sInterface(ctx)
+	s.sessionContext = userd.WithSession(ctx, session)
 	s.sessionCancel = func() {
 		cancel()
 		<-session.Done()

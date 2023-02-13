@@ -2,6 +2,10 @@
 
 ### 2.X.X (TBD)
 
+- Feature: A new flag, `--local-mount-port <port>` will make `telepresence intercept --detailed-output --output=[yaml|json]` create
+  a bridge to the remote SFTP service instead of starting an sshfs client. This enables the sshfs client to be started outside of the 
+  container, and thus, mount filesystems that then can be used as source for volumes that other containers will use.
+
 - Feature: The Telepresence daemon can now run as a long-lived process in a docker container so that CLI commands that
   run in other containers can use a common daemon for network access and intercepts.
 

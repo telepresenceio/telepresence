@@ -62,6 +62,9 @@ type intercept struct {
 
 	// The mounter of the remote file system.
 	remotefs.Mounter
+
+	// Use bridged ftp/sftp mount through this local port
+	localMountPort int32
 }
 
 // interceptResult is what gets written to the awaitIntercept's waitCh channel when the
@@ -77,7 +80,12 @@ type awaitIntercept struct {
 	// mountPoint is the mount point assigned to the InterceptInfo's ClientMountPoint when
 	// it arrives from the traffic-manager.
 	mountPoint string
-	waitCh     chan<- interceptResult
+
+	// mountPort is optional and indicates that a TCP bridge should be established, allowing
+	// the mount to take place in a host
+	mountPort int32
+
+	waitCh chan<- interceptResult
 }
 
 // podInterceptKey identifies an intercepted pod. Although an intercept may span multiple
@@ -354,6 +362,7 @@ func (s *session) setCurrentIntercepts(ctx context.Context, iis []*manager.Inter
 			dlog.Debugf(ctx, "Received new intercept %s", ic.Spec.Name)
 			if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok {
 				ic.ClientMountPoint = aw.mountPoint
+				ic.localMountPort = aw.mountPort
 			}
 		}
 		intercepts[ii.Id] = ic
@@ -641,6 +650,7 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 	s.currentInterceptsLock.Lock()
 	s.interceptWaiters[spec.Name] = &awaitIntercept{
 		mountPoint: ir.MountPoint,
+		mountPort:  ir.LocalMountPort,
 		waitCh:     waitCh,
 	}
 	s.currentInterceptsLock.Unlock()
