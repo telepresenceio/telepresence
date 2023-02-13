@@ -2,6 +2,7 @@ package remotefs
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"runtime"
 	"sync"
@@ -11,7 +12,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -44,12 +44,6 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 
 		// Retry mount in case it gets disconnected
 		err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
-			dl := &net.Dialer{Timeout: 3 * time.Second}
-			conn, err := dl.DialContext(ctx, "tcp", iputil.JoinIpPort(podIP, port))
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
 			sshfsArgs := []string{
 				"-F", "none", // don't load the user's config file
 				"-f", // foreground operation
@@ -57,15 +51,13 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 				// connection settings
 				"-C", // compression
 				"-oConnectTimeout=10",
-				"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-				"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-				"-o", "slave",                    // Unencrypted via stdin/stdout
+				"-o", fmt.Sprintf("directport=%d", port),
 
 				// mount directives
 				"-o", "follow_symlinks",
 				"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-				"localhost:" + mountPoint, // what to mount
-				clientMountPoint,          // where to mount it
+				fmt.Sprintf("%s:%s", podIP.String(), mountPoint), // what to mount
+				clientMountPoint, // where to mount it
 			}
 			exe := "sshfs"
 			if runtime.GOOS == "windows" {
@@ -73,7 +65,7 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 				sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
 				exe = "sshfs-win"
 			}
-			err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
+			err := proc.Run(ctx, nil, exe, sshfsArgs...)
 			time.Sleep(time.Second)
 
 			// sshfs sometimes leave the mount point in a bad state. This will clean it up
