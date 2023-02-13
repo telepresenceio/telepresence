@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: make generate
       - name: "Update dependency information after dependabot change"
-        uses: datawire/go-mkopensource/actions/save-dependabot-changes@v0.0.4
+        uses: datawire/go-mkopensource/actions/save-dependabot-changes@v0.0.7
         id: changed-by-dependabot
         with:
           branches_to_skip: 'release/v2'

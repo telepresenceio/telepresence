@@ -2,7 +2,7 @@ module local
 
 go 1.19
 
-require github.com/datawire/go-mkopensource v0.0.4
+require github.com/datawire/go-mkopensource v0.0.7
 
 require (
 	github.com/kr/pretty v0.1.0 // indirect
