@@ -221,7 +221,16 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	if mc == nil || err != nil {
 		return nil, err
 	}
+	s, err := newSession(c, scout, mi, mc, ver)
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	s.clientConn = conn
+	return s, nil
+}
 
+func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) (*Session, error) {
 	cfg := client.GetDefaultConfig()
 	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
 	if err != nil {
@@ -243,7 +252,6 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 		session:          mi.Session,
 		managerClient:    mc,
 		managerVersion:   ver,
-		clientConn:       conn,
 		alsoProxySubnets: as,
 		neverProxyRoutes: routing.Routes(c, ns),
 		proxyCluster:     true,
@@ -625,7 +633,13 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
 		return
 	}
-	conn.Close()
+	defer conn.Close()
+	mClient := manager.NewManagerClient(conn)
+	if _, err := mClient.Version(tCtx, &empty.Empty{}); err != nil {
+		dlog.Warnf(ctx, "Manager IP %s is connectable but not a traffic-manager instance (%v)."+
+			" Will proxy pods, but this may interfere with your VPN routes!!", info.ManagerPodIp, err)
+		return
+	}
 	s.proxyCluster = false
 	dlog.Info(ctx, "Already connected to cluster, will not map cluster subnets")
 }
@@ -633,7 +647,9 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 func (s *Session) run(c context.Context) error {
 	defer func() {
 		dlog.Info(c, "-- Session ended")
-		_ = s.clientConn.Close()
+		if s.clientConn != nil {
+			_ = s.clientConn.Close()
+		}
 		close(s.done)
 	}()
 

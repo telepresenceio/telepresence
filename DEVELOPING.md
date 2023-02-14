@@ -27,6 +27,12 @@
    various version tags.  It is not necessary to set this unless you
    have set `DTEST_KUBECONFIG`.
 
+   If `DTEST_KUBECONFIG` is pointing to a pre-existing cluster, and you
+   would like the `DTEST_REGISTRY` to point to a private registry that is
+   hosted in that cluster, then you can use `make private-registry`. It
+   will deploy a registry and set it up so that it is reachable at
+   `localhost:5000`, both from the cluster and from the local workstation.
+
  - `DEV_TELEPRESENCE_VERSION` (optional) if set to a version such as
    `v2.6.7-alpha.0`, the integration tests will assume that this version
    is pre-built and available, both as a CLI client (accessible from the
@@ -41,6 +47,55 @@
    which uses the same image as the traffic-manager.
 
 The output of `make help` has a bit more information.
+
+### Running integration tests
+
+Integration tests can be run using `go test ./integration_test/...`. For
+individual tests, use the `-m.testify=<pattern>` flag. Verbose output using
+the `-v` flag is also recommended, because the tests are built with human
+readable output in mind and timestamps can be compared to timestamps found
+in the telepresence logs.
+
+Example of running one test with existing cluster and registry:
+```
+make private-registry
+export DTEST_KUBECONFIG=<your kubeconfig>
+export DTEST_REGISTRY=localhost:5000
+go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
+```
+The test takes about a minute to complete when using an existing cluster
+and a private registry created by `make private-registry`. During that time
+it:
+- builds the traffic-manager image
+- pushes the image to the registry
+- builds the client binary
+- creates two namespaces for the test
+- performs a helm install of a namespace scoped traffic-manager
+- runs the test
+- uninstalls the traffic-manager
+- deletes the namespaces
+
+The first two can be omitted (and are omitted when the tests run
+from CI) by building the binary using `make build`.
+Example of running test with existing client and traffic-mananager:
+
+```
+make private-registry
+export TELEPRESENCE_VERSION=v2.10.5-alpha.3
+export TELEPRESENCE_REGISTRY=localhost:5000
+make build
+make push-image
+export DTEST_KUBECONFIG=<your kubeconfig>
+export DTEST_REGISTRY=$TELEPRESENCE_REGISTRY
+export DEV_TELEPRESENCE_VERSION=$TELEPRESENCE_VERSION
+
+# Run any number of indivitual test with this setup
+go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
+```
+
+The `DEV_TELEPRESENCE_VERSION` tells the integration test that a client and
+a traffic-manager of that version has been prebuilt and pushed. This usually
+shortens the time for the test with about 20 seconds.
 
 ### Runtime environment
 

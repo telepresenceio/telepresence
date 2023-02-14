@@ -35,6 +35,7 @@ import (
 	"github.com/datawire/dtest"
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -87,6 +88,7 @@ type cluster struct {
 	logCapturingPods sync.Map
 	agentImageName   string
 	agentImageTag    string
+	loginDomain      string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -101,8 +103,11 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		s.suffix = strconv.Itoa(os.Getpid())
 	}
 	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
-	if !s.prePushed {
+	if s.prePushed {
+		dlog.Infof(ctx, "Using pre-pushed binary %s", s.testVersion)
+	} else {
 		s.testVersion = "v2.9.0-gotest.z" + s.suffix
+		dlog.Infof(ctx, "Building temp binary %s", s.testVersion)
 	}
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
 	s.compatVersion = os.Getenv("DEV_COMPAT_VERSION")
@@ -128,6 +133,10 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	}
 	if s.agentRegistry == "" {
 		s.agentRegistry = s.registry
+	}
+	s.loginDomain = os.Getenv("DEV_LOGIN_DOMAIN")
+	if s.loginDomain == "" {
+		s.loginDomain = "localhost"
 	}
 	require.NoError(t, s.generalError)
 
@@ -311,7 +320,7 @@ func (s *cluster) GlobalEnv() map[string]string {
 		"TELEPRESENCE_VERSION":      s.testVersion,
 		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
 		"TELEPRESENCE_REGISTRY":     s.registry,
-		"TELEPRESENCE_LOGIN_DOMAIN": "localhost",
+		"TELEPRESENCE_LOGIN_DOMAIN": s.loginDomain,
 		"KUBECONFIG":                s.kubeConfig,
 	}
 	yes := struct{}{}
@@ -457,7 +466,7 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := telcharts.WriteChart(fh, s.TelepresenceVersion()[1:]); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.TelepresenceVersion()[1:]); err != nil {
 		_ = fh.Close()
 		return "", err
 	}
@@ -583,7 +592,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	}
 	cmd.Env = maps.ToSortedSlice(env)
 	cmd.Dir = GetWorkingDir(ctx)
-	cmd.Stdin = getStdin(ctx)
+	cmd.Stdin = dos.Stdin(ctx)
 	return cmd
 }
 

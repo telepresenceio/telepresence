@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: daily
+    # Disables version-updates
+    open-pull-requests-limit: 0
+  - package-ecosystem: gomod
+    directory: "/rpc"
+    schedule:
+      interval: daily
+    # Disables version-updates
+    open-pull-requests-limit: 0

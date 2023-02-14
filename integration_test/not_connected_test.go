@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type notConnectedSuite struct {
@@ -68,4 +69,50 @@ func (s *notConnectedSuite) Test_NonExistentContext() {
 	s.Error(err)
 	s.Contains(stderr, `"not-likely-to-exist" does not exist`)
 	itest.TelepresenceDisconnectOk(ctx)
+}
+
+func (s *notConnectedSuite) Test_ConnectingToOtherNamespace() {
+	ctx := s.Context()
+
+	suffix := itest.GetGlobalHarness(s.HarnessContext()).Suffix()
+	appSpace2, mgrSpace2 := itest.AppAndMgrNSName(suffix + "-2")
+	itest.CreateNamespaces(ctx, appSpace2, mgrSpace2)
+	defer itest.DeleteNamespaces(ctx, appSpace2, mgrSpace2)
+
+	s.Run("Installs Successfully", func() {
+		ctx := itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": mgrSpace2})
+		s.NoError(s.InstallTrafficManager(ctx, nil, mgrSpace2, appSpace2))
+	})
+
+	s.Run("Can be connected to with --manager-namespace-flag", func() {
+		itest.TelepresenceQuitOk(ctx)
+		ctx := itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": ""})
+
+		// Set the config to some nonsense to verify that the flag wins
+		cfg := client.GetDefaultConfig()
+		cfg.Cluster.DefaultManagerNamespace = "daffy-duck"
+		ctx = itest.WithConfig(ctx, &cfg)
+		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace="+mgrSpace2)
+		s.Contains(stdout, "Connected to context")
+		stdout = itest.TelepresenceOk(ctx, "status")
+		s.Regexp(`Manager namespace\s+: `+mgrSpace2, stdout)
+	})
+
+	s.Run("Can be connected to with defaultManagerNamespace config", func() {
+		itest.TelepresenceQuitOk(ctx)
+		ctx := itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": ""})
+
+		cfg := client.GetDefaultConfig()
+		cfg.Cluster.DefaultManagerNamespace = mgrSpace2
+		ctx = itest.WithConfig(ctx, &cfg)
+		stdout := itest.TelepresenceOk(ctx, "connect")
+		s.Contains(stdout, "Connected to context")
+		stdout = itest.TelepresenceOk(ctx, "status")
+		s.Regexp(`Manager namespace\s+: `+mgrSpace2, stdout)
+	})
+
+	s.Run("Uninstalls Successfully", func() {
+		ctx := itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": mgrSpace2})
+		s.UninstallTrafficManager(ctx, mgrSpace2)
+	})
 }

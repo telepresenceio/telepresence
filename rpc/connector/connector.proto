@@ -160,6 +160,9 @@ message ConnectRequest {
   repeated string mapped_namespaces = 2;
   reserved 3;
   bool is_pod_daemon = 4;
+  repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+  repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+  string manager_namespace = 7;
 }
 
 message ConnectInfo {
@@ -202,6 +205,7 @@ message ConnectInfo {
   string cluster_id = 11;
 
   daemon.DaemonStatus daemon_status = 13;
+  string manager_namespace = 14;
 
   reserved 6;
   reserved 7;
@@ -220,6 +224,7 @@ message HelmRequest {
   bytes values_json = 3;
   bool reuse_values = 4;
   bool reset_values = 5;
+  bool crds = 6;
 }
 
 message UninstallRequest {

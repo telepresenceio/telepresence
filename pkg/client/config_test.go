@@ -25,6 +25,8 @@ timeouts:
 logLevels:
   userDaemon: info
   rootDaemon: debug
+cluster:
+  defaultManagerNamespace: hello
 `,
 		/* sys2 */ `
 timeouts:
@@ -88,6 +90,7 @@ intercept:
 	assert.Equal(t, k8sapi.PortName, cfg.Intercept.AppProtocolStrategy)                        // from user
 	assert.Equal(t, 9080, cfg.Intercept.DefaultPort)                                           // from user
 	assert.True(t, cfg.Intercept.UseFtp)                                                       // from user
+	assert.Equal(t, cfg.Cluster.DefaultManagerNamespace, "hello")                              // from sys1
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {
@@ -104,6 +107,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg.TelepresenceAPI.Port = 4567
 	cfg.Intercept.AppProtocolStrategy = k8sapi.PortName
 	cfg.Intercept.DefaultPort = 9080
+	cfg.Cluster.DefaultManagerNamespace = "hello-there"
 	cfgBytes, err := yaml.Marshal(cfg)
 	require.NoError(t, err)
 

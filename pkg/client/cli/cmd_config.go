@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 
@@ -16,15 +17,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func configCommand() *cobra.Command {
+func configCommand(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "config",
 	}
-	cmd.AddCommand(configViewCommand())
+	cmd.AddCommand(configViewCommand(ctx))
 	return cmd
 }
 
-func configViewCommand() *cobra.Command {
+func configViewCommand(ctx context.Context) *cobra.Command {
 	var kubeFlags *pflag.FlagSet
 	var request *connector.ConnectRequest
 
@@ -41,7 +42,7 @@ func configViewCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
-	request, kubeFlags = InitConnectRequest(cmd)
+	request, kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
@@ -60,7 +61,7 @@ func configView(cmd *cobra.Command, _ []string) error {
 		cfg.ClientFile = filepath.Join(cfgDir, client.ConfigFile)
 
 		rq := util.GetConnectRequest(ctx)
-		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags)
+		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
 		if err != nil {
 			return err
 		}

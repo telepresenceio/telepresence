@@ -17,11 +17,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func helmCommand() *cobra.Command {
+func helmCommand(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
-	cmd.AddCommand(helmInstallCommand(), helmUpgradeCommand(), helmUninstallCommand())
+	cmd.AddCommand(helmInstallCommand(ctx), helmUpgradeCommand(ctx), helmUninstallCommand(ctx))
 	return cmd
 }
 
@@ -33,14 +33,16 @@ type HelmOpts struct {
 	Request     *connector.ConnectRequest
 	cmdType     connector.HelmRequest_Type
 	kubeFlags   *pflag.FlagSet
+	CRDs        bool
 }
 
 var (
 	HelmInstallExtendFlagsFunc func(*pflag.FlagSet)                                   //nolint:gochecknoglobals // extension point
+	HelmExtendFlagsFunc        func(*pflag.FlagSet)                                   //nolint:gochecknoglobals // extension point
 	HelmInstallPrologFunc      func(context.Context, *pflag.FlagSet, *HelmOpts) error //nolint:gochecknoglobals // extension point
 )
 
-func helmInstallCommand() *cobra.Command {
+func helmInstallCommand(ctx context.Context) *cobra.Command {
 	var upgrade bool
 
 	ha := &HelmOpts{
@@ -65,14 +67,15 @@ func helmInstallCommand() *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
 	ha.addValueSettingFlags(flags)
+	ha.addCRDsFlags(flags)
 	uf := flags.Lookup("upgrade")
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
-	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
-func helmUpgradeCommand() *cobra.Command {
+func helmUpgradeCommand(ctx context.Context) *cobra.Command {
 	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_UPGRADE,
 	}
@@ -89,11 +92,12 @@ func helmUpgradeCommand() *cobra.Command {
 
 	flags := cmd.Flags()
 	ha.addValueSettingFlags(flags)
+	ha.addCRDsFlags(flags)
 	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false,
 		"when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
-	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
+	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
@@ -113,7 +117,13 @@ func (ha *HelmOpts) addValueSettingFlags(flags *pflag.FlagSet) {
 	}
 }
 
-func helmUninstallCommand() *cobra.Command {
+func (ha *HelmOpts) addCRDsFlags(flags *pflag.FlagSet) {
+	if HelmExtendFlagsFunc != nil {
+		HelmExtendFlagsFunc(flags)
+	}
+}
+
+func helmUninstallCommand(ctx context.Context) *cobra.Command {
 	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_UNINSTALL,
 	}
@@ -127,7 +137,8 @@ func helmUninstallCommand() *cobra.Command {
 			ann.VersionCheck: ann.Required,
 		},
 	}
-	ha.Request, ha.kubeFlags = InitConnectRequest(cmd)
+	ha.addCRDsFlags(cmd.Flags())
+	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
 	return cmd
 }
 
@@ -166,12 +177,14 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	doQuit := false
+
 	request := &connector.HelmRequest{
 		Type:           ha.cmdType,
 		ValuesJson:     valuesJSON,
 		ReuseValues:    ha.ReuseValues,
 		ResetValues:    ha.ResetValues,
 		ConnectRequest: ha.Request,
+		Crds:           ha.CRDs,
 	}
 	resp, err := util.GetUserDaemon(ctx).Helm(ctx, request)
 	if err != nil {
@@ -191,7 +204,14 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 		doQuit = true
 		msg = "uninstalled"
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "\nTraffic Manager %s successfully\n", msg)
+
+	updatedResource := "Traffic Manager"
+	if ha.CRDs {
+		updatedResource = "Telepresence CRDs"
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "\n%s %s successfully\n", updatedResource, msg)
+
 	if err == nil && doQuit {
 		err = util.Disconnect(cmd.Context(), true)
 	}

@@ -29,20 +29,18 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
-
-type mounter interface {
-	start(ctx context.Context, ic *intercept) error
-}
 
 // intercept tracks the life-cycle of an intercept, dictated by the intercepts
 // arrival and departure in the watchInterceptsLoop.
@@ -63,7 +61,7 @@ type intercept struct {
 	pid int
 
 	// The mounter of the remote file system.
-	mounter
+	remotefs.Mounter
 }
 
 // interceptResult is what gets written to the awaitIntercept's waitCh channel when the
@@ -133,7 +131,12 @@ func (ic *intercept) shouldForward() bool {
 // It assumes that the user has called shouldForward and is sure that something will be started.
 func (ic *intercept) startForwards(ctx context.Context, wg *sync.WaitGroup) {
 	for _, port := range ic.localPorts() {
-		pfCtx := dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", ic.PodIp, port))
+		var pfCtx context.Context
+		if iputil.IsIpV6Addr(ic.PodIp) {
+			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("[/%s]:%s", ic.PodIp, port))
+		} else {
+			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", ic.PodIp, port))
+		}
 		wg.Add(1)
 		go ic.workerPortForward(pfCtx, port, wg)
 	}

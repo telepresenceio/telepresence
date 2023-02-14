@@ -19,13 +19,18 @@ type Env struct {
 	LoginTokenURL      *url.URL `env:"TELEPRESENCE_LOGIN_TOKEN_URL,     parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/token"`
 	LoginCompletionURL *url.URL `env:"TELEPRESENCE_LOGIN_COMPLETION_URL,parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/completion"`
 	UserInfoURL        *url.URL `env:"TELEPRESENCE_USER_INFO_URL,       parser=absolute-URL,    default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
-	ManagerNamespace   string   `env:"TELEPRESENCE_MANAGER_NAMESPACE,   parser=nonempty-string,default=ambassador"`
+	ManagerNamespace   string   `env:"TELEPRESENCE_MANAGER_NAMESPACE,   parser=nonempty-string"`
 
 	// This environment variable becomes the default for the images.registry and images.webhookRegistry
 	Registry string `env:"TELEPRESENCE_REGISTRY,                        parser=nonempty-string,default=docker.io/datawire"`
 
 	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
 	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,                   parser=possibly-empty-string,default="`
+
+	Shell string `env:"SHELL, parser=nonempty-string,default=/bin/bash"`
+
+	// The address that the user daemon is listening to (unless it is started by the client and uses a named pipe or unix socket).
+	UserDaemonAddress string `env:"TELEPRESENCE_USER_DAEMON_ADDRESS, parser=possibly-empty-string,default="`
 
 	lookupFunc func(key string) (string, bool)
 }

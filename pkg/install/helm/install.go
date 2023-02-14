@@ -22,8 +22,9 @@ import (
 )
 
 const (
-	helmDriver  = "secrets"
-	releaseName = "traffic-manager"
+	helmDriver                = "secrets"
+	trafficManagerReleaseName = "traffic-manager"
+	crdReleaseName            = "telepresence-crds"
 )
 
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
@@ -109,8 +110,8 @@ func timedRun(ctx context.Context, run func(time.Duration) error) error {
 	}
 }
 
-func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, namespace string, values map[string]any) error {
-	dlog.Infof(ctx, "No existing Traffic Manager found in namespace %s, installing %s...", namespace, client.Version())
+func installNew(ctx context.Context, chrt *chart.Chart, helmConfig *action.Configuration, releaseName, namespace string, values map[string]any) error {
+	dlog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, client.Version())
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -128,7 +129,7 @@ func upgradeExisting(
 	existingVer string,
 	chrt *chart.Chart,
 	helmConfig *action.Configuration,
-	ns string,
+	releaseName, ns string,
 	resetValues bool,
 	reuseValues bool,
 	values map[string]any,
@@ -146,8 +147,8 @@ func upgradeExisting(
 	})
 }
 
-func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, namespace string) error {
-	dlog.Infof(ctx, "Uninstalling Traffic Manager in namespace %s", namespace)
+func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, releaseName, namespace string) error {
+	dlog.Infof(ctx, "Uninstalling %s in namespace %s", releaseName, namespace)
 	uninstall := action.NewUninstall(helmConfig)
 	return timedRun(ctx, func(timeout time.Duration) error {
 		uninstall.Timeout = timeout
@@ -156,7 +157,7 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, na
 	})
 }
 
-func isTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*release.Release, *action.Configuration, error) {
+func isInstalled(ctx context.Context, configFlags *genericclioptions.ConfigFlags, releaseName, namespace string) (*release.Release, *action.Configuration, error) {
 	dlog.Debug(ctx, "getHelmConfig")
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
@@ -169,7 +170,7 @@ func isTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 	timeout := client.GetConfig(ctx).Timeouts.Get(client.TimeoutHelm)
 	for time.Since(transitionStart) < timeout {
 		dlog.Debugf(ctx, "getHelmRelease")
-		if existing, err = getHelmRelease(ctx, helmConfig); err != nil {
+		if existing, err = getHelmRelease(ctx, releaseName, helmConfig); err != nil {
 			// If we weren't able to get the helm release at all, there's no hope for installing it
 			// This could have happened because the user doesn't have the requisite permissions, or because there was some
 			// kind of issue communicating with kubernetes. Let's hope it's the former and let's hope the traffic manager
@@ -178,7 +179,7 @@ func isTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 			return nil, nil, err
 		}
 		if existing == nil {
-			dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install: none", namespace)
+			dlog.Infof(ctx, "isInstalled(namespace=%q): current install: none", namespace)
 			return nil, helmConfig, nil
 		}
 		st := existing.Info.Status
@@ -187,42 +188,67 @@ func isTrafficManager(ctx context.Context, configFlags *genericclioptions.Config
 			if ow, ok := existing.Config["createdBy"]; ok {
 				owner = ow.(string)
 			}
-			dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
+			dlog.Infof(ctx, "isInstalled(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
 				namespace, releaseVer(existing), owner, st, existing.Info.Description)
 			return existing, helmConfig, nil
 		}
-		dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install is in a pending or uninstalling state, waiting for it to transition...",
+		dlog.Infof(ctx, "isInstalled(namespace=%q): current install is in a pending or uninstalling state, waiting for it to transition...",
 			namespace)
 		dtime.SleepWithContext(ctx, 1*time.Second)
 	}
-	dlog.Infof(ctx, "IsTrafficManager(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); assuming it's stuck",
+	dlog.Infof(ctx, "isInstalled(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); assuming it's stuck",
 		namespace, timeout)
 	return existing, helmConfig, nil
 }
 
-// EnsureTrafficManager ensures the traffic manager is installed.
 func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *connector.HelmRequest) error {
-	existing, helmConfig, err := isTrafficManager(ctx, configFlags, namespace)
+	if req.Crds {
+		dlog.Debug(ctx, "loading build-in helm chart")
+		crdChart, err := loadCRDChart()
+		if err != nil {
+			return fmt.Errorf("unable to load built-in helm chart: %w", err)
+		}
+
+		err = ensureIsInstalled(ctx, configFlags, crdChart, crdReleaseName, namespace, req)
+		if err != nil {
+			return fmt.Errorf("failed to install traffic manager CRDs: %w", err)
+		}
+		return nil
+	}
+
+	coreChart, err := loadCoreChart()
 	if err != nil {
-		return fmt.Errorf("err detecting traffic manager: %w", err)
+		return fmt.Errorf("unable to load built-in helm chart: %w", err)
+	}
+
+	err = ensureIsInstalled(ctx, configFlags, coreChart, trafficManagerReleaseName, namespace, req)
+	if err != nil {
+		return fmt.Errorf("failed to install traffic manager: %w", err)
+	}
+
+	return nil
+}
+
+// EnsureTrafficManager ensures the traffic manager is installed.
+func ensureIsInstalled(
+	ctx context.Context, configFlags *genericclioptions.ConfigFlags, chrt *chart.Chart,
+	releaseName, namespace string, req *connector.HelmRequest,
+) error {
+	existing, helmConfig, err := isInstalled(ctx, configFlags, releaseName, namespace)
+	if err != nil {
+		return fmt.Errorf("err detecting %s: %w", releaseName, err)
 	}
 
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
 	// In those cases, an uninstall should clean everything up and leave us ready to install again
 	if existing != nil && (existing.Info.Status != release.StatusDeployed) {
-		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
+		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
 			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
-		err = uninstallExisting(ctx, helmConfig, namespace)
+		err = uninstallExisting(ctx, helmConfig, namespace, releaseName)
 		if err != nil {
 			return fmt.Errorf("failed to clean up leftover release history: %w", err)
 		}
 		existing = nil
-	}
-
-	dlog.Debug(ctx, "loading build-in helm chart")
-	chrt, err := loadChart()
-	if err != nil {
-		return fmt.Errorf("unable to load built-in helm chart: %w", err)
 	}
 
 	// OK, now install things.
@@ -238,36 +264,59 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 
 	switch {
 	case existing == nil: // fresh install
-		dlog.Debugf(ctx, "Importing legacy for namespace %s", namespace)
-		if err := importLegacy(ctx, namespace); err != nil {
-			// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
-			// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
-			dlog.Errorf(ctx, "EnsureTrafficManager(namespace=%q): unable to import existing k8s resources: %v. Assuming traffic-manager is setup and continuing...",
-				namespace, err)
-			return nil
+		// Only the traffic manager release has a legacy version.
+		if releaseName == trafficManagerReleaseName {
+			dlog.Debugf(ctx, "Importing legacy for namespace %s", namespace)
+			if err := importLegacy(ctx, releaseName, namespace); err != nil {
+				// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
+				// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
+				dlog.Errorf(ctx, "ensureIsInstalled(namespace=%q): unable to import existing k8s resources: %v. Assuming traffic-manager is setup and continuing...",
+					namespace, err)
+				return nil
+			}
 		}
 
-		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): performing fresh install...", namespace)
-		err = installNew(ctx, chrt, helmConfig, namespace, vals)
+		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): performing fresh install...", namespace)
+		err = installNew(ctx, chrt, helmConfig, releaseName, namespace, vals)
 	case req.Type == connector.HelmRequest_UPGRADE: // replace existing install
-		dlog.Infof(ctx, "EnsureTrafficManager(namespace=%q): replacing Traffic Manager from %q to %q...",
-			namespace, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
-		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, namespace, req.ResetValues, req.ReuseValues, vals)
+		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): replacing %s from %q to %q...",
+			namespace, releaseName, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
+		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, releaseName, namespace, req.ResetValues, req.ReuseValues, vals)
 	default:
 		err = errcat.User.Newf(
-			"traffic manager version %q is already installed, use 'telepresence helm upgrade' instead to replace it",
-			releaseVer(existing))
+			"%s version %q is already installed, use 'telepresence helm upgrade' instead to replace it",
+			releaseName, releaseVer(existing))
 	}
 	return err
 }
 
 // DeleteTrafficManager deletes the traffic manager.
-func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool) error {
+func DeleteTrafficManager(
+	ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool, crds bool,
+) error {
+	if !crds {
+		err := ensureIsDeleted(ctx, configFlags, trafficManagerReleaseName, namespace, errOnFail)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	err := ensureIsDeleted(ctx, configFlags, crdReleaseName, namespace, errOnFail)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ensureIsDeleted(ctx context.Context, configFlags *genericclioptions.ConfigFlags, releaseName, namespace string, errOnFail bool) error {
 	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
 	}
-	existing, err := getHelmRelease(ctx, helmConfig)
+
+	existing, err := getHelmRelease(ctx, releaseName, helmConfig)
 	if err != nil {
 		err := fmt.Errorf("unable to look for existing helm release in namespace %s: %w", namespace, err)
 		if errOnFail {
@@ -277,12 +326,12 @@ func DeleteTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		return nil
 	}
 	if existing == nil {
-		err := fmt.Errorf("traffic Manager in namespace %s already deleted", namespace)
+		err := fmt.Errorf("%s in namespace %s already deleted", releaseName, namespace)
 		if errOnFail {
 			return err
 		}
 		dlog.Info(ctx, err.Error())
 		return nil
 	}
-	return uninstallExisting(ctx, helmConfig, namespace)
+	return uninstallExisting(ctx, helmConfig, releaseName, namespace)
 }

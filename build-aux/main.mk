@@ -124,14 +124,14 @@ endif
 
 FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
 
-pkg/client/userd/daemon/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
+pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
 	cp $< $@
 
 $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
 	mkdir -p $(BUILDDIR)
 	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
 
-build-deps: pkg/client/userd/daemon/fuseftp.bits
+build-deps: pkg/client/remotefs/fuseftp.bits
 
 ifeq ($(GOHOSTOS),windows)
 WINTUN_VERSION=0.14.1
@@ -161,7 +161,13 @@ release-binary: $(TELEPRESENCE)
 image: build-deps
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
-	docker build --target tel2 --tag tel2 --tag $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f base-image/Dockerfile .
+	docker build --target tel2 --tag tel2 --tag $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.traffic .
+
+.PHONY: client-image
+client-image: build-deps
+	mkdir -p $(BUILDDIR)
+	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
+	docker build --target telepresence --tag telepresence --tag $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.client .
 
 .PHONY: push-image
 push-image: image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
@@ -301,6 +307,18 @@ _login:
 .PHONY: install
 install: build ## (Install) Installs the telepresence binary to $(bindir)
 	install -Dm755 $(BINDIR)/telepresence $(bindir)/telepresence
+
+.PHONY: private-registry
+private-registry: $(tools/helm) ## (Test) Add a private docker registry to the current k8s cluster and make it available on localhost:5000.
+	mkdir -p $(BUILDDIR)
+	$(tools/helm) repo add twuni https://helm.twun.io
+	$(tools/helm) repo update
+	$(tools/helm) install docker-registry twuni/docker-registry
+	kubectl apply -f k8s/private-reg-proxy.yaml
+	kubectl rollout status -w daemonset/private-registry-proxy
+	sleep 5
+	kubectl wait --for=condition=ready pod --all
+	kubectl port-forward daemonset/private-registry-proxy 5000:5000 > /dev/null &
 
 # Aliases
 # =======
