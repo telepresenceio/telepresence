@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.10.6 (TBD)
+### 2.10.6 (February 14, 2023)
 
 Security release to rebuild with go 1.19.6
 
