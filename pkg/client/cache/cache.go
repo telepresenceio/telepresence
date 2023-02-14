@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,4 +57,19 @@ func DeleteFromUserCache(ctx context.Context, file string) error {
 		return err
 	}
 	return nil
+}
+
+func ExistsInCache(ctx context.Context, fileName string) (bool, error) {
+	dir, err := filelocation.AppUserCacheDir(ctx)
+	if err != nil {
+		return false, err
+	}
+	path := filepath.Join(dir, fileName)
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
