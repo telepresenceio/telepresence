@@ -122,16 +122,20 @@ else
 	sdkroot=
 endif
 
+ifeq ($(DOCKER_BUILD),1)
+build-deps:
+else
 FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
-
-pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
-	cp $< $@
 
 $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
 	mkdir -p $(BUILDDIR)
 	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
 
+pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
+	cp $< $@
+
 build-deps: pkg/client/remotefs/fuseftp.bits
+endif
 
 ifeq ($(GOHOSTOS),windows)
 WINTUN_VERSION=0.14.1
@@ -150,7 +154,11 @@ ifeq ($(GOHOSTOS),windows)
 $(TELEPRESENCE): build-deps $(BINDIR)/wintun.dll FORCE
 endif
 	mkdir -p $(@D)
+ifeq ($(DOCKER_BUILD),1)
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -tags docker -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+else
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+endif
 
 .PHONY: release-binary
 release-binary: $(TELEPRESENCE)
