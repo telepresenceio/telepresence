@@ -2,7 +2,7 @@ package remotefs
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"net/netip"
 	"strings"
 	"time"
@@ -25,15 +25,10 @@ func NewFTPMounter(client rpc.FuseFTPClient) Mounter {
 	return &ftpMounter{client: client}
 }
 
-func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint, podIP string, port int32) error {
+func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint string, podIP net.IP, port uint16) error {
 	// The FTPClient and the NewHost must be controlled by the intercept context and not by the pod context that
 	// is passed as a parameter, because those services will survive pod changes.
-	var addr netip.AddrPort
-	if iputil.IsIpV6Addr(podIP) {
-		addr = netip.MustParseAddrPort(fmt.Sprintf("[%s]:%d", podIP, port))
-	} else {
-		addr = netip.MustParseAddrPort(fmt.Sprintf("%s:%d", podIP, port))
-	}
+	addr := netip.MustParseAddrPort(iputil.JoinIpPort(podIP, port))
 	if m.id == nil {
 		dlog.Infof(ctx, "Mounting FTP file system for intercept %q (address %s) at %q", id, addr, clientMountPoint)
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
@@ -41,8 +36,8 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 		id, err := m.client.Mount(ctx, &rpc.MountRequest{
 			MountPoint: clientMountPoint,
 			FtpServer: &rpc.AddressAndPort{
-				Ip:   iputil.Parse(podIP),
-				Port: port,
+				Ip:   podIP,
+				Port: int32(port),
 			},
 			ReadTimeout: durationpb.New(5 * time.Second),
 			Directory:   rmp,
@@ -68,8 +63,8 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 	dlog.Infof(ctx, "Switching remote address to %s for FTP file system for intercept %q at %q", addr, id, clientMountPoint)
 	_, err := m.client.SetFtpServer(ctx, &rpc.SetFtpServerRequest{
 		FtpServer: &rpc.AddressAndPort{
-			Ip:   iputil.Parse(podIP),
-			Port: port,
+			Ip:   podIP,
+			Port: int32(port),
 		},
 		Id: m.id,
 	})

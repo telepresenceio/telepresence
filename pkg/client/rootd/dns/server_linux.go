@@ -18,6 +18,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -175,6 +176,29 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, proxyClu
 		}, dev)
 		return s.Run(c, serverStarted, listeners, pool, s.resolveInSearch, proxyCluster)
 	})
+
+	if runningInDocker() {
+		g.Go("Local DNS", func(c context.Context) error {
+			select {
+			case <-c.Done():
+			case <-serverStarted:
+				// Give DNS server time to start before rerouting NAT
+				dtime.SleepWithContext(c, time.Millisecond)
+
+				lc := net.ListenConfig{}
+				pc, err := lc.ListenPacket(c, "udp", ":53")
+				if err != nil {
+					return nil
+				}
+				go func() {
+					if err = forwarder.ForwardUDP(c, pc.(*net.UDPConn), dnsResolverAddr); err != nil {
+						dlog.Error(c, err)
+					}
+				}()
+			}
+			return nil
+		})
+	}
 
 	g.Go("NAT-redirect", func(c context.Context) error {
 		select {

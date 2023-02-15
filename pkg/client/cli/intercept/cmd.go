@@ -19,12 +19,13 @@ import (
 )
 
 type Args struct {
-	Name        string // Args[0] || `${Args[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
-	AgentName   string // --workload || Args[0] // only valid if !localOnly
-	Namespace   string // --namespace
-	Port        string // --port // only valid if !localOnly
-	ServiceName string // --service // only valid if !localOnly
-	LocalOnly   bool   // --local-only
+	Name           string // Args[0] || `${Args[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
+	AgentName      string // --workload || Args[0] // only valid if !localOnly
+	Namespace      string // --namespace
+	Port           string // --port // only valid if !localOnly
+	ServiceName    string // --service // only valid if !localOnly
+	LocalOnly      bool   // --local-only
+	LocalMountPort uint16 // --local-mount-port
 
 	EnvFile  string   // --env-file
 	EnvJSON  string   // --env-json
@@ -108,6 +109,9 @@ func (a *Args) AddFlags(flags *pflag.FlagSet) {
 
 	flags.BoolVarP(&a.DetailedOutput, "detailed-output", "", false,
 		`Provide very detailed info about the intercept when used together with --output=json or --output=yaml'`)
+
+	flags.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,
+		`Do not mount remote directories. Instead, expose this port on localhost to an external mounter`)
 }
 
 func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
@@ -132,6 +136,11 @@ func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
 		}
 		return nil
 	}
+
+	if a.LocalMountPort > 0 && client.GetConfig(cmd.Context()).Intercept.UseFtp {
+		return errcat.User.New("only SFTP can be used with --local-mount-port. Client is configured to perform remote mounts using FTP")
+	}
+
 	// Actually intercepting something
 	if a.AgentName == "" {
 		a.AgentName = a.Name
@@ -229,10 +238,14 @@ func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) (
 func (a *Args) GetMountPoint(ctx context.Context) (string, bool, error) {
 	mountPoint := ""
 	doMount, err := strconv.ParseBool(a.Mount)
-	if err != nil {
+	switch {
+	case err != nil:
+		// Not a boolean. Must be a directory
 		mountPoint = a.Mount
 		doMount = len(mountPoint) > 0
 		err = nil
+	case doMount && a.LocalMountPort > 0:
+		return "", true, nil
 	}
 
 	if doMount {

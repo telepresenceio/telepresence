@@ -12,7 +12,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -26,12 +25,8 @@ func NewSFTPMounter(wg *sync.WaitGroup) Mounter {
 	return &sftpMounter{podWG: wg}
 }
 
-func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint, podIP string, port int32) error {
-	if iputil.IsIpV6Addr(podIP) {
-		ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("[/%s]:%d", podIP, port))
-	} else {
-		ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%d", podIP, port))
-	}
+func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint string, podIP net.IP, port uint16) error {
+	ctx = dgroup.WithGoroutineName(ctx, iputil.JoinIpPort(podIP, port))
 
 	// The mount is terminated and restarted when the intercept pod changes, so we
 	// must set up a wait/done pair here to ensure that this happens synchronously
@@ -49,18 +44,6 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 
 		// Retry mount in case it gets disconnected
 		err := client.Retry(ctx, "sshfs", func(ctx context.Context) error {
-			dl := &net.Dialer{Timeout: 3 * time.Second}
-			var conn net.Conn
-			var err error
-			if iputil.IsIpV6Addr(podIP) {
-				conn, err = dl.DialContext(ctx, "tcp", fmt.Sprintf("[%s]:%d", podIP, port))
-			} else {
-				conn, err = dl.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", podIP, port))
-			}
-			if err != nil {
-				return err
-			}
-			defer conn.Close()
 			sshfsArgs := []string{
 				"-F", "none", // don't load the user's config file
 				"-f", // foreground operation
@@ -68,15 +51,13 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 				// connection settings
 				"-C", // compression
 				"-oConnectTimeout=10",
-				"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-				"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-				"-o", "slave",                    // Unencrypted via stdin/stdout
+				"-o", fmt.Sprintf("directport=%d", port),
 
 				// mount directives
 				"-o", "follow_symlinks",
 				"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-				"localhost:" + mountPoint, // what to mount
-				clientMountPoint,          // where to mount it
+				fmt.Sprintf("%s:%s", podIP.String(), mountPoint), // what to mount
+				clientMountPoint, // where to mount it
 			}
 			exe := "sshfs"
 			if runtime.GOOS == "windows" {
@@ -84,7 +65,7 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 				sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
 				exe = "sshfs-win"
 			}
-			err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
+			err := proc.Run(ctx, nil, exe, sshfsArgs...)
 			time.Sleep(time.Second)
 
 			// sshfs sometimes leave the mount point in a bad state. This will clean it up

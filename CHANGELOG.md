@@ -2,6 +2,13 @@
 
 ### 2.X.X (TBD)
 
+- Feature: When Telepresence detects that it runs in a docker container, it will now expose its DNS on `localhost:53`. This makes the
+  container itself a DNS server. Very handy when other containers use `--network container:[tp-container]`.
+
+- Feature: A new flag, `--local-mount-port <port>` will make `telepresence intercept --detailed-output --output=[yaml|json]` create
+  a bridge to the remote SFTP service instead of starting an sshfs client. This enables the sshfs client to be started outside of the 
+  container, and thus, mount filesystems that then can be used as source for volumes that other containers will use.
+
 - Feature: The Telepresence daemon can now run as a long-lived process in a docker container so that CLI commands that
   run in other containers can use a common daemon for network access and intercepts.
 

@@ -18,7 +18,6 @@ import (
 
 type udp struct {
 	interceptor
-	targets *tunnel.Pool
 }
 
 func newUDP(listen *net.UDPAddr, targetHost string, targetPort uint16) Interceptor {
@@ -28,7 +27,6 @@ func newUDP(listen *net.UDPAddr, targetHost string, targetPort uint16) Intercept
 			targetHost: targetHost,
 			targetPort: targetPort,
 		},
-		targets: tunnel.NewPool(),
 	}
 }
 
@@ -48,7 +46,6 @@ func (f *udp) Serve(ctx context.Context, initCh chan<- net.Addr) error {
 			close(initCh)
 		}
 		f.lCancel()
-		f.targets.CloseAll(ctx)
 		dlog.Infof(ctx, "Done forwarding udp from %s", la)
 	}()
 
@@ -96,18 +93,22 @@ func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager
 // target host:port of this forwarder using a connection that will use the reply address
 // from the read as the destination for packages going in the other direction.
 func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
-	ctx, span := otel.Tracer("").Start(ctx, "forwardConn")
-	defer span.End()
-
 	targetAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", f.targetHost, f.targetPort))
 	if err != nil {
 		return fmt.Errorf("error on resolve(%s:%d): %w", f.targetHost, f.targetPort, err)
 	}
+	return ForwardUDP(ctx, conn, targetAddr)
+}
 
+func ForwardUDP(ctx context.Context, conn *net.UDPConn, targetAddr *net.UDPAddr) error {
+	ctx, span := otel.Tracer("").Start(ctx, "forwardConn")
+	defer span.End()
+
+	targets := tunnel.NewPool()
 	la := conn.LocalAddr()
 	dlog.Infof(ctx, "Forwarding udp from %s to %s", la, targetAddr)
 	defer func() {
-		f.targets.CloseAll(ctx)
+		targets.CloseAll(ctx)
 		dlog.Infof(ctx, "Done forwarding udp from %s to %s", la, targetAddr)
 	}()
 
@@ -124,7 +125,7 @@ func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
 			id := tunnel.ConnIDFromUDP(rr.Addr, targetAddr)
 			span.SetAttributes(attribute.String("conn-id", id.String()))
 			dlog.Tracef(ctx, "<- SRC udp %s, len %d", id, len(rr.Payload))
-			h, _, err := f.targets.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
+			h, _, err := targets.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 				tc, err := net.DialUDP("udp", nil, id.DestinationAddr().(*net.UDPAddr))
 				if err != nil {
 					return nil, err

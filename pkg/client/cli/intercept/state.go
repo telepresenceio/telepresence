@@ -186,9 +186,14 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	}
 
 	var volumeMountProblem error
-	doMount, err := strconv.ParseBool(s.Mount)
-	if doMount || err != nil {
-		volumeMountProblem = s.checkMountCapability(ctx)
+	if ir.LocalMountPort != 0 {
+		intercept.PodIp = "127.0.0.1"
+		intercept.SftpPort = ir.LocalMountPort
+	} else {
+		doMount, err := strconv.ParseBool(s.Mount)
+		if doMount || err != nil {
+			volumeMountProblem = s.checkMountCapability(ctx)
+		}
 	}
 	if detailedOutput {
 		mountError := ""
@@ -306,6 +311,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.TargetPort = int32(s.localPort)
 
 	doMount := false
+	ir.LocalMountPort = int32(s.LocalMountPort)
 	if err = s.checkMountCapability(ctx); err == nil {
 		if ir.MountPoint, doMount, err = s.GetMountPoint(ctx); err != nil {
 			return nil, err
