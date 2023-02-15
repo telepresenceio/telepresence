@@ -15,7 +15,7 @@ import (
 
 // WatchUserCache uses a file system watcher that receives events when the file changes
 // and calls the given function when that happens.
-func WatchUserCache(ctx context.Context, onChange func(context.Context) error, subdir string, files ...string) error {
+func WatchUserCache(ctx context.Context, subdir string, onChange func(context.Context) error, files ...string) error {
 	dir, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
 		return err

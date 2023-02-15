@@ -24,7 +24,7 @@ func ExistsInIspecCache(ctx context.Context, file string) (bool, error) {
 }
 
 func WatchInIspecCache(ctx context.Context, onChange func(context.Context) error, files ...string) error {
-	return WatchUserCache(ctx, onChange, ispecDirName, files...)
+	return WatchUserCache(ctx, ispecDirName, onChange, files...)
 }
 
 func LoadIspecsFromCache[T any](ctx context.Context) ([]T, error) {
