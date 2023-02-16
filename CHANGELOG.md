@@ -36,6 +36,7 @@
 - Change: Add `--output` option `json-stream`
 
 - Bugfix: Fixed a bug where connecting to certain VPNs that map the CIDR range of the cluster would result in no routes getting added.
+  Ticket [3006](https://github.com/telepresenceio/telepresence/issues/3006)
 
 ### 2.10.6 (February 14, 2023)
 
