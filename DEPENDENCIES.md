@@ -18,7 +18,7 @@ following Free and Open Source software:
     github.com/cenkalti/backoff/v4                                               v4.2.0                                MIT license
     github.com/cespare/xxhash/v2                                                 v2.2.0                                MIT license
     github.com/chai2010/gettext-go                                               v1.0.2                                3-clause BSD license
-    github.com/containerd/containerd                                             v1.6.13                               Apache License 2.0
+    github.com/containerd/containerd                                             v1.6.18                               Apache License 2.0
     github.com/coreos/go-iptables                                                v0.6.0                                Apache License 2.0
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                3-clause BSD license
     github.com/datawire/dlib                                                     v1.3.1-0.20221228104658-e373c6d44961  Apache License 2.0
@@ -125,7 +125,6 @@ following Free and Open Source software:
     github.com/xeipuuv/gojsonreference                                           v0.0.0-20180127040603-bd5ef7bd5415    Apache License 2.0
     github.com/xeipuuv/gojsonschema                                              v1.2.0                                Apache License 2.0
     github.com/xlab/treeprint                                                    v1.1.0                                MIT license
-    go.etcd.io/etcd/api/v3                                                       v3.5.6                                Apache License 2.0
     go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc  v0.37.0                               Apache License 2.0
     go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp                v0.37.0                               Apache License 2.0
     go.opentelemetry.io/otel                                                     v1.11.2                               Apache License 2.0
@@ -137,15 +136,15 @@ following Free and Open Source software:
     go.opentelemetry.io/otel/trace                                               v1.11.2                               Apache License 2.0
     go.opentelemetry.io/proto/otlp                                               v0.19.0                               Apache License 2.0
     go.starlark.net                                                              v0.0.0-20221205180719-3fd0dac74452    3-clause BSD license
-    golang.org/x/crypto                                                          v0.4.0                                3-clause BSD license
+    golang.org/x/crypto                                                          v0.5.0                                3-clause BSD license
     golang.org/x/exp                                                             v0.0.0-20221217163422-3c43f8badb15    3-clause BSD license
     golang.org/x/mod                                                             v0.7.0                                3-clause BSD license
-    golang.org/x/net                                                             v0.4.0                                3-clause BSD license
+    golang.org/x/net                                                             v0.5.0                                3-clause BSD license
     golang.org/x/oauth2                                                          v0.3.0                                3-clause BSD license
     golang.org/x/sync                                                            v0.1.0                                3-clause BSD license
-    golang.org/x/sys                                                             v0.3.0                                3-clause BSD license
-    golang.org/x/term                                                            v0.3.0                                3-clause BSD license
-    golang.org/x/text                                                            v0.5.0                                3-clause BSD license
+    golang.org/x/sys                                                             v0.4.0                                3-clause BSD license
+    golang.org/x/term                                                            v0.4.0                                3-clause BSD license
+    golang.org/x/text                                                            v0.6.0                                3-clause BSD license
     golang.org/x/time                                                            v0.3.0                                3-clause BSD license
     golang.org/x/tools                                                           v0.4.0                                3-clause BSD license
     golang.zx2c4.com/wintun                                                      v0.0.0-20211104114900-415007cec224    MIT license
@@ -160,7 +159,7 @@ following Free and Open Source software:
     gopkg.in/yaml.v2                                                             v2.4.0                                Apache License 2.0, MIT license
     gopkg.in/yaml.v3                                                             v3.0.1                                Apache License 2.0, MIT license
     gvisor.dev/gvisor                                                            v0.0.0-20221216231429-a78e892a26d2    Apache License 2.0, MIT license
-    helm.sh/helm/v3                                                              v3.10.3                               Apache License 2.0
+    helm.sh/helm/v3                                                              v3.11.1                               Apache License 2.0
     k8s.io/api                                                                   v0.26.0                               Apache License 2.0
     k8s.io/apiextensions-apiserver                                               v0.26.0                               Apache License 2.0
     k8s.io/apimachinery                                                          v0.26.0                               3-clause BSD license, Apache License 2.0
@@ -172,7 +171,7 @@ following Free and Open Source software:
     k8s.io/kube-openapi                                                          v0.0.0-20221207184640-f3cff1453715    3-clause BSD license, Apache License 2.0
     k8s.io/kubectl                                                               v0.26.0                               Apache License 2.0
     k8s.io/utils                                                                 v0.0.0-20221128185143-99ec85e7a448    3-clause BSD license, Apache License 2.0
-    oras.land/oras-go                                                            v1.2.1                                Apache License 2.0
+    oras.land/oras-go                                                            v1.2.2                                Apache License 2.0
     sigs.k8s.io/json                                                             v0.0.0-20221116044647-bc3834ca7abd    3-clause BSD license, Apache License 2.0
     sigs.k8s.io/kustomize/api                                                    v0.12.1                               Apache License 2.0
     sigs.k8s.io/kustomize/kyaml                                                  v0.13.9                               Apache License 2.0, MIT license
