@@ -1,0 +1,26 @@
+name: Go Dependency Submission
+on:
+  push:
+    branches:
+      - release/v2
+
+# The API requires write permission on the repository to submit dependencies
+permissions:
+  contents: write
+
+jobs:
+  go-action-detection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout Repository'
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: ">=1.19.0"
+
+      - name: Run snapshot action
+        uses: actions/go-dependency-submission@v1
+        with:
+          go-mod-path: go.mod
+          go-build-target: cmd/telepresence/main.go
