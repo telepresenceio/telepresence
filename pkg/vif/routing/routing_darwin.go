@@ -57,16 +57,16 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 			if !ok {
 				continue
 			}
-			gw, ok := gw.(*route.Inet4Addr)
-			if !ok {
-				continue
+			var gwIP net.IP
+			if gwAddr, ok := gw.(*route.Inet4Addr); ok {
+				gwIP = gwAddr.IP[:]
 			}
 			routes = append(routes, &Route{
 				Interface: iface,
-				Gateway:   net.IP(gw.IP[:]),
+				Gateway:   gwIP,
 				LocalIP:   localIP,
 				RoutedNet: &net.IPNet{
-					IP:   net.IP(a.IP[:]),
+					IP:   a.IP[:],
 					Mask: net.IPv4Mask(mask.IP[0], mask.IP[1], mask.IP[2], mask.IP[3]),
 				},
 				Default: rm.Flags&unix.RTF_IFSCOPE == 0,
@@ -83,9 +83,9 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 			if !ok {
 				continue
 			}
-			gw, ok := gw.(*route.Inet6Addr)
-			if !ok {
-				continue
+			var gwIP net.IP
+			if gwAddr, ok := gw.(*route.Inet6Addr); ok {
+				gwIP = gwAddr.IP[:]
 			}
 			i := 0
 			for _, b := range mask.IP {
@@ -96,7 +96,7 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 			}
 			routes = append(routes, &Route{
 				Interface: iface,
-				Gateway:   net.IP(gw.IP[:]),
+				Gateway:   gwIP,
 				LocalIP:   localIP,
 				RoutedNet: &net.IPNet{
 					IP:   net.IP(a.IP[:]),

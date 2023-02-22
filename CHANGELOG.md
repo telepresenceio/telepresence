@@ -35,6 +35,8 @@
 
 - Change: Add `--output` option `json-stream`
 
+- Bugfix: Fixed a bug when detecting VPN conflicts on macOS that removed conflicting gateway links. 
+
 - Bugfix: Fixed a bug where connecting to certain VPNs that map the CIDR range of the cluster would result in no routes getting added.
   Ticket [3006](https://github.com/telepresenceio/telepresence/issues/3006)
 
