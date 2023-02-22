@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.11.0 (TBD)
+### 2.11.0 (February 22, 2023)
 
 - Feature: When Telepresence detects that it runs in a docker container, it will now expose its DNS on `localhost:53`. This makes the
   container itself a DNS server. Very handy when other containers use `--network container:[tp-container]`.
