@@ -174,12 +174,23 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 		subnets[svcType] = append(subnets[svcType], ipsn)
 	}
 
+	zeroIP := func(bs net.IP) bool {
+		for _, b := range bs {
+			if b != 0 {
+				return false
+			}
+		}
+		return true
+	}
 	instructions := []string{}
 	for _, tp := range []string{podType, svcType} {
 		for _, sn := range subnets[tp] {
 			ok := true
 			for _, rt := range routeTable {
 				if _, inVPN := vpnIfaces[rt.Interface.Name]; !inVPN {
+					continue
+				}
+				if zeroIP(rt.RoutedNet.IP) {
 					continue
 				}
 				if rt.Routes(sn.IP) || sn.Contains(rt.RoutedNet.IP) {
