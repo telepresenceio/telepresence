@@ -6,7 +6,7 @@
   container itself a DNS server. Very handy when other containers use `--network container:[tp-container]`.
 
 - Feature: A new flag, `--local-mount-port <port>` will make `telepresence intercept --detailed-output --output=[yaml|json]` create
-  a bridge to the remote SFTP service instead of starting an sshfs client. This enables the sshfs client to be started outside of the 
+  a bridge to the remote SFTP service instead of starting an sshfs client. This enables the sshfs client to be started outside of the
   container, and thus, mount filesystems that then can be used as source for volumes that other containers will use.
 
 - Feature: The Telepresence daemon can now run as a long-lived process in a docker container so that CLI commands that
@@ -16,7 +16,7 @@
   detailed information about an intercept when used together with `--output=[json|yaml]`.
   Pull Request [3013](https://github.com/telepresenceio/telepresence/pull/3013).
 
-- Feature: IPv6 support.
+- Feature: IPv6 support. Thanks to [@0x6a77](https://www.github.com/0x6a77).
   Ticket [2978](https://github.com/telepresenceio/telepresence/issues/2978).
 
 - Feature: Adds two parameters `--also-proxy` and `--never-proxy` to the `telepresence connect` command.
@@ -35,10 +35,13 @@
 
 - Change: Add `--output` option `json-stream`
 
-- Bugfix: Fixed a bug when detecting VPN conflicts on macOS that removed conflicting gateway links. 
+- Bugfix: Fixed a bug when detecting VPN conflicts on macOS that removed conflicting gateway links.
 
 - Bugfix: Fixed a bug where connecting to certain VPNs that map the CIDR range of the cluster would result in no routes getting added.
   Ticket [3006](https://github.com/telepresenceio/telepresence/issues/3006)
+
+- Bugfix: Support ARM64 architecture
+  Ticket [2786](https://github.com/telepresenceio/telepresence/issues/2786)
 
 ### 2.10.6 (February 14, 2023)
 
