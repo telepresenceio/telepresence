@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.11.1 (February 27, 2023)
+
+- Bugfix: The multi-arch build now for the proprietary traffic-manager and traffic-agent now works for both amd64 and arm64.
+
 ### 2.11.0 (February 22, 2023)
 
 - Feature: When Telepresence detects that it runs in a docker container, it will now expose its DNS on `localhost:53`. This makes the
