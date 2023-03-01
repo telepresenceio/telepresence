@@ -42,7 +42,7 @@ Telepresence 2 is based on learnings from the original Telepresence architecture
 Start with an empty cluster:
 
 ```console
-$ kubectl create deploy hello --image=k8s.gcr.io/echoserver:1.4
+$ kubectl create deploy hello --image=registry.k8s.io/echoserver:1.4
 deployment.apps/hello created
 $ kubectl expose deploy hello --port 80 --target-port 8080
 service/hello exposed
@@ -252,7 +252,7 @@ Init Containers:
 Containers:
   echoserver:
     Container ID:   containerd://80d4645769a06b8671b5a4ce29d28abfa72ce5659ba96916c231bb9629593a29
-    Image:          k8s.gcr.io/echoserver:1.4
+    Image:          registry.k8s.io/echoserver:1.4
     Image ID:       sha256:523cad1a4df732d41406c9de49f932cd60d56ffd50619158a2977fd1066028f9
     Port:           <none>
     Host Port:      <none>
@@ -321,7 +321,7 @@ Events:
   Normal  Pulled     13m   kubelet            Successfully pulled image "docker.io/datawire/ambassador-telepresence-agent:1.12.6" in 17.043659509s
   Normal  Created    13m   kubelet            Created container tel-agent-init
   Normal  Started    13m   kubelet            Started container tel-agent-init
-  Normal  Pulled     13m   kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
+  Normal  Pulled     13m   kubelet            Container image "registry.k8s.io/echoserver:1.4" already present on machine
   Normal  Created    13m   kubelet            Created container echoserver
   Normal  Started    13m   kubelet            Started container echoserver
   Normal  Pulled     13m   kubelet            Container image "docker.io/datawire/ambassador-telepresence-agent:1.12.6" already present on machine
