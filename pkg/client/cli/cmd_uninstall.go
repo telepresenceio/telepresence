@@ -8,6 +8,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
@@ -47,7 +48,7 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 	if u.everything {
 		ha := &HelmOpts{
 			cmdType: connector.HelmRequest_UNINSTALL,
-			Request: &connector.ConnectRequest{},
+			Request: &connect.Request{},
 		}
 		fmt.Fprintln(cmd.OutOrStderr(), "--everything is deprecated. Please use telepresence helm uninstall")
 		return ha.run(cmd, args)

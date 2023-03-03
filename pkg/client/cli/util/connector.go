@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -15,30 +16,19 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
-
-type connectRequest struct{}
 
 var (
 	ErrNoUserDaemon     = errors.New("telepresence user daemon is not running")
 	ErrNoRootDaemon     = errors.New("telepresence root daemon is not running")
 	ErrNoTrafficManager = errors.New("telepresence traffic manager is not connected")
 )
-
-func WithConnectionRequest(ctx context.Context, rq *connector.ConnectRequest) context.Context {
-	return context.WithValue(ctx, connectRequest{}, rq)
-}
-
-func GetConnectRequest(ctx context.Context) *connector.ConnectRequest {
-	if cr, ok := ctx.Value(connectRequest{}).(*connector.ConnectRequest); ok {
-		return cr
-	}
-	return nil
-}
 
 func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 	stdout := output.Out(ctx)
@@ -78,21 +68,20 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 	return err
 }
 
-func AddKubeconfigEnv(cr *connector.ConnectRequest) {
-	// Certain options' default are bound to the connector daemon process; this is notably true of the kubeconfig file(s) to use,
-	// and since those files can be specified, both as a --kubeconfig flag and in the KUBECONFIG setting, and since the flag won't
-	// accept multiple path entries, we need to pass the environment setting to the connector daemon so that it can set it every
-	// time it receives a new config.
-	addEnv := func(key string) {
-		if cfg, ok := os.LookupEnv(key); ok {
-			if cr.KubeFlags == nil {
-				cr.KubeFlags = make(map[string]string)
-			}
-			cr.KubeFlags[key] = cfg
-		}
+func RunConnect(cmd *cobra.Command, args []string) error {
+	if err := InitCommand(cmd); err != nil {
+		return err
 	}
-	addEnv("KUBECONFIG")
-	addEnv("GOOGLE_APPLICATION_CREDENTIALS")
+	if len(args) == 0 {
+		return nil
+	}
+	ctx := cmd.Context()
+	if GetSession(ctx).Started {
+		defer func() {
+			_ = Disconnect(ctx, false)
+		}()
+	}
+	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (conn *grpc.ClientConn, err error) {
@@ -161,7 +150,7 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 	if _, ok := ctx.Value(sessionKey{}).(*Session); ok {
 		return ctx, nil
 	}
-	s, err := connect(ctx, GetUserDaemon(ctx), GetConnectRequest(ctx), required)
+	s, err := connectSession(ctx, GetUserDaemon(ctx), connect.GetRequest(ctx), required)
 	if err != nil {
 		return ctx, err
 	}
@@ -171,7 +160,7 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 	return context.WithValue(ctx, sessionKey{}, s), nil
 }
 
-func connect(ctx context.Context, userD *UserDaemon, request *connector.ConnectRequest, required bool) (*Session, error) {
+func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Request, required bool) (*Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
 	if request == nil {
@@ -181,8 +170,8 @@ func connect(ctx context.Context, userD *UserDaemon, request *connector.ConnectR
 		if !required {
 			return nil, nil
 		}
-		AddKubeconfigEnv(request)
-		ci, err = userD.Connect(ctx, request)
+		request.AddKubeconfigEnv()
+		ci, err = userD.Connect(ctx, &request.ConnectRequest)
 	}
 	if err != nil {
 		return nil, err
@@ -213,7 +202,7 @@ func connect(ctx context.Context, userD *UserDaemon, request *connector.ConnectR
 		}
 		// The attempt is implicit, i.e. caused by direct invocation of another command without a
 		// prior call to connect. So we make it explicit here without flags
-		return connect(ctx, userD, &connector.ConnectRequest{}, required)
+		return connectSession(ctx, userD, &connect.Request{}, required)
 	case connector.ConnectInfo_MUST_RESTART:
 		msg = "Cluster configuration changed, please quit telepresence and reconnect"
 	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:

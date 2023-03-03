@@ -13,6 +13,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
@@ -30,7 +31,7 @@ type HelmOpts struct {
 	AllValues   map[string]any
 	ReuseValues bool
 	ResetValues bool
-	Request     *connector.ConnectRequest
+	Request     *connect.Request
 	cmdType     connector.HelmRequest_Type
 	kubeFlags   *pflag.FlagSet
 	CRDs        bool
@@ -71,7 +72,7 @@ func helmInstallCommand(ctx context.Context) *cobra.Command {
 	uf := flags.Lookup("upgrade")
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
-	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
+	ha.Request, ha.kubeFlags = connect.InitRequest(ctx, cmd)
 	return cmd
 }
 
@@ -97,7 +98,7 @@ func helmUpgradeCommand(ctx context.Context) *cobra.Command {
 		"when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
-	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
+	ha.Request, ha.kubeFlags = connect.InitRequest(ctx, cmd)
 	return cmd
 }
 
@@ -138,7 +139,7 @@ func helmUninstallCommand(ctx context.Context) *cobra.Command {
 		},
 	}
 	ha.addCRDsFlags(cmd.Flags())
-	ha.Request, ha.kubeFlags = InitConnectRequest(ctx, cmd)
+	ha.Request, ha.kubeFlags = connect.InitRequest(ctx, cmd)
 	return cmd
 }
 
@@ -160,7 +161,7 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	}
 	ha.Request.KubeFlags = util.FlagMap(ha.kubeFlags)
 
-	util.AddKubeconfigEnv(ha.Request)
+	ha.Request.AddKubeconfigEnv()
 
 	ctx := cmd.Context()
 	if HelmInstallPrologFunc != nil {
@@ -183,7 +184,7 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 		ValuesJson:     valuesJSON,
 		ReuseValues:    ha.ReuseValues,
 		ResetValues:    ha.ResetValues,
-		ConnectRequest: ha.Request,
+		ConnectRequest: &ha.Request.ConnectRequest,
 		Crds:           ha.CRDs,
 	}
 	resp, err := util.GetUserDaemon(ctx).Helm(ctx, request)
