@@ -49,11 +49,13 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 		as[ann.RootDaemon] = v
 		as[ann.VersionCheck] = ann.Required
 	}
+
 	if as[ann.RootDaemon] == ann.Required {
 		if err = ensureRootDaemonRunning(ctx); err != nil {
 			return err
 		}
 	}
+
 	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
 		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
 			if v == ann.Optional && err == ErrNoUserDaemon {
@@ -74,6 +76,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 		// The rest requires a user daemon
 		return nil
 	}
+
 	if as[ann.VersionCheck] == ann.Required {
 		if err = ensureDaemonVersion(ctx); err != nil {
 			return err

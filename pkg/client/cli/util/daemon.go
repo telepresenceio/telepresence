@@ -54,14 +54,28 @@ func launchDaemon(ctx context.Context) error {
 
 // ensureRootDaemonRunning ensures that the daemon is running.
 func ensureRootDaemonRunning(ctx context.Context) error {
+	// If user daemon was already started in this process.
 	if ud := GetUserDaemon(ctx); ud != nil && ud.Remote {
 		// Never start root daemon when running remote
 		return nil
 	}
+
+	// If it's telepresence connect
 	if cr := connect.GetRequest(ctx); cr != nil && cr.Docker {
 		// Never start root daemon when connecting using a docker container.
 		return nil
 	}
+
+	// If it's another command than connect, and the user daemon wasn't started by this process.
+	ctx, err := discoverRemoteDaemon(ctx)
+	if err != nil {
+		return err
+	}
+	if ud := GetUserDaemon(ctx); ud != nil && ud.Remote {
+		// Never start root daemon when running remote
+		return nil
+	}
+
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Always assume that root daemon is running when a user daemon address is provided
 		return nil

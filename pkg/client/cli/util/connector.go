@@ -86,6 +86,18 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 }
 
+func discoverRemoteDaemon(ctx context.Context) (context.Context, error) {
+	name, err := daemonName(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := docker.DiscoverDaemon(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return context.WithValue(ctx, userDaemonKey{}, newUserDaemon(conn, true)), nil
+}
+
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*UserDaemon, error) {
 	name, err := daemonName(ctx)
 	if err != nil {
