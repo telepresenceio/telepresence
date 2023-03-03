@@ -409,7 +409,7 @@ func (s *Service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 			}
 			if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
 				err = status.Error(codes.Internal, err.Error())
-			} else {
+			} else if !s.rootSessionInProc {
 				err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
 					_, err := rd.SetLogLevel(ctx, mrq)
 					return err
@@ -598,6 +598,9 @@ func (s *Service) GetIntercept(ctx context.Context, request *manager.GetIntercep
 }
 
 func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
+	if s.rootSessionInProc {
+		return status.Error(codes.Unavailable, "root daemon is embedded")
+	}
 	conn, err := socket.Dial(ctx, socket.DaemonName)
 	if err == nil {
 		defer conn.Close()

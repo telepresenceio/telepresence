@@ -256,6 +256,10 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 
 			dlog.Error(ctx, err)
 		}
+		if s.rootSessionInProc {
+			// Simplified session management. The daemon handles one session, then exits.
+			_, _ = s.Quit(ctx, nil)
+		}
 	}(cr)
 	return rsp
 }
