@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos/aferofs"
 )
@@ -45,7 +46,8 @@ func TestWithFS(t *testing.T) {
 // Example using afero.MemMapFs.
 func ExampleWithFS() {
 	appFS := afero.NewCopyOnWriteFs(afero.NewOsFs(), afero.NewMemMapFs())
-	ctx := dos.WithFS(context.Background(), aferofs.Wrap(appFS))
+	envCtx := client.WithEnv(context.Background(), &client.Env{})
+	ctx := dos.WithFS(envCtx, aferofs.Wrap(appFS))
 
 	if err := dos.MkdirAll(ctx, "/etc", 0o700); err != nil {
 		log.Fatal(err)
@@ -66,7 +68,7 @@ func ExampleWithFS() {
 		log.Fatal(err)
 	}
 
-	if hosts, err = dos.Open(context.Background(), "/etc/example.conf"); err != nil {
+	if hosts, err = dos.Open(envCtx, "/etc/example.conf"); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			fmt.Println("file does not exist")
 		} else {

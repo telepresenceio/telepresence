@@ -3,13 +3,13 @@ package cache
 import (
 	"context"
 	"math"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -23,7 +23,7 @@ func WatchUserCache(ctx context.Context, subdir string, onChange func(context.Co
 	dir = filepath.Join(dir, subdir)
 
 	// Ensure that the user cache directory exists.
-	if err = os.MkdirAll(dir, 0o755); err != nil {
+	if err = dos.MkdirAll(ctx, dir, 0o755); err != nil {
 		return err
 	}
 	watcher, err := fsnotify.NewWatcher()

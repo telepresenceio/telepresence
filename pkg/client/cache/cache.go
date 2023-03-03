@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -26,10 +27,10 @@ func SaveToUserCache(ctx context.Context, object any, file string) error {
 	fullFilePath := filepath.Join(cacheDir, file)
 	// get dir of joined path
 	dir := filepath.Dir(fullFilePath)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := dos.MkdirAll(ctx, dir, 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(fullFilePath, jsonContent, 0o600)
+	return dos.WriteFile(ctx, fullFilePath, jsonContent, 0o600)
 }
 
 func LoadFromUserCache(ctx context.Context, dest any, file string) error {
