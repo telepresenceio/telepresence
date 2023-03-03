@@ -50,7 +50,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 		as[ann.VersionCheck] = ann.Required
 	}
 	if as[ann.RootDaemon] == ann.Required {
-		if err = EnsureRootDaemonRunning(ctx); err != nil {
+		if err = ensureRootDaemonRunning(ctx); err != nil {
 			return err
 		}
 	}
@@ -66,7 +66,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 		// RootDaemon == Optional means that the RootDaemon must be started if
 		// the UserDaemon was started
 		if as[ann.RootDaemon] == ann.Optional {
-			if err = EnsureRootDaemonRunning(ctx); err != nil {
+			if err = ensureRootDaemonRunning(ctx); err != nil {
 				return err
 			}
 		}

@@ -51,8 +51,8 @@ func launchDaemon(ctx context.Context) error {
 	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir)
 }
 
-// EnsureRootDaemonRunning ensures that the daemon is running.
-func EnsureRootDaemonRunning(ctx context.Context) error {
+// ensureRootDaemonRunning ensures that the daemon is running.
+func ensureRootDaemonRunning(ctx context.Context) error {
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Always assume that root daemon is running when a user daemon address is provided
 		return nil
