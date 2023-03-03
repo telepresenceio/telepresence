@@ -30,7 +30,7 @@ COPY build-output/version.txt .
 RUN \
     --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    go build -o /usr/local/bin/ -trimpath -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/telepresence/...
+    go build -o /usr/local/bin/ -trimpath -tags docker -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/telepresence/...
 
 # setcap is necessary because the process will listen to privileged ports
 RUN setcap 'cap_net_bind_service+ep' /usr/local/bin/telepresence
