@@ -75,7 +75,7 @@ const (
 	defaultManagerNamespace = "ambassador"
 )
 
-func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
+func ConfigFlags(c context.Context, flagMap map[string]string) (*genericclioptions.ConfigFlags, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -103,8 +103,6 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	if err := transferEnvFlag("KUBECONFIG"); err != nil {
 		return nil, err
 	}
-	dlog.Debugf(c, "Using kubernetes flags %v", flagMap)
-
 	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
@@ -126,7 +124,14 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
 		}
 	}
+	return configFlags, nil
+}
 
+func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
+	configFlags, err := ConfigFlags(c, flagMap)
+	if err != nil {
+		return nil, err
+	}
 	configLoader := configFlags.ToRawKubeConfigLoader()
 	config, err := configLoader.RawConfig()
 	if err != nil {
