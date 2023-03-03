@@ -74,6 +74,9 @@ type Service struct {
 
 	// Run root session in-process
 	rootSessionInProc bool
+
+	// The TCP address that the daemon listens to. Will be nil if the daemon listens to a unix socket.
+	daemonAddress *net.TCPAddr
 }
 
 func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
@@ -242,7 +245,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 			s.sessionLock.Unlock()
 			wg.Done()
 		}()
-		if err := userd.RunSession(s.sessionContext, session); err != nil {
+		if err := userd.RunSession(s.sessionContext, s.sessionCancel, session, s.daemonAddress); err != nil {
 			if errors.Is(err, trafficmgr.ErrSessionExpired) {
 				// Session has expired. We need to cancel the owner session and reconnect
 				dlog.Info(ctx, "refreshing session")
@@ -310,11 +313,14 @@ func run(cmd *cobra.Command, _ []string) error {
 	var grpcListener net.Listener
 	flags := cmd.Flags()
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
+	var daemonAddress *net.TCPAddr
 	if addr, _ := flags.GetString(addressFlag); addr != "" {
 		lc := net.ListenConfig{}
 		if grpcListener, err = lc.Listen(c, "tcp", addr); err != nil {
 			return err
 		}
+		daemonAddress = grpcListener.Addr().(*net.TCPAddr)
+		dlog.Debugf(c, "Listener opened on %s", daemonAddress)
 		defer func() {
 			_ = grpcListener.Close()
 		}()
@@ -322,11 +328,11 @@ func run(cmd *cobra.Command, _ []string) error {
 		if grpcListener, err = socket.Listen(c, userd.ProcessName, socket.ConnectorName); err != nil {
 			return err
 		}
+		dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 		defer func() {
 			_ = socket.Remove(grpcListener)
 		}()
 	}
-	dlog.Debug(c, "Listener opened")
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -377,6 +383,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	var s *Service
 	si.As(&s)
 	s.rootSessionInProc = rootSessionInProc
+	s.daemonAddress = daemonAddress
 
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err

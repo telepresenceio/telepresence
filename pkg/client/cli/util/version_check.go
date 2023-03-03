@@ -9,21 +9,19 @@ import (
 	"github.com/blang/semver"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 var validPrerelRx = regexp.MustCompile(`^[a-z]+\.\d+$`)
 
-func versionCheck(ctx context.Context, daemonBinary string, userD connector.ConnectorClient) error {
+func versionCheck(ctx context.Context, daemonBinary string, userD *UserDaemon) error {
 	// Ensure that the already running daemons have the correct version
 	vu, err := userD.Version(ctx, &empty.Empty{})
 	if err != nil {
 		return fmt.Errorf("unable to retrieve version of User Daemon: %w", err)
 	}
-	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
+	if userD.Remote {
 		// The user-daemon is remote (in a docker container, most likely). Compare the major, minor, and patch. Only
 		// compare pre-release if it's rc.X or test.X, and don't check if the binaries match.
 		cv := version.Structured
@@ -38,11 +36,11 @@ func versionCheck(ctx context.Context, daemonBinary string, userD connector.Conn
 				return nil
 			}
 		}
-		return errcat.User.Newf("version mismatch. Client %s != User Daemon at address %s %s", version.Version, addr, vu.Version)
+		return errcat.User.Newf("version mismatch. Client %s != remote user daemon %s", version.Version, vu.Version)
 	}
 	if version.Version != vu.Version {
 		// OSS Version mismatch. We never allow this
-		return errcat.User.Newf("version mismatch. Client %s != User Daemon %s, please run 'telepresence quit -s' and reconnect",
+		return errcat.User.Newf("version mismatch. Client %s != user daemon %s, please run 'telepresence quit -s' and reconnect",
 			version.Version, vu.Version)
 	}
 	if daemonBinary != "" && vu.Executable != daemonBinary {

@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -85,30 +86,81 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 }
 
-func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (conn *grpc.ClientConn, err error) {
-	conn, err = socket.Dial(ctx, socket.ConnectorName)
-	if errors.Is(err, os.ErrNotExist) {
-		err = ErrNoUserDaemon
+func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*UserDaemon, error) {
+	name, err := daemonName(ctx)
+	if err != nil {
+		return nil, err
+	}
+	conn, err := docker.DiscoverDaemon(ctx, name)
+	if err == nil {
+		return newUserDaemon(conn, true), nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if cr := connect.GetRequest(ctx); cr != nil && cr.Docker {
 		if required {
-			fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")
-			if _, err = ensureAppUserConfigDir(ctx); err != nil {
+			conn, err = docker.LaunchDaemon(ctx, name, cr.KubeFlags["KUBECONFIG"])
+			if err != nil {
 				return nil, err
 			}
-			if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
-				return nil, fmt.Errorf("failed to launch the connector service: %w", err)
-			}
-			if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {
-				return nil, fmt.Errorf("connector service did not start: %w", err)
-			}
-			conn, err = socket.Dial(ctx, socket.ConnectorName)
+			return newUserDaemon(conn, true), nil
 		}
+		return nil, ErrNoUserDaemon
 	}
-	return conn, err
+
+	conn, err = socket.Dial(ctx, socket.ConnectorName)
+	if err == nil {
+		return newUserDaemon(conn, false), nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if !required {
+		return nil, ErrNoUserDaemon
+	}
+
+	fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")
+	if _, err = ensureAppUserConfigDir(ctx); err != nil {
+		return nil, err
+	}
+	if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
+		return nil, fmt.Errorf("failed to launch the connector service: %w", err)
+	}
+	if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {
+		return nil, fmt.Errorf("connector service did not start: %w", err)
+	}
+	conn, err = socket.Dial(ctx, socket.ConnectorName)
+	if err != nil {
+		return nil, err
+	}
+	return newUserDaemon(conn, false), nil
+}
+
+func daemonName(ctx context.Context) (string, error) {
+	var flags map[string]string
+	if cr := connect.GetRequest(ctx); cr != nil {
+		flags = cr.KubeFlags
+	}
+	contextName, _, err := client.CurrentContext(ctx, flags)
+	if err != nil {
+		return "", fmt.Errorf("failed to establish what Kubernetes context to use: %w", err)
+	}
+	return contextName, nil
 }
 
 type UserDaemon struct {
 	connector.ConnectorClient
-	Conn *grpc.ClientConn
+	Conn   *grpc.ClientConn
+	Remote bool
+}
+
+func newUserDaemon(conn *grpc.ClientConn, remote bool) *UserDaemon {
+	return &UserDaemon{
+		ConnectorClient: connector.NewConnectorClient(conn),
+		Conn:            conn,
+		Remote:          remote,
+	}
 }
 
 type Session struct {
@@ -121,25 +173,26 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	if _, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
 		return ctx, nil
 	}
-	var conn *grpc.ClientConn
-	var err error
+	var ud *UserDaemon
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-		conn, err = grpc.DialContext(ctx, addr,
+		conn, err := grpc.DialContext(ctx, addr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.FailOnNonTempDialError(true))
+		if err != nil {
+			return ctx, err
+		}
+		ud = newUserDaemon(conn, true)
 	} else {
-		conn, err = launchConnectorDaemon(ctx, client.GetExe(), required)
+		var err error
+		ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)
+		if err != nil {
+			return ctx, err
+		}
 	}
-	if err != nil {
-		return ctx, err
-	}
-	return context.WithValue(ctx, userDaemonKey{}, &UserDaemon{
-		Conn:            conn,
-		ConnectorClient: connector.NewConnectorClient(conn),
-	}), nil
+	return context.WithValue(ctx, userDaemonKey{}, ud), nil
 }
 
 func ensureDaemonVersion(ctx context.Context) error {

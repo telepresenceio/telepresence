@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -80,6 +82,26 @@ func daemonInfoFiles(ctx context.Context) ([]fs.DirEntry, error) {
 		}
 	}
 	return active, err
+}
+
+var diNameRx = regexp.MustCompile(`^(.+?)-(\d+)\.json$`)
+
+func DaemonPortForName(ctx context.Context, context string) (int, error) {
+	files, err := daemonInfoFiles(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, file := range files {
+		if m := diNameRx.FindStringSubmatch(file.Name()); m != nil && m[1] == context {
+			port, _ := strconv.Atoi(m[2])
+			return port, nil
+		}
+	}
+	return 0, os.ErrNotExist
+}
+
+func DaemonInfoFile(name string, port int) string {
+	return fmt.Sprintf("%s-%d.json", name, port)
 }
 
 // KeepDaemonInfoAlive updates the access and modification times of the given DaemonInfo

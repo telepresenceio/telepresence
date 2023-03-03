@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -125,6 +127,26 @@ func ConfigFlags(c context.Context, flagMap map[string]string) (*genericclioptio
 		}
 	}
 	return configFlags, nil
+}
+
+// CurrentContext returns the name of the current Kubernetes context, and the context itself.
+func CurrentContext(ctx context.Context, flagMap map[string]string) (string, *api.Context, error) {
+	configFlags, err := ConfigFlags(ctx, flagMap)
+	if err != nil {
+		return "", nil, err
+	}
+	config, err := configFlags.ToRawKubeConfigLoader().RawConfig()
+	if err != nil {
+		return "", nil, err
+	}
+	if len(config.Contexts) == 0 {
+		return "", nil, errors.New("kubeconfig has no contexts")
+	}
+	cc := flagMap["context"]
+	if cc == "" {
+		cc = config.CurrentContext
+	}
+	return cc, config.Contexts[cc], nil
 }
 
 func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
@@ -256,6 +278,10 @@ func (kf *Kubeconfig) ContextServiceAndFlagsEqual(okf *Kubeconfig) bool {
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
 		maps.Equal(kf.FlagMap, okf.FlagMap)
+}
+
+func (kf *Kubeconfig) GetContext() string {
+	return kf.Context
 }
 
 func (kf *Kubeconfig) GetManagerNamespace() string {
