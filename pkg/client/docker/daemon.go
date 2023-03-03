@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -66,7 +67,7 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 	}
 	addr := as[0]
 	port := addr.Port
-	opts := []string{
+	return []string{
 		"--name", name,
 		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
@@ -78,9 +79,7 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 		"-v", fmt.Sprintf("%s:%s:ro", tpConfig, dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", tpCache, dockerTpCache),
 		"-v", fmt.Sprintf("%s:%s", tpLog, dockerTpLog),
-		"--quiet",
-	}
-	return opts, addr, nil
+	}, addr, nil
 }
 
 func DaemonArgs(port int) []string {
@@ -113,10 +112,28 @@ func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, 
 		grpc.FailOnNonTempDialError(true))
 }
 
+func pullDockerImage(ctx context.Context, image string) error {
+	cmd := proc.StdCommand(ctx, "docker", "image", "inspect", image)
+	cmd.Stdout = io.Discard
+	if cmd.Run() == nil {
+		// Image exists in the local cache, so don't bother pulling it.
+		return nil
+	}
+	cmd = proc.StdCommand(ctx, "docker", "pull", image)
+	// Docker run will put the pull logs in stderr, but docker pull will put them in stdout.
+	// We discard them here, so they don't spam the user. They'll get errors through stderr if it comes to it.
+	cmd.Stdout = io.Discard
+	return cmd.Run()
+}
+
 func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.ClientConn, err error) {
 	cidFileName, err := ioutil.CreateTempName("", "cid*.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cidfile: %v", err)
+	}
+	image := ClientImage(ctx)
+	if err = pullDockerImage(ctx, image); err != nil {
+		return nil, err
 	}
 	EnsureNetwork(ctx, "telepresence")
 	opts, addr, err := DaemonOptions(ctx, name, kubeconfig)
@@ -132,7 +149,7 @@ func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.Clie
 		"--cidfile", cidFileName,
 	)
 	allArgs = append(allArgs, opts...)
-	allArgs = append(allArgs, ClientImage(ctx))
+	allArgs = append(allArgs, image)
 	allArgs = append(allArgs, args...)
 
 	cmd := proc.StdCommand(ctx, "docker", allArgs...)
