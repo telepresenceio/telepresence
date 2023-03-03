@@ -13,6 +13,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -53,6 +54,14 @@ func launchDaemon(ctx context.Context) error {
 
 // ensureRootDaemonRunning ensures that the daemon is running.
 func ensureRootDaemonRunning(ctx context.Context) error {
+	if ud := GetUserDaemon(ctx); ud != nil && ud.Remote {
+		// Never start root daemon when running remote
+		return nil
+	}
+	if cr := connect.GetRequest(ctx); cr != nil && cr.Docker {
+		// Never start root daemon when connecting using a docker container.
+		return nil
+	}
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Always assume that root daemon is running when a user daemon address is provided
 		return nil
