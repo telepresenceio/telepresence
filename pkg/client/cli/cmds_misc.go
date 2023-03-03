@@ -14,9 +14,9 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -147,7 +147,7 @@ func quitCommand() *cobra.Command {
 			if quitDaemons && util.GetUserDaemon(ctx) == nil {
 				// User daemon isn't running. If the root daemon is running, we must
 				// kill it from here.
-				if conn, err := client.DialSocket(ctx, client.DaemonSocketName); err == nil {
+				if conn, err := socket.Dial(ctx, socket.DaemonName); err == nil {
 					_, _ = daemon.NewDaemonClient(conn).Quit(ctx, &empty.Empty{})
 				}
 			}

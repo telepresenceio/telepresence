@@ -1,4 +1,4 @@
-package client
+package socket
 
 import (
 	"context"
@@ -18,15 +18,15 @@ import (
 // See https://docs.microsoft.com/en-us/windows/win32/ipc/pipe-names for more info
 // about pipe names.
 const (
-	// ConnectorSocketName is the name used when communicating to the connector process.
-	ConnectorSocketName = `\\.\pipe\telepresence-connector`
+	// ConnectorName is the name used when communicating to the connector process.
+	ConnectorName = `\\.\pipe\telepresence-connector`
 
-	// DaemonSocketName is the name used when communicating to the daemon process.
-	DaemonSocketName = `\\.\pipe\telepresence-daemon`
+	// DaemonName is the name used when communicating to the daemon process.
+	DaemonName = `\\.\pipe\telepresence-daemon`
 )
 
-// dialSocket dials the given named pipe and returns the resulting connection.
-func dialSocket(c context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+// dial dials the given named pipe and returns the resulting connection.
+func dial(c context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	conn, err := grpc.DialContext(c, socketName, append([]grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
@@ -51,8 +51,8 @@ func dialSocket(c context.Context, socketName string, opts ...grpc.DialOption) (
 // https://docs.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
 const allowEveryone = "S:(ML;;NW;;;LW)D:(A;;0x12019f;;;WD)"
 
-// listenSocket returns a listener for the given named pipe and returns the resulting connection.
-func listenSocket(_ context.Context, processName, socketName string) (net.Listener, error) {
+// listen returns a listener for the given named pipe and returns the resulting connection.
+func listen(_ context.Context, processName, socketName string) (net.Listener, error) {
 	var config *winio.PipeConfig
 	if proc.IsAdmin() {
 		config = &winio.PipeConfig{SecurityDescriptor: allowEveryone}
@@ -60,14 +60,14 @@ func listenSocket(_ context.Context, processName, socketName string) (net.Listen
 	return winio.ListenPipe(socketName, config)
 }
 
-// removeSocket does nothing because a named pipe has no representation in the file system that
+// remove does nothing because a named pipe has no representation in the file system that
 // needs to be removed.
-func removeSocket(listener net.Listener) error {
+func remove(listener net.Listener) error {
 	return nil
 }
 
-// socketExists returns true if a socket exists with the given name.
-func socketExists(name string) (bool, error) {
+// exists returns true if a socket exists with the given name.
+func exists(name string) (bool, error) {
 	uPath, err := windows.UTF16PtrFromString(name)
 	if err != nil {
 		return false, err

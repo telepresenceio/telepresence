@@ -25,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -147,7 +148,7 @@ func Command() *cobra.Command {
 		RunE:   run,
 	}
 	flags := c.Flags()
-	flags.String(addressFlag, "", "Address to listen to. Defaults to "+client.ConnectorSocketName)
+	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.ConnectorName)
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	return c
 }
@@ -314,11 +315,11 @@ func run(cmd *cobra.Command, _ []string) error {
 			_ = grpcListener.Close()
 		}()
 	} else {
-		if grpcListener, err = client.ListenSocket(c, userd.ProcessName, client.ConnectorSocketName); err != nil {
+		if grpcListener, err = socket.Listen(c, userd.ProcessName, socket.ConnectorName); err != nil {
 			return err
 		}
 		defer func() {
-			_ = client.RemoveSocket(grpcListener)
+			_ = socket.Remove(grpcListener)
 		}()
 	}
 	dlog.Debug(c, "Listener opened")

@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -413,12 +414,12 @@ func run(c context.Context, loggingDir, configDir string) error {
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
 	// the socket/pipe to appear before it gives up.
-	grpcListener, err := client.ListenSocket(c, ProcessName, client.DaemonSocketName)
+	grpcListener, err := socket.Listen(c, ProcessName, socket.DaemonName)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = client.RemoveSocket(grpcListener)
+		_ = socket.Remove(grpcListener)
 	}()
 	dlog.Debug(c, "Listener opened")
 

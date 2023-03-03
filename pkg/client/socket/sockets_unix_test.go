@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package client_test
+package socket_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 )
 
 func TestDialSocket(t *testing.T) {
@@ -44,7 +44,7 @@ func TestDialSocket(t *testing.T) {
 		})
 
 		grp.Go("client", func(ctx context.Context) error {
-			conn, err := client.DialSocket(ctx, sockname)
+			conn, err := socket.Dial(ctx, sockname)
 			assert.NoError(t, err)
 			if assert.NotNil(t, conn) {
 				assert.NoError(t, conn.Close())
@@ -63,7 +63,7 @@ func TestDialSocket(t *testing.T) {
 		defer listener.Close()
 
 		ctx := dlog.NewTestContext(t, false)
-		conn, err := client.DialSocket(ctx, sockname)
+		conn, err := socket.Dial(ctx, sockname)
 		assert.Nil(t, conn)
 		assert.Error(t, err)
 		t.Log(err)
@@ -81,7 +81,7 @@ func TestDialSocket(t *testing.T) {
 		listener.Close()
 
 		ctx := dlog.NewTestContext(t, false)
-		conn, err := client.DialSocket(ctx, sockname)
+		conn, err := socket.Dial(ctx, sockname)
 		assert.Nil(t, conn)
 		assert.Error(t, err)
 		t.Log(err)
@@ -92,7 +92,7 @@ func TestDialSocket(t *testing.T) {
 	t.Run("NotExist", func(t *testing.T) {
 		ctx := dlog.NewTestContext(t, false)
 		sockname := filepath.Join(tmpdir, "not-exist.sock")
-		conn, err := client.DialSocket(ctx, sockname)
+		conn, err := socket.Dial(ctx, sockname)
 		assert.Nil(t, conn)
 		assert.Error(t, err)
 		t.Log(err)

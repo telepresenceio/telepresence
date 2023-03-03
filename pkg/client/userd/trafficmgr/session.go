@@ -42,6 +42,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
@@ -197,7 +198,7 @@ func NewSession(
 	rdRunning := userd.GetService(ctx).RootSessionInProcess()
 	if !rdRunning {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rdRunning, err = client.IsRunning(ctx, client.DaemonSocketName)
+		rdRunning, err = socket.IsRunning(ctx, socket.DaemonName)
 		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
@@ -1168,7 +1169,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 		rd = rootSession
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = client.DialSocket(ctx, client.DaemonSocketName,
+		conn, err = socket.Dial(ctx, socket.DaemonName,
 			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 		)

@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -64,7 +65,7 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
 	}
 	if _, err = ud.Quit(ctx, &empty.Empty{}); err == nil || grpcStatus.Code(err) == grpcCodes.Unavailable {
-		err = client.WaitUntilSocketVanishes("user daemon", client.ConnectorSocketName, 5*time.Second)
+		err = socket.WaitUntilVanishes("user daemon", socket.ConnectorName, 5*time.Second)
 	}
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Unavailable {
 		if quitDaemons {
@@ -95,7 +96,7 @@ func AddKubeconfigEnv(cr *connector.ConnectRequest) {
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (conn *grpc.ClientConn, err error) {
-	conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
+	conn, err = socket.Dial(ctx, socket.ConnectorName)
 	if errors.Is(err, os.ErrNotExist) {
 		err = ErrNoUserDaemon
 		if required {
@@ -106,10 +107,10 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 			if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
 				return nil, fmt.Errorf("failed to launch the connector service: %w", err)
 			}
-			if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
+			if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {
 				return nil, fmt.Errorf("connector service did not start: %w", err)
 			}
-			conn, err = client.DialSocket(ctx, client.ConnectorSocketName)
+			conn, err = socket.Dial(ctx, socket.ConnectorName)
 		}
 	}
 	return conn, err

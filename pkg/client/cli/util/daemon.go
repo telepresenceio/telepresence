@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -56,14 +57,14 @@ func EnsureRootDaemonRunning(ctx context.Context) error {
 		// Always assume that root daemon is running when a user daemon address is provided
 		return nil
 	}
-	running, err := client.IsRunning(ctx, client.DaemonSocketName)
+	running, err := socket.IsRunning(ctx, socket.DaemonName)
 	if err != nil || running {
 		return err
 	}
 	if err = launchDaemon(ctx); err != nil {
 		return fmt.Errorf("failed to launch the daemon service: %w", err)
 	}
-	if err = client.WaitUntilRunning(ctx, "daemon", client.DaemonSocketName, 10*time.Second); err != nil {
+	if err = socket.WaitUntilRunning(ctx, "daemon", socket.DaemonName, 10*time.Second); err != nil {
 		return fmt.Errorf("daemon service did not start: %w", err)
 	}
 	return nil
@@ -81,9 +82,9 @@ func Disconnect(ctx context.Context, quitDaemons bool) error {
 	if quitDaemons {
 		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
 		// the fact that the user daemon might have been killed ungracefully.
-		if err = client.WaitUntilSocketVanishes("root daemon", client.DaemonSocketName, 5*time.Second); err != nil {
+		if err = socket.WaitUntilVanishes("root daemon", socket.DaemonName, 5*time.Second); err != nil {
 			var conn *grpc.ClientConn
-			if conn, err = client.DialSocket(ctx, client.DaemonSocketName); err == nil {
+			if conn, err = socket.Dial(ctx, socket.DaemonName); err == nil {
 				if _, err = daemon.NewDaemonClient(conn).Quit(ctx, &empty.Empty{}); err != nil {
 					err = fmt.Errorf("error when quitting root daemon: %w", err)
 				}
