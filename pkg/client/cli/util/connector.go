@@ -9,9 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
-	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	grpcStatus "google.golang.org/grpc/status"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -48,16 +49,16 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 		fmt.Fprint(stdout, "quitting...")
 	} else {
 		fmt.Fprint(stdout, "disconnecting...")
-		if _, err = ud.Disconnect(ctx, &empty.Empty{}); grpcStatus.Code(err) != grpcCodes.Unimplemented {
+		if _, err = ud.Disconnect(ctx, &emptypb.Empty{}); status.Code(err) != codes.Unimplemented {
 			// nil or not unimplemented
 			return err
 		}
 		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
 	}
-	if _, err = ud.Quit(ctx, &empty.Empty{}); err == nil || grpcStatus.Code(err) == grpcCodes.Unavailable {
+	if _, err = ud.Quit(ctx, &emptypb.Empty{}); err == nil || status.Code(err) == codes.Unavailable {
 		err = socket.WaitUntilVanishes("user daemon", socket.ConnectorName, 5*time.Second)
 	}
-	if err != nil && grpcStatus.Code(err) == grpcCodes.Unavailable {
+	if err != nil && status.Code(err) == codes.Unavailable {
 		if quitDaemons {
 			fmt.Fprintln(stdout, "have already quit")
 		} else {
