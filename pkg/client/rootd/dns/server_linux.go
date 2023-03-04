@@ -19,6 +19,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -27,7 +28,7 @@ var errResolveDNotConfigured = errors.New("resolved not configured")
 func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, configureDNS func(net.IP, *net.UDPAddr)) error {
 	if !proxyCluster || runningInDocker() {
 		// Don't bother with systemd-resolved when running in a docker container
-		return s.runOverridingServer(dgroup.WithGoroutineName(c, "/docker"), dev, proxyCluster)
+		return s.runOverridingServer(c, dev, proxyCluster)
 	}
 
 	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
@@ -314,7 +315,11 @@ func runningInDocker() bool {
 func runNatTableCmd(c context.Context, args ...string) error {
 	// We specifically don't want to use the cancellation of 'ctx' here, because we don't ever
 	// want to leave things in a half-cleaned-up state.
-	return dexec.CommandContext(c, "iptables", append([]string{"-t", "nat"}, args...)...).Run()
+	args = append([]string{"-t", "nat"}, args...)
+	cmd := dexec.CommandContext(c, "iptables", args...)
+	cmd.DisableLogging = true
+	dlog.Debug(c, shellquote.ShellString("iptables", args))
+	return cmd.Run()
 }
 
 const tpDNSChain = "TELEPRESENCE_DNS"

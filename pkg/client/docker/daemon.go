@@ -82,9 +82,10 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 	}, addr, nil
 }
 
-func DaemonArgs(port int) []string {
+func DaemonArgs(name string, port int) []string {
 	return []string{
 		"connector-foreground",
+		"--name", "docker-" + name,
 		"--address", fmt.Sprintf(":%d", port),
 		"--embed-network",
 	}
@@ -140,7 +141,7 @@ func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.Clie
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	args := DaemonArgs(addr.Port)
+	args := DaemonArgs(name, addr.Port)
 
 	allArgs := make([]string, 0, len(opts)+len(args)+4)
 	allArgs = append(allArgs,

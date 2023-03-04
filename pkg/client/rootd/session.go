@@ -654,14 +654,21 @@ func (s *Session) run(c context.Context) error {
 		close(s.done)
 	}()
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	c, cancelGroup := context.WithCancel(c)
+	defer cancelGroup()
 
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	if err := s.Start(c, g); err != nil {
+		return err
+	}
+	return g.Wait()
+}
+
+func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 	cancelDNSLock := sync.Mutex{}
 	cancelDNS := func() {}
 
-	c, cancelGroup := context.WithCancel(c)
-	defer cancelGroup()
-	g.Go("watch-cluster-info", func(ctx context.Context) error {
+	g.Go("network", func(ctx context.Context) error {
 		defer func() {
 			cancelDNSLock.Lock()
 			cancelDNS()
@@ -703,7 +710,7 @@ func (s *Session) run(c context.Context) error {
 		s.stack.Wait()
 		return nil
 	})
-	return g.Wait()
+	return nil
 }
 
 func (s *Session) stop(c context.Context) {

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -136,6 +137,7 @@ func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOpti
 }
 
 const (
+	nameFlag         = "name"
 	addressFlag      = "address"
 	embedNetworkFlag = "embed-network"
 )
@@ -151,6 +153,7 @@ func Command() *cobra.Command {
 		RunE:   run,
 	}
 	flags := c.Flags()
+	flags.String(nameFlag, userd.ProcessName, "Daemon name")
 	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.ConnectorName)
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	return c
@@ -301,11 +304,6 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	c = client.WithConfig(c, cfg)
-	c = dgroup.WithGoroutineName(c, "/"+userd.ProcessName)
-	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
-	if err != nil {
-		return err
-	}
 
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
@@ -320,7 +318,6 @@ func run(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		daemonAddress = grpcListener.Addr().(*net.TCPAddr)
-		dlog.Debugf(c, "Listener opened on %s", daemonAddress)
 		defer func() {
 			_ = grpcListener.Close()
 		}()
@@ -328,11 +325,23 @@ func run(cmd *cobra.Command, _ []string) error {
 		if grpcListener, err = socket.Listen(c, userd.ProcessName, socket.ConnectorName); err != nil {
 			return err
 		}
-		dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 		defer func() {
 			_ = socket.Remove(grpcListener)
 		}()
 	}
+
+	name, _ := flags.GetString(nameFlag)
+	sessionName := "session"
+	if di := strings.IndexByte(name, '-'); di > 0 {
+		sessionName = name[di+1:]
+		name = name[:di]
+	}
+	c = dgroup.WithGoroutineName(c, "/"+name)
+	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
+	if err != nil {
+		return err
+	}
+	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -408,7 +417,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	})
 
 	g.Go("config-reload", s.configReload)
-	g.Go("session", func(c context.Context) error {
+	g.Go(sessionName, func(c context.Context) error {
 		c, s.quit = context.WithCancel(c)
 		return ManageSessions(c, si)
 	})

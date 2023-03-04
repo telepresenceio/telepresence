@@ -72,11 +72,9 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 
 	// Read the config and set the configured level.
 	logLevels := client.GetConfig(ctx).LogLevels
-	level := logrus.InfoLevel
+	level := logLevels.UserDaemon
 	if name == "daemon" {
 		level = logLevels.RootDaemon
-	} else if name == "connector" || name == "cli" { // Have the CLI log at the same level as the user daemon
-		level = logLevels.UserDaemon
 	}
 	tlog.SetLogrusLevel(logger, level.String())
 	ctx = tlog.WithLevelSetter(ctx, logger)

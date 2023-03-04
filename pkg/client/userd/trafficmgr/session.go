@@ -1165,7 +1165,9 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 		if err != nil {
 			return nil, err
 		}
-		dgroup.ParentGroup(ctx).Go("root-session", rootSession.Run)
+		if err = rootSession.Start(ctx, dgroup.ParentGroup(ctx)); err != nil {
+			return nil, err
+		}
 		rd = rootSession
 	} else {
 		var conn *grpc.ClientConn
