@@ -2,12 +2,13 @@ package logging
 
 import (
 	"fmt"
-	"os"
 	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 // FStat returns the file status/info of an open file.
-func FStat(file *os.File) (SysInfo, error) {
+func FStat(file dos.File) (SysInfo, error) {
 	return osFStat(file)
 }
 

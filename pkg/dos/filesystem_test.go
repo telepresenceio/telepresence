@@ -8,13 +8,15 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos/aferofs"
 )
@@ -43,11 +45,37 @@ func TestWithFS(t *testing.T) {
 	require.Equal(t, dData, data)
 }
 
+func TestFileNil(t *testing.T) {
+	// This function will return a File interface that points to a nil *os.File. That's
+	// not the same as a File interface which is nil.
+	neverDoThis := func(name string) (dos.File, error) {
+		return os.Open(name)
+	}
+
+	dlog.NewTestContext(t, false)
+	uuid, err := uuid.NewUUID()
+	badFile := filepath.Join(fmt.Sprintf("%c%s", filepath.Separator, uuid), "does", "not", "exist")
+	require.NoError(t, err)
+	f, err := neverDoThis(badFile)
+	assert.Error(t, err)
+	assert.True(t, f != nil) // Do NOT change this to assert.NotNil(t, f) because that test is flawed.
+	assert.Nil(t, f)         // Told you so. It is flawed!
+
+	f, err = dos.Open(context.Background(), badFile)
+	assert.Error(t, err)
+	assert.True(t, f == nil) // Do NOT change this to assert.Nil(t, f) because that test is flawed.
+	f, err = dos.OpenFile(context.Background(), badFile, os.O_RDONLY, 0o600)
+	assert.Error(t, err)
+	assert.True(t, f == nil) // Do NOT change this to assert.Nil(t, f) because that test is flawed.
+	f, err = dos.Create(context.Background(), badFile)
+	assert.Error(t, err)
+	assert.True(t, f == nil) // Do NOT change this to assert.Nil(t, f) because that test is flawed.
+}
+
 // Example using afero.MemMapFs.
 func ExampleWithFS() {
 	appFS := afero.NewCopyOnWriteFs(afero.NewOsFs(), afero.NewMemMapFs())
-	envCtx := client.WithEnv(context.Background(), &client.Env{})
-	ctx := dos.WithFS(envCtx, aferofs.Wrap(appFS))
+	ctx := dos.WithFS(context.Background(), aferofs.Wrap(appFS))
 
 	if err := dos.MkdirAll(ctx, "/etc", 0o700); err != nil {
 		log.Fatal(err)
@@ -68,7 +96,7 @@ func ExampleWithFS() {
 		log.Fatal(err)
 	}
 
-	if hosts, err = dos.Open(envCtx, "/etc/example.conf"); err != nil {
+	if hosts, err = dos.Open(context.Background(), "/etc/example.conf"); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			fmt.Println("file does not exist")
 		} else {

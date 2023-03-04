@@ -3,15 +3,16 @@ package logging
 import (
 	"errors"
 	"fmt"
-	"os"
-	"time"
 
 	//nolint:depguard // We specifically need "syscall.Win32FileAttributeData" rather than
 	// "windows.Win32FileAttributeData" for fs.File.Sys().
 	"syscall"
+	"time"
 
 	"github.com/hectane/go-acl/api"
 	"golang.org/x/sys/windows"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 type WindowsSysInfo interface {
@@ -32,14 +33,18 @@ type windowsSysInfo struct {
 	sacl  windows.Handle
 }
 
-func osFStat(file *os.File) (SysInfo, error) {
+func osFStat(file dos.File) (SysInfo, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat %s: %w", file.Name(), err)
 	}
+	sys, ok := info.Sys().(*syscall.Win32FileAttributeData)
+	if !ok {
+		return nil, fmt.Errorf("files of type %T don't support Fstat", file)
+	}
 	wi := windowsSysInfo{
 		path: file.Name(),
-		data: info.Sys().(*syscall.Win32FileAttributeData),
+		data: sys,
 	}
 	var secDesc windows.Handle
 	err = api.GetNamedSecurityInfo(

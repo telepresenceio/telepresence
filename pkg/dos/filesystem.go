@@ -45,6 +45,7 @@ type FileSystem interface {
 	RealPath(name string) (string, error)
 	Remove(name string) error
 	RemoveAll(name string) error
+	Rename(oldName, newName string) error
 	Stat(name string) (fs.FileInfo, error)
 	Symlink(oldName, newName string) error
 	WriteFile(name string, data []byte, perm fs.FileMode) error
@@ -64,7 +65,12 @@ func (*osFs) Chdir(name string) error {
 }
 
 func (fs *osFs) Create(name string) (File, error) {
-	return fs.chownFile(os.Create(name))
+	f, err := os.Create(name)
+	if err != nil {
+		// It's important to return a File nil here, not a File that represents an *os.File nil.
+		return nil, err
+	}
+	return fs.chownFile(f)
 }
 
 func (*osFs) Getwd() (string, error) {
@@ -119,18 +125,32 @@ func (fs *osFs) MkdirAll(path string, perm fs.FileMode) error {
 }
 
 func (*osFs) Open(name string) (File, error) {
-	return os.Open(name)
+	f, err := os.Open(name)
+	if err != nil {
+		// It's important to return a File nil here, not a File that represents an *os.File nil.
+		return nil, err
+	}
+	return f, nil
 }
 
 func (fs *osFs) OpenFile(name string, flag int, perm fs.FileMode) (File, error) {
 	if fs.mustChown() {
 		if (flag & os.O_CREATE) == os.O_CREATE {
 			if _, err := os.Stat(name); os.IsNotExist(err) {
-				return fs.chownFile(os.OpenFile(name, flag, perm))
+				f, err := os.OpenFile(name, flag, perm)
+				if err != nil {
+					return nil, err
+				}
+				return fs.chownFile(f)
 			}
 		}
 	}
-	return os.OpenFile(name, flag, perm)
+	f, err := os.OpenFile(name, flag, perm)
+	if err != nil {
+		// It's important to return a File nil here, not a File that represents an *os.File nil.
+		return nil, err
+	}
+	return f, nil
 }
 
 func (*osFs) ReadDir(name string) ([]fs.DirEntry, error) {
@@ -151,6 +171,10 @@ func (*osFs) Remove(name string) error {
 
 func (*osFs) RemoveAll(name string) error {
 	return os.RemoveAll(name)
+}
+
+func (*osFs) Rename(oldName, newName string) error {
+	return os.Rename(oldName, newName)
 }
 
 func (*osFs) Stat(name string) (fs.FileInfo, error) {
@@ -181,14 +205,15 @@ func (fs *osFs) chown(err error, name string) error {
 	return err
 }
 
-func (fs *osFs) chownFile(f *os.File, err error) (*os.File, error) {
-	if err == nil && fs.mustChown() {
-		if err = f.Chown(fs.tpUID, fs.tpGID); err != nil {
+func (fs *osFs) chownFile(f *os.File) (File, error) {
+	if fs.mustChown() {
+		if err := f.Chown(fs.tpUID, fs.tpGID); err != nil {
 			_ = f.Close()
 			_ = fs.Remove(f.Name())
+			return nil, err
 		}
 	}
-	return f, err
+	return f, nil
 }
 
 type fsKey struct{}
@@ -202,11 +227,13 @@ func getFS(ctx context.Context) FileSystem {
 	if fs, ok := ctx.Value(fsKey{}).(FileSystem); ok {
 		return fs
 	}
-	env := client.GetEnv(ctx)
-	return &osFs{
-		tpUID: env.TelepresenceUID,
-		tpGID: env.TelepresenceGID,
+	if env := client.GetEnv(ctx); env != nil {
+		return &osFs{
+			tpUID: env.TelepresenceUID,
+			tpGID: env.TelepresenceGID,
+		}
 	}
+	return &osFs{}
 }
 
 // Abs is like filepath.Abs but delegates to the context's FS.
@@ -273,6 +300,11 @@ func Remove(ctx context.Context, name string) error {
 // RemoveAll is like os.RemoveAll but delegates to the context's FS.
 func RemoveAll(ctx context.Context, name string) error {
 	return getFS(ctx).RemoveAll(name)
+}
+
+// Rename is like os.Rename but delegates to the context's FS.
+func Rename(ctx context.Context, oldName, newName string) error {
+	return getFS(ctx).Rename(oldName, newName)
 }
 
 func WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {
