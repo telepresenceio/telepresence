@@ -67,7 +67,7 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 	}
 	addr := as[0]
 	port := addr.Port
-	return []string{
+	opts := []string{
 		"--name", name,
 		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
@@ -79,7 +79,12 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 		"-v", fmt.Sprintf("%s:%s:ro", tpConfig, dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", tpCache, dockerTpCache),
 		"-v", fmt.Sprintf("%s:%s", tpLog, dockerTpLog),
-	}, addr, nil
+	}
+	env := client.GetEnv(ctx)
+	if env.ScoutDisable {
+		opts = append(opts, "-e", "SCOUT_DISABLE=1")
+	}
+	return opts, addr, nil
 }
 
 func DaemonArgs(name string, port int) []string {
