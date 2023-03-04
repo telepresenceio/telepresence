@@ -87,18 +87,31 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*UserDaemon, error) {
+	cr := connect.GetRequest(ctx)
+	conn, err := socket.Dial(ctx, socket.ConnectorName)
+	if err == nil {
+		if cr != nil && cr.Docker {
+			return nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
+		}
+		return newUserDaemon(conn, false), nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	// Check if a running daemon can be discovered.
 	name, err := daemonName(ctx)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := docker.DiscoverDaemon(ctx, name)
+	conn, err = docker.DiscoverDaemon(ctx, name)
 	if err == nil {
 		return newUserDaemon(conn, true), nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	if cr := connect.GetRequest(ctx); cr != nil && cr.Docker {
+	if cr != nil && cr.Docker {
 		if required {
 			conn, err = docker.LaunchDaemon(ctx, name, cr.KubeFlags["KUBECONFIG"])
 			if err != nil {
@@ -109,13 +122,6 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 		return nil, ErrNoUserDaemon
 	}
 
-	conn, err = socket.Dial(ctx, socket.ConnectorName)
-	if err == nil {
-		return newUserDaemon(conn, false), nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
 	if !required {
 		return nil, ErrNoUserDaemon
 	}

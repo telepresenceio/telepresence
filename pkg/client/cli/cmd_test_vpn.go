@@ -27,8 +27,7 @@ func vpnDiagCommand() *cobra.Command {
 		Short: "Test VPN configuration for compatibility with telepresence",
 		RunE:  di.run,
 		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
-			ann.Session:    ann.Required,
+			ann.Session: ann.Required,
 		},
 	}
 	return cmd

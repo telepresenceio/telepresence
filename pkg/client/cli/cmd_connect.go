@@ -20,8 +20,7 @@ func connectCommand(ctx context.Context) *cobra.Command {
 		Args:  cobra.ArbitraryArgs,
 		Short: "Connect to a cluster",
 		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
-			ann.Session:    ann.Required,
+			ann.Session: ann.Required,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request.KubeFlags = util.FlagMap(kubeFlags)

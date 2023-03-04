@@ -101,12 +101,7 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 	if err != nil {
 		return nil, err
 	}
-	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-	return grpc.DialContext(ctx, fmt.Sprintf(":%d", port),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true))
+	return ConnectDaemon(ctx, fmt.Sprintf(":%d", port))
 }
 
 func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {

@@ -118,19 +118,20 @@ func KeepDaemonInfoAlive(ctx context.Context, file string) error {
 	daemonFile := filepath.Join(dir, daemonsDirName, file)
 	ticker := time.NewTicker(keepAliveInterval)
 	defer ticker.Stop()
+	now := time.Now()
 	for {
+		if err := os.Chtimes(daemonFile, now, now); err != nil {
+			if os.IsNotExist(err) {
+				// File is removed, so stop trying to update its timestamps
+				return nil
+			}
+			return fmt.Errorf("failed to update timestamp on %s: %w", daemonFile, err)
+		}
 		select {
 		case <-ctx.Done():
 			_ = DeleteDaemonInfo(ctx, file)
 			return nil
-		case now := <-ticker.C:
-			if err := os.Chtimes(daemonFile, now, now); err != nil {
-				if os.IsNotExist(err) {
-					// File is removed, so stop trying to update its timestamps
-					return nil
-				}
-				return fmt.Errorf("failed to update timestamp on %s: %w", daemonFile, err)
-			}
+		case now = <-ticker.C:
 		}
 	}
 }
