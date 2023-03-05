@@ -1,3 +1,4 @@
+// Package docker contains the functions necessary to start or discover a Telepresence daemon running in a docker container.
 package docker
 
 import (
@@ -33,11 +34,14 @@ const (
 	dockerTpLog       = "/root/.cache/telepresence/logs"
 )
 
+// ClientImage returns the fully qualified name of the docker image that corresponds to
+// the version of the current executable.
 func ClientImage(ctx context.Context) string {
 	registry := client.GetConfig(ctx).Images.Registry(ctx)
 	return registry + "/" + telepresenceImage + ":" + strings.TrimPrefix(version.Version, "v")
 }
 
+// EnsureNetwork checks if that a network with the given name exists, and creates it if that is not the case.
 func EnsureNetwork(ctx context.Context, name string) {
 	// Ensure that the telepresence bridge network exists
 	cmd := dexec.CommandContext(ctx, "docker", "network", "create", name)
@@ -45,6 +49,7 @@ func EnsureNetwork(ctx context.Context, name string) {
 	_ = cmd.Run()
 }
 
+// DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
 func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]string, *net.TCPAddr, error) {
 	tpConfig, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
@@ -87,6 +92,7 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 	return opts, addr, nil
 }
 
+// DaemonArgs returns the arguments to pass to a docker run when starting a container daemon.
 func DaemonArgs(name string, port int) []string {
 	return []string{
 		"connector-foreground",
@@ -96,6 +102,8 @@ func DaemonArgs(name string, port int) []string {
 	}
 }
 
+// DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
+// to that daemon is returned if such an entry is found.
 func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err error) {
 	port, err := cache.DaemonPortForName(ctx, name)
 	if err != nil {
@@ -104,6 +112,7 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 	return ConnectDaemon(ctx, fmt.Sprintf(":%d", port))
 }
 
+// ConnectDaemon connects to a daemon at the given address.
 func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
 	return grpc.DialContext(ctx, address,
@@ -113,8 +122,11 @@ func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, 
 		grpc.FailOnNonTempDialError(true))
 }
 
-func pullDockerImage(ctx context.Context, image string) error {
+// PullImage checks if the given image exists locally by doing docker image inspect. A docker pull is
+// performed if no local image is found. Stdout is silenced during those operations.
+func PullImage(ctx context.Context, image string) error {
 	cmd := proc.StdCommand(ctx, "docker", "image", "inspect", image)
+	cmd.Stderr = io.Discard
 	cmd.Stdout = io.Discard
 	if cmd.Run() == nil {
 		// Image exists in the local cache, so don't bother pulling it.
@@ -127,13 +139,16 @@ func pullDockerImage(ctx context.Context, image string) error {
 	return cmd.Run()
 }
 
+// LaunchDaemon ensures that the image returned by ClientImage exists by calling PullImage. It then uses the
+// options DaemonOptions and DaemonArgs to start the image, and finally ConnectDaemon to connect to it. A
+// successful start yields a cache.DaemonInfo entry in the cache.
 func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.ClientConn, err error) {
 	cidFileName, err := ioutil.CreateTempName("", "cid*.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cidfile: %v", err)
 	}
 	image := ClientImage(ctx)
-	if err = pullDockerImage(ctx, image); err != nil {
+	if err = PullImage(ctx, image); err != nil {
 		return nil, err
 	}
 	EnsureNetwork(ctx, "telepresence")

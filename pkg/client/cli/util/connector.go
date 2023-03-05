@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -182,11 +181,7 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	var ud *UserDaemon
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-		conn, err := grpc.DialContext(ctx, addr,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithNoProxy(),
-			grpc.WithBlock(),
-			grpc.FailOnNonTempDialError(true))
+		conn, err := docker.ConnectDaemon(ctx, addr)
 		if err != nil {
 			return ctx, err
 		}
