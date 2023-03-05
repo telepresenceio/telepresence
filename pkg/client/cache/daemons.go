@@ -23,6 +23,14 @@ const (
 	keepAliveInterval = 5 * time.Second
 )
 
+func LoadDaemonInfo(ctx context.Context, file string) (*DaemonInfo, error) {
+	var di DaemonInfo
+	if err := LoadFromUserCache(ctx, &di, filepath.Join(daemonsDirName, file)); err != nil {
+		return nil, err
+	}
+	return &di, nil
+}
+
 func SaveDaemonInfo(ctx context.Context, object *DaemonInfo, file string) error {
 	return SaveToUserCache(ctx, object, filepath.Join(daemonsDirName, file))
 }
