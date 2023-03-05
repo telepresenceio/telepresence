@@ -3,6 +3,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -109,7 +110,15 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 	if err != nil {
 		return nil, err
 	}
-	return ConnectDaemon(ctx, fmt.Sprintf(":%d", port))
+	var addr string
+	if RunningInContainer() {
+		// Containers use the daemon container DNS name
+		addr = fmt.Sprintf("%s:%d", name, port)
+	} else {
+		// The host relies on that the daemon has exposed a port to localhost
+		addr = fmt.Sprintf(":%d", port)
+	}
+	return ConnectDaemon(ctx, addr)
 }
 
 // ConnectDaemon connects to a daemon at the given address.
@@ -143,6 +152,9 @@ func PullImage(ctx context.Context, image string) error {
 // options DaemonOptions and DaemonArgs to start the image, and finally ConnectDaemon to connect to it. A
 // successful start yields a cache.DaemonInfo entry in the cache.
 func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.ClientConn, err error) {
+	if RunningInContainer() {
+		return nil, errors.New("unable to start a docker container from within a container")
+	}
 	cidFileName, err := ioutil.CreateTempName("", "cid*.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cidfile: %v", err)
@@ -219,4 +231,10 @@ func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.Clie
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
 	return ConnectDaemon(ctx, addr.String())
+}
+
+// RunningInContainer returns true if the current process runs from inside a docker container.
+func RunningInContainer() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil
 }

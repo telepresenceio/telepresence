@@ -9,6 +9,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 )
 
 type Request struct {
@@ -25,7 +26,7 @@ func InitRequest(ctx context.Context, cmd *cobra.Command) (*Request, *pflag.Flag
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
-	nwFlags.BoolVar(&cr.Docker, "docker", false, "Start daemon in a docker container")
+	nwFlags.BoolVar(&cr.Docker, "docker", docker.RunningInContainer(), "Start, or connect to, daemon in a docker container")
 	nwFlags.StringSliceVar(&cr.MappedNamespaces,
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+

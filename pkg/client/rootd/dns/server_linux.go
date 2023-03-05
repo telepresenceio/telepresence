@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -26,7 +27,7 @@ import (
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
 func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, configureDNS func(net.IP, *net.UDPAddr)) error {
-	if !proxyCluster || runningInDocker() {
+	if !proxyCluster || docker.RunningInContainer() {
 		// Don't bother with systemd-resolved when running in a docker container
 		return s.runOverridingServer(c, dev, proxyCluster)
 	}
@@ -178,7 +179,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, proxyClu
 		return s.Run(c, serverStarted, listeners, pool, s.resolveInSearch, proxyCluster)
 	})
 
-	if runningInDocker() {
+	if docker.RunningInContainer() {
 		g.Go("Local DNS", func(c context.Context) error {
 			select {
 			case <-c.Done():
@@ -231,7 +232,7 @@ func (s *Server) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 		return nil, err
 	}
 	listeners := []net.PacketConn{listener}
-	if runningInDocker() {
+	if docker.RunningInContainer() {
 		// Inside docker. Don't add docker bridge
 		return listeners, nil
 	}
@@ -304,11 +305,6 @@ func (s *Server) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 			return nil, fmt.Errorf("unable to find a free port for both %s and %s", localAddr.IP, extraAddr.IP)
 		}
 	}
-}
-
-func runningInDocker() bool {
-	_, err := os.Stat("/.dockerenv")
-	return err == nil
 }
 
 // runNatTableCmd runs "iptables -t nat ...".
