@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package telepresence.authenticator;
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/authenticator";
+
+service Authenticator {
+  rpc GetContextExecCredentials(GetContextExecCredentialsRequest) returns (GetContextExecCredentialsResponse);
+}
+
+message GetContextExecCredentialsRequest {
+  string context_name = 1;
+}
+
+message GetContextExecCredentialsResponse {
+  bytes raw_credentials = 1;
+}
+

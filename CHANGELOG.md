@@ -4,6 +4,9 @@
 
 - Feature: Telepresence can now start or connect to a daemon in a docker container.
 
+- Feature: Adds an authenticator package to support integration with the [client-go credential](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins) plugins when the
+  daemon runs in a docker container.
+
 ### 2.11.1 (February 27, 2023)
 
 - Bugfix: The multi-arch build now for the proprietary traffic-manager and traffic-agent now works for both amd64 and arm64.
