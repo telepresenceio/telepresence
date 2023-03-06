@@ -49,6 +49,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.Context = nil   // --context is global
 	cr.KubeFlags = make(map[string]string)
 	cr.kubeFlagSet = pflag.NewFlagSet("Kubernetes flags", 0)
 	kubeConfig.AddFlags(cr.kubeFlagSet)
@@ -71,6 +72,7 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) {
 		}
 	})
 	cr.addKubeconfigEnv()
+	cr.setContextFromGlobal(cmd)
 	cmd.SetContext(context.WithValue(cmd.Context(), requestKey{}, cr))
 }
 
@@ -88,10 +90,12 @@ func (cr *Request) addKubeconfigEnv() {
 	addEnv("GOOGLE_APPLICATION_CREDENTIALS")
 }
 
-type requestKey struct{}
-
-func WithRequest(ctx context.Context, rq *Request) context.Context {
-	return context.WithValue(ctx, requestKey{}, rq)
+// setContext deals with the global --context flag and assigns it to KubeFlags because it's
+// deliberately excluded from the original flags (to avoid conflict with the global flag).
+func (cr *Request) setContextFromGlobal(cmd *cobra.Command) {
+	if contextFlag := cmd.Flag("context"); contextFlag != nil && contextFlag.Changed {
+		cr.KubeFlags["context"] = contextFlag.Value.String()
+	}
 }
 
 func GetRequest(ctx context.Context) *Request {
@@ -108,6 +112,7 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) context.Context
 		},
 		Implicit: true,
 	}
+	cr.setContextFromGlobal(cmd)
 	cr.addKubeconfigEnv()
 	return context.WithValue(ctx, requestKey{}, &cr)
 }

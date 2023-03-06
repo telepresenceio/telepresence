@@ -57,7 +57,7 @@ Kubernetes flags:
 {{kubeFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}
 
 Global flags:
-{{globalFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{if .HasHelpSubCommands}}
+{{globalFlags . | wrappedFlagUsages | trimTrailingWhitespaces}}{{if .HasHelpSubCommands}}
 
 Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
   {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
@@ -91,26 +91,31 @@ func localFlags(cmd *cobra.Command, exclude ...*pflag.FlagSet) *pflag.FlagSet {
 	return ngFlags
 }
 
-func addUsageTemplate(cmd *cobra.Command) {
-	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
+func kubeFlags() *pflag.FlagSet {
+	pflag.NewFlagSet("Kubernetes flags", 0)
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
-	kubeConfig.AddFlags(kubeFlags)
+	flags := pflag.NewFlagSet("Kubernetes flags", 0)
+	kubeConfig.AddFlags(flags)
+	return flags
+}
 
-	globalFlags := GlobalFlags()
-	cobra.AddTemplateFunc("globalFlags", func() *pflag.FlagSet { return globalFlags })
-	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet { return localFlags(cmd, kubeFlags, globalFlags) })
-	cobra.AddTemplateFunc("hasKubeFlags", func(cmd *cobra.Command) bool {
-		yep := true
-		flags := cmd.Flags()
-		kubeFlags.VisitAll(func(flag *pflag.Flag) {
-			if yep && !flagEqual(flag, flags.Lookup(flag.Name)) {
-				yep = false
-			}
-		})
-		return yep
+func hasKubeFlags(cmd *cobra.Command) bool {
+	yep := true
+	flags := cmd.Flags()
+	kubeFlags().VisitAll(func(flag *pflag.Flag) {
+		if yep && !flagEqual(flag, flags.Lookup(flag.Name)) {
+			yep = false
+		}
 	})
-	cobra.AddTemplateFunc("kubeFlags", func() *pflag.FlagSet { return kubeFlags })
+	return yep
+}
+
+func addUsageTemplate(cmd *cobra.Command) {
+	cobra.AddTemplateFunc("globalFlags", func(cmd *cobra.Command) *pflag.FlagSet { return GlobalFlags(hasKubeFlags(cmd)) })
+	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet { return localFlags(cmd, kubeFlags(), GlobalFlags(false)) })
+	cobra.AddTemplateFunc("hasKubeFlags", hasKubeFlags)
+	cobra.AddTemplateFunc("kubeFlags", kubeFlags)
 	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
 		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
 		// adjusted
@@ -190,7 +195,7 @@ func AddSubCommands(cmd *cobra.Command) {
 		command.SetContext(ctx)
 	}
 	cmd.AddCommand(commands...)
-	cmd.PersistentFlags().AddFlagSet(GlobalFlags())
+	cmd.PersistentFlags().AddFlagSet(GlobalFlags(false))
 	addCompletionCommand(cmd)
 	cmd.InitDefaultHelpCmd()
 	addUsageTemplate(cmd)
@@ -264,8 +269,14 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 	}
 }
 
-func GlobalFlags() *pflag.FlagSet {
+func GlobalFlags(hasKubeFlags bool) *pflag.FlagSet {
 	flags := pflag.NewFlagSet("", 0)
+	if !hasKubeFlags {
+		flags.String(
+			"context", "",
+			"The name of the kubeconfig context to use",
+		)
+	}
 	flags.Bool(
 		"no-report", false,
 		"turn off anonymous crash reports and log submission on failure",
