@@ -1,4 +1,4 @@
-package authenticator
+package patcher
 
 import (
 	"fmt"
@@ -9,10 +9,6 @@ import (
 )
 
 const KubeConfigStubBinaryName = "server"
-
-func CreateKubeConfigPatcher() *KubeConfigPatcher {
-	return &KubeConfigPatcher{}
-}
 
 type KubeConfigPatcher struct{}
 
@@ -25,7 +21,7 @@ func getKubeClientConfig(kubeConfig string) clientcmd.ClientConfig {
 
 // GenerateTempKubeConfigStubFile go through the kubeconfig file and replace all users using the Exec auth method by
 // an invocation of the stub binary.
-func (k *KubeConfigPatcher) GenerateTempKubeConfigStubFile(kubeConfig string) (string, error) {
+func GenerateTempKubeConfigStubFile(kubeConfig string) (string, error) {
 	clientConfig := getKubeClientConfig(kubeConfig)
 
 	rawConfig, err := clientConfig.RawConfig()
