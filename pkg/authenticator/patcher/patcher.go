@@ -10,30 +10,20 @@ import (
 
 const KubeConfigStubBinaryName = "server"
 
-type KubeConfigPatcher struct{}
-
-func getKubeClientConfig(kubeConfig string) clientcmd.ClientConfig {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
-	loadingRules.ExplicitPath = kubeConfig
-
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, &clientcmd.ConfigOverrides{})
-}
-
 // GenerateTempKubeConfigStubFile go through the kubeconfig file and replace all users using the Exec auth method by
 // an invocation of the stub binary.
-func GenerateTempKubeConfigStubFile(kubeConfig string) (string, clientcmd.ClientConfig, error) {
-	clientConfig := getKubeClientConfig(kubeConfig)
-
-	rawConfig, err := clientConfig.RawConfig()
+// It returns the temp kubeconfig file to mount, and the client config
+func GenerateTempKubeConfigStubFile(originalKubeConfig clientcmd.ClientConfig) (string, error) {
+	rawConfig, err := originalKubeConfig.RawConfig()
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
 	for contextName, kubeContext := range rawConfig.Contexts {
 		// Find related Auth.
 		authInfo, ok := rawConfig.AuthInfos[kubeContext.AuthInfo]
 		if !ok {
-			return "", nil, fmt.Errorf("auth info %s not found for context %s", kubeContext.AuthInfo, contextName)
+			return "", fmt.Errorf("auth info %s not found for context %s", kubeContext.AuthInfo, contextName)
 		}
 
 		// If it isn't an exec mode context, just return the default host kubeconfig.
@@ -52,14 +42,14 @@ func GenerateTempKubeConfigStubFile(kubeConfig string) (string, clientcmd.Client
 
 	tmpConfFile, err := os.CreateTemp(os.TempDir(), "kubeconfig")
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 	_ = tmpConfFile.Close()
 
 	err = clientcmd.WriteToFile(rawConfig, tmpConfFile.Name())
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
-	return tmpConfFile.Name(), getKubeClientConfig(tmpConfFile.Name()), nil
+	return tmpConfFile.Name(), nil
 }
