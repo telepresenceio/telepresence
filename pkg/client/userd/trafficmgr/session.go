@@ -42,6 +42,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
@@ -197,7 +198,7 @@ func NewSession(
 	rdRunning := userd.GetService(ctx).RootSessionInProcess()
 	if !rdRunning {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rdRunning, err = client.IsRunning(ctx, client.DaemonSocketName)
+		rdRunning, err = socket.IsRunning(ctx, socket.DaemonName)
 		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
@@ -265,14 +266,7 @@ func (s *session) GetSessionConfig() *client.Config {
 
 // connectCluster returns a configured cluster instance.
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
-	var config *client.Kubeconfig
-	var err error
-	if cr.IsPodDaemon {
-		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
-	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
-	}
-
+	config, err := client.DaemonKubeconfig(c, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -849,13 +843,7 @@ func (s *session) remain(c context.Context) error {
 }
 
 func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	var config *client.Kubeconfig
-	var err error
-	if cr.IsPodDaemon {
-		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
-	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
-	}
+	config, err := client.DaemonKubeconfig(c, cr)
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
@@ -1164,11 +1152,13 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 		if err != nil {
 			return nil, err
 		}
-		dgroup.ParentGroup(ctx).Go("root-session", rootSession.Run)
+		if err = rootSession.Start(ctx, dgroup.ParentGroup(ctx)); err != nil {
+			return nil, err
+		}
 		rd = rootSession
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = client.DialSocket(ctx, client.DaemonSocketName,
+		conn, err = socket.Dial(ctx, socket.DaemonName,
 			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 		)

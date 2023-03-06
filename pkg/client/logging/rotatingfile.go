@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 // A RotationStrategy answers the question if it is time to rotate the file now. It is called prior to every write
@@ -61,6 +63,7 @@ func (rotateDaily) RotateNow(rf *RotatingFile, _ int) bool {
 }
 
 type RotatingFile struct {
+	ctx         context.Context
 	fileMode    fs.FileMode
 	dirName     string
 	fileName    string
@@ -72,7 +75,7 @@ type RotatingFile struct {
 	removeMutex sync.Mutex
 
 	// file is the current file. It is never nil
-	file *os.File
+	file dos.File
 
 	// size is the number of bytes written to the current file.
 	size int64
@@ -104,6 +107,7 @@ type RotatingFile struct {
 // - maxFiles: maximum number of files in rotation, including the currently active logfile. A value of zero means
 // unlimited.
 func OpenRotatingFile(
+	ctx context.Context,
 	logfilePath string,
 	timeFormat string,
 	localTime bool,
@@ -114,11 +118,12 @@ func OpenRotatingFile(
 	logfileDir, logfileBase := filepath.Split(logfilePath)
 
 	var err error
-	if err = os.MkdirAll(logfileDir, 0o755); err != nil {
+	if err = dos.MkdirAll(ctx, logfileDir, 0o755); err != nil {
 		return nil, err
 	}
 
 	rf := &RotatingFile{
+		ctx:        ctx,
 		dirName:    logfileDir,
 		fileName:   logfileBase,
 		fileMode:   fileMode,
@@ -129,7 +134,7 @@ func OpenRotatingFile(
 	}
 
 	// Try to open existing file for append.
-	if rf.file, err = os.OpenFile(logfilePath, os.O_WRONLY|os.O_APPEND, rf.fileMode); err != nil {
+	if rf.file, err = dos.OpenFile(ctx, logfilePath, os.O_WRONLY|os.O_APPEND, rf.fileMode); err != nil {
 		if os.IsNotExist(err) {
 			// There is no existing file, go ahead and create a new one.
 			if err := rf.openNew(nil, ""); err == nil {
@@ -219,8 +224,8 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 	} else {
 		// Open file with a different name so that a tail -F on the original doesn't fail with a permission denied
 		tmp := fullPath + ".tmp"
-		var tmpFile *os.File
-		if tmpFile, err = os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, rf.fileMode); err != nil {
+		var tmpFile dos.File
+		if tmpFile, err = dos.OpenFile(rf.ctx, tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, rf.fileMode); err != nil {
 			return fmt.Errorf("failed to createFile %s: %w", tmp, err)
 		}
 
@@ -241,10 +246,10 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 		if err = rf.file.Close(); err != nil {
 			return fmt.Errorf("failed to close %s: %w", rf.file.Name(), err)
 		}
-		if err = os.Rename(fullPath, backupName); err != nil {
+		if err = dos.Rename(rf.ctx, fullPath, backupName); err != nil {
 			return fmt.Errorf("failed to rename %s to %s: %w", fullPath, backupName, err)
 		}
-		if err = os.Rename(tmp, fullPath); err != nil {
+		if err = dos.Rename(rf.ctx, tmp, fullPath); err != nil {
 			return fmt.Errorf("failed to rename %s to %s: %w", tmp, fullPath, err)
 		}
 		// Need to restore birth time on Windows since it retains the birt time of the
@@ -254,7 +259,7 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 		}
 		flag = os.O_WRONLY | os.O_APPEND
 	}
-	if rf.file, err = os.OpenFile(fullPath, flag, rf.fileMode); err != nil {
+	if rf.file, err = dos.OpenFile(rf.ctx, fullPath, flag, rf.fileMode); err != nil {
 		return fmt.Errorf("failed to open file %s: %w", fullPath, err)
 	}
 	rf.birthTime = rf.fileTime(dtime.Now())
@@ -272,7 +277,7 @@ func (rf *RotatingFile) removeOldFiles() {
 	rf.removeMutex.Lock()
 	defer rf.removeMutex.Unlock()
 
-	files, err := os.ReadDir(rf.dirName)
+	files, err := dos.ReadDir(rf.ctx, rf.dirName)
 	if err != nil {
 		return
 	}

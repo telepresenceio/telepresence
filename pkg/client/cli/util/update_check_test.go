@@ -15,11 +15,13 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 func Test_NewUpdateChecker(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
+	ctx = client.WithEnv(ctx, &client.Env{})
 
 	// the server that delivers the latest version
 	l, err := net.Listen("tcp", "localhost:0")

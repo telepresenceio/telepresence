@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.x.x (TBD)
+
+- Feature: Telepresence can now start or connect to a daemon in a docker container.
+
 ### 2.11.1 (February 27, 2023)
 
 - Bugfix: The multi-arch build now for the proprietary traffic-manager and traffic-agent now works for both amd64 and arm64.

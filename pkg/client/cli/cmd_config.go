@@ -1,33 +1,30 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func configCommand(ctx context.Context) *cobra.Command {
+func configCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "config",
 	}
-	cmd.AddCommand(configViewCommand(ctx))
+	cmd.AddCommand(configViewCommand())
 	return cmd
 }
 
-func configViewCommand(ctx context.Context) *cobra.Command {
-	var kubeFlags *pflag.FlagSet
-	var request *connector.ConnectRequest
+func configViewCommand() *cobra.Command {
+	var request *connect.Request
 
 	cmd := &cobra.Command{
 		Use:               "view",
@@ -35,14 +32,12 @@ func configViewCommand(ctx context.Context) *cobra.Command {
 		PersistentPreRunE: output.DefaultYAML,
 		Short:             "View current Telepresence configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request.KubeFlags = util.FlagMap(kubeFlags)
-			util.AddKubeconfigEnv(request)
-			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
+			request.CommitFlags(cmd)
 			return configView(cmd, args)
 		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
-	request, kubeFlags = InitConnectRequest(ctx, cmd)
+	request = connect.InitRequest(cmd)
 	return cmd
 }
 
@@ -60,7 +55,7 @@ func configView(cmd *cobra.Command, _ []string) error {
 		cfg.Config = client.GetConfig(cmd.Context())
 		cfg.ClientFile = filepath.Join(cfgDir, client.ConfigFile)
 
-		rq := util.GetConnectRequest(ctx)
+		rq := connect.GetRequest(ctx)
 		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
 		if err != nil {
 			return err

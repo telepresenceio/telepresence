@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -73,6 +75,9 @@ type Service struct {
 
 	// Run root session in-process
 	rootSessionInProc bool
+
+	// The TCP address that the daemon listens to. Will be nil if the daemon listens to a unix socket.
+	daemonAddress *net.TCPAddr
 }
 
 func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
@@ -132,6 +137,7 @@ func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOpti
 }
 
 const (
+	nameFlag         = "name"
 	addressFlag      = "address"
 	embedNetworkFlag = "embed-network"
 )
@@ -147,7 +153,8 @@ func Command() *cobra.Command {
 		RunE:   run,
 	}
 	flags := c.Flags()
-	flags.String(addressFlag, "", "Address to listen to. Defaults to "+client.ConnectorSocketName)
+	flags.String(nameFlag, userd.ProcessName, "Daemon name")
+	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.ConnectorName)
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	return c
 }
@@ -241,7 +248,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 			s.sessionLock.Unlock()
 			wg.Done()
 		}()
-		if err := userd.RunSession(s.sessionContext, session); err != nil {
+		if err := userd.RunSession(s.sessionContext, s.sessionCancel, session, s.daemonAddress); err != nil {
 			if errors.Is(err, trafficmgr.ErrSessionExpired) {
 				// Session has expired. We need to cancel the owner session and reconnect
 				dlog.Info(ctx, "refreshing session")
@@ -254,6 +261,10 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 			}
 
 			dlog.Error(ctx, err)
+		}
+		if s.rootSessionInProc {
+			// Simplified session management. The daemon handles one session, then exits.
+			_, _ = s.Quit(ctx, nil)
 		}
 	}(cr)
 	return rsp
@@ -293,11 +304,6 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	c = client.WithConfig(c, cfg)
-	c = dgroup.WithGoroutineName(c, "/"+userd.ProcessName)
-	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
-	if err != nil {
-		return err
-	}
 
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
@@ -305,23 +311,37 @@ func run(cmd *cobra.Command, _ []string) error {
 	var grpcListener net.Listener
 	flags := cmd.Flags()
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
+	var daemonAddress *net.TCPAddr
 	if addr, _ := flags.GetString(addressFlag); addr != "" {
 		lc := net.ListenConfig{}
 		if grpcListener, err = lc.Listen(c, "tcp", addr); err != nil {
 			return err
 		}
+		daemonAddress = grpcListener.Addr().(*net.TCPAddr)
 		defer func() {
 			_ = grpcListener.Close()
 		}()
 	} else {
-		if grpcListener, err = client.ListenSocket(c, userd.ProcessName, client.ConnectorSocketName); err != nil {
+		if grpcListener, err = socket.Listen(c, userd.ProcessName, socket.ConnectorName); err != nil {
 			return err
 		}
 		defer func() {
-			_ = client.RemoveSocket(grpcListener)
+			_ = socket.Remove(grpcListener)
 		}()
 	}
-	dlog.Debug(c, "Listener opened")
+
+	name, _ := flags.GetString(nameFlag)
+	sessionName := "session"
+	if di := strings.IndexByte(name, '-'); di > 0 {
+		sessionName = name[di+1:]
+		name = name[:di]
+	}
+	c = dgroup.WithGoroutineName(c, "/"+name)
+	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
+	if err != nil {
+		return err
+	}
+	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -372,6 +392,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	var s *Service
 	si.As(&s)
 	s.rootSessionInProc = rootSessionInProc
+	s.daemonAddress = daemonAddress
 
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
 		return err
@@ -396,7 +417,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	})
 
 	g.Go("config-reload", s.configReload)
-	g.Go("session", func(c context.Context) error {
+	g.Go(sessionName, func(c context.Context) error {
 		c, s.quit = context.WithCancel(c)
 		return ManageSessions(c, si)
 	})

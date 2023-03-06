@@ -95,10 +95,6 @@ func (rd *InProcSession) WaitForNetwork(ctx context.Context, in *empty.Empty, op
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) Run(ctx context.Context) error {
-	return rd.run(ctx)
-}
-
 // NewInProcSession returns a root daemon session suitable to use in-process (from the user daemon) and is primarily intended for
 // when the user daemon runs in a docker container with NET_ADMIN capabilities.
 func NewInProcSession(

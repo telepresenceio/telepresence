@@ -15,8 +15,10 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -75,7 +77,65 @@ const (
 	defaultManagerNamespace = "ambassador"
 )
 
+func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, error) {
+	configFlags := genericclioptions.NewConfigFlags(false)
+	flags := pflag.NewFlagSet("", 0)
+	configFlags.AddFlags(flags)
+	for k, v := range flagMap {
+		f := flags.Lookup(k)
+		if f == nil {
+			continue
+		}
+		var err error
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			var vs []string
+			if vs, err = csv.NewReader(strings.NewReader(v)).Read(); err == nil {
+				err = sv.Replace(vs)
+			}
+		} else {
+			err = flags.Set(k, v)
+		}
+		if err != nil {
+			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
+		}
+	}
+	return configFlags, nil
+}
+
+// CurrentContext returns the name of the current Kubernetes context, and the context itself.
+func CurrentContext(flagMap map[string]string) (string, *api.Context, error) {
+	configFlags, err := ConfigFlags(flagMap)
+	if err != nil {
+		return "", nil, err
+	}
+	config, err := configFlags.ToRawKubeConfigLoader().RawConfig()
+	if err != nil {
+		return "", nil, err
+	}
+	if len(config.Contexts) == 0 {
+		return "", nil, errcat.Config.New("kubeconfig has no context definition")
+	}
+	cc := flagMap["context"]
+	if cc == "" {
+		cc = config.CurrentContext
+	}
+	return cc, config.Contexts[cc], nil
+}
+
 func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
+	configFlags, err := ConfigFlags(flagMap)
+	if err != nil {
+		return nil, err
+	}
+	return newKubeconfig(c, flagMap, managerNamespaceOverride, configFlags)
+}
+
+func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
+	if cr.IsPodDaemon {
+		return NewInClusterConfig(c, cr.KubeFlags)
+	}
+	flagMap := cr.KubeFlags
+
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -103,30 +163,14 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	if err := transferEnvFlag("KUBECONFIG"); err != nil {
 		return nil, err
 	}
-	dlog.Debugf(c, "Using kubernetes flags %v", flagMap)
-
-	configFlags := genericclioptions.NewConfigFlags(false)
-	flags := pflag.NewFlagSet("", 0)
-	configFlags.AddFlags(flags)
-	for k, v := range flagMap {
-		f := flags.Lookup(k)
-		if f == nil {
-			continue
-		}
-		var err error
-		if sv, ok := f.Value.(pflag.SliceValue); ok {
-			var vs []string
-			if vs, err = csv.NewReader(strings.NewReader(v)).Read(); err == nil {
-				err = sv.Replace(vs)
-			}
-		} else {
-			err = flags.Set(k, v)
-		}
-		if err != nil {
-			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
-		}
+	configFlags, err := ConfigFlags(flagMap)
+	if err != nil {
+		return nil, err
 	}
+	return newKubeconfig(c, flagMap, cr.ManagerNamespace, configFlags)
+}
 
+func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string, configFlags *genericclioptions.ConfigFlags) (*Kubeconfig, error) {
 	configLoader := configFlags.ToRawKubeConfigLoader()
 	config, err := configLoader.RawConfig()
 	if err != nil {
@@ -251,6 +295,10 @@ func (kf *Kubeconfig) ContextServiceAndFlagsEqual(okf *Kubeconfig) bool {
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
 		maps.Equal(kf.FlagMap, okf.FlagMap)
+}
+
+func (kf *Kubeconfig) GetContext() string {
+	return kf.Context
 }
 
 func (kf *Kubeconfig) GetManagerNamespace() string {

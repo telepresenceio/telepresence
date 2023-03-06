@@ -11,7 +11,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 var osHasBTime = true
@@ -39,11 +42,13 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) (btimeIsCTime bool) {
 		minDelta        = 2 * time.Second
 	)
 
+	ctx := dlog.NewTestContext(t, false)
+	ctx = client.WithEnv(ctx, &client.Env{})
 	filename := filepath.Join(t.TempDir(), "stamp.txt")
-	withFile := func(flags int, fn func(*os.File)) (time.Time, time.Time) {
+	withFile := func(flags int, fn func(dos.File)) (time.Time, time.Time) {
 		before := time.Now()
 		time.Sleep(fsVsClockLeeway)
-		file, err := os.OpenFile(filename, flags, 0o666)
+		file, err := dos.OpenFile(ctx, filename, flags, 0o666)
 		require.NoError(t, err)
 		require.NotNil(t, file)
 		fn(file)
@@ -54,12 +59,12 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) (btimeIsCTime bool) {
 	}
 
 	// btime
-	bBefore, bAfter := withFile(os.O_CREATE|os.O_RDWR, func(file *os.File) {})
+	bBefore, bAfter := withFile(os.O_CREATE|os.O_RDWR, func(file dos.File) {})
 
 	time.Sleep(minDelta)
 
 	// mtime
-	mBefore, mAfter := withFile(os.O_RDWR, func(file *os.File) {
+	mBefore, mAfter := withFile(os.O_RDWR, func(file dos.File) {
 		_, err := io.WriteString(file, "#!/bin/sh\n")
 		require.NoError(t, err)
 	})
@@ -75,7 +80,7 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) (btimeIsCTime bool) {
 
 	// stat
 	var stat logging.SysInfo
-	withFile(os.O_RDWR, func(file *os.File) {
+	withFile(os.O_RDWR, func(file dos.File) {
 		var err error
 		stat, err = logging.FStat(file)
 		require.NoError(t, err)

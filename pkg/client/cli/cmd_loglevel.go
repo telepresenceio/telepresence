@@ -53,8 +53,7 @@ func loglevelCommand() *cobra.Command {
 		RunE:      lls.setTempLogLevel,
 		ValidArgs: lvStrs,
 		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
-			ann.Session:    ann.Required,
+			ann.Session: ann.Required,
 		},
 	}
 	flags := cmd.Flags()

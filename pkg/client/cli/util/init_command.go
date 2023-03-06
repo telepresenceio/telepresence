@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 )
 
 type userDaemonKey struct{}
@@ -49,12 +50,10 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 		as[ann.RootDaemon] = v
 		as[ann.VersionCheck] = ann.Required
 	}
-	if as[ann.RootDaemon] == ann.Required {
-		if err = EnsureRootDaemonRunning(ctx); err != nil {
-			return err
-		}
-	}
 	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
+		if cr := connect.GetRequest(ctx); cr == nil {
+			ctx = connect.WithDefaultRequest(ctx, cmd)
+		}
 		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
 			if v == ann.Optional && err == ErrNoUserDaemon {
 				// This is OK, but further initialization is not possible
@@ -65,8 +64,8 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 
 		// RootDaemon == Optional means that the RootDaemon must be started if
 		// the UserDaemon was started
-		if as[ann.RootDaemon] == ann.Optional {
-			if err = EnsureRootDaemonRunning(ctx); err != nil {
+		if _, ok := as[ann.RootDaemon]; ok {
+			if err = ensureRootDaemonRunning(ctx); err != nil {
 				return err
 			}
 		}

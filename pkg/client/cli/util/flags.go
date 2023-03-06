@@ -1,25 +1,13 @@
 package util
 
 import (
-	"bytes"
-	"encoding/csv"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/pflag"
-)
 
-// AsCSV returns the string slice encoded by a csv.NewWriter.
-func AsCSV(vs []string) string {
-	b := &bytes.Buffer{}
-	w := csv.NewWriter(b)
-	if err := w.Write(vs); err != nil {
-		// The underlying bytes.Buffer should never error.
-		panic(err)
-	}
-	w.Flush()
-	return strings.TrimSuffix(b.String(), "\n")
-}
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
+)
 
 // FlagMap returns a map of the flags that has been modified in the given FlagSet.
 func FlagMap(flags *pflag.FlagSet) map[string]string {
@@ -31,7 +19,7 @@ func FlagMap(flags *pflag.FlagSet) map[string]string {
 		if flag.Changed {
 			var v string
 			if sv, ok := flag.Value.(pflag.SliceValue); ok {
-				v = AsCSV(sv.GetSlice())
+				v = slice.AsCSV(sv.GetSlice())
 			} else {
 				v = flag.Value.String()
 			}

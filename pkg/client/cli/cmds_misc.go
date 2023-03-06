@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -12,13 +11,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
-	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 )
 
 // ClusterIdCommand is a simple command that makes it easier for users to
@@ -55,72 +51,6 @@ func ClusterIdCommand() *cobra.Command {
 	return cmd
 }
 
-func connectCommand(ctx context.Context) *cobra.Command {
-	var kubeFlags *pflag.FlagSet
-	var request *connector.ConnectRequest
-
-	cmd := &cobra.Command{
-		Use:   "connect [flags] [-- <command to run while connected>]",
-		Args:  cobra.ArbitraryArgs,
-		Short: "Connect to a cluster",
-		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
-			ann.Session:    ann.Required,
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			request.KubeFlags = util.FlagMap(kubeFlags)
-			cmd.SetContext(util.WithConnectionRequest(cmd.Context(), request))
-			if err := util.InitCommand(cmd); err != nil {
-				return err
-			}
-			if len(args) == 0 {
-				return nil
-			}
-			ctx := cmd.Context()
-			if util.GetSession(ctx).Started {
-				defer func() {
-					_ = util.Disconnect(ctx, false)
-				}()
-			}
-			return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
-		},
-	}
-	request, kubeFlags = InitConnectRequest(ctx, cmd)
-	return cmd
-}
-
-// InitConnectRequest adds the networking flags and Kubernetes flags to the given command and
-// returns a ConnectRequest and a FlagSet with the Kubernetes flags. The FlagSet is returned
-// here so that a map of flags that gets modified can be extracted using FlagMap once the flag
-// parsing has completed.
-func InitConnectRequest(ctx context.Context, cmd *cobra.Command) (*connector.ConnectRequest, *pflag.FlagSet) {
-	cr := connector.ConnectRequest{}
-	flags := cmd.Flags()
-
-	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
-	nwFlags.StringSliceVar(&cr.MappedNamespaces,
-		"mapped-namespaces", nil, ``+
-			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
-			`Defaults to all namespaces`)
-	nwFlags.StringSliceVar(&cr.AlsoProxy,
-		"also-proxy", nil, ``+
-			`Additional comma separated list of CIDR to proxy`)
-
-	nwFlags.StringSliceVar(&cr.NeverProxy,
-		"never-proxy", nil, ``+
-			`Comma separated list of CIDR to never proxy`)
-	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
-		`Overrides any other manager namespace set in config`)
-	flags.AddFlagSet(nwFlags)
-
-	kubeConfig := genericclioptions.NewConfigFlags(false)
-	kubeConfig.Namespace = nil // "connect", don't take --namespace
-	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
-	kubeConfig.AddFlags(kubeFlags)
-	flags.AddFlagSet(kubeFlags)
-	return &cr, kubeFlags
-}
-
 func quitCommand() *cobra.Command {
 	quitDaemons := false
 	quitRootDaemon := false
@@ -147,7 +77,7 @@ func quitCommand() *cobra.Command {
 			if quitDaemons && util.GetUserDaemon(ctx) == nil {
 				// User daemon isn't running. If the root daemon is running, we must
 				// kill it from here.
-				if conn, err := client.DialSocket(ctx, client.DaemonSocketName); err == nil {
+				if conn, err := socket.Dial(ctx, socket.DaemonName); err == nil {
 					_, _ = daemon.NewDaemonClient(conn).Quit(ctx, &empty.Empty{})
 				}
 			}

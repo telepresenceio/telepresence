@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -76,7 +77,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if conn, err := client.DialSocket(ctx, client.DaemonSocketName); err == nil {
+	if conn, err := socket.Dial(ctx, socket.DaemonName); err == nil {
 		defer conn.Close()
 		return daemon.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}

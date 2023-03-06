@@ -14,6 +14,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tlog "github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -46,17 +47,17 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 				maxFiles = uint16(mx)
 			}
 		}
-		rf, err := OpenRotatingFile(filepath.Join(dir, name+".log"), "20060102T150405", true, 0o600, strategy, maxFiles)
+		rf, err := OpenRotatingFile(ctx, filepath.Join(dir, name+".log"), "20060102T150405", true, 0o600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
 		}
 		logger.SetOutput(rf)
 
 		if captureStd {
-			if err := dupToStdOut(rf.file); err != nil {
+			if err := dupToStdOut(rf.file.(*os.File)); err != nil {
 				return ctx, err
 			}
-			if err := dupToStdErr(rf.file); err != nil {
+			if err := dupToStdErr(rf.file.(*os.File)); err != nil {
 				return ctx, err
 			}
 		}
@@ -71,11 +72,9 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 
 	// Read the config and set the configured level.
 	logLevels := client.GetConfig(ctx).LogLevels
-	level := logrus.InfoLevel
+	level := logLevels.UserDaemon
 	if name == "daemon" {
 		level = logLevels.RootDaemon
-	} else if name == "connector" || name == "cli" { // Have the CLI log at the same level as the user daemon
-		level = logLevels.UserDaemon
 	}
 	tlog.SetLogrusLevel(logger, level.String())
 	ctx = tlog.WithLevelSetter(ctx, logger)
@@ -89,7 +88,7 @@ func SummarizeLog(ctx context.Context, name string) (string, error) {
 	}
 
 	filename := filepath.Join(dir, name+".log")
-	file, err := os.Open(filename)
+	file, err := dos.Open(ctx, filename)
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = nil

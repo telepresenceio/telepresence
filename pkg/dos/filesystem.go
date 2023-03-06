@@ -6,6 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall" //nolint:depguard // "unix" don't work on windows
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // File represents a file in the filesystem. The os.File struct implements this interface.
@@ -42,75 +45,175 @@ type FileSystem interface {
 	RealPath(name string) (string, error)
 	Remove(name string) error
 	RemoveAll(name string) error
+	Rename(oldName, newName string) error
 	Stat(name string) (fs.FileInfo, error)
 	Symlink(oldName, newName string) error
 	WriteFile(name string, data []byte, perm fs.FileMode) error
 }
 
-type osFs struct{}
+type osFs struct {
+	tpUID int
+	tpGID int
+}
 
-func (osFs) Abs(name string) (string, error) {
+func (*osFs) Abs(name string) (string, error) {
 	return filepath.Abs(name)
 }
 
-func (osFs) Chdir(name string) error {
+func (*osFs) Chdir(name string) error {
 	return os.Chdir(name)
 }
 
-func (osFs) Create(name string) (File, error) {
-	return os.Create(name)
+func (fs *osFs) Create(name string) (File, error) {
+	f, err := os.Create(name)
+	if err != nil {
+		// It's important to return a File nil here, not a File that represents an *os.File nil.
+		return nil, err
+	}
+	return fs.chownFile(f)
 }
 
-func (osFs) Getwd() (string, error) {
+func (*osFs) Getwd() (string, error) {
 	return os.Getwd()
 }
 
-func (osFs) Mkdir(name string, perm fs.FileMode) error {
-	return os.Mkdir(name, perm)
+func (fs *osFs) Mkdir(name string, perm fs.FileMode) error {
+	return fs.chown(os.Mkdir(name, perm), name)
 }
 
-func (osFs) MkdirAll(name string, perm fs.FileMode) error {
-	return os.MkdirAll(name, perm)
+// MkdirAll is a slightly modified version the same function in of Go 1.19.3's os/path.go.
+func (fs *osFs) MkdirAll(path string, perm fs.FileMode) error {
+	// Fast path: if we can tell whether path is a directory or file, stop with success or error.
+	dir, err := os.Stat(path)
+	if err == nil {
+		if dir.IsDir() {
+			return nil
+		}
+		return &os.PathError{Op: "mkdir", Path: path, Err: syscall.ENOTDIR} //nolint:forbidigo // we want the same error
+	}
+
+	// Slow path: make sure parent exists and then call Mkdir for path.
+	i := len(path)
+	for i > 0 && os.IsPathSeparator(path[i-1]) { // Skip trailing path separator.
+		i--
+	}
+
+	j := i
+	for j > 0 && !os.IsPathSeparator(path[j-1]) { // Scan backward over element.
+		j--
+	}
+
+	if j > 1 {
+		// Create parent.
+		if err = fs.MkdirAll(path[:j-1], perm); err != nil {
+			return err
+		}
+	}
+
+	// Parent now exists; invoke Mkdir and use its result.
+	err = fs.Mkdir(path, perm)
+	if err != nil {
+		// Handle arguments like "foo/." by
+		// double-checking that directory doesn't exist.
+		dir, err1 := os.Lstat(path)
+		if err1 == nil && dir.IsDir() {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
-func (osFs) Open(name string) (File, error) {
-	return os.Open(name)
+func (*osFs) Open(name string) (File, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		// It's important to return a File nil here, not a File that represents an *os.File nil.
+		return nil, err
+	}
+	return f, nil
 }
 
-func (osFs) OpenFile(name string, flag int, perm fs.FileMode) (File, error) {
-	return os.OpenFile(name, flag, perm)
+func (fs *osFs) OpenFile(name string, flag int, perm fs.FileMode) (File, error) {
+	if fs.mustChown() {
+		if (flag & os.O_CREATE) == os.O_CREATE {
+			if _, err := os.Stat(name); os.IsNotExist(err) {
+				f, err := os.OpenFile(name, flag, perm)
+				if err != nil {
+					return nil, err
+				}
+				return fs.chownFile(f)
+			}
+		}
+	}
+	f, err := os.OpenFile(name, flag, perm)
+	if err != nil {
+		// It's important to return a File nil here, not a File that represents an *os.File nil.
+		return nil, err
+	}
+	return f, nil
 }
 
-func (osFs) ReadDir(name string) ([]fs.DirEntry, error) {
+func (*osFs) ReadDir(name string) ([]fs.DirEntry, error) {
 	return os.ReadDir(name)
 }
 
-func (osFs) ReadFile(name string) ([]byte, error) {
+func (*osFs) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name)
 }
 
-func (osFs) RealPath(name string) (string, error) {
+func (*osFs) RealPath(name string) (string, error) {
 	return filepath.Abs(name)
 }
 
-func (osFs) Remove(name string) error {
+func (*osFs) Remove(name string) error {
 	return os.Remove(name)
 }
 
-func (osFs) RemoveAll(name string) error {
+func (*osFs) RemoveAll(name string) error {
 	return os.RemoveAll(name)
 }
 
-func (osFs) Stat(name string) (fs.FileInfo, error) {
+func (*osFs) Rename(oldName, newName string) error {
+	return os.Rename(oldName, newName)
+}
+
+func (*osFs) Stat(name string) (fs.FileInfo, error) {
 	return os.Stat(name)
 }
 
-func (osFs) Symlink(oldName, newName string) error {
+func (*osFs) Symlink(oldName, newName string) error {
 	return os.Symlink(oldName, newName)
 }
 
-func (osFs) WriteFile(name string, data []byte, perm fs.FileMode) error {
+func (fs *osFs) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	if fs.mustChown() {
+		if _, err := os.Stat(name); os.IsNotExist(err) {
+			return fs.chown(os.WriteFile(name, data, perm), name)
+		}
+	}
 	return os.WriteFile(name, data, perm)
+}
+
+func (fs *osFs) mustChown() bool {
+	return fs.tpUID > 0 || fs.tpGID > 0
+}
+
+func (fs *osFs) chown(err error, name string) error {
+	if err == nil && fs.mustChown() {
+		err = os.Chown(name, fs.tpUID, fs.tpGID)
+	}
+	return err
+}
+
+func (fs *osFs) chownFile(f *os.File) (File, error) {
+	if fs.mustChown() {
+		if err := f.Chown(fs.tpUID, fs.tpGID); err != nil {
+			_ = f.Close()
+			_ = fs.Remove(f.Name())
+			return nil, err
+		}
+	}
+	return f, nil
 }
 
 type fsKey struct{}
@@ -124,7 +227,13 @@ func getFS(ctx context.Context) FileSystem {
 	if fs, ok := ctx.Value(fsKey{}).(FileSystem); ok {
 		return fs
 	}
-	return osFs{}
+	if env := client.GetEnv(ctx); env != nil {
+		return &osFs{
+			tpUID: env.TelepresenceUID,
+			tpGID: env.TelepresenceGID,
+		}
+	}
+	return &osFs{}
 }
 
 // Abs is like filepath.Abs but delegates to the context's FS.
@@ -191,6 +300,11 @@ func Remove(ctx context.Context, name string) error {
 // RemoveAll is like os.RemoveAll but delegates to the context's FS.
 func RemoveAll(ctx context.Context, name string) error {
 	return getFS(ctx).RemoveAll(name)
+}
+
+// Rename is like os.Rename but delegates to the context's FS.
+func Rename(ctx context.Context, oldName, newName string) error {
+	return getFS(ctx).Rename(oldName, newName)
 }
 
 func WriteFile(ctx context.Context, name string, data []byte, perm fs.FileMode) error {

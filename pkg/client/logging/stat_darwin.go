@@ -3,23 +3,29 @@ package logging
 import (
 	"fmt"
 	"os"
-	"time"
 
 	//nolint:depguard // We specifically need "syscall.Stat_t" rather than "unix.Stat_t" for
 	// fs.File.Sys().
 	"syscall"
+	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 type fileInfo struct {
 	*syscall.Stat_t
 }
 
-func osFStat(file *os.File) (SysInfo, error) {
+func osFStat(file dos.File) (SysInfo, error) {
 	stat, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat %s: %w", file.Name(), err)
 	}
-	return fileInfo{stat.Sys().(*syscall.Stat_t)}, nil
+	sys, ok := stat.Sys().(*syscall.Stat_t)
+	if !ok {
+		return nil, fmt.Errorf("files of type %T don't support Fstat", file)
+	}
+	return fileInfo{sys}, nil
 }
 
 func (u fileInfo) Size() int64 {

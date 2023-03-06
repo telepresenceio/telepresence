@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package client
+package socket
 
 import (
 	"context"
@@ -19,14 +19,14 @@ import (
 )
 
 const (
-	// ConnectorSocketName is the path used when communicating to the connector process.
-	ConnectorSocketName = "/tmp/telepresence-connector.socket"
+	// ConnectorName is the path used when communicating to the connector process.
+	ConnectorName = "/tmp/telepresence-connector.socket"
 
-	// DaemonSocketName is the path used when communicating to the daemon process.
-	DaemonSocketName = "/var/run/telepresence-daemon.socket"
+	// DaemonName is the path used when communicating to the daemon process.
+	DaemonName = "/var/run/telepresence-daemon.socket"
 )
 
-func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func dial(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // FIXME(lukeshu): Make this configurable
 	defer cancel()
 	for firstTry := true; ; firstTry = false {
@@ -77,7 +77,7 @@ func dialSocket(ctx context.Context, socketName string, opts ...grpc.DialOption)
 	}
 }
 
-func listenSocket(_ context.Context, processName, socketName string) (net.Listener, error) {
+func listen(_ context.Context, processName, socketName string) (net.Listener, error) {
 	if proc.IsAdmin() {
 		origUmask := unix.Umask(0)
 		defer unix.Umask(origUmask)
@@ -95,12 +95,12 @@ func listenSocket(_ context.Context, processName, socketName string) (net.Listen
 	return listener, nil
 }
 
-func removeSocket(listener net.Listener) error {
+func remove(listener net.Listener) error {
 	return os.Remove(listener.Addr().String())
 }
 
-// socketExists returns true if a socket is found at the given path.
-func socketExists(path string) (bool, error) {
+// exists returns true if a socket is found at the given path.
+func exists(path string) (bool, error) {
 	s, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {

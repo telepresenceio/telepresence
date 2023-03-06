@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 type fileInfo struct {
@@ -18,7 +20,11 @@ type fileInfo struct {
 	ctime time.Time
 }
 
-func osFStat(file *os.File) (SysInfo, error) {
+func osFStat(dfile dos.File) (SysInfo, error) {
+	file, ok := dfile.(*os.File)
+	if !ok {
+		return nil, fmt.Errorf("files of type %T don't support Fstat", dfile)
+	}
 	const want = 0 |
 		unix.STATX_SIZE |
 		unix.STATX_UID |

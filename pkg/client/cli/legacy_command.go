@@ -64,6 +64,7 @@ func parseLegacyCommand(args []string) *legacyCommand {
 	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
+	kubeConfig.Context = nil   // --context is global
 	kubeConfig.AddFlags(kubeFlags)
 Parsing:
 	for i, v := range args {
