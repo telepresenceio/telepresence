@@ -9,10 +9,10 @@ service Authenticator {
 }
 
 message GetContextExecCredentialsRequest {
-  string contextName = 1;
+  string context_name = 1;
 }
 
 message GetContextExecCredentialsResponse {
-  bytes rawCredentials = 1;
+  bytes raw_credentials = 1;
 }
 

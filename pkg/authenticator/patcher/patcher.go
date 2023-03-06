@@ -21,19 +21,19 @@ func getKubeClientConfig(kubeConfig string) clientcmd.ClientConfig {
 
 // GenerateTempKubeConfigStubFile go through the kubeconfig file and replace all users using the Exec auth method by
 // an invocation of the stub binary.
-func GenerateTempKubeConfigStubFile(kubeConfig string) (string, error) {
+func GenerateTempKubeConfigStubFile(kubeConfig string) (string, clientcmd.ClientConfig, error) {
 	clientConfig := getKubeClientConfig(kubeConfig)
 
 	rawConfig, err := clientConfig.RawConfig()
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	for contextName, kubeContext := range rawConfig.Contexts {
 		// Find related Auth.
 		authInfo, ok := rawConfig.AuthInfos[kubeContext.AuthInfo]
 		if !ok {
-			return "", fmt.Errorf("auth info %s not found for context %s", kubeContext.AuthInfo, contextName)
+			return "", nil, fmt.Errorf("auth info %s not found for context %s", kubeContext.AuthInfo, contextName)
 		}
 
 		// If it isn't an exec mode context, just return the default host kubeconfig.
@@ -52,14 +52,14 @@ func GenerateTempKubeConfigStubFile(kubeConfig string) (string, error) {
 
 	tmpConfFile, err := os.CreateTemp(os.TempDir(), "kubeconfig")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	_ = tmpConfFile.Close()
 
 	err = clientcmd.WriteToFile(rawConfig, tmpConfFile.Name())
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	return tmpConfFile.Name(), nil
+	return tmpConfFile.Name(), getKubeClientConfig(tmpConfFile.Name()), nil
 }
