@@ -11,8 +11,7 @@ import (
 const KubeConfigStubBinaryName = "authenticator"
 
 // GenerateTempKubeConfigStubFile go through the kubeconfig file and replace all users using the Exec auth method by
-// an invocation of the stub binary.
-// It returns the temp kubeconfig file to mount, and the client config
+// an invocation of the stub binary. It returns the temp kubeconfig file to mount, and the client config.
 func GenerateTempKubeConfigStubFile(originalKubeConfig clientcmd.ClientConfig) (string, error) {
 	rawConfig, err := originalKubeConfig.RawConfig()
 	if err != nil {
