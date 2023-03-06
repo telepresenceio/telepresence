@@ -46,13 +46,18 @@ func (f *KeyValueFormatter) WriteTo(out io.Writer) (int64, error) {
 		if i > 0 {
 			n += WriteString(out, "\n")
 		}
-		lines := strings.Split(strings.TrimSpace(kvs[i+1]), "\n")
+		lines := strings.Split(strings.TrimRight(kvs[i+1], " \t\r\n"), "\n")
 		n += Printf(out, "%s%-*s%s%s", f.Prefix, kLen, kvs[i], f.Separator, lines[0])
 		for _, line := range lines[1:] {
 			n += Printf(out, "\n%s%s%s", f.Prefix, f.Indent, line)
 		}
 	}
 	return int64(n), nil
+}
+
+func (f *KeyValueFormatter) Println(out io.Writer) int {
+	n, _ := f.WriteTo(out)
+	return int(n) + Println(out, "")
 }
 
 // String returns the formatted output string.
