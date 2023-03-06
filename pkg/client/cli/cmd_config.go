@@ -1,12 +1,10 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -17,16 +15,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func configCommand(ctx context.Context) *cobra.Command {
+func configCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "config",
 	}
-	cmd.AddCommand(configViewCommand(ctx))
+	cmd.AddCommand(configViewCommand())
 	return cmd
 }
 
-func configViewCommand(ctx context.Context) *cobra.Command {
-	var kubeFlags *pflag.FlagSet
+func configViewCommand() *cobra.Command {
 	var request *connect.Request
 
 	cmd := &cobra.Command{
@@ -35,14 +32,12 @@ func configViewCommand(ctx context.Context) *cobra.Command {
 		PersistentPreRunE: output.DefaultYAML,
 		Short:             "View current Telepresence configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request.KubeFlags = util.FlagMap(kubeFlags)
-			request.AddKubeconfigEnv()
-			cmd.SetContext(connect.WithRequest(cmd.Context(), request))
+			request.CommitFlags(cmd)
 			return configView(cmd, args)
 		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
-	request, kubeFlags = connect.InitRequest(ctx, cmd)
+	request = connect.InitRequest(cmd)
 	return cmd
 }
 

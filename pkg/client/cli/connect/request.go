@@ -9,19 +9,24 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
 type Request struct {
 	connector.ConnectRequest
 	Docker bool
+
+	// Request is created on-demand, not by InitRequest
+	Implicit    bool
+	kubeFlagSet *pflag.FlagSet
 }
 
 // InitRequest adds the networking flags and Kubernetes flags to the given command and
 // returns a Request and a FlagSet with the Kubernetes flags. The FlagSet is returned
 // here so that a map of flags that gets modified can be extracted using FlagMap once the flag
 // parsing has completed.
-func InitRequest(ctx context.Context, cmd *cobra.Command) (*Request, *pflag.FlagSet) {
+func InitRequest(cmd *cobra.Command) *Request {
 	cr := Request{}
 	flags := cmd.Flags()
 
@@ -44,22 +49,38 @@ func InitRequest(ctx context.Context, cmd *cobra.Command) (*Request, *pflag.Flag
 
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace
-	kubeFlags := pflag.NewFlagSet("Kubernetes flags", 0)
-	kubeConfig.AddFlags(kubeFlags)
-	flags.AddFlagSet(kubeFlags)
-	return &cr, kubeFlags
+	cr.KubeFlags = make(map[string]string)
+	cr.kubeFlagSet = pflag.NewFlagSet("Kubernetes flags", 0)
+	kubeConfig.AddFlags(cr.kubeFlagSet)
+	flags.AddFlagSet(cr.kubeFlagSet)
+	return &cr
 }
 
-func (cr *Request) AddKubeconfigEnv() {
+type requestKey struct{}
+
+func (cr *Request) CommitFlags(cmd *cobra.Command) {
+	cr.kubeFlagSet.VisitAll(func(flag *pflag.Flag) {
+		if flag.Changed {
+			var v string
+			if sv, ok := flag.Value.(pflag.SliceValue); ok {
+				v = slice.AsCSV(sv.GetSlice())
+			} else {
+				v = flag.Value.String()
+			}
+			cr.KubeFlags[flag.Name] = v
+		}
+	})
+	cr.addKubeconfigEnv()
+	cmd.SetContext(context.WithValue(cmd.Context(), requestKey{}, cr))
+}
+
+func (cr *Request) addKubeconfigEnv() {
 	// Certain options' default are bound to the connector daemon process; this is notably true of the kubeconfig file(s) to use,
 	// and since those files can be specified, both as a --kubeconfig flag and in the KUBECONFIG setting, and since the flag won't
 	// accept multiple path entries, we need to pass the environment setting to the connector daemon so that it can set it every
 	// time it receives a new config.
 	addEnv := func(key string) {
 		if cfg, ok := os.LookupEnv(key); ok {
-			if cr.KubeFlags == nil {
-				cr.KubeFlags = make(map[string]string)
-			}
 			cr.KubeFlags[key] = cfg
 		}
 	}
@@ -78,4 +99,15 @@ func GetRequest(ctx context.Context) *Request {
 		return cr
 	}
 	return nil
+}
+
+func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) context.Context {
+	cr := Request{
+		ConnectRequest: connector.ConnectRequest{
+			KubeFlags: make(map[string]string),
+		},
+		Implicit: true,
+	}
+	cr.addKubeconfigEnv()
+	return context.WithValue(ctx, requestKey{}, &cr)
 }

@@ -89,13 +89,13 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	cr := connect.GetRequest(ctx)
 	conn, err := socket.Dial(ctx, socket.ConnectorName)
 	if err == nil {
-		if cr != nil && cr.Docker {
+		if cr.Docker {
 			return nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
 		}
 		return newUserDaemon(conn, false), nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, errcat.NoDaemonLogs.New(err)
 	}
 
 	// Check if a running daemon can be discovered.
@@ -108,11 +108,11 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 		return newUserDaemon(conn, true), nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	if cr != nil && cr.Docker {
+	if cr.Docker {
 		if required {
-			conn, err = docker.LaunchDaemon(ctx, name, cr.KubeFlags["KUBECONFIG"])
+			conn, err = docker.LaunchDaemon(ctx, name)
 			if err != nil {
 				return nil, err
 			}
@@ -127,13 +127,13 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 
 	fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")
 	if _, err = ensureAppUserConfigDir(ctx); err != nil {
-		return nil, err
+		return nil, errcat.NoDaemonLogs.New(err)
 	}
 	if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
-		return nil, fmt.Errorf("failed to launch the connector service: %w", err)
+		return nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 	}
 	if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {
-		return nil, fmt.Errorf("connector service did not start: %w", err)
+		return nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
 	}
 	conn, err = socket.Dial(ctx, socket.ConnectorName)
 	if err != nil {
@@ -147,9 +147,9 @@ func daemonName(ctx context.Context) (string, error) {
 	if cr := connect.GetRequest(ctx); cr != nil {
 		flags = cr.KubeFlags
 	}
-	contextName, _, err := client.CurrentContext(ctx, flags)
+	contextName, _, err := client.CurrentContext(flags)
 	if err != nil {
-		return "", fmt.Errorf("failed to establish what Kubernetes context to use: %w", err)
+		return "", err
 	}
 	return contextName, nil
 }
@@ -218,22 +218,41 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Request, required bool) (*Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
-	if request == nil {
+	cat := errcat.Unknown
+	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
-		ci, err = userD.Status(ctx, &empty.Empty{})
-	} else {
-		if !required {
-			return nil, nil
+		if ci, err = userD.Status(ctx, &empty.Empty{}); err != nil {
+			return nil, err
 		}
-		request.AddKubeconfigEnv()
-		ci, err = userD.Connect(ctx, &request.ConnectRequest)
+		switch ci.Error {
+		case connector.ConnectInfo_ALREADY_CONNECTED:
+			if cc, ok := request.KubeFlags["context"]; ok && cc != ci.ClusterContext {
+				ci.Error = connector.ConnectInfo_MUST_RESTART
+			} else {
+				return &Session{
+					UserDaemon: *userD,
+					Info:       ci,
+					Started:    true,
+				}, nil
+			}
+		case connector.ConnectInfo_DISCONNECTED:
+			// proceed with connect
+		default:
+			if ci.ErrorCategory != 0 {
+				cat = errcat.Category(ci.ErrorCategory)
+			}
+			return nil, cat.Newf("connector.Status: %s", ci.Error)
+		}
 	}
-	if err != nil {
+
+	if !required {
+		return nil, nil
+	}
+	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err
 	}
 
 	var msg string
-	cat := errcat.Unknown
 	switch ci.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
 		fmt.Fprintf(output.Info(ctx), "Connected to context %s (%s)\n", ci.ClusterContext, ci.ClusterServer)
@@ -248,19 +267,9 @@ func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Req
 			Info:       ci,
 			Started:    false,
 		}, nil
-	case connector.ConnectInfo_DISCONNECTED:
-		if !required {
-			return nil, nil
-		}
-		if request != nil {
-			return nil, ErrNoTrafficManager
-		}
-		// The attempt is implicit, i.e. caused by direct invocation of another command without a
-		// prior call to connect. So we make it explicit here without flags
-		return connectSession(ctx, userD, &connect.Request{}, required)
 	case connector.ConnectInfo_MUST_RESTART:
 		msg = "Cluster configuration changed, please quit telepresence and reconnect"
-	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_DAEMON_FAILED:
+	default:
 		msg = ci.ErrorText
 		if ci.ErrorCategory != 0 {
 			cat = errcat.Category(ci.ErrorCategory)

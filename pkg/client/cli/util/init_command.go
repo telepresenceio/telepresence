@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 )
 
 type userDaemonKey struct{}
@@ -50,6 +51,9 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 		as[ann.VersionCheck] = ann.Required
 	}
 	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
+		if cr := connect.GetRequest(ctx); cr == nil {
+			ctx = connect.WithDefaultRequest(ctx, cmd)
+		}
 		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
 			if v == ann.Optional && err == ErrNoUserDaemon {
 				// This is OK, but further initialization is not possible

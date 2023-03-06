@@ -266,14 +266,7 @@ func (s *session) GetSessionConfig() *client.Config {
 
 // connectCluster returns a configured cluster instance.
 func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
-	var config *client.Kubeconfig
-	var err error
-	if cr.IsPodDaemon {
-		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
-	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
-	}
-
+	config, err := client.DaemonKubeconfig(c, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -850,13 +843,7 @@ func (s *session) remain(c context.Context) error {
 }
 
 func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	var config *client.Kubeconfig
-	var err error
-	if cr.IsPodDaemon {
-		config, err = client.NewInClusterConfig(c, cr.KubeFlags)
-	} else {
-		config, err = client.NewKubeconfig(c, cr.KubeFlags, cr.ManagerNamespace)
-	}
+	config, err := client.DaemonKubeconfig(c, cr)
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}

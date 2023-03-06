@@ -18,11 +18,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func helmCommand(ctx context.Context) *cobra.Command {
+func helmCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
-	cmd.AddCommand(helmInstallCommand(ctx), helmUpgradeCommand(ctx), helmUninstallCommand(ctx))
+	cmd.AddCommand(helmInstallCommand(), helmUpgradeCommand(), helmUninstallCommand())
 	return cmd
 }
 
@@ -33,7 +33,6 @@ type HelmOpts struct {
 	ResetValues bool
 	Request     *connect.Request
 	cmdType     connector.HelmRequest_Type
-	kubeFlags   *pflag.FlagSet
 	CRDs        bool
 }
 
@@ -43,7 +42,7 @@ var (
 	HelmInstallPrologFunc      func(context.Context, *pflag.FlagSet, *HelmOpts) error //nolint:gochecknoglobals // extension point
 )
 
-func helmInstallCommand(ctx context.Context) *cobra.Command {
+func helmInstallCommand() *cobra.Command {
 	var upgrade bool
 
 	ha := &HelmOpts{
@@ -72,11 +71,11 @@ func helmInstallCommand(ctx context.Context) *cobra.Command {
 	uf := flags.Lookup("upgrade")
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
-	ha.Request, ha.kubeFlags = connect.InitRequest(ctx, cmd)
+	ha.Request = connect.InitRequest(cmd)
 	return cmd
 }
 
-func helmUpgradeCommand(ctx context.Context) *cobra.Command {
+func helmUpgradeCommand() *cobra.Command {
 	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_UPGRADE,
 	}
@@ -98,7 +97,7 @@ func helmUpgradeCommand(ctx context.Context) *cobra.Command {
 		"when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
-	ha.Request, ha.kubeFlags = connect.InitRequest(ctx, cmd)
+	ha.Request = connect.InitRequest(cmd)
 	return cmd
 }
 
@@ -124,7 +123,7 @@ func (ha *HelmOpts) addCRDsFlags(flags *pflag.FlagSet) {
 	}
 }
 
-func helmUninstallCommand(ctx context.Context) *cobra.Command {
+func helmUninstallCommand() *cobra.Command {
 	ha := &HelmOpts{
 		cmdType: connector.HelmRequest_UNINSTALL,
 	}
@@ -139,7 +138,7 @@ func helmUninstallCommand(ctx context.Context) *cobra.Command {
 		},
 	}
 	ha.addCRDsFlags(cmd.Flags())
-	ha.Request, ha.kubeFlags = connect.InitRequest(ctx, cmd)
+	ha.Request = connect.InitRequest(cmd)
 	return cmd
 }
 
@@ -155,13 +154,12 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	if ha.AllValues, err = ha.MergeValues(getter.All(cli.New())); err != nil {
 		return err
 	}
+	ha.Request.CommitFlags(cmd)
+
 	flags := cmd.Flags()
 	if err = util.InitCommand(cmd); err != nil {
 		return err
 	}
-	ha.Request.KubeFlags = util.FlagMap(ha.kubeFlags)
-
-	ha.Request.AddKubeconfigEnv()
 
 	ctx := cmd.Context()
 	if HelmInstallPrologFunc != nil {

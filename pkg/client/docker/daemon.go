@@ -20,6 +20,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -51,7 +52,7 @@ func EnsureNetwork(ctx context.Context, name string) {
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
-func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]string, *net.TCPAddr, error) {
+func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, error) {
 	tpConfig, err := filelocation.AppUserConfigDir(ctx)
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
@@ -64,6 +65,8 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
+	cr := connect.GetRequest(ctx)
+	kubeConfig := cr.KubeFlags["KUBECONFIG"]
 	if kubeConfig == "" {
 		kubeConfig = clientcmd.RecommendedHomeFile
 	}
@@ -81,7 +84,7 @@ func DaemonOptions(ctx context.Context, name string, kubeConfig string) ([]strin
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
 		"-p", fmt.Sprintf("%s:%d", addr, port),
-		"-v", fmt.Sprintf("%s:/root/.kube/config", kubeConfig),
+		"-v", fmt.Sprintf("%s:/root/.kube/config", kubeConfig), // TODO: handle the case when KUBECONFIG contains multiple paths
 		"-v", fmt.Sprintf("%s:%s:ro", tpConfig, dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", tpCache, dockerTpCache),
 		"-v", fmt.Sprintf("%s:%s", tpLog, dockerTpLog),
@@ -151,7 +154,7 @@ func PullImage(ctx context.Context, image string) error {
 // LaunchDaemon ensures that the image returned by ClientImage exists by calling PullImage. It then uses the
 // options DaemonOptions and DaemonArgs to start the image, and finally ConnectDaemon to connect to it. A
 // successful start yields a cache.DaemonInfo entry in the cache.
-func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.ClientConn, err error) {
+func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err error) {
 	if proc.RunningInContainer() {
 		return nil, errors.New("unable to start a docker container from within a container")
 	}
@@ -164,7 +167,7 @@ func LaunchDaemon(ctx context.Context, name, kubeconfig string) (conn *grpc.Clie
 		return nil, err
 	}
 	EnsureNetwork(ctx, "telepresence")
-	opts, addr, err := DaemonOptions(ctx, name, kubeconfig)
+	opts, addr, err := DaemonOptions(ctx, name)
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}

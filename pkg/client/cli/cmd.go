@@ -243,13 +243,13 @@ func Command(ctx context.Context) *cobra.Command {
 
 func WithSubCommands(ctx context.Context) context.Context {
 	return util.AddSubCommands(ctx,
-		connectCommand(ctx), statusCommand(), quitCommand(),
+		connectCommand(), statusCommand(), quitCommand(),
 		listCommand(), intercept.LeaveCommand(), intercept.Command(),
-		helmCommand(ctx), uninstallCommand(),
+		helmCommand(), uninstallCommand(),
 		loglevelCommand(), gatherLogsCommand(),
 		GatherTracesCommand(), PushTracesCommand(),
 		versionCommand(), ClusterIdCommand(), genYAMLCommand(), vpnDiagCommand(),
-		configCommand(ctx),
+		configCommand(),
 	)
 }
 

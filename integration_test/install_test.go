@@ -364,10 +364,10 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, 
 
 func (is *installSuite) cluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster) {
 	require := is.Require()
+	_ = os.Setenv("KUBECONFIG", itest.KubeConfig(ctx))
 	cfgAndFlags, err := client.NewKubeconfig(ctx, map[string]string{
-		"KUBECONFIG": itest.KubeConfig(ctx),
-		"context":    context,
-		"namespace":  managerNamespace,
+		"context":   context,
+		"namespace": managerNamespace,
 	}, managerNamespace)
 	require.NoError(err)
 	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
