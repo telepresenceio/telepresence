@@ -26,7 +26,7 @@ func InitRequest(ctx context.Context, cmd *cobra.Command) (*Request, *pflag.Flag
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
-	nwFlags.BoolVar(&cr.Docker, "docker", docker.RunningInContainer(), "Start, or connect to, daemon in a docker container")
+	nwFlags.BoolVar(&cr.Docker, "docker", proc.RunningInContainer(), "Start, or connect to, daemon in a docker container")
 	nwFlags.StringSliceVar(&cr.MappedNamespaces,
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+

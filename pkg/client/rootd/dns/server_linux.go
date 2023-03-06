@@ -17,9 +17,9 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -27,7 +27,7 @@ import (
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
 func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, configureDNS func(net.IP, *net.UDPAddr)) error {
-	if !proxyCluster || docker.RunningInContainer() {
+	if !proxyCluster || proc.RunningInContainer() {
 		// Don't bother with systemd-resolved when running in a docker container
 		return s.runOverridingServer(c, dev, proxyCluster)
 	}
@@ -179,7 +179,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, proxyClu
 		return s.Run(c, serverStarted, listeners, pool, s.resolveInSearch, proxyCluster)
 	})
 
-	if docker.RunningInContainer() {
+	if proc.RunningInContainer() {
 		g.Go("Local DNS", func(c context.Context) error {
 			select {
 			case <-c.Done():
@@ -232,7 +232,7 @@ func (s *Server) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 		return nil, err
 	}
 	listeners := []net.PacketConn{listener}
-	if docker.RunningInContainer() {
+	if proc.RunningInContainer() {
 		// Inside docker. Don't add docker bridge
 		return listeners, nil
 	}
