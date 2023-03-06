@@ -8,7 +8,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-const KubeConfigStubBinaryName = "server"
+const KubeConfigStubBinaryName = "authenticator"
 
 // GenerateTempKubeConfigStubFile go through the kubeconfig file and replace all users using the Exec auth method by
 // an invocation of the stub binary.
