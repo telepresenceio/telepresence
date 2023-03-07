@@ -18,7 +18,7 @@ func CommandContext(ctx context.Context, name string, args ...string) *dexec.Cmd
 	return cmd
 }
 
-func startInBackground(args ...string) error {
+func startInBackground(_ bool, args ...string) error {
 	return shellExec("open", args[0], args[1:]...)
 }
 

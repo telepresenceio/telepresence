@@ -87,8 +87,8 @@ func Run(ctx context.Context, env map[string]string, exe string, args ...string)
 	return Wait(ctx, cancel, cmd)
 }
 
-func StartInBackground(args ...string) error {
-	return startInBackground(args...)
+func StartInBackground(includeEnv bool, args ...string) error {
+	return startInBackground(includeEnv, args...)
 }
 
 func StartInBackgroundAsRoot(ctx context.Context, args ...string) error {
