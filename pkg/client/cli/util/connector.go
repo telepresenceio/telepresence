@@ -219,9 +219,8 @@ func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Req
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote {
-		// We never pass on KUBECONFIG or --kubeconfig to a remote daemon.
+		// We never pass on KUBECONFIG to a remote daemon.
 		delete(request.KubeFlags, "KUBECONFIG")
-		delete(request.KubeFlags, "kubeconfig")
 	}
 	cat := errcat.Unknown
 	if request.Implicit {
@@ -252,6 +251,11 @@ func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Req
 
 	if !required {
 		return nil, nil
+	}
+	if userD.Remote {
+		if err = docker.EnableK8SAuthenticator(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err
