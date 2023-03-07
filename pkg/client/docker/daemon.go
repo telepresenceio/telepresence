@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -88,6 +89,9 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 		"-v", fmt.Sprintf("%s:%s:ro", tpConfig, dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", tpCache, dockerTpCache),
 		"-v", fmt.Sprintf("%s:%s", tpLog, dockerTpLog),
+	}
+	if runtime.GOOS == "linux" {
+		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
 	}
 	env := client.GetEnv(ctx)
 	if env.ScoutDisable {
