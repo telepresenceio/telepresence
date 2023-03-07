@@ -25,9 +25,10 @@ func ReplaceAuthExecWithStub(rawConfig *clientcmdapi.Config, address string) err
 
 		// Patch exec.
 		authInfo.Exec = &clientcmdapi.ExecConfig{
-			APIVersion: authInfo.Exec.APIVersion,
-			Command:    KubeConfigStubBinaryName,
-			Args:       []string{contextName, address},
+			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
+			APIVersion:      authInfo.Exec.APIVersion,
+			Command:         KubeConfigStubBinaryName,
+			Args:            []string{contextName, address},
 		}
 	}
 	return nil
