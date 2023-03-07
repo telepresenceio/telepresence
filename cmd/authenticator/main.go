@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -16,18 +15,10 @@ import (
 
 func main() {
 	cmd := &cobra.Command{
-		Use:  "authenticator [contextName]",
-		Args: cobra.ExactArgs(1),
+		Use:  "authenticator <contextName> <address>",
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			address := os.Getenv("AUTHENTICATOR_ADDR")
-			portEnv := os.Getenv("AUTHENTICATOR_PORT")
-
-			port, err := strconv.Atoi(portEnv)
-			if err != nil {
-				return fmt.Errorf("failed to convert port value: %s", portEnv)
-			}
-
-			if err := authenticateContext(cmd.Context(), args[0], address, port); err != nil {
+			if err := authenticateContext(cmd.Context(), args[0], args[1]); err != nil {
 				return fmt.Errorf("failed to authenticate context %s: %w", args[0], err)
 			}
 			return nil
@@ -38,8 +29,8 @@ func main() {
 	}
 }
 
-func authenticateContext(ctx context.Context, contextName, serverAddr string, port int) error {
-	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", serverAddr, port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+func authenticateContext(ctx context.Context, contextName, serverAddr string) error {
+	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return fmt.Errorf("failed to dial GRPC server: %w", err)
 	}
