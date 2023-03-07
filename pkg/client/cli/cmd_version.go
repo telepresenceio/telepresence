@@ -40,39 +40,46 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	}
 	kvf := ioutil.DefaultKeyValueFormatter()
 	kvf.Add(client.DisplayName, client.Version())
-
 	ctx := cmd.Context()
-	version, err := daemonVersion(ctx)
-	switch {
-	case err == nil:
-		kvf.Add(version.Name, version.Version)
-	case err == util.ErrNoRootDaemon:
-		kvf.Add("Root Daemon", "not running")
-	default:
-		kvf.Add("Root Daemon", fmt.Sprintf("error: %v", err))
+
+	remote := false
+	userD := util.GetUserDaemon(ctx)
+	if userD != nil {
+		remote = userD.Remote
 	}
 
-	version, err = connectorVersion(ctx)
-	switch {
-	case err == nil:
-		kvf.Add(version.Name, version.Version)
-		version, err = managerVersion(ctx)
+	if !remote {
+		version, err := daemonVersion(ctx)
 		switch {
 		case err == nil:
 			kvf.Add(version.Name, version.Version)
-		case status.Code(err) == codes.Unavailable:
-			kvf.Add("Traffic Manager", "not connected")
+		case err == util.ErrNoRootDaemon:
+			kvf.Add("Root Daemon", "not running")
 		default:
-			kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
+			kvf.Add("Root Daemon", fmt.Sprintf("error: %v", err))
 		}
-	case err == util.ErrNoUserDaemon:
-		kvf.Add("User Daemon", "not running")
-	default:
-		kvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
 	}
-	out := cmd.OutOrStdout()
-	_, _ = kvf.WriteTo(out)
-	ioutil.WriteString(out, "\n")
+
+	if userD != nil {
+		version, err := userD.Version(ctx, &empty.Empty{})
+		if err == nil {
+			kvf.Add(version.Name, version.Version)
+			version, err = managerVersion(ctx)
+			switch {
+			case err == nil:
+				kvf.Add(version.Name, version.Version)
+			case status.Code(err) == codes.Unavailable:
+				kvf.Add("Traffic Manager", "not connected")
+			default:
+				kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
+			}
+		} else {
+			kvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
+		}
+	} else {
+		kvf.Add("User Daemon", "not running")
+	}
+	kvf.Println(cmd.OutOrStdout())
 	return nil
 }
 
@@ -82,13 +89,6 @@ func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 		return daemon.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}
 	return nil, util.ErrNoRootDaemon
-}
-
-func connectorVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if userD := util.GetUserDaemon(ctx); userD != nil {
-		return userD.Version(ctx, &empty.Empty{})
-	}
-	return nil, util.ErrNoUserDaemon
 }
 
 func managerVersion(ctx context.Context) (*common.VersionInfo, error) {

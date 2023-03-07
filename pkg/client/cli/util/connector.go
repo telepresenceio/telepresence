@@ -218,6 +218,11 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Request, required bool) (*Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
+	if userD.Remote {
+		// We never pass on KUBECONFIG or --kubeconfig to a remote daemon.
+		delete(request.KubeFlags, "KUBECONFIG")
+		delete(request.KubeFlags, "kubeconfig")
+	}
 	cat := errcat.Unknown
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.

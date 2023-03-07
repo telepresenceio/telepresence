@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 func InitContext(ctx context.Context) context.Context {
@@ -28,7 +29,11 @@ func InitContext(ctx context.Context) context.Context {
 	ctx = client.WithEnv(ctx, env)
 	switch client.ProcessName() {
 	case userd.ProcessName:
-		client.DisplayName = "OSS User Daemon"
+		if proc.RunningInContainer() {
+			client.DisplayName = "OSS Daemon in container"
+		} else {
+			client.DisplayName = "OSS User Daemon"
+		}
 		ctx = userd.WithNewServiceFunc(ctx, userDaemon.NewService)
 		ctx = userd.WithNewSessionFunc(ctx, trafficmgr.NewSession)
 	case rootd.ProcessName:

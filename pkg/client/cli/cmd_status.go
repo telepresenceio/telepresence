@@ -2,7 +2,9 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -18,6 +20,11 @@ import (
 )
 
 type StatusInfo struct {
+	RootDaemon io.WriterTo `json:"root_daemon" yaml:"root_daemon"`
+	UserDaemon io.WriterTo `json:"user_daemon" yaml:"user_daemon"`
+}
+
+type StatusInfoEmbedded struct {
 	RootDaemon io.WriterTo `json:"root_daemon" yaml:"root_daemon"`
 	UserDaemon io.WriterTo `json:"user_daemon" yaml:"user_daemon"`
 }
@@ -111,16 +118,28 @@ var GetStatusInfo = BasicGetStatusInfo //nolint:gochecknoglobals // extension po
 func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	rs := rootDaemonStatus{}
 	us := userDaemonStatus{}
-	si := &StatusInfo{
-		RootDaemon: &rs,
-		UserDaemon: &us,
-	}
 	userD := util.GetUserDaemon(ctx)
 	if userD == nil {
-		return si, nil
+		return &StatusInfo{
+			RootDaemon: &rs,
+			UserDaemon: &us,
+		}, nil
+	}
+	var wt ioutil.WriterTos
+	if userD.Remote {
+		sie := StatusInfoEmbedded{
+			RootDaemon: &rs,
+			UserDaemon: &us,
+		}
+		wt = &sie
+	} else {
+		si := StatusInfo{
+			RootDaemon: &rs,
+			UserDaemon: &us,
+		}
+		wt = &si
 	}
 	reporter := scout.NewReporter(ctx, "cli")
-	si.UserDaemon = &us
 	us.InstallID = reporter.InstallID()
 	us.Running = true
 	version, err := userD.Version(ctx, &empty.Empty{})
@@ -129,7 +148,11 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	}
 	us.Name = version.Name
 	if us.Name == "" {
-		us.Name = "User Daemon"
+		if userD.Remote {
+			us.Name = "Daemon"
+		} else {
+			us.Name = "User Daemon"
+		}
 	}
 	us.Version = version.Version
 	us.APIVersion = version.ApiVersion
@@ -168,7 +191,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		rs.Running = true
 		rs.Name = rStatus.Version.Name
 		if rs.Name == "" {
-			rs.Name = "User Daemon"
+			rs.Name = "Root Daemon"
 		}
 		rs.Version = rStatus.Version.Version
 		rs.APIVersion = rStatus.Version.ApiVersion
@@ -192,74 +215,125 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 			}
 		}
 	}
-	return si, nil
+	return wt, nil
 }
 
 func (s *StatusInfo) WriterTos() []io.WriterTo {
 	return []io.WriterTo{s.UserDaemon, s.RootDaemon}
 }
 
+func (s *StatusInfoEmbedded) WriterTos() []io.WriterTo {
+	return []io.WriterTo{s}
+}
+
+func (s *StatusInfoEmbedded) WriteTo(out io.Writer) (int64, error) {
+	n := 0
+	cs := s.UserDaemon.(*userDaemonStatus)
+	if cs.Running {
+		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
+		kvf := ioutil.DefaultKeyValueFormatter()
+		kvf.Prefix = "  "
+		kvf.Indent = "  "
+		cs.print(kvf)
+		if rs, ok := s.RootDaemon.(*rootDaemonStatus); ok && rs.Running {
+			rs.printNetwork(kvf)
+		}
+		n += kvf.Println(out)
+	} else {
+		n += ioutil.Println(out, "Daemon: Not running")
+	}
+	return int64(n), nil
+}
+
 func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ds.Running {
 		n += ioutil.Printf(out, "%s: Running\n", ds.Name)
-		n += ioutil.Printf(out, "  Version    : %s\n", ds.Version)
-		if ds.DNS != nil {
-			n += printDNS(out, ds.DNS)
-		}
-		if ds.RoutingSnake != nil {
-			n += printRouting(out, ds.RoutingSnake)
-		}
+		kvf := ioutil.DefaultKeyValueFormatter()
+		kvf.Prefix = "  "
+		kvf.Indent = "  "
+		kvf.Add("Version", ds.Version)
+		ds.printNetwork(kvf)
+		n += kvf.Println(out)
 	} else {
 		n += ioutil.Println(out, "Root Daemon: Not running")
 	}
 	return int64(n), nil
 }
 
-func printDNS(out io.Writer, d *client.DNSSnake) int {
-	n := ioutil.Printf(out, "  DNS        :\n")
-	if len(d.LocalIP) > 0 {
-		n += ioutil.Printf(out, "    Local IP        : %v\n", d.LocalIP)
+func (ds *rootDaemonStatus) printNetwork(kvf *ioutil.KeyValueFormatter) {
+	kvf.Add("Version", ds.Version)
+	if ds.DNS != nil {
+		printDNS(kvf, ds.DNS)
 	}
-	n += ioutil.Printf(out, "    Remote IP       : %v\n", d.RemoteIP)
-	n += ioutil.Printf(out, "    Exclude suffixes: %v\n", d.ExcludeSuffixes)
-	n += ioutil.Printf(out, "    Include suffixes: %v\n", d.IncludeSuffixes)
-	n += ioutil.Printf(out, "    Timeout         : %v\n", d.LookupTimeout)
-	return n
+	if ds.RoutingSnake != nil {
+		printRouting(kvf, ds.RoutingSnake)
+	}
 }
 
-func printRouting(out io.Writer, r *client.RoutingSnake) int {
-	n := ioutil.Printf(out, "  Also Proxy : (%d subnets)\n", len(r.AlsoProxy))
-	for _, subnet := range r.AlsoProxy {
-		n += ioutil.Printf(out, "    - %s\n", subnet)
+func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
+	dnsKvf := ioutil.DefaultKeyValueFormatter()
+	kvf.Indent = "  "
+	if len(d.LocalIP) > 0 {
+		dnsKvf.Add("Local IP", d.LocalIP.String())
 	}
-	n += ioutil.Printf(out, "  Never Proxy: (%d subnets)\n", len(r.NeverProxy))
-	for _, subnet := range r.NeverProxy {
-		n += ioutil.Printf(out, "    - %s\n", subnet)
+	if len(d.RemoteIP) > 0 {
+		dnsKvf.Add("Remote IP", d.RemoteIP.String())
 	}
-	return n
+	dnsKvf.Add("Exclude suffixes", fmt.Sprintf("%v", d.ExcludeSuffixes))
+	dnsKvf.Add("Include suffixes", fmt.Sprintf("%v", d.IncludeSuffixes))
+	dnsKvf.Add("Timeout", fmt.Sprintf("%v", d.LookupTimeout))
+	kvf.Add("DNS", "\n"+dnsKvf.String())
+}
+
+func printRouting(kvf *ioutil.KeyValueFormatter, r *client.RoutingSnake) {
+	printSubnets := func(title string, subnets []*iputil.Subnet) {
+		out := &strings.Builder{}
+		fmt.Fprintf(out, "(%d subnets)", len(subnets))
+		for _, subnet := range subnets {
+			ioutil.Printf(out, "\n- %s", subnet)
+		}
+		kvf.Add(title, out.String())
+	}
+	printSubnets("Also Proxy", r.AlsoProxy)
+	printSubnets("Never Proxy", r.NeverProxy)
 }
 
 func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if cs.Running {
 		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
-		n += ioutil.Printf(out, "  Version           : %s\n", cs.Version)
-		n += ioutil.Printf(out, "  Executable        : %s\n", cs.Executable)
-		n += ioutil.Printf(out, "  Install ID        : %s\n", cs.InstallID)
-		n += ioutil.Printf(out, "  Status            : %s\n", cs.Status)
-		if cs.Error != "" {
-			n += ioutil.Printf(out, "  Error             : %s\n", cs.Error)
-		}
-		n += ioutil.Printf(out, "  Kubernetes server : %s\n", cs.KubernetesServer)
-		n += ioutil.Printf(out, "  Kubernetes context: %s\n", cs.KubernetesContext)
-		n += ioutil.Printf(out, "  Manager namespace : %s\n", cs.ManagerNamespace)
-		n += ioutil.Printf(out, "  Intercepts        : %d total\n", len(cs.Intercepts))
-		for _, intercept := range cs.Intercepts {
-			n += ioutil.Printf(out, "    %s: %s\n", intercept.Name, intercept.Client)
-		}
+		kvf := ioutil.DefaultKeyValueFormatter()
+		kvf.Prefix = "  "
+		kvf.Indent = "  "
+		cs.print(kvf)
+		n += kvf.Println(out)
 	} else {
 		n += ioutil.Println(out, "User Daemon: Not running")
 	}
 	return int64(n), nil
+}
+
+func (cs *userDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
+	kvf.Add("Version", cs.Version)
+	kvf.Add("Executable", cs.Executable)
+	kvf.Add("Install ID", cs.InstallID)
+	kvf.Add("Status", cs.Status)
+	if cs.Error != "" {
+		kvf.Add("Error", cs.Error)
+	}
+	kvf.Add("Kubernetes server", cs.KubernetesServer)
+	kvf.Add("Kubernetes context", cs.KubernetesContext)
+	kvf.Add("Manager namespace", cs.ManagerNamespace)
+	out := &strings.Builder{}
+	fmt.Fprintf(out, "%d total\n", len(cs.Intercepts))
+	if len(cs.Intercepts) > 0 {
+		subKvf := ioutil.DefaultKeyValueFormatter()
+		subKvf.Indent = "  "
+		for _, intercept := range cs.Intercepts {
+			subKvf.Add(intercept.Name, intercept.Client)
+		}
+		subKvf.Println(out)
+	}
+	kvf.Add("Intercepts", out.String())
 }
