@@ -23,6 +23,7 @@ func main() {
 			}
 			return nil
 		},
+		SilenceUsage: true,
 	}
 	if err := cmd.Execute(); err != nil {
 		log.Fatal(err)
