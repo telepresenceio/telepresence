@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -80,7 +81,8 @@ func daemonInfoFiles(ctx context.Context) ([]fs.DirEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		if fi.ModTime().Add(keepAliveInterval + 200*time.Millisecond).Before(time.Now()) {
+		if fi.ModTime().Add(keepAliveInterval + 600*time.Millisecond).Before(time.Now()) {
+			dlog.Debugf(ctx, "Daemon cache %s has expired.", file.Name())
 			// File has gone stale
 			if err = DeleteFromUserCache(ctx, filepath.Join(daemonsDirName, file.Name())); err != nil {
 				return nil, err
