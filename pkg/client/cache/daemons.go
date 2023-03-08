@@ -14,8 +14,10 @@ import (
 )
 
 type DaemonInfo struct {
-	Options  map[string]string
-	InDocker bool
+	Options       map[string]string
+	InDocker      bool
+	KubeContext   string
+	DaemonAddress string
 }
 
 const (

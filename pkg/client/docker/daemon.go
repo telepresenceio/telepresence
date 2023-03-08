@@ -378,8 +378,10 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	case cid := <-cidFound: // Success, the daemon info file exists
 		err := cache.SaveDaemonInfo(ctx,
 			&cache.DaemonInfo{
-				Options:  map[string]string{"cid": cid},
-				InDocker: true,
+				Options:       map[string]string{"cid": cid},
+				InDocker:      true,
+				DaemonAddress: addr.String(),
+				KubeContext:   name,
 			}, cache.DaemonInfoFile(name, addr.Port))
 		if err != nil {
 			return nil, err
