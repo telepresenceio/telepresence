@@ -3,8 +3,8 @@ package docker
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -157,15 +157,23 @@ func PullImage(ctx context.Context, image string) error {
 
 const kubeAuthPortFile = kubeauth.CommandName + ".port"
 
-func readPortFile(portFile string) (uint16, error) {
+func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
 	pb, err := os.ReadFile(portFile)
 	if err != nil {
 		return 0, err
 	}
-	if len(pb) != 2 {
-		return 0, errors.New("port file did not contain the expected two bytes")
+	var p kubeauth.PortFile
+	err = json.Unmarshal(pb, &p)
+	if err == nil {
+		if p.Kubeconfig == strings.Join(configFiles, string(filepath.ListSeparator)) {
+			return uint16(p.Port), nil
+		}
+		dlog.Debug(ctx, "kubeconfig used by kubeauth is no longer valid")
 	}
-	return binary.BigEndian.Uint16(pb), nil
+	if err := os.Remove(portFile); err != nil {
+		return 0, err
+	}
+	return 0, os.ErrNotExist
 }
 
 func appendKubeFlags(kubeFlags map[string]string, args []string) ([]string, error) {
@@ -193,7 +201,7 @@ func appendKubeFlags(kubeFlags map[string]string, args []string) ([]string, erro
 	return args, nil
 }
 
-func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string) (uint16, error) {
+func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, error) {
 	// remove any stale port file
 	_ = os.Remove(portFile)
 
@@ -212,7 +220,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	defer cancel()
 	for ctx.Err() == nil {
 		dtime.SleepWithContext(ctx, 10*time.Millisecond)
-		port, err := readPortFile(portFile)
+		port, err := readPortFile(ctx, portFile, configFiles)
 		if err != nil {
 			if !os.IsNotExist(err) {
 				return 0, err
@@ -224,7 +232,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(), kubeauth.CommandName)
 }
 
-func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string) (uint16, error) {
+func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, error) {
 	tpCache, err := filelocation.AppUserCacheDir(ctx)
 	if err != nil {
 		return 0, err
@@ -236,10 +244,16 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 			return 0, err
 		}
 	} else if st.ModTime().Add(kubeauth.PortFileStaleTime).After(time.Now()) {
-		dlog.Debug(ctx, "kube authentication service found alive")
-		return readPortFile(portFile)
+		port, err := readPortFile(ctx, portFile, configFiles)
+		if err == nil {
+			dlog.Debug(ctx, "kubeauth service found alive and valid")
+			return port, nil
+		}
+		if !os.IsNotExist(err) {
+			return 0, err
+		}
 	}
-	return startAuthenticatorService(ctx, portFile, kubeFlags)
+	return startAuthenticatorService(ctx, portFile, kubeFlags, configFiles)
 }
 
 func EnableK8SAuthenticator(ctx context.Context) error {
@@ -248,7 +262,10 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	config, err := configFlags.ToRawKubeConfigLoader().RawConfig()
+	loader := configFlags.ToRawKubeConfigLoader()
+	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
+	dlog.Debugf(ctx, "config = %v", configFiles)
+	config, err := loader.RawConfig()
 	if err != nil {
 		return err
 	}
@@ -258,7 +275,7 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 	}
 
 	if patcher.NeedsStubbedExec(&config) {
-		port, err := ensureAuthenticatorService(ctx, cr.KubeFlags)
+		port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
 		if err != nil {
 			return err
 		}
