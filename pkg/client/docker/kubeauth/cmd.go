@@ -134,7 +134,7 @@ func (as *authService) keepPortFileAlive(ctx context.Context) error {
 }
 
 func (as *authService) watchFiles(ctx context.Context) error {
-	// If any of the files that the current kubeconfig uses changes, then we die
+	// If any of the files that the current kubeconfig uses change, then we die
 	files := as.configFiles
 
 	// If the portFile changes, then we die
@@ -161,7 +161,7 @@ func (as *authService) watchFiles(ctx context.Context) error {
 		return false
 	}
 	for dir := range dirs {
-		// Can't watch things that doesn't exist. We want to know if files in there change though.
+		// Can't watch things that don't exist. We want to know if files in there change though.
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
