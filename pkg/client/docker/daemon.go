@@ -3,24 +3,31 @@ package docker
 
 import (
 	"context"
+	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -65,11 +72,6 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
-	cr := connect.GetRequest(ctx)
-	kubeConfig := cr.KubeFlags["KUBECONFIG"]
-	if kubeConfig == "" {
-		kubeConfig = clientcmd.RecommendedHomeFile
-	}
 	as, err := dnet.FreePortsTCP(1)
 	if err != nil {
 		return nil, nil, err
@@ -84,10 +86,12 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
 		"-p", fmt.Sprintf("%s:%d", addr, port),
-		"-v", fmt.Sprintf("%s:/root/.kube/config", kubeConfig), // TODO: handle the case when KUBECONFIG contains multiple paths
 		"-v", fmt.Sprintf("%s:%s:ro", tpConfig, dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", tpCache, dockerTpCache),
 		"-v", fmt.Sprintf("%s:%s", tpLog, dockerTpLog),
+	}
+	if runtime.GOOS == "linux" {
+		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
 	}
 	env := client.GetEnv(ctx)
 	if env.ScoutDisable {
@@ -151,6 +155,157 @@ func PullImage(ctx context.Context, image string) error {
 	return cmd.Run()
 }
 
+const kubeAuthPortFile = kubeauth.CommandName + ".port"
+
+func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
+	pb, err := os.ReadFile(portFile)
+	if err != nil {
+		return 0, err
+	}
+	var p kubeauth.PortFile
+	err = json.Unmarshal(pb, &p)
+	if err == nil {
+		if p.Kubeconfig == strings.Join(configFiles, string(filepath.ListSeparator)) {
+			return uint16(p.Port), nil
+		}
+		dlog.Debug(ctx, "kubeconfig used by kubeauth is no longer valid")
+	}
+	if err := os.Remove(portFile); err != nil {
+		return 0, err
+	}
+	return 0, os.ErrNotExist
+}
+
+func appendKubeFlags(kubeFlags map[string]string, args []string) ([]string, error) {
+	for k, v := range kubeFlags {
+		switch k {
+		case "as-group":
+			// Multi valued
+			r := csv.NewReader(strings.NewReader(v))
+			gs, err := r.Read()
+			if err != nil {
+				return nil, err
+			}
+			for _, g := range gs {
+				args = append(args, "--"+k, g)
+			}
+		case "disable-compression", "insecure-skip-tls-verify":
+			// Boolean with false default.
+			if v != "false" {
+				args = append(args, "--"+k)
+			}
+		default:
+			args = append(args, "--"+k, v)
+		}
+	}
+	return args, nil
+}
+
+func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, error) {
+	// remove any stale port file
+	_ = os.Remove(portFile)
+
+	args := make([]string, 0, 4+len(kubeFlags)*2)
+	args = append(args, client.GetExe(), kubeauth.CommandName, "--portfile", portFile)
+	var err error
+	if args, err = appendKubeFlags(kubeFlags, args); err != nil {
+		return 0, err
+	}
+	if err := proc.StartInBackground(true, args...); err != nil {
+		return 0, err
+	}
+
+	// Wait for the new port file to emerge
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	for ctx.Err() == nil {
+		dtime.SleepWithContext(ctx, 10*time.Millisecond)
+		port, err := readPortFile(ctx, portFile, configFiles)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return 0, err
+			}
+			continue
+		}
+		return port, nil
+	}
+	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(), kubeauth.CommandName)
+}
+
+func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, error) {
+	tpCache, err := filelocation.AppUserCacheDir(ctx)
+	if err != nil {
+		return 0, err
+	}
+	portFile := filepath.Join(tpCache, kubeAuthPortFile)
+	st, err := os.Stat(portFile)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return 0, err
+		}
+	} else if st.ModTime().Add(kubeauth.PortFileStaleTime).After(time.Now()) {
+		port, err := readPortFile(ctx, portFile, configFiles)
+		if err == nil {
+			dlog.Debug(ctx, "kubeauth service found alive and valid")
+			return port, nil
+		}
+		if !os.IsNotExist(err) {
+			return 0, err
+		}
+	}
+	return startAuthenticatorService(ctx, portFile, kubeFlags, configFiles)
+}
+
+func EnableK8SAuthenticator(ctx context.Context) error {
+	cr := connect.GetRequest(ctx)
+	configFlags, err := client.ConfigFlags(cr.KubeFlags)
+	if err != nil {
+		return err
+	}
+	loader := configFlags.ToRawKubeConfigLoader()
+	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
+	dlog.Debugf(ctx, "config = %v", configFiles)
+	config, err := loader.RawConfig()
+	if err != nil {
+		return err
+	}
+	// Minify the config so that we only deal with the current context
+	if err = api.MinifyConfig(&config); err != nil {
+		return err
+	}
+
+	if patcher.NeedsStubbedExec(&config) {
+		port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
+		if err != nil {
+			return err
+		}
+		// Replace any auth exec with a stub
+		addr := fmt.Sprintf("host.docker.internal:%d", port)
+		if err := patcher.ReplaceAuthExecWithStub(&config, addr); err != nil {
+			return err
+		}
+	}
+
+	// Store the file using its context name under the <telepresence cache>/kube directory
+	const kubeConfigs = "kube"
+	kubeConfigFile := config.CurrentContext
+	tpCache, err := filelocation.AppUserCacheDir(ctx)
+	if err != nil {
+		return err
+	}
+	kubeConfigDir := filepath.Join(tpCache, kubeConfigs)
+	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
+		return err
+	}
+	if err = clientcmd.WriteToFile(config, filepath.Join(kubeConfigDir, kubeConfigFile)); err != nil {
+		return err
+	}
+
+	// Concatenate using "/". This will be used in linux
+	cr.KubeFlags["kubeconfig"] = fmt.Sprintf("%s/%s/%s", dockerTpCache, kubeConfigs, kubeConfigFile)
+	return nil
+}
+
 // LaunchDaemon ensures that the image returned by ClientImage exists by calling PullImage. It then uses the
 // options DaemonOptions and DaemonArgs to start the image, and finally ConnectDaemon to connect to it. A
 // successful start yields a cache.DaemonInfo entry in the cache.
@@ -166,6 +321,7 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	if err = PullImage(ctx, image); err != nil {
 		return nil, err
 	}
+
 	EnsureNetwork(ctx, "telepresence")
 	opts, addr, err := DaemonOptions(ctx, name)
 	if err != nil {

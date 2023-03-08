@@ -26,8 +26,11 @@ func isAdmin() bool {
 	return os.Geteuid() == 0
 }
 
-func startInBackground(args ...string) error {
+func startInBackground(includeEnv bool, args ...string) error {
 	cmd := exec.Command(args[0], args[1:]...)
+	if includeEnv {
+		cmd.Env = os.Environ()
+	}
 
 	// Ensure that the processes uses a process group of its own to prevent
 	// it getting affected by <ctrl-c> in the terminal
@@ -76,7 +79,7 @@ func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
 		args = append([]string{"sudo", "--non-interactive"}, args...)
 	}
 
-	return startInBackground(args...)
+	return startInBackground(false, args...)
 }
 
 func terminate(p *os.Process) error {

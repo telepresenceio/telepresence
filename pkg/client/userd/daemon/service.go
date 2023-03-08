@@ -220,6 +220,12 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, s.scout, cr)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 		cancel()
+		if s.rootSessionInProc {
+			// Simplified session management. The daemon handles one session, then exits.
+			s.sessionLock.Unlock()
+			_, _ = s.Quit(ctx, nil)
+			s.sessionLock.Lock()
+		}
 		return rsp
 	}
 

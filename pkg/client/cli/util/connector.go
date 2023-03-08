@@ -129,7 +129,7 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if _, err = ensureAppUserConfigDir(ctx); err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	if err = proc.StartInBackground(connectorDaemon, "connector-foreground"); err != nil {
+	if err = proc.StartInBackground(false, connectorDaemon, "connector-foreground"); err != nil {
 		return nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 	}
 	if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {
@@ -219,9 +219,8 @@ func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Req
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote {
-		// We never pass on KUBECONFIG or --kubeconfig to a remote daemon.
+		// We never pass on KUBECONFIG to a remote daemon.
 		delete(request.KubeFlags, "KUBECONFIG")
-		delete(request.KubeFlags, "kubeconfig")
 	}
 	cat := errcat.Unknown
 	if request.Implicit {
@@ -252,6 +251,11 @@ func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Req
 
 	if !required {
 		return nil, nil
+	}
+	if userD.Remote {
+		if err = docker.EnableK8SAuthenticator(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err

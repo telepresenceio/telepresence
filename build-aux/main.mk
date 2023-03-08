@@ -160,6 +160,11 @@ else
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 endif
 
+# Make local authenticator. This is for test only as it's really only intended to run from within a container
+.PHONY: authenticator
+authenticator:
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -o $(BINDIR)/$@ ./cmd/$@
+
 .PHONY: release-binary
 release-binary: $(TELEPRESENCE)
 	mkdir -p $(RELEASEDIR)
