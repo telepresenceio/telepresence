@@ -14,8 +14,10 @@ import (
 )
 
 type DaemonInfo struct {
-	Options  map[string]string
-	InDocker bool
+	Options     map[string]string `json:"options,omitempty"`
+	InDocker    bool              `json:"in_docker,omitempty"`
+	KubeContext string            `json:"kube_context,omitempty"`
+	DaemonPort  int               `json:"daemon_port,omitempty"`
 }
 
 const (
