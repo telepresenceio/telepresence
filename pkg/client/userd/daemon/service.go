@@ -23,12 +23,14 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -215,20 +217,37 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 		return s.session.UpdateStatus(s.sessionContext, cr)
 	}
 
+	// Obtain the kubeconfig from the request parameters so that we can determine
+	// what kubernetes context that will be used.
+	config, err := client.DaemonKubeconfig(ctx, cr)
+	if err != nil {
+		if s.rootSessionInProc {
+			s.quit()
+		}
+		dlog.Errorf(ctx, "Failed to obtain kubeconfig: %v", err)
+		return &rpc.ConnectInfo{
+			Error:         rpc.ConnectInfo_CLUSTER_FAILED,
+			ErrorText:     err.Error(),
+			ErrorCategory: int32(errcat.GetCategory(err)),
+		}
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = userd.WithService(ctx, si)
-	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, s.scout, cr)
+
+	if s.daemonAddress != nil {
+		go runAliveAndCancellation(ctx, cancel, config.Context, s.daemonAddress.Port)
+	}
+
+	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, s.scout, cr, config)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 		cancel()
 		if s.rootSessionInProc {
 			// Simplified session management. The daemon handles one session, then exits.
-			s.sessionLock.Unlock()
-			_, _ = s.Quit(ctx, nil)
-			s.sessionLock.Lock()
+			s.quit()
 		}
 		return rsp
 	}
-
 	s.session = session
 	s.sessionContext = userd.WithSession(ctx, session)
 	s.sessionCancel = func() {
@@ -254,7 +273,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 			s.sessionLock.Unlock()
 			wg.Done()
 		}()
-		if err := userd.RunSession(s.sessionContext, s.sessionCancel, session, s.daemonAddress); err != nil {
+		if err := userd.RunSession(s.sessionContext, session); err != nil {
 			if errors.Is(err, trafficmgr.ErrSessionExpired) {
 				// Session has expired. We need to cancel the owner session and reconnect
 				dlog.Info(ctx, "refreshing session")
@@ -270,10 +289,33 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 		}
 		if s.rootSessionInProc {
 			// Simplified session management. The daemon handles one session, then exits.
-			_, _ = s.Quit(ctx, nil)
+			s.quit()
 		}
 	}(cr)
 	return rsp
+}
+
+func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, name string, port int) {
+	daemonInfoFile := cache.DaemonInfoFile(name, port)
+	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	g.Go(fmt.Sprintf("info-kicker-%s-%d", name, port), func(ctx context.Context) error {
+		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
+		return cache.KeepDaemonInfoAlive(ctx, daemonInfoFile)
+	})
+	g.Go(fmt.Sprintf("info-watcher-%s-%d", name, port), func(ctx context.Context) error {
+		// Cancel the session if the daemon info file is removed.
+		return cache.WatchDaemonInfos(ctx, func(ctx context.Context) error {
+			ok, err := cache.DaemonInfoExists(ctx, daemonInfoFile)
+			if err == nil && !ok {
+				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
+				cancel()
+			}
+			return err
+		}, daemonInfoFile)
+	})
+	if err := g.Wait(); err != nil {
+		dlog.Error(ctx, err)
+	}
 }
 
 func (s *Service) cancelSessionReadLocked() {

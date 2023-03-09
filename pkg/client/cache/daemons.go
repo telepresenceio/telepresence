@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -82,8 +83,10 @@ func daemonInfoFiles(ctx context.Context) ([]fs.DirEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		if fi.ModTime().Add(keepAliveInterval + 200*time.Millisecond).Before(time.Now()) {
+		age := time.Since(fi.ModTime())
+		if age > keepAliveInterval+600*time.Millisecond {
 			// File has gone stale
+			dlog.Debugf(ctx, "Deleting stale info %s with age = %s", file.Name(), age)
 			if err = DeleteFromUserCache(ctx, filepath.Join(daemonsDirName, file.Name())); err != nil {
 				return nil, err
 			}
@@ -133,12 +136,14 @@ func KeepDaemonInfoAlive(ctx context.Context, file string) error {
 		if err := os.Chtimes(daemonFile, now, now); err != nil {
 			if os.IsNotExist(err) {
 				// File is removed, so stop trying to update its timestamps
+				dlog.Debugf(ctx, "Daemon info %s does not exist", file)
 				return nil
 			}
 			return fmt.Errorf("failed to update timestamp on %s: %w", daemonFile, err)
 		}
 		select {
 		case <-ctx.Done():
+			dlog.Debugf(ctx, "Deleting daemon info %s because context was cancelled", file)
 			_ = DeleteDaemonInfo(ctx, file)
 			return nil
 		case now = <-ticker.C:
