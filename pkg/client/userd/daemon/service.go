@@ -224,6 +224,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 		if s.rootSessionInProc {
 			s.quit()
 		}
+		dlog.Errorf(ctx, "Failed to obtain kubeconfig: %v", err)
 		return &rpc.ConnectInfo{
 			Error:         rpc.ConnectInfo_CLUSTER_FAILED,
 			ErrorText:     err.Error(),
@@ -306,6 +307,7 @@ func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, nam
 		return cache.WatchDaemonInfos(ctx, func(ctx context.Context) error {
 			ok, err := cache.DaemonInfoExists(ctx, daemonInfoFile)
 			if err == nil && !ok {
+				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
 				cancel()
 			}
 			return err
