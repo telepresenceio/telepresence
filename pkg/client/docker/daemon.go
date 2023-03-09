@@ -258,6 +258,7 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 
 func EnableK8SAuthenticator(ctx context.Context) error {
 	cr := connect.GetRequest(ctx)
+	dlog.Debugf(ctx, "kubeflags = %v", cr.KubeFlags)
 	configFlags, err := client.ConfigFlags(cr.KubeFlags)
 	if err != nil {
 		return err
@@ -269,10 +270,15 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// Minify the config so that we only deal with the current context
+
+	// Minify the config so that we only deal with the current context.
+	if cx := configFlags.Context; cx != nil && *cx != "" {
+		config.CurrentContext = *cx
+	}
 	if err = api.MinifyConfig(&config); err != nil {
 		return err
 	}
+	dlog.Debugf(ctx, "context = %v", config.CurrentContext)
 
 	if patcher.NeedsStubbedExec(&config) {
 		port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
