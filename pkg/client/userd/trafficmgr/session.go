@@ -149,12 +149,13 @@ func NewSession(
 	ctx context.Context,
 	sr *scout.Reporter,
 	cr *rpc.ConnectRequest,
+	config *client.Kubeconfig,
 ) (context.Context, userd.Session, *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 	sr.Report(ctx, "connect")
 
 	dlog.Info(ctx, "Connecting to k8s cluster...")
-	cluster, err := connectCluster(ctx, cr)
+	cluster, err := connectCluster(ctx, cr, config)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
@@ -265,12 +266,7 @@ func (s *session) GetSessionConfig() *client.Config {
 }
 
 // connectCluster returns a configured cluster instance.
-func connectCluster(c context.Context, cr *rpc.ConnectRequest) (*k8s.Cluster, error) {
-	config, err := client.DaemonKubeconfig(c, cr)
-	if err != nil {
-		return nil, err
-	}
-
+func connectCluster(c context.Context, cr *rpc.ConnectRequest, config *client.Kubeconfig) (*k8s.Cluster, error) {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
@@ -292,7 +288,11 @@ func DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
 		cr = &rpc.ConnectRequest{}
 	}
 
-	cluster, err := connectCluster(ctx, cr)
+	config, err := client.DaemonKubeconfig(ctx, cr)
+	if err != nil {
+		return err
+	}
+	cluster, err := connectCluster(ctx, cr, config)
 	if err != nil {
 		return err
 	}
@@ -309,7 +309,11 @@ func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
 		cr = &rpc.ConnectRequest{}
 	}
 
-	cluster, err := connectCluster(ctx, cr)
+	config, err := client.DaemonKubeconfig(ctx, cr)
+	if err != nil {
+		return err
+	}
+	cluster, err := connectCluster(ctx, cr, config)
 	if err != nil {
 		return err
 	}

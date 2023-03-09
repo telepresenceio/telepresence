@@ -2,8 +2,6 @@ package userd
 
 import (
 	"context"
-	"fmt"
-	"net"
 
 	"google.golang.org/grpc"
 	core "k8s.io/api/core/v1"
@@ -19,7 +17,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
@@ -96,7 +93,7 @@ type Session interface {
 	Done() <-chan struct{}
 }
 
-type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest) (context.Context, Session, *connector.ConnectInfo)
+type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.ConnectRequest, *client.Kubeconfig) (context.Context, Session, *connector.ConnectInfo)
 
 type newSessionKey struct{}
 
@@ -118,32 +115,11 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 //   - (3) listen on the appropriate local ports and forward them to the intercepted
 //     Services, and
 //   - (4) mount the appropriate remote volumes.
-func RunSession(c context.Context, cancel context.CancelFunc, s Session, daemonAddress *net.TCPAddr) error {
+func RunSession(c context.Context, s Session) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	if daemonAddress != nil {
-		setupAliveAndCancellation(cancel, s.GetContext(), daemonAddress.Port, g)
-	}
 	defer func() {
 		s.Epilog(c)
 	}()
 	s.StartServices(g)
 	return g.Wait()
-}
-
-func setupAliveAndCancellation(cancel context.CancelFunc, name string, port int, g *dgroup.Group) {
-	daemonInfoFile := cache.DaemonInfoFile(name, port)
-	g.Go(fmt.Sprintf("info-kicker-%s-%d", name, port), func(ctx context.Context) error {
-		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
-		return cache.KeepDaemonInfoAlive(ctx, daemonInfoFile)
-	})
-	g.Go(fmt.Sprintf("info-watcher-%s-%d", name, port), func(ctx context.Context) error {
-		// Cancel the session if the daemon info file is removed.
-		return cache.WatchDaemonInfos(ctx, func(ctx context.Context) error {
-			ok, err := cache.DaemonInfoExists(ctx, daemonInfoFile)
-			if err == nil && !ok {
-				cancel()
-			}
-			return err
-		}, daemonInfoFile)
-	})
 }
