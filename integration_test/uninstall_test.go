@@ -40,7 +40,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	// The telepresence-test-developer will not be able to uninstall everything
 	stdout = itest.TelepresenceOk(ctx, "helm", "uninstall")
 	defer s.installTelepresence(ctx)
-	itest.AssertQuitOutput(ctx, stdout)
+	s.Equal("Traffic Manager uninstalled successfully", stdout)
 
 	// Double check webhook agent is uninstalled
 	require.NoError(s.RolloutStatusWait(ctx, deployname))

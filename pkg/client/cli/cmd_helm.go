@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -15,7 +14,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func helmCommand() *cobra.Command {
@@ -156,26 +157,20 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	}
 	ha.Request.CommitFlags(cmd)
 
-	flags := cmd.Flags()
 	if err = util.InitCommand(cmd); err != nil {
 		return err
 	}
-
 	ctx := cmd.Context()
 	if HelmInstallPrologFunc != nil {
-		if err := HelmInstallPrologFunc(ctx, flags, ha); err != nil {
+		if err := HelmInstallPrologFunc(ctx, cmd.Flags(), ha); err != nil {
 			return err
 		}
 	}
-
-	// always disconnect to ensure that there is no active session.
-	_ = util.Disconnect(ctx, false)
 
 	valuesJSON, err := json.Marshal(ha.AllValues)
 	if err != nil {
 		return err
 	}
-	doQuit := false
 
 	request := &connector.HelmRequest{
 		Type:           ha.cmdType,
@@ -185,7 +180,14 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 		ConnectRequest: &ha.Request.ConnectRequest,
 		Crds:           ha.CRDs,
 	}
-	resp, err := util.GetUserDaemon(ctx).Helm(ctx, request)
+	ud := util.GetUserDaemon(ctx)
+	if ud.Remote && util.GetSession(ctx) == nil {
+		// This is needed here, because we never establish a session.
+		if err := docker.EnableK8SAuthenticator(ctx); err != nil {
+			return err
+		}
+	}
+	resp, err := ud.Helm(ctx, request)
 	if err != nil {
 		return err
 	}
@@ -200,7 +202,6 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	case connector.HelmRequest_UPGRADE:
 		msg = "upgraded"
 	case connector.HelmRequest_UNINSTALL:
-		doQuit = true
 		msg = "uninstalled"
 	}
 
@@ -209,10 +210,6 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 		updatedResource = "Telepresence CRDs"
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "\n%s %s successfully\n", updatedResource, msg)
-
-	if err == nil && doQuit {
-		err = util.Disconnect(cmd.Context(), true)
-	}
-	return err
+	ioutil.Printf(cmd.OutOrStdout(), "\n%s %s successfully\n", updatedResource, msg)
+	return nil
 }

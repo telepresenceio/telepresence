@@ -33,6 +33,7 @@ func (s *helmSuite) assertInjected(ctx context.Context, name, namespace string, 
 }
 
 func (s *helmSuite) injectPolicyTest(ctx context.Context, policy agentconfig.InjectPolicy) {
+	itest.TelepresenceOk(ctx, "quit", "-s")
 	namespace := fmt.Sprintf("%s-%s", strings.ToLower(policy.String()), s.Suffix())
 	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": namespace})
 	itest.CreateNamespaces(ctx, namespace)
@@ -86,7 +87,6 @@ func (s *helmSuite) injectPolicyTest(ctx context.Context, policy agentconfig.Inj
 
 func (s *helmSuite) TestInjectPolicy() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "quit", "-s")
 	defer func() {
 		itest.TelepresenceOk(ctx, "connect")
 	}()

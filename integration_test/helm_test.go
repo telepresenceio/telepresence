@@ -113,10 +113,12 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	})
 
 	s.Run("Uninstalls Successfully", func() {
+		defer itest.TelepresenceQuitOk(s.Context())
 		s.UninstallTrafficManager(s.Context(), s.mgrSpace2)
 	})
 }
 
 func (s *helmSuite) Test_CollidingInstalls() {
+	defer itest.TelepresenceQuitOk(s.Context())
 	s.Error(s.InstallTrafficManager(s.Context(), nil, s.mgrSpace2, s.AppNamespace(), s.appSpace2))
 }

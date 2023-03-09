@@ -42,7 +42,7 @@ func (h *helmAndService) setup(ctx context.Context) bool {
 }
 
 func (h *helmAndService) tearDown(ctx context.Context) {
-	TelepresenceOk(ctx, "quit")
+	TelepresenceQuitOk(ctx)
 	h.UninstallTrafficManager(ctx, h.ManagerNamespace())
 
 	// Helm uninstall does deletions asynchronously, which means the rbac might not be cleaned
