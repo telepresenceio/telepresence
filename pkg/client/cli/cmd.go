@@ -14,8 +14,8 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 const (
@@ -187,7 +187,7 @@ func PerhapsLegacyCommands(cmd *cobra.Command, args []string) error {
 // the standard usage template with a custom template.
 func AddSubCommands(cmd *cobra.Command) {
 	ctx := cmd.Context()
-	commands := util.GetSubCommands(cmd)
+	commands := getSubCommands(cmd)
 	for _, command := range commands {
 		if ac := command.Args; ac != nil {
 			// Ensure that args errors don't advice the user to look in log files
@@ -248,7 +248,7 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 func WithSubCommands(ctx context.Context) context.Context {
-	return util.AddSubCommands(ctx,
+	return MergeSubCommands(ctx,
 		connectCommand(), statusCommand(), quitCommand(),
 		listCommand(), intercept.LeaveCommand(), intercept.Command(),
 		helmCommand(), uninstallCommand(),
@@ -268,4 +268,35 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 		}
 		return nil
 	}
+}
+
+type subCommandsKey struct{}
+
+func MergeSubCommands(ctx context.Context, commands ...*cobra.Command) context.Context {
+	if ecs, ok := ctx.Value(subCommandsKey{}).(*[]*cobra.Command); ok {
+		*ecs = mergeCommands(*ecs, commands)
+	} else {
+		ctx = context.WithValue(ctx, subCommandsKey{}, &commands)
+	}
+	return ctx
+}
+
+func getSubCommands(cmd *cobra.Command) []*cobra.Command {
+	if gs, ok := cmd.Context().Value(subCommandsKey{}).(*[]*cobra.Command); ok {
+		return *gs
+	}
+	return nil
+}
+
+// mergeCommands merges the command slice b into a, replacing commands using the same name
+// and returns the resulting slice.
+func mergeCommands(a, b []*cobra.Command) []*cobra.Command {
+	ac := make(map[string]*cobra.Command, len(a)+len(b))
+	for _, c := range a {
+		ac[c.Name()] = c
+	}
+	for _, c := range b {
+		ac[c.Name()] = c
+	}
+	return maps.ToSortedSlice(ac)
 }
