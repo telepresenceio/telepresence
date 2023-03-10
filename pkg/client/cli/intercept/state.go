@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -355,7 +356,7 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		"--dns-search", "tel2-search",
 	}
 
-	name, err := util.GetUnparsedFlagValue(args, "--name")
+	name, err := flags.GetUnparsedValue(args, "--name")
 	if err != nil {
 		return nil, err
 	}

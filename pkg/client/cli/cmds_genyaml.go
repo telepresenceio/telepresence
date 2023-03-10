@@ -22,7 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -253,7 +253,7 @@ func genConfigMapSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		Short: "Generate YAML for the agent's entry in the telepresence-agents configmap.",
 		Long:  "Generate YAML for the agent's entry in the telepresence-agents configmap. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, util.FlagMap(kubeFlags))
+			return info.run(cmd, flags.Map(kubeFlags))
 		},
 	}
 	flags := cmd.Flags()
@@ -315,7 +315,7 @@ func genContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		Short: "Generate YAML for the traffic-agent container.",
 		Long:  "Generate YAML for the traffic-agent container. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, util.FlagMap(kubeFlags))
+			return info.run(cmd, flags.Map(kubeFlags))
 		},
 	}
 	flags := cmd.Flags()
@@ -384,7 +384,7 @@ func genInitContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		Short: "Generate YAML for the traffic-agent init container.",
 		Long:  "Generate YAML for the traffic-agent init container. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, util.FlagMap(kubeFlags))
+			return info.run(cmd, flags.Map(kubeFlags))
 		},
 	}
 	flags := cmd.Flags()
@@ -429,7 +429,7 @@ func genVolumeSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
 		Short: "Generate YAML for the traffic-agent volume.",
 		Long:  "Generate YAML for the traffic-agent volume. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, util.FlagMap(kubeFlags))
+			return info.run(cmd, flags.Map(kubeFlags))
 		},
 	}
 	flags := cmd.Flags()

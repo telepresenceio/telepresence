@@ -1,4 +1,4 @@
-package util
+package flags
 
 import (
 	"strings"
@@ -57,7 +57,7 @@ func TestGetUnparsedFlagValue(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, "_"), func(t *testing.T) {
-			gotV, err := GetUnparsedFlagValue(tt.args, tt.flag)
+			gotV, err := GetUnparsedValue(tt.args, tt.flag)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getUnparsedFlagValue() error = %v, wantErr %v", err, tt.wantErr)
 				return
