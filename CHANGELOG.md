@@ -2,7 +2,7 @@
 
 ### 2.x.x (TBD)
 
-- Feature: Telepresence can now start or connect to a daemon in a docker container.
+- Feature: Telepresence can now start or connect to a daemon in a docker container by use of the global `--docker` flag.
 
 - Feature: Adds an authenticator package to support integration with the [client-go credential](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins) plugins when the
   daemon runs in a docker container.

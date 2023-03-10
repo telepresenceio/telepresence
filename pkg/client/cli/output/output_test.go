@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 )
 
 func TestWithOutput(t *testing.T) {
@@ -37,7 +39,7 @@ func TestWithOutput(t *testing.T) {
 		cmd.SetContext(context.Background())
 		cmd.RunE = re
 
-		cmd.PersistentFlags().String("output", "default", "")
+		cmd.PersistentFlags().String(global.FlagOutput, "default", "")
 
 		return &cmd, &stdoutBuf, &stderrBuf
 	}
