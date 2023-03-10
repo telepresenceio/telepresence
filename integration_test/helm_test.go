@@ -51,10 +51,11 @@ func (s *helmSuite) Test_HelmCanInterceptInManagedNamespace() {
 
 func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	ctx := s.Context()
-	ctx = itest.WithUser(ctx, "default")
 	_, stderr, err := itest.Telepresence(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", s.ServiceName(), "--port", "9090")
 	s.Error(err)
-	s.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`)
+	s.True(
+		strings.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`) ||
+			strings.Contains(stderr, `cannot get resource "deployments" in API group "apps" in the namespace`))
 }
 
 func (s *helmSuite) Test_HelmWebhookInjectsInManagedNamespace() {

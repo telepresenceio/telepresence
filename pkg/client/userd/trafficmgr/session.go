@@ -281,17 +281,13 @@ func connectCluster(c context.Context, cr *rpc.ConnectRequest, config *client.Ku
 	return cluster, nil
 }
 
-func DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
+func DeleteManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kubeconfig) error {
 	cr := req.GetConnectRequest()
 	if cr == nil {
 		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
 		cr = &rpc.ConnectRequest{}
 	}
 
-	config, err := client.DaemonKubeconfig(ctx, cr)
-	if err != nil {
-		return err
-	}
 	cluster, err := connectCluster(ctx, cr, config)
 	if err != nil {
 		return err
@@ -301,7 +297,7 @@ func DeleteManager(ctx context.Context, req *rpc.HelmRequest) error {
 		ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req.Crds)
 }
 
-func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
+func EnsureManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kubeconfig) error {
 	// seg guard
 	cr := req.GetConnectRequest()
 	if cr == nil {
@@ -309,10 +305,6 @@ func EnsureManager(ctx context.Context, req *rpc.HelmRequest) error {
 		cr = &rpc.ConnectRequest{}
 	}
 
-	config, err := client.DaemonKubeconfig(ctx, cr)
-	if err != nil {
-		return err
-	}
 	cluster, err := connectCluster(ctx, cr, config)
 	if err != nil {
 		return err

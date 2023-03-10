@@ -86,11 +86,6 @@ func (s *helmSuite) injectPolicyTest(ctx context.Context, policy agentconfig.Inj
 }
 
 func (s *helmSuite) TestInjectPolicy() {
-	ctx := s.Context()
-	defer func() {
-		itest.TelepresenceOk(ctx, "connect")
-	}()
-
 	for _, policy := range []agentconfig.InjectPolicy{agentconfig.OnDemand, agentconfig.WhenEnabled} {
 		s.Run(policy.String(), func() {
 			s.injectPolicyTest(s.Context(), policy)
