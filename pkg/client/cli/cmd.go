@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -249,7 +250,7 @@ func Command(ctx context.Context) *cobra.Command {
 
 func WithSubCommands(ctx context.Context) context.Context {
 	return MergeSubCommands(ctx,
-		connectCommand(), statusCommand(), quitCommand(),
+		connect.Command(), statusCommand(), connect.QuitCommand(),
 		listCommand(), intercept.LeaveCommand(), intercept.Command(),
 		helmCommand(), uninstallCommand(),
 		loglevelCommand(), gatherLogsCommand(),
