@@ -1,4 +1,4 @@
-package util
+package cloud
 
 import (
 	"bytes"
@@ -53,7 +53,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 	ft := dtime.NewFakeTime()
 	dtime.SetNow(ft.Now)
 
-	uc, err := NewUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
+	uc, err := newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 	// An update to latestVer should be available
 	currentVer := semver.MustParse("1.2.2")
 	errOut := &bytes.Buffer{}
-	v, _ := uc.UpdateAvailable(&currentVer, errOut)
+	v, _ := uc.updateAvailable(&currentVer, errOut)
 	if len(errOut.Bytes()) > 0 {
 		t.Fatal(errOut.String())
 	}
@@ -74,13 +74,13 @@ func Test_NewUpdateChecker(t *testing.T) {
 	}
 
 	// create the initial cache.
-	if err = uc.StoreNextCheck(ctx, checkDuration); err != nil {
+	if err = uc.storeNextCheck(ctx, checkDuration); err != nil {
 		t.Fatal(err)
 	}
 
 	// An hour later it should not be time to check yet
 	ft.Step(time.Hour)
-	uc, err = NewUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 
 	// A day later it should be time to check
 	ft.Step(checkDuration)
-	uc, err = NewUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,14 +100,14 @@ func Test_NewUpdateChecker(t *testing.T) {
 
 	// No updates available
 	currentVer = lastestVer
-	v, _ = uc.UpdateAvailable(&currentVer, errOut)
+	v, _ = uc.updateAvailable(&currentVer, errOut)
 	if len(errOut.Bytes()) > 0 {
 		t.Fatal(errOut.String())
 	}
 	if v != nil {
 		t.Fatal("Expected updateAvailable() to return nil")
 	}
-	if err = uc.StoreNextCheck(ctx, checkDuration); err != nil {
+	if err = uc.storeNextCheck(ctx, checkDuration); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,7 +116,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 
 	// A day later and one second it should be time to check again
 	ft.Step(checkDuration + 1)
-	uc, err = NewUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 	}
 
 	// An update should be available
-	v, _ = uc.UpdateAvailable(&currentVer, errOut)
+	v, _ = uc.updateAvailable(&currentVer, errOut)
 	if len(errOut.Bytes()) > 0 {
 		t.Fatal(errOut.String())
 	}

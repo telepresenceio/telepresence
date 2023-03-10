@@ -58,7 +58,7 @@ func Command() *cobra.Command {
 		SilenceErrors:     true,
 		RunE:              a.Run,
 		ValidArgsFunction: a.ValidArgs,
-		PreRunE:           util.UpdateCheckIfDue,
+		PreRunE:           cloud.UpdateCheckIfDue,
 		PostRunE:          cloud.RaiseMessage,
 	}
 	a.AddFlags(cmd.Flags())

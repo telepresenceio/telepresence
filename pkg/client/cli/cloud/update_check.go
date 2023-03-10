@@ -1,4 +1,4 @@
-package util
+package cloud
 
 import (
 	"context"
@@ -26,14 +26,28 @@ const (
 	cacheFilename = "update-checks.json"
 )
 
-type UpdateChecker struct {
+type updateChecker struct {
 	NextCheck map[string]time.Time `json:"next_check"`
 	url       string
 }
 
-// NewUpdateChecker returns a new update checker, possibly initialized from the users cache.
-func NewUpdateChecker(ctx context.Context, url string) (*UpdateChecker, error) {
-	ts := &UpdateChecker{
+// UpdateCheckIfDue performs an update check for the telepresence binary on the current os/arch and
+// prints a message on stdout if an update is available. The result is cached and will be reused
+// for 24 hours.
+func UpdateCheckIfDue(cmd *cobra.Command, _ []string) error {
+	return updateCheck(cmd, false)
+}
+
+// ForcedUpdateCheck performs an update check for the telepresence binary on the current os/arch and
+// prints a message on stdout if an update is available. The check will bypass the cache, but will
+// update it with the result.
+func ForcedUpdateCheck(cmd *cobra.Command, _ []string) error {
+	return updateCheck(cmd, true)
+}
+
+// newUpdateChecker returns a new update checker, possibly initialized from the users cache.
+func newUpdateChecker(ctx context.Context, url string) (*updateChecker, error) {
+	ts := &updateChecker{
 		url: url,
 	}
 
@@ -46,49 +60,34 @@ func NewUpdateChecker(ctx context.Context, url string) (*UpdateChecker, error) {
 	return ts, nil
 }
 
-func UpdateCheckIfDue(cmd *cobra.Command, _ []string) error {
-	return updateCheck(cmd, false)
-}
-
-func ForcedUpdateCheck(cmd *cobra.Command, _ []string) error {
-	return updateCheck(cmd, true)
-}
-
-// updateCheck performs an update check for the telepresence binary on the current os/arch and
-// prints a message on stdout if an update is available.
-//
-// Arguments:
-//
-//	cmd:         the command that provides Context and stout/stderr
-//	forcedCheck: if true, perform check regardless of if it's due or not
 func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	cloudCfg := client.GetConfig(cmd.Context()).Cloud
 	format := cmd.Annotations[ann.UpdateCheckFormat]
-	uc, err := NewUpdateChecker(cmd.Context(), fmt.Sprintf(format, cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
+	uc, err := newUpdateChecker(cmd.Context(), fmt.Sprintf(format, cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
 	if err != nil || !(forceCheck || uc.timeToCheck()) {
 		return err
 	}
 
 	ourVersion := client.Semver()
-	update, ok := uc.UpdateAvailable(&ourVersion, cmd.ErrOrStderr())
+	update, ok := uc.updateAvailable(&ourVersion, cmd.ErrOrStderr())
 	if !ok {
 		// Failed to read from remote server. Next attempt is due in an hour
-		return uc.StoreNextCheck(cmd.Context(), time.Hour)
+		return uc.storeNextCheck(cmd.Context(), time.Hour)
 	}
 	if update != nil {
 		fmt.Fprintf(output.Info(cmd.Context()),
 			"An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/telepresence/latest/install/upgrade/ for more info.\n",
 			binaryName, &ourVersion, update)
 	}
-	return uc.StoreNextCheck(cmd.Context(), checkDuration)
+	return uc.storeNextCheck(cmd.Context(), checkDuration)
 }
 
-func (uc *UpdateChecker) StoreNextCheck(ctx context.Context, d time.Duration) error {
+func (uc *updateChecker) storeNextCheck(ctx context.Context, d time.Duration) error {
 	uc.NextCheck[uc.url] = dtime.Now().Add(d)
 	return cache.SaveToUserCache(ctx, uc, cacheFilename)
 }
 
-func (uc *UpdateChecker) UpdateAvailable(currentVersion *semver.Version, errOut io.Writer) (*semver.Version, bool) {
+func (uc *updateChecker) updateAvailable(currentVersion *semver.Version, errOut io.Writer) (*semver.Version, bool) {
 	resp, err := http.Get(uc.url)
 	if err != nil {
 		// silently ignore connection failures
@@ -114,7 +113,7 @@ func (uc *UpdateChecker) UpdateAvailable(currentVersion *semver.Version, errOut 
 	return nil, true
 }
 
-func (uc *UpdateChecker) timeToCheck() bool {
+func (uc *updateChecker) timeToCheck() bool {
 	ts, ok := uc.NextCheck[uc.url]
 	return !ok || dtime.Now().After(ts)
 }
