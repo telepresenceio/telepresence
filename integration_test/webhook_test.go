@@ -64,7 +64,8 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	// creating the traffic-manager
 	uninstallEverything := func() {
 		stdout := itest.TelepresenceOk(ctx, "helm", "uninstall")
-		itest.AssertQuitOutput(ctx, stdout)
+		s.Contains(stdout, "Traffic Manager uninstalled successfully")
+		itest.TelepresenceQuitOk(ctx)
 		s.Require().Eventually(
 			func() bool {
 				stdout, _ := itest.KubectlOut(ctx, s.ManagerNamespace(),

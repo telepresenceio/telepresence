@@ -454,9 +454,46 @@ func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, erro
 func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Result, error) {
 	result := &common.Result{}
 	s.logCall(ctx, "Helm", func(c context.Context) {
+		s.quitDisable = true
+		if s.rootSessionInProc {
+			// Temporarily disable quit so that session cancel doesn't cancel everything
+			defer func() {
+				go func() {
+					// Give this call time to return its result before the gRPC server shuts down.
+					time.Sleep(10 * time.Millisecond)
+					s.quit()
+				}()
+			}()
+		}
+
+		var sessionDone <-chan struct{}
+		s.sessionLock.Lock()
+		if s.session != nil {
+			sessionDone = s.session.Done()
+		}
+		s.sessionLock.Unlock()
+
+		// Traffic manager will vanish, so we can't have an alive session.
+		s.cancelSession()
+		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+			_, _ = rd.Disconnect(ctx, &empty.Empty{})
+			s.quitDisable = false
+			return nil
+		})
+		if sessionDone != nil {
+			<-sessionDone
+		}
+		s.quitDisable = false
+
+		config, err := client.DaemonKubeconfig(ctx, req.ConnectRequest)
+		if err != nil {
+			result = errcat.ToResult(err)
+			return
+		}
+
 		sr := s.scout
 		if req.Type == rpc.HelmRequest_UNINSTALL {
-			err := trafficmgr.DeleteManager(c, req)
+			err := trafficmgr.DeleteManager(c, req, config)
 			if err != nil {
 				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
 				result = errcat.ToResult(err)
@@ -464,7 +501,7 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 				sr.Report(ctx, "helm_uninstall_success")
 			}
 		} else {
-			err := trafficmgr.EnsureManager(c, req)
+			err := trafficmgr.EnsureManager(c, req, config)
 			if err != nil {
 				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
 				result = errcat.ToResult(err)
@@ -477,6 +514,10 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 }
 
 func (s *Service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (*common.Result, error) {
+	if proc.RunningInContainer() {
+		// We mount using docker volumes and the telemount driver plugin.
+		return errcat.ToResult(nil), nil
+	}
 	if client.GetConfig(ctx).Intercept.UseFtp {
 		return errcat.ToResult(s.FuseFTPError()), nil
 	}

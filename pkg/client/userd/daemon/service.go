@@ -61,7 +61,13 @@ type Service struct {
 	fuseFTPError  error
 	scout         *scout.Reporter
 
+	// The quit function that quits the server.
 	quit func()
+
+	// quitDisable will temporarily disable the quit function. This is used when there's a desire
+	// to cancel the session without cancelling the process although the simplified session management
+	// is in effect (rootSessionInProc == true).
+	quitDisable bool
 
 	session         userd.Session
 	sessionCancel   context.CancelFunc
@@ -466,7 +472,12 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	g.Go("config-reload", s.configReload)
 	g.Go(sessionName, func(c context.Context) error {
-		c, s.quit = context.WithCancel(c)
+		c, cancel := context.WithCancel(c)
+		s.quit = func() {
+			if !s.quitDisable {
+				cancel()
+			}
+		}
 		return ManageSessions(c, si)
 	})
 
