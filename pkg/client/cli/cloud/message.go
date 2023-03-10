@@ -1,4 +1,4 @@
-package util
+package cloud
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	empty "google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
@@ -23,15 +23,15 @@ import (
 
 const messagesCacheFilename = "cloud-messages.json"
 
-type cloudMessageCache struct {
+type messageCache struct {
 	NextCheck         time.Time           `json:"next_check"`
 	Intercept         string              `json:"intercept"`
 	MessagesDelivered map[string]struct{} `json:"messagess_delivered"`
 }
 
-// newCloudMessageCache returns a new CloudMessageCache, initialized from the users' if it exists.
-func newCloudMessageCache(ctx context.Context) (*cloudMessageCache, error) {
-	cmc := &cloudMessageCache{}
+// newMessageCache returns a new messageCache, initialized from the users' if it exists.
+func newMessageCache(ctx context.Context) (*messageCache, error) {
+	cmc := &messageCache{}
 
 	if err := cache.LoadFromUserCache(ctx, cmc, messagesCacheFilename); err != nil {
 		if !os.IsNotExist(err) {
@@ -44,9 +44,9 @@ func newCloudMessageCache(ctx context.Context) (*cloudMessageCache, error) {
 	return cmc, nil
 }
 
-// getCloudMessages communicates with Ambassador Cloud and stores those messages
-// in the cloudMessageCache.
-func getCloudMessages(ctx context.Context, systemaURL string) (*systema.CommandMessageResponse, error) {
+// getMessages communicates with Ambassador Cloud and stores those messages
+// in the messageCache.
+func getMessages(ctx context.Context, systemaURL string) (*systema.CommandMessageResponse, error) {
 	u, err := url.Parse(systemaURL)
 	if err != nil {
 		return &systema.CommandMessageResponse{}, err
@@ -59,10 +59,10 @@ func getCloudMessages(ctx context.Context, systemaURL string) (*systema.CommandM
 	}
 
 	systemaClient := systema.NewSystemACliClient(conn)
-	return systemaClient.GetUnauthenticatedCommandMessages(ctx, &empty.Empty{})
+	return systemaClient.GetUnauthenticatedCommandMessages(ctx, &emptypb.Empty{})
 }
 
-func (cmc *cloudMessageCache) updateCacheMessages(ctx context.Context, resp *systema.CommandMessageResponse) {
+func (cmc *messageCache) updateCacheMessages(ctx context.Context, resp *systema.CommandMessageResponse) {
 	// Update the messages
 	cmc.Intercept = resp.GetIntercept()
 
@@ -75,7 +75,7 @@ func (cmc *cloudMessageCache) updateCacheMessages(ctx context.Context, resp *sys
 	cmc.MessagesDelivered = make(map[string]struct{})
 }
 
-func (cmc *cloudMessageCache) getMessageFromCache(_ context.Context, cmdUsed string) string {
+func (cmc *messageCache) getMessageFromCache(_ context.Context, cmdUsed string) string {
 	// Ensure that the message hasn't already been delivered to the user
 	// if it has, then we don't want to print any output.
 	var msg string
@@ -95,9 +95,9 @@ func (cmc *cloudMessageCache) getMessageFromCache(_ context.Context, cmdUsed str
 	return msg
 }
 
-// RaiseCloudMessage is what is called from `PostRunE` in a command and is responsible
+// RaiseMessage is what is called from `PostRunE` in a command and is responsible
 // for raising the message for the command used.
-func RaiseCloudMessage(cmd *cobra.Command, _ []string) error {
+func RaiseMessage(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	// If the user has specified they are in an air-gapped cluster,
@@ -111,7 +111,7 @@ func RaiseCloudMessage(cmd *cobra.Command, _ []string) error {
 	cmdUsed := strings.Split(cmd.Use, " ")[0]
 
 	// Load the config
-	cmc, err := newCloudMessageCache(ctx)
+	cmc, err := newMessageCache(ctx)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func RaiseCloudMessage(cmd *cobra.Command, _ []string) error {
 	// Check if it is time to get new messages from Ambassador Cloud
 	if dtime.Now().After(cmc.NextCheck) {
 		systemaURL := fmt.Sprintf("https://%s", net.JoinHostPort(cloudCfg.SystemaHost, cloudCfg.SystemaPort))
-		resp, err := getCloudMessages(ctx, systemaURL)
+		resp, err := getMessages(ctx, systemaURL)
 		if err != nil {
 			// We try again in an hour since we encountered an error
 			cmc.NextCheck = dtime.Now().Add(1 * time.Hour)

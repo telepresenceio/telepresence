@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
@@ -58,7 +59,7 @@ func Command() *cobra.Command {
 		RunE:              a.Run,
 		ValidArgsFunction: a.ValidArgs,
 		PreRunE:           util.UpdateCheckIfDue,
-		PostRunE:          util.RaiseCloudMessage,
+		PostRunE:          cloud.RaiseMessage,
 	}
 	a.AddFlags(cmd.Flags())
 	if err := cmd.RegisterFlagCompletionFunc("namespace", a.AutocompleteNamespace); err != nil {

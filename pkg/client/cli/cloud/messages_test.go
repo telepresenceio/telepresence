@@ -1,4 +1,4 @@
-package util
+package cloud
 
 import (
 	"context"
@@ -30,11 +30,11 @@ func newTestContext(t *testing.T) context.Context {
 	return client.WithConfig(ctx, cfg)
 }
 
-func Test_cloudGetMessageFromCache(t *testing.T) {
+func Test_GetMessageFromCache(t *testing.T) {
 	ctx := newTestContext(t)
 
 	// Pre-load cmc with a message for intercept
-	cmc, err := newCloudMessageCache(ctx)
+	cmc, err := newMessageCache(ctx)
 	ceptMessage := "Test Intercept Message"
 	cmc.Intercept = ceptMessage
 	if err != nil {
@@ -78,11 +78,11 @@ func Test_cloudGetMessageFromCache(t *testing.T) {
 	}
 }
 
-func Test_cloudUpdateMessages(t *testing.T) {
+func Test_UpdateMessages(t *testing.T) {
 	ctx := newTestContext(t)
 
 	// Pre-load cmc with a message for intercept
-	cmc, err := newCloudMessageCache(ctx)
+	cmc, err := newMessageCache(ctx)
 	ceptMessage := "Test Old Intercept Message"
 	cmc.Intercept = ceptMessage
 	if err != nil {
@@ -131,7 +131,7 @@ func Test_cloudUpdateMessages(t *testing.T) {
 	}
 }
 
-func Test_cloudRefreshMessagesConfig(t *testing.T) {
+func Test_RefreshMessagesConfig(t *testing.T) {
 	ctx := newTestContext(t)
 	confDir := t.TempDir()
 
@@ -142,7 +142,7 @@ func Test_cloudRefreshMessagesConfig(t *testing.T) {
 		t.Error(err)
 	}
 
-	cmc, err := newCloudMessageCache(ctx)
+	cmc, err := newMessageCache(ctx)
 	if err != nil {
 		t.Error(err)
 	}
