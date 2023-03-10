@@ -3,6 +3,7 @@ package connect
 import (
 	"context"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -31,7 +32,6 @@ func InitRequest(cmd *cobra.Command) *Request {
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
-	nwFlags.BoolVar(&cr.Docker, "docker", proc.RunningInContainer(), "Start, or connect to, daemon in a docker container")
 	nwFlags.StringSliceVar(&cr.MappedNamespaces,
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
@@ -72,7 +72,7 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) {
 		}
 	})
 	cr.addKubeconfigEnv()
-	cr.setContextFromGlobal(cmd)
+	cr.setGlobalConnectFlags(cmd)
 	cmd.SetContext(context.WithValue(cmd.Context(), requestKey{}, cr))
 }
 
@@ -92,9 +92,12 @@ func (cr *Request) addKubeconfigEnv() {
 
 // setContext deals with the global --context flag and assigns it to KubeFlags because it's
 // deliberately excluded from the original flags (to avoid conflict with the global flag).
-func (cr *Request) setContextFromGlobal(cmd *cobra.Command) {
-	if contextFlag := cmd.Flag("context"); contextFlag != nil && contextFlag.Changed {
-		cr.KubeFlags["context"] = contextFlag.Value.String()
+func (cr *Request) setGlobalConnectFlags(cmd *cobra.Command) {
+	if contextFlag := cmd.Flag(global.FlagContext); contextFlag != nil && contextFlag.Changed {
+		cr.KubeFlags[global.FlagContext] = contextFlag.Value.String()
+	}
+	if dockerFlag := cmd.Flag(global.FlagDocker); dockerFlag != nil && dockerFlag.Changed {
+		cr.Docker, _ = strconv.ParseBool(dockerFlag.Value.String())
 	}
 }
 
@@ -112,7 +115,7 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) context.Context
 		},
 		Implicit: true,
 	}
-	cr.setContextFromGlobal(cmd)
+	cr.setGlobalConnectFlags(cmd)
 	cr.addKubeconfigEnv()
 	return context.WithValue(ctx, requestKey{}, &cr)
 }
