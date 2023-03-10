@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package util
+package intercept
 
 import (
 	"os"

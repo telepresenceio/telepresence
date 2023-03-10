@@ -203,7 +203,7 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 		}
 		output.Object(ctx, NewInfo(ctx, intercept, mountError), true)
 	} else {
-		fmt.Fprintln(s.cmd.OutOrStdout(), util.DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
+		fmt.Fprintln(s.cmd.OutOrStdout(), DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
 	}
 	return true, nil
 }

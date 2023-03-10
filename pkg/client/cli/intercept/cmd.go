@@ -254,7 +254,7 @@ func (a *Args) GetMountPoint(ctx context.Context) (string, bool, error) {
 		if err != nil {
 			return "", false, err
 		}
-		mountPoint, err = util.PrepareMount(cwd, mountPoint)
+		mountPoint, err = PrepareMount(cwd, mountPoint)
 	}
 
 	return mountPoint, doMount, err

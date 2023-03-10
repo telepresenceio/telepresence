@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
@@ -151,7 +152,7 @@ func (s *listInfo) printList(ctx context.Context, workloads []*connector.Workloa
 
 	state := func(workload *connector.WorkloadInfo) string {
 		if iis := workload.InterceptInfos; len(iis) > 0 {
-			return util.DescribeIntercepts(iis, nil, s.debug)
+			return intercept.DescribeIntercepts(iis, nil, s.debug)
 		}
 		ai := workload.AgentInfo
 		if ai != nil {
