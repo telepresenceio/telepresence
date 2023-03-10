@@ -9,7 +9,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -24,7 +24,7 @@ func configCommand() *cobra.Command {
 }
 
 func configViewCommand() *cobra.Command {
-	var request *connect.Request
+	var request *daemon.Request
 
 	cmd := &cobra.Command{
 		Use:               "view",
@@ -37,7 +37,7 @@ func configViewCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
-	request = connect.InitRequest(cmd)
+	request = daemon.InitRequest(cmd)
 	return cmd
 }
 
@@ -55,7 +55,7 @@ func configView(cmd *cobra.Command, _ []string) error {
 		cfg.Config = client.GetConfig(cmd.Context())
 		cfg.ClientFile = filepath.Join(cfgDir, client.ConfigFile)
 
-		rq := connect.GetRequest(ctx)
+		rq := daemon.GetRequest(ctx)
 		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
 		if err != nil {
 			return err

@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -58,7 +58,7 @@ func ensureRootDaemonRunning(ctx context.Context) error {
 		// Never start root daemon when running remote
 		return nil
 	}
-	if cr := connect.GetRequest(ctx); cr != nil && cr.Docker {
+	if cr := daemon.GetRequest(ctx); cr != nil && cr.Docker {
 		// Never start root daemon when connecting using a docker container.
 		return nil
 	}
@@ -94,7 +94,7 @@ func Disconnect(ctx context.Context, quitDaemons bool) error {
 		if err = socket.WaitUntilVanishes("root daemon", socket.DaemonName, 5*time.Second); err != nil {
 			var conn *grpc.ClientConn
 			if conn, err = socket.Dial(ctx, socket.DaemonName); err == nil {
-				if _, err = daemon.NewDaemonClient(conn).Quit(ctx, &empty.Empty{}); err != nil {
+				if _, err = rpc.NewDaemonClient(conn).Quit(ctx, &empty.Empty{}); err != nil {
 					err = fmt.Errorf("error when quitting root daemon: %w", err)
 				}
 			}

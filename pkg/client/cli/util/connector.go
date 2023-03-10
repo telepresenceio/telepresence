@@ -16,7 +16,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -86,7 +86,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*UserDaemon, error) {
-	cr := connect.GetRequest(ctx)
+	cr := daemon.GetRequest(ctx)
 	conn, err := socket.Dial(ctx, socket.ConnectorName)
 	if err == nil {
 		if cr.Docker {
@@ -144,7 +144,7 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 
 func daemonName(ctx context.Context) (string, error) {
 	var flags map[string]string
-	if cr := connect.GetRequest(ctx); cr != nil {
+	if cr := daemon.GetRequest(ctx); cr != nil {
 		flags = cr.KubeFlags
 	}
 	contextName, _, err := client.CurrentContext(flags)
@@ -205,7 +205,7 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 	if _, ok := ctx.Value(sessionKey{}).(*Session); ok {
 		return ctx, nil
 	}
-	s, err := connectSession(ctx, GetUserDaemon(ctx), connect.GetRequest(ctx), required)
+	s, err := connectSession(ctx, GetUserDaemon(ctx), daemon.GetRequest(ctx), required)
 	if err != nil {
 		return ctx, err
 	}
@@ -215,7 +215,7 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 	return context.WithValue(ctx, sessionKey{}, s), nil
 }
 
-func connectSession(ctx context.Context, userD *UserDaemon, request *connect.Request, required bool) (*Session, error) {
+func connectSession(ctx context.Context, userD *UserDaemon, request *daemon.Request, required bool) (*Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote {

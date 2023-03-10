@@ -12,7 +12,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -32,7 +32,7 @@ type HelmOpts struct {
 	AllValues   map[string]any
 	ReuseValues bool
 	ResetValues bool
-	Request     *connect.Request
+	Request     *daemon.Request
 	cmdType     connector.HelmRequest_Type
 	CRDs        bool
 }
@@ -72,7 +72,7 @@ func helmInstallCommand() *cobra.Command {
 	uf := flags.Lookup("upgrade")
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
-	ha.Request = connect.InitRequest(cmd)
+	ha.Request = daemon.InitRequest(cmd)
 	return cmd
 }
 
@@ -98,7 +98,7 @@ func helmUpgradeCommand() *cobra.Command {
 		"when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
-	ha.Request = connect.InitRequest(cmd)
+	ha.Request = daemon.InitRequest(cmd)
 	return cmd
 }
 
@@ -139,7 +139,7 @@ func helmUninstallCommand() *cobra.Command {
 		},
 	}
 	ha.addCRDsFlags(cmd.Flags())
-	ha.Request = connect.InitRequest(cmd)
+	ha.Request = daemon.InitRequest(cmd)
 	return cmd
 }
 

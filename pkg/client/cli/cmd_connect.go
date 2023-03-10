@@ -4,12 +4,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
 func connectCommand() *cobra.Command {
-	var request *connect.Request
+	var request *daemon.Request
 
 	cmd := &cobra.Command{
 		Use:   "connect [flags] [-- <command to run while connected>]",
@@ -23,6 +23,6 @@ func connectCommand() *cobra.Command {
 			return util.RunConnect(cmd, args)
 		},
 	}
-	request = connect.InitRequest(cmd)
+	request = daemon.InitRequest(cmd)
 	return cmd
 }
