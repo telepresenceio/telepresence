@@ -9,24 +9,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 )
 
-type userDaemonKey struct{}
-
-func GetUserDaemon(ctx context.Context) *UserDaemon {
-	if ud, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
-		return ud
-	}
-	return nil
-}
-
-type sessionKey struct{}
-
-func GetSession(ctx context.Context) *Session {
-	if s, ok := ctx.Value(sessionKey{}).(*Session); ok {
-		return s
-	}
-	return nil
-}
-
 type cmdInitKey struct{}
 
 func WithCommandInitializer(ctx context.Context, cmdInit func(cmd *cobra.Command) error) context.Context {
@@ -63,7 +45,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 		}
 
 		// RootDaemon == Optional means that the RootDaemon must be started if
-		// the UserDaemon was started
+		// the UserClient was started
 		if _, ok := as[ann.RootDaemon]; ok {
 			if err = ensureRootDaemonRunning(ctx); err != nil {
 				return err

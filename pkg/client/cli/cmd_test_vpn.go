@@ -11,6 +11,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -159,7 +160,7 @@ func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	userd := util.GetUserDaemon(ctx)
+	userd := daemon.GetUserClient(ctx)
 	clusterSubnets, err := userd.GetClusterSubnets(ctx, &empty.Empty{})
 	if err != nil {
 		return err

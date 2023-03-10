@@ -180,8 +180,8 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 		ConnectRequest: &ha.Request.ConnectRequest,
 		Crds:           ha.CRDs,
 	}
-	ud := util.GetUserDaemon(ctx)
-	if ud.Remote && util.GetSession(ctx) == nil {
+	ud := daemon.GetUserClient(ctx)
+	if ud.Remote && daemon.GetSession(ctx) == nil {
 		// This is needed here, because we never establish a session.
 		if err := docker.EnableK8SAuthenticator(ctx); err != nil {
 			return err

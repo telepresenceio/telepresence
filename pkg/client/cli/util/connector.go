@@ -34,7 +34,7 @@ var (
 func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 	stdout := output.Out(ctx)
 	fmt.Fprint(stdout, "Telepresence Daemons ")
-	ud := GetUserDaemon(ctx)
+	ud := daemon.GetUserClient(ctx)
 	if ud == nil {
 		fmt.Fprintln(stdout, "have already quit")
 		return ErrNoUserDaemon
@@ -77,7 +77,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	ctx := cmd.Context()
-	if GetSession(ctx).Started {
+	if daemon.GetSession(ctx).Started {
 		defer func() {
 			_ = Disconnect(ctx, false)
 		}()
@@ -85,7 +85,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 }
 
-func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*UserDaemon, error) {
+func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
 	conn, err := socket.Dial(ctx, socket.ConnectorName)
 	if err == nil {
@@ -154,31 +154,19 @@ func daemonName(ctx context.Context) (string, error) {
 	return contextName, nil
 }
 
-type UserDaemon struct {
-	connector.ConnectorClient
-	Conn   *grpc.ClientConn
-	Remote bool
-}
-
-func newUserDaemon(conn *grpc.ClientConn, remote bool) *UserDaemon {
-	return &UserDaemon{
+func newUserDaemon(conn *grpc.ClientConn, remote bool) *daemon.UserClient {
+	return &daemon.UserClient{
 		ConnectorClient: connector.NewConnectorClient(conn),
 		Conn:            conn,
 		Remote:          remote,
 	}
 }
 
-type Session struct {
-	UserDaemon
-	Info    *connector.ConnectInfo
-	Started bool
-}
-
 func ensureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
-	if _, ok := ctx.Value(userDaemonKey{}).(*UserDaemon); ok {
+	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
-	var ud *UserDaemon
+	var ud *daemon.UserClient
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
 		conn, err := docker.ConnectDaemon(ctx, addr)
@@ -193,29 +181,29 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 			return ctx, err
 		}
 	}
-	return context.WithValue(ctx, userDaemonKey{}, ud), nil
+	return daemon.WithUserClient(ctx, ud), nil
 }
 
 func ensureDaemonVersion(ctx context.Context) error {
 	// Ensure that the already running daemon has the correct version
-	return versionCheck(ctx, client.GetExe(), GetUserDaemon(ctx))
+	return versionCheck(ctx, client.GetExe(), daemon.GetUserClient(ctx))
 }
 
 func ensureSession(ctx context.Context, required bool) (context.Context, error) {
-	if _, ok := ctx.Value(sessionKey{}).(*Session); ok {
+	if daemon.GetSession(ctx) != nil {
 		return ctx, nil
 	}
-	s, err := connectSession(ctx, GetUserDaemon(ctx), daemon.GetRequest(ctx), required)
+	s, err := connectSession(ctx, daemon.GetUserClient(ctx), daemon.GetRequest(ctx), required)
 	if err != nil {
 		return ctx, err
 	}
 	if s == nil {
 		return ctx, nil
 	}
-	return context.WithValue(ctx, sessionKey{}, s), nil
+	return daemon.WithSession(ctx, s), nil
 }
 
-func connectSession(ctx context.Context, userD *UserDaemon, request *daemon.Request, required bool) (*Session, error) {
+func connectSession(ctx context.Context, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote {
@@ -233,8 +221,8 @@ func connectSession(ctx context.Context, userD *UserDaemon, request *daemon.Requ
 			if cc, ok := request.KubeFlags["context"]; ok && cc != ci.ClusterContext {
 				ci.Error = connector.ConnectInfo_MUST_RESTART
 			} else {
-				return &Session{
-					UserDaemon: *userD,
+				return &daemon.Session{
+					UserClient: *userD,
 					Info:       ci,
 					Started:    true,
 				}, nil
@@ -265,14 +253,14 @@ func connectSession(ctx context.Context, userD *UserDaemon, request *daemon.Requ
 	switch ci.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
 		fmt.Fprintf(output.Info(ctx), "Connected to context %s (%s)\n", ci.ClusterContext, ci.ClusterServer)
-		return &Session{
-			UserDaemon: *userD,
+		return &daemon.Session{
+			UserClient: *userD,
 			Info:       ci,
 			Started:    true,
 		}, nil
 	case connector.ConnectInfo_ALREADY_CONNECTED:
-		return &Session{
-			UserDaemon: *userD,
+		return &daemon.Session{
+			UserClient: *userD,
 			Info:       ci,
 			Started:    false,
 		}, nil

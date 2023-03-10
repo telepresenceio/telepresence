@@ -9,13 +9,14 @@ import (
 	"github.com/blang/semver"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 var validPrerelRx = regexp.MustCompile(`^[a-z]+\.\d+$`)
 
-func versionCheck(ctx context.Context, daemonBinary string, userD *UserDaemon) error {
+func versionCheck(ctx context.Context, daemonBinary string, userD *daemon.UserClient) error {
 	// Ensure that the already running daemons have the correct version
 	vu, err := userD.Version(ctx, &empty.Empty{})
 	if err != nil {

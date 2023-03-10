@@ -54,7 +54,7 @@ func launchDaemon(ctx context.Context) error {
 
 // ensureRootDaemonRunning ensures that the daemon is running.
 func ensureRootDaemonRunning(ctx context.Context) error {
-	if ud := GetUserDaemon(ctx); ud != nil && ud.Remote {
+	if ud := daemon.GetUserClient(ctx); ud != nil && ud.Remote {
 		// Never start root daemon when running remote
 		return nil
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
@@ -57,7 +58,7 @@ func listCommand() *cobra.Command {
 			return nil, shellCompDir
 		}
 		ctx := cmd.Context()
-		userD := util.GetUserDaemon(ctx)
+		userD := daemon.GetUserClient(ctx)
 		resp, err := userD.GetNamespaces(ctx, &connector.GetNamespacesRequest{
 			ForClientAccess: false,
 			Prefix:          toComplete,
@@ -79,7 +80,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	}
 	stdout := cmd.OutOrStdout()
 	ctx := cmd.Context()
-	userD := util.GetUserDaemon(ctx)
+	userD := daemon.GetUserClient(ctx)
 	var filter connector.ListRequest_Filter
 	switch {
 	case s.onlyIntercepts:

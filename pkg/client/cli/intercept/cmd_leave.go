@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
@@ -37,7 +38,7 @@ func LeaveCommand() *cobra.Command {
 				return nil, shellCompDir | cobra.ShellCompDirectiveError
 			}
 			ctx := cmd.Context()
-			userD := util.GetUserDaemon(ctx)
+			userD := daemon.GetUserClient(ctx)
 			resp, err := userD.List(ctx, &connector.ListRequest{Filter: connector.ListRequest_INTERCEPTS})
 			if err != nil {
 				return nil, shellCompDir | cobra.ShellCompDirectiveError
@@ -61,6 +62,6 @@ func LeaveCommand() *cobra.Command {
 }
 
 func removeIntercept(ctx context.Context, name string) error {
-	userD := util.GetUserDaemon(ctx)
+	userD := daemon.GetUserClient(ctx)
 	return Result(userD.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name}))
 }

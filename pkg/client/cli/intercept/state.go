@@ -23,9 +23,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -103,7 +103,7 @@ func Run(ctx context.Context, sif State) error {
 }
 
 func create(sif State, ctx context.Context) (acquired bool, err error) {
-	ud := util.GetUserDaemon(ctx)
+	ud := daemon.GetUserClient(ctx)
 	status, err := ud.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
@@ -209,7 +209,7 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 }
 
 func leave(sif State, ctx context.Context) error {
-	r, err := util.GetUserDaemon(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(sif.Name())})
+	r, err := daemon.GetUserClient(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(sif.Name())})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
@@ -256,7 +256,7 @@ func runCommand(sif State, ctx context.Context) error {
 
 	// Send info about the pid and intercept id to the traffic-manager so that it kills
 	// the process if it receives a leave of quit call.
-	if _, err = util.GetUserDaemon(ctx).AddInterceptor(ctx, &ior); err != nil {
+	if _, err = daemon.GetUserClient(ctx).AddInterceptor(ctx, &ior); err != nil {
 		if grpcStatus.Code(err) == grpcCodes.Canceled {
 			// Deactivation was caused by a disconnect
 			err = nil
@@ -272,7 +272,7 @@ func runCommand(sif State, ctx context.Context) error {
 }
 
 func (s *state) checkMountCapability(ctx context.Context) error {
-	r, err := util.GetUserDaemon(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
+	r, err := daemon.GetUserClient(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
 	if err != nil {
 		return err
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
+	daemon2 "github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -44,7 +45,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	remote := false
-	userD := util.GetUserDaemon(ctx)
+	userD := daemon2.GetUserClient(ctx)
 	if userD != nil {
 		remote = userD.Remote
 	}
@@ -93,7 +94,7 @@ func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 }
 
 func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if userD := util.GetUserDaemon(ctx); userD != nil {
+	if userD := daemon2.GetUserClient(ctx); userD != nil {
 		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
 	}
 	return nil, util.ErrNoUserDaemon

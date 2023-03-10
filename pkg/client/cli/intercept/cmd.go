@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
@@ -175,7 +176,7 @@ func (a *Args) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete 
 		return nil, cobra.ShellCompDirectiveError
 	}
 	ctx := cmd.Context()
-	ud := util.GetUserDaemon(ctx)
+	ud := daemon.GetUserClient(ctx)
 	rs, err := ud.GetNamespaces(ctx, &connector.GetNamespacesRequest{
 		ForClientAccess: true,
 		Prefix:          toComplete,
@@ -215,7 +216,7 @@ func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) (
 	// Trace level is used here, because we generally don't want to log expansion attempts
 	// in the cli.log
 	dlog.Tracef(ctx, "ns = %s, toComplete = %s, args = %v", req.Namespace, toComplete, args)
-	r, err := util.GetUserDaemon(ctx).List(ctx, &req)
+	r, err := daemon.GetUserClient(ctx).List(ctx, &req)
 	if err != nil {
 		dlog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
 		return nil, cobra.ShellCompDirectiveError

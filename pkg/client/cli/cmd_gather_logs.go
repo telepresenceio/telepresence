@@ -18,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -242,7 +243,7 @@ func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, exportDir strin
 		GetPodYaml:     gl.podYaml,
 		ExportDir:      exportDir,
 	}
-	userD := util.GetUserDaemon(ctx)
+	userD := daemon.GetUserClient(ctx)
 	if userD != nil {
 		var opts []grpc.CallOption
 		cfg := client.GetConfig(ctx)

@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
@@ -119,7 +120,7 @@ var GetStatusInfo = BasicGetStatusInfo //nolint:gochecknoglobals // extension po
 func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	rs := rootDaemonStatus{}
 	us := userDaemonStatus{}
-	userD := util.GetUserDaemon(ctx)
+	userD := daemon.GetUserClient(ctx)
 	if userD == nil {
 		return &StatusInfo{
 			RootDaemon: &rs,

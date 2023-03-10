@@ -85,7 +85,7 @@ func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 		ur.UninstallType = connector.UninstallRequest_ALL_AGENTS
 	}
 	ctx := cmd.Context()
-	r, err := util.GetUserDaemon(ctx).Uninstall(ctx, ur)
+	r, err := daemon.GetUserClient(ctx).Uninstall(ctx, ur)
 	if err != nil {
 		return err
 	}
