@@ -12,10 +12,10 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -96,7 +96,7 @@ func fixFlag(cmd *cobra.Command, _ []string) error {
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
 func run(cmd *cobra.Command, _ []string) error {
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
 	ctx := cmd.Context()

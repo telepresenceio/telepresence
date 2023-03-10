@@ -15,8 +15,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -165,14 +165,14 @@ func (a *Args) Run(cmd *cobra.Command, positional []string) error {
 	if err := a.Validate(cmd, positional); err != nil {
 		return err
 	}
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
 	return Run(cmd.Context(), NewState(cmd, a))
 }
 
 func (a *Args) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
 	ctx := cmd.Context()
@@ -201,7 +201,7 @@ func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) (
 		// Not completing the name of the workload
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
 	req := connector.ListRequest{

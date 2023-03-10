@@ -10,8 +10,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
 func LeaveCommand() *cobra.Command {
@@ -24,7 +24,7 @@ func LeaveCommand() *cobra.Command {
 			ann.Session: ann.Required,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := util.InitCommand(cmd); err != nil {
+			if err := connect.InitCommand(cmd); err != nil {
 				return err
 			}
 			return removeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
@@ -34,7 +34,7 @@ func LeaveCommand() *cobra.Command {
 			if len(args) != 0 {
 				return nil, shellCompDir
 			}
-			if err := util.InitCommand(cmd); err != nil {
+			if err := connect.InitCommand(cmd); err != nil {
 				return nil, shellCompDir | cobra.ShellCompDirectiveError
 			}
 			ctx := cmd.Context()

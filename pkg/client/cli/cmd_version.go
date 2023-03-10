@@ -10,12 +10,12 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
-	daemon2 "github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
@@ -37,7 +37,7 @@ func versionCommand() *cobra.Command {
 }
 
 func printVersion(cmd *cobra.Command, _ []string) error {
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
 	kvf := ioutil.DefaultKeyValueFormatter()
@@ -45,7 +45,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	remote := false
-	userD := daemon2.GetUserClient(ctx)
+	userD := daemon.GetUserClient(ctx)
 	if userD != nil {
 		remote = userD.Remote
 	}
@@ -55,7 +55,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 		switch {
 		case err == nil:
 			kvf.Add(version.Name, version.Version)
-		case err == util.ErrNoRootDaemon:
+		case err == connect.ErrNoRootDaemon:
 			kvf.Add("Root Daemon", "not running")
 		default:
 			kvf.Add("Root Daemon", fmt.Sprintf("error: %v", err))
@@ -88,14 +88,14 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 	if conn, err := socket.Dial(ctx, socket.DaemonName); err == nil {
 		defer conn.Close()
-		return daemon.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
+		return daemonRpc.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}
-	return nil, util.ErrNoRootDaemon
+	return nil, connect.ErrNoRootDaemon
 }
 
 func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if userD := daemon2.GetUserClient(ctx); userD != nil {
+	if userD := daemon.GetUserClient(ctx); userD != nil {
 		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
 	}
-	return nil, util.ErrNoUserDaemon
+	return nil, connect.ErrNoUserDaemon
 }

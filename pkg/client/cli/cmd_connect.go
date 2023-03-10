@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
 func connectCommand() *cobra.Command {
@@ -20,7 +20,7 @@ func connectCommand() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request.CommitFlags(cmd)
-			return util.RunConnect(cmd, args)
+			return connect.RunConnect(cmd, args)
 		},
 	}
 	request = daemon.InitRequest(cmd)

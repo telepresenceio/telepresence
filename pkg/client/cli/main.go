@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
@@ -43,7 +43,7 @@ func InitContext(ctx context.Context) context.Context {
 		ctx = rootd.WithNewSessionFunc(ctx, rootd.NewSession)
 	default:
 		client.DisplayName = "OSS Client"
-		ctx = util.WithCommandInitializer(ctx, util.CommandInitializer)
+		ctx = connect.WithCommandInitializer(ctx, connect.CommandInitializer)
 		ctx = WithSubCommands(ctx)
 	}
 	return ctx

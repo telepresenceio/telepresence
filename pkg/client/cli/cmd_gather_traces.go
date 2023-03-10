@@ -7,8 +7,8 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -38,7 +38,7 @@ func GatherTracesCommand() *cobra.Command {
 }
 
 func gatherTraces(cmd *cobra.Command, request *connector.TracesRequest) error {
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
 	ctx := cmd.Context()

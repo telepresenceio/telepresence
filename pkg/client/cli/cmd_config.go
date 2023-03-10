@@ -9,9 +9,9 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -79,7 +79,7 @@ func configView(cmd *cobra.Command, _ []string) error {
 	cmd.Annotations = map[string]string{
 		ann.Session: ann.Required,
 	}
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
 	ctx := cmd.Context()

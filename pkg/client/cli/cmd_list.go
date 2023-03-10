@@ -12,10 +12,10 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 )
 
 type listInfo struct {
@@ -53,7 +53,7 @@ func listCommand() *cobra.Command {
 
 	_ = cmd.RegisterFlagCompletionFunc("namespace", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		shellCompDir := cobra.ShellCompDirectiveNoFileComp
-		if err := util.InitCommand(cmd); err != nil {
+		if err := connect.InitCommand(cmd); err != nil {
 			shellCompDir |= cobra.ShellCompDirectiveError
 			return nil, shellCompDir
 		}
@@ -75,7 +75,7 @@ func listCommand() *cobra.Command {
 
 // list requests a list current intercepts from the daemon.
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
-	if err := util.InitCommand(cmd); err != nil {
+	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
 	stdout := cmd.OutOrStdout()

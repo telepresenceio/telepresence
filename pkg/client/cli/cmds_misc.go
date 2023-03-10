@@ -11,10 +11,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	daemon2 "github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 )
 
@@ -63,7 +63,7 @@ func quitCommand() *cobra.Command {
 		Short:       "Tell telepresence daemon to quit",
 		Annotations: map[string]string{ann.UserDaemon: ann.Optional},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := util.InitCommand(cmd); err != nil {
+			if err := connect.InitCommand(cmd); err != nil {
 				return err
 			}
 			if quitUserDaemon {
@@ -75,14 +75,14 @@ func quitCommand() *cobra.Command {
 				quitDaemons = true
 			}
 			ctx := cmd.Context()
-			if quitDaemons && daemon2.GetUserClient(ctx) == nil {
+			if quitDaemons && daemon.GetUserClient(ctx) == nil {
 				// User daemon isn't running. If the root daemon is running, we must
 				// kill it from here.
 				if conn, err := socket.Dial(ctx, socket.DaemonName); err == nil {
-					_, _ = daemon.NewDaemonClient(conn).Quit(ctx, &empty.Empty{})
+					_, _ = rpc.NewDaemonClient(conn).Quit(ctx, &empty.Empty{})
 				}
 			}
-			return util.Disconnect(cmd.Context(), quitDaemons)
+			return connect.Disconnect(cmd.Context(), quitDaemons)
 		},
 	}
 	flags := cmd.Flags()
