@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -85,7 +86,7 @@ func fixFlag(cmd *cobra.Command, _ []string) error {
 	}
 	rootCmd := cmd.Parent()
 	if json {
-		if err = rootCmd.PersistentFlags().Set("output", "json"); err != nil {
+		if err = rootCmd.PersistentFlags().Set(global.FlagOutput, "json"); err != nil {
 			return err
 		}
 	}

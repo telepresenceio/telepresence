@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/util"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -112,8 +113,8 @@ func hasKubeFlags(cmd *cobra.Command) bool {
 }
 
 func addUsageTemplate(cmd *cobra.Command) {
-	cobra.AddTemplateFunc("globalFlags", func(cmd *cobra.Command) *pflag.FlagSet { return GlobalFlags(hasKubeFlags(cmd)) })
-	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet { return localFlags(cmd, kubeFlags(), GlobalFlags(false)) })
+	cobra.AddTemplateFunc("globalFlags", func(cmd *cobra.Command) *pflag.FlagSet { return global.Flags(hasKubeFlags(cmd)) })
+	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet { return localFlags(cmd, kubeFlags(), global.Flags(false)) })
 	cobra.AddTemplateFunc("hasKubeFlags", hasKubeFlags)
 	cobra.AddTemplateFunc("kubeFlags", kubeFlags)
 	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
@@ -195,7 +196,7 @@ func AddSubCommands(cmd *cobra.Command) {
 		command.SetContext(ctx)
 	}
 	cmd.AddCommand(commands...)
-	cmd.PersistentFlags().AddFlagSet(GlobalFlags(false))
+	cmd.PersistentFlags().AddFlagSet(global.Flags(false))
 	addCompletionCommand(cmd)
 	cmd.InitDefaultHelpCmd()
 	addUsageTemplate(cmd)
@@ -267,23 +268,4 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 		}
 		return nil
 	}
-}
-
-func GlobalFlags(hasKubeFlags bool) *pflag.FlagSet {
-	flags := pflag.NewFlagSet("", 0)
-	if !hasKubeFlags {
-		flags.String(
-			"context", "",
-			"The name of the kubeconfig context to use",
-		)
-	}
-	flags.Bool(
-		"no-report", false,
-		"turn off anonymous crash reports and log submission on failure",
-	)
-	flags.String(
-		"output", "default",
-		"set the output format, supported values are 'json', 'yaml', and 'default'",
-	)
-	return flags
 }

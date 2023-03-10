@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
@@ -98,7 +99,7 @@ func DefaultYAML(cmd *cobra.Command, _ []string) error {
 		rootCmd = p
 	}
 	if fmt == formatDefault {
-		if err = rootCmd.PersistentFlags().Set("output", "yaml"); err != nil {
+		if err = rootCmd.PersistentFlags().Set(global.FlagOutput, "yaml"); err != nil {
 			return err
 		}
 	}
@@ -198,7 +199,7 @@ func WantsStream(cmd *cobra.Command) bool {
 }
 
 func validateFlag(cmd *cobra.Command) (format, error) {
-	if of := cmd.Flags().Lookup("output"); of != nil && of.DefValue == "default" {
+	if of := cmd.Flags().Lookup(global.FlagOutput); of != nil && of.DefValue == "default" {
 		fmt := strings.ToLower(of.Value.String())
 		switch fmt {
 		case "yaml":
