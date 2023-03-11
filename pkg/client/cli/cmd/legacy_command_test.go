@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"strings"
@@ -88,7 +88,7 @@ func Test_legacyCommands(t *testing.T) {
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {
 			inputArgs := strings.Split(tc.inputLegacyCommand, " ")
-			genTPCmd, msg, _, err := translateLegacyCmd(inputArgs)
+			genTPCmd, msg, _, err := translateLegacy(inputArgs)
 			if err != nil {
 				t.Fatal(err)
 			}

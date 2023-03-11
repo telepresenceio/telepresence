@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cmd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
@@ -44,7 +44,7 @@ func InitContext(ctx context.Context) context.Context {
 	default:
 		client.DisplayName = "OSS Client"
 		ctx = connect.WithCommandInitializer(ctx, connect.CommandInitializer)
-		ctx = WithSubCommands(ctx)
+		ctx = cmd.WithSubCommands(ctx)
 	}
 	return ctx
 }
@@ -60,35 +60,12 @@ func Main(ctx context.Context) {
 	if client.IsDaemon() {
 		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
 		// avoids checks for legacy commands.
-		cmd := &cobra.Command{
-			Use:  "telepresence",
-			Args: OnlySubcommands,
-			RunE: func(cmd *cobra.Command, args []string) error {
-				cmd.SetOut(cmd.ErrOrStderr())
-				return nil
-			},
-			SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
-			SilenceUsage:  true, // our FlagErrorFunc will handle it
-		}
-		cmd.AddCommand(kubeauth.Command())
-		cmd.AddCommand(userDaemon.Command())
-		cmd.AddCommand(rootd.Command())
-		if err := cmd.ExecuteContext(ctx); err != nil {
+		if cmd, _, err := output.Execute(cmd.TelepresenceDaemon(ctx)); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			os.Exit(1)
 		}
 	} else {
-		cfg, err := client.LoadConfig(ctx)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load config: %v", err)
-			os.Exit(1)
-		}
-		ctx = client.WithConfig(ctx, cfg)
-		if ctx, err = logging.InitContext(ctx, "cli", logging.RotateDaily, false); err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
-		if cmd, fmtOutput, err := output.Execute(Command(ctx)); err != nil {
+		if cmd, fmtOutput, err := output.Execute(cmd.Telepresence(ctx)); err != nil {
 			if fmtOutput {
 				os.Exit(1)
 			}

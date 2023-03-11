@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func GatherTracesCommand() *cobra.Command {
+func gatherTraces() *cobra.Command {
 	tr := connector.TracesRequest{}
 	cmd := &cobra.Command{
 		Use:  "gather-traces",
@@ -20,7 +20,7 @@ func GatherTracesCommand() *cobra.Command {
 
 		Short: "Gather Traces",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return gatherTraces(cmd, &tr)
+			return runGatherTraces(cmd, &tr)
 		},
 		Annotations: map[string]string{
 			ann.RootDaemon: ann.Required,
@@ -37,7 +37,7 @@ func GatherTracesCommand() *cobra.Command {
 	return cmd
 }
 
-func gatherTraces(cmd *cobra.Command, request *connector.TracesRequest) error {
+func runGatherTraces(cmd *cobra.Command, request *connector.TracesRequest) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}

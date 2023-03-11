@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 )
 
-func commandLeave() *cobra.Command {
+func leave() *cobra.Command {
 	return &cobra.Command{
 		Use:  "leave [flags] <intercept_name>",
 		Args: cobra.ExactArgs(1),

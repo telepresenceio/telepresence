@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"errors"
@@ -13,15 +13,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-type uninstallInfo struct {
+type uninstallCommand struct {
 	agent      bool
 	allAgents  bool
 	everything bool
 	namespace  string
 }
 
-func uninstallCommand() *cobra.Command {
-	ui := &uninstallInfo{}
+func uninstall() *cobra.Command {
+	ui := &uninstallCommand{}
 	cmd := &cobra.Command{
 		Use:  "uninstall [flags] { --agent <agents...> | --all-agents }",
 		Args: ui.args,
@@ -44,11 +44,11 @@ func uninstallCommand() *cobra.Command {
 	return cmd
 }
 
-func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
+func (u *uninstallCommand) args(cmd *cobra.Command, args []string) error {
 	if u.everything {
-		ha := &HelmOpts{
-			cmdType: connector.HelmRequest_UNINSTALL,
-			Request: &daemon.Request{},
+		ha := &HelmCommand{
+			RequestType: connector.HelmRequest_UNINSTALL,
+			Request:     &daemon.Request{},
 		}
 		fmt.Fprintln(cmd.OutOrStderr(), "--everything is deprecated. Please use telepresence helm uninstall")
 		return ha.run(cmd, args)
@@ -69,7 +69,7 @@ func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 }
 
 // uninstall.
-func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
+func (u *uninstallCommand) run(cmd *cobra.Command, args []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}

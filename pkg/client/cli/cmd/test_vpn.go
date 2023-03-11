@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"bufio"
@@ -18,15 +18,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
-type vpnDiagInfo struct{}
+type testVPNCommand struct{}
 
-func vpnDiagCommand() *cobra.Command {
-	di := vpnDiagInfo{}
+func testVPN() *cobra.Command {
+	tc := testVPNCommand{}
 	cmd := &cobra.Command{
 		Use:   "test-vpn",
 		Args:  cobra.NoArgs,
 		Short: "Test VPN configuration for compatibility with telepresence",
-		RunE:  di.run,
+		RunE:  tc.run,
 		Annotations: map[string]string{
 			ann.Session: ann.Required,
 		},
@@ -82,7 +82,7 @@ ifaces:
 	return vpnIfaces
 }
 
-func (di *vpnDiagInfo) run(cmd *cobra.Command, _ []string) (err error) {
+func (tc *testVPNCommand) run(cmd *cobra.Command, _ []string) (err error) {
 	var (
 		ctx          = cmd.Context()
 		sc           = scout.NewReporter(ctx, "cli")

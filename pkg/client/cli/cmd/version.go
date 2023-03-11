@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
-func versionCommand() *cobra.Command {
+func version() *cobra.Command {
 	return &cobra.Command{
 		Use:  "version",
 		Args: cobra.NoArgs,

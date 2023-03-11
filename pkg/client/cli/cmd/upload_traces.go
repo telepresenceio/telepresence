@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"compress/gzip"
@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 )
 
-func PushTracesCommand() *cobra.Command {
+func uploadTraces() *cobra.Command {
 	return &cobra.Command{
 		Use:  "upload-traces <zipFile> <jaeger target>",
 		Args: cobra.ExactArgs(2),

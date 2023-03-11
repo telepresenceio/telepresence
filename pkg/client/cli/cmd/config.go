@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"encoding/json"
@@ -15,15 +15,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func configCommand() *cobra.Command {
+func config() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "config",
 	}
-	cmd.AddCommand(configViewCommand())
+	cmd.AddCommand(configView())
 	return cmd
 }
 
-func configViewCommand() *cobra.Command {
+func configView() *cobra.Command {
 	var request *daemon.Request
 
 	cmd := &cobra.Command{
@@ -33,7 +33,7 @@ func configViewCommand() *cobra.Command {
 		Short:             "View current Telepresence configuration",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request.CommitFlags(cmd)
-			return configView(cmd, args)
+			return runConfigView(cmd, args)
 		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
@@ -41,7 +41,7 @@ func configViewCommand() *cobra.Command {
 	return cmd
 }
 
-func configView(cmd *cobra.Command, _ []string) error {
+func runConfigView(cmd *cobra.Command, _ []string) error {
 	var cfg client.SessionConfig
 	clientOnly, _ := cmd.Flags().GetBool("client-only")
 	if clientOnly {

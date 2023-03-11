@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func addCompletionCommand(rootCmd *cobra.Command) {
+func addCompletion(rootCmd *cobra.Command) {
 	cmd := cobra.Command{
 		Use:   "completion",
 		Short: "Generate a shell completion script",

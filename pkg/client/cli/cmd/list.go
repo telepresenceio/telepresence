@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
-type listInfo struct {
+type listCommand struct {
 	onlyIntercepts    bool
 	onlyAgents        bool
 	onlyInterceptable bool
@@ -27,8 +27,8 @@ type listInfo struct {
 	watch             bool
 }
 
-func listCommand() *cobra.Command {
-	s := &listInfo{}
+func list() *cobra.Command {
+	s := &listCommand{}
 	cmd := &cobra.Command{
 		Use:  "list",
 		Args: cobra.NoArgs,
@@ -74,7 +74,7 @@ func listCommand() *cobra.Command {
 }
 
 // list requests a list current intercepts from the daemon.
-func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
+func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ looper:
 	return nil
 }
 
-func (s *listInfo) printList(ctx context.Context, workloads []*connector.WorkloadInfo, stdout io.Writer, formattedOut bool) {
+func (s *listCommand) printList(ctx context.Context, workloads []*connector.WorkloadInfo, stdout io.Writer, formattedOut bool) {
 	if len(workloads) == 0 {
 		if formattedOut {
 			output.Object(ctx, []struct{}{}, false)

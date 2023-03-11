@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"archive/zip"
@@ -231,7 +231,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			cmd.SetOut(stdout)
 			cmd.SetErr(stderr)
 			cmd.SetContext(ctx)
-			gl := &gatherLogsArgs{
+			gl := &gatherLogsCommand{
 				outputFile: tc.outputFile,
 				daemons:    tc.daemons,
 				// We will test other values of this in our integration tests since

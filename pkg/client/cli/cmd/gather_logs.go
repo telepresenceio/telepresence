@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"archive/zip"
@@ -25,7 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-type gatherLogsArgs struct {
+type gatherLogsCommand struct {
 	outputFile     string
 	daemons        string
 	trafficAgents  string
@@ -34,8 +34,8 @@ type gatherLogsArgs struct {
 	podYaml        bool
 }
 
-func gatherLogsCommand() *cobra.Command {
-	gl := &gatherLogsArgs{}
+func gatherLogs() *cobra.Command {
+	gl := &gatherLogsCommand{}
 	cmd := &cobra.Command{
 		Use:   "gather-logs",
 		Args:  cobra.NoArgs,
@@ -88,7 +88,7 @@ type anonymizer struct {
 }
 
 // gatherLogs gets the logs from the daemons (daemon + connector) and creates a zip.
-func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, _ []string) error {
+func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func (gl *gatherLogsArgs) gatherLogs(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (gl *gatherLogsArgs) gatherClusterLogs(ctx context.Context, exportDir string, az *anonymizer) error {
+func (gl *gatherLogsCommand) gatherClusterLogs(ctx context.Context, exportDir string, az *anonymizer) error {
 	// To get logs from the components in the kubernetes cluster, we ask the
 	// traffic-manager.
 	rq := &connector.LogsRequest{

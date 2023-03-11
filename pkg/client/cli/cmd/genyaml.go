@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-type genYAMLInfo struct {
+type genYAMLCommand struct {
 	outputFile   string
 	inputFile    string
 	configFile   string
@@ -35,8 +35,8 @@ type genYAMLInfo struct {
 	namespace    string
 }
 
-func genYAMLCommand() *cobra.Command {
-	info := genYAMLInfo{}
+func genYAML() *cobra.Command {
+	info := genYAMLCommand{}
 	cmd := &cobra.Command{
 		Use:  "genyaml",
 		Args: cobra.NoArgs,
@@ -84,7 +84,7 @@ func getInput(inputFile string) ([]byte, error) {
 	return b, nil
 }
 
-func (i *genYAMLInfo) getOutputWriter() (io.WriteCloser, error) {
+func (i *genYAMLCommand) getOutputWriter() (io.WriteCloser, error) {
 	if i.outputFile == "-" {
 		return os.Stdout, nil
 	}
@@ -95,7 +95,7 @@ func (i *genYAMLInfo) getOutputWriter() (io.WriteCloser, error) {
 	return f, nil
 }
 
-func (i *genYAMLInfo) loadConfigMapEntry(ctx context.Context) (*agentconfig.Sidecar, error) {
+func (i *genYAMLCommand) loadConfigMapEntry(ctx context.Context) (*agentconfig.Sidecar, error) {
 	if i.configFile != "" {
 		b, err := getInput(i.configFile)
 		if err != nil {
@@ -131,7 +131,7 @@ func (i *genYAMLInfo) loadConfigMapEntry(ctx context.Context) (*agentconfig.Side
 	return &cfg, nil
 }
 
-func (i *genYAMLInfo) loadWorkload(ctx context.Context) (k8sapi.Workload, error) {
+func (i *genYAMLCommand) loadWorkload(ctx context.Context) (k8sapi.Workload, error) {
 	if i.inputFile == "" {
 		if i.workloadName == "" {
 			return nil, errcat.User.New("either --input or --workload must be provided")
@@ -168,7 +168,7 @@ func (i *genYAMLInfo) loadWorkload(ctx context.Context) (k8sapi.Workload, error)
 	return wl, nil
 }
 
-func (i *genYAMLInfo) writeObjToOutput(obj any) error {
+func (i *genYAMLCommand) writeObjToOutput(obj any) error {
 	// We use sigs.ks8.io/yaml because it treats json serialization tags as if they were yaml tags.
 	doc, err := yaml.Marshal(obj)
 	if err != nil {
@@ -186,7 +186,7 @@ func (i *genYAMLInfo) writeObjToOutput(obj any) error {
 	return nil
 }
 
-func (i *genYAMLInfo) withK8sInterface(ctx context.Context, flagMap map[string]string) (context.Context, error) {
+func (i *genYAMLCommand) withK8sInterface(ctx context.Context, flagMap map[string]string) (context.Context, error) {
 	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
@@ -234,7 +234,7 @@ func (i *genYAMLInfo) withK8sInterface(ctx context.Context, flagMap map[string]s
 
 type genConfigMap struct {
 	agentmap.GeneratorConfig
-	*genYAMLInfo
+	*genYAMLCommand
 }
 
 func allKubeFlags() *pflag.FlagSet {
@@ -244,9 +244,9 @@ func allKubeFlags() *pflag.FlagSet {
 	return kubeFlags
 }
 
-func genConfigMapSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
+func genConfigMapSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 	kubeFlags := allKubeFlags()
-	info := genConfigMap{genYAMLInfo: yamlInfo}
+	info := genConfigMap{genYAMLCommand: yamlInfo}
 	cmd := &cobra.Command{
 		Use:   "config",
 		Args:  cobra.NoArgs,
@@ -303,12 +303,12 @@ func (g *genConfigMap) run(cmd *cobra.Command, kubeFlags map[string]string) erro
 }
 
 type genContainerInfo struct {
-	*genYAMLInfo
+	*genYAMLCommand
 }
 
-func genContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
+func genContainerSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 	kubeFlags := allKubeFlags()
-	info := genContainerInfo{genYAMLInfo: yamlInfo}
+	info := genContainerInfo{genYAMLCommand: yamlInfo}
 	cmd := &cobra.Command{
 		Use:   "container",
 		Args:  cobra.NoArgs,
@@ -372,12 +372,12 @@ func (g *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 }
 
 type genInitContainerInfo struct {
-	*genYAMLInfo
+	*genYAMLCommand
 }
 
-func genInitContainerSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
+func genInitContainerSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 	kubeFlags := allKubeFlags()
-	info := genInitContainerInfo{genYAMLInfo: yamlInfo}
+	info := genInitContainerInfo{genYAMLCommand: yamlInfo}
 	cmd := &cobra.Command{
 		Use:   "initcontainer",
 		Args:  cobra.NoArgs,
@@ -417,11 +417,11 @@ func (g *genInitContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]stri
 }
 
 type genVolumeInfo struct {
-	*genYAMLInfo
+	*genYAMLCommand
 }
 
-func genVolumeSubCommand(yamlInfo *genYAMLInfo) *cobra.Command {
-	info := genVolumeInfo{genYAMLInfo: yamlInfo}
+func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
+	info := genVolumeInfo{genYAMLCommand: yamlInfo}
 	kubeFlags := allKubeFlags()
 	cmd := &cobra.Command{
 		Use:   "volume",

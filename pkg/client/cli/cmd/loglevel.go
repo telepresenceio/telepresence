@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"errors"
@@ -19,7 +19,7 @@ import (
 
 const defaultDuration = 30 * time.Minute
 
-type logLevelSetter struct {
+type logLevelCommand struct {
 	duration   time.Duration
 	localOnly  bool
 	remoteOnly bool
@@ -40,13 +40,13 @@ func logLevelArg(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func loglevelCommand() *cobra.Command {
+func loglevel() *cobra.Command {
 	lvs := logrus.AllLevels[2:] // Don't include `panic` and `fatal`
 	lvStrs := make([]string, len(lvs))
 	for i, lv := range lvs {
 		lvStrs[i] = lv.String()
 	}
-	lls := logLevelSetter{}
+	lls := logLevelCommand{}
 	cmd := &cobra.Command{
 		Use:       fmt.Sprintf("loglevel <%s>", strings.Join(lvStrs, ",")),
 		Args:      logLevelArg,
@@ -64,7 +64,7 @@ func loglevelCommand() *cobra.Command {
 	return cmd
 }
 
-func (lls *logLevelSetter) setTempLogLevel(cmd *cobra.Command, args []string) error {
+func (lls *logLevelCommand) setTempLogLevel(cmd *cobra.Command, args []string) error {
 	rq := &connector.LogLevelRequest{LogLevel: args[0], Duration: durationpb.New(lls.duration)}
 	switch {
 	case lls.localOnly && lls.remoteOnly:

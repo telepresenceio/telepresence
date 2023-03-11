@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"fmt"
@@ -47,7 +47,7 @@ type legacyCommand struct {
 // https://github.com/spf13/cobra/issues/739
 // but until that is addressed, we'll do the flag parsing ourselves (which isn't
 // the worst because it's a legacy command so the flags won't be growing).
-func parseLegacyCommand(args []string) *legacyCommand {
+func parseLegacy(args []string) *legacyCommand {
 	lc := &legacyCommand{}
 
 	// We don't want to over-index in case somebody has a command that has a
@@ -197,10 +197,10 @@ func (lc *legacyCommand) genTPCommand() (string, error) {
 	return strings.Join(cmdSlice, " "), nil
 }
 
-// translateLegacyCmd tries to detect if a legacy Telepresence command was used
+// translateLegacy tries to detect if a legacy Telepresence command was used
 // and constructs a Telepresence command from that.
-func translateLegacyCmd(args []string) (string, string, *legacyCommand, error) {
-	lc := parseLegacyCommand(args)
+func translateLegacy(args []string) (string, string, *legacyCommand, error) {
+	lc := parseLegacy(args)
 	tpCmd, err := lc.genTPCommand()
 	if err != nil {
 		return "", "", lc, err
@@ -224,13 +224,30 @@ func translateLegacyCmd(args []string) (string, string, *legacyCommand, error) {
 	return tpCmd, msg, lc, nil
 }
 
-// checkLegacyCmd is mostly a wrapper around translateLegacyCmd. The latter
+// perhapsLegacy is like OnlySubcommands but performs some initial check for legacy flags.
+func perhapsLegacy(cmd *cobra.Command, args []string) error {
+	// If a user is using a flag that is coming from telepresence 1, we try to
+	// construct the tp2 command based on their input. If the args passed to
+	// telepresence are one of the flags we recognize, we don't want to error
+	// out here.
+	tp1Flags := []string{"--swap-deployment", "-s", "--run", "--run-shell", "--docker-run", "--help"}
+	for _, v := range args {
+		for _, flag := range tp1Flags {
+			if v == flag {
+				return nil
+			}
+		}
+	}
+	return OnlySubcommands(cmd, args)
+}
+
+// checkLegacy is mostly a wrapper around translateLegacy. The latter
 // is separate to make for easier testing.
-func checkLegacyCmd(cmd *cobra.Command, args []string) error {
+func checkLegacy(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
-	tpCmd, msg, lc, err := translateLegacyCmd(args)
+	tpCmd, msg, lc, err := translateLegacy(args)
 	if err != nil {
 		return err
 	}
@@ -271,7 +288,7 @@ func checkLegacyCmd(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStderr(), "Command roughly translates to the following in Telepresence:\ntelepresence %s\n", tpCmd)
 		ctx := cmd.Context()
 		fmt.Fprintln(cmd.OutOrStderr(), "running...")
-		newCmd := Command(ctx)
+		newCmd := Telepresence(ctx)
 		newCmd.SetArgs(strings.Split(tpCmd, " "))
 		newCmd.SetOut(cmd.OutOrStderr())
 		newCmd.SetErr(cmd.OutOrStderr())

@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -19,35 +19,35 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
-func helmCommand() *cobra.Command {
+func helm() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
-	cmd.AddCommand(helmInstallCommand(), helmUpgradeCommand(), helmUninstallCommand())
+	cmd.AddCommand(helmInstall(), helmUpgrade(), helmUninstall())
 	return cmd
 }
 
-type HelmOpts struct {
+type HelmCommand struct {
 	values.Options
 	AllValues   map[string]any
+	Request     *daemon.Request
+	RequestType connector.HelmRequest_Type
 	ReuseValues bool
 	ResetValues bool
-	Request     *daemon.Request
-	cmdType     connector.HelmRequest_Type
 	CRDs        bool
 }
 
 var (
-	HelmInstallExtendFlagsFunc func(*pflag.FlagSet)                                   //nolint:gochecknoglobals // extension point
-	HelmExtendFlagsFunc        func(*pflag.FlagSet)                                   //nolint:gochecknoglobals // extension point
-	HelmInstallPrologFunc      func(context.Context, *pflag.FlagSet, *HelmOpts) error //nolint:gochecknoglobals // extension point
+	HelmInstallExtendFlagsFunc func(*pflag.FlagSet)                                      //nolint:gochecknoglobals // extension point
+	HelmExtendFlagsFunc        func(*pflag.FlagSet)                                      //nolint:gochecknoglobals // extension point
+	HelmInstallPrologFunc      func(context.Context, *pflag.FlagSet, *HelmCommand) error //nolint:gochecknoglobals // extension point
 )
 
-func helmInstallCommand() *cobra.Command {
+func helmInstall() *cobra.Command {
 	var upgrade bool
 
-	ha := &HelmOpts{
-		cmdType: connector.HelmRequest_INSTALL,
+	ha := &HelmCommand{
+		RequestType: connector.HelmRequest_INSTALL,
 	}
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -55,7 +55,7 @@ func helmInstallCommand() *cobra.Command {
 		Short: "Install telepresence traffic manager",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if upgrade {
-				ha.cmdType = connector.HelmRequest_UPGRADE
+				ha.RequestType = connector.HelmRequest_UPGRADE
 			}
 			return ha.run(cmd, args)
 		},
@@ -76,9 +76,9 @@ func helmInstallCommand() *cobra.Command {
 	return cmd
 }
 
-func helmUpgradeCommand() *cobra.Command {
-	ha := &HelmOpts{
-		cmdType: connector.HelmRequest_UPGRADE,
+func helmUpgrade() *cobra.Command {
+	ha := &HelmCommand{
+		RequestType: connector.HelmRequest_UPGRADE,
 	}
 	cmd := &cobra.Command{
 		Use:   "upgrade",
@@ -102,7 +102,7 @@ func helmUpgradeCommand() *cobra.Command {
 	return cmd
 }
 
-func (ha *HelmOpts) addValueSettingFlags(flags *pflag.FlagSet) {
+func (ha *HelmCommand) addValueSettingFlags(flags *pflag.FlagSet) {
 	flags.StringSliceVarP(&ha.ValueFiles, "values", "f", []string{},
 		"specify values in a YAML file or a URL (can specify multiple)")
 	flags.StringSliceVarP(&ha.Values, "set", "", []string{},
@@ -118,15 +118,15 @@ func (ha *HelmOpts) addValueSettingFlags(flags *pflag.FlagSet) {
 	}
 }
 
-func (ha *HelmOpts) addCRDsFlags(flags *pflag.FlagSet) {
+func (ha *HelmCommand) addCRDsFlags(flags *pflag.FlagSet) {
 	if HelmExtendFlagsFunc != nil {
 		HelmExtendFlagsFunc(flags)
 	}
 }
 
-func helmUninstallCommand() *cobra.Command {
-	ha := &HelmOpts{
-		cmdType: connector.HelmRequest_UNINSTALL,
+func helmUninstall() *cobra.Command {
+	ha := &HelmCommand{
+		RequestType: connector.HelmRequest_UNINSTALL,
 	}
 	cmd := &cobra.Command{
 		Use:   "uninstall",
@@ -143,11 +143,11 @@ func helmUninstallCommand() *cobra.Command {
 	return cmd
 }
 
-func (ha *HelmOpts) Type() connector.HelmRequest_Type {
-	return ha.cmdType
+func (ha *HelmCommand) Type() connector.HelmRequest_Type {
+	return ha.RequestType
 }
 
-func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
+func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 	if ha.ReuseValues && ha.ResetValues {
 		return errcat.User.New("--reset-values and --reuse-values are mutually exclusive")
 	}
@@ -173,7 +173,7 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	request := &connector.HelmRequest{
-		Type:           ha.cmdType,
+		Type:           ha.RequestType,
 		ValuesJson:     valuesJSON,
 		ReuseValues:    ha.ReuseValues,
 		ResetValues:    ha.ResetValues,
@@ -196,7 +196,7 @@ func (ha *HelmOpts) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	var msg string
-	switch ha.cmdType {
+	switch ha.RequestType {
 	case connector.HelmRequest_INSTALL:
 		msg = "installed"
 	case connector.HelmRequest_UPGRADE:

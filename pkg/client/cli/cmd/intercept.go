@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"log"
@@ -10,7 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 )
 
-func commandIntercept() *cobra.Command {
+func interceptCmd() *cobra.Command {
 	ic := &intercept.Command{}
 	cmd := &cobra.Command{
 		Use:   "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",

@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"fmt"
@@ -11,10 +11,10 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 )
 
-// ClusterIdCommand is a simple command that makes it easier for users to
+// currentClusterId is a simple command that makes it easier for users to
 // figure out what their cluster ID is. For now this is just used when
 // people are making licenses for air-gapped environments.
-func ClusterIdCommand() *cobra.Command {
+func currentClusterId() *cobra.Command {
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	cmd := &cobra.Command{
 		Use:  "current-cluster-id",

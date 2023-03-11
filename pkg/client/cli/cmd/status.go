@@ -1,4 +1,4 @@
-package cli
+package cmd
 
 import (
 	"context"
@@ -60,7 +60,7 @@ type connectStatusIntercept struct {
 	Client string `json:"client,omitempty" yaml:"client,omitempty"`
 }
 
-func statusCommand() *cobra.Command {
+func statusCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "status",
 		Args: cobra.NoArgs,
