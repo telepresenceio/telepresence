@@ -1,4 +1,4 @@
-package intercept
+package cli
 
 import (
 	"context"
@@ -12,9 +12,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 )
 
-func LeaveCommand() *cobra.Command {
+func commandLeave() *cobra.Command {
 	return &cobra.Command{
 		Use:  "leave [flags] <intercept_name>",
 		Args: cobra.ExactArgs(1),
@@ -63,5 +64,5 @@ func LeaveCommand() *cobra.Command {
 
 func removeIntercept(ctx context.Context, name string) error {
 	userD := daemon.GetUserClient(ctx)
-	return Result(userD.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name}))
+	return intercept.Result(userD.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name}))
 }

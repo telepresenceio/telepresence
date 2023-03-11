@@ -2,7 +2,6 @@ package intercept
 
 import (
 	"context"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -13,16 +12,14 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-type Args struct {
-	Name           string // Args[0] || `${Args[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
-	AgentName      string // --workload || Args[0] // only valid if !localOnly
+type Command struct {
+	Name           string // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
+	AgentName      string // --workload || Command[0] // only valid if !localOnly
 	Namespace      string // --namespace
 	Port           string // --port // only valid if !localOnly
 	ServiceName    string // --service // only valid if !localOnly
@@ -37,7 +34,7 @@ type Args struct {
 
 	DockerRun   bool     // --docker-run
 	DockerMount string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
-	Cmdline     []string // Args[1:]
+	Cmdline     []string // Command[1:]
 
 	Mechanism      string // --mechanism tcp
 	MechanismArgs  []string
@@ -45,31 +42,7 @@ type Args struct {
 	DetailedOutput bool
 }
 
-func Command() *cobra.Command {
-	a := &Args{}
-	cmd := &cobra.Command{
-		Use:   "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
-		Args:  cobra.MinimumNArgs(1),
-		Short: "Intercept a service",
-		Annotations: map[string]string{
-			ann.Session:           ann.Required,
-			ann.UpdateCheckFormat: ann.Tel2,
-		},
-		SilenceUsage:      true,
-		SilenceErrors:     true,
-		RunE:              a.Run,
-		ValidArgsFunction: a.ValidArgs,
-		PreRunE:           cloud.UpdateCheckIfDue,
-		PostRunE:          cloud.RaiseMessage,
-	}
-	a.AddFlags(cmd.Flags())
-	if err := cmd.RegisterFlagCompletionFunc("namespace", a.AutocompleteNamespace); err != nil {
-		log.Fatal(err)
-	}
-	return cmd
-}
-
-func (a *Args) AddFlags(flags *pflag.FlagSet) {
+func (a *Command) AddFlags(flags *pflag.FlagSet) {
 	flags.StringVarP(&a.AgentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
 	flags.StringVarP(&a.Port, "port", "p", "", ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
@@ -115,7 +88,7 @@ func (a *Args) AddFlags(flags *pflag.FlagSet) {
 		`Do not mount remote directories. Instead, expose this port on localhost to an external mounter`)
 }
 
-func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
+func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 	if len(positional) > 1 && cmd.Flags().ArgsLenAtDash() != 1 {
 		return errcat.User.New("commands to be run with intercept must come after options")
 	}
@@ -161,7 +134,7 @@ func (a *Args) Validate(cmd *cobra.Command, positional []string) error {
 	return nil
 }
 
-func (a *Args) Run(cmd *cobra.Command, positional []string) error {
+func (a *Command) Run(cmd *cobra.Command, positional []string) error {
 	if err := a.Validate(cmd, positional); err != nil {
 		return err
 	}
@@ -171,7 +144,7 @@ func (a *Args) Run(cmd *cobra.Command, positional []string) error {
 	return Run(cmd.Context(), NewState(cmd, a))
 }
 
-func (a *Args) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func (a *Command) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if err := connect.InitCommand(cmd); err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
@@ -187,7 +160,7 @@ func (a *Args) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete 
 	return rs.Namespaces, cobra.ShellCompDirectiveNoFileComp
 }
 
-func (a *Args) ValidateDockerArgs() error {
+func (a *Command) ValidateDockerArgs() error {
 	for _, arg := range a.Cmdline {
 		if arg == "-d" || arg == "--detach" {
 			return errcat.User.New("running docker container in background using -d or --detach is not supported")
@@ -196,7 +169,7 @@ func (a *Args) ValidateDockerArgs() error {
 	return nil
 }
 
-func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func (a *Command) ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) > 0 {
 		// Not completing the name of the workload
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -236,7 +209,7 @@ func (a *Args) ValidArgs(cmd *cobra.Command, args []string, toComplete string) (
 	return list, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 }
 
-func (a *Args) GetMountPoint(ctx context.Context) (string, bool, error) {
+func (a *Command) GetMountPoint(ctx context.Context) (string, bool, error) {
 	mountPoint := ""
 	doMount, err := strconv.ParseBool(a.Mount)
 	switch {

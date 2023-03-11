@@ -50,7 +50,7 @@ func describeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 	}
 	if debug {
 		kvf.Add("Mechanism", ii.Spec.Mechanism)
-		kvf.Add("Mechanism Args", fmt.Sprintf("%q", ii.Spec.MechanismArgs))
+		kvf.Add("Mechanism Command", fmt.Sprintf("%q", ii.Spec.MechanismArgs))
 		kvf.Add("Metadata", fmt.Sprintf("%q", ii.Metadata))
 	}
 

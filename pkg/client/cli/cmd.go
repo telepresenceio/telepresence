@@ -14,7 +14,6 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -121,7 +120,7 @@ func addUsageTemplate(cmd *cobra.Command) {
 	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
 		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
 		// adjusted
-		//  1. to take a pflag.FlagSet instead of a cobra.Command, so that we can have flag groups, and
+		//  1. to take a pflag.FlagSet instead of a cobra.commandIntercept, so that we can have flag groups, and
 		//  2. to correct for the ways that Docker upsets me.
 
 		// Obey COLUMNS if the shell or user sets it.  (Docker doesn't do this.)
@@ -203,7 +202,7 @@ func AddSubCommands(cmd *cobra.Command) {
 	addUsageTemplate(cmd)
 }
 
-// RunSubcommands is for use as a cobra.Command.RunE for commands that don't do anything themselves
+// RunSubcommands is for use as a cobra.commandIntercept.RunE for commands that don't do anything themselves
 // but have subcommands.  In such cases, it is important to set RunE even though there's nothing to
 // run, because otherwise cobra will treat that as "success", and it shouldn't be "success" if the
 // user typos a command and types something invalid.
@@ -251,7 +250,7 @@ func Command(ctx context.Context) *cobra.Command {
 func WithSubCommands(ctx context.Context) context.Context {
 	return MergeSubCommands(ctx,
 		connect.Command(), statusCommand(), connect.QuitCommand(),
-		listCommand(), intercept.LeaveCommand(), intercept.Command(),
+		listCommand(), commandLeave(), commandIntercept(),
 		helmCommand(), uninstallCommand(),
 		loglevelCommand(), gatherLogsCommand(),
 		GatherTracesCommand(), PushTracesCommand(),

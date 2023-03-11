@@ -43,7 +43,7 @@ type State interface {
 }
 
 type state struct {
-	*Args
+	*Command
 	cmd        *cobra.Command
 	scout      *scout.Reporter
 	env        map[string]string
@@ -54,12 +54,12 @@ type state struct {
 
 func NewState(
 	cmd *cobra.Command,
-	args *Args,
+	args *Command,
 ) State {
 	return &state{
-		Args:  args,
-		cmd:   cmd,
-		scout: scout.NewReporter(cmd.Context(), "cli"),
+		Command: args,
+		cmd:     cmd,
+		scout:   scout.NewReporter(cmd.Context(), "cli"),
 	}
 }
 
@@ -77,7 +77,7 @@ func (s *state) Cmd() *cobra.Command {
 }
 
 func (s *state) Name() string {
-	return s.Args.Name
+	return s.Command.Name
 }
 
 func (s *state) Reporter() *scout.Reporter {
