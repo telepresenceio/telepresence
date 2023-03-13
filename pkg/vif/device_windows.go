@@ -172,7 +172,7 @@ $job | Receive-Job
 	return nil
 }
 
-func (t *nativeDevice) setMTU(mtu int) error {
+func (t *nativeDevice) setMTU(int) error {
 	return errors.New("not implemented")
 }
 

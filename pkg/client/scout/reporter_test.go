@@ -483,6 +483,7 @@ func TestReport(t *testing.T) {
 				capturedRequestBodies = append(capturedRequestBodies, body)
 			}))
 
+			os.Unsetenv("SCOUT_DISABLE")
 			// Given...
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, v)

@@ -26,7 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -257,7 +257,7 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 }
 
 func EnableK8SAuthenticator(ctx context.Context) error {
-	cr := connect.GetRequest(ctx)
+	cr := daemon.GetRequest(ctx)
 	dlog.Debugf(ctx, "kubeflags = %v", cr.KubeFlags)
 	configFlags, err := client.ConfigFlags(cr.KubeFlags)
 	if err != nil {
