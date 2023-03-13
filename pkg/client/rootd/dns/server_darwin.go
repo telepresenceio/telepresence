@@ -155,6 +155,9 @@ func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, co
 	}
 
 	kubernetesZone := s.clusterDomain
+	if kubernetesZone == "" {
+		kubernetesZone = "cluster.local."
+	}
 	kubernetesZone = kubernetesZone[:len(kubernetesZone)-1] // strip trailing dot
 	rf := resolveFile{
 		port:        dnsAddr.Port,

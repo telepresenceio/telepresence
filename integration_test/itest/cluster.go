@@ -570,6 +570,7 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
 		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
+	TelepresenceQuitOk(ctx)
 }
 
 func KubeConfig(ctx context.Context) string {
