@@ -200,8 +200,6 @@ func ManageSessions(c context.Context, si userd.Service) error {
 		case cr := <-s.connectRequest:
 			rsp := startSession(c, si, cr, &wg)
 			select {
-			case <-c.Done():
-				return nil
 			case s.connectResponse <- rsp:
 			default:
 				// Nobody left to read the response? That's fine really. Just means that
