@@ -339,6 +339,7 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	allArgs = append(allArgs,
 		"run",
 		"--rm",
+		"-d",
 		"--cidfile", cidFileName,
 	)
 	allArgs = append(allArgs, opts...)
