@@ -7,7 +7,11 @@
 - Feature: Adds an authenticator package to support integration with the [client-go credential](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins) plugins when the
   daemon runs in a docker container.
 
+- Feature: The `telepresence helm` command now accepts a `--namespace` flag.
+
 - Bugfix: The traffic-manager will no longer panic when the CNAME of kubernetes.default doesn't contain .svc.
+
+- Bugfix: The `telepresence helm install/upgrade --set` family of flags now work correctly with comma separated values.
 
 ### 2.11.1 (February 27, 2023)
 
