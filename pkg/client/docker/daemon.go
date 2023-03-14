@@ -30,7 +30,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -140,14 +139,14 @@ func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, 
 			grpc.WithBlock(),
 			grpc.FailOnNonTempDialError(true))
 		if err != nil {
-			if i < 5 && strings.Contains(err.Error(), "connection refused") {
+			if i < 5 {
 				// It's likely that we were too quick. Let's take a nap and try again
 				time.Sleep(time.Duration(i*50) * time.Millisecond)
 				continue
 			}
 			return nil, err
 		}
-		return conn, err
+		return conn, nil
 	}
 }
 
@@ -376,7 +375,9 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 
 func tryLaunch(ctx context.Context, port int, name, cidFileName string, args []string) error {
 	stdErr := &bytes.Buffer{}
-	cmd := proc.StdCommand(dos.WithStderr(ctx, stdErr), "docker", args...)
+	cmd := proc.CommandContext(ctx, "docker", args...)
+	cmd.DisableLogging = true
+	cmd.Stderr = stdErr
 	if err := cmd.Start(); err != nil {
 		return err
 	}
