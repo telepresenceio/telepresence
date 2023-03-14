@@ -42,6 +42,7 @@ func TestEnvconfig(t *testing.T) {
 		AgentLogLevel:            "info",
 		AgentPort:                9900,
 		AgentRegistry:            "docker.io/datawire",
+		AgentInjectorName:        "agent-injector",
 		ClientConnectionTTL:      24 * time.Hour,
 		ClientDnsExcludeSuffixes: []string{".com", ".io", ".net", ".org", ".ru"},
 		LogLevel:                 "info",

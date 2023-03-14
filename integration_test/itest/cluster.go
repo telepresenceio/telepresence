@@ -36,6 +36,7 @@ import (
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -67,6 +68,7 @@ type Cluster interface {
 	UninstallTrafficManager(ctx context.Context, managerNamespace string)
 	PackageHelmChart(ctx context.Context) (string, error)
 	GetValuesForHelm(values map[string]string, release bool, managerNamespace string, appNamespaces ...string) []string
+	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
 }
 
 // The cluster is created once and then reused by all tests. It ensures that:
@@ -571,6 +573,22 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
 		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
 	TelepresenceQuitOk(ctx)
+}
+
+func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error) {
+	_ = os.Setenv("KUBECONFIG", KubeConfig(ctx))
+	cfgAndFlags, err := client.NewKubeconfig(ctx, map[string]string{
+		"context":   context,
+		"namespace": managerNamespace,
+	}, managerNamespace)
+	if err != nil {
+		return ctx, nil, err
+	}
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return kc.WithK8sInterface(ctx), kc, nil
 }
 
 func KubeConfig(ctx context.Context) string {
