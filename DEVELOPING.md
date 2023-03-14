@@ -5,8 +5,9 @@
 ### Development environment
 
  - `TELEPRESENCE_REGISTRY` (required) is the Docker registry that
-   `make push-image` pushes the `tel2` image to.  For most developers
-   the easiest thing is to set it to `docker.io/USERNAME`.
+   `make push-images` pushes the `tel2` and `telepresence` image to.
+   For most developers, the easiest thing is to set it to
+   `docker.io/USERNAME`.
 
  - `TELEPRESENCE_VERSION` (optional) is the "vSEMVER" string to
    compile-in to the binary and Docker image, if set.  Otherwise,
@@ -34,7 +35,7 @@
    `localhost:5000`, both from the cluster and from the local workstation.
 
  - `DEV_TELEPRESENCE_VERSION` (optional) if set to a version such as
-   `v2.6.7-alpha.0`, the integration tests will assume that this version
+   `v2.12.1-alpha.0`, the integration tests will assume that this version
    is pre-built and available, both as a CLI client (accessible from the
    current runtime path), and also pre-pushed into a pre-existing cluster
    accessible from `DTEST_KUBECONFIG`. In other words, if this is set, no
@@ -42,7 +43,7 @@
    can be quit rapid.
 
  - `DEV_AGENT_IMAGE` (optional) can be set to an alternative image to use
-   for the traffic agent, such as `ambassador-telepresence-agent:1.12.7-alpha.0`.
+   for the traffic agent, such as `ambassador-telepresence-agent:1.13.11-alpha.0`.
    This will make all tests use that traffic-agent instead of the default
    which uses the same image as the traffic-manager.
 
@@ -81,10 +82,10 @@ Example of running test with existing client and traffic-mananager:
 
 ```
 make private-registry
-export TELEPRESENCE_VERSION=v2.10.5-alpha.3
+export TELEPRESENCE_VERSION=v2.12.1-alpha.0
 export TELEPRESENCE_REGISTRY=localhost:5000
 make build
-make push-image
+make push-images
 export DTEST_KUBECONFIG=<your kubeconfig>
 export DTEST_REGISTRY=$TELEPRESENCE_REGISTRY
 export DEV_TELEPRESENCE_VERSION=$TELEPRESENCE_VERSION
@@ -136,27 +137,29 @@ Telemetry to Ambassador Labs can be disabled by having your os resolve the `metr
 The easiest thing to do to get going:
 
 ```console
-$ TELEPRESENCE_REGISTRY=docker.io/lukeshu make build push-images # use .\build-aux\winmake.bat build on windows
 $ TELEPRESENCE_REGISTRY=docker.io/thhal make build push-images # use .\build-aux\winmake.bat build on windows
-[make] TELEPRESENCE_VERSION=v2.6.7-19-g37085c2d7-1655891839
+[make] TELEPRESENCE_VERSION=v2.12.1-19-g37085c2d7-1655891839
 ... # Lots of output
-2.6.7-19-g37085c2d7-1655891839: digest: sha256:40fe852f8d8026a89f196293f37ae8c462c765c85572150d26263d78c43cdd4b size: 1157
+2.12.1-19-g37085c2d7-1655891839: digest: sha256:40fe852f8d8026a89f196293f37ae8c462c765c85572150d26263d78c43cdd4b size: 1157
 ```
 
-This has 2 primary outputs:
+This has 3 primary outputs:
  1. The `./build-output/bin/telepresence` executable binary
  2. The `${TELEPRESENCE_REGISTRY}/tel2` Docker image
+ 3. The `${TELEPRESENCE_REGISTRY}/telepresence` Docker image
 
-It essentially does 3 separate tasks:
+It essentially does 4 separate tasks:
  1. `make build` to build the `./build-output/bin/telepresence`
     executable binary
- 2. `make tel2` to build the `${TELEPRESENCE_REGISTRY}/tel2` Docker
+ 2. `make tel2-image` to build the `${TELEPRESENCE_REGISTRY}/tel2` Docker
     image.
- 3. `make push-image` to push the `${TELEPRESENCE_REGISTRY}/tel2`
-    Docker image.
+ 3. `make client-image` to build the `${TELEPRESENCE_REGISTRY}/telepresence` Docker
+   image.
+ 4. `make push-images` to push the `${TELEPRESENCE_REGISTRY}/tel2` and `${TELEPRESENCE_REGISTRY}/telepresence`
+    Docker images.
 
 You can run any of those tasks separately, but be warned: The
-`TELEPRESENCE_VERSION` for all 3 needs to agree, and `make` includes a
+`TELEPRESENCE_VERSION` for all 4 needs to agree, and `make` includes a
 timestamp in the default `TELEPRESENCE_VERSION`; if you run the tasks
 separately you will need to explicitly set the `TELEPRESENCE_VERSION`
 environment variable so that they all agree.
@@ -170,7 +173,7 @@ will want to set it to the version of a previously-pushed Docker
 image.
 
 You may think that the initial suggestion of running `make build
-push-image` all the time (so that every build gets new matching
+push-images` all the time (so that every build gets new matching
 version numbers) would be terribly slow.  However, This is not as slow
 as you might think; both `go` and `docker` are very good about reusing
 existing builds and avoiding unnecessary work.

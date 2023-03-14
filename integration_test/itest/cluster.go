@@ -149,7 +149,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
 	go s.ensureExecutable(ctx, errs, wg)
-	go s.ensureDockerImage(ctx, errs, wg)
+	go s.ensureDockerImages(ctx, errs, wg)
 	go s.ensureCluster(ctx, wg)
 	wg.Wait()
 	close(errs)
@@ -211,7 +211,7 @@ func (s *cluster) ensureDocker(ctx context.Context, wg *sync.WaitGroup) {
 	dtest.DockerRegistry(log.WithDiscardingLogger(ctx))
 }
 
-func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
+func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	if s.prePushed || s.isCI {
 		return
@@ -235,15 +235,19 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 		}
 	}
 
-	wgs.Add(1)
+	wgs.Add(2)
 	go func() {
 		defer wgs.Done()
-		runMake("image")
+		runMake("tel2-image")
+	}()
+	go func() {
+		defer wgs.Done()
+		runMake("client-image")
 	}()
 	wgs.Wait()
 
 	//  Image built and a registry exists. Push the image
-	runMake("push-image")
+	runMake("push-images")
 }
 
 func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
