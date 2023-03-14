@@ -2,6 +2,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -29,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -131,11 +133,22 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 // ConnectDaemon connects to a daemon at the given address.
 func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-	return grpc.DialContext(ctx, address,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true))
+	for i := 0; ; i++ {
+		conn, err := grpc.DialContext(ctx, address,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithNoProxy(),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true))
+		if err != nil {
+			if i < 5 && strings.Contains(err.Error(), "connection refused") {
+				// It's likely that we were too quick. Let's take a nap and try again
+				time.Sleep(time.Duration(i*50) * time.Millisecond)
+				continue
+			}
+			return nil, err
+		}
+		return conn, err
+	}
 }
 
 // PullImage checks if the given image exists locally by doing docker image inspect. A docker pull is
@@ -339,15 +352,33 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	allArgs = append(allArgs,
 		"run",
 		"--rm",
+		"-d",
 		"--cidfile", cidFileName,
 	)
 	allArgs = append(allArgs, opts...)
 	allArgs = append(allArgs, image)
 	allArgs = append(allArgs, args...)
+	for i := 0; ; i++ {
+		err = tryLaunch(ctx, addr.Port, name, cidFileName, allArgs)
+		if err != nil {
+			if i < 3 && strings.Contains(err.Error(), "already in use by container") {
+				// This may happen if the daemon has died (and hence, we never discovered it), but
+				// the container still hasn't died. Let's sleep for a short while and retry.
+				dtime.SleepWithContext(ctx, 500*time.Millisecond)
+				continue
+			}
+			return nil, errcat.NoDaemonLogs.New(err)
+		}
+		break
+	}
+	return ConnectDaemon(ctx, addr.String())
+}
 
-	cmd := proc.StdCommand(ctx, "docker", allArgs...)
+func tryLaunch(ctx context.Context, port int, name, cidFileName string, args []string) error {
+	stdErr := &bytes.Buffer{}
+	cmd := proc.StdCommand(dos.WithStderr(ctx, stdErr), "docker", args...)
 	if err := cmd.Start(); err != nil {
-		return nil, errcat.NoDaemonLogs.New(err)
+		return err
 	}
 
 	cidFound := make(chan string, 1)
@@ -355,9 +386,9 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	go func() {
 		defer close(cidFound)
 		for ctx.Err() == nil {
-			dtime.SleepWithContext(ctx, 50*time.Millisecond)
+			dtime.SleepWithContext(ctx, 10*time.Millisecond)
 			if _, err := os.Stat(cidFileName); err == nil {
-				dtime.SleepWithContext(ctx, 200*time.Millisecond)
+				dtime.SleepWithContext(ctx, 10*time.Millisecond)
 				cid, err := os.ReadFile(cidFileName)
 				if err == nil {
 					cidFound <- string(cid)
@@ -369,33 +400,23 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	go func() {
 		defer close(errStart)
 		if err := cmd.Wait(); err != nil {
-			err = fmt.Errorf("daemon container exited with %v", err)
-			dlog.Error(ctx, err)
-			errStart <- err
+			errStart <- fmt.Errorf("daemon container exited: %s: %v", stdErr.String(), err)
 		} else {
 			dlog.Debug(ctx, "daemon container exited normally")
 		}
 	}()
-	if err != nil {
-		return nil, err
-	}
 	select {
 	case <-ctx.Done(): // Everything is cancelled
+		return nil
 	case cid := <-cidFound: // Success, the daemon info file exists
-		err := cache.SaveDaemonInfo(ctx,
+		return cache.SaveDaemonInfo(ctx,
 			&cache.DaemonInfo{
 				Options:     map[string]string{"cid": cid},
 				InDocker:    true,
-				DaemonPort:  addr.Port,
+				DaemonPort:  port,
 				KubeContext: name,
-			}, cache.DaemonInfoFile(name, addr.Port))
-		if err != nil {
-			return nil, err
-		}
-		// Give the listener time to start
-		dtime.SleepWithContext(ctx, 500*time.Millisecond)
+			}, cache.DaemonInfoFile(name, port))
 	case err := <-errStart: // Daemon exited before the daemon info came into existence
-		return nil, errcat.NoDaemonLogs.New(err)
+		return err
 	}
-	return ConnectDaemon(ctx, addr.String())
 }

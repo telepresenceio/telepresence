@@ -454,16 +454,10 @@ func (s *Service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, erro
 func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Result, error) {
 	result := &common.Result{}
 	s.logCall(ctx, "Helm", func(c context.Context) {
+		// Temporarily disable quit so that session cancel doesn't cancel everything
 		s.quitDisable = true
 		if s.rootSessionInProc {
-			// Temporarily disable quit so that session cancel doesn't cancel everything
-			defer func() {
-				go func() {
-					// Give this call time to return its result before the gRPC server shuts down.
-					time.Sleep(10 * time.Millisecond)
-					s.quit()
-				}()
-			}()
+			defer s.quit()
 		}
 
 		var sessionDone <-chan struct{}

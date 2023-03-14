@@ -125,19 +125,10 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
 	defer s.rollbackTM()
 
-	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,
-	// and the traffic-manager will be able to apply its own. For this same reason we can't use WithConfig to do this,
-	// as it'll not merge the info config into the existing one.
-	origConfig := client.GetConfig(ctx)
-	config := *origConfig // copy
-	config.LogLevels.RootDaemon = logrus.InfoLevel
-	configYaml, err := yaml.Marshal(&config)
-	require.NoError(err)
-	configYamlStr := string(configYaml)
-	configDir := s.T().TempDir()
-	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-	ctx, err = client.SetConfig(ctx, configDir, configYamlStr)
-	require.NoError(err)
+	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
+		cfg.LogLevels.RootDaemon = logrus.InfoLevel
+	})
+
 	itest.TelepresenceQuitOk(ctx) // Because context changed
 
 	var currentLine int64
@@ -182,10 +173,8 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.True(levelSet, "Root log level not reset after disconnect")
 
 	// Set it to a "real" value to see that the client-side wins
-	ctx = itest.WithConfig(ctx, &client.Config{
-		LogLevels: client.LogLevels{
-			RootDaemon: logrus.DebugLevel,
-		},
+	ctx = itest.WithConfig(ctx, func(config *client.Config) {
+		config.LogLevels.RootDaemon = logrus.DebugLevel
 	})
 	itest.TelepresenceQuitOk(ctx) // Because context changed
 	itest.TelepresenceOk(ctx, "connect")
@@ -225,20 +214,9 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 
 	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
 	defer s.rollbackTM()
-
-	// logrus.InfoLevel is the 0 value, so it's considered as unset if that's what's used,
-	// and the traffic-manager will be able to apply its own. For this same reason we can't use WithConfig to do this,
-	// as it'll not merge the info config into the existing one.
-	origConfig := client.GetConfig(ctx)
-	config := *origConfig // copy
-	config.LogLevels.UserDaemon = logrus.InfoLevel
-	configYaml, err := yaml.Marshal(&config)
-	require.NoError(err)
-	configYamlStr := string(configYaml)
-	configDir := s.T().TempDir()
-	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-	ctx, err = client.SetConfig(ctx, configDir, configYamlStr)
-	require.NoError(err)
+	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
+		cfg.LogLevels.UserDaemon = logrus.InfoLevel
+	})
 	itest.TelepresenceQuitOk(ctx) // Because context changed
 
 	var currentLine int64
@@ -283,10 +261,8 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	require.True(levelSet, "Connector log level not reset after disconnect")
 
 	// Set it to a "real" value to see that the client-side wins
-	ctx = itest.WithConfig(ctx, &client.Config{
-		LogLevels: client.LogLevels{
-			UserDaemon: logrus.DebugLevel,
-		},
+	ctx = itest.WithConfig(ctx, func(config *client.Config) {
+		config.LogLevels.UserDaemon = logrus.DebugLevel
 	})
 	itest.TelepresenceQuitOk(ctx) // Because context changed
 

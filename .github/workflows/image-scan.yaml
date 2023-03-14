@@ -14,7 +14,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Build dev image
         run: |
-          make save-image
+          make save-tel2-image
       - name: Scan
         uses: aquasecurity/trivy-action@master
         with:

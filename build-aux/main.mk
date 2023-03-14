@@ -170,8 +170,8 @@ release-binary: $(TELEPRESENCE)
 	mkdir -p $(RELEASEDIR)
 	cp $(TELEPRESENCE) $(RELEASEDIR)/telepresence-$(GOOS)-$(GOARCH)$(BEXE)
 
-.PHONY: image
-image: build-deps
+.PHONY: tel2-image
+tel2-image: build-deps
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 	docker build --target tel2 --tag tel2 --tag $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.traffic .
@@ -182,13 +182,24 @@ client-image: build-deps
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 	docker build --target telepresence --tag telepresence --tag $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.client .
 
-.PHONY: push-image
-push-image: image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
+.PHONY: push-tel2-image
+push-tel2-image: tel2-image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
-.PHONY: save-image
-save-image: image
+.PHONY: push-client-image
+push-client-image: client-image ## (Build) Push the client container image to $(TELEPRESENCE_REGISTRY)
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+
+.PHONY: save-tel2-image
+save-tel2-image: tel2-image
 	docker save $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
+
+.PHONY: save-client-image
+save-client-image: client-image
+	docker save $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/telepresence-image.tar
+
+.PHONY: push-images
+push-images: push-tel2-image push-client-image
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
@@ -336,10 +347,7 @@ private-registry: $(tools/helm) ## (Test) Add a private docker registry to the c
 # Aliases
 # =======
 
-.PHONY: all test images push-images
-all:         build image     ## (ZAlias) Alias for 'build image'
+.PHONY: test save-image push-image
 test:        check-all       ## (ZAlias) Alias for 'check-all'
-images:      image           ## (ZAlias) Alias for 'tel2'
-tel2:        image           ## (ZAlias) Alias for 'tel2'
-tel2-image:  save-image      ## (ZAlias) Alias for 'tel2'
-push-images: push-image      ## (ZAlias) Alias for 'push-image'
+save-image: save-tel2-image
+push-image: push-tel2-image

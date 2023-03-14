@@ -21,7 +21,7 @@ jobs:
           go-version: '~1.19.6'
       - name: Build dev image
         run: |
-          make save-image
+          make save-tel2-image
       - name: Upload image
         uses: actions/upload-artifact@v3
         with:
