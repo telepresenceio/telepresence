@@ -896,21 +896,17 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 	)
 }
 
-func WithConfig(c context.Context, addConfig *client.Config) context.Context {
-	if addConfig != nil {
-		t := getT(c)
-		origConfig := client.GetConfig(c)
-		config := *origConfig // copy
-		config.Merge(addConfig)
-		configYaml, err := yaml.Marshal(&config)
-		require.NoError(t, err)
-		configYamlStr := string(configYaml)
-
-		configDir := t.TempDir()
-		c = filelocation.WithAppUserConfigDir(c, configDir)
-		c, err = client.SetConfig(c, configDir, configYamlStr)
-		require.NoError(t, err)
-	}
+func WithConfig(c context.Context, modifierFunc func(config *client.Config)) context.Context {
+	t := getT(c)
+	configCopy := *client.GetConfig(c)
+	modifierFunc(&configCopy)
+	configYaml, err := yaml.Marshal(&configCopy)
+	require.NoError(t, err)
+	configYamlStr := string(configYaml)
+	configDir := t.TempDir()
+	c = filelocation.WithAppUserConfigDir(c, configDir)
+	c, err = client.SetConfig(c, configDir, configYamlStr)
+	require.NoError(t, err)
 	return c
 }
 
