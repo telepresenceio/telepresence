@@ -73,6 +73,7 @@ func helmInstall() *cobra.Command {
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
 	ha.Request = daemon.InitRequest(cmd)
+	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
@@ -99,6 +100,7 @@ func helmUpgrade() *cobra.Command {
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
 	ha.Request = daemon.InitRequest(cmd)
+	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
@@ -138,8 +140,10 @@ func helmUninstall() *cobra.Command {
 			ann.VersionCheck: ann.Required,
 		},
 	}
-	ha.addCRDsFlags(cmd.Flags())
+	flags := cmd.Flags()
+	ha.addCRDsFlags(flags)
 	ha.Request = daemon.InitRequest(cmd)
+	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
