@@ -132,14 +132,14 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 // ConnectDaemon connects to a daemon at the given address.
 func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-	for i := 0; ; i++ {
+	for i := 1; ; i++ {
 		conn, err := grpc.DialContext(ctx, address,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.FailOnNonTempDialError(true))
 		if err != nil {
-			if i < 5 {
+			if i < 10 {
 				// It's likely that we were too quick. Let's take a nap and try again
 				time.Sleep(time.Duration(i*50) * time.Millisecond)
 				continue
