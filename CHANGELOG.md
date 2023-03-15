@@ -9,6 +9,8 @@
 
 - Bugfix: The traffic-manager will no longer panic when the CNAME of kubernetes.default doesn't contain .svc.
 
+- Change: Add `.image.hooks.curl.imagePullSecrets` and `.image.hooks.busybox.imagePullSecrets` to Helm values.
+
 ### 2.11.1 (February 27, 2023)
 
 - Bugfix: The multi-arch build now for the proprietary traffic-manager and traffic-agent now works for both amd64 and arm64.
