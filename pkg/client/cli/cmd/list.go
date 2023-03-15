@@ -153,7 +153,7 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 
 	state := func(workload *connector.WorkloadInfo) string {
 		if iis := workload.InterceptInfos; len(iis) > 0 {
-			return intercept.DescribeIntercepts(iis, nil, s.debug)
+			return intercept.DescribeIntercepts(ctx, iis, "", s.debug)
 		}
 		ai := workload.AgentInfo
 		if ai != nil {
