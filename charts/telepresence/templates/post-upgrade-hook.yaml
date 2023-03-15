@@ -25,6 +25,10 @@ spec:
       restartPolicy: Never
       securityContext:
         {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
+      {{- with .image.hooks.curl.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: upgrade-legacy
           securityContext:
