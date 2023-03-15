@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
@@ -137,7 +138,7 @@ func OpenRotatingFile(
 	if rf.file, err = dos.OpenFile(ctx, logfilePath, os.O_WRONLY|os.O_APPEND, rf.fileMode); err != nil {
 		if os.IsNotExist(err) {
 			// There is no existing file, go ahead and create a new one.
-			if err := rf.openNew(nil, ""); err == nil {
+			if err = rf.openNew(nil, ""); err == nil {
 				return rf, nil
 			}
 		}
@@ -322,8 +323,10 @@ func (rf *RotatingFile) rotate() error {
 	if rf.maxFiles == 0 || rf.maxFiles > 1 {
 		var err error
 		prevInfo, err = FStat(rf.file)
-		if err != nil {
-			return fmt.Errorf("failed to stat %s: %w", rf.file.Name(), err)
+		if err != nil || prevInfo == nil {
+			err = fmt.Errorf("failed to stat %s: %w", rf.file.Name(), err)
+			dlog.Error(rf.ctx, err)
+			return err
 		}
 
 		fullPath := filepath.Join(rf.dirName, rf.fileName)
@@ -332,5 +335,9 @@ func (rf *RotatingFile) rotate() error {
 		ts := rf.fileTime(dtime.Now()).Format(rf.timeFormat)
 		backupName = fmt.Sprintf("%s-%s%s", sf, ts, ex)
 	}
-	return rf.openNew(prevInfo, backupName)
+	err := rf.openNew(prevInfo, backupName)
+	if err != nil {
+		dlog.Error(rf.ctx, err)
+	}
+	return err
 }
