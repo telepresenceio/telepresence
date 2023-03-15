@@ -133,6 +133,9 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
 	for i := 1; ; i++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		conn, err := grpc.DialContext(ctx, address,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
@@ -383,9 +386,10 @@ func tryLaunch(ctx context.Context, port int, name, cidFileName string, args []s
 	}
 
 	cidFound := make(chan string, 1)
+	defer close(cidFound)
+
 	errStart := make(chan error, 1)
 	go func() {
-		defer close(cidFound)
 		for ctx.Err() == nil {
 			dtime.SleepWithContext(ctx, 10*time.Millisecond)
 			if _, err := os.Stat(cidFileName); err == nil {
@@ -408,7 +412,7 @@ func tryLaunch(ctx context.Context, port int, name, cidFileName string, args []s
 	}()
 	select {
 	case <-ctx.Done(): // Everything is cancelled
-		return nil
+		return ctx.Err()
 	case cid := <-cidFound: // Success, the daemon info file exists
 		return cache.SaveDaemonInfo(ctx,
 			&cache.DaemonInfo{
