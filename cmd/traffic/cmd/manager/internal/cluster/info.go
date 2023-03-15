@@ -163,7 +163,7 @@ func NewInfo(ctx context.Context) Info {
 
 	oi.ManagerPodIp = env.PodIP
 	oi.ManagerPodPort = int32(env.ServerPort)
-	oi.InjectorSvcIp, oi.InjectorSvcPort, err = getManagerSvcIP(ctx, env, client)
+	oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
 	if err != nil {
 		dlog.Warnf(ctx, "failed to detect injector service ClusterIP; service connectivity check will be disabled in clients: %s", err)
 	}
@@ -249,7 +249,7 @@ func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
 	return true
 }
 
-func getManagerSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV1Interface) ([]byte, int32, error) {
+func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV1Interface) ([]byte, int32, error) {
 	sc, err := client.Services(env.ManagerNamespace).Get(ctx, env.AgentInjectorName, metav1.GetOptions{})
 	if err != nil {
 		return nil, 0, err
@@ -261,7 +261,7 @@ func getManagerSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV1
 			break
 		}
 	}
-	return net.ParseIP(sc.Spec.ClusterIP), p, nil
+	return iputil.Parse(sc.Spec.ClusterIP), p, nil
 }
 
 func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {

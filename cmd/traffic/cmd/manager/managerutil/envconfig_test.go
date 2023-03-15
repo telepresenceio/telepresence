@@ -22,6 +22,7 @@ func TestEnvconfig(t *testing.T) {
 		"AGENT_ENVOY_ADMIN_PORT":      "19000",
 		"AGENT_ENVOY_SERVER_PORT":     "18000",
 		"AGENT_INJECT_POLICY":         agentconfig.OnDemand.String(),
+		"AGENT_INJECTOR_NAME":         "agent-injector",
 		"AGENT_PORT":                  "9900",
 		"AGENT_REGISTRY":              "docker.io/datawire",
 		"CLIENT_CONNECTION_TTL":       (24 * time.Hour).String(),

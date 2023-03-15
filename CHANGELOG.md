@@ -7,6 +7,8 @@
 - Feature: Adds an authenticator package to support integration with the [client-go credential](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins) plugins when the
   daemon runs in a docker container.
 
+- Change: Telepresence will now detect if services and pods are routable, independently of one another, before adding their routes. This is a change from before, when being already able to connect to pods prevented the addition of routes for services too.
+
 - Bugfix: The traffic-manager will no longer panic when the CNAME of kubernetes.default doesn't contain .svc.
 
 ### 2.11.1 (February 27, 2023)
