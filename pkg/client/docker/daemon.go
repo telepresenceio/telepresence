@@ -38,10 +38,11 @@ import (
 )
 
 const (
-	telepresenceImage = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
-	dockerTpCache     = "/root/.cache/telepresence"
-	dockerTpConfig    = "/root/.config/telepresence"
-	dockerTpLog       = "/root/.cache/telepresence/logs"
+	telepresenceImage   = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
+	dockerTpCache       = "/root/.cache/telepresence"
+	dockerTpConfig      = "/root/.config/telepresence"
+	dockerTpLog         = "/root/.cache/telepresence/logs"
+	containerNamePrefix = "tp-"
 )
 
 // ClientImage returns the fully qualified name of the docker image that corresponds to
@@ -80,7 +81,7 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	addr := as[0]
 	port := addr.Port
 	opts := []string{
-		"--name", name,
+		"--name", containerNamePrefix + name,
 		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
 		"--device", "/dev/net/tun:/dev/net/tun",
@@ -360,13 +361,13 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	allArgs = append(allArgs, opts...)
 	allArgs = append(allArgs, image)
 	allArgs = append(allArgs, args...)
-	for i := 0; ; i++ {
+	for i := 1; ; i++ {
 		err = tryLaunch(ctx, addr.Port, name, cidFileName, allArgs)
 		if err != nil {
-			if i < 3 && strings.Contains(err.Error(), "already in use by container") {
+			if i < 6 && strings.Contains(err.Error(), "already in use by container") {
 				// This may happen if the daemon has died (and hence, we never discovered it), but
 				// the container still hasn't died. Let's sleep for a short while and retry.
-				dtime.SleepWithContext(ctx, 500*time.Millisecond)
+				dtime.SleepWithContext(ctx, time.Duration(i)*200*time.Millisecond)
 				continue
 			}
 			return nil, errcat.NoDaemonLogs.New(err)
