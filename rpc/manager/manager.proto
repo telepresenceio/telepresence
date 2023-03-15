@@ -508,6 +508,15 @@ message ClusterInfo {
   // manager_pod_port is the port of the traffic manager
   int32 manager_pod_port = 8;
 
+  // injector_svc_ip is the ip address of the traffic manager's agent injector service
+  bytes injector_svc_ip = 9;
+
+  // injector_svc_port is the port of the traffic manager's agent injector service
+  int32 injector_svc_port = 10;
+
+  // injector_svc_host is the http host of the traffic manager's agent injector service
+  string injector_svc_host = 11;
+
   // Router configuration
   Routing routing = 6;
 
