@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
 const messagesCacheFilename = "cloud-messages.json"
@@ -131,7 +132,7 @@ func RaiseMessage(cmd *cobra.Command, _ []string) error {
 	// Get the message from the cache that should be delivered to the user
 	msg := cmc.getMessageFromCache(ctx, cmdUsed)
 	if msg != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", msg)
+		fmt.Fprintf(output.Info(ctx), "%s\n", msg)
 	}
 	_ = cache.SaveToUserCache(ctx, cmc, messagesCacheFilename)
 
