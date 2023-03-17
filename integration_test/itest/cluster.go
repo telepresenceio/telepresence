@@ -91,7 +91,6 @@ type cluster struct {
 	logCapturingPods sync.Map
 	agentImageName   string
 	agentImageTag    string
-	loginDomain      string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -137,10 +136,6 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	if s.agentRegistry == "" {
 		s.agentRegistry = s.registry
 	}
-	s.loginDomain = os.Getenv("DEV_LOGIN_DOMAIN")
-	if s.loginDomain == "" {
-		s.loginDomain = "localhost"
-	}
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
@@ -158,7 +153,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	for err := range errs {
 		assert.NoError(t, err)
 	}
-	s.ensureQuitAndLoggedOut(ctx)
+	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
 	defer s.tearDown(ctx)
 	if !t.Failed() {
@@ -167,7 +162,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 }
 
 func (s *cluster) tearDown(ctx context.Context) {
-	s.ensureQuitAndLoggedOut(ctx)
+	s.ensureQuit(ctx)
 	if s.kubeConfig != "" {
 		ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml"))
@@ -175,10 +170,7 @@ func (s *cluster) tearDown(ctx context.Context) {
 	}
 }
 
-func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
-	// Ensure that telepresence is not logged in
-	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
-
+func (s *cluster) ensureQuit(ctx context.Context) {
 	// Ensure that no telepresence is running when the tests start
 	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
@@ -324,11 +316,10 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
-		"TELEPRESENCE_VERSION":      s.testVersion,
-		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
-		"TELEPRESENCE_REGISTRY":     s.registry,
-		"TELEPRESENCE_LOGIN_DOMAIN": s.loginDomain,
-		"KUBECONFIG":                s.kubeConfig,
+		"TELEPRESENCE_VERSION":     s.testVersion,
+		"TELEPRESENCE_AGENT_IMAGE": s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
+		"TELEPRESENCE_REGISTRY":    s.registry,
+		"KUBECONFIG":               s.kubeConfig,
 	}
 	yes := struct{}{}
 	includeEnv := map[string]struct{}{
