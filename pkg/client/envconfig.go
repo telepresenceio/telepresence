@@ -10,6 +10,7 @@ import (
 )
 
 type Env struct {
+	OSSpecificEnv
 	// I'd like to set TELEPRESENCE_LOGIN_DOMAIN,default=auth.datawire.io, but
 	// sethvargo/go-envconfig doesn't support filling in the default for our later references to
 	// it in following settings, so we have to do the hack with maybeSetDefault below.  *sigh* I
@@ -26,8 +27,6 @@ type Env struct {
 
 	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
 	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,                   parser=possibly-empty-string,default="`
-
-	Shell string `env:"SHELL, parser=nonempty-string,default=/bin/bash"`
 
 	TelepresenceUID int `env:"TELEPRESENCE_UID, parser=strconv.ParseInt, default=0"`
 	TelepresenceGID int `env:"TELEPRESENCE_GID, parser=strconv.ParseInt, default=0"`
