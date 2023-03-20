@@ -91,7 +91,6 @@ type cluster struct {
 	logCapturingPods sync.Map
 	agentImageName   string
 	agentImageTag    string
-	loginDomain      string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -137,10 +136,6 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	if s.agentRegistry == "" {
 		s.agentRegistry = s.registry
 	}
-	s.loginDomain = os.Getenv("DEV_LOGIN_DOMAIN")
-	if s.loginDomain == "" {
-		s.loginDomain = "localhost"
-	}
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
@@ -151,14 +146,14 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
 	go s.ensureExecutable(ctx, errs, wg)
-	go s.ensureDockerImage(ctx, errs, wg)
+	go s.ensureDockerImages(ctx, errs, wg)
 	go s.ensureCluster(ctx, wg)
 	wg.Wait()
 	close(errs)
 	for err := range errs {
 		assert.NoError(t, err)
 	}
-	s.ensureQuitAndLoggedOut(ctx)
+	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
 	defer s.tearDown(ctx)
 	if !t.Failed() {
@@ -167,7 +162,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 }
 
 func (s *cluster) tearDown(ctx context.Context) {
-	s.ensureQuitAndLoggedOut(ctx)
+	s.ensureQuit(ctx)
 	if s.kubeConfig != "" {
 		ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml"))
@@ -175,10 +170,7 @@ func (s *cluster) tearDown(ctx context.Context) {
 	}
 }
 
-func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
-	// Ensure that telepresence is not logged in
-	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
-
+func (s *cluster) ensureQuit(ctx context.Context) {
 	// Ensure that no telepresence is running when the tests start
 	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
@@ -213,7 +205,7 @@ func (s *cluster) ensureDocker(ctx context.Context, wg *sync.WaitGroup) {
 	dtest.DockerRegistry(log.WithDiscardingLogger(ctx))
 }
 
-func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
+func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	if s.prePushed || s.isCI {
 		return
@@ -237,15 +229,19 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 		}
 	}
 
-	wgs.Add(1)
+	wgs.Add(2)
 	go func() {
 		defer wgs.Done()
-		runMake("image")
+		runMake("tel2-image")
+	}()
+	go func() {
+		defer wgs.Done()
+		runMake("client-image")
 	}()
 	wgs.Wait()
 
 	//  Image built and a registry exists. Push the image
-	runMake("push-image")
+	runMake("push-images")
 }
 
 func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
@@ -320,11 +316,10 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
-		"TELEPRESENCE_VERSION":      s.testVersion,
-		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
-		"TELEPRESENCE_REGISTRY":     s.registry,
-		"TELEPRESENCE_LOGIN_DOMAIN": s.loginDomain,
-		"KUBECONFIG":                s.kubeConfig,
+		"TELEPRESENCE_VERSION":     s.testVersion,
+		"TELEPRESENCE_AGENT_IMAGE": s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
+		"TELEPRESENCE_REGISTRY":    s.registry,
+		"KUBECONFIG":               s.kubeConfig,
 	}
 	yes := struct{}{}
 	includeEnv := map[string]struct{}{
@@ -910,21 +905,17 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 	)
 }
 
-func WithConfig(c context.Context, addConfig *client.Config) context.Context {
-	if addConfig != nil {
-		t := getT(c)
-		origConfig := client.GetConfig(c)
-		config := *origConfig // copy
-		config.Merge(addConfig)
-		configYaml, err := yaml.Marshal(&config)
-		require.NoError(t, err)
-		configYamlStr := string(configYaml)
-
-		configDir := t.TempDir()
-		c = filelocation.WithAppUserConfigDir(c, configDir)
-		c, err = client.SetConfig(c, configDir, configYamlStr)
-		require.NoError(t, err)
-	}
+func WithConfig(c context.Context, modifierFunc func(config *client.Config)) context.Context {
+	t := getT(c)
+	configCopy := *client.GetConfig(c)
+	modifierFunc(&configCopy)
+	configYaml, err := yaml.Marshal(&configCopy)
+	require.NoError(t, err)
+	configYamlStr := string(configYaml)
+	configDir := t.TempDir()
+	c = filelocation.WithAppUserConfigDir(c, configDir)
+	c, err = client.SetConfig(c, configDir, configYamlStr)
+	require.NoError(t, err)
 	return c
 }
 

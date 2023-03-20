@@ -89,9 +89,9 @@ func (s *notConnectedSuite) Test_ConnectingToOtherNamespace() {
 		ctx := itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": ""})
 
 		// Set the config to some nonsense to verify that the flag wins
-		cfg := client.GetDefaultConfig()
-		cfg.Cluster.DefaultManagerNamespace = "daffy-duck"
-		ctx = itest.WithConfig(ctx, &cfg)
+		ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
+			cfg.Cluster.DefaultManagerNamespace = "daffy-duck"
+		})
 		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace="+mgrSpace2)
 		s.Contains(stdout, "Connected to context")
 		stdout = itest.TelepresenceOk(ctx, "status")
@@ -102,9 +102,9 @@ func (s *notConnectedSuite) Test_ConnectingToOtherNamespace() {
 		itest.TelepresenceQuitOk(ctx)
 		ctx := itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": ""})
 
-		cfg := client.GetDefaultConfig()
-		cfg.Cluster.DefaultManagerNamespace = mgrSpace2
-		ctx = itest.WithConfig(ctx, &cfg)
+		ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
+			cfg.Cluster.DefaultManagerNamespace = mgrSpace2
+		})
 		stdout := itest.TelepresenceOk(ctx, "connect")
 		s.Contains(stdout, "Connected to context")
 		stdout = itest.TelepresenceOk(ctx, "status")

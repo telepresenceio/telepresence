@@ -1,15 +1,19 @@
 # Changelog
 
-### 2.x.x (TBD)
+### 2.12.0 (March 20, 2023)
 
 - Feature: Telepresence can now start or connect to a daemon in a docker container by use of the global `--docker` flag.
 
 - Feature: Adds an authenticator package to support integration with the [client-go credential](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins) plugins when the
   daemon runs in a docker container.
 
+- Feature: The `telepresence helm` command now accepts a `--namespace` flag.
+
 - Change: Telepresence will now detect if services and pods are routable, independently of one another, before adding their routes. This is a change from before, when being already able to connect to pods prevented the addition of routes for services too.
 
 - Bugfix: The traffic-manager will no longer panic when the CNAME of kubernetes.default doesn't contain .svc.
+
+- Bugfix: The `telepresence helm install/upgrade --set` family of flags now work correctly with comma separated values.
 
 ### 2.11.1 (February 27, 2023)
 

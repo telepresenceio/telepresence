@@ -56,9 +56,9 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 
 	// Use a config with agentImage to validate that it's the
 	// latter that is used in the traffic-manager
-	cfg := client.GetDefaultConfig()
-	cfg.Images.PrivateAgentImage = "imageFromConfig:0.0.1"
-	ctxAI := itest.WithConfig(ctx, &cfg)
+	ctxAI := itest.WithConfig(ctx, func(cfg *client.Config) {
+		cfg.Images.PrivateAgentImage = "imageFromConfig:0.0.1"
+	})
 
 	// Remove the traffic-manager since we are altering config that applies to
 	// creating the traffic-manager
