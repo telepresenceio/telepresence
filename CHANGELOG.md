@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.12.0 (TBD)
+### 2.12.0 (March 20, 2023)
 
 - Feature: Telepresence can now start or connect to a daemon in a docker container by use of the global `--docker` flag.
 
