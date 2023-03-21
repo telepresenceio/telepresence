@@ -10,6 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -24,7 +25,7 @@ const (
 )
 
 func withProfile(ctx context.Context) context.Context {
-	profile, ok := os.LookupEnv("TELEPRESENCE_TEST_PROFILE")
+	profile, ok := dos.LookupEnv(ctx, "TELEPRESENCE_TEST_PROFILE")
 	if !ok {
 		return context.WithValue(ctx, profileKey{}, DefaultProfile)
 	}
