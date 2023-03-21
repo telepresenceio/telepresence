@@ -95,7 +95,7 @@ type cluster struct {
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
-	s.suffix, s.isCI = os.LookupEnv("GITHUB_SHA")
+	s.suffix, s.isCI = dos.LookupEnv(ctx, "GITHUB_SHA")
 	if s.isCI {
 		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
 		if len(s.suffix) > 7 {
@@ -104,7 +104,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	} else {
 		s.suffix = strconv.Itoa(os.Getpid())
 	}
-	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
+	s.testVersion, s.prePushed = dos.LookupEnv(ctx, "DEV_TELEPRESENCE_VERSION")
 	if s.prePushed {
 		dlog.Infof(ctx, "Using pre-pushed binary %s", s.testVersion)
 	} else {
@@ -112,12 +112,12 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		dlog.Infof(ctx, "Building temp binary %s", s.testVersion)
 	}
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
-	s.compatVersion = os.Getenv("DEV_COMPAT_VERSION")
+	s.compatVersion = dos.Getenv(ctx, "DEV_COMPAT_VERSION")
 
 	t := getT(ctx)
 	s.agentImageName = "tel2"
 	s.agentImageTag = s.testVersion[1:]
-	if agentImageQN, ok := os.LookupEnv("DEV_AGENT_IMAGE"); ok {
+	if agentImageQN, ok := dos.LookupEnv(ctx, "DEV_AGENT_IMAGE"); ok {
 		i := strings.LastIndexByte(agentImageQN, '/')
 		if i >= 0 {
 			s.agentRegistry = agentImageQN[:i]
@@ -129,13 +129,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		s.agentImageTag = agentImageQN[i+1:]
 	}
 
-	s.registry = os.Getenv("DTEST_REGISTRY")
-	if s.registry == "" {
-		s.registry = "localhost:5000"
-	}
-	if s.agentRegistry == "" {
-		s.agentRegistry = s.registry
-	}
+	s.registry = dos.Getenv(ctx, "DTEST_REGISTRY")
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
@@ -152,6 +146,9 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	close(errs)
 	for err := range errs {
 		assert.NoError(t, err)
+	}
+	if s.agentRegistry == "" {
+		s.agentRegistry = s.registry
 	}
 	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
@@ -202,7 +199,7 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 
 func (s *cluster) ensureDocker(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	dtest.DockerRegistry(log.WithDiscardingLogger(ctx))
+	s.registry = dtest.DockerRegistry(log.WithDiscardingLogger(ctx))
 }
 
 func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
@@ -217,7 +214,7 @@ func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg 
 
 	// Initialize docker and build image simultaneously
 	wgs := &sync.WaitGroup{}
-	if s.registry == "localhost:5000" {
+	if s.registry == "" {
 		wgs.Add(1)
 		go s.ensureDocker(ctx, wgs)
 	}
@@ -246,14 +243,17 @@ func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg 
 
 func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	if s.registry == "localhost:5000" {
+	if s.registry == "" {
 		dwg := sync.WaitGroup{}
 		dwg.Add(1)
 		s.ensureDocker(ctx, &dwg)
 		dwg.Wait()
 	}
 	t := getT(ctx)
-	s.kubeConfig = dtest.Kubeconfig(log.WithDiscardingLogger(ctx))
+	s.kubeConfig = dos.Getenv(ctx, "DTEST_KUBECONFIG")
+	if s.kubeConfig == "" {
+		s.kubeConfig = dtest.Kubeconfig(log.WithDiscardingLogger(ctx))
+	}
 	require.NoError(t, os.Chmod(s.kubeConfig, 0o600), "failed to chmod 0600 %q", s.kubeConfig)
 
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.

@@ -47,6 +47,17 @@
    This will make all tests use that traffic-agent instead of the default
    which uses the same image as the traffic-manager.
 
+The above environment can optionally be provided in a `itest.yml` file
+that is placed adjacent to the normal `config.yml` file used to configure
+Telepresence. The `itest.yml` currently has only one single entry, the
+`Env` which is a map. It can look something like this:
+
+```yaml
+Env:
+  DEV_TELEPRESENCE_VERSION: v2.12.1-alpha.0
+  DTEST_KUBECONFIG: /home/thhal/.kube/testconfig
+```
+
 The output of `make help` has a bit more information.
 
 ### Running integration tests

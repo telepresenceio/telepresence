@@ -79,7 +79,7 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	addr := as[0]
 	port := addr.Port
 	opts := []string{
-		"--name", containerNamePrefix + name,
+		"--name", SafeContainerName(containerNamePrefix + name),
 		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
 		"--device", "/dev/net/tun:/dev/net/tun",
@@ -100,11 +100,32 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	return opts, addr, nil
 }
 
+// SafeContainerName returns a string that can safely be used as an argument
+// to docker run --name. Only characters [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed.
+// Others are replaced by an underscore, or if it's the very first character,
+// by the character 'a'.
+func SafeContainerName(name string) string {
+	n := strings.Builder{}
+	for i, c := range name {
+		switch {
+		case (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
+			n.WriteByte(byte(c))
+		case i > 0 && (c == '_' || c == '.' || c == '-'):
+			n.WriteByte(byte(c))
+		case i > 0:
+			n.WriteByte('_')
+		default:
+			n.WriteByte('a')
+		}
+	}
+	return n.String()
+}
+
 // DaemonArgs returns the arguments to pass to a docker run when starting a container daemon.
 func DaemonArgs(name string, port int) []string {
 	return []string{
 		"connector-foreground",
-		"--name", "docker-" + name,
+		"--name", SafeContainerName("docker-" + name),
 		"--address", fmt.Sprintf(":%d", port),
 		"--embed-network",
 	}

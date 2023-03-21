@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.12.1 (TBD)
+
+- Bugfix: Illegal characters are now replaced when a docker container name is generated from a kubernetes context name. 
+
 ### 2.12.0 (March 20, 2023)
 
 - Feature: Telepresence can now start or connect to a daemon in a docker container by use of the global `--docker` flag.
