@@ -70,7 +70,7 @@ telepresence gather-logs --daemons=None
 	}
 	flags := cmd.Flags()
 	flags.StringVarP(&gl.outputFile, "output-file", "o", "", "The file you want to output the logs to.")
-	flags.StringVar(&gl.daemons, "daemons", "all", "The daemons you want logs from: all, root, user, None")
+	flags.StringVar(&gl.daemons, "daemons", "all", "The daemons you want logs from: all, root, user, kubeauth, None")
 	flags.BoolVar(&gl.trafficManager, "traffic-manager", true, "If you want to collect logs from the traffic-manager")
 	flags.StringVar(&gl.trafficAgents, "traffic-agents", "all", "Traffic-agents to collect logs from: all, name substring, None")
 	flags.BoolVarP(&gl.anon, "anonymize", "a", false, "To anonymize pod names + namespaces from the logs")
@@ -130,11 +130,13 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 	var daemonLogs []string
 	switch gl.daemons {
 	case "all":
-		daemonLogs = append(daemonLogs, "cli", "connector", "daemon")
+		daemonLogs = append(daemonLogs, "cli", "connector", "daemon", "kubeauth")
 	case "root":
 		daemonLogs = append(daemonLogs, "daemon")
 	case "user":
 		daemonLogs = append(daemonLogs, "connector")
+	case "kubeauth":
+		daemonLogs = append(daemonLogs, "kubeauth")
 	case "None":
 	default:
 		return errcat.User.New("Options for --daemons are: all, root, user, or None")

@@ -32,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -380,6 +381,7 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 func tryLaunch(ctx context.Context, port int, name string, args []string) error {
 	stdErr := bytes.Buffer{}
 	stdOut := bytes.Buffer{}
+	dlog.Debug(ctx, shellquote.ShellString("docker", args))
 	cmd := proc.CommandContext(ctx, "docker", args...)
 	cmd.DisableLogging = true
 	cmd.Stderr = &stdErr
