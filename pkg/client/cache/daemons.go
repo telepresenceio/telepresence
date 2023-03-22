@@ -99,10 +99,11 @@ func daemonInfoFiles(ctx context.Context) ([]fs.DirEntry, error) {
 
 var (
 	diNameRx   = regexp.MustCompile(`^(.+?)-(\d+)\.json$`)
-	pathNameRx = regexp.MustCompile(`[^a-zA-Z0-9-\.]`)
+	pathNameRx = regexp.MustCompile(`[^a-zA-Z0-9-_\.]`)
 )
 
 func DaemonPortForName(ctx context.Context, context string) (int, error) {
+	context = pathNameRx.ReplaceAllString(context, "-")
 	files, err := daemonInfoFiles(ctx)
 	if err != nil {
 		return 0, err
