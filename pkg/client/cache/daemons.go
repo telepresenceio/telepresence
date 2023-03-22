@@ -97,9 +97,13 @@ func daemonInfoFiles(ctx context.Context) ([]fs.DirEntry, error) {
 	return active, err
 }
 
-var diNameRx = regexp.MustCompile(`^(.+?)-(\d+)\.json$`)
+var (
+	diNameRx   = regexp.MustCompile(`^(.+?)-(\d+)\.json$`)
+	pathNameRx = regexp.MustCompile(`[^a-zA-Z0-9-_\.]`)
+)
 
 func DaemonPortForName(ctx context.Context, context string) (int, error) {
+	context = pathNameRx.ReplaceAllString(context, "-")
 	files, err := daemonInfoFiles(ctx)
 	if err != nil {
 		return 0, err
@@ -114,7 +118,8 @@ func DaemonPortForName(ctx context.Context, context string) (int, error) {
 }
 
 func DaemonInfoFile(name string, port int) string {
-	return fmt.Sprintf("%s-%d.json", name, port)
+	fileName := fmt.Sprintf("%s-%d.json", name, port)
+	return pathNameRx.ReplaceAllString(fileName, "-")
 }
 
 // KeepDaemonInfoAlive updates the access and modification times of the given DaemonInfo
