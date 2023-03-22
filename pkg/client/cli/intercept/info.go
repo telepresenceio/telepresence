@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"path/filepath"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -83,12 +82,17 @@ func NewMount(ctx context.Context, ii *manager.InterceptInfo, mountError string)
 		} else {
 			port = ii.SftpPort
 		}
+		var mounts []string
+		if tpMounts := ii.Environment["TELEPRESENCE_MOUNTS"]; tpMounts != "" {
+			// This is a Unix path, so we cannot use filepath.SplitList
+			mounts = strings.Split(tpMounts, ":")
+		}
 		return &Mount{
 			LocalDir:  ii.ClientMountPoint,
 			RemoteDir: ii.MountPoint,
 			PodIP:     ii.PodIp,
 			Port:      port,
-			Mounts:    filepath.SplitList(ii.Environment["TELEPRESENCE_MOUNTS"]),
+			Mounts:    mounts,
 		}
 	}
 	return nil
