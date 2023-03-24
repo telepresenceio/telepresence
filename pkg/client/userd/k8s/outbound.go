@@ -2,17 +2,17 @@ package k8s
 
 import (
 	"context"
+	"math"
 	"sort"
-	"sync"
+	"time"
 
 	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	typedAuth "k8s.io/client-go/kubernetes/typed/authorization/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 )
 
@@ -22,53 +22,65 @@ import (
 // the DNS-resolver in the root daemon each time an update arrives.
 //
 // The first update will close the firstSnapshotArrived channel.
-func (kc *Cluster) startNamespaceWatcher(c context.Context) {
-	cond := sync.Cond{}
-	cond.L = &kc.nsLock
+func (kc *Cluster) StartNamespaceWatcher(ctx context.Context) {
+	kc.namespaceWatcherSnapshot = make(map[string]struct{})
+	nsSynced := make(chan struct{})
 	go func() {
-		<-c.Done()
-		cond.Broadcast()
-	}()
-
-	kc.nsWatcher = k8sapi.NewWatcher("namespaces", kc.ki.CoreV1().RESTClient(), &cond, k8sapi.WithEquals[*core.Namespace](func(a, b *core.Namespace) bool {
-		return a.Name == b.Name
-	}))
-
-	ready := sync.WaitGroup{}
-	ready.Add(1)
-	go func() {
-		err := kc.nsWatcher.Watch(c, &ready)
-		if err != nil {
-			dlog.Errorf(c, "error watching namespaces: %s", err)
-		}
-	}()
-	ready.Wait()
-	cache.WaitForCacheSync(c.Done(), kc.nsWatcher.HasSynced)
-
-	kc.nsLock.Lock()
-	go func() {
-		defer kc.nsLock.Unlock()
-		for {
-			select {
-			case <-c.Done():
+		api := kc.ki.CoreV1()
+		for ctx.Err() == nil {
+			w, err := api.Namespaces().Watch(ctx, meta.ListOptions{})
+			if err != nil {
+				dlog.Errorf(ctx, "unable to create service watcher: %v", err)
 				return
-			default:
 			}
-			cond.Wait()
-			kc.refreshNamespacesLocked(c)
+			kc.namespacesEventHandler(ctx, w.ResultChan(), nsSynced)
 		}
 	}()
-
-	// A Lock here forces us to wait until the above goroutine
-	// has entered cond.Wait()
-	kc.nsLock.Lock()
-	cond.Broadcast() // force initial call to refreshNamespacesLocked
-	kc.nsLock.Unlock()
+	select {
+	case <-ctx.Done():
+	case <-nsSynced:
+	}
 }
 
-func (kc *Cluster) WaitForNSSync(c context.Context) {
-	if !kc.nsWatcher.HasSynced() {
-		cache.WaitForCacheSync(c.Done(), kc.nsWatcher.HasSynced)
+func (kc *Cluster) namespacesEventHandler(ctx context.Context, evCh <-chan watch.Event, nsSynced chan struct{}) {
+	// The delay timer will initially sleep forever. It's reset to a very short
+	// delay when the file is modified.
+	var delay *time.Timer
+	delay = time.AfterFunc(time.Duration(math.MaxInt64), func() {
+		kc.refreshNamespaces(ctx)
+		select {
+		case <-nsSynced:
+		default:
+			close(nsSynced)
+		}
+	})
+	defer delay.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-evCh:
+			if !ok {
+				return // restart watcher
+			}
+			ns, ok := event.Object.(*core.Namespace)
+			if !ok {
+				continue
+			}
+			kc.nsLock.Lock()
+			switch event.Type {
+			case watch.Deleted:
+				delete(kc.namespaceWatcherSnapshot, ns.Name)
+			case watch.Added, watch.Modified:
+				kc.namespaceWatcherSnapshot[ns.Name] = struct{}{}
+			}
+			kc.nsLock.Unlock()
+
+			// We consider the watcher synced after 10 ms of inactivity. It's not a big deal
+			// if more namespaces arrive after that.
+			delay.Reset(10 * time.Millisecond)
+		}
 	}
 }
 
@@ -117,12 +129,10 @@ func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) b
 		sort.Strings(namespaces)
 	}
 
-	kc.nsLock.Lock()
-	defer kc.nsLock.Unlock()
 	equal := sortedStringSlicesEqual(namespaces, kc.mappedNamespaces)
 	if !equal {
 		kc.mappedNamespaces = namespaces
-		kc.refreshNamespacesLocked(c)
+		kc.refreshNamespaces(c)
 	}
 	return !equal
 }
@@ -134,16 +144,23 @@ func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.Name
 	nsListener(c)
 }
 
-func (kc *Cluster) refreshNamespacesLocked(c context.Context) {
+func (kc *Cluster) refreshNamespaces(c context.Context) {
+	kc.nsLock.Lock()
+	defer kc.nsLock.Unlock()
 	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
-	cns, err := kc.nsWatcher.List(c)
-	if err != nil {
-		dlog.Errorf(c, "error listing namespaces: %s", err)
-		return
+	var nss []string
+	if kc.namespaceWatcherSnapshot == nil {
+		nss = kc.mappedNamespaces
+	} else {
+		nss = make([]string, len(kc.namespaceWatcherSnapshot))
+		i := 0
+		for ns := range kc.namespaceWatcherSnapshot {
+			nss[i] = ns
+			i++
+		}
 	}
-	namespaces := make(map[string]bool, len(cns))
-	for _, o := range cns {
-		ns := o.Name
+	namespaces := make(map[string]bool, len(nss))
+	for _, ns := range nss {
 		if kc.shouldBeWatched(ns) {
 			accessOk, ok := kc.currentMappedNamespaces[ns]
 			if !ok {
@@ -175,9 +192,7 @@ func (kc *Cluster) refreshNamespacesLocked(c context.Context) {
 }
 
 func (kc *Cluster) shouldBeWatched(namespace string) bool {
-	// The "kube-system" namespace must be mapped when hijacking the IP of the
-	// kube-dns service in the daemon.
-	if len(kc.mappedNamespaces) == 0 || namespace == "kube-system" {
+	if len(kc.mappedNamespaces) == 0 {
 		return true
 	}
 	for _, n := range kc.mappedNamespaces {

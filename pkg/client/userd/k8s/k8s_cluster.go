@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
@@ -30,15 +29,15 @@ type Cluster struct {
 	// Main
 	ki kubernetes.Interface
 
-	// Current Namespace snapshot, get set by namespace Watcher.
-	// The boolean value indicates if this client is allowed to
-	// watch services and retrieve workloads in the namespace
-	nsWatcher *k8sapi.Watcher[*corev1.Namespace]
-
-	// nsLock protects currentMappedNamespaces and namespaceListeners
+	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceListeners
 	nsLock sync.Mutex
 
-	// Current Namespace snapshot, filtered by mappedNamespaces
+	namespaceResourceVersion string
+
+	// snapshot maintained by the namespaces watcher.
+	namespaceWatcherSnapshot map[string]struct{}
+
+	// Current Namespace snapshot, filtered by MappedNamespaces
 	currentMappedNamespaces map[string]bool
 
 	// Namespace listener. Notified when the currentNamespaces changes
@@ -149,7 +148,7 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 	dlog.Infof(c, "Context: %s", ret.Context)
 	dlog.Infof(c, "Server: %s", ret.Server)
 
-	ret.startNamespaceWatcher(c)
+	ret.StartNamespaceWatcher(c)
 	return ret, nil
 }
 
