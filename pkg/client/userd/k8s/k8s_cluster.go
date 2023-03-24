@@ -19,7 +19,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 )
 
-const supportedKubeAPIVersion = "1.17.0"
+const (
+	supportedKubeAPIVersion = "1.17.0"
+	defaultManagerNamespace = "ambassador"
+)
 
 // Cluster is a Kubernetes cluster reference.
 type Cluster struct {
@@ -127,28 +130,32 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 	}
 	c = k8sapi.WithK8sInterface(c, cs)
 
-	if len(namespaces) == 1 && namespaces[0] == "all" {
-		namespaces = nil
-	} else {
-		sort.Strings(namespaces)
-	}
-
 	ret := &Cluster{
-		Kubeconfig:       kubeFlags,
-		mappedNamespaces: namespaces,
-		ki:               cs,
+		Kubeconfig: kubeFlags,
+		ki:         cs,
 	}
 
-	timedC, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
+	cfg := client.GetConfig(c)
+	timedC, cancel := cfg.Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
 	defer cancel()
-	if err := ret.check(timedC); err != nil {
+	if err = ret.check(timedC); err != nil {
 		return nil, err
 	}
 
 	dlog.Infof(c, "Context: %s", ret.Context)
 	dlog.Infof(c, "Server: %s", ret.Server)
 
-	ret.StartNamespaceWatcher(c)
+	if len(namespaces) == 1 && namespaces[0] == "all" {
+		namespaces = nil
+	}
+	if len(namespaces) == 0 {
+		if ret.CanWatchNamespaces(c) {
+			ret.StartNamespaceWatcher(c)
+		}
+	} else {
+		ret.SetMappedNamespaces(c, namespaces)
+	}
+	dlog.Infof(c, "Will look for traffic manager in namespace %s", ret.GetManagerNamespace())
 	return ret, nil
 }
 

@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -82,6 +83,50 @@ func (kc *Cluster) namespacesEventHandler(ctx context.Context, evCh <-chan watch
 			delay.Reset(10 * time.Millisecond)
 		}
 	}
+}
+
+func (kc *Cluster) canI(ctx context.Context, ra *auth.ResourceAttributes) (bool, error) {
+	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
+	review := auth.SelfSubjectAccessReview{Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
+	ar, err := authHandler.Create(ctx, &review, meta.CreateOptions{})
+	if err == nil && ar.Status.Allowed {
+		return true, nil
+	}
+	where := ""
+	if ra.Namespace != "" {
+		where = " in namespace " + ra.Namespace
+	}
+	if err != nil {
+		err = fmt.Errorf(`unable to do "can-i %s %s%s": %v`, ra.Verb, ra.Resource, where, err)
+		if ctx.Err() == nil {
+			dlog.Error(ctx, err)
+		}
+	} else {
+		dlog.Infof(ctx, `"can-i %s %s%s" is not allowed`, ra.Verb, ra.Resource, where)
+	}
+	return false, err
+}
+
+// CanWatchNamespaces answers the question if this client has the RBAC permissions necessary
+// to watch namespaces. The answer is likely false when using a namespaces scoped installation.
+func (kc *Cluster) CanWatchNamespaces(ctx context.Context) bool {
+	ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+		Verb:     "watch",
+		Resource: "namespaces",
+	})
+	return err == nil && ok
+}
+
+// canGetDefaultTrafficManagerService answers the question if this client has the RBAC permissions
+// necessary to get the traffic-manager in the default namespace.
+func (kc *Cluster) canGetDefaultTrafficManagerService(ctx context.Context) bool {
+	ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+		Verb:      "get",
+		Resource:  "services",
+		Name:      "traffic-manager",
+		Namespace: defaultManagerNamespace,
+	})
+	return err == nil && ok
 }
 
 // canAccessNS answers the question if this client has the RBAC permissions
