@@ -225,6 +225,7 @@ message HelmRequest {
   bool reuse_values = 4;
   bool reset_values = 5;
   bool crds = 6;
+  bool no_hooks = 7;
 }
 
 message UninstallRequest {

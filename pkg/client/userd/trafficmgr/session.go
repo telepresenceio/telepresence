@@ -297,7 +297,7 @@ func DeleteManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kub
 	}
 
 	return helm.DeleteTrafficManager(
-		ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req.Crds)
+		ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req)
 }
 
 func EnsureManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kubeconfig) error {
