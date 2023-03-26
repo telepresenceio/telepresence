@@ -99,7 +99,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 
 	// Add the configmap entry by first retrieving the current config map
 	var cfgMap *core.ConfigMap
-	origCfgYaml, err := s.KubectlOut(ctx, "get", "configmap", agentconfig.ConfigMap, "-o", "yaml", "--context", "default")
+	origCfgYaml, err := s.KubectlOut(ctx, "get", "configmap", agentconfig.ConfigMap, "-o", "yaml")
 	if err != nil {
 		cfgMap = &core.ConfigMap{
 			TypeMeta: meta.TypeMeta{
@@ -121,21 +121,21 @@ func (s *connectedSuite) Test_ManualAgent() {
 	cfgMap.Data[ac.WorkloadName] = cfgEntry
 
 	cfgYaml := writeYaml(agentconfig.ConfigMap+".yaml", cfgMap)
-	require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml, "--context", "default"))
+	require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml))
 	defer func() {
 		if origCfgYaml == "" {
-			require.NoError(s.Kubectl(ctx, "delete", "configmap", agentconfig.ConfigMap, "--context", "default"))
+			require.NoError(s.Kubectl(ctx, "delete", "configmap", agentconfig.ConfigMap))
 		} else {
 			// Restore original configmap
 			writeFile(cfgYaml, []byte(origCfgYaml))
-			require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml, "--context", "default"))
+			require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml))
 		}
 	}()
 
 	dplYaml := writeYaml("deployment.yaml", deploy)
-	require.NoError(s.Kubectl(ctx, "apply", "-f", dplYaml, "--context", "default"))
+	require.NoError(s.Kubectl(ctx, "apply", "-f", dplYaml))
 	defer func() {
-		require.NoError(s.Kubectl(ctx, "delete", "-f", dplYaml, "--context", "default"))
+		require.NoError(s.Kubectl(ctx, "delete", "-f", dplYaml))
 	}()
 
 	err = s.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName)

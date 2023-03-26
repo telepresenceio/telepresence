@@ -11,8 +11,8 @@ import (
 type Runner interface {
 	AddClusterSuite(func(context.Context) suite.TestingSuite)
 	AddNamespacePairSuite(suffix string, f func(NamespacePair) suite.TestingSuite)
+	AddTrafficManagerSuite(suffix string, f func(NamespacePair) suite.TestingSuite)
 	AddConnectedSuite(suffix string, f func(NamespacePair) suite.TestingSuite)
-	AddHelmAndServiceSuite(suffix, name string, f func(HelmAndService) suite.TestingSuite)
 	AddMultipleServicesSuite(suffix, name string, f func(MultipleServices) suite.TestingSuite)
 	AddSingleServiceSuite(suffix, name string, f func(SingleService) suite.TestingSuite)
 	RunTests(context.Context)
@@ -21,13 +21,13 @@ type Runner interface {
 type namedRunner struct {
 	withMultipleServices []func(MultipleServices) suite.TestingSuite
 	withSingleService    []func(SingleService) suite.TestingSuite
-	withHelmAndService   []func(HelmAndService) suite.TestingSuite
 }
 
 type suffixedRunner struct {
-	withNamespace  []func(NamespacePair) suite.TestingSuite
-	withConnection []func(NamespacePair) suite.TestingSuite
-	withName       map[string]*namedRunner
+	withNamespace      []func(NamespacePair) suite.TestingSuite
+	withTrafficManager []func(NamespacePair) suite.TestingSuite
+	withConnected      []func(NamespacePair) suite.TestingSuite
+	withName           map[string]*namedRunner
 }
 
 type runner struct {
@@ -69,17 +69,17 @@ func (r *runner) AddNamespacePairSuite(suffix string, f func(NamespacePair) suit
 	sr.withNamespace = append(sr.withNamespace, f)
 }
 
-// AddConnectedSuite adds a constructor for a test suite that requires a cluster where a namespace
-// pair has been initialized and telepresence is connected to the default runner.
-func AddConnectedSuite(suffix string, f func(NamespacePair) suite.TestingSuite) {
-	defaultRunner.AddConnectedSuite(suffix, f)
+// AddTrafficManagerSuite adds a constructor for a test suite that requires a cluster where a namespace
+// pair has been initialized and a traffic manager is installed.
+func AddTrafficManagerSuite(suffix string, f func(NamespacePair) suite.TestingSuite) {
+	defaultRunner.AddTrafficManagerSuite(suffix, f)
 }
 
-// AddConnectedSuite adds a constructor for a test suite that requires a cluster where a namespace
-// pair has been initialized and telepresence is connected.
-func (r *runner) AddConnectedSuite(suffix string, f func(NamespacePair) suite.TestingSuite) {
+// AddTrafficManagerSuite adds a constructor for a test suite that requires a cluster where a namespace
+// pair has been initialized and a traffic manager is installed.
+func (r *runner) AddTrafficManagerSuite(suffix string, f func(NamespacePair) suite.TestingSuite) {
 	sr := r.forSuffix(suffix)
-	sr.withConnection = append(sr.withConnection, f)
+	sr.withTrafficManager = append(sr.withTrafficManager, f)
 }
 
 func (r *suffixedRunner) forName(name string) *namedRunner {
@@ -89,6 +89,19 @@ func (r *suffixedRunner) forName(name string) *namedRunner {
 		r.withName[name] = nr
 	}
 	return nr
+}
+
+// AddConnectedSuite adds a constructor for a test suite to the default runner that requires a cluster where a namespace
+// pair has been initialized, and telepresence is connected.
+func AddConnectedSuite(suffix string, f func(NamespacePair) suite.TestingSuite) {
+	defaultRunner.AddConnectedSuite(suffix, f)
+}
+
+// AddConnectedSuite adds a constructor for a test suite to the default runner that requires a cluster where a namespace
+// pair has been initialized, and telepresence is connected.
+func (r *runner) AddConnectedSuite(suffix string, f func(NamespacePair) suite.TestingSuite) {
+	sr := r.forSuffix(suffix)
+	sr.withConnected = append(sr.withConnected, f)
 }
 
 // AddMultipleServicesSuite adds a constructor for a test suite to the default runner that requires a cluster where a namespace
@@ -117,19 +130,6 @@ func (r *runner) AddSingleServiceSuite(suffix, name string, f func(services Sing
 	nr.withSingleService = append(nr.withSingleService, f)
 }
 
-// AddHelmAndServiceSuite adds a constructor for a TestingSuite to the default runner that requires a cluster where a namespace
-// pair has been initialized, a service has been installed, and telepresence has been installed using Helm.
-func AddHelmAndServiceSuite(suffix, name string, f func(services HelmAndService) suite.TestingSuite) {
-	defaultRunner.AddHelmAndServiceSuite(suffix, name, f)
-}
-
-// AddHelmAndServiceSuite adds a constructor for a test suite that requires a cluster where a namespace
-// pair has been initialized, a service has been installed, and telepresence has been installed using Helm.
-func (r *runner) AddHelmAndServiceSuite(suffix, name string, f func(services HelmAndService) suite.TestingSuite) {
-	nr := r.forSuffix(suffix).forName(name)
-	nr.withHelmAndService = append(nr.withHelmAndService, f)
-}
-
 func RunTests(c context.Context) {
 	defaultRunner.RunTests(c)
 }
@@ -147,41 +147,35 @@ func (r *runner) RunTests(c context.Context) { //nolint:gocognit
 					for _, f := range sr.withNamespace {
 						np.RunSuite(f(np))
 					}
-					if len(sr.withConnection)+len(sr.withName) > 0 {
-						WithConnection(np, func(c context.Context, cnp NamespacePair) {
-							for _, f := range sr.withConnection {
+					if len(sr.withTrafficManager)+len(sr.withConnected)+len(sr.withName) > 0 {
+						WithTrafficManager(np, func(c context.Context, cnp NamespacePair) {
+							for _, f := range sr.withTrafficManager {
 								cnp.RunSuite(f(cnp))
 							}
-							for n, nr := range sr.withName {
-								if len(nr.withMultipleServices) > 0 {
-									WithMultipleServices(cnp, n, 3, func(ms MultipleServices) {
-										for _, f := range nr.withMultipleServices {
-											ms.RunSuite(f(ms))
+							if len(sr.withConnected)+len(sr.withName) > 0 {
+								WithConnected(np, func(c context.Context, cnp NamespacePair) {
+									for _, f := range sr.withConnected {
+										cnp.RunSuite(f(cnp))
+									}
+									for n, nr := range sr.withName {
+										if len(nr.withMultipleServices) > 0 {
+											WithMultipleServices(cnp, n, 3, func(ms MultipleServices) {
+												for _, f := range nr.withMultipleServices {
+													ms.RunSuite(f(ms))
+												}
+											})
 										}
-									})
-								}
-								if len(nr.withSingleService) > 0 {
-									WithSingleService(cnp, n, func(ss SingleService) {
-										for _, f := range nr.withSingleService {
-											ss.RunSuite(f(ss))
+										if len(nr.withSingleService) > 0 {
+											WithSingleService(cnp, n, func(ss SingleService) {
+												for _, f := range nr.withSingleService {
+													ss.RunSuite(f(ss))
+												}
+											})
 										}
-									})
-								}
+									}
+								})
 							}
 						})
-					}
-					for n, nr := range sr.withName {
-						if len(nr.withHelmAndService) > 0 {
-							WithSingleService(np, n, func(ss SingleService) {
-								if len(nr.withHelmAndService) > 0 {
-									WithHelmAndService(ss, func(hs HelmAndService) {
-										for _, f := range nr.withHelmAndService {
-											ss.RunSuite(f(hs))
-										}
-									})
-								}
-							})
-						}
 					}
 				})
 			}

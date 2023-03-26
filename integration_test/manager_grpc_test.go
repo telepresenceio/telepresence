@@ -33,7 +33,7 @@ func (m *managerGRPCSuite) SetupSuite() {
 	m.Suite.SetupSuite()
 
 	ctx := m.Context()
-	ctx, k8sCluster, err := m.GetK8SCluster(ctx, "default", m.ManagerNamespace())
+	ctx, k8sCluster, err := m.GetK8SCluster(ctx, "", m.ManagerNamespace())
 	m.Require().NoError(err)
 
 	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, k8sCluster.RestConfig, k8sapi.GetK8sInterface(ctx))

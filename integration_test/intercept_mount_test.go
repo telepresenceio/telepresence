@@ -199,11 +199,13 @@ func (s *singleServiceSuite) Test_NoInterceptorResponse() {
 	// result in stream congestion that kills the intercept.
 	url := "http://" + s.ServiceName()
 	for i := 0; i < 1000; i++ {
-		hc := http.Client{Timeout: 100 * time.Millisecond}
-		resp, err := hc.Get(url)
-		if err == nil {
-			resp.Body.Close()
-		}
+		go func() {
+			hc := http.Client{Timeout: 100 * time.Millisecond}
+			resp, err := hc.Get(url)
+			if err == nil {
+				resp.Body.Close()
+			}
+		}()
 	}
 
 	// Verify that we still have a functional mount

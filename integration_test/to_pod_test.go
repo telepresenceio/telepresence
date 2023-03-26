@@ -13,9 +13,7 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 	const svc = "echo-w-sidecars"
 	ctx := s.Context()
 	s.ApplyApp(ctx, svc, "deploy/"+svc)
-	defer func() {
-		_ = s.Kubectl(ctx, "delete", "svc,deploy", svc)
-	}()
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
 	require := s.Require()
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", "8080", "--to-pod", "8081", "--to-pod", "8082")
@@ -53,9 +51,7 @@ func (s *connectedSuite) Test_ToPodUDPPortForwarding() {
 	const svc = "echo-extra-udp"
 	ctx := s.Context()
 	s.ApplyApp(ctx, svc, "deploy/"+svc)
-	defer func() {
-		_ = s.Kubectl(ctx, "delete", "svc,deploy", svc)
-	}()
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
 	require := s.Require()
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", "9080", "--to-pod", "8080/UDP")
