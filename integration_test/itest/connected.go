@@ -32,12 +32,9 @@ func (ch *connected) setup(ctx context.Context) bool {
 	if t.Failed() {
 		return false
 	}
-	stdout, _, err = Telepresence(ctx, "loglevel", "-d30m", "debug")
+	_, _, err = Telepresence(ctx, "loglevel", "-d30m", "debug")
 	assert.NoError(t, err)
-	if t.Failed() {
-		return false
-	}
-	return true
+	return !t.Failed()
 }
 
 func (ch *connected) tearDown(ctx context.Context) {

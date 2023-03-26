@@ -46,8 +46,7 @@ func (kc *Cluster) StartNamespaceWatcher(ctx context.Context) {
 func (kc *Cluster) namespacesEventHandler(ctx context.Context, evCh <-chan watch.Event, nsSynced chan struct{}) {
 	// The delay timer will initially sleep forever. It's reset to a very short
 	// delay when the file is modified.
-	var delay *time.Timer
-	delay = time.AfterFunc(time.Duration(math.MaxInt64), func() {
+	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
 		kc.refreshNamespaces(ctx)
 		select {
 		case <-nsSynced:

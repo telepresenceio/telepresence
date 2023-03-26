@@ -36,8 +36,6 @@ type Cluster struct {
 	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceListeners
 	nsLock sync.Mutex
 
-	namespaceResourceVersion string
-
 	// snapshot maintained by the namespaces watcher.
 	namespaceWatcherSnapshot map[string]struct{}
 

@@ -259,8 +259,6 @@ func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.
 	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,role,rolebinding", "-l", "app=traffic-manager")
-
-	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 }
 
 // PodCreateTimeout will return a timeout suitable for operations that create pods.
@@ -600,9 +598,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		verb = "upgrade"
 		settings = append(settings, "--reuse-values")
 	}
-	args := []string{"helm", verb, "-n", nss.Namespace,
-		"-f", valuesFile,
-	}
+	args := []string{"helm", verb, "-n", nss.Namespace, "-f", valuesFile}
 	args = append(args, settings...)
 
 	if _, _, err = Telepresence(WithUser(ctx, "default"), args...); err != nil {

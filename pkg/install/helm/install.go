@@ -253,9 +253,10 @@ func ensureIsInstalled(
 	if existing != nil && (existing.Info.Status != release.StatusDeployed) {
 		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
 			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
-		urq := *req
-		urq.NoHooks = true
-		urq.Type = connector.HelmRequest_UNINSTALL
+		urq := connector.HelmRequest{
+			Type:    connector.HelmRequest_UNINSTALL,
+			NoHooks: true,
+		}
 		err = uninstallExisting(ctx, helmConfig, namespace, releaseName, &urq)
 		if err != nil {
 			return fmt.Errorf("failed to clean up leftover release history: %w", err)
