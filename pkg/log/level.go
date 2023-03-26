@@ -27,12 +27,12 @@ func SetLevel(ctx context.Context, logLevelStr string) {
 // an argument to the SetLevel function.
 func WithLevelSetter(ctx context.Context, logrusLogger *logrus.Logger) context.Context {
 	return context.WithValue(ctx, setLogLevelContextKey{}, func(logLevelStr string) {
-		SetLogrusLevel(logrusLogger, logLevelStr)
+		SetLogrusLevel(logrusLogger, logLevelStr, true)
 	})
 }
 
 // SetLogrusLevel sets the log-level of the given logger from logLevelStr and logs that to the logger.
-func SetLogrusLevel(logrusLogger *logrus.Logger, logLevelStr string) {
+func SetLogrusLevel(logrusLogger *logrus.Logger, logLevelStr string, logChange bool) {
 	const defaultLogLevel = logrus.InfoLevel
 	logLevel := defaultLogLevel
 	var err error
@@ -46,6 +46,8 @@ func SetLogrusLevel(logrusLogger *logrus.Logger, logLevelStr string) {
 	if logrusLogger.Level != logLevel {
 		logrusLogger.SetLevel(logLevel)
 		logrusLogger.SetReportCaller(logLevel >= logrus.TraceLevel)
-		logrusLogger.Logf(logLevel, "Logging at this level %q", logLevel)
+		if logChange {
+			logrusLogger.Logf(logLevel, "Logging at this level %q", logLevel)
+		}
 	}
 }

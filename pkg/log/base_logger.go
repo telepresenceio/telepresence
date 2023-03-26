@@ -13,7 +13,7 @@ func MakeBaseLogger(ctx context.Context, logLevel string) context.Context {
 	logrusFormatter := NewFormatter("2006-01-02 15:04:05.0000")
 	logrusLogger.SetFormatter(logrusFormatter)
 
-	SetLogrusLevel(logrusLogger, logLevel)
+	SetLogrusLevel(logrusLogger, logLevel, false)
 
 	logger := dlog.WrapLogrus(logrusLogger)
 	dlog.SetFallbackLogger(logger)
