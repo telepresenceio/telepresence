@@ -193,18 +193,13 @@ func sortedStringSlicesEqual(as, bs []string) bool {
 }
 
 func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) bool {
-	if len(namespaces) == 1 && namespaces[0] == "all" {
-		namespaces = nil
-	} else {
-		sort.Strings(namespaces)
-	}
-
-	equal := sortedStringSlicesEqual(namespaces, kc.mappedNamespaces)
-	if !equal {
-		kc.mappedNamespaces = namespaces
+	sort.Strings(namespaces)
+	if !sortedStringSlicesEqual(namespaces, kc.MappedNamespaces) {
+		kc.MappedNamespaces = namespaces
 		kc.refreshNamespaces(c)
+		return true
 	}
-	return !equal
+	return false
 }
 
 func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.NamespaceListener) {
@@ -219,7 +214,12 @@ func (kc *Cluster) refreshNamespaces(c context.Context) {
 	defer kc.nsLock.Unlock()
 	var nss []string
 	if kc.namespaceWatcherSnapshot == nil {
-		nss = kc.mappedNamespaces
+		// No permission to watch namespaces. Use the mapped-namespaces instead.
+		nss = kc.MappedNamespaces
+		if len(nss) == 0 {
+			// No mapped namespaces exists. Fallback to what's defined in the kube-context (will be "default" if none was defined).
+			nss = []string{kc.Namespace}
+		}
 	} else {
 		nss = make([]string, len(kc.namespaceWatcherSnapshot))
 		i := 0
@@ -261,10 +261,10 @@ func (kc *Cluster) refreshNamespaces(c context.Context) {
 }
 
 func (kc *Cluster) shouldBeWatched(namespace string) bool {
-	if len(kc.mappedNamespaces) == 0 {
+	if len(kc.MappedNamespaces) == 0 {
 		return true
 	}
-	for _, n := range kc.mappedNamespaces {
+	for _, n := range kc.MappedNamespaces {
 		if n == namespace {
 			return true
 		}

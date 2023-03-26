@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 const (
@@ -27,7 +28,7 @@ const (
 // Cluster is a Kubernetes cluster reference.
 type Cluster struct {
 	*client.Kubeconfig
-	mappedNamespaces []string
+	MappedNamespaces []string
 
 	// Main
 	ki kubernetes.Interface
@@ -149,14 +150,51 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 		namespaces = nil
 	}
 	if len(namespaces) == 0 {
+		namespaces = cfg.Cluster.MappedNamespaces
+	}
+	if len(namespaces) == 0 {
 		if ret.CanWatchNamespaces(c) {
 			ret.StartNamespaceWatcher(c)
 		}
 	} else {
 		ret.SetMappedNamespaces(c, namespaces)
 	}
+	if ret.GetManagerNamespace() == "" {
+		ret.KubeconfigExtension.Manager.Namespace, err = ret.determineTrafficManagerNamespace(c)
+		if err != nil {
+			return nil, err
+		}
+	}
 	dlog.Infof(c, "Will look for traffic manager in namespace %s", ret.GetManagerNamespace())
 	return ret, nil
+}
+
+// determineTrafficManagerNamespace finds the namespace for the traffic-manager. It is determined by the following steps:
+//
+//  1. If a treffic-manager service is found in one of the currently accessible namespaces, return it.
+//  2. If the client has access to the default manager namespace, then return it.
+//  3. If the client has access to the default namespace, then return it.
+//  4. Return an error stating that it isn't possible to determine the namespace.
+func (kc *Cluster) determineTrafficManagerNamespace(c context.Context) (string, error) {
+	// Search for the traffic-manager in mapped namespaces
+	nss := kc.GetCurrentNamespaces(true)
+	for _, ns := range nss {
+		if _, err := k8sapi.GetService(c, "traffic-manager", ns); err == nil {
+			return ns, nil
+		}
+	}
+
+	// No existing manager was found.
+	if kc.canGetDefaultTrafficManagerService(c) {
+		return defaultManagerNamespace, nil
+	}
+
+	// No existing traffic-manager found. Assume that it should be installed
+	// in the default namespace if it is accessible
+	if kc.canAccessNS(c, kc.Namespace) {
+		return kc.Namespace, nil
+	}
+	return "", errcat.User.New("unable to determine the traffic-manager namespace")
 }
 
 // GetCurrentNamespaces returns the names of the namespaces that this client
