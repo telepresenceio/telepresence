@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -18,8 +16,12 @@ type helmSuite struct {
 	appSpace2 string
 }
 
+func (s *helmSuite) SuiteName() string {
+	return "Helm"
+}
+
 func init() {
-	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) suite.TestingSuite {
+	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) itest.TestingSuite {
 		s := &helmSuite{Suite: itest.Suite{Harness: h}, SingleService: h}
 		suffix := itest.GetGlobalHarness(h.HarnessContext()).Suffix()
 		s.appSpace2, s.mgrSpace2 = itest.AppAndMgrNSName(suffix + "-2")
