@@ -44,7 +44,6 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	defaultGW, err := routing.DefaultRoute(ctx)
 	require.NoError(err)
 	var ips []net.IP
-	itest.TelepresenceQuitOk(ctx)
 
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		var apiServers []string
@@ -61,7 +60,6 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	})
 
 	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
-	defer itest.TelepresenceQuitOk(ctx) // WithKubeConfigExtension sets env which gets sticky, so quitting is a must here
 
 	expectedLen := len(ips)
 	s.Eventually(func() bool {
@@ -86,7 +84,6 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 func (s *notConnectedSuite) Test_NeverProxy() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	svcName := "echo-never-proxy"
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
@@ -104,8 +101,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		require.NoError(err)
 		return map[string]any{"never-proxy": []string{ip + "/32"}}
 	})
-	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
-	defer itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
 
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
 	neverProxiedCount := len(ips) + 1
@@ -128,7 +124,6 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 
 func (s *notConnectedSuite) Test_ConflictingProxies() {
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	testIP := &net.IPNet{
 		IP:   net.ParseIP("10.128.0.32"),
@@ -153,40 +148,39 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 		},
 	} {
 		s.Run(name, func() {
-			require := s.Require()
 			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]any {
 				return map[string]any{
 					"never-proxy": t.neverProxy,
 					"also-proxy":  t.alsoProxy,
 				}
 			})
-			itest.TelepresenceOk(ctx, "connect", "--context", "extra")
+			itest.TelepresenceOk(ctx, "connect", "--context", "extra", "--manager-namespace", s.ManagerNamespace())
 			defer itest.TelepresenceQuitOk(ctx)
 			s.Eventually(func() bool {
-				return itest.Run(ctx, "curl", "--silent", "-k", "--max-time", "0.5", "https://kubernetes.default:443") == nil
-			}, 15*time.Second, 2*time.Second, "cluster is not connected")
-			newRoute, err := routing.GetRoute(ctx, testIP)
-			if t.expectEq {
-				if originalRoute.Interface != nil {
-					require.NotNil(newRoute.Interface)
-					require.Equal(originalRoute.Interface.Name, newRoute.Interface.Name)
-				} else {
-					require.Nil(newRoute.Interface)
+				newRoute, err := routing.GetRoute(ctx, testIP)
+				if err != nil {
+					return false
 				}
-			} else {
-				require.NoError(err)
-				require.NotNil(newRoute.Interface)
-				if originalRoute.Interface != nil {
-					require.NotEqual(newRoute.Interface.Name, originalRoute.Interface.Name, "Expected %s not to equal %s", newRoute.Interface.Name, originalRoute.Interface.Name)
+				if t.expectEq {
+					if originalRoute.Interface != nil {
+						return newRoute.Interface != nil && originalRoute.Interface.Name == newRoute.Interface.Name
+					}
+					return newRoute.Interface == nil
 				}
-			}
+				if newRoute.Interface == nil {
+					return false
+				}
+				if originalRoute.Interface == nil {
+					return true
+				}
+				return newRoute.Interface.Name != originalRoute.Interface.Name
+			}, 5*time.Second, 200*time.Millisecond)
 		})
 	}
 }
 
 func (s *notConnectedSuite) Test_DNSIncludes() {
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		return map[string]any{"dns": map[string][]string{"include-suffixes": {".org"}}}
@@ -200,8 +194,7 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	stdout := itest.TelepresenceOk(ctx, "config", "--context", "extra", "view", "--client-only")
 	require.Contains(stdout, "    includeSuffixes:\n        - .org")
 
-	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
-	defer itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
 
 	retryCount := 0
 	s.Eventually(func() bool {

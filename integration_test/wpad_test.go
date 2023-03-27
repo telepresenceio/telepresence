@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -19,14 +20,6 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 	require := s.Require()
 	ctx := s.Context()
 
-	// Ensure that DNS has full functionality
-	s.Eventually(func() bool {
-		short, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-		defer cancel()
-		as, err := net.DefaultResolver.LookupIPAddr(short, "kubernetes.default")
-		return err == nil && len(as) > 0
-	}, 30*time.Second, time.Second, "DNS is not functional")
-
 	logDir, err := filelocation.AppUserLogDir(ctx)
 	require.NoError(err)
 	logFile := filepath.Join(logDir, "daemon.log")
@@ -40,7 +33,7 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 			false,
 		},
 		{
-			"wpad.default",
+			fmt.Sprintf("wpad.%s", s.AppNamespace()),
 			false,
 		},
 		{
@@ -52,7 +45,7 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 			false,
 		},
 		{
-			"wpad.default.svc.cluster.local",
+			fmt.Sprintf("wpad.%s.svc.cluster.local", s.AppNamespace()),
 			false,
 		},
 		/* revisit after checking relevant log messages on all platforms

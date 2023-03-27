@@ -99,7 +99,7 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	}
 
 	// Check if a running daemon can be discovered.
-	name, err := daemonName(ctx)
+	name, err := contextName(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -142,16 +142,16 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	return newUserDaemon(conn, false), nil
 }
 
-func daemonName(ctx context.Context) (string, error) {
+func contextName(ctx context.Context) (string, error) {
 	var flags map[string]string
 	if cr := daemon.GetRequest(ctx); cr != nil {
 		flags = cr.KubeFlags
 	}
-	contextName, _, err := client.CurrentContext(flags)
+	name, _, err := client.CurrentContext(flags)
 	if err != nil {
 		return "", err
 	}
-	return contextName, nil
+	return name, nil
 }
 
 func newUserDaemon(conn *grpc.ClientConn, remote bool) *daemon.UserClient {

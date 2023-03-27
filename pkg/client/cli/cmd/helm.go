@@ -32,6 +32,7 @@ type HelmCommand struct {
 	AllValues   map[string]any
 	Request     *daemon.Request
 	RequestType connector.HelmRequest_Type
+	NoHooks     bool
 	ReuseValues bool
 	ResetValues bool
 	CRDs        bool
@@ -66,6 +67,7 @@ func helmInstall() *cobra.Command {
 	}
 
 	flags := cmd.Flags()
+	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "prevent hooks from running during install")
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
 	ha.addValueSettingFlags(flags)
 	ha.addCRDsFlags(flags)
@@ -73,6 +75,7 @@ func helmInstall() *cobra.Command {
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
 	ha.Request = daemon.InitRequest(cmd)
+	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
@@ -94,24 +97,25 @@ func helmUpgrade() *cobra.Command {
 	flags := cmd.Flags()
 	ha.addValueSettingFlags(flags)
 	ha.addCRDsFlags(flags)
-	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false,
-		"when upgrading, reset the values to the ones built into the chart")
+	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "disable pre/post upgrade hooks")
+	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false, "when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
 	ha.Request = daemon.InitRequest(cmd)
+	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
 func (ha *HelmCommand) addValueSettingFlags(flags *pflag.FlagSet) {
-	flags.StringSliceVarP(&ha.ValueFiles, "values", "f", []string{},
+	flags.StringArrayVarP(&ha.ValueFiles, "values", "f", []string{},
 		"specify values in a YAML file or a URL (can specify multiple)")
-	flags.StringSliceVarP(&ha.Values, "set", "", []string{},
+	flags.StringArrayVarP(&ha.Values, "set", "", []string{},
 		"specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)")
-	flags.StringSliceVarP(&ha.FileValues, "set-file", "", []string{},
+	flags.StringArrayVarP(&ha.FileValues, "set-file", "", []string{},
 		"set values from respective files specified via the command line (can specify multiple or separate values with commas: key1=path1,key2=path2)")
-	flags.StringSliceVarP(&ha.JSONValues, "set-json", "", []string{},
+	flags.StringArrayVarP(&ha.JSONValues, "set-json", "", []string{},
 		"set JSON values on the command line (can specify multiple or separate values with commas: a.b=jsonval1,a.c=jsonval2)")
-	flags.StringSliceVarP(&ha.StringValues, "set-string", "", []string{},
+	flags.StringArrayVarP(&ha.StringValues, "set-string", "", []string{},
 		"set STRING values on the command line (can specify multiple or separate values with commas: a.b=val1,a.c=val2)")
 	if HelmInstallExtendFlagsFunc != nil {
 		HelmInstallExtendFlagsFunc(flags)
@@ -138,8 +142,11 @@ func helmUninstall() *cobra.Command {
 			ann.VersionCheck: ann.Required,
 		},
 	}
-	ha.addCRDsFlags(cmd.Flags())
+	flags := cmd.Flags()
+	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "prevent hooks from running during uninstallation")
+	ha.addCRDsFlags(flags)
 	ha.Request = daemon.InitRequest(cmd)
+	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
@@ -179,6 +186,7 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 		ResetValues:    ha.ResetValues,
 		ConnectRequest: &ha.Request.ConnectRequest,
 		Crds:           ha.CRDs,
+		NoHooks:        ha.NoHooks,
 	}
 	ud := daemon.GetUserClient(ctx)
 	if ud.Remote && daemon.GetSession(ctx) == nil {

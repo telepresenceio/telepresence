@@ -200,8 +200,6 @@ func ManageSessions(c context.Context, si userd.Service) error {
 		case cr := <-s.connectRequest:
 			rsp := startSession(c, si, cr, &wg)
 			select {
-			case <-c.Done():
-				return nil
 			case s.connectResponse <- rsp:
 			default:
 				// Nobody left to read the response? That's fine really. Just means that
@@ -259,9 +257,6 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 	s.sessionCancel = func() {
 		cancel()
 		<-session.Done()
-	}
-	if err := s.session.ApplyConfig(ctx); err != nil {
-		dlog.Warnf(ctx, "failed to apply config from traffic-manager: %v", err)
 	}
 
 	// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while

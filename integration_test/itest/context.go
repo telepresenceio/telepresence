@@ -10,6 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -24,7 +25,7 @@ const (
 )
 
 func withProfile(ctx context.Context) context.Context {
-	profile, ok := os.LookupEnv("TELEPRESENCE_TEST_PROFILE")
+	profile, ok := dos.LookupEnv(ctx, "TELEPRESENCE_TEST_PROFILE")
 	if !ok {
 		return context.WithValue(ctx, profileKey{}, DefaultProfile)
 	}
@@ -170,6 +171,19 @@ func GetUser(ctx context.Context) string {
 		return user
 	}
 	return "default"
+}
+
+type useDockerContextkey struct{}
+
+func WithUseDocker(ctx context.Context, use bool) context.Context {
+	return context.WithValue(ctx, useDockerContextkey{}, use)
+}
+
+func UseDocker(ctx context.Context) bool {
+	if use, ok := ctx.Value(useDockerContextkey{}).(bool); ok {
+		return use
+	}
+	return false
 }
 
 func LookupEnv(ctx context.Context, key string) (value string, ok bool) {

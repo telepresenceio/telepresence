@@ -2,11 +2,14 @@ package intercept
 
 import (
 	"context"
-	"path/filepath"
+	"fmt"
+	"io"
+	"net"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type Ingress struct {
@@ -36,10 +39,13 @@ type Info struct {
 	ServicePortID string            `json:"service_port_id,omitempty" yaml:"service_port_id,omitempty"`
 	Environment   map[string]string `json:"environment,omitempty"     yaml:"environment,omitempty"`
 	Mount         *Mount            `json:"mount,omitempty"           yaml:"mount,omitempty"`
+	FilterDesc    string            `json:"filter_desc,omitempty"     yaml:"filter_desc,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"     yaml:"metadata,omitempty"`
 	HttpFilter    []string          `json:"http_filter,omitempty"     yaml:"http_filter,omitempty"`
 	Global        bool              `json:"global,omitempty"          yaml:"global,omitempty"`
 	PreviewURL    string            `json:"preview_url,omitempty"     yaml:"preview_url,omitempty"`
 	Ingress       *Ingress          `json:"ingress,omitempty"         yaml:"ingress,omitempty"`
+	debug         bool
 }
 
 func NewIngress(ps *manager.PreviewSpec) *Ingress {
@@ -76,12 +82,17 @@ func NewMount(ctx context.Context, ii *manager.InterceptInfo, mountError string)
 		} else {
 			port = ii.SftpPort
 		}
+		var mounts []string
+		if tpMounts := ii.Environment["TELEPRESENCE_MOUNTS"]; tpMounts != "" {
+			// This is a Unix path, so we cannot use filepath.SplitList
+			mounts = strings.Split(tpMounts, ":")
+		}
 		return &Mount{
 			LocalDir:  ii.ClientMountPoint,
 			RemoteDir: ii.MountPoint,
 			PodIP:     ii.PodIp,
 			Port:      port,
-			Mounts:    filepath.SplitList(ii.Environment["TELEPRESENCE_MOUNTS"]),
+			Mounts:    mounts,
 		}
 	}
 	return nil
@@ -100,9 +111,83 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, mountError string) 
 		Mount:         NewMount(ctx, ii, mountError),
 		ServicePortID: spec.ServicePortName,
 		Environment:   ii.Environment,
+		FilterDesc:    ii.MechanismArgsDesc,
+		Metadata:      ii.Metadata,
 		HttpFilter:    spec.MechanismArgs,
 		Global:        spec.Mechanism == "tcp",
 		PreviewURL:    PreviewURL(ii.PreviewDomain),
 		Ingress:       NewIngress(ii.PreviewSpec),
 	}
+}
+
+func (ii *Info) WriteTo(w io.Writer) (int64, error) {
+	kvf := ioutil.DefaultKeyValueFormatter()
+	kvf.Prefix = "   "
+	kvf.Add("Intercept name", ii.Name)
+	kvf.Add("State", func() string {
+		msg := ""
+		if manager.InterceptDispositionType_value[ii.Disposition] > int32(manager.InterceptDispositionType_WAITING) {
+			msg += "error: "
+		}
+		msg += ii.Disposition
+		if ii.Message != "" {
+			msg += ": " + ii.Message
+		}
+		return msg
+	}())
+	kvf.Add("Workload kind", ii.WorkloadKind)
+
+	if ii.debug {
+		kvf.Add("ID", ii.ID)
+	}
+
+	kvf.Add(
+		"Destination",
+		net.JoinHostPort(ii.TargetHost, fmt.Sprintf("%d", ii.TargetPort)),
+	)
+
+	if ii.ServicePortID != "" {
+		kvf.Add("Service Port Identifier", ii.ServicePortID)
+	}
+	if ii.debug {
+		m := "http"
+		if ii.Global {
+			m = "tcp"
+		}
+		kvf.Add("Mechanism", m)
+		kvf.Add("Mechanism Command", fmt.Sprintf("%q", ii.FilterDesc))
+		kvf.Add("Metadata", fmt.Sprintf("%q", ii.Metadata))
+	}
+
+	if m := ii.Mount; m != nil {
+		if m.LocalDir != "" {
+			kvf.Add("Volume Mount Point", m.LocalDir)
+		} else if m.Error != "" {
+			kvf.Add("Volume Mount Error", m.Error)
+		}
+	}
+
+	kvf.Add("Intercepting", func() string {
+		if ii.FilterDesc != "" {
+			return ii.FilterDesc
+		}
+		if ii.Global {
+			return `using mechanism "tcp"`
+		}
+		return fmt.Sprintf("using mechanism=%q with args=%q", "http", ii.HttpFilter)
+	}())
+
+	if ii.PreviewURL != "" {
+		previewURL := ii.PreviewURL
+		// Right now SystemA gives back domains with the leading "https://", but
+		// let's not rely on that.
+		if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
+			previewURL = "https://" + previewURL
+		}
+		kvf.Add("Preview URL", previewURL)
+	}
+	if in := ii.Ingress; in != nil {
+		kvf.Add("Layer 5 Hostname", in.L5Host)
+	}
+	return kvf.WriteTo(w)
 }

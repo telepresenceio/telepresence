@@ -2,12 +2,12 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -31,16 +31,17 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 const (
-	telepresenceImage = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
-	dockerTpCache     = "/root/.cache/telepresence"
-	dockerTpConfig    = "/root/.config/telepresence"
-	dockerTpLog       = "/root/.cache/telepresence/logs"
+	telepresenceImage   = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
+	dockerTpCache       = "/root/.cache/telepresence"
+	dockerTpConfig      = "/root/.config/telepresence"
+	dockerTpLog         = "/root/.cache/telepresence/logs"
+	containerNamePrefix = "tp-"
 )
 
 // ClientImage returns the fully qualified name of the docker image that corresponds to
@@ -79,7 +80,7 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	addr := as[0]
 	port := addr.Port
 	opts := []string{
-		"--name", name,
+		"--name", SafeContainerName(containerNamePrefix + name),
 		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
 		"--device", "/dev/net/tun:/dev/net/tun",
@@ -100,11 +101,32 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	return opts, addr, nil
 }
 
+// SafeContainerName returns a string that can safely be used as an argument
+// to docker run --name. Only characters [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed.
+// Others are replaced by an underscore, or if it's the very first character,
+// by the character 'a'.
+func SafeContainerName(name string) string {
+	n := strings.Builder{}
+	for i, c := range name {
+		switch {
+		case (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
+			n.WriteByte(byte(c))
+		case i > 0 && (c == '_' || c == '.' || c == '-'):
+			n.WriteByte(byte(c))
+		case i > 0:
+			n.WriteByte('_')
+		default:
+			n.WriteByte('a')
+		}
+	}
+	return n.String()
+}
+
 // DaemonArgs returns the arguments to pass to a docker run when starting a container daemon.
 func DaemonArgs(name string, port int) []string {
 	return []string{
 		"connector-foreground",
-		"--name", "docker-" + name,
+		"--name", SafeContainerName("docker-" + name),
 		"--address", fmt.Sprintf(":%d", port),
 		"--embed-network",
 	}
@@ -131,28 +153,25 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 // ConnectDaemon connects to a daemon at the given address.
 func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-	return grpc.DialContext(ctx, address,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true))
-}
-
-// PullImage checks if the given image exists locally by doing docker image inspect. A docker pull is
-// performed if no local image is found. Stdout is silenced during those operations.
-func PullImage(ctx context.Context, image string) error {
-	cmd := proc.StdCommand(ctx, "docker", "image", "inspect", image)
-	cmd.Stderr = io.Discard
-	cmd.Stdout = io.Discard
-	if cmd.Run() == nil {
-		// Image exists in the local cache, so don't bother pulling it.
-		return nil
+	for i := 1; ; i++ {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		conn, err := grpc.DialContext(ctx, address,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithNoProxy(),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true))
+		if err != nil {
+			if i < 10 {
+				// It's likely that we were too quick. Let's take a nap and try again
+				time.Sleep(time.Duration(i*50) * time.Millisecond)
+				continue
+			}
+			return nil, err
+		}
+		return conn, nil
 	}
-	cmd = proc.StdCommand(ctx, "docker", "pull", image)
-	// Docker run will put the pull logs in stderr, but docker pull will put them in stdout.
-	// We discard them here, so they don't spam the user. They'll get errors through stderr if it comes to it.
-	cmd.Stdout = io.Discard
-	return cmd.Run()
 }
 
 const kubeAuthPortFile = kubeauth.CommandName + ".port"
@@ -292,6 +311,11 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 		}
 	}
 
+	// Ensure that all certs are embedded instead of reachable using a path
+	if err = api.FlattenConfig(&config); err != nil {
+		return err
+	}
+
 	// Store the file using its context name under the <telepresence cache>/kube directory
 	const kubeConfigs = "kube"
 	kubeConfigFile := config.CurrentContext
@@ -319,7 +343,6 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	if proc.RunningInContainer() {
 		return nil, errors.New("unable to start a docker container from within a container")
 	}
-	cidFileName, err := ioutil.CreateTempName("", "cid*.txt")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cidfile: %v", err)
 	}
@@ -339,63 +362,47 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	allArgs = append(allArgs,
 		"run",
 		"--rm",
-		"--cidfile", cidFileName,
+		"-d",
 	)
 	allArgs = append(allArgs, opts...)
 	allArgs = append(allArgs, image)
 	allArgs = append(allArgs, args...)
-
-	cmd := proc.StdCommand(ctx, "docker", allArgs...)
-	if err := cmd.Start(); err != nil {
-		return nil, errcat.NoDaemonLogs.New(err)
-	}
-
-	cidFound := make(chan string, 1)
-	errStart := make(chan error, 1)
-	go func() {
-		defer close(cidFound)
-		for ctx.Err() == nil {
-			dtime.SleepWithContext(ctx, 50*time.Millisecond)
-			if _, err := os.Stat(cidFileName); err == nil {
-				dtime.SleepWithContext(ctx, 200*time.Millisecond)
-				cid, err := os.ReadFile(cidFileName)
-				if err == nil {
-					cidFound <- string(cid)
-					return
-				}
-			}
-		}
-	}()
-	go func() {
-		defer close(errStart)
-		if err := cmd.Wait(); err != nil {
-			err = fmt.Errorf("daemon container exited with %v", err)
-			dlog.Error(ctx, err)
-			errStart <- err
-		} else {
-			dlog.Debug(ctx, "daemon container exited normally")
-		}
-	}()
-	if err != nil {
-		return nil, err
-	}
-	select {
-	case <-ctx.Done(): // Everything is cancelled
-	case cid := <-cidFound: // Success, the daemon info file exists
-		err := cache.SaveDaemonInfo(ctx,
-			&cache.DaemonInfo{
-				Options:     map[string]string{"cid": cid},
-				InDocker:    true,
-				DaemonPort:  addr.Port,
-				KubeContext: name,
-			}, cache.DaemonInfoFile(name, addr.Port))
+	for i := 1; ; i++ {
+		err = tryLaunch(ctx, addr.Port, name, allArgs)
 		if err != nil {
-			return nil, err
+			if i < 6 && strings.Contains(err.Error(), "already in use by container") {
+				// This may happen if the daemon has died (and hence, we never discovered it), but
+				// the container still hasn't died. Let's sleep for a short while and retry.
+				dtime.SleepWithContext(ctx, time.Duration(i)*200*time.Millisecond)
+				continue
+			}
+			return nil, errcat.NoDaemonLogs.New(err)
 		}
-		// Give the listener time to start
-		dtime.SleepWithContext(ctx, 500*time.Millisecond)
-	case err := <-errStart: // Daemon exited before the daemon info came into existence
-		return nil, errcat.NoDaemonLogs.New(err)
+		break
 	}
 	return ConnectDaemon(ctx, addr.String())
+}
+
+func tryLaunch(ctx context.Context, port int, name string, args []string) error {
+	stdErr := bytes.Buffer{}
+	stdOut := bytes.Buffer{}
+	dlog.Debug(ctx, shellquote.ShellString("docker", args))
+	cmd := proc.CommandContext(ctx, "docker", args...)
+	cmd.DisableLogging = true
+	cmd.Stderr = &stdErr
+	cmd.Stdout = &stdOut
+	if err := cmd.Run(); err != nil {
+		errStr := strings.TrimSpace(stdErr.String())
+		if errStr == "" {
+			errStr = err.Error()
+		}
+		return fmt.Errorf("launch of daemon container failed: %s", errStr)
+	}
+	return cache.SaveDaemonInfo(ctx,
+		&cache.DaemonInfo{
+			Options:     map[string]string{"cid": strings.TrimSpace(stdOut.String())},
+			InDocker:    true,
+			DaemonPort:  port,
+			KubeContext: name,
+		}, cache.DaemonInfoFile(name, port))
 }

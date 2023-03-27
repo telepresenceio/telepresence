@@ -3,6 +3,7 @@ package logging
 import (
 	"errors"
 	"fmt"
+	"runtime"
 
 	//nolint:depguard // We specifically need "syscall.Win32FileAttributeData" rather than
 	// "windows.Win32FileAttributeData" for fs.File.Sys().
@@ -25,12 +26,13 @@ type WindowsSysInfo interface {
 }
 
 type windowsSysInfo struct {
-	path  string
-	data  *syscall.Win32FileAttributeData
-	owner *windows.SID
-	group *windows.SID
-	dacl  windows.Handle
-	sacl  windows.Handle
+	path    string
+	data    *syscall.Win32FileAttributeData
+	owner   *windows.SID
+	group   *windows.SID
+	dacl    windows.Handle
+	sacl    windows.Handle
+	secDesc windows.Handle
 }
 
 func osFStat(file dos.File) (SysInfo, error) {
@@ -46,7 +48,6 @@ func osFStat(file dos.File) (SysInfo, error) {
 		path: file.Name(),
 		data: sys,
 	}
-	var secDesc windows.Handle
 	err = api.GetNamedSecurityInfo(
 		wi.path,
 		api.SE_FILE_OBJECT,
@@ -55,14 +56,14 @@ func osFStat(file dos.File) (SysInfo, error) {
 		&wi.group,
 		&wi.dacl,
 		&wi.sacl,
-		&secDesc,
+		&wi.secDesc,
 	)
 	if err != nil && !errors.Is(err, windows.ERROR_SUCCESS) {
 		return nil, err
 	}
-	if _, err = windows.LocalFree(secDesc); err != nil && !errors.Is(err, windows.ERROR_SUCCESS) {
-		return nil, err
-	}
+	runtime.SetFinalizer(&wi, func(wi *windowsSysInfo) {
+		_, _ = windows.LocalFree(wi.secDesc)
+	})
 	return &wi, nil
 }
 
@@ -91,7 +92,13 @@ func (wi *windowsSysInfo) HaveSameOwnerAndGroup(s SysInfo) bool {
 		if a == nil || b == nil {
 			return false
 		}
-		return a.Equals(b)
+		if a.IsValid() {
+			if b.IsValid() {
+				return a.Equals(b)
+			}
+			return false
+		}
+		return !b.IsValid()
 	}
 	owi, ok := s.(*windowsSysInfo)
 	return ok && eq(wi.owner, owi.owner) && eq(wi.group, owi.group)
@@ -126,5 +133,13 @@ func (wi *windowsSysInfo) SACL() windows.Handle {
 }
 
 func (wi *windowsSysInfo) String() string {
-	return fmt.Sprintf("CTIME %v, UID %v, GID %v", wi.BirthTime(), wi.owner, wi.group)
+	ov := "invalid"
+	if wi.owner != nil && wi.owner.IsValid() {
+		ov = wi.owner.String()
+	}
+	gv := "invalid"
+	if wi.group != nil && wi.group.IsValid() {
+		gv = wi.group.String()
+	}
+	return fmt.Sprintf("CTIME %v, UID %v, GID %v", wi.BirthTime(), ov, gv)
 }

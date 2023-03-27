@@ -22,10 +22,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
+	rbac "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
+	sigsYaml "sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
@@ -36,6 +38,7 @@ import (
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -46,19 +49,17 @@ import (
 )
 
 const (
-	TestUser        = "telepresence-test-developer"
-	TestUserAccount = "system:serviceaccount:default:" + TestUser
+	TestUser = "telepresence-test-developer"
 )
 
 type Cluster interface {
-	AgentImageName() string
 	CapturePodLogs(ctx context.Context, app, container, ns string)
 	CompatVersion() string
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
-	InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error
-	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string, managerNamespace string, appNamespaces ...string) error
+	InstallTrafficManager(ctx context.Context, values map[string]string) error
+	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error
 	IsCI() bool
 	Registry() string
 	SetGeneralError(error)
@@ -66,7 +67,9 @@ type Cluster interface {
 	TelepresenceVersion() string
 	UninstallTrafficManager(ctx context.Context, managerNamespace string)
 	PackageHelmChart(ctx context.Context) (string, error)
-	GetValuesForHelm(values map[string]string, release bool, managerNamespace string, appNamespaces ...string) []string
+	GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string
+	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
+	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) error
 }
 
 // The cluster is created once and then reused by all tests. It ensures that:
@@ -83,18 +86,14 @@ type cluster struct {
 	testVersion      string
 	compatVersion    string
 	registry         string
-	agentRegistry    string
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
-	agentImageName   string
-	agentImageTag    string
-	loginDomain      string
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
-	s.suffix, s.isCI = os.LookupEnv("GITHUB_SHA")
+	s.suffix, s.isCI = dos.LookupEnv(ctx, "GITHUB_SHA")
 	if s.isCI {
 		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
 		if len(s.suffix) > 7 {
@@ -103,7 +102,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	} else {
 		s.suffix = strconv.Itoa(os.Getpid())
 	}
-	s.testVersion, s.prePushed = os.LookupEnv("DEV_TELEPRESENCE_VERSION")
+	s.testVersion, s.prePushed = dos.LookupEnv(ctx, "DEV_TELEPRESENCE_VERSION")
 	if s.prePushed {
 		dlog.Infof(ctx, "Using pre-pushed binary %s", s.testVersion)
 	} else {
@@ -111,34 +110,25 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		dlog.Infof(ctx, "Building temp binary %s", s.testVersion)
 	}
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")
-	s.compatVersion = os.Getenv("DEV_COMPAT_VERSION")
+	s.compatVersion = dos.Getenv(ctx, "DEV_COMPAT_VERSION")
 
 	t := getT(ctx)
-	s.agentImageName = "tel2"
-	s.agentImageTag = s.testVersion[1:]
-	if agentImageQN, ok := os.LookupEnv("DEV_AGENT_IMAGE"); ok {
+	var agentImage Image
+	agentImage.Name = "tel2"
+	agentImage.Tag = s.testVersion[1:]
+	if agentImageQN, ok := dos.LookupEnv(ctx, "DEV_AGENT_IMAGE"); ok {
 		i := strings.LastIndexByte(agentImageQN, '/')
 		if i >= 0 {
-			s.agentRegistry = agentImageQN[:i]
+			agentImage.Registry = agentImageQN[:i]
 			agentImageQN = agentImageQN[i+1:]
 		}
 		i = strings.IndexByte(agentImageQN, ':')
 		require.Greater(t, i, 0)
-		s.agentImageName = agentImageQN[:i]
-		s.agentImageTag = agentImageQN[i+1:]
+		agentImage.Name = agentImageQN[:i]
+		agentImage.Tag = agentImageQN[i+1:]
 	}
 
-	s.registry = os.Getenv("DTEST_REGISTRY")
-	if s.registry == "" {
-		s.registry = "localhost:5000"
-	}
-	if s.agentRegistry == "" {
-		s.agentRegistry = s.registry
-	}
-	s.loginDomain = os.Getenv("DEV_LOGIN_DOMAIN")
-	if s.loginDomain == "" {
-		s.loginDomain = "localhost"
-	}
+	s.registry = dos.Getenv(ctx, "DTEST_REGISTRY")
 	require.NoError(t, s.generalError)
 
 	ctx = withGlobalHarness(ctx, &s)
@@ -149,23 +139,28 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
 	go s.ensureExecutable(ctx, errs, wg)
-	go s.ensureDockerImage(ctx, errs, wg)
+	go s.ensureDockerImages(ctx, errs, wg)
 	go s.ensureCluster(ctx, wg)
 	wg.Wait()
 	close(errs)
 	for err := range errs {
 		assert.NoError(t, err)
 	}
-	s.ensureQuitAndLoggedOut(ctx)
+	if agentImage.Registry == "" {
+		agentImage.Registry = s.registry
+	}
+	ctx = WithAgentImage(ctx, &agentImage)
+
+	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
 	defer s.tearDown(ctx)
 	if !t.Failed() {
-		f(WithUser(s.withBasicConfig(ctx, t), TestUser))
+		f(s.withBasicConfig(ctx, t))
 	}
 }
 
 func (s *cluster) tearDown(ctx context.Context) {
-	s.ensureQuitAndLoggedOut(ctx)
+	s.ensureQuit(ctx)
 	if s.kubeConfig != "" {
 		ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml"))
@@ -173,10 +168,7 @@ func (s *cluster) tearDown(ctx context.Context) {
 	}
 }
 
-func (s *cluster) ensureQuitAndLoggedOut(ctx context.Context) {
-	// Ensure that telepresence is not logged in
-	_, _, _ = Telepresence(ctx, "logout") //nolint:dogsled // don't care about any of the returns
-
+func (s *cluster) ensureQuit(ctx context.Context) {
 	// Ensure that no telepresence is running when the tests start
 	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
@@ -208,10 +200,10 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 
 func (s *cluster) ensureDocker(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	dtest.DockerRegistry(log.WithDiscardingLogger(ctx))
+	s.registry = dtest.DockerRegistry(log.WithDiscardingLogger(ctx))
 }
 
-func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
+func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
 	defer wg.Done()
 	if s.prePushed || s.isCI {
 		return
@@ -223,7 +215,7 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 
 	// Initialize docker and build image simultaneously
 	wgs := &sync.WaitGroup{}
-	if s.registry == "localhost:5000" {
+	if s.registry == "" {
 		wgs.Add(1)
 		go s.ensureDocker(ctx, wgs)
 	}
@@ -235,36 +227,38 @@ func (s *cluster) ensureDockerImage(ctx context.Context, errs chan<- error, wg *
 		}
 	}
 
-	wgs.Add(1)
+	wgs.Add(2)
 	go func() {
 		defer wgs.Done()
-		runMake("image")
+		runMake("tel2-image")
+	}()
+	go func() {
+		defer wgs.Done()
+		runMake("client-image")
 	}()
 	wgs.Wait()
 
 	//  Image built and a registry exists. Push the image
-	runMake("push-image")
+	runMake("push-images")
 }
 
 func (s *cluster) ensureCluster(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	if s.registry == "localhost:5000" {
+	if s.registry == "" {
 		dwg := sync.WaitGroup{}
 		dwg.Add(1)
 		s.ensureDocker(ctx, &dwg)
 		dwg.Wait()
 	}
 	t := getT(ctx)
-	s.kubeConfig = dtest.Kubeconfig(log.WithDiscardingLogger(ctx))
+	s.kubeConfig = dos.Getenv(ctx, "DTEST_KUBECONFIG")
+	if s.kubeConfig == "" {
+		s.kubeConfig = dtest.Kubeconfig(log.WithDiscardingLogger(ctx))
+	}
 	require.NoError(t, os.Chmod(s.kubeConfig, 0o600), "failed to chmod 0600 %q", s.kubeConfig)
 
 	// Delete any lingering traffic-manager resources that aren't bound to specific namespaces.
-	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,clusterrole,clusterrolebinding", "-l", "app=traffic-manager")
-
-	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
-	require.NoError(t, Run(ctx, "kubectl", "apply", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml")),
-		"failed to create %s service account", TestUser)
-	require.NoError(t, Run(ctx, "kubectl", "label", "serviceaccount,clusterrole,clusterrolebinding", TestUser, "purpose="+purposeLabel))
+	_ = Run(ctx, "kubectl", "delete", "mutatingwebhookconfiguration,role,rolebinding", "-l", "app=traffic-manager")
 }
 
 // PodCreateTimeout will return a timeout suitable for operations that create pods.
@@ -298,7 +292,11 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
 	config.Images.PrivateRegistry = s.Registry()
-	config.Images.PrivateWebhookRegistry = s.AgentRegistry()
+	if agentImage := GetAgentImage(c); agentImage != nil {
+		config.Images.PrivateWebhookRegistry = agentImage.Registry
+	} else {
+		config.Images.PrivateWebhookRegistry = s.Registry()
+	}
 
 	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
 	config.Cloud.SystemaHost = "127.0.0.1"
@@ -318,11 +316,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 func (s *cluster) GlobalEnv() map[string]string {
 	globalEnv := map[string]string{
-		"TELEPRESENCE_VERSION":      s.testVersion,
-		"TELEPRESENCE_AGENT_IMAGE":  s.agentImageName + ":" + s.agentImageTag, // Prevent attempts to retrieve image from SystemA
-		"TELEPRESENCE_REGISTRY":     s.registry,
-		"TELEPRESENCE_LOGIN_DOMAIN": s.loginDomain,
-		"KUBECONFIG":                s.kubeConfig,
+		"KUBECONFIG": s.kubeConfig,
 	}
 	yes := struct{}{}
 	includeEnv := map[string]struct{}{
@@ -374,10 +368,6 @@ func (s *cluster) IsCI() bool {
 	return s.isCI
 }
 
-func (s *cluster) AgentRegistry() string {
-	return s.agentRegistry
-}
-
 func (s *cluster) Registry() string {
 	return s.registry
 }
@@ -396,10 +386,6 @@ func (s *cluster) TelepresenceVersion() string {
 
 func (s *cluster) CompatVersion() string {
 	return s.compatVersion
-}
-
-func (s *cluster) AgentImageName() string {
-	return s.agentImageName
 }
 
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
@@ -477,21 +463,27 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	return filename, nil
 }
 
-func (s *cluster) GetValuesForHelm(values map[string]string, release bool, managerNamespace string, appNamespaces ...string) []string {
+func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string {
+	nss := GetNamespaces(ctx)
 	settings := []string{
 		"--set", "logLevel=debug",
-		"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", s.agentImageName), // Prevent attempts to retrieve image from SystemA
-		"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", s.agentImageTag),
-		"--set", fmt.Sprintf("clientRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
-		"--set", fmt.Sprintf("managerRbac.namespaces={%s}", strings.Join(append(appNamespaces, managerNamespace), ",")),
+		"--set", fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
+		"--set", fmt.Sprintf("managerRbac.namespaces=%s", nss.HelmString()),
 		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
 		"--set", "systemaHost=127.0.0.1",
 	}
-	if !release {
+	agentImage := GetAgentImage(ctx)
+	if agentImage != nil {
 		settings = append(settings,
-			"--set", fmt.Sprintf("image.registry=%s", s.Registry()),
-			"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", s.AgentRegistry()),
+			"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
+			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
 		)
+	}
+	if !release {
+		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.Registry()))
+		if agentImage != nil {
+			settings = append(settings, "--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
+		}
 	}
 
 	for k, v := range values {
@@ -500,12 +492,12 @@ func (s *cluster) GetValuesForHelm(values map[string]string, release bool, manag
 	return settings
 }
 
-func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string, managerNamespace string, appNamespaces ...string) error {
+func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string) error {
 	chartFilename, err := s.PackageHelmChart(ctx)
 	if err != nil {
 		return err
 	}
-	return s.installChart(ctx, false, chartFilename, values, managerNamespace, appNamespaces...)
+	return s.installChart(ctx, false, chartFilename, values)
 }
 
 // InstallTrafficManagerVersion performs a helm install of a specific version of the traffic-manager using
@@ -514,37 +506,109 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 // configured using DEV_AGENT_IMAGE.
 //
 // The intent is to simulate connection to an older cluster from the current client.
-func (s *cluster) InstallTrafficManagerVersion(
-	ctx context.Context,
-	version string,
-	values map[string]string,
-	managerNamespace string,
-	appNamespaces ...string,
-) error {
+func (s *cluster) InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error {
 	chartFilename, err := s.pullHelmChart(ctx, version)
 	if err != nil {
 		return err
 	}
-	return s.installChart(ctx, true, chartFilename, values, managerNamespace, appNamespaces...)
+	return s.installChart(ctx, true, chartFilename, values)
 }
 
-func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]string, managerNamespace string, appNamespaces ...string) error {
-	settings := s.GetValuesForHelm(values, release, managerNamespace, appNamespaces...)
+func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]string) error {
+	settings := s.GetValuesForHelm(ctx, values, release)
 
 	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	helmValues := filepath.Join("testdata", "namespaced-values.yaml")
-	args := []string{"install", "-n", managerNamespace, "-f", helmValues, "--wait"}
+	nss := GetNamespaces(ctx)
+	args := []string{"install", "-n", nss.Namespace, "-f", helmValues, "--wait"}
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)
 
 	err := Run(ctx, "helm", args...)
 	if err == nil {
-		err = RolloutStatusWait(ctx, managerNamespace, "deploy/traffic-manager")
+		err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager")
 		if err == nil {
-			s.CapturePodLogs(ctx, "app=traffic-manager", "", managerNamespace)
+			s.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
 		}
 	}
 	return err
+}
+
+func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, settings ...string) error {
+	nss := GetNamespaces(ctx)
+	subjectNames := []string{TestUser}
+	subjects := make([]rbac.Subject, len(subjectNames))
+	for i, s := range subjectNames {
+		subjects[i] = rbac.Subject{
+			Kind:      "ServiceAccount",
+			Name:      s,
+			Namespace: nss.Namespace,
+		}
+	}
+
+	type xRbac struct {
+		Create     bool           `json:"create"`
+		Namespaced bool           `json:"namespaced"`
+		Subjects   []rbac.Subject `json:"subjects,omitempty"`
+		Namespaces []string       `json:"namespaces,omitempty"`
+	}
+	type xAgent struct {
+		Image *Image `json:"image,omitempty"`
+	}
+	var agent *xAgent
+	if agentImage := GetAgentImage(ctx); agentImage != nil {
+		agent = &xAgent{Image: agentImage}
+	}
+	nsl := nss.UniqueList()
+	vx := struct {
+		SystemaHost string  `json:"systemaHost"`
+		SystemaPort int     `json:"systemaPort"`
+		LogLevel    string  `json:"logLevel"`
+		Image       *Image  `json:"image,omitempty"`
+		Agent       *xAgent `json:"agent,omitempty"`
+		ClientRbac  xRbac   `json:"clientRbac"`
+		ManagerRbac xRbac   `json:"managerRbac"`
+	}{
+		LogLevel: "debug",
+		Image:    GetImage(ctx),
+		Agent:    agent,
+		ClientRbac: xRbac{
+			Create:     true,
+			Namespaced: len(nss.ManagedNamespaces) > 0,
+			Subjects:   subjects,
+			Namespaces: nsl,
+		},
+		ManagerRbac: xRbac{
+			Create:     true,
+			Namespaced: true,
+			Namespaces: nsl,
+		},
+	}
+	ss, err := sigsYaml.Marshal(&vx)
+	if err != nil {
+		return err
+	}
+	valuesFile := filepath.Join(getT(ctx).TempDir(), "values.yaml")
+	if err := os.WriteFile(valuesFile, ss, 0o644); err != nil {
+		return err
+	}
+
+	verb := "install"
+	if upgrade {
+		verb = "upgrade"
+		settings = append(settings, "--reuse-values")
+	}
+	args := []string{"helm", verb, "-n", nss.Namespace, "-f", valuesFile}
+	args = append(args, settings...)
+
+	if _, _, err = Telepresence(WithUser(ctx, "default"), args...); err != nil {
+		return err
+	}
+	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager"); err != nil {
+		return err
+	}
+	s.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+	return nil
 }
 
 func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, error) {
@@ -563,14 +627,32 @@ func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, er
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
 	t := getT(ctx)
-	ctx = WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": managerNamespace})
 	ctx = WithUser(ctx, "default")
-	TelepresenceOk(ctx, "helm", "uninstall")
+	TelepresenceOk(ctx, "helm", "uninstall", "--manager-namespace", managerNamespace)
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
 		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
 	TelepresenceQuitOk(ctx)
+}
+
+func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error) {
+	_ = os.Setenv("KUBECONFIG", KubeConfig(ctx))
+	flags := map[string]string{
+		"namespace": managerNamespace,
+	}
+	if context != "" {
+		flags["context"] = context
+	}
+	cfgAndFlags, err := client.NewKubeconfig(ctx, flags, managerNamespace)
+	if err != nil {
+		return ctx, nil, err
+	}
+	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return kc.WithK8sInterface(ctx), kc, nil
 }
 
 func KubeConfig(ctx context.Context) string {
@@ -603,8 +685,8 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
 	stdout, stderr, err := Telepresence(ctx, args...)
-	require.NoError(t, err, "telepresence was unable to run, stdout %s, stderr: %s", stdout, stderr)
-	require.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
+	assert.NoError(t, err, "telepresence was unable to run, stdout %s, stderr: %s", stdout, stderr)
+	assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
 	return stdout
 }
 
@@ -644,10 +726,13 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		if user := GetUser(ctx); user != "default" {
 			na := make([]string, len(args)+2)
 			na[0] = "--as"
-			na[1] = "system:serviceaccount:default:" + user
+			na[1] = "system:serviceaccount:" + user
 			copy(na[2:], args)
 			args = na
 		}
+	}
+	if UseDocker(ctx) {
+		args = append([]string{"--docker"}, args...)
 	}
 	cmd := Command(ctx, GetGlobalHarness(ctx).executable, args...)
 	cmd.Stdout = &stdout
@@ -664,7 +749,8 @@ func TelepresenceDisconnectOk(ctx context.Context) {
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
 	assert.True(t, strings.Contains(stdout, "Telepresence Daemons disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Daemons are already disconnected"))
+		strings.Contains(stdout, "Telepresence Daemons are already disconnected") ||
+		strings.Contains(stdout, "Telepresence Daemons have already quit"))
 	if t.Failed() {
 		t.Logf("Disconnect output was %q", stdout)
 	}
@@ -762,7 +848,7 @@ func ApplyService(ctx context.Context, name, namespace, image string, port, targ
 }
 
 func DeleteSvcAndWorkload(ctx context.Context, workload, name, namespace string) {
-	require.NoError(getT(ctx), Kubectl(ctx, namespace, "delete", "--ignore-not-found", "--grace-period", "3", "svc,"+workload, name),
+	assert.NoError(getT(ctx), Kubectl(ctx, namespace, "delete", "--ignore-not-found", "--grace-period", "3", "svc,"+workload, name),
 		"failed to delete service and %s %s", workload, name)
 }
 
@@ -892,21 +978,20 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 	)
 }
 
-func WithConfig(c context.Context, addConfig *client.Config) context.Context {
-	if addConfig != nil {
-		t := getT(c)
-		origConfig := client.GetConfig(c)
-		config := *origConfig // copy
-		config.Merge(addConfig)
-		configYaml, err := yaml.Marshal(&config)
-		require.NoError(t, err)
-		configYamlStr := string(configYaml)
+func WithConfig(c context.Context, modifierFunc func(config *client.Config)) context.Context {
+	// Quit a running daemon. We're changing the directory where its config resides.
+	TelepresenceQuitOk(c)
 
-		configDir := t.TempDir()
-		c = filelocation.WithAppUserConfigDir(c, configDir)
-		c, err = client.SetConfig(c, configDir, configYamlStr)
-		require.NoError(t, err)
-	}
+	t := getT(c)
+	configCopy := *client.GetConfig(c)
+	modifierFunc(&configCopy)
+	configYaml, err := yaml.Marshal(&configCopy)
+	require.NoError(t, err)
+	configYamlStr := string(configYaml)
+	configDir := t.TempDir()
+	c = filelocation.WithAppUserConfigDir(c, configDir)
+	c, err = client.SetConfig(c, configDir, configYamlStr)
+	require.NoError(t, err)
 	return c
 }
 
@@ -915,24 +1000,23 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 	t := getT(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(t, err, "unable to read %s", kc)
-	cluster := cfg.Clusters["default"]
-	require.NotNil(t, cluster, "unable to get default cluster from config")
+	cc := cfg.Contexts[cfg.CurrentContext]
+	require.NotNil(t, cc, "unable to get current context from config")
+	cluster := cfg.Clusters[cc.Cluster]
+	require.NotNil(t, cluster, "unable to get current cluster from config")
 
 	raw, err := json.Marshal(extProducer(cluster))
 	require.NoError(t, err, "unable to json.Marshal extension map")
 	cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{Raw: raw}}
 
-	context := &api.Context{
-		Cluster:   "extra",
-		AuthInfo:  "default",
-		Namespace: "default",
-	}
+	context := *cc
+	context.Cluster = "extra"
 	cfg = &api.Config{
 		Kind:           "Config",
 		APIVersion:     "v1",
 		Preferences:    api.Preferences{},
 		Clusters:       map[string]*api.Cluster{"extra": cluster},
-		Contexts:       map[string]*api.Context{"extra": context},
+		Contexts:       map[string]*api.Context{"extra": &context},
 		CurrentContext: "extra",
 	}
 	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")

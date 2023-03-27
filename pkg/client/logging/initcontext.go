@@ -76,7 +76,7 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	if name == "daemon" {
 		level = logLevels.RootDaemon
 	}
-	tlog.SetLogrusLevel(logger, level.String())
+	tlog.SetLogrusLevel(logger, level.String(), false)
 	ctx = tlog.WithLevelSetter(ctx, logger)
 	return ctx, nil
 }

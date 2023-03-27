@@ -2,11 +2,14 @@ package rootd
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -132,8 +135,10 @@ type Session struct {
 	dnsLookups  int
 	dnsFailures int
 
-	// Whether pods and services should be proxied by the TUN-device
-	proxyCluster bool
+	// Whether pods should be proxied by the TUN-device
+	proxyClusterPods bool
+	// Whether services should be proxied by the TUN-device
+	proxyClusterSvcs bool
 
 	// vifReady is closed when the virtual network interface has been configured.
 	vifReady chan error
@@ -255,7 +260,8 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 		managerVersion:   ver,
 		alsoProxySubnets: as,
 		neverProxyRoutes: routing.Routes(c, ns),
-		proxyCluster:     true,
+		proxyClusterPods: true,
+		proxyClusterSvcs: true,
 		vifReady:         make(chan error, 2),
 		config:           cfg,
 		done:             make(chan struct{}),
@@ -529,7 +535,8 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 
 func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
 	defer close(s.vifReady)
-	s.checkConnectivity(ctx, mgrInfo)
+	s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
+	s.proxyClusterSvcs = s.checkSvcConnectivity(ctx, mgrInfo)
 	err := ctx.Err()
 	if err != nil {
 		return err
@@ -586,19 +593,23 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	}
 
 	subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
-	if s.proxyCluster {
+	if s.proxyClusterSvcs {
 		if mgrInfo.ServiceSubnet != nil {
 			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
 			dlog.Infof(ctx, "Adding Service subnet %s", cidr)
 			subnets = append(subnets, cidr)
 		}
+	}
 
+	if s.proxyClusterPods {
 		for _, sn := range mgrInfo.PodSubnets {
 			cidr := iputil.IPNetFromRPC(sn)
 			dlog.Infof(ctx, "Adding pod subnet %s", cidr)
 			subnets = append(subnets, cidr)
 		}
+	}
 
+	if s.proxyClusterPods || s.proxyClusterSvcs {
 		s.clusterSubnets = subnet.Unique(subnets)
 		if err := s.refreshSubnets(ctx); err != nil {
 			dlog.Error(ctx, err)
@@ -606,20 +617,73 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	}
 
 	span.SetAttributes(
-		attribute.Bool("tel2.proxy-cluster", s.proxyCluster),
+		attribute.Bool("tel2.proxy-svcs", s.proxyClusterSvcs),
+		attribute.Bool("tel2.proxy-pods", s.proxyClusterPods),
 		attribute.Stringer("tel2.cluster-dns", net.IP(dns.KubeIp)),
 		attribute.String("tel2.cluster-domain", dns.ClusterDomain),
 	)
 }
 
-func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterInfo) {
-	if info.ManagerPodIp == nil {
-		return
+func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
+	// The traffic-manager service is headless, which means we can't try a GRPC connection to its ClusterIP.
+	// Instead we try an HTTP health check on the agent-injector server, since that one does expose a ClusterIP.
+	// This is less precise than if we could check for our own GRPC, since /healthz is a common enough health check path,
+	// but hopefully the server on the other end isn't configured to respond to the hostname "agent-injector" if it isn't the agent-injector.
+	if info.InjectorSvcIp == nil {
+		return true
 	}
 	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
 	if ct == 0 {
-		dlog.Debug(ctx, "Connectivity check disabled")
-		return
+		dlog.Info(ctx, "Connectivity check for services disabled")
+		return true
+	}
+	ip := net.IP(info.InjectorSvcIp).String()
+	port := info.InjectorSvcPort
+	if port == 0 {
+		port = 443
+	}
+	tr := &http.Transport{
+		// Skip checking the cert because its trust chain is loaded into a secret on the cluster; we'd fail to verify it
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+	tCtx, tCancel := context.WithTimeout(ctx, ct)
+	defer tCancel()
+	url := net.JoinHostPort(ip, strconv.Itoa(int(port)))
+	url = fmt.Sprintf("https://%s/healthz", url)
+	request, err := http.NewRequestWithContext(tCtx, http.MethodGet, url, nil)
+	if err != nil {
+		// As far as I can tell, this error means a) that the context was cancelled before the request could be allocated, or b) that the request is misconstructed, e.g. bad method.
+		// Neither of those two should really happen here (unless you set the timeout to a few microseconds, maybe), but we can't really continue. May as well route the cluster.
+		dlog.Errorf(ctx, "Unexpected: service conn check could not build request: %v. Will route services anyway.", err)
+		return true
+	}
+	request.Header.Set("Host", info.InjectorSvcHost)
+	dlog.Debugf(ctx, "Performing service connectivity check on %s with Host %s and timeout %s", url, info.InjectorSvcHost, ct)
+	resp, err := client.Do(request)
+	if err != nil {
+		// This means either network errors (timeouts, failed to connect), or that the server doesn't speak HTTP.
+		dlog.Debugf(ctx, "Will proxy services (%v)", err)
+		return true
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		dlog.Warnf(ctx, "Service IP %s is connectable, but did not respond as expected (status code %d)."+
+			" Will proxy services, but this may interfere with your VPN routes.", info.InjectorSvcIp, resp.StatusCode)
+		return true
+	}
+	dlog.Info(ctx, "Already connected to cluster, will not map service subnets.")
+	return false
+}
+
+func (s *Session) checkPodConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
+	if info.ManagerPodIp == nil {
+		return true
+	}
+	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
+	if ct == 0 {
+		dlog.Info(ctx, "Connectivity check for pods disabled")
+		return true
 	}
 	ip := net.IP(info.ManagerPodIp).String()
 	port := info.ManagerPodPort
@@ -628,21 +692,21 @@ func (s *Session) checkConnectivity(ctx context.Context, info *manager.ClusterIn
 	}
 	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
-	dlog.Debugf(ctx, "Performing connectivity check with timeout %s", ct)
+	dlog.Debugf(ctx, "Performing pod connectivity check on IP %s with timeout %s", ip, ct)
 	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
-		return
+		return true
 	}
 	defer conn.Close()
 	mClient := manager.NewManagerClient(conn)
 	if _, err := mClient.Version(tCtx, &empty.Empty{}); err != nil {
 		dlog.Warnf(ctx, "Manager IP %s is connectable but not a traffic-manager instance (%v)."+
-			" Will proxy pods, but this may interfere with your VPN routes!!", info.ManagerPodIp, err)
-		return
+			" Will proxy pods, but this may interfere with your VPN routes.", ip, err)
+		return true
 	}
-	s.proxyCluster = false
-	dlog.Info(ctx, "Already connected to cluster, will not map cluster subnets")
+	dlog.Info(ctx, "Already connected to cluster, will not map pod subnets.")
+	return false
 }
 
 func (s *Session) run(c context.Context) error {
@@ -703,7 +767,7 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
-		return s.dnsServer.Worker(ctx, s.dev, s.proxyCluster, s.configureDNS)
+		return s.dnsServer.Worker(ctx, s.dev, s.proxyClusterPods || s.proxyClusterSvcs, s.configureDNS)
 	})
 
 	g.Go("stack", func(_ context.Context) error {

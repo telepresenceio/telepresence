@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
+	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
@@ -161,6 +163,11 @@ func NewInfo(ctx context.Context) Info {
 
 	oi.ManagerPodIp = env.PodIP
 	oi.ManagerPodPort = int32(env.ServerPort)
+	oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
+	if err != nil {
+		dlog.Warnf(ctx, "failed to detect injector service ClusterIP; service connectivity check will be disabled in clients: %s", err)
+	}
+	oi.InjectorSvcHost = fmt.Sprintf("%s.%s", env.AgentInjectorName, env.ManagerNamespace)
 
 	alsoProxy := env.ClientRoutingAlsoProxySubnets
 	neverProxy := env.ClientRoutingNeverProxySubnets
@@ -242,6 +249,21 @@ func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
 	return true
 }
 
+func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV1Interface) ([]byte, int32, error) {
+	sc, err := client.Services(env.ManagerNamespace).Get(ctx, env.AgentInjectorName, metav1.GetOptions{})
+	if err != nil {
+		return nil, 0, err
+	}
+	p := int32(0)
+	for _, port := range sc.Spec.Ports {
+		if port.Name == "https" {
+			p = port.Port
+			break
+		}
+	}
+	return iputil.Parse(sc.Spec.ClusterIP), p, nil
+}
+
 func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -304,14 +326,17 @@ func (oi *info) GetClusterID() string {
 
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	ci := &rpc.ClusterInfo{
-		ServiceSubnet:  oi.ServiceSubnet,
-		PodSubnets:     make([]*rpc.IPNet, len(oi.PodSubnets)),
-		ManagerPodIp:   oi.ManagerPodIp,
-		ManagerPodPort: oi.ManagerPodPort,
-		Routing:        oi.Routing,
-		Dns:            oi.Dns,
-		KubeDnsIp:      oi.Dns.KubeIp,
-		ClusterDomain:  oi.Dns.ClusterDomain,
+		ServiceSubnet:   oi.ServiceSubnet,
+		PodSubnets:      make([]*rpc.IPNet, len(oi.PodSubnets)),
+		ManagerPodIp:    oi.ManagerPodIp,
+		ManagerPodPort:  oi.ManagerPodPort,
+		InjectorSvcIp:   oi.InjectorSvcIp,
+		InjectorSvcPort: oi.InjectorSvcPort,
+		InjectorSvcHost: oi.InjectorSvcHost,
+		Routing:         oi.Routing,
+		Dns:             oi.Dns,
+		KubeDnsIp:       oi.Dns.KubeIp,
+		ClusterDomain:   oi.Dns.ClusterDomain,
 	}
 	copy(ci.PodSubnets, oi.PodSubnets)
 	return ci

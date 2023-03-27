@@ -73,7 +73,9 @@ func (h *harness) SetupSuite() {
 		upDown := &uds[i]
 		if setup := upDown.setup; setup != nil {
 			upDown.setup = nil // Never setup twice
-			upDown.wasSetup = safeSetUp(upDown.setupWith, setup)
+			if upDown.wasSetup = safeSetUp(upDown.setupWith, setup); !upDown.wasSetup {
+				getT(h.ctx).FailNow()
+			}
 		}
 	}
 }

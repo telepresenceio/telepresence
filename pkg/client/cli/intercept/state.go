@@ -196,14 +196,17 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 			volumeMountProblem = s.checkMountCapability(ctx)
 		}
 	}
+	mountError := ""
+	if volumeMountProblem != nil {
+		mountError = volumeMountProblem.Error()
+	}
+	info := NewInfo(ctx, intercept, mountError)
 	if detailedOutput {
-		mountError := ""
-		if volumeMountProblem != nil {
-			mountError = volumeMountProblem.Error()
-		}
-		output.Object(ctx, NewInfo(ctx, intercept, mountError), true)
+		output.Object(ctx, info, true)
 	} else {
-		fmt.Fprintln(s.cmd.OutOrStdout(), DescribeIntercepts([]*manager.InterceptInfo{intercept}, volumeMountProblem, false))
+		out := s.cmd.OutOrStdout()
+		_, _ = info.WriteTo(out)
+		_, _ = fmt.Fprintln(out)
 	}
 	return true, nil
 }

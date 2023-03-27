@@ -85,6 +85,8 @@ spec:
           {{- with .agentInjector }}
           - name: AGENT_INJECT_POLICY
             value: {{ .injectPolicy }}
+          - name: AGENT_INJECTOR_NAME
+            value:  {{ .name | quote }}
           {{- end }}
         {{- /*
         Traffic agent configuration

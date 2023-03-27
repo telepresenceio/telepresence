@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,14 +13,14 @@ import (
 
 type helmSuite struct {
 	itest.Suite
-	itest.HelmAndService
+	itest.SingleService
 	mgrSpace2 string
 	appSpace2 string
 }
 
 func init() {
-	itest.AddHelmAndServiceSuite("-1", "echo", func(h itest.HelmAndService) suite.TestingSuite {
-		s := &helmSuite{Suite: itest.Suite{Harness: h}, HelmAndService: h}
+	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) suite.TestingSuite {
+		s := &helmSuite{Suite: itest.Suite{Harness: h}, SingleService: h}
 		suffix := itest.GetGlobalHarness(h.HarnessContext()).Suffix()
 		s.appSpace2, s.mgrSpace2 = itest.AppAndMgrNSName(suffix + "-2")
 		return s
@@ -29,10 +30,8 @@ func init() {
 func (s *helmSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 	itest.CreateNamespaces(ctx, s.appSpace2, s.mgrSpace2)
 	itest.ApplyEchoService(ctx, s.ServiceName(), s.appSpace2, 80)
-	itest.TelepresenceOk(ctx, "connect")
 }
 
 func (s *helmSuite) TearDownSuite() {
@@ -51,7 +50,8 @@ func (s *helmSuite) Test_HelmCanInterceptInManagedNamespace() {
 
 func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	ctx := s.Context()
-	_, stderr, err := itest.Telepresence(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", s.ServiceName(), "--port", "9090")
+	_, stderr, err := itest.Telepresence(itest.WithUser(ctx, "default"), "intercept",
+		"--namespace", s.appSpace2, "--mount", "false", s.ServiceName(), "--port", "9090")
 	s.Error(err)
 	s.True(
 		strings.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`) ||
@@ -88,16 +88,25 @@ func (s *helmSuite) Test_HelmWebhookDoesntInjectInUnmanagedNamespace() {
 
 func (s *helmSuite) Test_HelmMultipleInstalls() {
 	svc := s.ServiceName()
+	defer func() {
+		ctx := s.Context()
+		itest.TelepresenceDisconnectOk(ctx)
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	}()
 
 	s.Run("Installs Successfully", func() {
-		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
-		s.NoError(s.InstallTrafficManager(ctx, nil, s.mgrSpace2, s.appSpace2))
+		ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
+			Namespace:         s.mgrSpace2,
+			ManagedNamespaces: []string{s.appSpace2},
+		})
+		s.NoError(itest.Kubectl(ctx, s.mgrSpace2, "apply", "-f", filepath.Join("testdata", "k8s", "client_sa.yaml")))
+		itest.TelepresenceDisconnectOk(ctx)
+		s.NoError(s.TelepresenceHelmInstall(ctx, false))
 	})
 
 	s.Run("Can be connected to", func() {
-		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
-		itest.TelepresenceQuitOk(ctx)
-		stdout := itest.TelepresenceOk(ctx, "connect")
+		ctx := itest.WithUser(s.Context(), s.mgrSpace2+":"+itest.TestUser)
+		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.mgrSpace2)
 		s.Contains(stdout, "Connected to context")
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--connect-timeout", "1", fmt.Sprintf("%s.%s", svc, s.appSpace2)) == nil
@@ -105,8 +114,8 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	})
 
 	s.Run("Can intercept", func() {
-		ctx := itest.WithEnv(s.Context(), map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": s.mgrSpace2})
-		defer itest.TelepresenceQuitOk(ctx)
+		ctx := s.Context()
+		defer itest.TelepresenceOk(ctx, "leave", svc+"-"+s.appSpace2)
 		stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", svc, "--port", "9090")
 		s.Contains(stdout, "Using Deployment "+svc)
 		stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.appSpace2, "--intercepts")
@@ -120,6 +129,9 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 }
 
 func (s *helmSuite) Test_CollidingInstalls() {
-	defer itest.TelepresenceQuitOk(s.Context())
-	s.Error(s.InstallTrafficManager(s.Context(), nil, s.mgrSpace2, s.AppNamespace(), s.appSpace2))
+	ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
+		Namespace:         s.AppNamespace(),
+		ManagedNamespaces: []string{s.appSpace2},
+	})
+	s.Error(s.TelepresenceHelmInstall(ctx, false))
 }
