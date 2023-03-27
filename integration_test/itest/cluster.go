@@ -479,6 +479,12 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
 		)
 	}
+	if sysA := GetSystemA(ctx); sysA != nil {
+		settings = append(settings,
+			"--set", fmt.Sprintf("systemaHost=%s", sysA.SystemaHost),
+			"--set", fmt.Sprintf("systemaPort=%d", sysA.SystemaPort),
+		)
+	}
 	if !release {
 		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.Registry()))
 		if agentImage != nil {
@@ -583,6 +589,10 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 			Namespaced: true,
 			Namespaces: nsl,
 		},
+	}
+	if sysA := GetSystemA(ctx); sysA != nil {
+		vx.SystemaHost = sysA.SystemaHost
+		vx.SystemaPort = sysA.SystemaPort
 	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {
