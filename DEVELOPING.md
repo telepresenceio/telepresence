@@ -75,6 +75,23 @@ export DTEST_KUBECONFIG=<your kubeconfig>
 export DTEST_REGISTRY=localhost:5000
 go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
 ```
+
+If you run these tests on a Mac, localhost won't work. Please use the docker hub, or this value for the registry:
+
+```cli
+export DTEST_REGISTRY=host.docker.internal:5000
+```
+
+You must also set this in your docker engine settings: 
+
+```json
+{
+   "insecure-registries": [
+     "host.docker.internal:5000"
+   ]
+}
+```
+
 The test takes about a minute to complete when using an existing cluster
 and a private registry created by `make private-registry`. During that time
 it:
