@@ -31,7 +31,7 @@ func (s *cliSuite) Test_Version() {
 	s.Regexp(fmt.Sprintf(`Client\s*: %s`, regexp.QuoteMeta(s.TelepresenceVersion())), stdout)
 }
 
-func (s *cliSuite) Test_VersionWithoutKubeContext() {
+func (s *cliSuite) Test_VersionWithInvalidKubeContext() {
 	stdout, _, err := itest.Telepresence(itest.WithEnv(s.Context(), map[string]string{
 		"KUBECONFIG": "file-that-does-not-exist",
 	}), "version")

@@ -6,7 +6,7 @@
 
 - Bugfix: The client will no longer need cluster wide permissions when connected to a namespace scoped Traffic Manager.
 
-- BugFix: The version command won't throw an error anymore if there are no kubeconfig file defined.
+- BugFix: The version command won't throw an error anymore if there is no kubeconfig file defined.
 
 ### 2.12.1 (March 22, 2023)
 
