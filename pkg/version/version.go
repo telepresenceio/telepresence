@@ -10,8 +10,10 @@ import (
 
 // Version is a "vSEMVER" string, and is either populated at build-time using `--ldflags -X`, or at
 // init()-time by inspecting the binary's own debug info.
-var Version string            //nolint:gochecknoglobals // constant
-var Structured semver.Version //nolint:gochecknoglobals // constant
+var (
+	Version    string         //nolint:gochecknoglobals // constant
+	Structured semver.Version //nolint:gochecknoglobals // constant
+)
 
 func init() {
 	// Prefer version number inserted at build using --ldflags, but if it's not set...
