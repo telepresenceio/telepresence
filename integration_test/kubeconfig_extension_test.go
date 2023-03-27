@@ -59,7 +59,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		return map[string]any{"also-proxy": apiServers}
 	})
 
-	itest.TelepresenceOk(ctx, "connect", "--context", "extra")
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
 
 	expectedLen := len(ips)
 	s.Eventually(func() bool {
