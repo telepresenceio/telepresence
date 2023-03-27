@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
@@ -18,27 +17,29 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-const supportedKubeAPIVersion = "1.17.0"
+const (
+	supportedKubeAPIVersion = "1.17.0"
+	defaultManagerNamespace = "ambassador"
+)
 
 // Cluster is a Kubernetes cluster reference.
 type Cluster struct {
 	*client.Kubeconfig
-	mappedNamespaces []string
+	MappedNamespaces []string
 
 	// Main
 	ki kubernetes.Interface
 
-	// Current Namespace snapshot, get set by namespace Watcher.
-	// The boolean value indicates if this client is allowed to
-	// watch services and retrieve workloads in the namespace
-	nsWatcher *k8sapi.Watcher[*corev1.Namespace]
-
-	// nsLock protects currentMappedNamespaces and namespaceListeners
+	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceListeners
 	nsLock sync.Mutex
 
-	// Current Namespace snapshot, filtered by mappedNamespaces
+	// snapshot maintained by the namespaces watcher.
+	namespaceWatcherSnapshot map[string]struct{}
+
+	// Current Namespace snapshot, filtered by MappedNamespaces
 	currentMappedNamespaces map[string]bool
 
 	// Namespace listener. Notified when the currentNamespaces changes
@@ -128,29 +129,70 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 	}
 	c = k8sapi.WithK8sInterface(c, cs)
 
-	if len(namespaces) == 1 && namespaces[0] == "all" {
-		namespaces = nil
-	} else {
-		sort.Strings(namespaces)
-	}
-
 	ret := &Cluster{
-		Kubeconfig:       kubeFlags,
-		mappedNamespaces: namespaces,
-		ki:               cs,
+		Kubeconfig: kubeFlags,
+		ki:         cs,
 	}
 
-	timedC, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
+	cfg := client.GetConfig(c)
+	timedC, cancel := cfg.Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
 	defer cancel()
-	if err := ret.check(timedC); err != nil {
+	if err = ret.check(timedC); err != nil {
 		return nil, err
 	}
 
 	dlog.Infof(c, "Context: %s", ret.Context)
 	dlog.Infof(c, "Server: %s", ret.Server)
 
-	ret.startNamespaceWatcher(c)
+	if len(namespaces) == 1 && namespaces[0] == "all" {
+		namespaces = nil
+	}
+	if len(namespaces) == 0 {
+		namespaces = cfg.Cluster.MappedNamespaces
+	}
+	if len(namespaces) == 0 {
+		if ret.CanWatchNamespaces(c) {
+			ret.StartNamespaceWatcher(c)
+		}
+	} else {
+		ret.SetMappedNamespaces(c, namespaces)
+	}
+	if ret.GetManagerNamespace() == "" {
+		ret.KubeconfigExtension.Manager.Namespace, err = ret.determineTrafficManagerNamespace(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+	dlog.Infof(c, "Will look for traffic manager in namespace %s", ret.GetManagerNamespace())
 	return ret, nil
+}
+
+// determineTrafficManagerNamespace finds the namespace for the traffic-manager. It is determined by the following steps:
+//
+//  1. If a treffic-manager service is found in one of the currently accessible namespaces, return it.
+//  2. If the client has access to the default manager namespace, then return it.
+//  3. If the client has access to the default namespace, then return it.
+//  4. Return an error stating that it isn't possible to determine the namespace.
+func (kc *Cluster) determineTrafficManagerNamespace(c context.Context) (string, error) {
+	// Search for the traffic-manager in mapped namespaces
+	nss := kc.GetCurrentNamespaces(true)
+	for _, ns := range nss {
+		if _, err := k8sapi.GetService(c, "traffic-manager", ns); err == nil {
+			return ns, nil
+		}
+	}
+
+	// No existing manager was found.
+	if kc.canGetDefaultTrafficManagerService(c) {
+		return defaultManagerNamespace, nil
+	}
+
+	// No existing traffic-manager found. Assume that it should be installed
+	// in the default namespace if it is accessible
+	if kc.canAccessNS(c, kc.Namespace) {
+		return kc.Namespace, nil
+	}
+	return "", errcat.User.New("unable to determine the traffic-manager namespace")
 }
 
 // GetCurrentNamespaces returns the names of the namespaces that this client

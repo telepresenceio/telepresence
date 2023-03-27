@@ -13,7 +13,7 @@ import (
 func (s *notConnectedSuite) Test_RootDaemonLogLevel() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	itest.TelepresenceQuitOk(ctx)
 	logDir, err := filelocation.AppUserLogDir(ctx)
 	require.NoError(err)

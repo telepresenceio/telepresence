@@ -258,9 +258,6 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 		cancel()
 		<-session.Done()
 	}
-	if err := s.session.ApplyConfig(ctx); err != nil {
-		dlog.Warnf(ctx, "failed to apply config from traffic-manager: %v", err)
-	}
 
 	// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
 	// the session is running. The s.sessionCancel is called from Disconnect

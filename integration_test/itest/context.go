@@ -173,6 +173,19 @@ func GetUser(ctx context.Context) string {
 	return "default"
 }
 
+type useDockerContextkey struct{}
+
+func WithUseDocker(ctx context.Context, use bool) context.Context {
+	return context.WithValue(ctx, useDockerContextkey{}, use)
+}
+
+func UseDocker(ctx context.Context) bool {
+	if use, ok := ctx.Value(useDockerContextkey{}).(bool); ok {
+		return use
+	}
+	return false
+}
+
 func LookupEnv(ctx context.Context, key string) (value string, ok bool) {
 	if value, ok = getEnv(ctx)[key]; !ok {
 		value, ok = GetGlobalHarness(ctx).GlobalEnv()[key]

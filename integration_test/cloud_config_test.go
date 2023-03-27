@@ -2,17 +2,14 @@ package integration_test
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/datawire/dlib/dlog"
@@ -21,18 +18,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func (s *notConnectedSuite) rollbackTM() {
-	require := s.Require()
-	ctx := s.Context()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	require.NoError(itest.Run(ctx, "helm", "rollback", "--wait", "--namespace", s.ManagerNamespace(), "traffic-manager"))
-}
-
 func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	svcName := "echo-never-proxy"
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
@@ -53,29 +41,12 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	ips, err := getClusterIPs(cluster)
 	require.NoError(err)
 
-	tmpdir := s.T().TempDir()
-	values := path.Join(tmpdir, "values.yaml")
-	f, err := os.Create(values)
-	require.NoError(err)
-	b, err := yaml.Marshal(
-		map[string]map[string]map[string][]string{
-			"client": {
-				"routing": {
-					"neverProxySubnets": {fmt.Sprintf("%s/32", ip)},
-				},
-			},
-		},
-	)
-	require.NoError(err)
-	_, err = f.Write(b)
-	require.NoError(err)
-
-	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
-	defer s.rollbackTM()
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/32}", ip)))
+	defer s.RollbackTM(ctx)
 
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect")
-		defer itest.TelepresenceQuitOk(ctx)
+		defer itest.TelepresenceDisconnectOk(ctx)
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 
 		// The cluster's IP address will also be never proxied, so we gotta account for that.
 		neverProxiedCount := len(ips) + 1
@@ -105,7 +76,6 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	// The log file may have junk from other tests in it, so we'll do a very simple method
 	// of rushing to the end of the file and remembering where we left off when we start looking
@@ -121,19 +91,16 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 		lines++
 	}
 	rootLog.Close()
-
-	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
-	defer s.rollbackTM()
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace"))
+	defer s.RollbackTM(ctx)
 
 	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
 		cfg.LogLevels.RootDaemon = logrus.InfoLevel
 	})
 
-	itest.TelepresenceQuitOk(ctx) // Because context changed
-
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect")
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 		itest.TelepresenceDisconnectOk(ctx)
 
 		rootLog, err := os.Open(rootLogName)
@@ -176,10 +143,8 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	ctx = itest.WithConfig(ctx, func(config *client.Config) {
 		config.LogLevels.RootDaemon = logrus.DebugLevel
 	})
-	itest.TelepresenceQuitOk(ctx) // Because context changed
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
-	defer itest.TelepresenceQuitOk(ctx)
 	levelSet = false
 	for scn.Scan() && !levelSet {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)
@@ -187,6 +152,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.False(levelSet, "Root log level not respected when set in config file")
 
 	var view client.SessionConfig
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
 	require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 	require.Equal(view.LogLevels.RootDaemon, logrus.DebugLevel)
@@ -195,7 +161,6 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	// The log file may have junk from other tests in it, so we'll do a very simple method
 	// of rushing to the end of the file and remembering where we left off when we start looking
@@ -212,16 +177,15 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	}
 	logF.Close()
 
-	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
-	defer s.rollbackTM()
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace"))
+	defer s.RollbackTM(ctx)
 	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
 		cfg.LogLevels.UserDaemon = logrus.InfoLevel
 	})
-	itest.TelepresenceQuitOk(ctx) // Because context changed
 
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect")
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 		itest.TelepresenceDisconnectOk(ctx)
 
 		logF, err := os.Open(logName)
@@ -264,12 +228,10 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	ctx = itest.WithConfig(ctx, func(config *client.Config) {
 		config.LogLevels.UserDaemon = logrus.DebugLevel
 	})
-	itest.TelepresenceQuitOk(ctx) // Because context changed
 
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
 
-	defer itest.TelepresenceQuitOk(ctx)
 	levelSet = false
 	for scn.Scan() && !levelSet {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)

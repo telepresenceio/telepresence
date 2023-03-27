@@ -3,6 +3,7 @@ package integration_test
 import (
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -127,6 +128,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 			for err == nil {
 				var rr net.Addr
 				var n int
+				_ = pc.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
 				n, rr, err = pc.ReadFrom(buf[:])
 				if n > 0 {
 					msg := string(buf[0:n])
@@ -134,7 +136,11 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 					_, werr := pc.WriteTo([]byte(fmt.Sprintf("received message %q", msg)), rr)
 					require.NoError(werr)
 				}
+				if err != nil && strings.Contains(err.Error(), "timeout") {
+					err = ctx.Err()
+				}
 			}
+			dlog.Debug(ctx, "UDP end")
 		}()
 		var localPort int
 		select {

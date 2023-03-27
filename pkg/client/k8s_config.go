@@ -72,10 +72,7 @@ type Kubeconfig struct {
 	RestConfig  *rest.Config
 }
 
-const (
-	configExtension         = "telepresence.io"
-	defaultManagerNamespace = "ambassador"
-)
+const configExtension = "telepresence.io"
 
 func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, error) {
 	configFlags := genericclioptions.NewConfigFlags(false)
@@ -233,12 +230,6 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	if k.KubeconfigExtension.Manager.Namespace == "" {
 		k.KubeconfigExtension.Manager.Namespace = GetConfig(c).Cluster.DefaultManagerNamespace
 	}
-
-	if k.KubeconfigExtension.Manager.Namespace == "" {
-		k.KubeconfigExtension.Manager.Namespace = defaultManagerNamespace
-	}
-
-	dlog.Infof(c, "Will look for traffic manager in namespace %s", k.KubeconfigExtension.Manager.Namespace)
 	return k, nil
 }
 

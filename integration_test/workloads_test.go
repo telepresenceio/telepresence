@@ -10,14 +10,14 @@ import (
 func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	ctx := s.Context()
 	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
-	defer func() {
-		_ = s.Kubectl(ctx, "delete", "svc,"+strings.ToLower(tp), svc)
-	}()
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
+
 	require := s.Require()
 
 	require.Eventually(
 		func() bool {
-			return strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace()), svc)
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace())
+			return err == nil && strings.Contains(stdout, svc)
 		},
 		6*time.Second, // waitFor
 		2*time.Second, // polling interval
@@ -38,7 +38,7 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	dfltCtx := itest.WithUser(ctx, "default")
 	itest.TelepresenceOk(dfltCtx, "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
 	itest.TelepresenceQuitOk(dfltCtx)
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 
 	require.Eventually(
 		func() bool {

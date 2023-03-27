@@ -4,23 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
-type list_watchSuite struct {
-	itest.Suite
-	itest.NamespacePair
-}
-
-func init() {
-	itest.AddConnectedSuite("", func(h itest.NamespacePair) suite.TestingSuite {
-		return &list_watchSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
-	})
-}
-
-func (s *list_watchSuite) Test_ListWatch() {
+func (s *connectedSuite) Test_ListWatch() {
 	svc := "echo-easy"
 
 	s.Run("<ctrl>-C", func() {
@@ -34,6 +21,7 @@ func (s *list_watchSuite) Test_ListWatch() {
 		}()
 		time.Sleep(time.Second)
 		s.ApplyApp(ctx, svc, "deploy/"+svc)
+		defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 		time.Sleep(time.Second)
 		cancel()
 		s.Contains(<-ch, svc)

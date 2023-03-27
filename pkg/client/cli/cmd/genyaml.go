@@ -218,9 +218,9 @@ func (i *genYAMLCommand) withK8sInterface(ctx context.Context, flagMap map[strin
 	if !ok {
 		return nil, errcat.Config.Newf("context %q does not exist in the kubeconfig", ctxName)
 	}
-	i.namespace = c.Namespace
+	i.namespace = flagMap["namespace"]
 	if i.namespace == "" {
-		i.namespace = flagMap["namespace"]
+		i.namespace = c.Namespace
 		if i.namespace == "" {
 			i.namespace = "default"
 		}
