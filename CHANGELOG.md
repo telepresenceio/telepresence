@@ -2,6 +2,8 @@
 
 ### 2.12.2 (TBD)
 
+- Bugfix: The kubeconfig is made self-contained before running Telepresence daemon in a Docker container.
+
 - Bugfix: The client will no longer need cluster wide permissions when connected to a namespace scoped Traffic Manager.
 
 ### 2.12.1 (March 22, 2023)

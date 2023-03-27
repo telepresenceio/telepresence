@@ -311,6 +311,11 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 		}
 	}
 
+	// Ensure that all certs are embedded instead of reachable using a path
+	if err = api.FlattenConfig(&config); err != nil {
+		return err
+	}
+
 	// Store the file using its context name under the <telepresence cache>/kube directory
 	const kubeConfigs = "kube"
 	kubeConfigFile := config.CurrentContext
