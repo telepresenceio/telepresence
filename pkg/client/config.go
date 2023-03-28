@@ -814,10 +814,6 @@ func (cc *Cluster) merge(o *Cluster) {
 	}
 }
 
-var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
-	DefaultManagerNamespace: defaultDefaultManagerNamespace,
-}
-
 // IsZero controls whether this element will be included in marshalled output.
 func (cc Cluster) IsZero() bool {
 	return cc.DefaultManagerNamespace == defaultDefaultManagerNamespace && len(cc.MappedNamespaces) == 0

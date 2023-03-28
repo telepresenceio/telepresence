@@ -4,8 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
@@ -15,8 +13,12 @@ type webhookSuite struct {
 	itest.NamespacePair
 }
 
+func (s *webhookSuite) SuiteName() string {
+	return "Webhook"
+}
+
 func init() {
-	itest.AddConnectedSuite("", func(h itest.NamespacePair) suite.TestingSuite {
+	itest.AddConnectedSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &webhookSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
 }

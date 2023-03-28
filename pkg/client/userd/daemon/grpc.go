@@ -194,8 +194,8 @@ func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, 
 	return true, false
 }
 
-func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult) ([]scout.Entry, bool) {
-	// The scout belongs to the session and can only contain session specific meta-data
+func (s *Service) scoutInterceptEntries(ctx context.Context, spec *manager.InterceptSpec, result *rpc.InterceptResult) ([]scout.Entry, bool) {
+	// The scout belongs to the session and can only contain session specific meta-data,
 	// so we don't want to use scout.SetMetadatum() here.
 	entries := make([]scout.Entry, 0, 7)
 	if spec != nil {
@@ -216,7 +216,12 @@ func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc
 	if result != nil {
 		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
 		if result.Error != common.InterceptError_UNSPECIFIED {
-			entries = append(entries, scout.Entry{Key: "error", Value: result.Error.String()})
+			es := result.Error.String()
+			if result.ErrorText != "" {
+				es = fmt.Sprintf("%s: %s", es, result.ErrorText)
+			}
+			dlog.Debugf(ctx, "reporting error: %s", es)
+			entries = append(entries, scout.Entry{Key: "error", Value: es})
 			return entries, false
 		}
 	}
@@ -242,7 +247,7 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
-		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result)
+		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
 		return nil
 	})
 	return
@@ -267,7 +272,7 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		if result != nil && result.InterceptInfo != nil {
 			tracing.RecordInterceptInfo(span, result.InterceptInfo)
 		}
-		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result)
+		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
 		return nil
 	})
 	return
@@ -304,7 +309,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
-		entries, ok = s.scoutInterceptEntries(spec, result)
+		entries, ok = s.scoutInterceptEntries(c, spec, result)
 		return nil
 	})
 	return result, err

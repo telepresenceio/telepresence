@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -15,8 +13,12 @@ type cliSuite struct {
 	itest.Suite
 }
 
+func (s *cliSuite) SuiteName() string {
+	return "CLI"
+}
+
 func init() {
-	itest.AddClusterSuite(func(ctx context.Context) suite.TestingSuite {
+	itest.AddClusterSuite(func(ctx context.Context) itest.TestingSuite {
 		return &cliSuite{Suite: itest.Suite{Harness: itest.NewContextHarness(ctx)}}
 	})
 }

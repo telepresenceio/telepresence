@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
@@ -28,8 +26,12 @@ type interceptMountSuite struct {
 	cancelLocal context.CancelFunc
 }
 
+func (s *interceptMountSuite) SuiteName() string {
+	return "InterceptMount"
+}
+
 func init() {
-	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) suite.TestingSuite {
+	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) itest.TestingSuite {
 		return &interceptMountSuite{Suite: itest.Suite{Harness: h}, SingleService: h}
 	})
 }
