@@ -467,16 +467,24 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 	nss := GetNamespaces(ctx)
 	settings := []string{
 		"--set", "logLevel=debug",
-		"--set", fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
-		"--set", fmt.Sprintf("managerRbac.namespaces=%s", nss.HelmString()),
-		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
-		"--set", "systemaHost=127.0.0.1",
+	}
+	if len(nss.ManagedNamespaces) > 0 {
+		settings = append(settings,
+			"--set", fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
+			"--set", fmt.Sprintf("managerRbac.namespaces=%s", nss.HelmString()),
+		)
 	}
 	agentImage := GetAgentImage(ctx)
 	if agentImage != nil {
 		settings = append(settings,
 			"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
 			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
+		)
+	}
+	if sysA := GetSystemA(ctx); sysA != nil {
+		settings = append(settings,
+			"--set", fmt.Sprintf("systemaHost=%s", sysA.SystemaHost),
+			"--set", fmt.Sprintf("systemaPort=%d", sysA.SystemaPort),
 		)
 	}
 	if !release {
@@ -518,9 +526,8 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 	settings := s.GetValuesForHelm(ctx, values, release)
 
 	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
-	helmValues := filepath.Join("testdata", "namespaced-values.yaml")
 	nss := GetNamespaces(ctx)
-	args := []string{"install", "-n", nss.Namespace, "-f", helmValues, "--wait"}
+	args := []string{"install", "-n", nss.Namespace, "--wait"}
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)
 
@@ -580,9 +587,13 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		},
 		ManagerRbac: xRbac{
 			Create:     true,
-			Namespaced: true,
+			Namespaced: len(nss.ManagedNamespaces) > 0,
 			Namespaces: nsl,
 		},
+	}
+	if sysA := GetSystemA(ctx); sysA != nil {
+		vx.SystemaHost = sysA.SystemaHost
+		vx.SystemaPort = sysA.SystemaPort
 	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -15,8 +13,12 @@ type connectedSuite struct {
 	itest.NamespacePair
 }
 
+func (s *connectedSuite) SuiteName() string {
+	return "Connected"
+}
+
 func init() {
-	itest.AddConnectedSuite("", func(h itest.NamespacePair) suite.TestingSuite {
+	itest.AddConnectedSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &connectedSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
 }

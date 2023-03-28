@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -38,8 +37,12 @@ type installSuite struct {
 	itest.NamespacePair
 }
 
+func (is *installSuite) SuiteName() string {
+	return "Install"
+}
+
 func init() {
-	itest.AddNamespacePairSuite("-install", func(h itest.NamespacePair) suite.TestingSuite {
+	itest.AddNamespacePairSuite("-install", func(h itest.NamespacePair) itest.TestingSuite {
 		return &installSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
 }
