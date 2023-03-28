@@ -7,6 +7,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 type cmdInitKey struct{}
@@ -37,7 +38,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 			ctx = daemon.WithDefaultRequest(ctx, cmd)
 		}
 		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
-			if v == ann.Optional && err == ErrNoUserDaemon {
+			if v == ann.Optional && (err == ErrNoUserDaemon || errcat.GetCategory(err) == errcat.Config) {
 				// This is OK, but further initialization is not possible
 				err = nil
 			}
