@@ -119,13 +119,18 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			dlog.Debug(ctx, "Skipping webhook injection because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
 			return nil, nil
 		}
-		config, err = a.findConfigMapValue(ctx, pod, nil)
+
+		workloadCache := make(map[string]k8sapi.Workload, 0)
+
+		config, err = a.findConfigMapValue(ctx, workloadCache, pod, nil)
+
 		if err != nil {
 			if isDelete {
 				err = nil
 			}
 			return nil, err
 		}
+
 		switch {
 		case config == nil && isDelete:
 			return nil, nil
@@ -139,7 +144,8 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			}
 			return nil, nil
 		}
-		wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+
+		wl, err := agentmap.FindOwnerWorkload(ctx, workloadCache, k8sapi.Pod(pod))
 		if err != nil {
 			if k8sErrors.IsNotFound(err) {
 				err = nil
@@ -150,6 +156,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			}
 			return nil, err
 		}
+
 		tracing.RecordWorkloadInfo(span, wl)
 		if isDelete {
 			return nil, nil
@@ -161,6 +168,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if config, err = agentmap.Generate(ctx, wl, gc); err != nil {
 			return nil, err
 		}
+
 		config.RecordInSpan(span)
 		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
 			return nil, err
@@ -570,7 +578,7 @@ func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patch
 	return patches
 }
 
-func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache map[string]k8sapi.Workload, pod *core.Pod, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
 	if a.agentConfigs == nil {
 		return nil, nil
 	}
@@ -590,7 +598,7 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 			if ok && (ag.WorkloadKind == "" || ag.WorkloadKind == or.Kind) {
 				return &ag, nil
 			}
-			wl, err = tracing.GetWorkload(ctx, or.Name, pod.GetNamespace(), or.Kind)
+			wl, err = tracing.GetWorkloadFromCache(ctx, workloadCache, or.Name, pod.GetNamespace(), or.Kind)
 			if err != nil {
 				if k8sErrors.IsNotFound(err) {
 					return nil, nil
@@ -604,7 +612,7 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, pod *core.Pod, w
 				}
 				return nil, err
 			}
-			return a.findConfigMapValue(ctx, pod, wl)
+			return a.findConfigMapValue(ctx, workloadCache, pod, wl)
 		}
 	}
 	return nil, nil
