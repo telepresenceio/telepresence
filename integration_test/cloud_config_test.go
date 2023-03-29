@@ -48,17 +48,26 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 
 	s.Eventually(func() bool {
 		defer itest.TelepresenceDisconnectOk(ctx)
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 
 		// The cluster's IP address will also be never proxied, so we gotta account for that.
 		neverProxiedCount := len(ips) + 1
-		stdout := itest.TelepresenceOk(ctx, "status")
+		stdout, _, err := itest.Telepresence(ctx, "status")
+		if err != nil {
+			return false
+		}
 		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets", neverProxiedCount)
 			return false
 		}
 
-		jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
+		jsonStdout, _, err := itest.Telepresence(ctx, "config", "view", "--output", "json")
+		if err != nil {
+			return false
+		}
 		var view client.SessionConfig
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 		if len(view.Routing.NeverProxy) != neverProxiedCount {
@@ -102,7 +111,10 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 		itest.TelepresenceDisconnectOk(ctx)
 
 		rootLog, err := os.Open(rootLogName)
@@ -187,7 +199,10 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err := itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 		itest.TelepresenceDisconnectOk(ctx)
 
 		logF, err := os.Open(logName)

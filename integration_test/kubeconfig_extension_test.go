@@ -63,8 +63,8 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 
 	expectedLen := len(ips)
 	s.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "status")
-		return strings.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen))
+		stdout, _, err := itest.Telepresence(ctx, "status")
+		return err == nil && strings.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen))
 	}, 10*time.Second, 1*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
 
 	jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
@@ -106,15 +106,18 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
 	neverProxiedCount := len(ips) + 1
 	s.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "status")
-		return strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
+		stdout, _, err := itest.Telepresence(ctx, "status")
+		return err == nil && strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {
-		jsonStdout := itest.TelepresenceOk(ctx, "status", "--output", "json")
+		jsonStdout, _, err := itest.Telepresence(ctx, "status", "--output", "json")
+		if err != nil {
+			return false
+		}
 		var status statusResponse
-		require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
-		return len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
+		err = json.Unmarshal([]byte(jsonStdout), &status)
+		return err == nil && len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
 
 	s.Eventually(func() bool {

@@ -35,8 +35,8 @@ func (s *installSuite) limitedRangeTest() {
 	require.NoError(err)
 	s.Eventually(
 		func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-			return strings.Contains(stdout, svc+": intercepted")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
