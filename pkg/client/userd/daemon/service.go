@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -148,6 +149,7 @@ const (
 	nameFlag         = "name"
 	addressFlag      = "address"
 	embedNetworkFlag = "embed-network"
+	pprofFlag        = "pprof"
 )
 
 // Command returns the CLI sub-command for "connector-foreground".
@@ -164,6 +166,7 @@ func Command() *cobra.Command {
 	flags.String(nameFlag, userd.ProcessName, "Daemon name")
 	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.ConnectorName)
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
+	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
 	return c
 }
 
@@ -359,6 +362,13 @@ func run(cmd *cobra.Command, _ []string) error {
 	// the connection/socket/pipe to appear before it gives up.
 	var grpcListener net.Listener
 	flags := cmd.Flags()
+	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
+		go func() {
+			if err := pprof.PprofServer(c, pprofPort); err != nil {
+				dlog.Error(c, err)
+			}
+		}()
+	}
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
 	var daemonAddress *net.TCPAddr
 	if addr, _ := flags.GetString(addressFlag); addr != "" {

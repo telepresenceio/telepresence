@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -54,6 +55,7 @@ func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
 const (
 	ProcessName = "daemon"
 	titleName   = "Daemon"
+	pprofFlag   = "pprof"
 )
 
 func help() string {
@@ -109,16 +111,17 @@ func (s *Service) As(ptr any) {
 
 // Command returns the telepresence sub-command "daemon-foreground".
 func Command() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:    ProcessName + "-foreground <logging dir> <config dir>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		Long:   help(),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), args[0], args[1])
-		},
+		RunE:   run,
 	}
+	flags := cmd.Flags()
+	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
+	return cmd
 }
 
 func (s *Service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
@@ -376,13 +379,17 @@ func (s *Service) serveGrpc(c context.Context, l net.Listener, tracer common.Tra
 }
 
 // run is the main function when executing as the daemon.
-func run(c context.Context, loggingDir, configDir string) error {
+func run(cmd *cobra.Command, args []string) error {
 	if !proc.IsAdmin() {
 		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
 	}
 
 	// seed random generator (used when shuffling IPs)
 	rand.Seed(time.Now().UnixNano())
+
+	loggingDir := args[0]
+	configDir := args[1]
+	c := cmd.Context()
 
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
 	// directories rather than directories for the root user.
@@ -394,6 +401,14 @@ func run(c context.Context, loggingDir, configDir string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	c = client.WithConfig(c, cfg)
+	flags := cmd.Flags()
+	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
+		go func() {
+			if err := pprof.PprofServer(c, pprofPort); err != nil {
+				dlog.Error(c, err)
+			}
+		}()
+	}
 
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
 	c, err = logging.InitContext(c, ProcessName, logging.RotateDaily, true)
