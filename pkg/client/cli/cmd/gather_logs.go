@@ -97,12 +97,6 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 	scout.Start(ctx)
 	defer scout.Close()
 
-	// Get the log directory and return the error if we can't get it
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	if err != nil {
-		return errcat.User.New(err)
-	}
-
 	// If the user did not provide an outputFile, we'll use their current working directory
 	if gl.outputFile == "" {
 		pwd, err := os.Getwd()
@@ -174,6 +168,7 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Get all logs from the logDir that match the daemons the user cares about.
+	logDir := filelocation.AppUserLogDir(ctx)
 	logFiles, err := os.ReadDir(logDir)
 	if err != nil {
 		return errcat.User.New(err)

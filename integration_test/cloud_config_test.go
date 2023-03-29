@@ -92,9 +92,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	// of rushing to the end of the file and remembering where we left off when we start looking
 	// for new lines.
 	var lines int64
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	rootLogName := filepath.Join(logDir, "daemon.log")
+	rootLogName := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
 	rootLog, err := os.Open(rootLogName)
 	require.NoError(err)
 	scn := bufio.NewScanner(rootLog)
@@ -180,9 +178,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	// of rushing to the end of the file and remembering where we left off when we start looking
 	// for new lines.
 	var lines int64
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	logName := filepath.Join(logDir, "connector.log")
+	logName := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")
 	logF, err := os.Open(logName)
 	require.NoError(err)
 	scn := bufio.NewScanner(logF)

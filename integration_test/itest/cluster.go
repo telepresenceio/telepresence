@@ -424,7 +424,6 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	ctx = dcontext.WithoutCancel(ctx)
 
 	present := struct{}{}
-	logDir, _ := filelocation.AppUserLogDir(ctx)
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
@@ -433,7 +432,8 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
+		logFile, err := os.Create(
+			filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
@@ -734,15 +734,11 @@ func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	t := getT(ctx)
 	t.Helper()
-	configDir, err := filelocation.AppUserConfigDir(ctx)
-	require.NoError(t, err)
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(t, err)
 
 	var stdout, stderr strings.Builder
 	ctx = WithEnv(ctx, map[string]string{
-		"DEV_TELEPRESENCE_CONFIG_DIR": configDir,
-		"DEV_TELEPRESENCE_LOG_DIR":    logDir,
+		"DEV_TELEPRESENCE_CONFIG_DIR": filelocation.AppUserConfigDir(ctx),
+		"DEV_TELEPRESENCE_LOG_DIR":    filelocation.AppUserLogDir(ctx),
 	})
 
 	gh := GetGlobalHarness(ctx)

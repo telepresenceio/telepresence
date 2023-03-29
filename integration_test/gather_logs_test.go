@@ -179,8 +179,7 @@ func (s *multipleInterceptsSuite) cleanLogDir(ctx context.Context) {
 }
 
 func cleanLogDir(ctx context.Context, require *require.Assertions, nsRx, mgrNamespace, svcNameRx string) {
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
+	logDir := filelocation.AppUserLogDir(ctx)
 	files, err := os.ReadDir(logDir)
 	require.NoError(err)
 	match := regexp.MustCompile(

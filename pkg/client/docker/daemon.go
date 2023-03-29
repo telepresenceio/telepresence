@@ -63,18 +63,6 @@ func EnsureNetwork(ctx context.Context, name string) {
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
 func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, error) {
-	tpConfig, err := filelocation.AppUserConfigDir(ctx)
-	if err != nil {
-		return nil, nil, errcat.NoDaemonLogs.New(err)
-	}
-	tpCache, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return nil, nil, errcat.NoDaemonLogs.New(err)
-	}
-	tpLog, err := filelocation.AppUserLogDir(ctx)
-	if err != nil {
-		return nil, nil, errcat.NoDaemonLogs.New(err)
-	}
 	as, err := dnet.FreePortsTCP(1)
 	if err != nil {
 		return nil, nil, err
@@ -89,9 +77,9 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
 		"-p", fmt.Sprintf("%s:%d", addr, port),
-		"-v", fmt.Sprintf("%s:%s:ro", tpConfig, dockerTpConfig),
-		"-v", fmt.Sprintf("%s:%s", tpCache, dockerTpCache),
-		"-v", fmt.Sprintf("%s:%s", tpLog, dockerTpLog),
+		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), dockerTpConfig),
+		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), dockerTpCache),
+		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), dockerTpLog),
 	}
 	if runtime.GOOS == "linux" {
 		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
@@ -254,11 +242,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 }
 
 func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, error) {
-	tpCache, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return 0, err
-	}
-	portFile := filepath.Join(tpCache, kubeAuthPortFile)
+	portFile := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeAuthPortFile)
 	st, err := os.Stat(portFile)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -327,11 +311,7 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 	// Store the file using its context name under the <telepresence cache>/kube directory
 	const kubeConfigs = "kube"
 	kubeConfigFile := config.CurrentContext
-	tpCache, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return err
-	}
-	kubeConfigDir := filepath.Join(tpCache, kubeConfigs)
+	kubeConfigDir := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeConfigs)
 	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ Launch the Telepresence ` + titleName + `:
     telepresence connect
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), userd.ProcessName+".log") + `
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), userd.ProcessName+".log") + `
 to troubleshoot problems.
 `
 }

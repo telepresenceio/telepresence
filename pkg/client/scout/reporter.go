@@ -81,23 +81,19 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 
 	if runtime.GOOS != "windows" { // won't find any legacy on Windows
 		// We'll use this (and justify overriding GOOS=linux) below.
-		xdgConfigHome, err := filelocation.UserConfigDir(filelocation.WithGOOS(ctx, "linux"))
-		if err == nil {
-			// Similarly to Telepresence-1 (below), edgectl always used the XDG filepath, but unlike
-			// Telepresence-1 it did obey $XDG_CONFIG_HOME.
-			if id, err := readFile(filepath.Join(xdgConfigHome, "edgectl", "id")); err == nil {
-				allIDs["edgectl"] = id
-				retID = id
-			}
+		xdgConfigHome := filelocation.UserConfigDir(filelocation.WithGOOS(ctx, "linux"))
+		// Similarly to Telepresence-1 (below), edgectl always used the XDG filepath, but unlike
+		// Telepresence-1 it did obey $XDG_CONFIG_HOME.
+		if id, err := readFile(filepath.Join(xdgConfigHome, "edgectl", "id")); err == nil {
+			allIDs["edgectl"] = id
+			retID = id
 		}
 
 		// Telepresence-1 used "$HOME/.config/telepresence/id" always, even on macOS (where ~/.config
 		// isn't a thing) or when $XDG_CONFIG_HOME is something different than "$HOME/.config".
-		if homeDir, err := filelocation.UserHomeDir(ctx); err == nil {
-			if id, err := readFile(filepath.Join(homeDir, ".config", "telepresence", "id")); err == nil {
-				allIDs["telepresence-1"] = id
-				retID = id
-			}
+		if id, err := readFile(filepath.Join(filelocation.UserHomeDir(ctx), ".config", "telepresence", "id")); err == nil {
+			allIDs["telepresence-1"] = id
+			retID = id
 		}
 
 		// Telepresence-2 prior to 2.1.0 did the exact same thing as edgectl, but with
@@ -111,10 +107,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 	// Current.  Telepresence-2 now uses the most appropriate directory for the platform, and
 	// uses "telepresence" instead of "telepresence2".  On GOOS=linux this is probably
 	// (depending on how $XDG_CONFIG_HOME is set) the same as the Telepresence 1 location.
-	telConfigDir, err := filelocation.AppUserConfigDir(ctx)
-	if err != nil {
-		return "", err
-	}
+	telConfigDir := filelocation.AppUserConfigDir(ctx)
 	idFilename := filepath.Join(telConfigDir, idFiles[installType])
 	if id, err := readFile(idFilename); err != nil {
 		if !os.IsNotExist(err) {

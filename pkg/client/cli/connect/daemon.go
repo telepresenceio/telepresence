@@ -27,10 +27,7 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) error {
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	if err != nil {
-		return err
-	}
+	logDir := filelocation.AppUserLogDir(ctx)
 	logFile := filepath.Join(logDir, "daemon.log")
 	if _, err := os.Stat(logFile); err != nil {
 		if !os.IsNotExist(err) {
@@ -111,11 +108,8 @@ func Disconnect(ctx context.Context, quitDaemons bool) error {
 }
 
 func ensureAppUserConfigDir(ctx context.Context) (string, error) {
-	configDir, err := filelocation.AppUserConfigDir(ctx)
-	if err != nil {
-		return "", errcat.NoDaemonLogs.New(err)
-	}
-	if err = os.MkdirAll(configDir, 0o700); err != nil {
+	configDir := filelocation.AppUserConfigDir(ctx)
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return "", errcat.NoDaemonLogs.Newf("unable to ensure that config directory %q exists: %w", configDir, err)
 	}
 	return configDir, nil

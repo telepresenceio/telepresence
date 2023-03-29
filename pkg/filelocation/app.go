@@ -18,23 +18,15 @@ const appName = "telepresence"
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func AppUserLogDir(ctx context.Context) (string, error) {
-	if untyped := ctx.Value(logCtxKey{}); untyped != nil {
-		return untyped.(string), nil
+func AppUserLogDir(ctx context.Context) string {
+	if logDir, ok := ctx.Value(logCtxKey{}).(string); ok && logDir != "" {
+		return logDir
 	}
 	switch goos(ctx) {
 	case "darwin":
-		home, err := UserHomeDir(ctx)
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, "Library", "Logs", appName), nil
+		return filepath.Join(UserHomeDir(ctx), "Library", "Logs", appName)
 	default: // Unix
-		appCacheDir, err := AppUserCacheDir(ctx)
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(appCacheDir, "logs"), nil
+		return filepath.Join(AppUserCacheDir(ctx), "logs")
 	}
 }
 
@@ -46,15 +38,11 @@ func AppUserLogDir(ctx context.Context) (string, error) {
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func AppUserCacheDir(ctx context.Context) (string, error) {
-	if untyped := ctx.Value(cacheCtxKey{}); untyped != nil {
-		return untyped.(string), nil
+func AppUserCacheDir(ctx context.Context) string {
+	if cacheDir, ok := ctx.Value(cacheCtxKey{}).(string); ok && cacheDir != "" {
+		return cacheDir
 	}
-	userDir, err := userCacheDir(ctx)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(userDir, appName), nil
+	return filepath.Join(userCacheDir(ctx), appName)
 }
 
 // AppUserConfigDir returns the directory to use for application-specific
@@ -65,15 +53,11 @@ func AppUserCacheDir(ctx context.Context) (string, error) {
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func AppUserConfigDir(ctx context.Context) (string, error) {
-	if untyped := ctx.Value(configCtxKey{}); untyped != nil {
-		return untyped.(string), nil
+func AppUserConfigDir(ctx context.Context) string {
+	if configDir, ok := ctx.Value(configCtxKey{}).(string); ok && configDir != "" {
+		return configDir
 	}
-	userDir, err := UserConfigDir(ctx)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(userDir, appName), nil
+	return filepath.Join(UserConfigDir(ctx), appName)
 }
 
 // AppSystemConfigDirs returns a list of directories to search for
@@ -84,14 +68,14 @@ func AppUserConfigDir(ctx context.Context) (string, error) {
 // separator, if not "/").
 //
 // If the location cannot be determined, then it will return an error.
-func AppSystemConfigDirs(ctx context.Context) ([]string, error) {
-	if untyped := ctx.Value(sysConfigsCtxKey{}); untyped != nil {
-		return untyped.([]string), nil
+func AppSystemConfigDirs(ctx context.Context) []string {
+	if sysConfigDirs, ok := ctx.Value(sysConfigsCtxKey{}).([]string); ok && sysConfigDirs != nil {
+		return sysConfigDirs
 	}
 	dirs := systemConfigDirs()
 	ret := make([]string, 0, len(dirs))
 	for _, dir := range dirs {
 		ret = append(ret, filepath.Join(dir, appName))
 	}
-	return ret, nil
+	return ret
 }

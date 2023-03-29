@@ -189,9 +189,7 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 		return map[string]any{"dns": map[string][]string{"include-suffixes": {".org"}}}
 	})
 	require := s.Require()
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	logFile := filepath.Join(logDir, "daemon.log")
+	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
 
 	// Check that config view -c includes the includeSuffixes
 	stdout := itest.TelepresenceOk(ctx, "config", "--context", "extra", "view", "--client-only")

@@ -66,7 +66,7 @@ Launch the Telepresence ` + titleName + `:
     sudo telepresence Service
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), ProcessName+".log") + `
 to troubleshoot problems.
 `
 }

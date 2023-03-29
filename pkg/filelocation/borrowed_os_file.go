@@ -14,7 +14,6 @@ package filelocation
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -29,9 +28,9 @@ import (
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func UserHomeDir(ctx context.Context) (string, error) {
+func UserHomeDir(ctx context.Context) string {
 	if untyped := ctx.Value(homeCtxKey{}); untyped != nil {
-		return untyped.(string), nil
+		return untyped.(string)
 	}
 	env, enverr := "HOME", "$HOME"
 	switch goos(ctx) {
@@ -41,18 +40,18 @@ func UserHomeDir(ctx context.Context) (string, error) {
 		env, enverr = "home", "$home"
 	}
 	if v := os.Getenv(env); v != "" {
-		return v, nil
+		return v
 	}
 	// On some geese the home directory is not always defined.
 	switch goos(ctx) {
 	case "android":
-		return "/sdcard", nil
+		return "/sdcard"
 	case "darwin":
 		if goos(ctx) == "arm64" {
-			return "/", nil
+			return "/"
 		}
 	}
-	return "", errors.New(enverr + " is not defined")
+	panic(enverr + " is not defined")
 }
 
 // UserCacheDir returns the default root directory to use for user-specific
@@ -74,49 +73,39 @@ func UserHomeDir(ctx context.Context) (string, error) {
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func userCacheDir(ctx context.Context) (string, error) {
+func userCacheDir(ctx context.Context) string {
 	var dir string
 
 	switch goos(ctx) {
 	case "windows":
-		if untyped := ctx.Value(homeCtxKey{}); untyped != nil {
-			return untyped.(string) + `\AppData\Local`, nil
+		if home, ok := ctx.Value(homeCtxKey{}).(string); ok && home != "" {
+			return filepath.Join(home, "AppData", "Local")
 		}
 		dir = os.Getenv("LocalAppData")
 		if dir == "" {
-			home, err := UserHomeDir(ctx)
-			if err != nil {
-				return "", fmt.Errorf("%%LocalAppData%% is not defined and %w", err)
-			}
-			return filepath.Join(home, `\AppData\Local`), nil
+			home := UserHomeDir(ctx)
+			return filepath.Join(home, "AppData", "Local")
 		}
 
 	case "darwin":
-		home, err := UserHomeDir(ctx)
-		if err != nil {
-			return "", err
-		}
-		dir = home + "/Library/Caches"
+		home := UserHomeDir(ctx)
+		dir = filepath.Join(home, "Library", "Caches")
 
 	case "plan9":
-		home, err := UserHomeDir(ctx)
-		if err != nil {
-			return "", err
-		}
-		dir = home + "/lib/cache"
+		home := UserHomeDir(ctx)
+		dir = filepath.Join(home, "lib", "cache")
 
 	default: // Unix
 		dir = os.Getenv("XDG_CACHE_HOME")
 		if dir == "" || (ctx.Value(homeCtxKey{}) != nil) {
-			home, _ := UserHomeDir(ctx)
+			home := UserHomeDir(ctx)
 			if home == "" {
-				return "", errors.New("neither $XDG_CACHE_HOME nor $HOME are defined")
+				panic(errors.New("neither $XDG_CACHE_HOME nor $HOME are defined"))
 			}
-			dir = home + "/.cache"
+			dir = filepath.Join(home, ".cache")
 		}
 	}
-
-	return dir, nil
+	return dir
 }
 
 // UserConfigDir returns the default root directory to use for user-specific
@@ -138,47 +127,35 @@ func userCacheDir(ctx context.Context) (string, error) {
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func UserConfigDir(ctx context.Context) (string, error) {
+func UserConfigDir(ctx context.Context) string {
 	var dir string
 
 	switch goos(ctx) {
 	case "windows":
-		if untyped := ctx.Value(homeCtxKey{}); untyped != nil {
-			return untyped.(string) + `\AppData\Roaming`, nil
+		if home, ok := ctx.Value(homeCtxKey{}).(string); ok && home != "" {
+			return filepath.Join(home, "AppData", "Roaming")
 		}
 		dir = os.Getenv("AppData")
 		if dir == "" {
-			home, err := UserHomeDir(ctx)
-			if err != nil {
-				return "", fmt.Errorf("%%AppData%% is not defined and %w", err)
-			}
-			return filepath.Join(home, `\AppData\Roaming`), nil
+			return filepath.Join(UserHomeDir(ctx), "AppData", "Roaming")
 		}
 
 	case "darwin":
-		home, err := UserHomeDir(ctx)
-		if err != nil {
-			return "", err
-		}
-		dir = home + "/Library/Application Support"
+		dir = filepath.Join(UserHomeDir(ctx), "Library", "Application Support")
 
 	case "plan9":
-		home, err := UserHomeDir(ctx)
-		if err != nil {
-			return "", err
-		}
+		home := UserHomeDir(ctx)
 		dir = home + "/lib"
 
 	default: // Unix
 		dir = os.Getenv("XDG_CONFIG_HOME")
 		if dir == "" || (ctx.Value(homeCtxKey{}) != nil) {
-			home, _ := UserHomeDir(ctx)
+			home := UserHomeDir(ctx)
 			if home == "" {
-				return "", errors.New("neither $XDG_CONFIG_HOME nor $HOME are defined")
+				panic(errors.New("neither $XDG_CONFIG_HOME nor $HOME are defined"))
 			}
-			dir = home + "/.config"
+			dir = filepath.Join(home, ".config")
 		}
 	}
-
-	return dir, nil
+	return dir
 }

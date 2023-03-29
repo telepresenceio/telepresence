@@ -48,12 +48,8 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 		// Unable to establish a session, so try to convey the local config instead. It
 		// may be helpful in diagnosing the problem.
 		ctx := cmd.Context()
-		cfgDir, err := filelocation.AppUserConfigDir(ctx)
-		if err != nil {
-			return err
-		}
 		cfg.Config = client.GetConfig(cmd.Context())
-		cfg.ClientFile = filepath.Join(cfgDir, client.ConfigFile)
+		cfg.ClientFile = filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile)
 
 		rq := daemon.GetRequest(ctx)
 		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
