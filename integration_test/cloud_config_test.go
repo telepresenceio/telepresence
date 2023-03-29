@@ -36,8 +36,10 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	kc := itest.KubeConfig(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(err)
-	cluster := cfg.Clusters["default"]
-	require.NotNil(s.T(), cluster, "unable to get default cluster from config")
+	ktx := cfg.Contexts[cfg.CurrentContext]
+	require.NotNil(ktx, "unable to get current context from config")
+	cluster := cfg.Clusters[ktx.Cluster]
+	require.NotNil(cluster, "unable to get %s cluster from config", ktx.Cluster)
 	ips, err := getClusterIPs(cluster)
 	require.NoError(err)
 
