@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -129,7 +130,11 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if _, err = ensureAppUserConfigDir(ctx); err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	if err = proc.StartInBackground(false, connectorDaemon, "connector-foreground"); err != nil {
+	args := []string{connectorDaemon, "connector-foreground"}
+	if cr.UserDaemonProfilingPort > 0 {
+		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
+	}
+	if err = proc.StartInBackground(false, args...); err != nil {
 		return nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 	}
 	if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {

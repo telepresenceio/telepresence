@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"google.golang.org/grpc"
@@ -21,7 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func launchDaemon(ctx context.Context) error {
+func launchDaemon(ctx context.Context, cr *daemon.Request) error {
 	fmt.Fprintln(output.Info(ctx), "Launching Telepresence Root Daemon")
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
@@ -49,7 +50,12 @@ func launchDaemon(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir)
+	args := []string{client.GetExe(), "daemon-foreground"}
+	if cr != nil && cr.RootDaemonProfilingPort > 0 {
+		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
+	}
+	args = append(args, logDir, configDir)
+	return proc.StartInBackgroundAsRoot(ctx, args...)
 }
 
 // ensureRootDaemonRunning ensures that the daemon is running.
@@ -58,7 +64,8 @@ func ensureRootDaemonRunning(ctx context.Context) error {
 		// Never start root daemon when running remote
 		return nil
 	}
-	if cr := daemon.GetRequest(ctx); cr != nil && cr.Docker {
+	cr := daemon.GetRequest(ctx)
+	if cr != nil && cr.Docker {
 		// Never start root daemon when connecting using a docker container.
 		return nil
 	}
@@ -70,7 +77,7 @@ func ensureRootDaemonRunning(ctx context.Context) error {
 	if err != nil || running {
 		return err
 	}
-	if err = launchDaemon(ctx); err != nil {
+	if err = launchDaemon(ctx, cr); err != nil {
 		return fmt.Errorf("failed to launch the daemon service: %w", err)
 	}
 	if err = socket.WaitUntilRunning(ctx, "daemon", socket.DaemonName, 10*time.Second); err != nil {

@@ -19,8 +19,10 @@ type Request struct {
 	Docker bool
 
 	// Request is created on-demand, not by InitRequest
-	Implicit    bool
-	kubeFlagSet *pflag.FlagSet
+	Implicit                bool
+	kubeFlagSet             *pflag.FlagSet
+	UserDaemonProfilingPort uint16
+	RootDaemonProfilingPort uint16
 }
 
 // InitRequest adds the networking flags and Kubernetes flags to the given command and
@@ -46,6 +48,15 @@ func InitRequest(cmd *cobra.Command) *Request {
 	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
 		`Overrides any other manager namespace set in config`)
 	flags.AddFlagSet(nwFlags)
+
+	dbgFlags := pflag.NewFlagSet("Debug and Profiling flags", 0)
+	dbgFlags.Uint16Var(&cr.UserDaemonProfilingPort,
+		"userd-profiling-port", 0, "Start a pprof server in the user daemon on this port")
+	_ = dbgFlags.MarkHidden("userd-profiling-port")
+	dbgFlags.Uint16Var(&cr.RootDaemonProfilingPort,
+		"rootd-profiling-port", 0, "Start a pprof server in the root daemon on this port")
+	_ = dbgFlags.MarkHidden("rootd-profiling-port")
+	flags.AddFlagSet(dbgFlags)
 
 	kubeConfig := genericclioptions.NewConfigFlags(false)
 	kubeConfig.Namespace = nil // "connect", don't take --namespace

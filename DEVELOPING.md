@@ -297,6 +297,25 @@ command to `cat` to trigger the usual logfile setup:
 $ telepresence connector-foreground | cat
 ```
 
+### Profiling the daemons
+
+The daemons can be profiled using [pprof](https://pkg.go.dev/net/http/pprof).
+The profiling is initialized using the following flags:
+
+```console
+$ telepresence quit -s
+$ telepresence connect --userd-profiling-port 6060 --rootd-profiling-port 6061
+```
+
+If a daemon is started with pprof, then the goroutine stacks and much other
+info can be found by connecting your browser to http://localhost:6060/debug/pprof/
+(swap 6060 for whatever port you used with the flags)
+
+#### Dumping the goroutine stacks
+
+A dump will be produced in the respective logs for the daemon simply by killing it
+with a SIGQUIT signal. On Windows however, using profiling is the only option.
+
 ### RBAC issues
 
 If you are debugging or working on RBAC-related feature work with
