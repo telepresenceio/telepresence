@@ -89,6 +89,8 @@ type cluster struct {
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
+	userdPProf       uint16
+	rootdPProf       uint16
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -131,6 +133,16 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s.registry = dos.Getenv(ctx, "DTEST_REGISTRY")
 	require.NoError(t, s.generalError)
 
+	if pp := dos.Getenv(ctx, "DEV_USERD_PROFILING_PORT"); pp != "" {
+		port, err := strconv.ParseUint(pp, 10, 16)
+		require.NoError(t, err)
+		s.userdPProf = uint16(port)
+	}
+	if pp := dos.Getenv(ctx, "DEV_ROOTD_PROFILING_PORT"); pp != "" {
+		port, err := strconv.ParseUint(pp, 10, 16)
+		require.NoError(t, err)
+		s.rootdPProf = uint16(port)
+	}
 	ctx = withGlobalHarness(ctx, &s)
 	if s.prePushed {
 		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
@@ -733,6 +745,7 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		"DEV_TELEPRESENCE_LOG_DIR":    logDir,
 	})
 
+	gh := GetGlobalHarness(ctx)
 	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
 		if user := GetUser(ctx); user != "default" {
 			na := make([]string, len(args)+2)
@@ -741,11 +754,17 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 			copy(na[2:], args)
 			args = na
 		}
+		if gh.userdPProf > 0 {
+			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.userdPProf)))
+		}
+		if gh.rootdPProf > 0 {
+			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.rootdPProf)))
+		}
 	}
 	if UseDocker(ctx) {
 		args = append([]string{"--docker"}, args...)
 	}
-	cmd := Command(ctx, GetGlobalHarness(ctx).executable, args...)
+	cmd := Command(ctx, gh.executable, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	return cmd
