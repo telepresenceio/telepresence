@@ -70,14 +70,14 @@ func ensureRootDaemonRunning(ctx context.Context) error {
 		// Always assume that root daemon is running when a user daemon address is provided
 		return nil
 	}
-	running, err := socket.IsRunning(ctx, socket.DaemonName)
+	running, err := socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
 	if err != nil || running {
 		return err
 	}
 	if err = launchDaemon(ctx, cr); err != nil {
 		return fmt.Errorf("failed to launch the daemon service: %w", err)
 	}
-	if err = socket.WaitUntilRunning(ctx, "daemon", socket.DaemonName, 10*time.Second); err != nil {
+	if err = socket.WaitUntilRunning(ctx, "daemon", socket.RootDaemonPath(ctx), 10*time.Second); err != nil {
 		return fmt.Errorf("daemon service did not start: %w", err)
 	}
 	return nil
@@ -95,9 +95,9 @@ func Disconnect(ctx context.Context, quitDaemons bool) error {
 	if quitDaemons {
 		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
 		// the fact that the user daemon might have been killed ungracefully.
-		if err = socket.WaitUntilVanishes("root daemon", socket.DaemonName, 5*time.Second); err != nil {
+		if err = socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); err != nil {
 			var conn *grpc.ClientConn
-			if conn, err = socket.Dial(ctx, socket.DaemonName); err == nil {
+			if conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
 				if _, err = rpc.NewDaemonClient(conn).Quit(ctx, &empty.Empty{}); err != nil {
 					err = fmt.Errorf("error when quitting root daemon: %w", err)
 				}

@@ -174,7 +174,7 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err := socket.Dial(tc, socket.ConnectorName,
+	conn, err := socket.Dial(tc, socket.UserDaemonPath(c),
 		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 	)

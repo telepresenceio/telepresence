@@ -185,7 +185,7 @@ func (s *cluster) ensureQuit(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that the daemon-socket is non-existent.
-	_ = rmAsRoot(socket.DaemonName)
+	_ = rmAsRoot(socket.RootDaemonPath(ctx))
 }
 
 func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {

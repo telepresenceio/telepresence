@@ -18,13 +18,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-const (
-	// ConnectorName is the path used when communicating to the connector process.
-	ConnectorName = "/tmp/telepresence-connector.socket"
+// userDaemonPath is the path used when communicating to the user daemon process.
+func userDaemonUnixSocket(ctx context.Context) string {
+	return "/tmp/telepresence-connector.socket"
+}
 
-	// DaemonName is the path used when communicating to the daemon process.
-	DaemonName = "/var/run/telepresence-daemon.socket"
-)
+// rootDaemonPath is the path used when communicating to the root daemon process.
+func rootDaemonUnixSocket(ctx context.Context) string {
+	return "/var/run/telepresence-daemon.socket"
+}
 
 func dial(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second) // FIXME(lukeshu): Make this configurable
@@ -93,10 +95,6 @@ func listen(_ context.Context, processName, socketName string) (net.Listener, er
 	// until the process exits.
 	listener.(*net.UnixListener).SetUnlinkOnClose(false)
 	return listener, nil
-}
-
-func remove(listener net.Listener) error {
-	return os.Remove(listener.Addr().String())
 }
 
 // exists returns true if a socket is found at the given path.

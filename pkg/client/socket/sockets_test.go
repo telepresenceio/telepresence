@@ -1,6 +1,3 @@
-//go:build !windows
-// +build !windows
-
 package socket_test
 
 import (
@@ -11,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
@@ -20,9 +18,8 @@ import (
 )
 
 func TestDialSocket(t *testing.T) {
-	tmpdir := t.TempDir()
 	t.Run("OK", func(t *testing.T) {
-		sockname := filepath.Join(tmpdir, "ok.sock")
+		sockname := filepath.Join(t.TempDir(), "ok.sock")
 		listener, err := net.Listen("unix", sockname)
 		if !assert.NoError(t, err) {
 			return
@@ -55,7 +52,7 @@ func TestDialSocket(t *testing.T) {
 		assert.NoError(t, grp.Wait())
 	})
 	t.Run("Hang", func(t *testing.T) {
-		sockname := filepath.Join(tmpdir, "hang.sock")
+		sockname := filepath.Join(t.TempDir(), "hang.sock")
 		listener, err := net.Listen("unix", sockname)
 		if !assert.NoError(t, err) {
 			return
@@ -72,7 +69,7 @@ func TestDialSocket(t *testing.T) {
 		assert.Contains(t, err.Error(), "this usually means that the process has locked up")
 	})
 	t.Run("Orphan", func(t *testing.T) {
-		sockname := filepath.Join(tmpdir, "orphan.sock")
+		sockname := filepath.Join(t.TempDir(), "orphan.sock")
 		listener, err := net.Listen("unix", sockname)
 		if !assert.NoError(t, err) {
 			return
@@ -83,7 +80,7 @@ func TestDialSocket(t *testing.T) {
 		ctx := dlog.NewTestContext(t, false)
 		conn, err := socket.Dial(ctx, sockname)
 		assert.Nil(t, conn)
-		assert.Error(t, err)
+		require.Error(t, err)
 		t.Log(err)
 		assert.ErrorIs(t, err, os.ErrNotExist)
 		assert.Contains(t, err.Error(), "dial unix "+sockname)
@@ -91,7 +88,7 @@ func TestDialSocket(t *testing.T) {
 	})
 	t.Run("NotExist", func(t *testing.T) {
 		ctx := dlog.NewTestContext(t, false)
-		sockname := filepath.Join(tmpdir, "not-exist.sock")
+		sockname := filepath.Join(t.TempDir(), "not-exist.sock")
 		conn, err := socket.Dial(ctx, sockname)
 		assert.Nil(t, conn)
 		assert.Error(t, err)

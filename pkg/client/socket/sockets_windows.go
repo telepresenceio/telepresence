@@ -2,98 +2,165 @@ package socket
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
+	"os"
+	"path/filepath"
+	"time"
+	"unsafe"
 
-	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-// The Windows IPC between the CLI and the user and root daemons is based on named pipes rather than
-// unix sockets.
-// See https://docs.microsoft.com/en-us/windows/win32/ipc/pipe-names for more info
-// about pipe names.
-const (
-	// ConnectorName is the name used when communicating to the connector process.
-	ConnectorName = `\\.\pipe\telepresence-connector`
+// userDaemonPath is the path used when communicating to the user daemon process.
+func userDaemonPath(ctx context.Context) string {
+	return filepath.Join(filelocation.AppUserCacheDir(ctx), "userd.socket")
+}
 
-	// DaemonName is the name used when communicating to the daemon process.
-	DaemonName = `\\.\pipe\telepresence-daemon`
-)
+// rootDaemonPath is the path used when communicating to the root daemon process.
+func rootDaemonPath(ctx context.Context) string {
+	return filepath.Join(filelocation.AppUserCacheDir(ctx), "rootd.socket")
+}
 
-// dial dials the given named pipe and returns the resulting connection.
-func dial(c context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	conn, err := grpc.DialContext(c, socketName, append([]grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.FailOnNonTempDialError(true),
-		grpc.WithContextDialer(func(c context.Context, s string) (net.Conn, error) {
-			conn, err := winio.DialPipeContext(c, socketName)
-			return conn, err
-		}),
-	}, opts...)...)
-	// The google.golang.org/grpc/internal/transport.ConnectionError does not have an
-	// Unwrap method. It does have a Origin method though.
-	// See: https://github.com/grpc/grpc-go/pull/5148
-	if oe, ok := err.(interface{ Origin() error }); ok {
-		err = oe.Origin()
+func dial(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second) // FIXME(lukeshu): Make this configurable
+	defer cancel()
+	for firstTry := true; ; firstTry = false {
+		// Windows will give us a WSAECONNREFUSED if the socket does not exist. That's not
+		// what we want.
+		found, err := exists(socketName)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			err = &net.OpError{
+				Op:  "dial",
+				Net: "unix",
+				Addr: &net.UnixAddr{
+					Name: socketName,
+					Net:  "unix",
+				},
+				Err: fs.ErrNotExist,
+			}
+		}
+		if err == nil {
+			conn, dialErr := grpc.DialContext(ctx, "unix:"+socketName, append([]grpc.DialOption{
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithNoProxy(),
+				grpc.WithBlock(),
+				grpc.FailOnNonTempDialError(true),
+			}, opts...)...)
+			if dialErr == nil {
+				return conn, nil
+			}
+			err = dialErr
+		}
+
+		// Remove the gRPC internal transport.Connection error wrapper. It messes up the message by
+		// quoting it so that backslashes in the path get doubled.
+		var opErr *net.OpError
+		if errors.As(err, &opErr) {
+			err = opErr
+		}
+
+		// Windows will give us a WSAECONNREFUSED if the socket does not exist. That's not
+		// what we want.
+		if errors.Is(err, windows.WSAECONNREFUSED) {
+			found, exErr := exists(socketName)
+			if exErr != nil {
+				return nil, exErr
+			}
+			if !found {
+				err = &net.OpError{
+					Op:  "dial",
+					Net: "unix",
+					Addr: &net.UnixAddr{
+						Name: socketName,
+						Net:  "unix",
+					},
+					Err: fs.ErrNotExist,
+				}
+			}
+		}
+
+		if firstTry && errors.Is(err, windows.WSAECONNREFUSED) {
+			// Socket exists but doesn't accept connections. This usually means that the process
+			// terminated ungracefully. To remedy this, we make an attempt to remove the socket
+			// and dial again.
+			dlog.Errorf(ctx, "Dial unix:%s failed: %v", socketName, err)
+			if rmErr := os.Remove(socketName); rmErr != nil && !errors.Is(err, os.ErrNotExist) {
+				err = fmt.Errorf("%w (socket rm failed with %v)", err, rmErr)
+			} else {
+				continue
+			}
+		}
+
+		if err == context.DeadlineExceeded {
+			// grpc.DialContext doesn't wrap context.DeadlineExceeded with any useful
+			// information at all.  Fix that.
+			err = &net.OpError{
+				Op:  "dial",
+				Net: "unix",
+				Addr: &net.UnixAddr{
+					Name: socketName,
+					Net:  "unix",
+				},
+				Err: fmt.Errorf("socket exists but is not responding: %w", err),
+			}
+		}
+
+		// Add some Telepresence-specific commentary on what specific common errors mean.
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			err = fmt.Errorf("%w; this usually means that the process has locked up", err)
+		case errors.Is(err, windows.WSAECONNREFUSED):
+			err = fmt.Errorf("%w; this usually means that the process has terminated ungracefully", err)
+		case errors.Is(err, os.ErrNotExist):
+			err = fmt.Errorf("%w; this usually means that the process is not running", err)
+		}
+		return nil, err
 	}
-	return conn, err
 }
 
-// allowEveryone is a security descriptor that allows everyone to perform the action.
-// For more info about the syntax, sse:
-// https://docs.microsoft.com/en-us/windows/win32/secauthz/security-descriptor-string-format
-const allowEveryone = "S:(ML;;NW;;;LW)D:(A;;0x12019f;;;WD)"
-
-// listen returns a listener for the given named pipe and returns the resulting connection.
-func listen(_ context.Context, processName, socketName string) (net.Listener, error) {
-	var config *winio.PipeConfig
-	if proc.IsAdmin() {
-		config = &winio.PipeConfig{SecurityDescriptor: allowEveryone}
+// listen returns a listener for the given socket and returns the resulting connection.
+func listen(ctx context.Context, processName, socketName string) (net.Listener, error) {
+	listener, err := net.Listen("unix", socketName)
+	if err != nil {
+		if err != nil {
+			err = fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully: %T, %w", socketName, processName, err, err)
+		}
+		return nil, err
 	}
-	return winio.ListenPipe(socketName, config)
+	// Don't have dhttp.ServerConfig.Serve unlink the socket; defer unlinking the socket
+	// until the process exits.
+	listener.(*net.UnixListener).SetUnlinkOnClose(false)
+	return listener, nil
 }
 
-// remove does nothing because a named pipe has no representation in the file system that
-// needs to be removed.
-func remove(listener net.Listener) error {
-	return nil
-}
+// socketAttributes is the combination that Windows uses for Unix socket FileAttributes.
+const socketAttributes = windows.FILE_ATTRIBUTE_REPARSE_POINT | windows.FILE_ATTRIBUTE_ARCHIVE
 
-// exists returns true if a socket exists with the given name.
-func exists(name string) (bool, error) {
-	uPath, err := windows.UTF16PtrFromString(name)
+// exists returns true if a socket is found at the given path.
+func exists(path string) (bool, error) {
+	namep, err := windows.UTF16PtrFromString(path)
 	if err != nil {
 		return false, err
 	}
 
-	// Despite the name of the function, this is actually an attempt to open an existing socket. The
-	// OPEN_EXISTING disposition will make it fail unless it exists.
-	h, err := windows.CreateFile(uPath, windows.GENERIC_READ|windows.GENERIC_WRITE, 0, nil, windows.OPEN_EXISTING, windows.FILE_FLAG_OVERLAPPED, 0)
-	switch err {
-	case windows.ERROR_PIPE_BUSY:
-		// ERROR_PIPE_BUSY is an error that is issued somewhat sporadically, but it's a safe
-		// indication that the pipe exists.
-		return true, nil
-	case windows.ERROR_FILE_NOT_FOUND:
+	var fa windows.Win32FileAttributeData
+	err = windows.GetFileAttributesEx(namep, windows.GetFileExInfoStandard, (*byte)(unsafe.Pointer(&fa)))
+	if err != nil {
 		return false, nil
-	case nil:
-		var ft uint32
-		ft, err = windows.GetFileType(h)
-		if err != nil {
-			break
-		}
-		_ = windows.CloseHandle(h)
-		if ft|windows.FILE_TYPE_PIPE != 0 {
-			return true, nil
-		}
-		err = fmt.Errorf("%q is not a named pipe", name)
 	}
-	return false, err
+	if fa.FileAttributes&socketAttributes != socketAttributes {
+		return false, fmt.Errorf("%q is not a socket", path)
+	}
+	return true, nil
 }
