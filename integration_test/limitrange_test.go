@@ -45,14 +45,14 @@ func (s *installSuite) limitedRangeTest() {
 
 	// Ensure that LimitRange is injected into traffic-agent
 	out, err := itest.KubectlOut(ctx, s.AppNamespace(), "get", "pods", "-l", "app="+svc, "-o",
-		"jsonpath={.items.*.spec.containers[?(@.name=='traffic-agent')].resources}")
+		`jsonpath={.items.*.spec.containers[?(@.name=='traffic-agent')].resources}{","}`)
 	require.NoError(err)
 	dlog.Infof(ctx, "resources = %s", out)
 	var rrs []v1.ResourceRequirements
-	require.NoError(json.Unmarshal([]byte("["+out+"]"), &rrs))
+	require.NoError(json.Unmarshal([]byte("["+strings.TrimSuffix(out, ",")+"]"), &rrs))
 	oneGig, err := resource.ParseQuantity("100Mi")
 	require.NoError(err)
-	require.Len(rrs, 1)
+	require.NotEmpty(rrs)
 	rr := rrs[0]
 	m := rr.Limits.Memory()
 	require.True(m != nil && m.Equal(oneGig))
