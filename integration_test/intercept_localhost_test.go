@@ -67,6 +67,7 @@ func (s *interceptLocalhostSuite) TestIntercept_WithCustomLocalhost() {
 		if err != nil {
 			return err
 		}
+		defer resp.Body.Close()
 		// If there was a response, make sure it's a 200
 		s.Require().Equal(http.StatusOK, resp.StatusCode)
 		return nil

@@ -945,7 +945,6 @@ func StartLocalHttpEchoServerWithHost(ctx context.Context, name string, host str
 		_ = sc.Serve(ctx, l)
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
-
 }
 
 // StartLocalHttpEchoServer starts a local http server that echoes a line with the given name and
