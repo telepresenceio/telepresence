@@ -52,6 +52,7 @@ type userDaemonStatus struct {
 	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
 	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
 	ManagerNamespace  string                   `json:"manager_namespace,omitempty" yaml:"manager_namespace,omitempty"`
+	MappedNamespaces  []string                 `json:"mapped_namespaces,omitempty" yaml:"mapped_namespaces,omitempty"`
 	Intercepts        []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
 }
 
@@ -176,6 +177,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 			})
 		}
 		us.ManagerNamespace = status.ManagerNamespace
+		us.MappedNamespaces = status.MappedNamespaces
 	case connector.ConnectInfo_MUST_RESTART:
 		us.Status = "Connected, but must restart"
 	case connector.ConnectInfo_DISCONNECTED:
@@ -327,6 +329,9 @@ func (cs *userDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
 	kvf.Add("Kubernetes server", cs.KubernetesServer)
 	kvf.Add("Kubernetes context", cs.KubernetesContext)
 	kvf.Add("Manager namespace", cs.ManagerNamespace)
+	if len(cs.MappedNamespaces) > 0 {
+		kvf.Add("Mapped namespaces", fmt.Sprintf("%v", cs.MappedNamespaces))
+	}
 	out := &strings.Builder{}
 	fmt.Fprintf(out, "%d total\n", len(cs.Intercepts))
 	if len(cs.Intercepts) > 0 {

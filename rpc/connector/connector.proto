@@ -207,6 +207,8 @@ message ConnectInfo {
   daemon.DaemonStatus daemon_status = 13;
   string manager_namespace = 14;
 
+  repeated string mapped_namespaces = 15;
+
   reserved 6;
   reserved 7;
   reserved 9;

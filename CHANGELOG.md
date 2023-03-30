@@ -1,9 +1,11 @@
 # Changelog
 
-### 2.12.2 (TBD)
+### 2.13.0 (TBD)
 
 - Feature: The Docker network used by a Kind or Minikube (using the "docker" driver) installation, is automatically
   detected and connected to a Docker container running the Telepresence daemon.
+
+- Feature: Mapped namespaces are included in the output of the `telepresence status` command.
 
 - Bugfix: The kubeconfig is made self-contained before running Telepresence daemon in a Docker container.
 
