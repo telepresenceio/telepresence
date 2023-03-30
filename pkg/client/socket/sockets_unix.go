@@ -19,12 +19,12 @@ import (
 )
 
 // userDaemonPath is the path used when communicating to the user daemon process.
-func userDaemonUnixSocket(ctx context.Context) string {
+func userDaemonPath(ctx context.Context) string {
 	return "/tmp/telepresence-connector.socket"
 }
 
 // rootDaemonPath is the path used when communicating to the root daemon process.
-func rootDaemonUnixSocket(ctx context.Context) string {
+func rootDaemonPath(ctx context.Context) string {
 	return "/var/run/telepresence-daemon.socket"
 }
 

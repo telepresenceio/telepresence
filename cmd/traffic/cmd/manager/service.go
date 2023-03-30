@@ -294,7 +294,7 @@ func (m *service) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			resp := &rpc.AgentInfoSnapshot{
 				Agents: agents,
 			}
-			dlog.Debug(ctx, "WatchAgents sending update %v", names)
+			dlog.Debugf(ctx, "WatchAgents sending update %v", names)
 			if err := stream.Send(resp); err != nil {
 				return err
 			}
@@ -398,7 +398,7 @@ func (m *service) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_W
 				names[i] = a.Name + "." + a.Namespace
 				i++
 			}
-			dlog.Debug(ctx, "WatchAgentsNS sending update %v", names)
+			dlog.Debugf(ctx, "WatchAgentsNS sending update %v", names)
 			resp := &rpc.AgentInfoSnapshot{
 				Agents: agents,
 			}
