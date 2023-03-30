@@ -743,12 +743,10 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 
 	gh := GetGlobalHarness(ctx)
 	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
+		rest := args[1:]
+		args = append(make([]string, 0, len(args)+3), args[0])
 		if user := GetUser(ctx); user != "default" {
-			na := make([]string, len(args)+2)
-			na[0] = "--as"
-			na[1] = "system:serviceaccount:" + user
-			copy(na[2:], args)
-			args = na
+			args = append(args, "--as", "system:serviceaccount:"+user)
 		}
 		if gh.userdPProf > 0 {
 			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.userdPProf)))
@@ -756,6 +754,7 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		if gh.rootdPProf > 0 {
 			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.rootdPProf)))
 		}
+		args = append(args, rest...)
 	}
 	if UseDocker(ctx) {
 		args = append([]string{"--docker"}, args...)
@@ -1004,7 +1003,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 		return true
 	},
 		time.Minute,   // waitFor
-		3*time.Second, // polling interval
+		5*time.Second, // polling interval
 		`body of %q equals %q`, "http://"+svc, expectedOutput,
 	)
 }

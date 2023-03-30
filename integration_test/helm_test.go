@@ -57,7 +57,8 @@ func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	s.Error(err)
 	s.True(
 		strings.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`) ||
-			strings.Contains(stderr, `cannot get resource "deployments" in API group "apps" in the namespace`))
+			strings.Contains(stderr, `cannot get resource "deployments" in API group "apps" in the namespace`),
+		"stderr = %s", stderr)
 }
 
 func (s *helmSuite) Test_HelmWebhookInjectsInManagedNamespace() {
@@ -131,6 +132,11 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 }
 
 func (s *helmSuite) Test_CollidingInstalls() {
+	defer func() {
+		ctx := s.Context()
+		itest.TelepresenceDisconnectOk(ctx)
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	}()
 	ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
 		Namespace:         s.AppNamespace(),
 		ManagedNamespaces: []string{s.appSpace2},

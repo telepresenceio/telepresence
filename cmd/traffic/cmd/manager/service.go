@@ -282,13 +282,19 @@ func (m *service) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 				dlog.Debug(ctx, "WatchAgents request cancelled")
 				return nil
 			}
-			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
-			for _, agent := range snapshot.State {
-				agents = append(agents, agent)
+			as := snapshot.State
+			agents := make([]*rpc.AgentInfo, len(as))
+			names := make([]string, len(as))
+			i := 0
+			for _, a := range as {
+				agents[i] = a
+				names[i] = a.Name + "." + a.Namespace
+				i++
 			}
 			resp := &rpc.AgentInfoSnapshot{
 				Agents: agents,
 			}
+			dlog.Debug(ctx, "WatchAgents sending update %v", names)
 			if err := stream.Send(resp); err != nil {
 				return err
 			}
@@ -386,6 +392,13 @@ func (m *service) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_W
 			for _, a := range agents {
 				lastSnap[a.PodIp] = a
 			}
+			names := make([]string, len(agents))
+			i := 0
+			for _, a := range agents {
+				names[i] = a.Name + "." + a.Namespace
+				i++
+			}
+			dlog.Debug(ctx, "WatchAgentsNS sending update %v", names)
 			resp := &rpc.AgentInfoSnapshot{
 				Agents: agents,
 			}
@@ -394,7 +407,7 @@ func (m *service) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_W
 			}
 		case <-sessionDone:
 			// Manager believes this session has ended.
-			dlog.Debug(ctx, "WatchAgents session cancelled")
+			dlog.Debug(ctx, "WatchAgentsNS session cancelled")
 			return nil
 		}
 	}
