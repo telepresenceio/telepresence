@@ -45,7 +45,7 @@ func (s *Server) updateRouterDNS(c context.Context, paths []string, dev vif.Devi
 	s.namespaces = namespaces
 	s.search = search
 	s.domainsLock.Unlock()
-	err := dev.SetDNS(c, s.config.RemoteIp, search)
+	err := dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, search)
 	s.flushDNS()
 	if err != nil {
 		return fmt.Errorf("failed to set DNS: %w", err)
