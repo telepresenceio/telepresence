@@ -7,6 +7,8 @@
 
 - Feature: Mapped namespaces are included in the output of the `telepresence status` command.
 
+- Feature: There's a new --address flag to the intercept command allowing users to set the target IP of the intercept.
+
 - Bugfix: The kubeconfig is made self-contained before running Telepresence daemon in a Docker container.
 
 - Bugfix: The client will no longer need cluster wide permissions when connected to a namespace scoped Traffic Manager.
