@@ -907,6 +907,9 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		},
 		ManagerNamespace: cfg.GetManagerNamespace(),
 	}
+	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster.MappedNamespaces) > 0 {
+		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
+	}
 	if s.rootDaemon != nil {
 		var err error
 		ret.DaemonStatus, err = s.rootDaemon.Status(c, &empty.Empty{})
