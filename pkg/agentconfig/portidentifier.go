@@ -20,7 +20,7 @@ func ValidatePort(s string) error {
 	_, err := ParseNumericPort(s)
 	if err == ErrNotInteger {
 		err = nil
-		if errs := validation.IsDNS1035Label(s); len(errs) > 0 {
+		if errs := validation.IsValidPortName(s); len(errs) > 0 {
 			err = fmt.Errorf(strings.Join(errs, " and "))
 		}
 	}
