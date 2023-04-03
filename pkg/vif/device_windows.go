@@ -237,7 +237,7 @@ func getGlobalSearchList() ([]string, error) {
 }
 
 func setGlobalSearchList(ctx context.Context, gss []string) error {
-	cmd := proc.CommandContext(ctx, "powershell.exe", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
+	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
 	_, err := proc.CaptureErr(ctx, cmd)
 	return err
 }
