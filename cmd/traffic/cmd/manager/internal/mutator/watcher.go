@@ -216,10 +216,10 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorC
 
 func NewWatcher(name string, namespaces ...string) *configWatcher {
 	return &configWatcher{
-		name:          name,
-		namespaces:    namespaces,
-		data:          make(map[string]map[string]string),
-		configUpdater: make(map[string]*configUpdater),
+		name:           name,
+		namespaces:     namespaces,
+		data:           make(map[string]map[string]string),
+		configUpdaters: make(map[string]*configUpdater),
 	}
 }
 
@@ -232,8 +232,8 @@ type configWatcher struct {
 	modCh      chan entry
 	delCh      chan entry
 
-	configUpdaterMapLock sync.RWMutex
-	configUpdater        map[string]*configUpdater
+	configUpdatersMapLock sync.RWMutex
+	configUpdaters        map[string]*configUpdater
 }
 
 type configUpdater struct {
@@ -357,7 +357,7 @@ func (c *configWatcher) Delete(ctx context.Context, name, namespace string) erro
 	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return fmt.Errorf("unable to get ConfigMap (delete) %s: %w", agentconfig.ConfigMap, err)
+			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
 		}
 		return nil
 	}
@@ -399,13 +399,13 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 		return nil
 	}
 
-	c.configUpdaterMapLock.Lock()
+	c.configUpdatersMapLock.Lock()
 	var cu *configUpdater
 
 	newGroup := false
-	if _, ok := c.configUpdater[ns]; !ok {
+	if _, ok := c.configUpdaters[ns]; !ok {
 		grp, _ := errgroup.WithContext(ctx)
-		c.configUpdater[ns] = &configUpdater{
+		c.configUpdaters[ns] = &configUpdater{
 			grp,
 			map[string]string{},
 			map[string]struct{}{},
@@ -413,14 +413,14 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 		newGroup = true
 	}
 
-	cu = c.configUpdater[ns]
+	cu = c.configUpdaters[ns]
 	cu.Config[ac.AgentName] = yml
 
 	if updateSnapshot {
 		cu.AddToSnapshot[ac.AgentName] = struct{}{}
 	}
 
-	c.configUpdaterMapLock.Unlock()
+	c.configUpdatersMapLock.Unlock()
 
 	if newGroup {
 		cu.Go(c.updateConfigMap(ctx, ns))
@@ -460,19 +460,19 @@ func (c *configWatcher) updateConfigMap(ctx context.Context, ns string) func() e
 		}
 
 		// Can't add / remove things to the map at this point.
-		c.configUpdaterMapLock.Lock()
+		c.configUpdatersMapLock.Lock()
 		// Finishes by deleting the key and then unlocking.
 		defer func() {
-			delete(c.configUpdater, ns)
-			c.configUpdaterMapLock.Unlock()
+			delete(c.configUpdaters, ns)
+			c.configUpdatersMapLock.Unlock()
 		}()
 
-		newConfigMapData := map[string]string{}
+		cmData := map[string]string{}
 
 		if nm, ok := c.data[ns]; ok {
-			newConfigMapData = copyMap(c.data[ns])
+			cmData = copyMap(nm)
 
-			for agentName, yml := range c.configUpdater[ns].Config {
+			for agentName, yml := range c.configUpdaters[ns].Config {
 				var currAc agentconfig.Sidecar
 				// Ensure that we're not about to overwrite a manually added config entry
 				if err = decode(yml, &currAc); err == nil && currAc.Manual {
@@ -485,9 +485,9 @@ func (c *configWatcher) updateConfigMap(ctx context.Context, ns string) func() e
 					continue
 				}
 
-				newConfigMapData[agentName] = yml
+				cmData[agentName] = yml
 
-				if _, updateSnapshotOK := c.configUpdater[ns].AddToSnapshot[agentName]; updateSnapshotOK {
+				if _, updateSnapshotOK := c.configUpdaters[ns].AddToSnapshot[agentName]; updateSnapshotOK {
 					c.Lock()
 					nm[agentName] = yml
 					c.Unlock()
@@ -497,12 +497,12 @@ func (c *configWatcher) updateConfigMap(ctx context.Context, ns string) func() e
 		}
 
 		if create {
-			cm.Data = newConfigMapData
+			cm.Data = cmData
 			dlog.Debugf(ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, ns)
 			_, err = api.Create(ctx, cm, meta.CreateOptions{})
 		} else {
 			dlog.Debugf(ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, ns)
-			cm.Data = newConfigMapData
+			cm.Data = cmData
 			_, err = api.Update(ctx, cm, meta.UpdateOptions{})
 		}
 

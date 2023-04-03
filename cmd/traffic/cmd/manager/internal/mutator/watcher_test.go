@@ -45,10 +45,10 @@ func (s *suiteConfigWatcher) SetupTest() {
 	s.coreV1ApiMock.EXPECT().ConfigMaps(gomock.Any()).Return(s.configMapApiMock).AnyTimes()
 
 	s.configWatcher = &configWatcher{
-		name:          "watcher",
-		namespaces:    []string{"ambassador"},
-		data:          make(map[string]map[string]string),
-		configUpdater: make(map[string]*configUpdater),
+		name:           "watcher",
+		namespaces:     []string{"ambassador"},
+		data:           make(map[string]map[string]string),
+		configUpdaters: make(map[string]*configUpdater),
 	}
 }
 
