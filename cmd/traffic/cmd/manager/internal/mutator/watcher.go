@@ -648,17 +648,7 @@ func (c *configWatcher) configsAffectedByWorkloads(ctx context.Context, nsData m
 }
 
 func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []*agentconfig.Sidecar {
-	c.RLock()
-	defer c.RUnlock()
 	ns := svc.Namespace
-	nsData, ok := c.data[ns]
-	if !ok || len(nsData) == 0 {
-		return nil
-	}
-
-	if isDelete {
-		return c.configsAffectedBySvcUID(ctx, nsData, svc.UID)
-	}
 
 	var wls []k8sapi.Workload
 	// Find workloads that the updated service is referencing.
@@ -674,6 +664,19 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 			wls = append(wls, stss...)
 		}
 	}
+
+	c.RLock()
+	defer c.RUnlock()
+	nsData, ok := c.data[ns]
+
+	if !ok || len(nsData) == 0 {
+		return nil
+	}
+
+	if isDelete {
+		return c.configsAffectedBySvcUID(ctx, nsData, svc.UID)
+	}
+
 	return c.configsAffectedByWorkloads(ctx, nsData, wls)
 }
 
