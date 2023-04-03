@@ -66,7 +66,7 @@ Launch the Telepresence ` + titleName + `:
     sudo telepresence Service
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), ProcessName+".log") + `
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), ProcessName+".log") + `
 to troubleshoot problems.
 `
 }
@@ -429,7 +429,7 @@ func run(cmd *cobra.Command, args []string) error {
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
 	// the socket/pipe to appear before it gives up.
-	grpcListener, err := socket.Listen(c, ProcessName, socket.DaemonName)
+	grpcListener, err := socket.Listen(c, ProcessName, socket.RootDaemonPath(c))
 	if err != nil {
 		return err
 	}

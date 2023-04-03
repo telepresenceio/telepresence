@@ -36,8 +36,10 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	kc := itest.KubeConfig(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(err)
-	cluster := cfg.Clusters["default"]
-	require.NotNil(s.T(), cluster, "unable to get default cluster from config")
+	ktx := cfg.Contexts[cfg.CurrentContext]
+	require.NotNil(ktx, "unable to get current context from config")
+	cluster := cfg.Clusters[ktx.Cluster]
+	require.NotNil(cluster, "unable to get %s cluster from config", ktx.Cluster)
 	ips, err := getClusterIPs(cluster)
 	require.NoError(err)
 
@@ -46,17 +48,26 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 
 	s.Eventually(func() bool {
 		defer itest.TelepresenceDisconnectOk(ctx)
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 
 		// The cluster's IP address will also be never proxied, so we gotta account for that.
 		neverProxiedCount := len(ips) + 1
-		stdout := itest.TelepresenceOk(ctx, "status")
+		stdout, _, err := itest.Telepresence(ctx, "status")
+		if err != nil {
+			return false
+		}
 		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets", neverProxiedCount)
 			return false
 		}
 
-		jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
+		jsonStdout, _, err := itest.Telepresence(ctx, "config", "view", "--output", "json")
+		if err != nil {
+			return false
+		}
 		var view client.SessionConfig
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 		if len(view.Routing.NeverProxy) != neverProxiedCount {
@@ -81,9 +92,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	// of rushing to the end of the file and remembering where we left off when we start looking
 	// for new lines.
 	var lines int64
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	rootLogName := filepath.Join(logDir, "daemon.log")
+	rootLogName := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
 	rootLog, err := os.Open(rootLogName)
 	require.NoError(err)
 	scn := bufio.NewScanner(rootLog)
@@ -100,7 +109,10 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 		itest.TelepresenceDisconnectOk(ctx)
 
 		rootLog, err := os.Open(rootLogName)
@@ -166,9 +178,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	// of rushing to the end of the file and remembering where we left off when we start looking
 	// for new lines.
 	var lines int64
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	logName := filepath.Join(logDir, "connector.log")
+	logName := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")
 	logF, err := os.Open(logName)
 	require.NoError(err)
 	scn := bufio.NewScanner(logF)
@@ -185,7 +195,10 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err := itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 		itest.TelepresenceDisconnectOk(ctx)
 
 		logF, err := os.Open(logName)

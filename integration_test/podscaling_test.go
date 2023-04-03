@@ -33,7 +33,10 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
 	assert.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
+		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list")
+		if err != nil {
+			return false
+		}
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "`+s.ServiceName()+`"`)
 		}
@@ -54,7 +57,10 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Verify that intercept becomes active
 	assert.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
+		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list")
+		if err != nil {
+			return false
+		}
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "ACTIVE"
 		}
@@ -123,7 +129,10 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	// Verify that intercept is still active
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `-` + s.AppNamespace() + `\s+State\s*: ([^\n]+)\n`))
 	assert.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
+		if err != nil {
+			return false
+		}
 		dlog.Debugf(ctx, "match %q in %q", rx.String(), stdout)
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "ACTIVE"

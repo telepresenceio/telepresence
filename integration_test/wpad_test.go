@@ -17,12 +17,8 @@ import (
 // Test_WpadNotForwarded tests that DNS request aren't forwarded
 // to the cluster.
 func (s *connectedSuite) Test_WpadNotForwarded() {
-	require := s.Require()
 	ctx := s.Context()
-
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	logFile := filepath.Join(logDir, "daemon.log")
+	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
 
 	tests := []struct {
 		qn      string

@@ -2,6 +2,8 @@ package filelocation
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,18 +13,14 @@ import (
 )
 
 func TestUser(t *testing.T) {
-	type pathResult struct {
-		Path string
-		Err  error
-	}
 	type testcase struct {
 		InputGOOS string
 		InputHOME string
 		InputEnv  map[string]string
 
-		ExpectedHomeDir   pathResult
-		ExpectedCacheDir  pathResult
-		ExpectedConfigDir pathResult
+		ExpectedHomeDir   string
+		ExpectedCacheDir  string
+		ExpectedConfigDir string
 	}
 	testcases := map[string]testcase{
 		"linux": {
@@ -30,9 +28,9 @@ func TestUser(t *testing.T) {
 			InputEnv: map[string]string{
 				"HOME": "/realhome",
 			},
-			ExpectedHomeDir:   pathResult{"/realhome", nil},
-			ExpectedCacheDir:  pathResult{"/realhome/.cache", nil},
-			ExpectedConfigDir: pathResult{"/realhome/.config", nil},
+			ExpectedHomeDir:   "/realhome",
+			ExpectedCacheDir:  "/realhome/.cache",
+			ExpectedConfigDir: "/realhome/.config",
 		},
 		"linux-withhome": {
 			InputGOOS: "linux",
@@ -40,9 +38,9 @@ func TestUser(t *testing.T) {
 			InputEnv: map[string]string{
 				"HOME": "/realhome",
 			},
-			ExpectedHomeDir:   pathResult{"/testhome", nil},
-			ExpectedCacheDir:  pathResult{"/testhome/.cache", nil},
-			ExpectedConfigDir: pathResult{"/testhome/.config", nil},
+			ExpectedHomeDir:   "/testhome",
+			ExpectedCacheDir:  "/testhome/.cache",
+			ExpectedConfigDir: "/testhome/.config",
 		},
 		"linux-xdg": {
 			InputGOOS: "linux",
@@ -51,9 +49,9 @@ func TestUser(t *testing.T) {
 				"XDG_CACHE_HOME":  "/realhome/xdg-cache",
 				"XDG_CONFIG_HOME": "/realhome/xdg-config",
 			},
-			ExpectedHomeDir:   pathResult{"/realhome", nil},
-			ExpectedCacheDir:  pathResult{"/realhome/xdg-cache", nil},
-			ExpectedConfigDir: pathResult{"/realhome/xdg-config", nil},
+			ExpectedHomeDir:   "/realhome",
+			ExpectedCacheDir:  "/realhome/xdg-cache",
+			ExpectedConfigDir: "/realhome/xdg-config",
 		},
 		"linux-xdg-withhome": {
 			InputGOOS: "linux",
@@ -63,18 +61,18 @@ func TestUser(t *testing.T) {
 				"XDG_CACHE_HOME":  "/realhome/xdg-config",
 				"XDG_CONFIG_HOME": "/realhome/xdg-config",
 			},
-			ExpectedHomeDir:   pathResult{"/testhome", nil},
-			ExpectedCacheDir:  pathResult{"/testhome/.cache", nil},
-			ExpectedConfigDir: pathResult{"/testhome/.config", nil},
+			ExpectedHomeDir:   "/testhome",
+			ExpectedCacheDir:  "/testhome/.cache",
+			ExpectedConfigDir: "/testhome/.config",
 		},
 		"darwin": {
 			InputGOOS: "darwin",
 			InputEnv: map[string]string{
 				"HOME": "/realhome",
 			},
-			ExpectedHomeDir:   pathResult{"/realhome", nil},
-			ExpectedCacheDir:  pathResult{"/realhome/Library/Caches", nil},
-			ExpectedConfigDir: pathResult{"/realhome/Library/Application Support", nil},
+			ExpectedHomeDir:   "/realhome",
+			ExpectedCacheDir:  "/realhome/Library/Caches",
+			ExpectedConfigDir: "/realhome/Library/Application Support",
 		},
 		"darwin-withhome": {
 			InputGOOS: "darwin",
@@ -82,15 +80,37 @@ func TestUser(t *testing.T) {
 			InputEnv: map[string]string{
 				"HOME": "/realhome",
 			},
-			ExpectedHomeDir:   pathResult{"/testhome", nil},
-			ExpectedCacheDir:  pathResult{"/testhome/Library/Caches", nil},
-			ExpectedConfigDir: pathResult{"/testhome/Library/Application Support", nil},
+			ExpectedHomeDir:   "/testhome",
+			ExpectedCacheDir:  "/testhome/Library/Caches",
+			ExpectedConfigDir: "/testhome/Library/Application Support",
 		},
 	}
 	origEnv := os.Environ()
 	for tcName, tcData := range testcases {
 		tcData := tcData
 		t.Run(tcName, func(t *testing.T) {
+			if runtime.GOOS == "windows" {
+				splitAndRejoin := func(path *string) {
+					if path != nil && *path != "" {
+						ps := strings.Split(*path, "/")
+						if ps[0] == "" {
+							ps[0] = "\\"
+						}
+						*path = filepath.Join(ps...)
+					}
+				}
+				splitAndRejoinEnv := func(env map[string]string) {
+					for k, v := range env {
+						splitAndRejoin(&v)
+						env[k] = v
+					}
+				}
+				splitAndRejoin(&tcData.InputHOME)
+				splitAndRejoin(&tcData.ExpectedHomeDir)
+				splitAndRejoin(&tcData.ExpectedCacheDir)
+				splitAndRejoin(&tcData.ExpectedConfigDir)
+				splitAndRejoinEnv(tcData.InputEnv)
+			}
 			ctx := dlog.NewTestContext(t, true)
 			defer func() {
 				os.Clearenv()
@@ -114,32 +134,15 @@ func TestUser(t *testing.T) {
 			}
 
 			// Then do...
-			actualHomePath, actualHomeErr := UserHomeDir(ctx)
-			actualCachePath, actualCacheErr := userCacheDir(ctx)
-			actualConfigPath, actualConfigErr := UserConfigDir(ctx)
+			actualHomePath := UserHomeDir(ctx)
+			actualCachePath := userCacheDir(ctx)
+			actualConfigPath := UserConfigDir(ctx)
 
 			// And expect...
 
-			assert.Equal(t, tcData.ExpectedHomeDir.Path, actualHomePath)
-			if tcData.ExpectedHomeDir.Err == nil {
-				assert.NoError(t, actualHomeErr)
-			} else {
-				assert.Equal(t, tcData.ExpectedHomeDir.Err.Error(), actualHomeErr.Error())
-			}
-
-			assert.Equal(t, tcData.ExpectedCacheDir.Path, actualCachePath)
-			if tcData.ExpectedCacheDir.Err == nil {
-				assert.NoError(t, actualCacheErr)
-			} else {
-				assert.Equal(t, tcData.ExpectedCacheDir.Err.Error(), actualCacheErr.Error())
-			}
-
-			assert.Equal(t, tcData.ExpectedConfigDir.Path, actualConfigPath)
-			if tcData.ExpectedConfigDir.Err == nil {
-				assert.NoError(t, actualConfigErr)
-			} else {
-				assert.Equal(t, tcData.ExpectedConfigDir.Err.Error(), actualConfigErr.Error())
-			}
+			assert.Equal(t, tcData.ExpectedHomeDir, actualHomePath)
+			assert.Equal(t, tcData.ExpectedCacheDir, actualCachePath)
+			assert.Equal(t, tcData.ExpectedConfigDir, actualConfigPath)
 		})
 	}
 }

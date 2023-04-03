@@ -47,6 +47,11 @@
    This will make all tests use that traffic-agent instead of the default
    which uses the same image as the traffic-manager.
 
+- `DEV_USERD_PROFILING_PORT` and `DEV_ROOTD_PROFILING_PORT` (optional) if
+  set, will cause the `telepresence connect` calls in the integration tests
+  to start daemons where pprof is enabled (see
+  [Profiling the daemons](#profiling_the_daemons) below).
+
 The above environment can optionally be provided in a `itest.yml` file
 that is placed adjacent to the normal `config.yml` file used to configure
 Telepresence. The `itest.yml` currently has only one single entry, the

@@ -867,8 +867,7 @@ func ReplaceConfig(ctx context.Context, config *Config) {
 
 // GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
 func GetConfigFile(c context.Context) string {
-	dir, _ := filelocation.AppUserConfigDir(c)
-	return filepath.Join(dir, ConfigFile)
+	return filepath.Join(filelocation.AppUserConfigDir(c), ConfigFile)
 }
 
 // GetDefaultConfig returns the default configuration settings.
@@ -917,12 +916,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		}
 	}()
 
-	var dirs []string
-	dirs, err = filelocation.AppSystemConfigDirs(c)
-	if err != nil {
-		return nil, err
-	}
-
+	dirs := filelocation.AppSystemConfigDirs(c)
 	dflt := GetDefaultConfig()
 	cfg = &dflt
 	readMerge := func(dir string) error {
@@ -954,13 +948,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 			return nil, err
 		}
 	}
-	appDir, err := filelocation.AppUserConfigDir(c)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
-		}
-		return nil, err
-	}
+	appDir := filelocation.AppUserConfigDir(c)
 	if err = readMerge(appDir); err != nil {
 		return nil, err
 	}

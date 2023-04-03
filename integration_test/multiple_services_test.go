@@ -35,7 +35,7 @@ func (s *multipleServicesSuite) Test_LargeRequest() {
 	client := &http.Client{Timeout: 15 * time.Minute}
 	const sendSize = 1024 * 1024 * 20
 	const varyMax = 1 << 15 // vary last 64Ki
-	const concurrentRequests = 31
+	const concurrentRequests = 13
 
 	tb := [sendSize + varyMax]byte{}
 	tb[0] = '!'

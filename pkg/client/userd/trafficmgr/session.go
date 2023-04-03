@@ -202,7 +202,7 @@ func NewSession(
 	rdRunning := userd.GetService(ctx).RootSessionInProcess()
 	if !rdRunning {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rdRunning, err = socket.IsRunning(ctx, socket.DaemonName)
+		rdRunning, err = socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
 		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
@@ -1186,7 +1186,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 		rd = rootSession
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = socket.Dial(ctx, socket.DaemonName,
+		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx),
 			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 		)

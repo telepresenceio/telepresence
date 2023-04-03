@@ -33,8 +33,8 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", jobname)
 
 	s.Eventually(func() bool {
-		stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
-		return strings.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
+		stdout, _, err = itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+		return err == nil && strings.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
 	}, 30*time.Second, 3*time.Second)
 
 	stdout = itest.TelepresenceOk(ctx, "helm", "uninstall", "-n", s.ManagerNamespace())

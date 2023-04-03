@@ -641,7 +641,7 @@ func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context
 	if s.rootSessionInProc {
 		return status.Error(codes.Unavailable, "root daemon is embedded")
 	}
-	conn, err := socket.Dial(ctx, socket.DaemonName)
+	conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx))
 	if err == nil {
 		defer conn.Close()
 		err = f(ctx, daemon.NewDaemonClient(conn))

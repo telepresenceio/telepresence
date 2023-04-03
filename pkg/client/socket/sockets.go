@@ -11,6 +11,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+// UserDaemonPath is the path used when communicating to the user daemon process.
+func UserDaemonPath(ctx context.Context) string {
+	return userDaemonPath(ctx)
+}
+
+// RootDaemonPath is the path used when communicating to the root daemon process.
+func RootDaemonPath(ctx context.Context) string {
+	return rootDaemonPath(ctx)
+}
+
 // Dial dials the given socket and returns the resulting connection.
 func Dial(ctx context.Context, socketName string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	return dial(ctx, socketName, opts...)
@@ -21,12 +31,12 @@ func Listen(ctx context.Context, processName, socketName string) (net.Listener, 
 	return listen(ctx, processName, socketName)
 }
 
-// RemoveSocket removes any representation of the socket from the filesystem.
+// Remove removes any representation of the socket from the filesystem.
 func Remove(listener net.Listener) error {
-	return remove(listener)
+	return os.Remove(listener.Addr().String())
 }
 
-// SocketExists returns true if a socket is found with the given name.
+// Exists returns true if a socket is found with the given name.
 func Exists(name string) (bool, error) {
 	return exists(name)
 }

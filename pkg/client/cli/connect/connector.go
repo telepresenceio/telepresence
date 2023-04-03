@@ -57,7 +57,7 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
 	}
 	if _, err = ud.Quit(ctx, &emptypb.Empty{}); err == nil || status.Code(err) == codes.Unavailable {
-		err = socket.WaitUntilVanishes("user daemon", socket.ConnectorName, 5*time.Second)
+		err = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 	}
 	if err != nil && status.Code(err) == codes.Unavailable {
 		if quitDaemons {
@@ -88,7 +88,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
-	conn, err := socket.Dial(ctx, socket.ConnectorName)
+	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err == nil {
 		if cr.Docker {
 			return nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
@@ -137,10 +137,10 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if err = proc.StartInBackground(false, args...); err != nil {
 		return nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 	}
-	if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {
+	if err = socket.WaitUntilAppears("connector", socket.UserDaemonPath(ctx), 10*time.Second); err != nil {
 		return nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
 	}
-	conn, err = socket.Dial(ctx, socket.ConnectorName)
+	conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err != nil {
 		return nil, err
 	}

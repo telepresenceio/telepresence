@@ -89,6 +89,8 @@ type cluster struct {
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
+	userdPProf       uint16
+	rootdPProf       uint16
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -131,6 +133,16 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s.registry = dos.Getenv(ctx, "DTEST_REGISTRY")
 	require.NoError(t, s.generalError)
 
+	if pp := dos.Getenv(ctx, "DEV_USERD_PROFILING_PORT"); pp != "" {
+		port, err := strconv.ParseUint(pp, 10, 16)
+		require.NoError(t, err)
+		s.userdPProf = uint16(port)
+	}
+	if pp := dos.Getenv(ctx, "DEV_ROOTD_PROFILING_PORT"); pp != "" {
+		port, err := strconv.ParseUint(pp, 10, 16)
+		require.NoError(t, err)
+		s.rootdPProf = uint16(port)
+	}
 	ctx = withGlobalHarness(ctx, &s)
 	if s.prePushed {
 		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
@@ -173,7 +185,7 @@ func (s *cluster) ensureQuit(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that the daemon-socket is non-existent.
-	_ = rmAsRoot(socket.DaemonName)
+	_ = rmAsRoot(socket.RootDaemonPath(ctx))
 }
 
 func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
@@ -412,7 +424,6 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	ctx = dcontext.WithoutCancel(ctx)
 
 	present := struct{}{}
-	logDir, _ := filelocation.AppUserLogDir(ctx)
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
@@ -421,7 +432,8 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
+		logFile, err := os.Create(
+			filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
@@ -722,30 +734,32 @@ func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	t := getT(ctx)
 	t.Helper()
-	configDir, err := filelocation.AppUserConfigDir(ctx)
-	require.NoError(t, err)
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(t, err)
 
 	var stdout, stderr strings.Builder
 	ctx = WithEnv(ctx, map[string]string{
-		"DEV_TELEPRESENCE_CONFIG_DIR": configDir,
-		"DEV_TELEPRESENCE_LOG_DIR":    logDir,
+		"DEV_TELEPRESENCE_CONFIG_DIR": filelocation.AppUserConfigDir(ctx),
+		"DEV_TELEPRESENCE_LOG_DIR":    filelocation.AppUserLogDir(ctx),
 	})
 
+	gh := GetGlobalHarness(ctx)
 	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
+		rest := args[1:]
+		args = append(make([]string, 0, len(args)+3), args[0])
 		if user := GetUser(ctx); user != "default" {
-			na := make([]string, len(args)+2)
-			na[0] = "--as"
-			na[1] = "system:serviceaccount:" + user
-			copy(na[2:], args)
-			args = na
+			args = append(args, "--as", "system:serviceaccount:"+user)
 		}
+		if gh.userdPProf > 0 {
+			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.userdPProf)))
+		}
+		if gh.rootdPProf > 0 {
+			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.rootdPProf)))
+		}
+		args = append(args, rest...)
 	}
 	if UseDocker(ctx) {
 		args = append([]string{"--docker"}, args...)
 	}
-	cmd := Command(ctx, GetGlobalHarness(ctx).executable, args...)
+	cmd := Command(ctx, gh.executable, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	return cmd
@@ -989,7 +1003,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 		return true
 	},
 		time.Minute,   // waitFor
-		3*time.Second, // polling interval
+		5*time.Second, // polling interval
 		`body of %q equals %q`, "http://"+svc, expectedOutput,
 	)
 }

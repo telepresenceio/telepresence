@@ -46,7 +46,7 @@ Launch the Telepresence ` + titleName + `:
     telepresence connect
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), userd.ProcessName+".log") + `
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), userd.ProcessName+".log") + `
 to troubleshoot problems.
 `
 }
@@ -164,7 +164,7 @@ func Command() *cobra.Command {
 	}
 	flags := c.Flags()
 	flags.String(nameFlag, userd.ProcessName, "Daemon name")
-	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.ConnectorName)
+	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.UserDaemonPath(context.Background()))
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
 	return c
@@ -369,6 +369,18 @@ func run(cmd *cobra.Command, _ []string) error {
 			}
 		}()
 	}
+
+	name, _ := flags.GetString(nameFlag)
+	sessionName := "session"
+	if di := strings.IndexByte(name, '-'); di > 0 {
+		sessionName = name[di+1:]
+		name = name[:di]
+	}
+	c = dgroup.WithGoroutineName(c, "/"+name)
+	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
+	if err != nil {
+		return err
+	}
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
 	var daemonAddress *net.TCPAddr
 	if addr, _ := flags.GetString(addressFlag); addr != "" {
@@ -381,24 +393,15 @@ func run(cmd *cobra.Command, _ []string) error {
 			_ = grpcListener.Close()
 		}()
 	} else {
-		if grpcListener, err = socket.Listen(c, userd.ProcessName, socket.ConnectorName); err != nil {
+		socketPath := socket.UserDaemonPath(c)
+		dlog.Infof(c, "Starting socket listener for %s", socketPath)
+		if grpcListener, err = socket.Listen(c, userd.ProcessName, socketPath); err != nil {
+			dlog.Errorf(c, "socket listener for %s failed: %v", socketPath, err)
 			return err
 		}
 		defer func() {
 			_ = socket.Remove(grpcListener)
 		}()
-	}
-
-	name, _ := flags.GetString(nameFlag)
-	sessionName := "session"
-	if di := strings.IndexByte(name, '-'); di > 0 {
-		sessionName = name[di+1:]
-		name = name[:di]
-	}
-	c = dgroup.WithGoroutineName(c, "/"+name)
-	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
-	if err != nil {
-		return err
 	}
 	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 

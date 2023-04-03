@@ -109,7 +109,7 @@ func (*traceCollector) launchTraceWriter(ctx context.Context, destFile string) (
 }
 
 func (c *traceCollector) userdTraces(ctx context.Context, tCh chan<- []byte) error {
-	userdConn, err := socket.Dial(ctx, socket.ConnectorName, grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
+	userdConn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (c *traceCollector) userdTraces(ctx context.Context, tCh chan<- []byte) err
 }
 
 func (c *traceCollector) rootdTraces(ctx context.Context, tCh chan<- []byte) error {
-	dConn, err := socket.Dial(ctx, socket.DaemonName, grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
+	dConn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
 	if err != nil {
 		return err
 	}

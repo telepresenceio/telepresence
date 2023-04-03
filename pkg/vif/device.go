@@ -36,7 +36,7 @@ type Device interface {
 	Name() string
 	AddSubnet(context.Context, *net.IPNet) error
 	RemoveSubnet(context.Context, *net.IPNet) error
-	SetDNS(context.Context, net.IP, []string) (err error)
+	SetDNS(context.Context, string, net.IP, []string) (err error)
 }
 
 const defaultDevMtu = 1500
@@ -99,8 +99,8 @@ func (d *device) Name() string {
 }
 
 // SetDNS sets the DNS configuration for the device on the windows platform.
-func (d *device) SetDNS(ctx context.Context, server net.IP, domains []string) (err error) {
-	return d.dev.setDNS(ctx, server, domains)
+func (d *device) SetDNS(ctx context.Context, clusterDomain string, server net.IP, domains []string) (err error) {
+	return d.dev.setDNS(ctx, clusterDomain, server, domains)
 }
 
 func (d *device) SetMTU(mtu int) error {

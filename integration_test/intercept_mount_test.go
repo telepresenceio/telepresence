@@ -62,8 +62,8 @@ func (s *interceptMountSuite) TearDownSuite() {
 	itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
 	s.cancelLocal()
 	s.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return err == nil && !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
 	if goRuntime.GOOS != "windows" && goRuntime.GOOS != "darwin" {

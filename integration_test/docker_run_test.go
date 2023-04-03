@@ -38,8 +38,8 @@ func (s *singleServiceSuite) Test_DockerRun() {
 
 	assertInterceptResponse := func(ctx context.Context) {
 		s.Eventually(func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-			return strings.Contains(stdout, svc+": intercepted")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		}, 30*time.Second, 3*time.Second)
 
 		// Response contains env variables TELEPRESENCE_CONTAINER and TELEPRESENCE_INTERCEPT_ID
@@ -63,8 +63,8 @@ func (s *singleServiceSuite) Test_DockerRun() {
 
 	assertNotIntercepted := func(ctx context.Context) {
 		s.Eventually(func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-			return !strings.Contains(stdout, svc+": intercepted")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			return err == nil && !strings.Contains(stdout, svc+": intercepted")
 		}, 10*time.Second, 2*time.Second)
 	}
 
