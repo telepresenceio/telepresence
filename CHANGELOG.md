@@ -11,6 +11,8 @@
 
 - Bugfix: DNS on windows is more reliable and performant.
 
+- Bugfix: The agent is now correctly injected even with a high number of deployment starting at the same time.
+
 - Bugfix: The kubeconfig is made self-contained before running Telepresence daemon in a Docker container.
 
 - Bugfix: The client will no longer need cluster wide permissions when connected to a namespace scoped Traffic Manager.
