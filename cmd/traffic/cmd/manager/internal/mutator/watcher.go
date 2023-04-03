@@ -6,10 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -17,8 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
-
-	"github.com/google/go-cmp/cmp"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -216,9 +216,10 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorC
 
 func NewWatcher(name string, namespaces ...string) *configWatcher {
 	return &configWatcher{
-		name:       name,
-		namespaces: namespaces,
-		data:       make(map[string]map[string]string),
+		name:          name,
+		namespaces:    namespaces,
+		data:          make(map[string]map[string]string),
+		configUpdater: make(map[string]*configUpdater),
 	}
 }
 
@@ -230,6 +231,14 @@ type configWatcher struct {
 	data       map[string]map[string]string
 	modCh      chan entry
 	delCh      chan entry
+
+	configUpdaterMapLock sync.RWMutex
+	configUpdater        map[string]*configUpdater
+}
+
+type configUpdater struct {
+	*errgroup.Group
+	Config map[string]string
 }
 
 type entry struct {
@@ -347,7 +356,7 @@ func (c *configWatcher) Delete(ctx context.Context, name, namespace string) erro
 	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
+			return fmt.Errorf("unable to get ConfigMap (delete) %s: %w", agentconfig.ConfigMap, err)
 		}
 		return nil
 	}
@@ -389,66 +398,110 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 		return nil
 	}
 
-	create := false
-	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
-	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
-		}
-		create = true
-	} else {
-		// Ensure that we're not about to overwrite a manually added config entry
-		if currentYml, ok := cm.Data[ac.AgentName]; ok {
-			var currAc agentconfig.Sidecar
-			if err = decode(currentYml, &currAc); err == nil && currAc.Manual {
-				dlog.Warnf(ctx, "avoided an attempt to overwrite manually added config entry for %s.%s", ac.AgentName, ns)
-				return nil
+	if updateSnapshot {
+		c.configUpdaterMapLock.Lock()
+		var cu *configUpdater
+
+		newGroup := false
+		if _, ok := c.configUpdater[ns]; !ok {
+			grp, _ := errgroup.WithContext(ctx)
+			c.configUpdater[ns] = &configUpdater{
+				grp,
+				map[string]string{},
 			}
+			newGroup = true
 		}
-		if cm.Data == nil {
+
+		cu = c.configUpdater[ns]
+		cu.Config[ac.AgentName] = yml
+		c.configUpdaterMapLock.Unlock()
+
+		if newGroup {
+			cu.Go(c.updateConfigMap(ctx, ns))
+		}
+
+		return cu.Wait()
+	}
+
+	return nil
+}
+
+func (c *configWatcher) updateConfigMap(ctx context.Context, ns string) func() error {
+	return func() error {
+		api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
+
+		create := false
+		cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
+		if err != nil {
+			if !errors.IsNotFound(err) {
+				return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
+			}
+			create = true
+		}
+
+		if !create && cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
-		if cm.Data[ac.AgentName] == yml {
-			// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
-			return nil
-		}
-	}
 
-	if updateSnapshot {
+		// Can't add / remove things to the map at this point.
+		c.configUpdaterMapLock.Lock()
+		// Finishes by deleting the key and then unlocking.
+		defer func() {
+			delete(c.configUpdater, ns)
+			c.configUpdaterMapLock.Unlock()
+		}()
+
 		c.Lock()
 		if nm, ok := c.data[ns]; ok {
-			nm[ac.AgentName] = yml
-		}
-		c.Unlock()
-	}
+			for agentName, yml := range c.configUpdater[ns].Config {
+				var currAc agentconfig.Sidecar
+				// Ensure that we're not about to overwrite a manually added config entry
+				if err = decode(yml, &currAc); err == nil && currAc.Manual {
+					dlog.Warnf(ctx, "avoided an attempt to overwrite manually added config entry for %s.%s", agentName, ns)
+					continue
+				}
 
-	if create {
-		cm = &core.ConfigMap{
-			TypeMeta: meta.TypeMeta{
-				Kind:       "ConfigMap",
-				APIVersion: "v1",
-			},
-			ObjectMeta: meta.ObjectMeta{
-				Name:      agentconfig.ConfigMap,
-				Namespace: ns,
-			},
-			Data: map[string]string{
-				ac.AgentName: yml,
-			},
+				// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
+				if cm.Data[agentName] == yml {
+					continue
+				}
+
+				nm[agentName] = yml
+			}
 		}
-		dlog.Debugf(ctx, "Creating new ConfigMap %s.%s with %s", agentconfig.ConfigMap, ns, ac.AgentName)
-		_, err = api.Create(ctx, cm, meta.CreateOptions{})
-	} else {
-		if _, ok := cm.Data[ac.AgentName]; ok {
-			dlog.Debugf(ctx, "Updating %s in ConfigMap %s.%s", ac.AgentName, agentconfig.ConfigMap, ns)
+		data := copyMap(c.data[ns])
+		c.Unlock()
+
+		if create {
+			cm = &core.ConfigMap{
+				TypeMeta: meta.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: meta.ObjectMeta{
+					Name:      agentconfig.ConfigMap,
+					Namespace: ns,
+				},
+				Data: data,
+			}
+			dlog.Debugf(ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, ns)
+			_, err = api.Create(ctx, cm, meta.CreateOptions{})
 		} else {
-			dlog.Debugf(ctx, "Adding %s to ConfigMap %s.%s", ac.AgentName, agentconfig.ConfigMap, ns)
+			dlog.Debugf(ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, ns)
+			cm.Data = data
+			_, err = api.Update(ctx, cm, meta.UpdateOptions{})
 		}
-		cm.Data[ac.AgentName] = yml
-		_, err = api.Update(ctx, cm, meta.UpdateOptions{})
+
+		return err
 	}
-	return err
+}
+
+func copyMap(m map[string]string) map[string]string {
+	mapCopy := make(map[string]string, len(m))
+	for k, v := range m {
+		mapCopy[k] = v
+	}
+	return mapCopy
 }
 
 func whereWeWatch(ns string) string {
