@@ -690,6 +690,8 @@ func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.Cluste
 	// This is less precise than if we could check for our own GRPC, since /healthz is a common enough health check path,
 	// but hopefully the server on the other end isn't configured to respond to the hostname "agent-injector" if it isn't the agent-injector.
 	if info.InjectorSvcIp == nil {
+		dlog.Debugf(ctx, "No injector service IP given; usually this is because the traffic-manager is older than the telepresence binary."+
+			"Connectivity check for services set to pass.")
 		return true
 	}
 	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
