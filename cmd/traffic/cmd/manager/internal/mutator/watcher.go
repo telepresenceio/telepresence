@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -484,7 +485,7 @@ func (c *configUpdater) updateConfigMap() error {
 	cmData := map[string]string{}
 
 	if nm, ok := c.cw.data[c.namespace]; ok {
-		cmData = copyMap(nm)
+		cmData = maps.Copy(nm)
 
 		for agentName, yml := range c.cw.configUpdaters[c.namespace].Config {
 			var currAc agentconfig.Sidecar
@@ -520,14 +521,6 @@ func (c *configUpdater) updateConfigMap() error {
 	}
 
 	return err
-}
-
-func copyMap(m map[string]string) map[string]string {
-	mapCopy := make(map[string]string, len(m))
-	for k, v := range m {
-		mapCopy[k] = v
-	}
-	return mapCopy
 }
 
 func whereWeWatch(ns string) string {
