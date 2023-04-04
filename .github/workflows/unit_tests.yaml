@@ -84,7 +84,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v2
         with:
-          go-version: '~1.19.6'
+          go-version: '~1.20.3'
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
