@@ -394,23 +394,39 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 		return nil
 	}
 
-	c.configUpdatersLock.Lock()
 	var cu *configUpdater
 
 	newGroup := false
-	if _, ok := c.configUpdaters[ns]; !ok {
-		c.configUpdaters[ns] = createConfigUpdater(ctx, c, ns)
-		newGroup = true
+
+	for {
+		// Check if the group is in the pool.
+		c.configUpdatersLock.Lock()
+		if _, ok := c.configUpdaters[ns]; !ok {
+			cu = createConfigUpdater(ctx, c, ns)
+			c.configUpdaters[ns] = cu
+			newGroup = true
+		} else {
+			cu = c.configUpdaters[ns]
+		}
+		c.configUpdatersLock.Unlock()
+
+		cu.Lock()
+		// If the config updater already has updated the config map, this flag will be true, so drop it.
+		if cu.Updated {
+			cu.Unlock()
+			continue
+		}
+
+		cu.Config[ac.AgentName] = yml
+
+		if updateSnapshot {
+			cu.AddToSnapshot(ac.AgentName)
+		}
+
+		cu.Unlock()
+
+		break
 	}
-
-	cu = c.configUpdaters[ns]
-	cu.Config[ac.AgentName] = yml
-
-	if updateSnapshot {
-		cu.AddToSnapshot(ac.AgentName)
-	}
-
-	c.configUpdatersLock.Unlock()
 
 	if newGroup {
 		cu.Go(cu.updateConfigMap)
@@ -422,23 +438,31 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 func createConfigUpdater(ctx context.Context, configWatcher *configWatcher, namespace string) *configUpdater {
 	grp, grpCtx := errgroup.WithContext(ctx)
 	return &configUpdater{
-		Group:         grp,
-		cw:            configWatcher,
+		Group: grp,
+		Mutex: &sync.Mutex{},
+		cw:    configWatcher,
+
 		ctx:           grpCtx,
 		namespace:     namespace,
-		Config:        map[string]string{},
 		addToSnapshot: map[string]struct{}{},
+
+		Config:  map[string]string{},
+		Updated: false,
 	}
 }
 
 type configUpdater struct {
 	*errgroup.Group
+	*sync.Mutex
+
 	cw *configWatcher
 
 	ctx           context.Context
 	namespace     string
-	Config        map[string]string
 	addToSnapshot map[string]struct{}
+
+	Config  map[string]string
+	Updated bool
 }
 
 func (c *configUpdater) AddToSnapshot(agentName string) {
@@ -446,9 +470,17 @@ func (c *configUpdater) AddToSnapshot(agentName string) {
 }
 
 func (c *configUpdater) updateConfigMap() error {
+	// Any other update for this namespace will have to start a new group at this point.
+	defer func() {
+		c.cw.configUpdatersLock.Lock()
+		delete(c.cw.configUpdaters, c.namespace)
+		c.cw.configUpdatersLock.Unlock()
+	}()
+
 	api := k8sapi.GetK8sInterface(c.ctx).CoreV1().ConfigMaps(c.namespace)
 
 	create := false
+
 	cm, err := api.Get(c.ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -474,22 +506,20 @@ func (c *configUpdater) updateConfigMap() error {
 		cm.Data = make(map[string]string)
 	}
 
-	// Can't add / remove things to the map at this point.
-	c.cw.configUpdatersLock.Lock()
-	// Finishes by deleting the key and then unlocking.
-	defer func() {
-		delete(c.cw.configUpdaters, c.namespace)
-		c.cw.configUpdatersLock.Unlock()
-	}()
-
 	cmData := map[string]string{}
+
+	c.Lock() // Lock the config updater to avoid any addition to c.Config.
+	defer func() {
+		c.Updated = true
+		c.Unlock()
+	}()
 
 	if nm, ok := c.cw.data[c.namespace]; ok {
 		cmData = maps.Copy(nm)
 
-		for agentName, yml := range c.cw.configUpdaters[c.namespace].Config {
+		for agentName, yml := range c.Config {
 			var currAc agentconfig.Sidecar
-			// Ensure that we're not about to overwrite a manually added Config entry
+			// Ensure that we're not about to overwrite a manually added config entry
 			if err = decode(yml, &currAc); err == nil && currAc.Manual {
 				dlog.Warnf(c.ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", agentName, c.namespace)
 				continue
@@ -502,7 +532,7 @@ func (c *configUpdater) updateConfigMap() error {
 
 			cmData[agentName] = yml
 
-			if _, updateSnapshotOK := c.cw.configUpdaters[c.namespace].addToSnapshot[agentName]; updateSnapshotOK {
+			if _, updateSnapshotOK := c.addToSnapshot[agentName]; updateSnapshotOK {
 				c.cw.Lock()
 				nm[agentName] = yml
 				c.cw.Unlock()

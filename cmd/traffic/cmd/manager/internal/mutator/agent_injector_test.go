@@ -1719,7 +1719,6 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admissi
 func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc *agentmap.GeneratorConfig) (*agentconfig.Sidecar, error) {
 	workloadCache := make(map[string]k8sapi.Workload, 0)
 	wl, err := agentmap.FindOwnerWorkload(ctx, workloadCache, k8sapi.Pod(pod))
-
 	if err != nil {
 		return nil, err
 	}
