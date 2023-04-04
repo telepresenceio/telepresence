@@ -9,6 +9,8 @@
 
 - Feature: There's a new --address flag to the intercept command allowing users to set the target IP of the intercept.
 
+- Bugfix: The Traffic Manager uses a fail-proof way to determine the cluster domain.
+
 - Bugfix: DNS on windows is more reliable and performant.
 
 - Bugfix: The kubeconfig is made self-contained before running Telepresence daemon in a Docker container.
