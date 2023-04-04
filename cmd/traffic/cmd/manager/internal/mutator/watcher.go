@@ -232,14 +232,8 @@ type configWatcher struct {
 	modCh      chan entry
 	delCh      chan entry
 
-	configUpdatersMapLock sync.RWMutex
-	configUpdaters        map[string]*configUpdater
-}
-
-type configUpdater struct {
-	*errgroup.Group
-	Config        map[string]string
-	AddToSnapshot map[string]struct{}
+	configUpdatersLock sync.RWMutex
+	configUpdaters     map[string]*configUpdater
 }
 
 type entry struct {
@@ -399,17 +393,12 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 		return nil
 	}
 
-	c.configUpdatersMapLock.Lock()
+	c.configUpdatersLock.Lock()
 	var cu *configUpdater
 
 	newGroup := false
 	if _, ok := c.configUpdaters[ns]; !ok {
-		grp, _ := errgroup.WithContext(ctx)
-		c.configUpdaters[ns] = &configUpdater{
-			grp,
-			map[string]string{},
-			map[string]struct{}{},
-		}
+		c.configUpdaters[ns] = createConfigUpdater(ctx, c, ns)
 		newGroup = true
 	}
 
@@ -417,97 +406,120 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 	cu.Config[ac.AgentName] = yml
 
 	if updateSnapshot {
-		cu.AddToSnapshot[ac.AgentName] = struct{}{}
+		cu.AddToSnapshot(ac.AgentName)
 	}
 
-	c.configUpdatersMapLock.Unlock()
+	c.configUpdatersLock.Unlock()
 
 	if newGroup {
-		cu.Go(c.updateConfigMap(ctx, ns))
+		cu.Go(cu.updateConfigMap)
 	}
 
 	return cu.Wait()
 }
 
-func (c *configWatcher) updateConfigMap(ctx context.Context, ns string) func() error {
-	return func() error {
-		api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
-
-		create := false
-		cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
-			}
-			create = true
-		}
-
-		if create {
-			cm = &core.ConfigMap{
-				TypeMeta: meta.TypeMeta{
-					Kind:       "ConfigMap",
-					APIVersion: "v1",
-				},
-				ObjectMeta: meta.ObjectMeta{
-					Name:      agentconfig.ConfigMap,
-					Namespace: ns,
-				},
-			}
-		}
-
-		if cm.Data == nil {
-			cm.Data = make(map[string]string)
-		}
-
-		// Can't add / remove things to the map at this point.
-		c.configUpdatersMapLock.Lock()
-		// Finishes by deleting the key and then unlocking.
-		defer func() {
-			delete(c.configUpdaters, ns)
-			c.configUpdatersMapLock.Unlock()
-		}()
-
-		cmData := map[string]string{}
-
-		if nm, ok := c.data[ns]; ok {
-			cmData = copyMap(nm)
-
-			for agentName, yml := range c.configUpdaters[ns].Config {
-				var currAc agentconfig.Sidecar
-				// Ensure that we're not about to overwrite a manually added config entry
-				if err = decode(yml, &currAc); err == nil && currAc.Manual {
-					dlog.Warnf(ctx, "avoided an attempt to overwrite manually added config entry for %s.%s", agentName, ns)
-					continue
-				}
-
-				// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
-				if cm.Data[agentName] == yml {
-					continue
-				}
-
-				cmData[agentName] = yml
-
-				if _, updateSnapshotOK := c.configUpdaters[ns].AddToSnapshot[agentName]; updateSnapshotOK {
-					c.Lock()
-					nm[agentName] = yml
-					c.Unlock()
-				}
-
-			}
-		}
-
-		if create {
-			cm.Data = cmData
-			dlog.Debugf(ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, ns)
-			_, err = api.Create(ctx, cm, meta.CreateOptions{})
-		} else {
-			dlog.Debugf(ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, ns)
-			cm.Data = cmData
-			_, err = api.Update(ctx, cm, meta.UpdateOptions{})
-		}
-
-		return err
+func createConfigUpdater(ctx context.Context, configWatcher *configWatcher, namespace string) *configUpdater {
+	grp, grpCtx := errgroup.WithContext(ctx)
+	return &configUpdater{
+		Group:         grp,
+		cw:            configWatcher,
+		ctx:           grpCtx,
+		namespace:     namespace,
+		Config:        map[string]string{},
+		addToSnapshot: map[string]struct{}{},
 	}
+}
+
+type configUpdater struct {
+	*errgroup.Group
+	cw *configWatcher
+
+	ctx           context.Context
+	namespace     string
+	Config        map[string]string
+	addToSnapshot map[string]struct{}
+}
+
+func (c *configUpdater) AddToSnapshot(agentName string) {
+	c.addToSnapshot[agentName] = struct{}{}
+}
+
+func (c *configUpdater) updateConfigMap() error {
+	api := k8sapi.GetK8sInterface(c.ctx).CoreV1().ConfigMaps(c.namespace)
+
+	create := false
+	cm, err := api.Get(c.ctx, agentconfig.ConfigMap, meta.GetOptions{})
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
+		}
+		create = true
+	}
+
+	if create {
+		cm = &core.ConfigMap{
+			TypeMeta: meta.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: "v1",
+			},
+			ObjectMeta: meta.ObjectMeta{
+				Name:      agentconfig.ConfigMap,
+				Namespace: c.namespace,
+			},
+		}
+	}
+
+	if cm.Data == nil {
+		cm.Data = make(map[string]string)
+	}
+
+	// Can't add / remove things to the map at this point.
+	c.cw.configUpdatersLock.Lock()
+	// Finishes by deleting the key and then unlocking.
+	defer func() {
+		delete(c.cw.configUpdaters, c.namespace)
+		c.cw.configUpdatersLock.Unlock()
+	}()
+
+	cmData := map[string]string{}
+
+	if nm, ok := c.cw.data[c.namespace]; ok {
+		cmData = copyMap(nm)
+
+		for agentName, yml := range c.cw.configUpdaters[c.namespace].Config {
+			var currAc agentconfig.Sidecar
+			// Ensure that we're not about to overwrite a manually added Config entry
+			if err = decode(yml, &currAc); err == nil && currAc.Manual {
+				dlog.Warnf(c.ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", agentName, c.namespace)
+				continue
+			}
+
+			// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
+			if cm.Data[agentName] == yml {
+				continue
+			}
+
+			cmData[agentName] = yml
+
+			if _, updateSnapshotOK := c.cw.configUpdaters[c.namespace].addToSnapshot[agentName]; updateSnapshotOK {
+				c.cw.Lock()
+				nm[agentName] = yml
+				c.cw.Unlock()
+			}
+		}
+	}
+
+	if create {
+		cm.Data = cmData
+		dlog.Debugf(c.ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
+		_, err = api.Create(c.ctx, cm, meta.CreateOptions{})
+	} else {
+		dlog.Debugf(c.ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
+		cm.Data = cmData
+		_, err = api.Update(c.ctx, cm, meta.UpdateOptions{})
+	}
+
+	return err
 }
 
 func copyMap(m map[string]string) map[string]string {

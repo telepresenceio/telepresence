@@ -101,7 +101,7 @@ func (s *suiteConfigWatcher) TestStoreForExistingConfigMap() {
 		},
 	}
 
-	s.configMapApiMock.EXPECT().Get(ctx, agentconfig.ConfigMap, meta.GetOptions{}).Return(&v1.ConfigMap{
+	s.configMapApiMock.EXPECT().Get(gomock.Any(), agentconfig.ConfigMap, meta.GetOptions{}).Return(&v1.ConfigMap{
 		ObjectMeta: meta.ObjectMeta{
 			Name:      agentconfig.ConfigMap,
 			Namespace: namespace,
@@ -140,7 +140,7 @@ func (s *suiteConfigWatcher) TestStoreForNewConfigMapNoSnapshotUpdate() {
 	rawSidecarConfig, _ := yaml.Marshal(sidecarConfig)
 
 	s.configMapApiMock.EXPECT().
-		Get(ctx, agentconfig.ConfigMap, meta.GetOptions{}).
+		Get(gomock.Any(), agentconfig.ConfigMap, meta.GetOptions{}).
 		Return(nil, errors.NewNotFound(v1.Resource("configmap"), agentconfig.ConfigMap))
 
 	s.configMapApiMock.EXPECT().
@@ -184,7 +184,7 @@ func (s *suiteConfigWatcher) TestStoreErrGroupBuffer() {
 	}
 
 	s.configMapApiMock.EXPECT().
-		Get(ctx, agentconfig.ConfigMap, meta.GetOptions{}).
+		Get(gomock.Any(), agentconfig.ConfigMap, meta.GetOptions{}).
 		DoAndReturn(func(ctx context.Context, name string, opts meta.GetOptions) (*v1.ConfigMap, error) {
 			time.Sleep(50 * time.Millisecond)
 			return nil, errors.NewNotFound(v1.Resource("configmap"), agentconfig.ConfigMap)
