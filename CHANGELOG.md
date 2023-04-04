@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.12.2 (TBD)
+### 2.12.2 (April 4, 2023)
 
 - Security: Update golang to 1.20.3 to address CVE-2023-24534, CVE-2023-24536, CVE-2023-24537, CVE-2023-24538
 
