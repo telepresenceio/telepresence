@@ -3,7 +3,6 @@ package integration_test
 import (
 	"fmt"
 
-	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -23,8 +22,12 @@ type managerGRPCSuite struct {
 	si     *manager.SessionInfo
 }
 
+func (m *managerGRPCSuite) SuiteName() string {
+	return "ManagerGRPC"
+}
+
 func init() {
-	itest.AddConnectedSuite("", func(h itest.NamespacePair) suite.TestingSuite {
+	itest.AddConnectedSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &managerGRPCSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
 }
@@ -33,7 +36,7 @@ func (m *managerGRPCSuite) SetupSuite() {
 	m.Suite.SetupSuite()
 
 	ctx := m.Context()
-	ctx, k8sCluster, err := m.GetK8SCluster(ctx, "default", m.ManagerNamespace())
+	ctx, k8sCluster, err := m.GetK8SCluster(ctx, "", m.ManagerNamespace())
 	m.Require().NoError(err)
 
 	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, k8sCluster.RestConfig, k8sapi.GetK8sInterface(ctx))

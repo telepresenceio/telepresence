@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/blang/semver"
 	corev1 "k8s.io/api/core/v1"
@@ -93,17 +94,6 @@ func NewInfo(ctx context.Context) Info {
 			oi.clusterID, err)
 	}
 
-	apiSvc := "kubernetes.default"
-	var clusterDomain string
-	if cn, err := net.LookupCNAME(apiSvc); err == nil && strings.HasSuffix(cn, apiSvc+".svc.") {
-		clusterDomain = cn[len(apiSvc)+5:]
-	}
-	if clusterDomain == "" {
-		dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s: %v"`, err, apiSvc)
-		clusterDomain = "cluster.local."
-	}
-	dlog.Infof(ctx, "Using cluster domain %q", clusterDomain)
-
 	// make an attempt to create a service with ClusterIP that is out of range and then
 	// check the error message for the correct range as suggested tin the second answer here:
 	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
@@ -185,6 +175,8 @@ func NewInfo(ctx context.Context) Info {
 		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(sn)
 	}
 
+	clusterDomain := getClusterDomain(ctx, oi.InjectorSvcIp, env)
+	dlog.Infof(ctx, "Using cluster domain %q", clusterDomain)
 	oi.Dns = &rpc.DNS{
 		IncludeSuffixes: env.ClientDnsIncludeSuffixes,
 		ExcludeSuffixes: env.ClientDnsExcludeSuffixes,
@@ -218,6 +210,30 @@ func NewInfo(ctx context.Context) Info {
 		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
 	}
 	return &oi
+}
+
+func getClusterDomain(ctx context.Context, svcIp net.IP, env *managerutil.Env) string {
+	desiredMatch := env.AgentInjectorName + "." + env.ManagerNamespace + ".svc."
+	addr := svcIp.String()
+
+	for retry := 0; retry <= 2; retry++ {
+		if retry > 0 {
+			dlog.Debugf(ctx, "retry %d of reverse lookup of agent-injector", retry+1)
+		}
+		if names, err := net.LookupAddr(addr); err == nil {
+			for _, name := range names {
+				if strings.HasPrefix(name, desiredMatch) {
+					dlog.Infof(ctx, `Cluster domain derived from agent-injector reverse lookup %q`, name)
+					return name[len(desiredMatch):]
+				}
+			}
+		}
+		// If no reverse lookups are found containing the cluster domain, then that's probably because the
+		// DNS for the service isn't completely setup yet.
+		time.Sleep(300 * time.Millisecond)
+	}
+	dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s"`, env.AgentInjectorName)
+	return "cluster.local."
 }
 
 func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {

@@ -78,6 +78,9 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["list", "get"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["list", "watch"]
 # Needed for the gather-traces command
 - apiGroups: [""]
   resources: ["pods/portforward"]

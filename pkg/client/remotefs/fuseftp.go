@@ -87,15 +87,11 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 		}
 	}()
 
-	dir, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return err
-	}
 	exe := "fuseftp"
 	if runtime.GOOS == "windows" {
 		exe = "fuseftp.exe"
 	}
-	qn := filepath.Join(dir, exe)
+	qn := filepath.Join(filelocation.AppUserCacheDir(ctx), exe)
 	var sz int
 	st, err := os.Stat(qn)
 	if err != nil {

@@ -23,6 +23,7 @@ type Command struct {
 	Namespace      string // --namespace
 	Port           string // --port // only valid if !localOnly
 	ServiceName    string // --service // only valid if !localOnly
+	Address        string // --address // only valid if !localOnly
 	LocalOnly      bool   // --local-only
 	LocalMountPort uint16 // --local-mount-port
 
@@ -48,6 +49,11 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 		`Local port to forward to. If intercepting a service with multiple ports, `+
 		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
 		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
+	)
+
+	flags.StringVar(&a.Address, "address", "127.0.0.1", ``+
+		`Local address to forward to, Only accepts IP address as a value. `+
+		`e.g. '--address 10.0.0.2'`,
 	)
 
 	flags.StringVar(&a.ServiceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")

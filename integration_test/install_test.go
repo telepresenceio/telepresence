@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -38,17 +37,14 @@ type installSuite struct {
 	itest.NamespacePair
 }
 
-func init() {
-	itest.AddNamespacePairSuite("-auto-install", func(h itest.NamespacePair) suite.TestingSuite {
-		return &installSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
-	})
+func (is *installSuite) SuiteName() string {
+	return "Install"
 }
 
-func (is *installSuite) SetupSuite() {
-	is.Suite.SetupSuite()
-	ctx := is.Context()
-	itest.TelepresenceQuitOk(ctx)
-	_ = itest.Run(ctx, "helm", "uninstall", "traffic-manager", "--namespace", is.ManagerNamespace())
+func init() {
+	itest.AddNamespacePairSuite("-install", func(h itest.NamespacePair) itest.TestingSuite {
+		return &installSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
+	})
 }
 
 func (is *installSuite) Test_NonHelmInstall() {
@@ -57,7 +53,7 @@ func (is *installSuite) Test_NonHelmInstall() {
 
 	chart, err := is.PackageHelmChart(ctx)
 	require.NoError(err)
-	values := is.GetValuesForHelm(map[string]string{}, false, is.ManagerNamespace(), is.AppNamespace())
+	values := is.GetValuesForHelm(ctx, map[string]string{}, false)
 	values = append([]string{"template", "traffic-manager", chart, "-n", is.ManagerNamespace()}, values...)
 	manifest, err := itest.Output(ctx, "helm", values...)
 	require.NoError(err)
@@ -76,14 +72,14 @@ func (is *installSuite) Test_NonHelmInstall() {
 		// Sometimes the traffic-agents configmap gets wiped, causing the delete command to fail, hence we don't require.NoError
 		_ = cmd.Run()
 	}()
-	stdout := itest.TelepresenceOk(ctx, "connect")
+	stdout := itest.TelepresenceOk(itest.WithUser(ctx, "default"), "connect")
 	is.Contains(stdout, "Connected to context")
 	defer itest.TelepresenceQuitOk(ctx)
 }
 
 func (is *installSuite) Test_FindTrafficManager_notPresent() {
 	ctx := is.Context()
-	ctx, _ = is.cluster(ctx, "default", is.ManagerNamespace()) // ensure that k8sapi is initialized
+	ctx, _ = is.cluster(ctx, "", is.ManagerNamespace()) // ensure that k8sapi is initialized
 
 	sv := version.Version
 	version.Version = "v0.0.0-bogus"
@@ -117,7 +113,7 @@ func (is *installSuite) Test_EnsureManager_updateFromLegacy() {
 	require.NoError(cmd.Run())
 	require.NoError(itest.Kubectl(ctx, is.ManagerNamespace(), "rollout", "status", "-w", "deploy/traffic-manager"))
 
-	is.findTrafficManagerPresent(ctx, "default", is.ManagerNamespace())
+	is.findTrafficManagerPresent(ctx, "", is.ManagerNamespace())
 }
 
 func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
@@ -135,7 +131,7 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
 		cfg.Timeouts.PrivateHelm = 30 * time.Second
 	})
-	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
 	require.Error(ensureTrafficManager(ctx, kc))
 	restoreVersion()
 	var err error
@@ -242,7 +238,7 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 	require := is.Require()
 	ctx := is.Context()
 
-	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
 	require.NoError(ensureTrafficManager(ctx, kc))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
@@ -261,15 +257,15 @@ func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
 func (is *installSuite) Test_RemoveManager_canUninstall() {
 	require := is.Require()
 	ctx := is.Context()
-	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
 
 	require.NoError(ensureTrafficManager(ctx, kc))
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, false))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, &connector.HelmRequest{}))
 	// We want to make sure that we can re-install the manager after it's been uninstalled,
 	// so try to ensureManager again.
 	require.NoError(ensureTrafficManager(ctx, kc))
 	// Uninstall the manager one last time -- this should behave the same way as the previous uninstall
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, false))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, &connector.HelmRequest{}))
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
@@ -280,7 +276,7 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 	is.T().Skip()
 	require := is.Require()
 	ctx := is.Context()
-	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
 	require.NoError(ensureTrafficManager(ctx, kc))
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
@@ -306,7 +302,7 @@ func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
 func (is *installSuite) Test_No_Upgrade() {
 	ctx := is.Context()
 	require := is.Require()
-	ctx, kc := is.cluster(ctx, "default", is.ManagerNamespace())
+	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
 
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 	// first install
@@ -338,7 +334,6 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 	itest.CreateNamespaces(ctx, customNamespace)
 	defer itest.DeleteNamespaces(ctx, customNamespace)
 	defer is.UninstallTrafficManager(ctx, customNamespace)
-	ctx = itest.WithEnv(ctx, map[string]string{"TELEPRESENCE_MANAGER_NAMESPACE": customNamespace})
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		return map[string]any{"manager": map[string]string{"namespace": customNamespace}}
 	})

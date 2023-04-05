@@ -97,56 +97,80 @@ func (s *multipleInterceptsSuite) TestGatherLogs_NoK8sLogs() {
 	require.Equal(0, yamlCount, fileNames)
 }
 
-func (s *singleServiceSuite) TestGatherLogs_OnlyMappedLogs() {
+func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
+	const svc = "echo"
 	require := s.Require()
-	ctx := s.Context()
-	otherNS := fmt.Sprintf("other-ns-%s", s.Suffix())
-	itest.CreateNamespaces(ctx, otherNS)
-	defer itest.DeleteNamespaces(ctx, otherNS)
-	itest.ApplyEchoService(ctx, s.ServiceName(), otherNS, 8083)
-	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherNS, "--mount", "false", s.ServiceName())
-	s.Eventually(
-		func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", otherNS, "--intercepts")
-			return strings.Contains(stdout, s.ServiceName()+": intercepted")
-		},
-		10*time.Second,
-		2*time.Second,
-	)
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+otherNS)
-	itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", s.ServiceName())
-	s.Eventually(
-		func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-			return strings.Contains(stdout, s.ServiceName()+": intercepted")
-		},
-		10*time.Second,
-		2*time.Second,
-	)
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+s.AppNamespace())
+	defer func() {
+		ctx := s.Context()
+		itest.TelepresenceQuitOk(ctx)
+		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		require.Contains(stdout, "Connected to context")
+	}()
 
-	bothNsRx := fmt.Sprintf("(?:%s|%s)", s.AppNamespace(), otherNS)
+	ctx := s.Context()
+	itest.TelepresenceDisconnectOk(ctx)
+
+	otherOne := fmt.Sprintf("other-one-%s", s.Suffix())
+	itest.CreateNamespaces(ctx, otherOne)
+	defer itest.DeleteNamespaces(ctx, otherOne)
+
+	otherTwo := fmt.Sprintf("other-two-%s", s.Suffix())
+	itest.CreateNamespaces(ctx, otherTwo)
+	defer itest.DeleteNamespaces(ctx, otherTwo)
+
+	require.NoError(s.TelepresenceHelmInstall(itest.WithNamespaces(ctx, &itest.Namespaces{
+		Namespace:         s.ManagerNamespace(),
+		ManagedNamespaces: []string{otherOne, otherTwo},
+	}), true))
+	defer s.RollbackTM(ctx)
+
+	itest.TelepresenceDisconnectOk(ctx)
+	itest.ApplyEchoService(ctx, svc, otherOne, 8083)
+	itest.ApplyEchoService(ctx, svc, otherTwo, 8084)
+
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+
+	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherOne, "--mount", "false", svc)
+	s.Eventually(
+		func() bool {
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherOne, "--intercepts")
+			return err == nil && strings.Contains(stdout, svc+": intercepted")
+		},
+		10*time.Second,
+		2*time.Second,
+	)
+	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherOne)
+	itest.TelepresenceOk(ctx, "leave", svc+"-"+otherOne)
+
+	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherTwo, "--mount", "false", svc)
+	s.Eventually(
+		func() bool {
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherTwo, "--intercepts")
+			return err == nil && strings.Contains(stdout, svc+": intercepted")
+		},
+		10*time.Second,
+		2*time.Second,
+	)
+	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherTwo)
+	itest.TelepresenceOk(ctx, "leave", svc+"-"+otherTwo)
+
+	bothNsRx := fmt.Sprintf("(?:%s|%s)", otherOne, otherTwo)
 	outputDir := s.T().TempDir()
 	outputFile := filepath.Join(outputDir, "allLogs.zip")
-	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), s.ServiceName())
+	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), svc)
 	itest.TelepresenceOk(ctx, "gather-logs", "--output-file", outputFile, "--traffic-manager=False")
-	_, foundAgents, _, fileNames := getZipData(require, outputFile, bothNsRx, s.ManagerNamespace(), s.ServiceName())
+	_, foundAgents, _, fileNames := getZipData(require, outputFile, bothNsRx, s.ManagerNamespace(), svc)
 	require.Equal(2, foundAgents, fileNames)
 
 	// Connect using mapped-namespaces
 	itest.TelepresenceDisconnectOk(ctx)
-	stdout := itest.TelepresenceOk(ctx, "connect", "--mapped-namespaces", s.AppNamespace())
-	require.Contains(stdout, "Connected to context default")
-	defer func() {
-		itest.TelepresenceQuitOk(ctx)
-		stdout := itest.TelepresenceOk(ctx, "connect")
-		require.Contains(stdout, "Connected to context default")
-	}()
+	stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", otherOne)
+	require.Contains(stdout, "Connected to context")
 
-	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), s.ServiceName())
+	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), svc)
 	itest.TelepresenceOk(ctx, "list") // To ensure that the mapped namespaces are active
 	itest.TelepresenceOk(ctx, "gather-logs", "--output-file", outputFile, "--traffic-manager=False")
-	_, foundAgents, _, fileNames = getZipData(require, outputFile, bothNsRx, s.ManagerNamespace(), s.ServiceName())
+	_, foundAgents, _, fileNames = getZipData(require, outputFile, bothNsRx, s.ManagerNamespace(), svc)
 	require.Equal(1, foundAgents, fileNames)
 }
 
@@ -154,14 +178,13 @@ func (s *multipleInterceptsSuite) cleanLogDir(ctx context.Context) {
 	cleanLogDir(ctx, s.Require(), s.AppNamespace(), s.ManagerNamespace(), s.svcRegex())
 }
 
-func cleanLogDir(ctx context.Context, require *require.Assertions, appNamespace, mgrNamespace, svcNameRx string) {
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
+func cleanLogDir(ctx context.Context, require *require.Assertions, nsRx, mgrNamespace, svcNameRx string) {
+	logDir := filelocation.AppUserLogDir(ctx)
 	files, err := os.ReadDir(logDir)
 	require.NoError(err)
 	match := regexp.MustCompile(
 		fmt.Sprintf(`^(?:traffic-manager-[0-9a-z-]+\.%s|%s-[0-9a-z-]+\.%s)\.(?:log|yaml)$`,
-			mgrNamespace, svcNameRx, appNamespace))
+			mgrNamespace, svcNameRx, nsRx))
 
 	for _, file := range files {
 		if match.MatchString(file.Name()) {

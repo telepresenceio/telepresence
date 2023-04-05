@@ -66,11 +66,7 @@ func LoadDaemonInfos(ctx context.Context) ([]*DaemonInfo, error) {
 }
 
 func daemonInfoFiles(ctx context.Context) ([]fs.DirEntry, error) {
-	dir, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return nil, err
-	}
-	files, err := os.ReadDir(filepath.Join(dir, daemonsDirName))
+	files, err := os.ReadDir(filepath.Join(filelocation.AppUserCacheDir(ctx), daemonsDirName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = nil
@@ -129,11 +125,7 @@ func DaemonInfoFile(name string, port int) string {
 //
 // The alive poll ends and the DaemonInfo is deleted when the context is cancelled.
 func KeepDaemonInfoAlive(ctx context.Context, file string) error {
-	dir, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return err
-	}
-	daemonFile := filepath.Join(dir, daemonsDirName, file)
+	daemonFile := filepath.Join(filelocation.AppUserCacheDir(ctx), daemonsDirName, file)
 	ticker := time.NewTicker(keepAliveInterval)
 	defer ticker.Stop()
 	now := time.Now()

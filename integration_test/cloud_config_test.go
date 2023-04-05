@@ -2,17 +2,14 @@ package integration_test
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/datawire/dlib/dlog"
@@ -21,18 +18,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func (s *notConnectedSuite) rollbackTM() {
-	require := s.Require()
-	ctx := s.Context()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	require.NoError(itest.Run(ctx, "helm", "rollback", "--wait", "--namespace", s.ManagerNamespace(), "traffic-manager"))
-}
-
 func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	svcName := "echo-never-proxy"
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
@@ -48,44 +36,38 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	kc := itest.KubeConfig(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(err)
-	cluster := cfg.Clusters["default"]
-	require.NotNil(s.T(), cluster, "unable to get default cluster from config")
+	ktx := cfg.Contexts[cfg.CurrentContext]
+	require.NotNil(ktx, "unable to get current context from config")
+	cluster := cfg.Clusters[ktx.Cluster]
+	require.NotNil(cluster, "unable to get %s cluster from config", ktx.Cluster)
 	ips, err := getClusterIPs(cluster)
 	require.NoError(err)
 
-	tmpdir := s.T().TempDir()
-	values := path.Join(tmpdir, "values.yaml")
-	f, err := os.Create(values)
-	require.NoError(err)
-	b, err := yaml.Marshal(
-		map[string]map[string]map[string][]string{
-			"client": {
-				"routing": {
-					"neverProxySubnets": {fmt.Sprintf("%s/32", ip)},
-				},
-			},
-		},
-	)
-	require.NoError(err)
-	_, err = f.Write(b)
-	require.NoError(err)
-
-	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug", "-f", values)
-	defer s.rollbackTM()
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/32}", ip)))
+	defer s.RollbackTM(ctx)
 
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect")
-		defer itest.TelepresenceQuitOk(ctx)
+		defer itest.TelepresenceDisconnectOk(ctx)
+		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 
 		// The cluster's IP address will also be never proxied, so we gotta account for that.
 		neverProxiedCount := len(ips) + 1
-		stdout := itest.TelepresenceOk(ctx, "status")
+		stdout, _, err := itest.Telepresence(ctx, "status")
+		if err != nil {
+			return false
+		}
 		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets", neverProxiedCount)
 			return false
 		}
 
-		jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
+		jsonStdout, _, err := itest.Telepresence(ctx, "config", "view", "--output", "json")
+		if err != nil {
+			return false
+		}
 		var view client.SessionConfig
 		require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 		if len(view.Routing.NeverProxy) != neverProxiedCount {
@@ -105,15 +87,12 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	// The log file may have junk from other tests in it, so we'll do a very simple method
 	// of rushing to the end of the file and remembering where we left off when we start looking
 	// for new lines.
 	var lines int64
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	rootLogName := filepath.Join(logDir, "daemon.log")
+	rootLogName := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
 	rootLog, err := os.Open(rootLogName)
 	require.NoError(err)
 	scn := bufio.NewScanner(rootLog)
@@ -121,19 +100,19 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 		lines++
 	}
 	rootLog.Close()
-
-	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
-	defer s.rollbackTM()
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace"))
+	defer s.RollbackTM(ctx)
 
 	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
 		cfg.LogLevels.RootDaemon = logrus.InfoLevel
 	})
 
-	itest.TelepresenceQuitOk(ctx) // Because context changed
-
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect")
+		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 		itest.TelepresenceDisconnectOk(ctx)
 
 		rootLog, err := os.Open(rootLogName)
@@ -176,10 +155,8 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	ctx = itest.WithConfig(ctx, func(config *client.Config) {
 		config.LogLevels.RootDaemon = logrus.DebugLevel
 	})
-	itest.TelepresenceQuitOk(ctx) // Because context changed
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
-	defer itest.TelepresenceQuitOk(ctx)
 	levelSet = false
 	for scn.Scan() && !levelSet {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)
@@ -187,6 +164,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.False(levelSet, "Root log level not respected when set in config file")
 
 	var view client.SessionConfig
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
 	require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 	require.Equal(view.LogLevels.RootDaemon, logrus.DebugLevel)
@@ -195,15 +173,12 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	require := s.Require()
 	ctx := s.Context()
-	itest.TelepresenceQuitOk(ctx)
 
 	// The log file may have junk from other tests in it, so we'll do a very simple method
 	// of rushing to the end of the file and remembering where we left off when we start looking
 	// for new lines.
 	var lines int64
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
-	logName := filepath.Join(logDir, "connector.log")
+	logName := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")
 	logF, err := os.Open(logName)
 	require.NoError(err)
 	scn := bufio.NewScanner(logF)
@@ -212,16 +187,18 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	}
 	logF.Close()
 
-	itest.TelepresenceOk(ctx, "helm", "upgrade", "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
-	defer s.rollbackTM()
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace"))
+	defer s.RollbackTM(ctx)
 	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
 		cfg.LogLevels.UserDaemon = logrus.InfoLevel
 	})
-	itest.TelepresenceQuitOk(ctx) // Because context changed
 
 	var currentLine int64
 	s.Eventually(func() bool {
-		itest.TelepresenceOk(ctx, "connect")
+		_, _, err := itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		if err != nil {
+			return false
+		}
 		itest.TelepresenceDisconnectOk(ctx)
 
 		logF, err := os.Open(logName)
@@ -264,12 +241,10 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	ctx = itest.WithConfig(ctx, func(config *client.Config) {
 		config.LogLevels.UserDaemon = logrus.DebugLevel
 	})
-	itest.TelepresenceQuitOk(ctx) // Because context changed
 
-	itest.TelepresenceOk(ctx, "connect")
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
 
-	defer itest.TelepresenceQuitOk(ctx)
 	levelSet = false
 	for scn.Scan() && !levelSet {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)

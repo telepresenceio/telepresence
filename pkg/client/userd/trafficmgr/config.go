@@ -17,10 +17,6 @@ func (s *session) GetConfig(ctx context.Context) (*client.SessionConfig, error) 
 	if err != nil {
 		return nil, err
 	}
-	cfgDir, err := filelocation.AppUserConfigDir(ctx)
-	if err != nil {
-		return nil, err
-	}
 	oi := nc.OutboundInfo
 	dns := oi.Dns
 	subnets := func(rs []*manager.IPNet) []*iputil.Subnet {
@@ -31,7 +27,7 @@ func (s *session) GetConfig(ctx context.Context) (*client.SessionConfig, error) 
 		return ss
 	}
 	return &client.SessionConfig{
-		ClientFile: filepath.Join(cfgDir, client.ConfigFile),
+		ClientFile: filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile),
 		Config:     s.GetSessionConfig(),
 		DNS: client.DNS{
 			LocalIP:         dns.LocalIp,

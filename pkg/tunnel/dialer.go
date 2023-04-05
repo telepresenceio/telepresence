@@ -21,8 +21,10 @@ import (
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
 // reading or writing any messages. The dialer is normally closed by one of the peers.
-const tcpConnTTL = 2 * time.Hour // Default tcp_keepalive_time on Linux
-const udpConnTTL = 1 * time.Minute
+const (
+	tcpConnTTL = 2 * time.Hour // Default tcp_keepalive_time on Linux
+	udpConnTTL = 1 * time.Minute
+)
 
 const (
 	notConnected = int32(iota)

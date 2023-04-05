@@ -18,14 +18,7 @@ type itestConfig struct {
 }
 
 func LoadEnv(ctx context.Context) context.Context {
-	dir, err := filelocation.AppUserConfigDir(ctx)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			getT(ctx).Fatal(err)
-		}
-		return ctx
-	}
-	cf := filepath.Join(dir, "itest.yml")
+	cf := filepath.Join(filelocation.AppUserConfigDir(ctx), "itest.yml")
 	data, err := os.ReadFile(cf)
 	if err != nil {
 		if !os.IsNotExist(err) {

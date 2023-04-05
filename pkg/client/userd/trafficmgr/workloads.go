@@ -140,6 +140,7 @@ func workloadEquals(oa, ob runtime.Object) bool {
 }
 
 func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond) *namespacedWASWatcher {
+	dlog.Debugf(c, "newNamespaceWatcher %s", namespace)
 	ki := k8sapi.GetK8sInterface(c)
 	appsGetter := ki.AppsV1().RESTClient()
 	w := &namespacedWASWatcher{

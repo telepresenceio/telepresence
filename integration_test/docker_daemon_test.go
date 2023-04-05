@@ -3,10 +3,7 @@ package integration_test
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	goRuntime "runtime"
-
-	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -17,16 +14,21 @@ type dockerDaemonSuite struct {
 	itest.NamespacePair
 }
 
+func (s *dockerDaemonSuite) SuiteName() string {
+	return "DockerDaemon"
+}
+
 func init() {
-	itest.AddNamespacePairSuite("", func(h itest.NamespacePair) suite.TestingSuite {
+	itest.AddTrafficManagerSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &dockerDaemonSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
 }
 
 func (s *dockerDaemonSuite) Context() context.Context {
-	return itest.WithConfig(s.Suite.Context(), func(cfg *client.Config) {
+	ctx := itest.WithConfig(s.Suite.Context(), func(cfg *client.Config) {
 		cfg.Intercept.UseFtp = false
 	})
+	return itest.WithUseDocker(ctx, true)
 }
 
 func (s *dockerDaemonSuite) SetupSuite() {
@@ -35,22 +37,15 @@ func (s *dockerDaemonSuite) SetupSuite() {
 		return
 	}
 	s.Suite.SetupSuite()
-	args := append([]string{"helm", "install", "--docker", "-n", s.ManagerNamespace()}, s.GetValuesForHelm(nil, false, s.ManagerNamespace(), s.AppNamespace())...)
-	args = append(args, "-f", filepath.Join("testdata", "namespaced-values.yaml"))
-
-	ctx := s.Context()
-	ctx = itest.WithWorkingDir(itest.WithUser(ctx, "default"), filepath.Join(itest.GetOSSRoot(ctx), "integration_test"))
-	itest.TelepresenceOk(ctx, args...)
 }
 
-func (s *dockerDaemonSuite) TearDownSuite() {
-	itest.TelepresenceOk(itest.WithUser(s.Context(), "default"), "helm", "uninstall", "-n", s.ManagerNamespace(), "--docker")
+func (s *dockerDaemonSuite) TearDownTest() {
+	itest.TelepresenceQuitOk(s.Context())
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--docker")
-	defer itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 
 	jsOut := itest.TelepresenceOk(ctx, "status", "--output", "json")
 
@@ -68,17 +63,16 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonConflict() {
 	ctx := s.Context()
-	defer itest.TelepresenceQuitOk(ctx)
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	defer itest.TelepresenceQuitOk(itest.WithUseDocker(ctx, false))
+	itest.TelepresenceOk(itest.WithUseDocker(ctx, false), "connect", "--manager-namespace", s.ManagerNamespace())
 
-	_, stdErr, err := itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--docker")
+	_, stdErr, err := itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	s.Error(err)
 	s.Contains(stdErr, "option --docker cannot be used as long as a daemon is running on the host")
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {
 	ctx := s.Context()
-	defer itest.TelepresenceQuitOk(ctx)
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--docker")
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(itest.WithUseDocker(ctx, false), "connect", "--manager-namespace", s.ManagerNamespace())
 }

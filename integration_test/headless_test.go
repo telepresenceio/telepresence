@@ -45,8 +45,8 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 				require.NoError(annotateForWebhook(ctx, "statefulset", "echo-headless", s.AppNamespace(), 8080))
 				require.Eventually(
 					func() bool {
-						stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
-						return strings.Contains(stdout, "echo-headless: ready to intercept")
+						stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+						return err == nil && strings.Contains(stdout, "echo-headless: ready to intercept")
 					},
 					30*time.Second, // waitFor
 					3*time.Second,  // polling interval
@@ -67,12 +67,12 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 				dfltCtx := itest.WithUser(ctx, "default")
 				itest.TelepresenceOk(dfltCtx, "uninstall", "--agent", "echo-headless", "-n", s.AppNamespace())
 				itest.TelepresenceQuitOk(dfltCtx)
-				itest.TelepresenceOk(ctx, "connect")
+				itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 
 				require.Eventually(
 					func() bool {
-						stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
-						return !strings.Contains(stdout, "echo-headless")
+						stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+						return err == nil && !strings.Contains(stdout, "echo-headless")
 					},
 					30*time.Second, // waitFor
 					3*time.Second,  // polling interval
@@ -81,8 +81,8 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 
 			require.Eventually(
 				func() bool {
-					stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-					return strings.Contains(stdout, "echo-headless: intercepted")
+					stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+					return err == nil && strings.Contains(stdout, "echo-headless: intercepted")
 				},
 				30*time.Second, // waitFor
 				3*time.Second,  // polling interval

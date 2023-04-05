@@ -145,8 +145,10 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 //
 // The tel2SubDomain fills this purpose and a request for "<single label name>.<tel2SubDomain>"
 // will be resolved as "<single label name>.<currently intercepted namespace>".
-const tel2SubDomain = "tel2-search"
-const tel2SubDomainDot = tel2SubDomain + "."
+const (
+	tel2SubDomain    = "tel2-search"
+	tel2SubDomainDot = tel2SubDomain + "."
+)
 
 // wpadDot is used when rejecting all WPAD (Wep Proxy Auto-Discovery) queries.
 const wpadDot = "wpad."

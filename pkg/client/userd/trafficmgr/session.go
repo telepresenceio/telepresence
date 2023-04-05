@@ -191,6 +191,9 @@ func NewSession(
 		if err := yaml.Unmarshal(cliCfg.ConfigYaml, &tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
 		}
+		if err := tmgr.ApplyConfig(ctx); err != nil {
+			dlog.Warnf(ctx, "failed to apply config from traffic-manager: %v", err)
+		}
 		if err := cluster.AddRemoteKubeConfigExtension(ctx, cliCfg.ConfigYaml); err != nil {
 			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
 		}
@@ -199,7 +202,7 @@ func NewSession(
 	rdRunning := userd.GetService(ctx).RootSessionInProcess()
 	if !rdRunning {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rdRunning, err = socket.IsRunning(ctx, socket.DaemonName)
+		rdRunning, err = socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
 		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
@@ -294,7 +297,7 @@ func DeleteManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kub
 	}
 
 	return helm.DeleteTrafficManager(
-		ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req.Crds)
+		ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req)
 }
 
 func EnsureManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kubeconfig) error {
@@ -579,7 +582,17 @@ func (s *session) ApplyConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return client.MergeAndReplace(ctx, &s.sessionConfig, cfg, false)
+	err = client.MergeAndReplace(ctx, &s.sessionConfig, cfg, false)
+	if err != nil {
+		return err
+	}
+	if len(s.MappedNamespaces) == 0 {
+		mns := client.GetConfig(ctx).Cluster.MappedNamespaces
+		if len(mns) > 0 {
+			s.SetMappedNamespaces(ctx, mns)
+		}
+	}
+	return err
 }
 
 // getInfosForWorkloads returns a list of workloads found in the given namespace that fulfils the given filter criteria.
@@ -642,7 +655,6 @@ func (s *session) getInfosForWorkloads(
 }
 
 func (s *session) waitForSync(ctx context.Context) {
-	s.WaitForNSSync(ctx)
 	s.wlWatcher.setNamespacesToWatch(ctx, s.GetCurrentNamespaces(true))
 	s.wlWatcher.waitForSync(ctx)
 }
@@ -694,6 +706,7 @@ func (s *session) WorkloadInfoSnapshot(
 func (s *session) ensureWatchers(ctx context.Context,
 	namespaces []string,
 ) {
+	dlog.Debugf(ctx, "Ensure watchers %v", namespaces)
 	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
 	waitCh := make(chan struct{}, 1)
 	s.currentAgentsLock.Lock()
@@ -709,11 +722,16 @@ func (s *session) ensureWatchers(ctx context.Context,
 			// is actually determined once the watcher starts
 			ns = s.Namespace
 		}
+		wgp := &wg
 		s.wlWatcher.ensureStarted(ctx, ns, func(started bool) {
 			if started {
+				dlog.Debugf(ctx, "watchers for %s started", ns)
 				needWait = true
 			}
-			wg.Done()
+			if wgp != nil {
+				wgp.Done()
+				wgp = nil
+			}
 		})
 	}
 	wg.Wait()
@@ -853,7 +871,18 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 		}
 	}
 
-	if s.SetMappedNamespaces(c, cr.MappedNamespaces) {
+	namespaces := cr.MappedNamespaces
+	if len(namespaces) == 1 && namespaces[0] == "all" {
+		namespaces = nil
+	}
+	if len(namespaces) == 0 {
+		namespaces = client.GetConfig(c).Cluster.MappedNamespaces
+	}
+
+	if s.SetMappedNamespaces(c, namespaces) {
+		if len(namespaces) == 0 && s.CanWatchNamespaces(c) {
+			s.StartNamespaceWatcher(c)
+		}
 		s.currentInterceptsLock.Lock()
 		s.ingressInfo = nil
 		s.currentInterceptsLock.Unlock()
@@ -877,6 +906,9 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 			Name:       client.DisplayName,
 		},
 		ManagerNamespace: cfg.GetManagerNamespace(),
+	}
+	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster.MappedNamespaces) > 0 {
+		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
 	}
 	if s.rootDaemon != nil {
 		var err error
@@ -1154,7 +1186,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 		rd = rootSession
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = socket.Dial(ctx, socket.DaemonName,
+		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx),
 			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 		)

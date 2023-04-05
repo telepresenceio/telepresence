@@ -12,6 +12,8 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 const (
@@ -90,6 +92,20 @@ func (c *config) refreshFile(ctx context.Context, data map[string]string) {
 	c.Lock()
 	if yml, ok := data[clientConfigFileName]; ok {
 		c.clientYAML = []byte(yml)
+		env := managerutil.GetEnv(ctx)
+		if len(env.ManagedNamespaces) > 0 {
+			dlog.Debugf(ctx, "Checking if Augment mapped namespaces with %d managed namespaces", len(env.ManagedNamespaces))
+			cfg, err := client.ParseConfigYAML(c.clientYAML)
+			if err != nil {
+				dlog.Errorf(ctx, "failed to unmarshal YAML from %s", clientConfigFileName)
+			}
+			if len(cfg.Cluster.MappedNamespaces) == 0 {
+				dlog.Debugf(ctx, "Augment mapped namespaces with %d managed namespaces", len(env.ManagedNamespaces))
+				cfg.Cluster.MappedNamespaces = env.ManagedNamespaces
+				yml = cfg.String()
+				c.clientYAML = []byte(yml)
+			}
+		}
 		dlog.Debugf(ctx, "Refreshed client config: %s", yml)
 	} else {
 		c.clientYAML = nil

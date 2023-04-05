@@ -207,6 +207,8 @@ message ConnectInfo {
   daemon.DaemonStatus daemon_status = 13;
   string manager_namespace = 14;
 
+  repeated string mapped_namespaces = 15;
+
   reserved 6;
   reserved 7;
   reserved 9;
@@ -225,6 +227,7 @@ message HelmRequest {
   bool reuse_values = 4;
   bool reset_values = 5;
   bool crds = 6;
+  bool no_hooks = 7;
 }
 
 message UninstallRequest {

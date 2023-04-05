@@ -2,18 +2,19 @@ package k8s
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"sort"
-	"sync"
+	"time"
 
 	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	typedAuth "k8s.io/client-go/kubernetes/typed/authorization/v1"
-	"k8s.io/client-go/tools/cache"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
 // nsWatcher runs a Kubernetes Watcher that provide information about the cluster's namespaces'.
@@ -22,78 +23,170 @@ import (
 // the DNS-resolver in the root daemon each time an update arrives.
 //
 // The first update will close the firstSnapshotArrived channel.
-func (kc *Cluster) startNamespaceWatcher(c context.Context) {
-	cond := sync.Cond{}
-	cond.L = &kc.nsLock
+func (kc *Cluster) StartNamespaceWatcher(ctx context.Context) {
+	kc.namespaceWatcherSnapshot = make(map[string]struct{})
+	nsSynced := make(chan struct{})
 	go func() {
-		<-c.Done()
-		cond.Broadcast()
-	}()
-
-	kc.nsWatcher = k8sapi.NewWatcher("namespaces", kc.ki.CoreV1().RESTClient(), &cond, k8sapi.WithEquals[*core.Namespace](func(a, b *core.Namespace) bool {
-		return a.Name == b.Name
-	}))
-
-	ready := sync.WaitGroup{}
-	ready.Add(1)
-	go func() {
-		err := kc.nsWatcher.Watch(c, &ready)
-		if err != nil {
-			dlog.Errorf(c, "error watching namespaces: %s", err)
-		}
-	}()
-	ready.Wait()
-	cache.WaitForCacheSync(c.Done(), kc.nsWatcher.HasSynced)
-
-	kc.nsLock.Lock()
-	go func() {
-		defer kc.nsLock.Unlock()
-		for {
-			select {
-			case <-c.Done():
+		api := kc.ki.CoreV1()
+		for ctx.Err() == nil {
+			w, err := api.Namespaces().Watch(ctx, meta.ListOptions{})
+			if err != nil {
+				dlog.Errorf(ctx, "unable to create service watcher: %v", err)
 				return
-			default:
 			}
-			cond.Wait()
-			kc.refreshNamespacesLocked(c)
+			kc.namespacesEventHandler(ctx, w.ResultChan(), nsSynced)
 		}
 	}()
-
-	// A Lock here forces us to wait until the above goroutine
-	// has entered cond.Wait()
-	kc.nsLock.Lock()
-	cond.Broadcast() // force initial call to refreshNamespacesLocked
-	kc.nsLock.Unlock()
-}
-
-func (kc *Cluster) WaitForNSSync(c context.Context) {
-	if !kc.nsWatcher.HasSynced() {
-		cache.WaitForCacheSync(c.Done(), kc.nsWatcher.HasSynced)
+	select {
+	case <-ctx.Done():
+	case <-nsSynced:
 	}
 }
 
-func (kc *Cluster) canAccessNS(c context.Context, authHandler typedAuth.SelfSubjectAccessReviewInterface, namespace string) bool {
-	// Doing multiple checks here to really ensure that the current user can watch, list, and get services and workloads would
-	// take too long, so this check will have to do. In case other restrictions are encountered later on, they will generate
-	// errors and invalidate the namespace.
-	ra := auth.ResourceAttributes{
-		Namespace: namespace,
-		Verb:      "get",
-		Resource:  "deployments",
-		Group:     "apps",
+func (kc *Cluster) namespacesEventHandler(ctx context.Context, evCh <-chan watch.Event, nsSynced chan struct{}) {
+	// The delay timer will initially sleep forever. It's reset to a very short
+	// delay when the file is modified.
+	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
+		kc.refreshNamespaces(ctx)
+		select {
+		case <-nsSynced:
+		default:
+			close(nsSynced)
+		}
+	})
+	defer delay.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-evCh:
+			if !ok {
+				return // restart watcher
+			}
+			ns, ok := event.Object.(*core.Namespace)
+			if !ok {
+				continue
+			}
+			kc.nsLock.Lock()
+			switch event.Type {
+			case watch.Deleted:
+				delete(kc.namespaceWatcherSnapshot, ns.Name)
+			case watch.Added, watch.Modified:
+				kc.namespaceWatcherSnapshot[ns.Name] = struct{}{}
+			}
+			kc.nsLock.Unlock()
+
+			// We consider the watcher synced after 10 ms of inactivity. It's not a big deal
+			// if more namespaces arrive after that.
+			delay.Reset(10 * time.Millisecond)
+		}
 	}
-	ar, err := authHandler.Create(c, &auth.SelfSubjectAccessReview{
-		Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: &ra},
-	}, meta.CreateOptions{})
+}
+
+func (kc *Cluster) canI(ctx context.Context, ra *auth.ResourceAttributes) (bool, error) {
+	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
+	review := auth.SelfSubjectAccessReview{Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
+	ar, err := authHandler.Create(ctx, &review, meta.CreateOptions{})
+	if err == nil && ar.Status.Allowed {
+		return true, nil
+	}
+	where := ""
+	if ra.Namespace != "" {
+		where = " in namespace " + ra.Namespace
+	}
 	if err != nil {
-		if c.Err() == nil {
-			dlog.Errorf(c, `unable to do "can-i" check verb %q, kind %q, in namespace %q: %v`, ra.Verb, ra.Resource, ra.Namespace, err)
+		err = fmt.Errorf(`unable to do "can-i %s %s%s": %v`, ra.Verb, ra.Resource, where, err)
+		if ctx.Err() == nil {
+			dlog.Error(ctx, err)
+		}
+	} else {
+		dlog.Infof(ctx, `"can-i %s %s%s" is not allowed`, ra.Verb, ra.Resource, where)
+	}
+	return false, err
+}
+
+// CanWatchNamespaces answers the question if this client has the RBAC permissions necessary
+// to watch namespaces. The answer is likely false when using a namespaces scoped installation.
+func (kc *Cluster) CanWatchNamespaces(ctx context.Context) bool {
+	ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+		Verb:     "watch",
+		Resource: "namespaces",
+	})
+	return err == nil && ok
+}
+
+// canGetDefaultTrafficManagerService answers the question if this client has the RBAC permissions
+// necessary to get the traffic-manager in the default namespace.
+func (kc *Cluster) canGetDefaultTrafficManagerService(ctx context.Context) bool {
+	ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+		Verb:      "get",
+		Resource:  "services",
+		Name:      "traffic-manager",
+		Namespace: defaultManagerNamespace,
+	})
+	return err == nil && ok
+}
+
+// canAccessNS answers the question if this client has the RBAC permissions
+// necessary to list and intercept workloads the namespace.
+func (kc *Cluster) canAccessNS(ctx context.Context, namespace string) bool {
+	authHandler := kc.ki.AuthorizationV1().SelfSubjectRulesReviews()
+	review := auth.SelfSubjectRulesReview{Spec: auth.SelfSubjectRulesReviewSpec{Namespace: namespace}}
+	rr, err := authHandler.Create(ctx, &review, meta.CreateOptions{})
+	if err != nil {
+		dlog.Errorf(ctx, `unable to do "can-i --list" on namespace %s`, namespace)
+	}
+	if rr.Status.Incomplete {
+		// Incomplete is most commonly encountered when an authorizer, such as an external authorizer, doesn't support rules evaluation.
+		// When this happens, we must default to using standard can-i semantics and only check deployments (checking every single
+		// resource here takes a long time, so this is a best-effort).
+		ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+			Namespace: namespace,
+			Verb:      "get",
+			Resource:  "deployments",
+			Group:     "apps",
+		})
+		return err == nil && ok
+	}
+	ras := []*auth.ResourceAttributes{
+		{
+			Resource: "services",
+			Verb:     "list",
+		},
+		{
+			Resource: "services",
+			Verb:     "watch",
+		},
+	}
+	for _, r := range []string{"deployments", "replicasets", "statefulsets"} {
+		for _, v := range []string{"get", "watch", "list"} {
+			ras = append(ras, &auth.ResourceAttributes{
+				Group:    "apps",
+				Resource: r,
+				Verb:     v,
+			})
+		}
+	}
+
+	sliceMatch := func(vs []string, s string) bool {
+		return slice.Contains(vs, "*") || slice.Contains(vs, s)
+	}
+	// canDo will just compare the group, verb, and resource property. We know that the namespace is correct, and
+	// we don't care about names or sub-resources.
+	canDo := func(ra *auth.ResourceAttributes) bool {
+		for _, rule := range rr.Status.ResourceRules {
+			if sliceMatch(rule.APIGroups, ra.Group) && sliceMatch(rule.Verbs, ra.Verb) && sliceMatch(rule.Resources, ra.Resource) {
+				return true
+			}
 		}
 		return false
 	}
-	if !ar.Status.Allowed {
-		dlog.Infof(c, "Namespace %q is not accessible. Doing %q on %q is not allowed", namespace, ra.Verb, ra.Resource)
-		return false
+	for _, ra := range ras {
+		if !canDo(ra) {
+			dlog.Errorf(ctx, `client can't do %s %s/%s in namespace %s`, ra.Verb, ra.Group, ra.Resource, namespace)
+			return false
+		}
 	}
 	return true
 }
@@ -111,20 +204,13 @@ func sortedStringSlicesEqual(as, bs []string) bool {
 }
 
 func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) bool {
-	if len(namespaces) == 1 && namespaces[0] == "all" {
-		namespaces = nil
-	} else {
-		sort.Strings(namespaces)
+	sort.Strings(namespaces)
+	if !sortedStringSlicesEqual(namespaces, kc.MappedNamespaces) {
+		kc.MappedNamespaces = namespaces
+		kc.refreshNamespaces(c)
+		return true
 	}
-
-	kc.nsLock.Lock()
-	defer kc.nsLock.Unlock()
-	equal := sortedStringSlicesEqual(namespaces, kc.mappedNamespaces)
-	if !equal {
-		kc.mappedNamespaces = namespaces
-		kc.refreshNamespacesLocked(c)
-	}
-	return !equal
+	return false
 }
 
 func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.NamespaceListener) {
@@ -134,20 +220,31 @@ func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.Name
 	nsListener(c)
 }
 
-func (kc *Cluster) refreshNamespacesLocked(c context.Context) {
-	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
-	cns, err := kc.nsWatcher.List(c)
-	if err != nil {
-		dlog.Errorf(c, "error listing namespaces: %s", err)
-		return
+func (kc *Cluster) refreshNamespaces(c context.Context) {
+	kc.nsLock.Lock()
+	defer kc.nsLock.Unlock()
+	var nss []string
+	if kc.namespaceWatcherSnapshot == nil {
+		// No permission to watch namespaces. Use the mapped-namespaces instead.
+		nss = kc.MappedNamespaces
+		if len(nss) == 0 {
+			// No mapped namespaces exists. Fallback to what's defined in the kube-context (will be "default" if none was defined).
+			nss = []string{kc.Namespace}
+		}
+	} else {
+		nss = make([]string, len(kc.namespaceWatcherSnapshot))
+		i := 0
+		for ns := range kc.namespaceWatcherSnapshot {
+			nss[i] = ns
+			i++
+		}
 	}
-	namespaces := make(map[string]bool, len(cns))
-	for _, o := range cns {
-		ns := o.Name
+	namespaces := make(map[string]bool, len(nss))
+	for _, ns := range nss {
 		if kc.shouldBeWatched(ns) {
 			accessOk, ok := kc.currentMappedNamespaces[ns]
 			if !ok {
-				accessOk = kc.canAccessNS(c, authHandler, ns)
+				accessOk = kc.canAccessNS(c, ns)
 			}
 			namespaces[ns] = accessOk
 		}
@@ -175,12 +272,10 @@ func (kc *Cluster) refreshNamespacesLocked(c context.Context) {
 }
 
 func (kc *Cluster) shouldBeWatched(namespace string) bool {
-	// The "kube-system" namespace must be mapped when hijacking the IP of the
-	// kube-dns service in the daemon.
-	if len(kc.mappedNamespaces) == 0 || namespace == "kube-system" {
+	if len(kc.MappedNamespaces) == 0 {
 		return true
 	}
-	for _, n := range kc.mappedNamespaces {
+	for _, n := range kc.MappedNamespaces {
 		if n == namespace {
 			return true
 		}

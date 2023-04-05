@@ -4,8 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
@@ -15,8 +13,12 @@ type webhookSuite struct {
 	itest.NamespacePair
 }
 
+func (s *webhookSuite) SuiteName() string {
+	return "Webhook"
+}
+
 func init() {
-	itest.AddConnectedSuite("", func(h itest.NamespacePair) suite.TestingSuite {
+	itest.AddConnectedSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &webhookSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
 }
@@ -24,14 +26,12 @@ func init() {
 func (s *webhookSuite) Test_AutoInjectedAgent() {
 	ctx := s.Context()
 	s.ApplyApp(ctx, "echo-auto-inject", "deploy/echo-auto-inject")
-	defer func() {
-		s.NoError(s.Kubectl(ctx, "delete", "svc,deploy", "echo-auto-inject"))
-	}()
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
 
 	require := s.Require()
 	require.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
-		return strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+		return err == nil && strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
 	},
 		20*time.Second, // waitFor
 		2*time.Second,  // polling interval
@@ -46,55 +46,22 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 }
 
 func (s *notConnectedSuite) Test_AgentImageFromConfig() {
-	// Restore the traffic-manager at the end of this function
-	ctx := itest.WithUser(s.Context(), "default")
-	defer func() {
-		itest.TelepresenceOk(ctx, "helm", "install")
-		itest.TelepresenceOk(ctx, "connect")
-		itest.TelepresenceDisconnectOk(ctx)
-	}()
-
 	// Use a config with agentImage to validate that it's the
 	// latter that is used in the traffic-manager
-	ctxAI := itest.WithConfig(ctx, func(cfg *client.Config) {
+	ctx := itest.WithConfig(s.Context(), func(cfg *client.Config) {
 		cfg.Images.PrivateAgentImage = "imageFromConfig:0.0.1"
 	})
 
-	// Remove the traffic-manager since we are altering config that applies to
-	// creating the traffic-manager
-	uninstallEverything := func() {
-		stdout := itest.TelepresenceOk(ctx, "helm", "uninstall")
-		s.Contains(stdout, "Traffic Manager uninstalled successfully")
-		itest.TelepresenceQuitOk(ctx)
-		s.Require().Eventually(
-			func() bool {
-				stdout, _ := itest.KubectlOut(ctx, s.ManagerNamespace(),
-					"get", "svc,deploy", "traffic-manager", "--ignore-not-found")
-				return stdout == ""
-			},
-			5*time.Second,        // waitFor
-			500*time.Millisecond, // polling interval
-		)
-	}
-	uninstallEverything()
+	require := s.Require()
+	require.NoError(s.TelepresenceHelmInstall(itest.WithAgentImage(ctx, nil), true))
+	defer s.RollbackTM(ctx)
 
-	// And reinstall it
-	itest.TelepresenceOk(ctxAI, "helm", "install")
-	itest.TelepresenceOk(ctxAI, "connect")
-
-	// When this function ends we uninstall the manager
-	defer func() {
-		uninstallEverything()
-	}()
-
-	image, err := itest.Output(ctx, "kubectl",
-		"--namespace", s.ManagerNamespace(),
+	image, err := itest.KubectlOut(ctx, s.ManagerNamespace(),
 		"get", "deploy", "traffic-manager",
 		"--ignore-not-found",
 		"-o",
 		"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='AGENT_IMAGE')].value}")
 
-	require := s.Require()
 	require.NoError(err)
 	actualRegistry, err := itest.KubectlOut(ctx, s.ManagerNamespace(),
 		"get", "deploy", "traffic-manager",
@@ -104,5 +71,4 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	require.NoError(err)
 	s.Equal("imageFromConfig:0.0.1", image)
 	s.Equal(s.Registry(), actualRegistry)
-	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.ManagerNamespace())
 }

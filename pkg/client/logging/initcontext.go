@@ -35,10 +35,6 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 		logger.Formatter = tlog.NewFormatter("15:04:05.0000")
 	} else {
 		logger.Formatter = tlog.NewFormatter("2006-01-02 15:04:05.0000")
-		dir, err := filelocation.AppUserLogDir(ctx)
-		if err != nil {
-			return ctx, err
-		}
 		maxFiles := uint16(5)
 
 		// TODO: Also make this a configurable setting in config.yml
@@ -47,7 +43,7 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 				maxFiles = uint16(mx)
 			}
 		}
-		rf, err := OpenRotatingFile(ctx, filepath.Join(dir, name+".log"), "20060102T150405", true, 0o600, strategy, maxFiles)
+		rf, err := OpenRotatingFile(ctx, filepath.Join(filelocation.AppUserLogDir(ctx), name+".log"), "20060102T150405", true, 0o600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
 		}
@@ -76,18 +72,13 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	if name == "daemon" {
 		level = logLevels.RootDaemon
 	}
-	tlog.SetLogrusLevel(logger, level.String())
+	tlog.SetLogrusLevel(logger, level.String(), false)
 	ctx = tlog.WithLevelSetter(ctx, logger)
 	return ctx, nil
 }
 
 func SummarizeLog(ctx context.Context, name string) (string, error) {
-	dir, err := filelocation.AppUserLogDir(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	filename := filepath.Join(dir, name+".log")
+	filename := filepath.Join(filelocation.AppUserLogDir(ctx), name+".log")
 	file, err := dos.Open(ctx, filename)
 	if err != nil {
 		if os.IsNotExist(err) {

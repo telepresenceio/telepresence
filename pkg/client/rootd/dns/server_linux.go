@@ -91,11 +91,14 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 	}
 
 	if s.shouldApplySearch(query) {
+		origQuery := q.Name
 		for _, sp := range s.search {
 			q.Name = query + sp
 			if rrs, rCode, err := s.resolveInCluster(c, q); err != nil || len(rrs) > 0 {
+				q.Name = origQuery
 				return rrs, rCode, err
 			}
+			q.Name = origQuery
 		}
 	}
 	return s.resolveInCluster(c, q)

@@ -3,7 +3,7 @@ following Free and Open Source software:
 
     Name                                                                         Version                               License(s)
     ----                                                                         -------                               ----------
-    the Go language standard library ("std")                                     v1.19                                 3-clause BSD license
+    the Go language standard library ("std")                                     v1.20                                 3-clause BSD license
     github.com/Azure/go-ansiterm                                                 v0.0.0-20210617225240-d185dfc1b5a1    MIT license
     github.com/BurntSushi/toml                                                   v1.2.1                                MIT license
     github.com/MakeNowJust/heredoc                                               v1.0.0                                MIT license
@@ -11,7 +11,6 @@ following Free and Open Source software:
     github.com/Masterminds/semver/v3                                             v3.2.0                                MIT license
     github.com/Masterminds/sprig/v3                                              v3.2.3                                MIT license
     github.com/Masterminds/squirrel                                              v1.5.3                                MIT license
-    github.com/Microsoft/go-winio                                                v0.6.0                                MIT license
     github.com/asaskevich/govalidator                                            v0.0.0-20210307081110-f21760c49a8d    MIT license
     github.com/beorn7/perks                                                      v1.0.1                                MIT license
     github.com/blang/semver                                                      v3.5.1+incompatible                   MIT license

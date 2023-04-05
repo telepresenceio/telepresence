@@ -39,6 +39,14 @@ type Config struct {
 	Cluster         Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
 }
 
+func ParseConfigYAML(data []byte) (*Config, error) {
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
 // Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) Merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
@@ -49,6 +57,11 @@ func (c *Config) Merge(o *Config) {
 	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
 	c.Intercept.merge(&o.Intercept)
 	c.Cluster.merge(&o.Cluster)
+}
+
+func (c *Config) String() string {
+	y, _ := yaml.Marshal(c)
+	return string(y)
 }
 
 // Watch uses a file system watcher that receives events when the configuration changes
@@ -784,7 +797,8 @@ func (ic Intercept) MarshalYAML() (any, error) {
 }
 
 type Cluster struct {
-	DefaultManagerNamespace string `json:"defaultManagerNamespace,omitempty" yaml:"defaultManagerNamespace,omitempty"`
+	DefaultManagerNamespace string   `json:"defaultManagerNamespace,omitempty" yaml:"defaultManagerNamespace,omitempty"`
+	MappedNamespaces        []string `json:"mappedNamespaces,omitempty" yaml:"mappedNamespaces,omitempty"`
 }
 
 // This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
@@ -795,15 +809,14 @@ func (cc *Cluster) merge(o *Cluster) {
 	if o.DefaultManagerNamespace != defaultDefaultManagerNamespace {
 		cc.DefaultManagerNamespace = o.DefaultManagerNamespace
 	}
-}
-
-var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
-	DefaultManagerNamespace: defaultDefaultManagerNamespace,
+	if len(o.MappedNamespaces) > 0 {
+		cc.MappedNamespaces = o.MappedNamespaces
+	}
 }
 
 // IsZero controls whether this element will be included in marshalled output.
 func (cc Cluster) IsZero() bool {
-	return cc == defaultCluster
+	return cc.DefaultManagerNamespace == defaultDefaultManagerNamespace && len(cc.MappedNamespaces) == 0
 }
 
 // MarshalYAML is not using pointer receiver here, because Cluster is not pointer in the Config struct.
@@ -811,6 +824,9 @@ func (cc Cluster) MarshalYAML() (any, error) {
 	cm := make(map[string]any)
 	if cc.DefaultManagerNamespace != defaultDefaultManagerNamespace {
 		cm["defaultManagerNamespace"] = cc.DefaultManagerNamespace
+	}
+	if len(cc.MappedNamespaces) > 0 {
+		cm["mappedNamespaces"] = cc.MappedNamespaces
 	}
 	return cm, nil
 }
@@ -851,8 +867,7 @@ func ReplaceConfig(ctx context.Context, config *Config) {
 
 // GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
 func GetConfigFile(c context.Context) string {
-	dir, _ := filelocation.AppUserConfigDir(c)
-	return filepath.Join(dir, ConfigFile)
+	return filepath.Join(filelocation.AppUserConfigDir(c), ConfigFile)
 }
 
 // GetDefaultConfig returns the default configuration settings.
@@ -901,12 +916,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		}
 	}()
 
-	var dirs []string
-	dirs, err = filelocation.AppSystemConfigDirs(c)
-	if err != nil {
-		return nil, err
-	}
-
+	dirs := filelocation.AppSystemConfigDirs(c)
 	dflt := GetDefaultConfig()
 	cfg = &dflt
 	readMerge := func(dir string) error {
@@ -938,13 +948,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 			return nil, err
 		}
 	}
-	appDir, err := filelocation.AppUserConfigDir(c)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
-		}
-		return nil, err
-	}
+	appDir := filelocation.AppUserConfigDir(c)
 	if err = readMerge(appDir); err != nil {
 		return nil, err
 	}

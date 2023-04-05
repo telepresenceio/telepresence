@@ -3,7 +3,6 @@ module github.com/telepresenceio/telepresence/v2
 go 1.19
 
 require (
-	github.com/Microsoft/go-winio v0.6.0
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/coreos/go-iptables v0.6.0
 	github.com/datawire/dlib v1.3.1-0.20221228104658-e373c6d44961

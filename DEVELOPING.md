@@ -47,6 +47,11 @@
    This will make all tests use that traffic-agent instead of the default
    which uses the same image as the traffic-manager.
 
+- `DEV_USERD_PROFILING_PORT` and `DEV_ROOTD_PROFILING_PORT` (optional) if
+  set, will cause the `telepresence connect` calls in the integration tests
+  to start daemons where pprof is enabled (see
+  [Profiling the daemons](#profiling_the_daemons) below).
+
 The above environment can optionally be provided in a `itest.yml` file
 that is placed adjacent to the normal `config.yml` file used to configure
 Telepresence. The `itest.yml` currently has only one single entry, the
@@ -75,6 +80,23 @@ export DTEST_KUBECONFIG=<your kubeconfig>
 export DTEST_REGISTRY=localhost:5000
 go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
 ```
+
+If you run these tests on a Mac, localhost won't work. Please use the docker hub, or this value for the registry:
+
+```cli
+export DTEST_REGISTRY=host.docker.internal:5000
+```
+
+You must also set this in your docker engine settings: 
+
+```json
+{
+   "insecure-registries": [
+     "host.docker.internal:5000"
+   ]
+}
+```
+
 The test takes about a minute to complete when using an existing cluster
 and a private registry created by `make private-registry`. During that time
 it:
@@ -279,6 +301,25 @@ command to `cat` to trigger the usual logfile setup:
 ```console
 $ telepresence connector-foreground | cat
 ```
+
+### Profiling the daemons
+
+The daemons can be profiled using [pprof](https://pkg.go.dev/net/http/pprof).
+The profiling is initialized using the following flags:
+
+```console
+$ telepresence quit -s
+$ telepresence connect --userd-profiling-port 6060 --rootd-profiling-port 6061
+```
+
+If a daemon is started with pprof, then the goroutine stacks and much other
+info can be found by connecting your browser to http://localhost:6060/debug/pprof/
+(swap 6060 for whatever port you used with the flags)
+
+#### Dumping the goroutine stacks
+
+A dump will be produced in the respective logs for the daemon simply by killing it
+with a SIGQUIT signal. On Windows however, using profiling is the only option.
 
 ### RBAC issues
 

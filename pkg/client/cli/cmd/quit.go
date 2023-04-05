@@ -40,7 +40,7 @@ func quit() *cobra.Command {
 			if quitDaemons && daemon.GetUserClient(ctx) == nil {
 				// User daemon isn't running. If the root daemon is running, we must
 				// kill it from here.
-				if conn, err := socket.Dial(ctx, socket.DaemonName); err == nil {
+				if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
 					_, _ = daemon2.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{})
 				}
 			}

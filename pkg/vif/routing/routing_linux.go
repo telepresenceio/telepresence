@@ -136,9 +136,10 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get route for %s: %w", ip, err)
 	}
-	match := findInterfaceRe.FindStringSubmatch(string(out))
+	msg := string(out)
+	match := findInterfaceRe.FindStringSubmatch(msg)
 	if match == nil {
-		return nil, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, out)
+		return nil, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, msg)
 	}
 	var gatewayIP net.IP
 	gw := match[gwidx]

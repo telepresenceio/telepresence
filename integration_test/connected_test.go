@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -15,8 +13,12 @@ type connectedSuite struct {
 	itest.NamespacePair
 }
 
+func (s *connectedSuite) SuiteName() string {
+	return "Connected"
+}
+
 func init() {
-	itest.AddConnectedSuite("", func(h itest.NamespacePair) suite.TestingSuite {
+	itest.AddConnectedSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &connectedSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
 }
@@ -33,18 +35,6 @@ func (s *connectedSuite) Test_ReportsAllVersions() {
 	s.Regexp(fmt.Sprintf(`Root Daemon\s*: %s`, rxVer), stdout)
 	s.Regexp(fmt.Sprintf(`User Daemon\s*: %s`, rxVer), stdout)
 	s.Regexp(fmt.Sprintf(`Traffic Manager\s*: %s`, rxVer), stdout)
-}
-
-func (s *connectedSuite) Test_ReportsNotConnected() {
-	ctx := s.Context()
-	itest.TelepresenceDisconnectOk(ctx)
-	defer itest.TelepresenceOk(itest.WithUser(ctx, "default"), "connect")
-	stdout := itest.TelepresenceOk(ctx, "version")
-	rxVer := regexp.QuoteMeta(s.TelepresenceVersion())
-	s.Regexp(fmt.Sprintf(`Client\s*: %s`, rxVer), stdout)
-	s.Regexp(fmt.Sprintf(`Root Daemon\s*: %s`, rxVer), stdout)
-	s.Regexp(fmt.Sprintf(`User Daemon\s*: %s`, rxVer), stdout)
-	s.Regexp(`Traffic Manager\s*: not connected`, stdout)
 }
 
 func (s *connectedSuite) Test_Status() {

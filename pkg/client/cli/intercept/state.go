@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
@@ -313,6 +314,10 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		return nil, err
 	}
 	spec.TargetPort = int32(s.localPort)
+	if iputil.Parse(s.Address) == nil {
+		return nil, fmt.Errorf("--address %s is not a valid IP address", s.Address)
+	}
+	spec.TargetHost = s.Address
 
 	doMount := false
 	ir.LocalMountPort = int32(s.LocalMountPort)

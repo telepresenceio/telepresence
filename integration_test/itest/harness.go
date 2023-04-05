@@ -12,7 +12,7 @@ type Harness interface {
 	Cluster
 
 	PushHarness(ctx context.Context, setup func(ctx context.Context) bool, tearDown func(ctx context.Context))
-	RunSuite(suite.TestingSuite)
+	RunSuite(TestingSuite)
 
 	HarnessContext() context.Context
 	SetupSuite()
@@ -50,8 +50,8 @@ func (h *harness) HarnessContext() context.Context {
 	return h.ctx
 }
 
-func (h *harness) RunSuite(s suite.TestingSuite) {
-	suite.Run(h.HarnessT(), s)
+func (h *harness) RunSuite(s TestingSuite) {
+	h.HarnessT().Run(s.SuiteName(), func(t *testing.T) { suite.Run(t, s) })
 }
 
 // SetupSuite calls all functions that has been added with AddSetup in the order they
@@ -73,7 +73,9 @@ func (h *harness) SetupSuite() {
 		upDown := &uds[i]
 		if setup := upDown.setup; setup != nil {
 			upDown.setup = nil // Never setup twice
-			upDown.wasSetup = safeSetUp(upDown.setupWith, setup)
+			if upDown.wasSetup = safeSetUp(upDown.setupWith, setup); !upDown.wasSetup {
+				getT(h.ctx).FailNow()
+			}
 		}
 	}
 }

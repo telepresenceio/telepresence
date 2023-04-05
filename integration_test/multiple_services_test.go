@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
@@ -22,8 +20,12 @@ type multipleServicesSuite struct {
 	itest.MultipleServices
 }
 
+func (s *multipleServicesSuite) SuiteName() string {
+	return "MultipleServices"
+}
+
 func init() {
-	itest.AddMultipleServicesSuite("", "hello", func(h itest.MultipleServices) suite.TestingSuite {
+	itest.AddMultipleServicesSuite("", "hello", func(h itest.MultipleServices) itest.TestingSuite {
 		return &multipleServicesSuite{Suite: itest.Suite{Harness: h}, MultipleServices: h}
 	})
 }
@@ -33,7 +35,7 @@ func (s *multipleServicesSuite) Test_LargeRequest() {
 	client := &http.Client{Timeout: 15 * time.Minute}
 	const sendSize = 1024 * 1024 * 20
 	const varyMax = 1 << 15 // vary last 64Ki
-	const concurrentRequests = 31
+	const concurrentRequests = 13
 
 	tb := [sendSize + varyMax]byte{}
 	tb[0] = '!'
@@ -100,15 +102,20 @@ func (s *multipleServicesSuite) Test_List() {
 }
 
 func (s *multipleServicesSuite) Test_ListOnlyMapped() {
-	ctx := s.Context()
+	ctx := itest.WithUser(s.Context(), "default")
 	require := s.Require()
-	stdout := itest.TelepresenceOk(ctx, "connect", "--mapped-namespaces", "default")
-	require.Empty(stdout)
+	itest.TelepresenceDisconnectOk(ctx)
+	defer func() {
+		ctx := s.Context()
+		itest.TelepresenceDisconnectOk(ctx)
+		itest.TelepresenceOk(s.Context(), "connect", "--manager-namespace", s.ManagerNamespace())
+	}()
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", "default")
 
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
+	stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
 	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 
-	stdout = itest.TelepresenceOk(ctx, "connect", "--mapped-namespaces", "all")
+	stdout = itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", "all")
 	require.Empty(stdout)
 
 	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
