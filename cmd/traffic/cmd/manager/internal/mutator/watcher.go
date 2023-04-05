@@ -502,11 +502,7 @@ func (c *configUpdater) updateConfigMap() error {
 		}
 	}
 
-	if cm.Data == nil {
-		cm.Data = make(map[string]string)
-	}
-
-	cmData := map[string]string{}
+	var cmData map[string]string
 
 	c.Lock() // Lock the config updater to avoid any addition to c.Config.
 	defer func() {
@@ -540,13 +536,13 @@ func (c *configUpdater) updateConfigMap() error {
 		}
 	}
 
+	cm.Data = cmData
+
 	if create {
-		cm.Data = cmData
 		dlog.Debugf(c.ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
 		_, err = api.Create(c.ctx, cm, meta.CreateOptions{})
 	} else {
 		dlog.Debugf(c.ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
-		cm.Data = cmData
 		_, err = api.Update(c.ctx, cm, meta.UpdateOptions{})
 	}
 
