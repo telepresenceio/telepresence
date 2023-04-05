@@ -48,7 +48,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
@@ -155,7 +154,7 @@ func NewSession(
 	sr.Report(ctx, "connect")
 
 	dlog.Info(ctx, "Connecting to k8s cluster...")
-	cluster, err := connectCluster(ctx, cr, config)
+	cluster, err := k8s.ConnectCluster(ctx, cr, config)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
@@ -266,56 +265,6 @@ func (s *session) ManagerVersion() semver.Version {
 
 func (s *session) GetSessionConfig() *client.Config {
 	return &s.sessionConfig
-}
-
-// connectCluster returns a configured cluster instance.
-func connectCluster(c context.Context, cr *rpc.ConnectRequest, config *client.Kubeconfig) (*k8s.Cluster, error) {
-	mappedNamespaces := cr.MappedNamespaces
-	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
-		mappedNamespaces = nil
-	} else {
-		sort.Strings(mappedNamespaces)
-	}
-
-	cluster, err := k8s.NewCluster(c, config, mappedNamespaces)
-	if err != nil {
-		return nil, err
-	}
-	return cluster, nil
-}
-
-func DeleteManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kubeconfig) error {
-	cr := req.GetConnectRequest()
-	if cr == nil {
-		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
-		cr = &rpc.ConnectRequest{}
-	}
-
-	cluster, err := connectCluster(ctx, cr, config)
-	if err != nil {
-		return err
-	}
-
-	return helm.DeleteTrafficManager(
-		ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req)
-}
-
-func EnsureManager(ctx context.Context, req *rpc.HelmRequest, config *client.Kubeconfig) error {
-	// seg guard
-	cr := req.GetConnectRequest()
-	if cr == nil {
-		dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
-		cr = &rpc.ConnectRequest{}
-	}
-
-	cluster, err := connectCluster(ctx, cr, config)
-	if err != nil {
-		return err
-	}
-
-	dlog.Debug(ctx, "ensuring that traffic-manager exists")
-	c := cluster.WithK8sInterface(ctx)
-	return helm.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
