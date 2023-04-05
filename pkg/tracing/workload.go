@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"context"
+	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -19,6 +20,19 @@ func RecordWorkloadInfo(span trace.Span, wl k8sapi.Workload) {
 		attribute.String("tel2.workload-namespace", wl.GetNamespace()),
 		attribute.String("tel2.workload-kind", wl.GetKind()),
 	)
+}
+
+func GetWorkloadFromCache(ctx context.Context, workloadCache map[string]k8sapi.Workload, name, namespace, kind string) (k8sapi.Workload, error) {
+	key := fmt.Sprintf("%s-%s-%s", name, namespace, kind)
+	if val, ok := workloadCache[key]; ok {
+		return val, nil
+	}
+	wl, err := GetWorkload(ctx, name, namespace, kind)
+	if err != nil {
+		return nil, err
+	}
+	workloadCache[key] = wl
+	return workloadCache[key], nil
 }
 
 // GetWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind

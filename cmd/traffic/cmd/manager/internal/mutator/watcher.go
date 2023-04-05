@@ -6,10 +6,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -17,8 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
-
-	"github.com/google/go-cmp/cmp"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -216,9 +217,10 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorC
 
 func NewWatcher(name string, namespaces ...string) *configWatcher {
 	return &configWatcher{
-		name:       name,
-		namespaces: namespaces,
-		data:       make(map[string]map[string]string),
+		name:           name,
+		namespaces:     namespaces,
+		data:           make(map[string]map[string]string),
+		configUpdaters: make(map[string]*configUpdater),
 	}
 }
 
@@ -230,6 +232,9 @@ type configWatcher struct {
 	data       map[string]map[string]string
 	modCh      chan entry
 	delCh      chan entry
+
+	configUpdatersLock sync.RWMutex
+	configUpdaters     map[string]*configUpdater
 }
 
 type entry struct {
@@ -389,38 +394,99 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 		return nil
 	}
 
+	var cu *configUpdater
+
+	newGroup := false
+
+	for {
+		// Check if the group is in the pool.
+		c.configUpdatersLock.Lock()
+		if _, ok := c.configUpdaters[ns]; !ok {
+			cu = createConfigUpdater(ctx, c, ns)
+			c.configUpdaters[ns] = cu
+			newGroup = true
+		} else {
+			cu = c.configUpdaters[ns]
+		}
+		c.configUpdatersLock.Unlock()
+
+		cu.Lock()
+		// If the config updater already has updated the config map, this flag will be true, so drop it.
+		if cu.Updated {
+			cu.Unlock()
+			continue
+		}
+
+		cu.Config[ac.AgentName] = yml
+
+		if updateSnapshot {
+			cu.AddToSnapshot(ac.AgentName)
+		}
+
+		cu.Unlock()
+
+		break
+	}
+
+	if newGroup {
+		cu.Go(cu.updateConfigMap)
+	}
+
+	return cu.Wait()
+}
+
+func createConfigUpdater(ctx context.Context, configWatcher *configWatcher, namespace string) *configUpdater {
+	grp, grpCtx := errgroup.WithContext(ctx)
+	return &configUpdater{
+		Group: grp,
+		Mutex: &sync.Mutex{},
+		cw:    configWatcher,
+
+		ctx:           grpCtx,
+		namespace:     namespace,
+		addToSnapshot: map[string]struct{}{},
+
+		Config:  map[string]string{},
+		Updated: false,
+	}
+}
+
+type configUpdater struct {
+	*errgroup.Group
+	*sync.Mutex
+
+	cw *configWatcher
+
+	ctx           context.Context
+	namespace     string
+	addToSnapshot map[string]struct{}
+
+	Config  map[string]string
+	Updated bool
+}
+
+func (c *configUpdater) AddToSnapshot(agentName string) {
+	c.addToSnapshot[agentName] = struct{}{}
+}
+
+func (c *configUpdater) updateConfigMap() error {
+	// Any other update for this namespace will have to start a new group at this point.
+	defer func() {
+		c.cw.configUpdatersLock.Lock()
+		delete(c.cw.configUpdaters, c.namespace)
+		c.cw.configUpdatersLock.Unlock()
+	}()
+
+	api := k8sapi.GetK8sInterface(c.ctx).CoreV1().ConfigMaps(c.namespace)
+
 	create := false
-	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
-	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
+
+	cm, err := api.Get(c.ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
 		}
 		create = true
-	} else {
-		// Ensure that we're not about to overwrite a manually added config entry
-		if currentYml, ok := cm.Data[ac.AgentName]; ok {
-			var currAc agentconfig.Sidecar
-			if err = decode(currentYml, &currAc); err == nil && currAc.Manual {
-				dlog.Warnf(ctx, "avoided an attempt to overwrite manually added config entry for %s.%s", ac.AgentName, ns)
-				return nil
-			}
-		}
-		if cm.Data == nil {
-			cm.Data = make(map[string]string)
-		}
-		if cm.Data[ac.AgentName] == yml {
-			// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
-			return nil
-		}
-	}
-
-	if updateSnapshot {
-		c.Lock()
-		if nm, ok := c.data[ns]; ok {
-			nm[ac.AgentName] = yml
-		}
-		c.Unlock()
 	}
 
 	if create {
@@ -431,23 +497,58 @@ func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, upda
 			},
 			ObjectMeta: meta.ObjectMeta{
 				Name:      agentconfig.ConfigMap,
-				Namespace: ns,
-			},
-			Data: map[string]string{
-				ac.AgentName: yml,
+				Namespace: c.namespace,
 			},
 		}
-		dlog.Debugf(ctx, "Creating new ConfigMap %s.%s with %s", agentconfig.ConfigMap, ns, ac.AgentName)
-		_, err = api.Create(ctx, cm, meta.CreateOptions{})
-	} else {
-		if _, ok := cm.Data[ac.AgentName]; ok {
-			dlog.Debugf(ctx, "Updating %s in ConfigMap %s.%s", ac.AgentName, agentconfig.ConfigMap, ns)
-		} else {
-			dlog.Debugf(ctx, "Adding %s to ConfigMap %s.%s", ac.AgentName, agentconfig.ConfigMap, ns)
-		}
-		cm.Data[ac.AgentName] = yml
-		_, err = api.Update(ctx, cm, meta.UpdateOptions{})
 	}
+
+	var cmData map[string]string
+
+	c.Lock() // Lock the config updater to avoid any addition to c.Config.
+	defer func() {
+		c.Updated = true
+		c.Unlock()
+	}()
+
+	cmData = maps.Copy(c.cw.data[c.namespace])
+
+	for agentName, yml := range c.Config {
+		var currAc agentconfig.Sidecar
+		// Ensure that we're not about to overwrite a manually added config entry
+		if err = decode(yml, &currAc); err == nil && currAc.Manual {
+			dlog.Warnf(c.ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", agentName, c.namespace)
+			continue
+		}
+
+		// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
+		if cm.Data[agentName] == yml {
+			continue
+		}
+
+		cmData[agentName] = yml
+
+		if _, updateSnapshotOK := c.addToSnapshot[agentName]; updateSnapshotOK {
+			c.cw.Lock()
+			nm, ok := c.cw.data[c.namespace]
+			if !ok {
+				c.cw.data[c.namespace] = make(map[string]string, len(cmData))
+				nm = c.cw.data[c.namespace]
+			}
+			nm[agentName] = yml
+			c.cw.Unlock()
+		}
+	}
+
+	cm.Data = cmData
+
+	if create {
+		dlog.Debugf(c.ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
+		_, err = api.Create(c.ctx, cm, meta.CreateOptions{})
+	} else {
+		dlog.Debugf(c.ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
+		_, err = api.Update(c.ctx, cm, meta.UpdateOptions{})
+	}
+
 	return err
 }
 
@@ -595,17 +696,7 @@ func (c *configWatcher) configsAffectedByWorkloads(ctx context.Context, nsData m
 }
 
 func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []*agentconfig.Sidecar {
-	c.RLock()
-	defer c.RUnlock()
 	ns := svc.Namespace
-	nsData, ok := c.data[ns]
-	if !ok || len(nsData) == 0 {
-		return nil
-	}
-
-	if isDelete {
-		return c.configsAffectedBySvcUID(ctx, nsData, svc.UID)
-	}
 
 	var wls []k8sapi.Workload
 	// Find workloads that the updated service is referencing.
@@ -621,6 +712,19 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 			wls = append(wls, stss...)
 		}
 	}
+
+	c.RLock()
+	defer c.RUnlock()
+	nsData, ok := c.data[ns]
+
+	if !ok || len(nsData) == 0 {
+		return nil
+	}
+
+	if isDelete {
+		return c.configsAffectedBySvcUID(ctx, nsData, svc.UID)
+	}
+
 	return c.configsAffectedByWorkloads(ctx, nsData, wls)
 }
 
