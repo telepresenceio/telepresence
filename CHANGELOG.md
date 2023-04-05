@@ -19,9 +19,13 @@
 
 - BugFix: The version command won't throw an error anymore if there is no kubeconfig file defined.
 
+### 2.12.2 (April 4, 2023)
+
+- Security: Update golang to 1.20.3 to address CVE-2023-24534, CVE-2023-24536, CVE-2023-24537, CVE-2023-24538
+
 ### 2.12.1 (March 22, 2023)
 
-- Bugfix: Illegal characters are now replaced when a docker container name is generated from a kubernetes context name. 
+- Bugfix: Illegal characters are now replaced when a docker container name is generated from a kubernetes context name.
 
 ### 2.12.0 (March 20, 2023)
 
@@ -373,7 +377,6 @@ Security release to rebuild with go 1.19.6
 - Bugfix: Telepresence help message functionality without a running user daemon has been restored.
 
 - Bugfix: The `telepresence list` command no longer includes the `traffic-manager` deployment.
-
 
 ### 2.7.1 (August 10, 2022)
 
