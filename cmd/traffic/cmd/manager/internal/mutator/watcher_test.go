@@ -169,6 +169,46 @@ func (s *suiteConfigWatcher) TestStoreForNewConfigMapNoSnapshotUpdate() {
 	}, s.configWatcher.data)
 }
 
+func (s *suiteConfigWatcher) TestStoreForNewConfigMapWithSnapshotUpdate() {
+	// given
+	ctx := k8sapi.WithK8sInterface(context.Background(), s.kubeApiMock)
+	namespace := "my-app"
+	s.configWatcher.data = map[string]map[string]string{}
+	sidecarConfig := &agentconfig.Sidecar{
+		AgentName: "echo-easy",
+		Namespace: namespace,
+	}
+
+	rawSidecarConfig, _ := yaml.Marshal(sidecarConfig)
+
+	s.configMapApiMock.EXPECT().
+		Get(gomock.Any(), agentconfig.ConfigMap, meta.GetOptions{}).
+		Return(nil, errors.NewNotFound(v1.Resource("configmap"), agentconfig.ConfigMap))
+
+	s.configMapApiMock.EXPECT().
+		Create(gomock.Any(), &v1.ConfigMap{
+			TypeMeta: meta.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: "v1",
+			},
+			ObjectMeta: meta.ObjectMeta{
+				Name:      agentconfig.ConfigMap,
+				Namespace: namespace,
+			},
+			Data: map[string]string{
+				"echo-easy": string(rawSidecarConfig),
+			},
+		}, meta.CreateOptions{}).
+		Return(nil, nil)
+
+	// when
+	err := s.configWatcher.Store(ctx, sidecarConfig, true)
+
+	// then
+	assert.NoError(s.T(), err)
+	assert.Contains(s.T(), s.configWatcher.data, "my-app")
+}
+
 func (s *suiteConfigWatcher) TestStoreErrGroupBuffer() {
 	// given
 	ctx := k8sapi.WithK8sInterface(context.Background(), s.kubeApiMock)

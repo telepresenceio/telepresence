@@ -510,29 +510,32 @@ func (c *configUpdater) updateConfigMap() error {
 		c.Unlock()
 	}()
 
-	if nm, ok := c.cw.data[c.namespace]; ok {
-		cmData = maps.Copy(nm)
+	cmData = maps.Copy(c.cw.data[c.namespace])
 
-		for agentName, yml := range c.Config {
-			var currAc agentconfig.Sidecar
-			// Ensure that we're not about to overwrite a manually added config entry
-			if err = decode(yml, &currAc); err == nil && currAc.Manual {
-				dlog.Warnf(c.ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", agentName, c.namespace)
-				continue
+	for agentName, yml := range c.Config {
+		var currAc agentconfig.Sidecar
+		// Ensure that we're not about to overwrite a manually added config entry
+		if err = decode(yml, &currAc); err == nil && currAc.Manual {
+			dlog.Warnf(c.ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", agentName, c.namespace)
+			continue
+		}
+
+		// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
+		if cm.Data[agentName] == yml {
+			continue
+		}
+
+		cmData[agentName] = yml
+
+		if _, updateSnapshotOK := c.addToSnapshot[agentName]; updateSnapshotOK {
+			c.cw.Lock()
+			nm, ok := c.cw.data[c.namespace]
+			if !ok {
+				c.cw.data[c.namespace] = make(map[string]string, len(cmData))
+				nm = c.cw.data[c.namespace]
 			}
-
-			// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
-			if cm.Data[agentName] == yml {
-				continue
-			}
-
-			cmData[agentName] = yml
-
-			if _, updateSnapshotOK := c.addToSnapshot[agentName]; updateSnapshotOK {
-				c.cw.Lock()
-				nm[agentName] = yml
-				c.cw.Unlock()
-			}
+			nm[agentName] = yml
+			c.cw.Unlock()
 		}
 	}
 
