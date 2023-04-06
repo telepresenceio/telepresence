@@ -1,4 +1,4 @@
-package vif
+package device
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/device/buffer"
 )
 
 type device struct {

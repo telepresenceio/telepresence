@@ -1,4 +1,4 @@
-package vif
+package device
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/device/buffer"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 

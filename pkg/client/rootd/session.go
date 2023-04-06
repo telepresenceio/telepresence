@@ -48,7 +48,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
@@ -75,7 +75,7 @@ type Session struct {
 	scout *scout.Reporter
 
 	// dev is the TUN device that gets configured with the subnets found in the cluster
-	dev vif.Device
+	dev device.Device
 
 	stack *stack.Stack
 
@@ -91,9 +91,6 @@ type Session struct {
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
 	handlers *tunnel.Pool
-
-	// fragmentMap is when concatenating ipv4 fragments
-	fragmentMap map[uint16][]*buffer.Data
 
 	// The local dns server
 	dnsServer *dns.Server
@@ -266,7 +263,6 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 	s := &Session{
 		scout:            scout,
 		handlers:         tunnel.NewPool(),
-		fragmentMap:      make(map[uint16][]*buffer.Data),
 		rndSource:        rand.NewSource(time.Now().UnixNano()),
 		session:          mi.Session,
 		managerClient:    mc,
@@ -587,7 +583,7 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 
 	// Do we need a VIF? A darwin system with full cluster access doesn't.
 	if willProxy || s.dnsServerSubnet != nil {
-		if s.dev, err = vif.OpenTun(ctx); err != nil {
+		if s.dev, err = device.OpenTun(ctx); err != nil {
 			return err
 		}
 		if s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator()); err != nil {

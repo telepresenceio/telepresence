@@ -21,12 +21,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev device.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	if proc.RunningInContainer() {
 		// Don't bother with systemd-resolved when running in a docker container
 		return s.runOverridingServer(c, dev)
@@ -104,7 +104,7 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 	return s.resolveInCluster(c, q)
 }
 
-func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
+func (s *Server) runOverridingServer(c context.Context, dev device.Device) error {
 	if s.config.LocalIp == nil {
 		dat, err := os.ReadFile("/etc/resolv.conf")
 		if err != nil {
@@ -162,7 +162,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
 		// Server will close the listener, so no need to close it here.
-		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
+		s.processSearchPaths(g, func(c context.Context, paths []string, _ device.Device) error {
 			namespaces := make(map[string]struct{})
 			search := make([]string, 0)
 			for _, path := range paths {

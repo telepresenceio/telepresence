@@ -22,7 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
 )
 
 type Resolver func(context.Context, *dns.Question) (dnsproxy.RRs, int, error)
@@ -310,7 +310,7 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
 }
 
-func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
+func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, device.Device) error, dev device.Device) {
 	g.Go("RecursionCheck", s.performRecursionCheck)
 
 	g.Go("SearchPaths", func(c context.Context) error {
