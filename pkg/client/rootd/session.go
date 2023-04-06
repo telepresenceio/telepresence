@@ -47,8 +47,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/netstack"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
@@ -583,10 +583,7 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 
 	// Do we need a VIF? A darwin system with full cluster access doesn't.
 	if willProxy || s.dnsServerSubnet != nil {
-		if s.dev, err = device.OpenTun(ctx); err != nil {
-			return err
-		}
-		if s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator()); err != nil {
+		if s.stack, err = netstack.NewStack(ctx, s.dev, s.streamCreator()); err != nil {
 			return fmt.Errorf("NewStack: %v", err)
 		}
 	}

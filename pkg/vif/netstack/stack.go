@@ -1,4 +1,4 @@
-package vif
+package netstack
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"gvisor.dev/gvisor/pkg/log"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
@@ -25,35 +24,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
-
-type dlogEmitter struct {
-	context.Context
-}
-
-func (l dlogEmitter) Emit(_ int, level log.Level, _ time.Time, format string, v ...interface{}) { //nolint:goprintffuncname // not our API
-	switch level {
-	case log.Debug:
-		dlog.Debugf(l, format, v...)
-	case log.Info:
-		dlog.Infof(l, format, v...)
-	case log.Warning:
-		dlog.Warnf(l, format, v...)
-	}
-}
-
-func InitLogger(ctx context.Context) {
-	log.SetTarget(&dlogEmitter{Context: ctx})
-	var gl log.Level
-	switch dlog.MaxLogLevel(ctx) {
-	case dlog.LogLevelInfo:
-		gl = log.Info
-	case dlog.LogLevelDebug, dlog.LogLevelTrace:
-		gl = log.Debug
-	default:
-		gl = log.Warning
-	}
-	log.SetLevel(gl)
-}
 
 func NewStack(ctx context.Context, dev stack.LinkEndpoint, streamCreator tunnel.StreamCreator) (*stack.Stack, error) {
 	s := stack.New(stack.Options{
