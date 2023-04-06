@@ -196,8 +196,10 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 
 	ctx = WithModuleRoot(ctx)
 	exe := "telepresence"
-	env := make(map[string]string)
-	env["TELEPRESENCE_VERSION"] = s.testVersion
+	env := map[string]string{
+		"TELEPRESENCE_VERSION":  s.testVersion,
+		"TELEPRESENCE_REGISTRY": s.registry,
+	}
 	if runtime.GOOS == "windows" {
 		env["CGO_ENABLED"] = "0"
 		exe += ".exe"
@@ -233,7 +235,10 @@ func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg 
 	}
 
 	runMake := func(target string) {
-		out, err := Command(WithModuleRoot(ctx), makeExe, target).CombinedOutput()
+		out, err := Command(WithEnv(WithModuleRoot(ctx), map[string]string{
+			"TELEPRESENCE_VERSION":  s.testVersion,
+			"TELEPRESENCE_REGISTRY": s.registry,
+		}), makeExe, target).CombinedOutput()
 		if err != nil {
 			errs <- RunError(err, out)
 		}
