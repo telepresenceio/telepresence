@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -47,8 +46,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/netstack"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
@@ -74,10 +72,7 @@ import (
 type Session struct {
 	scout *scout.Reporter
 
-	// dev is the TUN device that gets configured with the subnets found in the cluster
-	dev device.Device
-
-	stack *stack.Stack
+	tunVif *vif.TunnelVIF
 
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
@@ -449,13 +444,13 @@ func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 	s.curSubnets = append(s.curSubnets, added...)
 
 	for _, sn := range removed {
-		if err := s.dev.RemoveSubnet(ctx, sn); err != nil {
+		if err := s.tunVif.Device.RemoveSubnet(ctx, sn); err != nil {
 			dlog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
 		}
 	}
 
 	for _, sn := range added {
-		if err := s.dev.AddSubnet(ctx, sn); err != nil {
+		if err := s.tunVif.Device.AddSubnet(ctx, sn); err != nil {
 			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
 		}
 	}
@@ -583,8 +578,8 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 
 	// Do we need a VIF? A darwin system with full cluster access doesn't.
 	if willProxy || s.dnsServerSubnet != nil {
-		if s.stack, err = netstack.NewStack(ctx, s.dev, s.streamCreator()); err != nil {
-			return fmt.Errorf("NewStack: %v", err)
+		if s.tunVif, err = vif.NewTunnelVIF(ctx, s.streamCreator()); err != nil {
+			return fmt.Errorf("NewTunnelVIF: %v", err)
 		}
 	}
 	s.onClusterInfo(ctx, mgrInfo, span)
@@ -822,14 +817,11 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
-		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
+		return s.dnsServer.Worker(ctx, s.tunVif.Device, s.configureDNS)
 	})
 
-	if s.stack != nil {
-		g.Go("stack", func(_ context.Context) error {
-			s.stack.Wait()
-			return nil
-		})
+	if s.tunVif != nil {
+		g.Go("vif", s.tunVif.Run)
 	}
 	return nil
 }
@@ -854,8 +846,10 @@ func (s *Session) stop(c context.Context) {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
-	if s.stack != nil {
-		s.stack.Close()
+	if s.tunVif != nil {
+		if err := s.tunVif.Close(); err != nil {
+			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)
+		}
 	}
 
 	cc = dcontext.WithoutCancel(c)
@@ -863,11 +857,6 @@ func (s *Session) stop(c context.Context) {
 		err := np.RemoveStatic(cc)
 		if err != nil {
 			dlog.Warnf(c, "error removing route %s: %v", np, err)
-		}
-	}
-	if s.dev != nil {
-		if err := s.dev.Close(); err != nil {
-			dlog.Errorf(c, "unable to close %s: %v", s.dev.Name(), err)
 		}
 	}
 }
