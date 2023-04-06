@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
 	"gvisor.dev/gvisor/pkg/log"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 type dlogEmitter struct {

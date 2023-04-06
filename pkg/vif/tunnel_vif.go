@@ -3,10 +3,11 @@ package vif
 import (
 	"context"
 
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/netstack"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 type TunnelVIF struct {
