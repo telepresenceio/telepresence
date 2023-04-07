@@ -150,7 +150,14 @@ func (s *Service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 
 func (s *Service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
-	s.sessionLock.RLock()
+	if !s.sessionLock.TryRLock() {
+		// A running session is blocking with a write-lock. Give it some time to quit, then kill it
+		time.Sleep(2 * time.Second)
+		if !s.sessionLock.TryRLock() {
+			s.quit()
+			return &empty.Empty{}, nil
+		}
+	}
 	defer s.sessionLock.RUnlock()
 	s.cancelSessionReadLocked()
 	s.quit()

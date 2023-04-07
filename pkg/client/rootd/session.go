@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -137,8 +138,24 @@ type Session struct {
 
 	// Whether pods should be proxied by the TUN-device
 	proxyClusterPods bool
+
 	// Whether services should be proxied by the TUN-device
 	proxyClusterSvcs bool
+
+	// dnsServerSubnet is normally never set. It is only used when neither proxyClusterPods nor the
+	// proxyClusterSvcs are set. In this situation, the VIF would be left without a primary subnet, so
+	// it will instead route very small subnet with 30 bit mask, large enough to hold:
+	//
+	//   n.n.n.0 The IP identifying the subnet
+	//   n.n.n.1 The IP of the (non existent) gateway
+	//   n.n.n.2 The IP of the DNS server
+	//   n.n.n.3 Unused
+	//
+	// The subnet is guaranteed to be free from all other routed subnets.
+	//
+	// NOTE: On macOS, where DNS is controlled by adding entries in /etc/resolver that points directly
+	// to a port on localhost, there's no need for this subnet.
+	dnsServerSubnet *net.IPNet
 
 	// vifReady is closed when the virtual network interface has been configured.
 	vifReady chan error
@@ -227,16 +244,12 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	if mc == nil || err != nil {
 		return nil, err
 	}
-	s, err := newSession(c, scout, mi, mc, ver)
-	if err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
+	s := newSession(c, scout, mi, mc, ver)
 	s.clientConn = conn
 	return s, nil
 }
 
-func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) (*Session, error) {
+func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
 	cfg := client.GetDefaultConfig()
 	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
 	if err != nil {
@@ -267,11 +280,6 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 		done:             make(chan struct{}),
 	}
 
-	s.dev, err = vif.OpenTun(c)
-	if err != nil {
-		return nil, err
-	}
-
 	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
 		s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
 	} else {
@@ -279,7 +287,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 	}
 	dlog.Infof(c, "also-proxy subnets %v", as)
 	dlog.Infof(c, "never-proxy subnets %v", ns)
-	return s, nil
+	return s
 }
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
@@ -368,7 +376,7 @@ func (s *Session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
 }
 
 func (s *Session) reconcileStaticRoutes(ctx context.Context) (err error) {
-	desired := []*routing.Route{}
+	var desired []*routing.Route
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "reconcileStaticRoutes")
 	defer tracing.EndAndRecord(span, err)
 
@@ -533,6 +541,33 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 	}
 }
 
+// createSubnetForDNSOnly will find a random IPv4 subnet that isn't currently routed and
+// attach the DNS server to that subnet.
+func (s *Session) createSubnetForDNSOnly(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+	// Avoid alsoProxied and neverProxied
+	avoid := make([]*net.IPNet, 0, len(s.alsoProxySubnets)+len(s.neverProxyRoutes))
+	avoid = append(avoid, s.alsoProxySubnets...)
+	for _, r := range s.neverProxyRoutes {
+		avoid = append(avoid, r.RoutedNet)
+	}
+
+	// Avoid the service subnet. It might be mapped with iptables (if running bare-metal) and
+	// hence invisible when listing known routes.
+	if mgrInfo.ServiceSubnet != nil {
+		avoid = append(avoid, iputil.IPNetFromRPC(mgrInfo.ServiceSubnet))
+	}
+
+	// Avoid the pod subnets. They are probably visible as known routes, but we add them to
+	// the avoid table to be sure.
+	for _, ps := range mgrInfo.PodSubnets {
+		avoid = append(avoid, iputil.IPNetFromRPC(ps))
+	}
+	var err error
+	if s.dnsServerSubnet, err = subnet.RandomIPv4Subnet(net.CIDRMask(30, 32), avoid); err != nil {
+		dlog.Error(ctx, err)
+	}
+}
+
 func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
 	defer close(s.vifReady)
 	s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
@@ -541,8 +576,23 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 	if err != nil {
 		return err
 	}
-	if s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator()); err != nil {
-		return fmt.Errorf("NewStack: %v", err)
+	willProxy := s.proxyClusterSvcs || s.proxyClusterPods
+
+	// We'll need to synthesize a subnet where we can attach the DNS service when the VIF isn't configured
+	// from cluster subnets. But not on darwin systems, because there the DNS is controlled by /etc/resolver
+	// entries appointing the DNS service directly via localhost:<port>.
+	if !willProxy && runtime.GOOS != "darwin" {
+		s.createSubnetForDNSOnly(ctx, mgrInfo)
+	}
+
+	// Do we need a VIF? A darwin system with full cluster access doesn't.
+	if willProxy || s.dnsServerSubnet != nil {
+		if s.dev, err = vif.OpenTun(ctx); err != nil {
+			return err
+		}
+		if s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator()); err != nil {
+			return fmt.Errorf("NewStack: %v", err)
+		}
 	}
 	s.onClusterInfo(ctx, mgrInfo, span)
 	return nil
@@ -557,15 +607,6 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			ClusterDomain: mgrInfo.ClusterDomain,
 		}
 	}
-
-	// We use the ManagerPodIp as the dnsIP. The reason for this is that no one should ever
-	// talk to the traffic-manager directly using the TUN device, so it's safe to use its
-	// IP to impersonate the DNS server. All traffic sent to that IP, will be routed to
-	// the local DNS server.
-	dnsIP := net.IP(mgrInfo.ManagerPodIp)
-	dlog.Infof(ctx, "Setting cluster DNS to %s", dnsIP)
-	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
-	s.dnsServer.SetClusterDNS(dns, dnsIP)
 
 	if r := mgrInfo.Routing; r != nil {
 		as := subnet.Unique(append(s.alsoProxySubnets, convertSubnets(r.AlsoProxySubnets)...))
@@ -592,7 +633,7 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		dlog.Infof(ctx, "never-proxy subnets %v", routing.Subnets(s.neverProxyRoutes))
 	}
 
-	subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
+	var subnets []*net.IPNet
 	if s.proxyClusterSvcs {
 		if mgrInfo.ServiceSubnet != nil {
 			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
@@ -609,11 +650,30 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		}
 	}
 
-	if s.proxyClusterPods || s.proxyClusterSvcs {
-		s.clusterSubnets = subnet.Unique(subnets)
-		if err := s.refreshSubnets(ctx); err != nil {
-			dlog.Error(ctx, err)
-		}
+	var dnsIP net.IP
+	if s.dnsServerSubnet != nil {
+		// None of the cluster's subnets are routed, so add this subnet instead and unconditionally
+		// use the first available IP for our DNS server.
+		dlog.Infof(ctx, "Adding Service subnet %s (for DNS only)", s.dnsServerSubnet)
+		subnets = append(subnets, s.dnsServerSubnet)
+		dnsIP = make(net.IP, len(s.dnsServerSubnet.IP))
+		copy(dnsIP, s.dnsServerSubnet.IP)
+		dnsIP[len(dnsIP)-1] = 2
+	} else {
+		// We use the ManagerPodIp as the dnsIP. The reason for this is that no one should ever
+		// talk to the traffic-manager directly using the TUN device, so it's safe to use its
+		// IP to impersonate the DNS server. All traffic sent to that IP, will be routed to
+		// the local DNS server.
+		dnsIP = mgrInfo.ManagerPodIp
+	}
+
+	dlog.Infof(ctx, "Setting cluster DNS to %s", dnsIP)
+	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
+	s.dnsServer.SetClusterDNS(dns, dnsIP)
+
+	s.clusterSubnets = subnet.Unique(subnets)
+	if err := s.refreshSubnets(ctx); err != nil {
+		dlog.Error(ctx, err)
 	}
 
 	span.SetAttributes(
@@ -767,13 +827,15 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
-		return s.dnsServer.Worker(ctx, s.dev, s.proxyClusterPods || s.proxyClusterSvcs, s.configureDNS)
+		return s.dnsServer.Worker(ctx, s.dev, s.configureDNS)
 	})
 
-	g.Go("stack", func(_ context.Context) error {
-		s.stack.Wait()
-		return nil
-	})
+	if s.stack != nil {
+		g.Go("stack", func(_ context.Context) error {
+			s.stack.Wait()
+			return nil
+		})
+	}
 	return nil
 }
 
@@ -797,7 +859,9 @@ func (s *Session) stop(c context.Context) {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
-	s.stack.Close()
+	if s.stack != nil {
+		s.stack.Close()
+	}
 
 	cc = dcontext.WithoutCancel(c)
 	for _, np := range s.curStaticRoutes {
@@ -806,8 +870,10 @@ func (s *Session) stop(c context.Context) {
 			dlog.Warnf(c, "error removing route %s: %v", np, err)
 		}
 	}
-	if err := s.dev.Close(); err != nil {
-		dlog.Errorf(c, "unable to close %s: %v", s.dev.Name(), err)
+	if s.dev != nil {
+		if err := s.dev.Close(); err != nil {
+			dlog.Errorf(c, "unable to close %s: %v", s.dev.Name(), err)
+		}
 	}
 }
 

@@ -9,6 +9,8 @@
 
 - Feature: There's a new --address flag to the intercept command allowing users to set the target IP of the intercept.
 
+- Bugfix: DNS works properly even when no cluster subnet is routed by the Telepresence VIF.
+
 - Bugfix: The Traffic Manager uses a fail-proof way to determine the cluster domain.
 
 - Bugfix: DNS on windows is more reliable and performant.

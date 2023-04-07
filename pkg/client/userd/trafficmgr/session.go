@@ -1176,10 +1176,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 	svc := userd.GetService(ctx)
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
-		rootSession, err := rootd.NewInProcSession(ctx, svc.Reporter(), oi, s.managerClient, s.managerVersion)
-		if err != nil {
-			return nil, err
-		}
+		rootSession := rootd.NewInProcSession(ctx, svc.Reporter(), oi, s.managerClient, s.managerVersion)
 		if err = rootSession.Start(ctx, dgroup.NewGroup(ctx, dgroup.GroupConfig{})); err != nil {
 			return nil, err
 		}
