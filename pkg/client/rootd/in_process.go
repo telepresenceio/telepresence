@@ -103,12 +103,7 @@ func NewInProcSession(
 	mi *rpc.OutboundInfo,
 	mc manager.ManagerClient,
 	ver semver.Version,
-) (*InProcSession, error) {
+) *InProcSession {
 	ctx, cancel := context.WithCancel(ctx)
-	s, err := newSession(ctx, scout, mi, &userdToManagerShortcut{mc}, ver)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	return &InProcSession{Session: s, cancel: cancel}, nil
+	return &InProcSession{Session: newSession(ctx, scout, mi, &userdToManagerShortcut{mc}, ver), cancel: cancel}
 }

@@ -26,10 +26,10 @@ import (
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, configureDNS func(net.IP, *net.UDPAddr)) error {
-	if !proxyCluster || proc.RunningInContainer() {
+func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
+	if proc.RunningInContainer() {
 		// Don't bother with systemd-resolved when running in a docker container
-		return s.runOverridingServer(c, dev, proxyCluster)
+		return s.runOverridingServer(c, dev)
 	}
 
 	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
@@ -37,7 +37,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, co
 		err = nil
 		if c.Err() == nil {
 			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev, proxyCluster)
+			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev)
 		}
 	}
 	return err
@@ -104,7 +104,7 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 	return s.resolveInCluster(c, q)
 }
 
-func (s *Server) runOverridingServer(c context.Context, dev vif.Device, proxyCluster bool) error {
+func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	if s.config.LocalIp == nil {
 		dat, err := os.ReadFile("/etc/resolv.conf")
 		if err != nil {
@@ -179,7 +179,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, proxyClu
 			s.flushDNS()
 			return nil
 		}, dev)
-		return s.Run(c, serverStarted, listeners, pool, s.resolveInSearch, proxyCluster)
+		return s.Run(c, serverStarted, listeners, pool, s.resolveInSearch)
 	})
 
 	if proc.RunningInContainer() {

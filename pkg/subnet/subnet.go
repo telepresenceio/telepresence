@@ -3,6 +3,7 @@ package subnet
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"sort"
 )
@@ -148,28 +149,110 @@ func Equal(a, b *net.IPNet) bool {
 	return false
 }
 
-// Covers answers the question if network range a contains all of network range b.
+// Covers answers the question if network range a contains the full network range b.
 func Covers(a, b *net.IPNet) bool {
-	if !a.Contains(b.IP) {
-		return false
-	}
+	return a.Contains(b.IP) && a.Contains(maxIP(b))
+}
 
+// Overlaps answers the question if there is an overlap between network range a and b.
+func Overlaps(a, b *net.IPNet) bool {
+	return a.Contains(b.IP) || a.Contains(maxIP(b)) || b.Contains(a.IP) || b.Contains(maxIP(a))
+}
+
+func maxIP(cidr *net.IPNet) net.IP {
 	// create max IP in range b using its mask
-	ones, _ := b.Mask.Size()
-	l := len(b.IP)
+	ones, _ := cidr.Mask.Size()
+	l := len(cidr.IP)
 	m := make(net.IP, l)
 	n := uint(ones)
 	for i := 0; i < l; i++ {
 		switch {
 		case n >= 8:
-			m[i] = b.IP[i]
+			m[i] = cidr.IP[i]
 			n -= 8
 		case n > 0:
-			m[i] = b.IP[i] | byte(0xff>>n)
+			m[i] = cidr.IP[i] | byte(0xff>>n)
 			n = 0
 		default:
 			m[i] = 0xff
 		}
 	}
-	return a.Contains(m)
+	return m
+}
+
+// incIP attempts to increase the given ip. The increase starts at the penultimate byte. The increased IP is
+// returned unless it is equal or larger than the given end, in which case nil is returned.
+func incIP(ip, end net.IP) net.IP {
+	ipc := make(net.IP, len(ip))
+	for bi := len(ip) - 2; bi >= 0; bi-- {
+		if bv := ip[bi]; bv < 255 {
+			copy(ipc, ip)
+			ipc[bi] = bv + 1
+			// set bytes to the right of the increased byt to zero.
+			for xi := bi + 1; xi < len(ipc)-1; xi++ {
+				ipc[xi] = 0
+			}
+			if compareIPs(ipc, end) < 0 {
+				return ipc
+			}
+			break
+		}
+	}
+	return nil
+}
+
+// RandomIPv4Subnet finds a random free subnet using the given mask. A subnet is considered
+// free if it doesn't overlap with any of the subnets returned by the net.InterfaceAddrs
+// function or with any of the subnets provided in the avoid parameter.
+// The returned subnet will be a private IPv4 subnet in either class C, B, or A range, and the search
+// for a free subnet uses that order.
+// See https://en.wikipedia.org/wiki/Private_network for more info about private subnets.
+func RandomIPv4Subnet(mask net.IPMask, avoid []*net.IPNet) (*net.IPNet, error) {
+	as, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	cidrs := make([]*net.IPNet, 0, len(as)+len(avoid))
+	for _, a := range as {
+		if _, cidr, err := net.ParseCIDR(a.String()); err == nil {
+			cidrs = append(cidrs, cidr)
+		}
+	}
+	cidrs = append(cidrs, avoid...)
+
+	// IP address range pairs, from - to (to is non-inclusive)
+	ranges := []net.IP{
+		{192, 168, 0, 0}, {192, 169, 0, 0}, // Class C private range
+		{172, 16, 0, 0}, {172, 32, 0, 0}, // Class B private range
+		{10, 0, 0, 0}, {11, 0, 0, 0}, // Class A private range
+	}
+
+	for i := 0; i < len(ranges); i += 2 {
+		ip := ranges[i]
+
+		end := ranges[i+1]
+		inUse := false
+		for {
+			ip1 := make(net.IP, len(ip))
+			copy(ip1, ip)
+			ip1[len(ip)-1] = 1
+			sn := net.IPNet{
+				IP:   ip1,
+				Mask: mask,
+			}
+			for _, cidr := range cidrs {
+				if Overlaps(cidr, &sn) {
+					inUse = true
+					break
+				}
+			}
+			if !inUse {
+				return &sn, nil
+			}
+			if ip = incIP(ip, end); ip == nil {
+				break
+			}
+		}
+	}
+	return nil, fmt.Errorf("unable to find a free subnet")
 }

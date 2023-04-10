@@ -83,9 +83,6 @@ type Server struct {
 
 	// ready is closed when the DNS server is fully configured
 	ready chan error
-
-	// Whether the TUN-device is proxying cluster CIDRs
-	proxyCluster bool
 }
 
 type cacheEntry struct {
@@ -638,11 +635,10 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 }
 
 // Run starts the DNS server(s) and waits for them to end.
-func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallbackPool FallbackPool, resolve Resolver, proxyCluster bool) error {
+func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []net.PacketConn, fallbackPool FallbackPool, resolve Resolver) error {
 	s.ctx = c
 	s.fallbackPool = fallbackPool
 	s.resolve = resolve
-	s.proxyCluster = proxyCluster
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	for _, listener := range listeners {
