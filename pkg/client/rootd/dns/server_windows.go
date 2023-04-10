@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/datawire/dlib/dgroup"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (s *Server) Worker(c context.Context, dev device.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return err
@@ -31,7 +31,7 @@ func (s *Server) Worker(c context.Context, dev device.Device, configureDNS func(
 	return g.Wait()
 }
 
-func (s *Server) updateRouterDNS(c context.Context, paths []string, dev device.Device) error {
+func (s *Server) updateRouterDNS(c context.Context, paths []string, dev vif.Device) error {
 	namespaces := make(map[string]struct{})
 	search := make([]string, 0)
 	for _, path := range paths {

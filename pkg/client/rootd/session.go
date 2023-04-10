@@ -72,7 +72,7 @@ import (
 type Session struct {
 	scout *scout.Reporter
 
-	tunVif *vif.TunnelVIF
+	tunVif *vif.TunnelingDevice
 
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
@@ -578,7 +578,7 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 
 	// Do we need a VIF? A darwin system with full cluster access doesn't.
 	if willProxy || s.dnsServerSubnet != nil {
-		if s.tunVif, err = vif.NewTunnelVIF(ctx, s.streamCreator()); err != nil {
+		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator()); err != nil {
 			return fmt.Errorf("NewTunnelVIF: %v", err)
 		}
 	}

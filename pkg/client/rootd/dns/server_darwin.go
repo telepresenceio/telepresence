@@ -14,7 +14,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/device"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 type resolveFile struct {
@@ -130,7 +130,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //	man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (s *Server) Worker(c context.Context, dev device.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
@@ -184,7 +184,7 @@ func (s *Server) Worker(c context.Context, dev device.Device, configureDNS func(
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		s.processSearchPaths(g, func(c context.Context, paths []string, _ device.Device) error {
+		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
 			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
 		}, dev)
 		// Server will close the listener, so no need to close it here.

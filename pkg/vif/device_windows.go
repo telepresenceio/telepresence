@@ -1,4 +1,4 @@
-package device
+package vif
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/device/buffer"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
 // This nativeDevice will require that wintun.dll is available to the loader.

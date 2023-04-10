@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package device
+package vif
 
 import (
 	"context"
