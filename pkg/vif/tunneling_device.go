@@ -11,6 +11,7 @@ import (
 type TunnelingDevice struct {
 	stack  *stack.Stack
 	Device Device
+	Router *Router
 }
 
 func NewTunnelingDevice(ctx context.Context, tunnelStreamCreator tunnel.StreamCreator) (*TunnelingDevice, error) {
@@ -22,14 +23,17 @@ func NewTunnelingDevice(ctx context.Context, tunnelStreamCreator tunnel.StreamCr
 	if err != nil {
 		return nil, err
 	}
+	router := NewRouter(dev)
 	return &TunnelingDevice{
 		stack:  stack,
 		Device: dev,
+		Router: router,
 	}, nil
 }
 
-func (vif *TunnelingDevice) Close() error {
+func (vif *TunnelingDevice) Close(ctx context.Context) error {
 	vif.stack.Close()
+	vif.Router.Close(ctx)
 	return vif.Device.Close()
 }
 

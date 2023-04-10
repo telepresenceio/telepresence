@@ -10,6 +10,15 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
+func ConvertSubnets(ms []*manager.IPNet) []*net.IPNet {
+	ns := make([]*net.IPNet, len(ms))
+	for i, m := range ms {
+		n := IPNetFromRPC(m)
+		ns[i] = n
+	}
+	return ns
+}
+
 func IPNetToRPC(n *net.IPNet) *manager.IPNet {
 	ones, _ := n.Mask.Size()
 	return &manager.IPNet{
