@@ -340,10 +340,12 @@ func (s *Session) getNetworkConfig() *rpc.NetworkConfig {
 			info.NeverProxySubnets[i] = iputil.IPNetToRPC(np)
 		}
 	}
-	curSubnets := s.tunVif.Router.GetRoutedSubnets()
-	nc.Subnets = make([]*manager.IPNet, len(curSubnets))
-	for i, sn := range curSubnets {
-		nc.Subnets[i] = iputil.IPNetToRPC(sn)
+	if s.tunVif != nil {
+		curSubnets := s.tunVif.Router.GetRoutedSubnets()
+		nc.Subnets = make([]*manager.IPNet, len(curSubnets))
+		for i, sn := range curSubnets {
+			nc.Subnets[i] = iputil.IPNetToRPC(sn)
+		}
 	}
 	return nc
 }
@@ -354,6 +356,10 @@ func (s *Session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
 }
 
 func (s *Session) refreshSubnets(ctx context.Context) (err error) {
+	if s.tunVif == nil {
+		dlog.Debug(ctx, "no tunnel, not refreshing subnets")
+		return nil
+	}
 	// Create a unique slice of all desired subnets.
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "refreshSubnets")
 	defer tracing.EndAndRecord(span, err)
