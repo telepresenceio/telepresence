@@ -23,7 +23,7 @@
 
 - Bugfix: The traffic-manager will no longer panic when the CNAME of kubernetes.default doesn't contain .svc.
 
-- Change: Add `.image.hooks.curl.imagePullSecrets` and `.image.hooks.busybox.imagePullSecrets` to Helm values.
+- Change: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
 
 - Bugfix: The `telepresence helm install/upgrade --set` family of flags now work correctly with comma separated values.
 

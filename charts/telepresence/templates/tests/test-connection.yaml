@@ -9,7 +9,7 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
-  {{- with .image.hooks.busybox.imagePullSecrets }}
+  {{- with .Values.hooks.busybox.imagePullSecrets }}
   imagePullSecrets:
     {{- toYaml . | nindent 2 }}
   {{- end }}

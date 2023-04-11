@@ -27,7 +27,7 @@ spec:
       securityContext:
         {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
       restartPolicy: Never
-      {{- with .image.hooks.curl.imagePullSecrets }}
+      {{- with .Values.hooks.curl.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
