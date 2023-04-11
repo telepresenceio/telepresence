@@ -104,7 +104,7 @@ type Session struct {
 	// Subnets configured by the user
 	alsoProxySubnets []*net.IPNet
 
-	// Subnets configured by the user to be proxieds
+	// Subnets configured by the user to never be proxied
 	neverProxySubnets []*net.IPNet
 
 	// closing is set during shutdown and can have the values:
