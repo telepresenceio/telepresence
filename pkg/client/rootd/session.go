@@ -743,7 +743,8 @@ func (s *Session) stop(c context.Context) {
 	atomic.StoreInt32(&s.closing, 2)
 
 	if s.tunVif != nil {
-		cc = dcontext.WithoutCancel(c)
+		cc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 1*time.Second)
+		defer cancel()
 		if err := s.tunVif.Close(cc); err != nil {
 			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)
 		}
