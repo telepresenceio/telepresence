@@ -184,7 +184,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		s.processSearchPaths(g, func(c context.Context, paths []string, device vif.Device) error {
+		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
 			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
 		}, dev)
 		// Server will close the listener, so no need to close it here.

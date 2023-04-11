@@ -11,7 +11,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
 type interceptLocalhostSuite struct {

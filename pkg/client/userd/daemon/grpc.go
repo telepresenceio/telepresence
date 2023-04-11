@@ -31,8 +31,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -491,8 +493,25 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 		}
 
 		sr := s.scout
+		cr := req.GetConnectRequest()
+		if cr == nil {
+			dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
+			cr = &rpc.ConnectRequest{}
+		}
+
+		cluster, err := k8s.ConnectCluster(ctx, cr, config)
+		if err != nil {
+			if req.Type == rpc.HelmRequest_UNINSTALL {
+				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
+			} else {
+				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
+			}
+			result = errcat.ToResult(err)
+			return
+		}
+
 		if req.Type == rpc.HelmRequest_UNINSTALL {
-			err := trafficmgr.DeleteManager(c, req, config)
+			err := helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req)
 			if err != nil {
 				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
 				result = errcat.ToResult(err)
@@ -500,7 +519,10 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 				sr.Report(ctx, "helm_uninstall_success")
 			}
 		} else {
-			err := trafficmgr.EnsureManager(c, req, config)
+			dlog.Debug(ctx, "ensuring that traffic-manager exists")
+			c := cluster.WithK8sInterface(ctx)
+			err := helm.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
+
 			if err != nil {
 				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
 				result = errcat.ToResult(err)

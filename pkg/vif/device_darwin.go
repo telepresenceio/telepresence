@@ -13,8 +13,8 @@ import (
 	"golang.org/x/net/ipv6"
 	"golang.org/x/sys/unix"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
 const (

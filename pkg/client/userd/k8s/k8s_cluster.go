@@ -15,6 +15,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -165,6 +166,21 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 	}
 	dlog.Infof(c, "Will look for traffic manager in namespace %s", ret.GetManagerNamespace())
 	return ret, nil
+}
+
+func ConnectCluster(c context.Context, cr *rpc.ConnectRequest, config *client.Kubeconfig) (*Cluster, error) {
+	mappedNamespaces := cr.MappedNamespaces
+	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
+		mappedNamespaces = nil
+	} else {
+		sort.Strings(mappedNamespaces)
+	}
+
+	cluster, err := NewCluster(c, config, mappedNamespaces)
+	if err != nil {
+		return nil, err
+	}
+	return cluster, nil
 }
 
 // determineTrafficManagerNamespace finds the namespace for the traffic-manager. It is determined by the following steps:

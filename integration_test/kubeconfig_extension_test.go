@@ -17,7 +17,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
 func getClusterIPs(cluster *api.Cluster) ([]net.IP, error) {

@@ -15,7 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
 type testVPNCommand struct{}
