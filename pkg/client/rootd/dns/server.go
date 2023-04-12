@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -164,16 +165,17 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 		// Reject "<label>.cluster.local."
 		return false
 	}
+
+	query = query[:len(query)-1] // skip last dot
+
 	if strings.Contains(query, "."+tel2SubDomainDot) {
-		// Reject "xxx.tel2-search.xxx."
+		// Reject "xxx.tel2-search.xxx" (we know it doesn't end with tel2SubDomain because we just removed the last dot)
 		// Addresses like that can come into existence if the daemon runs in a docker container
 		// with --dns-search tel2-search and docker in turn uses a DNS server from a VPN that
 		// applies search paths to multi-label names.
 		// Example when using Tailscape: hello.default.tel2-search.tailbfa9e.ts.net.
 		return false
 	}
-
-	query = query[:len(query)-1] // skip last dot
 
 	// Always include configured includeSuffixes
 	for _, sfx := range s.config.IncludeSuffixes {
@@ -426,7 +428,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
 		oldDv := v.(*cacheEntry)
-		if q.Name == recursionCheck {
+		if strings.HasPrefix(q.Name, recursionCheck) {
 			atomic.StoreInt32(&s.recursive, recursionDetected)
 		}
 		if atomic.LoadInt32(&s.recursive) == recursionDetected {
@@ -440,7 +442,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 	}
 
 	answer, rCode, err := s.resolveQuery(q, newDv)
-	if q.Name == recursionCheck {
+	if strings.HasPrefix(q.Name, recursionCheck) {
 		if atomic.LoadInt32(&s.recursive) == recursionDetected {
 			dlog.Debug(s.ctx, "DNS resolver is recursive")
 		} else {
@@ -465,7 +467,12 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 	defer close(s.ready)
 	const maxRetry = 10
 	defer dlog.Debug(c, "Recursion check finished")
-	rc := recursionCheck + tel2SubDomain
+	var rc string
+	if runtime.GOOS == "linux" {
+		rc = recursionCheck + tel2SubDomain
+	} else {
+		rc = recursionCheck + s.clusterDomain
+	}
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
 	atomic.StoreInt32(&s.recursive, recursionTestInProgress)
@@ -475,7 +482,7 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 		if i > 0 {
 			dlog.Debug(c, "retrying recursion check")
 		}
-		tc, cancel := context.WithTimeout(c, 200*time.Millisecond)
+		tc, cancel := context.WithTimeout(c, 500*time.Millisecond)
 		_, err := net.DefaultResolver.LookupIP(tc, "ip4", rc)
 		cancel()
 		if err != nil {
