@@ -65,7 +65,7 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 
 	flags.StringVarP(&a.EnvJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
 
-	flags.StringVarP(&a.Mount, "mount", "", "true", ``+
+	flags.StringVar(&a.Mount, "mount", "true", ``+
 		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
 		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
 
@@ -74,18 +74,18 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
 		`Use <port>/UDP for UDP ports`)
 
-	flags.BoolVarP(&a.DockerRun, "docker-run", "", false, ``+
+	flags.BoolVar(&a.DockerRun, "docker-run", false, ``+
 		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
 		`e.g. '--docker-run -- -it --rm ubuntu:20.04 /bin/bash'`)
 
-	flags.StringVarP(&a.DockerMount, "docker-mount", "", "", ``+
+	flags.StringVar(&a.DockerMount, "docker-mount", "", ``+
 		`The volume mount point in docker. Defaults to same as "--mount"`)
 
 	flags.StringVarP(&a.Namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
 	flags.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
 
-	flags.BoolVarP(&a.DetailedOutput, "detailed-output", "", false,
+	flags.BoolVar(&a.DetailedOutput, "detailed-output", false,
 		`Provide very detailed info about the intercept when used together with --output=json or --output=yaml'`)
 
 	flags.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,

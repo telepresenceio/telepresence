@@ -18,17 +18,18 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -105,9 +106,11 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.Agent = s.AgentName
 	spec.TargetHost = "127.0.0.1"
 
+	ud := daemon.GetUserClient(ctx)
+
 	// Parse port into spec based on how it's formatted
 	var err error
-	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun)
+	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Remote)
 	if err != nil {
 		return nil, err
 	}
@@ -179,17 +182,24 @@ func (s *state) RunAndLeave() bool {
 }
 
 func Run(ctx context.Context, sif State) error {
-	scout := sif.Reporter()
-	scout.Start(ctx)
-	defer scout.Close()
+	reporter := sif.Reporter()
+	reporter.Start(ctx)
+	defer reporter.Close()
 
-	if sif.RunAndLeave() {
-		// start intercept, run command, then leave the intercept
-		return client.WithEnsuredState(ctx, sif, create, runCommand, leave)
+	if !sif.RunAndLeave() {
+		// start and retain the intercept
+		return client.WithEnsuredState(ctx, sif, create, nil, nil)
 	}
 
-	// start and retain the intercept
-	return client.WithEnsuredState(ctx, sif, create, nil, nil)
+	// start intercept, run command, then leave the intercept
+	var s *state
+	sif.As(&s)
+	if s.DockerRun {
+		if err := s.prepareDockerRun(ctx); err != nil {
+			return err
+		}
+	}
+	return client.WithEnsuredState(ctx, sif, create, runCommand, leave)
 }
 
 func create(sif State, ctx context.Context) (acquired bool, err error) {
@@ -230,6 +240,16 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 			s.scout.Report(ctx, "intercept_success")
 		}
 	}()
+
+	if ud.Remote && ir.LocalMountPort == 0 {
+		// No use having the remote container actually mount, so let's have it create a bridge
+		// to the remote sftp server instead.
+		lma, err := dnet.FreePortsTCP(1)
+		if err != nil {
+			return false, err
+		}
+		ir.LocalMountPort = int32(lma[0].Port)
+	}
 
 	// Submit the request
 	r, err := ud.CreateIntercept(ctx, ir)
@@ -315,47 +335,60 @@ func runCommand(sif State, ctx context.Context) error {
 	sif.As(&s)
 
 	ctx = dos.WithStdio(ctx, s.cmd)
-	var containerName string
-	var cmd *dexec.Cmd
-	var err error
-	if s.DockerRun {
-		envFile := s.EnvFile
-		if envFile == "" {
-			file, err := os.CreateTemp("", "tel-*.env")
-			if err != nil {
-				return fmt.Errorf("failed to create temporary environment file. %w", err)
-			}
-			defer os.Remove(file.Name())
-
-			if err = s.writeEnvToFileAndClose(file); err != nil {
-				return err
-			}
-			envFile = file.Name()
+	ud := daemon.GetUserClient(ctx)
+	if !s.DockerRun {
+		cmd, err := proc.Start(ctx, s.env, s.Cmdline[0], s.Cmdline[1:]...)
+		if err != nil {
+			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
+			return errcat.NoDaemonLogs.New(err)
 		}
-		cmd, containerName, err = s.startInDocker(ctx, envFile, s.Cmdline)
-	} else {
-		cmd, err = proc.Start(ctx, s.env, s.Cmdline[0], s.Cmdline[1:]...)
-	}
-	if err != nil {
-		dlog.Errorf(ctx, "error interceptor starting process: %v", err)
-		return errcat.NoDaemonLogs.New(err)
-	}
-	if err = s.addInterceptorToDaemon(ctx, cmd, containerName); err != nil {
-		return errcat.NoDaemonLogs.New(err)
+		if cmd == nil {
+			return nil
+		}
+		if err = s.addInterceptorToDaemon(ctx, cmd, ""); err != nil {
+			return err
+		}
+
+		// The external command will not output anything to the logs. An error here
+		// is likely caused by the user hitting <ctrl>-C to terminate the process.
+		return errcat.NoDaemonLogs.New(proc.Wait(ctx, func() {}, cmd))
 	}
 
-	cancel := func() {}
-	if containerName != "" {
-		cancel = func() {
-			if err := docker.StopContainer(dcontext.WithoutCancel(ctx), containerName); ctx != nil {
-				dlog.Error(ctx, err)
-			}
+	envFile := s.EnvFile
+	if envFile == "" {
+		file, err := os.CreateTemp("", "tel-*.env")
+		if err != nil {
+			return fmt.Errorf("failed to create temporary environment file. %w", err)
+		}
+		defer os.Remove(file.Name())
+
+		if err = s.writeEnvToFileAndClose(file); err != nil {
+			return err
+		}
+		envFile = file.Name()
+	}
+
+	var dr *dockerRun
+	var daemonName string
+	procCtx := ctx
+	if ud.Remote {
+		daemonName = docker.SafeContainerName("tp-" + s.status.ClusterContext)
+		if daemonPort := ud.DaemonPort(); daemonPort > 0 {
+			// Ensure that the intercept handler is stopped properly if the daemon quits
+			var cancel context.CancelFunc
+			procCtx, cancel = context.WithCancel(procCtx)
+			go func() {
+				if err := docker.CancelWhenRmFromCache(procCtx, cancel, cache.DaemonInfoFile(s.status.ClusterContext, daemonPort)); err != nil {
+					dlog.Error(ctx)
+				}
+			}()
 		}
 	}
-
-	// The external command will not output anything to the logs. An error here
-	// is likely caused by the user hitting <ctrl>-C to terminate the process.
-	return errcat.NoDaemonLogs.New(proc.Wait(ctx, cancel, cmd))
+	dr = s.startInDocker(ctx, daemonName, envFile, s.Cmdline)
+	if dr.err == nil {
+		dr.err = s.addInterceptorToDaemon(ctx, dr.cmd, dr.name)
+	}
+	return dr.wait(procCtx)
 }
 
 func (s *state) addInterceptorToDaemon(ctx context.Context, cmd *dexec.Cmd, containerName string) error {
@@ -435,10 +468,10 @@ func (s *state) writeEnvJSON() error {
 }
 
 // parsePort parses portSpec based on how it's formatted.
-func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, svcPortId string, err error) {
+func parsePort(portSpec string, dockerRun, remote bool) (local uint16, docker uint16, svcPortId string, err error) {
 	portMapping := strings.Split(portSpec, ":")
 	portError := func() (uint16, uint16, string, error) {
-		if dockerRun {
+		if dockerRun && !remote {
 			return 0, 0, "", errcat.User.New("port must be of the format --port <local-port>:<container-port>[:<svcPortIdentifier>]")
 		}
 		return 0, 0, "", errcat.User.New("port must be of the format --port <local-port>[:<svcPortIdentifier>]")
@@ -452,7 +485,7 @@ func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, sv
 	case 1:
 	case 2:
 		p := portMapping[1]
-		if dockerRun {
+		if dockerRun && !remote {
 			if docker, err = agentconfig.ParseNumericPort(p); err != nil {
 				return portError()
 			}
@@ -463,6 +496,10 @@ func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, sv
 			svcPortId = p
 		}
 	case 3:
+		if remote && dockerRun {
+			return 0, 0, "", errcat.User.New(
+				"the format --port <local-port>:<container-port>:<svcPortIdentifier> cannot be used when the daemon runs in a container")
+		}
 		if !dockerRun {
 			return portError()
 		}
@@ -476,7 +513,7 @@ func parsePort(portSpec string, dockerRun bool) (local uint16, docker uint16, sv
 	default:
 		return portError()
 	}
-	if dockerRun && docker == 0 {
+	if dockerRun && !remote && docker == 0 {
 		docker = local
 	}
 	return local, docker, svcPortId, nil

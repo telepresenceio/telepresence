@@ -63,8 +63,7 @@ type intercept struct {
 
 	// containerName is the name or ID of the container that the intercept handler is
 	// running in, when it runs in Docker. As with pid, this entry will only be present when
-	// the telepresence intercept command spawns a new command using --docker-run or
-	// --docker-build
+	// the telepresence intercept command spawns a new command using --docker-run.
 	containerName string
 
 	// The mounter of the remote file system.
