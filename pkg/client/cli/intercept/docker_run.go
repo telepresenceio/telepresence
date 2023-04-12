@@ -20,9 +20,39 @@ import (
 )
 
 func (s *state) prepareDockerRun(ctx context.Context) error {
-	imageName, _ := firstDockerArg(s.Cmdline)
+	imageName, idx := firstDockerArg(s.Cmdline)
 	// Ensure that the image is ready to run before we create the intercept.
-	return docker.PullImage(ctx, imageName)
+	if s.DockerBuild == "" {
+		if idx < 0 {
+			return errcat.User.New(`unable to find the image name. When using --docker-run, the syntax after "--" must be [OPTIONS] IMAGE [COMMAND] [ARG...]`)
+		}
+		return docker.PullImage(ctx, imageName)
+	}
+
+	// DockerBuild will produce an image-ID that must be injected into the docker run argument
+	// list. It must be injected between arguments intended for docker run and arguments intended
+	// for the container, so we require that a placeholder is present. E.g.
+	//
+	// telepresence intercept hello --docker-build ./some/path -- -it --add-host foo IMAGE --port 8080
+	if (idx < 0 || imageName != "IMAGE") && len(s.Cmdline) > 0 {
+		return errcat.User.New(`` +
+			`the string "IMAGE", acting as a placeholder for image ID, must be included after "--" when using "--docker-build", so ` +
+			`that flags intended for docker run can be distinguished from the command and arguments intended for the container.`)
+	}
+	opts := make([]string, len(s.DockerBuildOptions))
+	for i, opt := range s.DockerBuildOptions {
+		opts[i] = "--" + opt
+	}
+	imageID, err := docker.BuildImage(ctx, s.DockerBuild, opts)
+	if err != nil {
+		return err
+	}
+	if idx < 0 {
+		s.Cmdline = []string{imageID}
+	} else {
+		s.Cmdline[idx] = imageID
+	}
+	return nil
 }
 
 var dockerBoolFlags = map[string]bool{ //nolint:gochecknoglobals // this is a constant

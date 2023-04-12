@@ -31,9 +31,11 @@ type Command struct {
 	MountSet bool     // whether --mount was passed
 	ToPod    []string // --to-pod
 
-	DockerRun   bool     // --docker-run
-	DockerMount string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
-	Cmdline     []string // Command[1:]
+	DockerRun          bool     // --docker-run
+	DockerBuild        string   // --docker-build DIR | URL // Optional docker build context
+	DockerBuildOptions []string // --docker-build-opt key=value, // Optional flag to docker build can be repeated (but not comma separated)
+	DockerMount        string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
+	Cmdline            []string // Command[1:]
 
 	Mechanism      string // --mechanism tcp
 	MechanismArgs  []string
@@ -77,6 +79,13 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 	flags.BoolVar(&a.DockerRun, "docker-run", false, ``+
 		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
 		`e.g. '--docker-run -- -it --rm ubuntu:20.04 /bin/bash'`)
+
+	flags.StringVar(&a.DockerBuild, "docker-build", "", ``+
+		`Build a Docker container from the given docker-context (path or URL), and run it with intercepted environment and volume mounts, `+
+		`by passing arguments after -- to 'docker run', e.g. '--docker-build /path/to/docker/context -- -it IMAGE /bin/bash'`)
+
+	flags.StringArrayVar(&a.DockerBuildOptions, "docker-build-opt", nil,
+		`Option to docker-build in the form key=value, e.g. --docker-build-opt tag=mytag. Can be repeated`)
 
 	flags.StringVar(&a.DockerMount, "docker-mount", "", ``+
 		`The volume mount point in docker. Defaults to same as "--mount"`)
@@ -130,6 +139,9 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 		a.Port = strconv.Itoa(client.GetConfig(cmd.Context()).Intercept.DefaultPort)
 	}
 	a.MountSet = cmd.Flag("mount").Changed
+	if a.DockerBuild != "" {
+		a.DockerRun = true
+	}
 	if a.DockerRun {
 		if err := a.ValidateDockerArgs(); err != nil {
 			return err
