@@ -714,7 +714,11 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
-		return s.dnsServer.Worker(ctx, s.tunVif.Device, s.configureDNS)
+		var dev vif.Device
+		if s.tunVif != nil {
+			dev = s.tunVif.Device
+		}
+		return s.dnsServer.Worker(ctx, dev, s.configureDNS)
 	})
 
 	if s.tunVif != nil {
