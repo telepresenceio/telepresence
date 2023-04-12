@@ -48,7 +48,7 @@ cp "$( dirname -- "${BASH_SOURCE[0]}")/sidebar.png" "${ZIPDIR}/sidebar.png"
 
 dotnet tool install --global wix --version 4.0.0
 
-cd ${ZIPDIR}
+cd "${ZIPDIR}"
 wix build -o telepresence.msi telepresence.wxs
 wix extension add -g WixToolset.Bal.wixext
 wix build -ext WixToolset.Bal.wixext -o ".${BINDIR}/telepresence-setup.exe" bundle.wxs
