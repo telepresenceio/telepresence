@@ -51,6 +51,8 @@ type state struct {
 	mountPoint    string // if non-empty, this the final mount point of a successful mount
 	localPort     uint16 // the parsed <local port>
 	dockerPort    uint16
+	status        *connector.ConnectInfo
+	info          *Info // Info from the created intercept
 }
 
 func NewState(
@@ -189,18 +191,17 @@ func Run(ctx context.Context, sif State) error {
 }
 
 func create(sif State, ctx context.Context) (acquired bool, err error) {
+	var s *state
+	sif.As(&s)
 	ud := daemon.GetUserClient(ctx)
-	status, err := ud.Status(ctx, &empty.Empty{})
+	s.status, err = ud.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
 	}
 
-	var s *state
-	sif.As(&s)
-
 	// Add whatever metadata we already have to scout
 	s.scout.SetMetadatum(ctx, "service_name", s.AgentName)
-	s.scout.SetMetadatum(ctx, "cluster_id", status.ClusterId)
+	s.scout.SetMetadatum(ctx, "cluster_id", s.status.ClusterId)
 	s.scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
 	s.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
 
@@ -286,12 +287,12 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	if volumeMountProblem != nil {
 		mountError = volumeMountProblem.Error()
 	}
-	info := NewInfo(ctx, intercept, mountError)
+	s.info = NewInfo(ctx, intercept, mountError)
 	if detailedOutput {
-		output.Object(ctx, info, true)
+		output.Object(ctx, s.info, true)
 	} else {
 		out := s.cmd.OutOrStdout()
-		_, _ = info.WriteTo(out)
+		_, _ = s.info.WriteTo(out)
 		_, _ = fmt.Fprintln(out)
 	}
 	return true, nil
