@@ -221,6 +221,9 @@ prepare-release: generate
 	rm -f charts/telepresence/CHANGELOG.md.bak
 	git add charts/telepresence/CHANGELOG.md
 
+	git add packaging/telepresence.wxs
+	git add packaging/bundle.wxs
+
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
