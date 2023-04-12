@@ -230,7 +230,7 @@ prepare-release: generate
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: push-executable
-push-executable: build wix## (Release) Upload the executable to S3
+push-executable: build ## (Release) Upload the executable to S3
 ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
