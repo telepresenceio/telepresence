@@ -164,6 +164,14 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 		// Reject "<label>.cluster.local."
 		return false
 	}
+	if strings.Contains(query, "."+tel2SubDomainDot) {
+		// Reject "xxx.tel2-search.xxx."
+		// Addresses like that can come into existence if the daemon runs in a docker container
+		// with --dns-search tel2-search and docker in turn uses a DNS server from a VPN that
+		// applies search paths to multi-label names.
+		// Example when using Tailscape: hello.default.tel2-search.tailbfa9e.ts.net.
+		return false
+	}
 
 	query = query[:len(query)-1] // skip last dot
 
@@ -418,13 +426,11 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
 		oldDv := v.(*cacheEntry)
-		if atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
-			if q.Name == recursionCheck {
-				atomic.StoreInt32(&s.recursive, recursionDetected)
-			}
-			if atomic.LoadInt32(&s.recursive) == recursionDetected {
-				return nil, dns.RcodeNameError, nil
-			}
+		if q.Name == recursionCheck {
+			atomic.StoreInt32(&s.recursive, recursionDetected)
+		}
+		if atomic.LoadInt32(&s.recursive) == recursionDetected {
+			return nil, dns.RcodeNameError, nil
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
@@ -459,32 +465,38 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 	defer close(s.ready)
 	const maxRetry = 10
 	defer dlog.Debug(c, "Recursion check finished")
-	rc := strings.TrimSuffix(recursionCheck, ".")
+	rc := recursionCheck + tel2SubDomain
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
-	for ; i < maxRetry; i++ {
-		_, err := net.DefaultResolver.LookupIP(c, "ip4", rc)
+	atomic.StoreInt32(&s.recursive, recursionTestInProgress)
+	for ; i < maxRetry && atomic.LoadInt32(&s.recursive) == recursionTestInProgress; i++ {
+		// Recursion is typically very fast (all on the same host) so let's
+		// use short timeouts
+		if i > 0 {
+			dlog.Debug(c, "retrying recursion check")
+		}
+		tc, cancel := context.WithTimeout(c, 200*time.Millisecond)
+		_, err := net.DefaultResolver.LookupIP(tc, "ip4", rc)
+		cancel()
 		if err != nil {
-			if derr, ok := err.(*net.DNSError); ok && derr.IsNotFound {
-				err = nil
+			if derr, ok := err.(*net.DNSError); ok {
+				if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
+					if derr.IsTimeout || derr.IsNotFound {
+						return nil
+					}
+				}
+				if derr.IsTimeout {
+					dtime.SleepWithContext(c, 100*time.Millisecond)
+					continue
+				}
 			}
-		}
-		if err != nil {
-			dlog.Errorf(c, "recursion check ended with %v", err)
+			dlog.Errorf(c, "unexpected error during recursion check: %v", err)
 		}
 		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
 			return nil
 		}
-		// Check didn't hit our resolver. Try again after a second
-		dtime.SleepWithContext(c, time.Second)
-
-		// Check that the resolver didn't get hit during our wait. We don't want
-		// to retry if it did, because that will give the false impression that
-		// the resolver is recursive.
-		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
-			return nil
-		}
-		dlog.Debug(c, "retrying recursion check")
+		// Check didn't hit our resolver. Try again
+		dtime.SleepWithContext(c, 100*time.Millisecond)
 	}
 	if i == maxRetry {
 		err := errors.New("recursion check failed. The DNS isn't working properly")
