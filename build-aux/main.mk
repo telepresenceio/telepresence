@@ -77,7 +77,7 @@ protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-g
 
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
-generate: generate-clean
+generate: generate-clean wix
 generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
@@ -347,6 +347,11 @@ private-registry: $(tools/helm) ## (Test) Add a private docker registry to the c
 	sleep 5
 	kubectl wait --for=condition=ready pod --all
 	kubectl port-forward daemonset/private-registry-proxy 5000:5000 > /dev/null &
+
+.PHONY: wix
+wix:
+	sed s/TELEPRESENCE_VERSION/$(TELEPRESENCE_VERSION)/ packaging/telepresence.wxs.in > packaging/telepresence.wxs
+	sed s/TELEPRESENCE_VERSION/$(TELEPRESENCE_VERSION)/ packaging/bundle.wxs.in > packaging/bundle.wxs
 
 # Aliases
 # =======
