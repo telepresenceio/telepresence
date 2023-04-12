@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -141,7 +142,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	for _, toPod := range s.ToPod {
 		pp, err := agentconfig.NewPortAndProto(toPod)
 		if err != nil {
-			return nil, errcat.User.New(err)
+			return nil, err
 		}
 		spec.LocalPorts = append(spec.LocalPorts, pp.String())
 		if pp.Proto == core.ProtocolTCP {
@@ -152,10 +153,10 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 	if s.DockerMount != "" {
 		if !s.DockerRun {
-			return nil, errcat.User.New("--docker-mount must be used together with --docker-run")
+			return nil, errors.New("--docker-mount must be used together with --docker-run")
 		}
 		if s.mountDisabled {
-			return nil, errcat.User.New("--docker-mount cannot be used with --mount=false")
+			return nil, errors.New("--docker-mount cannot be used with --mount=false")
 		}
 	}
 	return ir, nil
@@ -206,7 +207,7 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	ir, err := sif.CreateRequest(ctx)
 	if err != nil {
 		s.scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
-		return false, err
+		return false, errcat.NoDaemonLogs.New(err)
 	}
 
 	if ir.MountPoint != "" {
