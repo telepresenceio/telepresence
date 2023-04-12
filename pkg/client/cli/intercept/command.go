@@ -1,8 +1,6 @@
 package intercept
 
 import (
-	"context"
-	"os"
 	"strconv"
 	"strings"
 
@@ -215,27 +213,20 @@ func (a *Command) ValidArgs(cmd *cobra.Command, args []string, toComplete string
 	return list, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 }
 
-func (a *Command) GetMountPoint(ctx context.Context) (string, bool, error) {
-	mountPoint := ""
-	doMount, err := strconv.ParseBool(a.Mount)
-	switch {
-	case err != nil:
-		// Not a boolean. Must be a directory
-		mountPoint = a.Mount
-		doMount = len(mountPoint) > 0
-		err = nil
-	case doMount && a.LocalMountPort > 0:
-		return "", true, nil
+// GetMountPoint returns a boolean indicating if mounts are enabled or not, and path
+// indicating a mount point.
+func (a *Command) GetMountPoint() (bool, string) {
+	if !a.MountSet {
+		// Default is that mount is enabled and the path is unspecified
+		return true, ""
 	}
-
-	if doMount {
-		var cwd string
-		cwd, err = os.Getwd()
-		if err != nil {
-			return "", false, err
-		}
-		mountPoint, err = PrepareMount(cwd, mountPoint)
+	if doMount, err := strconv.ParseBool(a.Mount); err == nil {
+		// Boolean flag, path unspecified
+		return doMount, ""
 	}
-
-	return mountPoint, doMount, err
+	if len(a.Mount) == 0 {
+		// Let explicit --mount= have the same meaning as --mount=false
+		return false, ""
+	}
+	return true, a.Mount
 }

@@ -45,12 +45,13 @@ type State interface {
 
 type state struct {
 	*Command
-	cmd        *cobra.Command
-	scout      *scout.Reporter
-	env        map[string]string
-	mountPoint string // if non-empty, this the final mount point of a successful mount
-	localPort  uint16 // the parsed <local port>
-	dockerPort uint16
+	cmd           *cobra.Command
+	scout         *scout.Reporter
+	env           map[string]string
+	mountDisabled bool
+	mountPoint    string // if non-empty, this the final mount point of a successful mount
+	localPort     uint16 // the parsed <local port>
+	dockerPort    uint16
 }
 
 func NewState(
@@ -319,18 +320,29 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	}
 	spec.TargetHost = s.Address
 
-	doMount := false
-	ir.LocalMountPort = int32(s.LocalMountPort)
-	if err = s.checkMountCapability(ctx); err == nil {
-		if ir.MountPoint, doMount, err = s.GetMountPoint(ctx); err != nil {
-			return nil, err
+	mountEnabled, mountPoint := s.GetMountPoint()
+	if !mountEnabled {
+		s.mountDisabled = true
+	} else {
+		if err = s.checkMountCapability(ctx); err != nil {
+			err = fmt.Errorf("remote volume mounts are disabled: %w", err)
+			if mountPoint != "" {
+				return nil, err
+			}
+			// Log a warning and disable, but continue
+			s.mountDisabled = true
+			dlog.Warning(ctx, err)
 		}
-	} else if s.MountSet {
-		var boolErr error
-		doMount, boolErr = strconv.ParseBool(s.Mount)
-		if boolErr != nil || doMount {
-			// not --mount=false, so refuse.
-			return nil, errcat.User.Newf("remote volume mounts are disabled: %w", err)
+
+		if !s.mountDisabled {
+			ir.LocalMountPort = int32(s.LocalMountPort)
+			var cwd string
+			if cwd, err = os.Getwd(); err != nil {
+				return nil, err
+			}
+			if ir.MountPoint, err = PrepareMount(cwd, mountPoint); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -350,7 +362,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		if !s.DockerRun {
 			return nil, errcat.User.New("--docker-mount must be used together with --docker-run")
 		}
-		if !doMount {
+		if s.mountDisabled {
 			return nil, errcat.User.New("--docker-mount cannot be used with --mount=false")
 		}
 	}
