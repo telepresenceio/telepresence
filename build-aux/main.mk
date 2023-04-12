@@ -230,13 +230,18 @@ prepare-release: generate
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: push-executable
-push-executable: build ## (Release) Upload the executable to S3
+push-executable: build wix## (Release) Upload the executable to S3
 ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
 		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
 		--body $(BINDIR)/telepresence.zip
+	AWS_PAGER="" aws s3api put-object \
+		--region us-east-1 \
+		--bucket datawire-static-files \
+		--key tel2/windows/$(GOARCH)/$(TELEPRESENCE_VERSIONDIR)/telepresence-setup.exe \
+		--body $(BINDIR)/telepresence-setup.exe
 else
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
