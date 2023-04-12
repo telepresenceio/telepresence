@@ -1,5 +1,5 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Bundle Name="Telepresence" Manufacturer="Ambassador Labs" Version="v2.12.3-94-g89d49ebc3-aqjl98PLHPgcvenAY0unGA"
+  <Bundle Name="Telepresence" Manufacturer="Ambassador Labs" Version="v2.12.3"
     UpgradeCode="82fd5464-dd21-44bd-a44d-053cea4da740">
 
     <BootstrapperApplication>

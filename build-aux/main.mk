@@ -77,7 +77,7 @@ protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-g
 
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
-generate: generate-clean wix
+generate: generate-clean
 generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
@@ -209,7 +209,7 @@ clobber: ## (Build) Remove all build artifacts and tools
 # ===========================================================
 
 .PHONY: prepare-release
-prepare-release: generate
+prepare-release: generate wix
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
 	rm -f CHANGELOG.md.bak
 	git add CHANGELOG.md
@@ -356,10 +356,11 @@ private-registry: $(tools/helm) ## (Test) Add a private docker registry to the c
 	kubectl wait --for=condition=ready pod --all
 	kubectl port-forward daemonset/private-registry-proxy 5000:5000 > /dev/null &
 
+WIX_VERSION != cut -d "-" -f 1 <<< $(TELEPRESENCE_VERSION)
 .PHONY: wix
 wix:
-	sed s/TELEPRESENCE_VERSION/$(TELEPRESENCE_VERSION)/ packaging/telepresence.wxs.in > packaging/telepresence.wxs
-	sed s/TELEPRESENCE_VERSION/$(TELEPRESENCE_VERSION)/ packaging/bundle.wxs.in > packaging/bundle.wxs
+	sed s/TELEPRESENCE_VERSION/$(WIX_VERSION)/ packaging/telepresence.wxs.in > packaging/telepresence.wxs
+	sed s/TELEPRESENCE_VERSION/$(WIX_VERSION)/ packaging/bundle.wxs.in > packaging/bundle.wxs
 
 # Aliases
 # =======
