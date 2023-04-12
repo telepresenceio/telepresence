@@ -5,14 +5,18 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
-	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 func leave() *cobra.Command {
@@ -64,5 +68,19 @@ func leave() *cobra.Command {
 
 func removeIntercept(ctx context.Context, name string) error {
 	userD := daemon.GetUserClient(ctx)
-	return intercept.Result(userD.RemoveIntercept(dcontext.WithoutCancel(ctx), &manager.RemoveInterceptRequest2{Name: name}))
+	ic, err := userD.GetIntercept(ctx, &manager.GetInterceptRequest{Name: name})
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+			return errcat.User.New(st.Message())
+		}
+		return err
+	}
+	if handlerContainer, ok := ic.Environment["TELEPRESENCE_HANDLER_CONTAINER_NAME"]; ok {
+		// Stop the intercept handler's container. The daemon is most likely running in another
+		// container, and won't be able to.
+		if err = docker.StopContainer(ctx, handlerContainer); err != nil {
+			dlog.Error(ctx, err)
+		}
+	}
+	return intercept.Result(userD.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: name}))
 }

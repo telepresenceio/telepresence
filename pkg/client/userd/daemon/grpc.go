@@ -327,7 +327,7 @@ func (s *Service) UpdateIntercept(c context.Context, rr *manager.UpdateIntercept
 
 func (s *Service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
 	return &empty.Empty{}, s.WithSession(ctx, "AddInterceptor", func(_ context.Context, session userd.Session) error {
-		return session.AddInterceptor(interceptor.InterceptId, int(interceptor.Pid))
+		return session.AddInterceptor(interceptor.InterceptId, interceptor)
 	})
 }
 

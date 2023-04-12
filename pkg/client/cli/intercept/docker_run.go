@@ -11,7 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-func (s *state) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, error) {
+func (s *state) startInDocker(ctx context.Context, envFile string, args []string) (*dexec.Cmd, string, error) {
 	ourArgs := []string{
 		"run",
 		"--env-file", envFile,
@@ -20,7 +20,7 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 
 	name, err := flags.GetUnparsedValue(args, "--name")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if name == "" {
 		name = fmt.Sprintf("intercept-%s-%d", s.Name(), s.localPort)
@@ -48,7 +48,7 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 	cmd.Stdin = s.cmd.InOrStdin()
 	dlog.Debugf(ctx, shellquote.ShellString("docker", args))
 	if err = cmd.Start(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return cmd, err
+	return cmd, name, err
 }

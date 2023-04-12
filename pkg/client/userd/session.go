@@ -52,7 +52,7 @@ type Session interface {
 	InterceptEpilog(context.Context, *rpc.CreateInterceptRequest, *rpc.InterceptResult) *rpc.InterceptResult
 	RemoveIntercept(context.Context, string) error
 
-	AddInterceptor(string, int) error
+	AddInterceptor(string, *rpc.Interceptor) error
 	RemoveInterceptor(string) error
 	ClearIntercepts(context.Context) error
 

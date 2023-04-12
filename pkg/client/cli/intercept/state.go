@@ -18,6 +18,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -26,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -313,6 +315,7 @@ func runCommand(sif State, ctx context.Context) error {
 	sif.As(&s)
 
 	ctx = dos.WithStdio(ctx, s.cmd)
+	var containerName string
 	var cmd *dexec.Cmd
 	var err error
 	if s.DockerRun {
@@ -329,7 +332,7 @@ func runCommand(sif State, ctx context.Context) error {
 			}
 			envFile = file.Name()
 		}
-		cmd, err = s.startInDocker(ctx, envFile, s.Cmdline)
+		cmd, containerName, err = s.startInDocker(ctx, envFile, s.Cmdline)
 	} else {
 		cmd, err = proc.Start(ctx, s.env, s.Cmdline[0], s.Cmdline[1:]...)
 	}
@@ -337,16 +340,35 @@ func runCommand(sif State, ctx context.Context) error {
 		dlog.Errorf(ctx, "error interceptor starting process: %v", err)
 		return errcat.NoDaemonLogs.New(err)
 	}
+	if err = s.addInterceptorToDaemon(ctx, cmd, containerName); err != nil {
+		return errcat.NoDaemonLogs.New(err)
+	}
 
+	cancel := func() {}
+	if containerName != "" {
+		cancel = func() {
+			if err := docker.StopContainer(dcontext.WithoutCancel(ctx), containerName); ctx != nil {
+				dlog.Error(ctx, err)
+			}
+		}
+	}
+
+	// The external command will not output anything to the logs. An error here
+	// is likely caused by the user hitting <ctrl>-C to terminate the process.
+	return errcat.NoDaemonLogs.New(proc.Wait(ctx, cancel, cmd))
+}
+
+func (s *state) addInterceptorToDaemon(ctx context.Context, cmd *dexec.Cmd, containerName string) error {
 	// setup cleanup for the interceptor process
 	ior := connector.Interceptor{
-		InterceptId: s.env["TELEPRESENCE_INTERCEPT_ID"],
-		Pid:         int32(cmd.Process.Pid),
+		InterceptId:   s.env["TELEPRESENCE_INTERCEPT_ID"],
+		Pid:           int32(cmd.Process.Pid),
+		ContainerName: containerName,
 	}
 
 	// Send info about the pid and intercept id to the traffic-manager so that it kills
 	// the process if it receives a leave of quit call.
-	if _, err = daemon.GetUserClient(ctx).AddInterceptor(ctx, &ior); err != nil {
+	if _, err := daemon.GetUserClient(ctx).AddInterceptor(ctx, &ior); err != nil {
 		if grpcStatus.Code(err) == grpcCodes.Canceled {
 			// Deactivation was caused by a disconnect
 			err = nil
@@ -355,10 +377,7 @@ func runCommand(sif State, ctx context.Context) error {
 		_ = cmd.Process.Kill()
 		return err
 	}
-
-	// The external command will not output anything to the logs. An error here
-	// is likely caused by the user hitting <ctrl>-C to terminate the process.
-	return errcat.NoDaemonLogs.New(proc.Wait(ctx, func() {}, cmd))
+	return nil
 }
 
 func (s *state) checkMountCapability(ctx context.Context) error {
