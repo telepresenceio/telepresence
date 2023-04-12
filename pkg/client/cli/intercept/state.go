@@ -76,6 +76,91 @@ func (s *state) Cmd() *cobra.Command {
 	return s.cmd
 }
 
+func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
+	spec := &manager.InterceptSpec{
+		Name:      s.Name(),
+		Namespace: s.Namespace,
+	}
+	ir := &connector.CreateInterceptRequest{
+		Spec:         spec,
+		ExtendedInfo: s.ExtendedInfo,
+	}
+
+	if s.AgentName == "" {
+		// local-only
+		return ir, nil
+	}
+
+	if s.ServiceName != "" {
+		spec.ServiceName = s.ServiceName
+	}
+
+	spec.Mechanism = s.Mechanism
+	spec.MechanismArgs = s.MechanismArgs
+	spec.Agent = s.AgentName
+	spec.TargetHost = "127.0.0.1"
+
+	// Parse port into spec based on how it's formatted
+	var err error
+	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun)
+	if err != nil {
+		return nil, err
+	}
+	spec.TargetPort = int32(s.localPort)
+	if iputil.Parse(s.Address) == nil {
+		return nil, fmt.Errorf("--address %s is not a valid IP address", s.Address)
+	}
+	spec.TargetHost = s.Address
+
+	mountEnabled, mountPoint := s.GetMountPoint()
+	if !mountEnabled {
+		s.mountDisabled = true
+	} else {
+		if err = s.checkMountCapability(ctx); err != nil {
+			err = fmt.Errorf("remote volume mounts are disabled: %w", err)
+			if mountPoint != "" {
+				return nil, err
+			}
+			// Log a warning and disable, but continue
+			s.mountDisabled = true
+			dlog.Warning(ctx, err)
+		}
+
+		if !s.mountDisabled {
+			ir.LocalMountPort = int32(s.LocalMountPort)
+			var cwd string
+			if cwd, err = os.Getwd(); err != nil {
+				return nil, err
+			}
+			if ir.MountPoint, err = PrepareMount(cwd, mountPoint); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for _, toPod := range s.ToPod {
+		pp, err := agentconfig.NewPortAndProto(toPod)
+		if err != nil {
+			return nil, errcat.User.New(err)
+		}
+		spec.LocalPorts = append(spec.LocalPorts, pp.String())
+		if pp.Proto == core.ProtocolTCP {
+			// For backward compatibility
+			spec.ExtraPorts = append(spec.ExtraPorts, int32(pp.Port))
+		}
+	}
+
+	if s.DockerMount != "" {
+		if !s.DockerRun {
+			return nil, errcat.User.New("--docker-mount must be used together with --docker-run")
+		}
+		if s.mountDisabled {
+			return nil, errcat.User.New("--docker-mount cannot be used with --mount=false")
+		}
+	}
+	return ir, nil
+}
+
 func (s *state) Name() string {
 	return s.Command.Name
 }
@@ -280,91 +365,6 @@ func (s *state) checkMountCapability(ctx context.Context) error {
 		return err
 	}
 	return errcat.FromResult(r)
-}
-
-func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
-	spec := &manager.InterceptSpec{
-		Name:      s.Name(),
-		Namespace: s.Namespace,
-	}
-	ir := &connector.CreateInterceptRequest{
-		Spec:         spec,
-		ExtendedInfo: s.ExtendedInfo,
-	}
-
-	if s.AgentName == "" {
-		// local-only
-		return ir, nil
-	}
-
-	if s.ServiceName != "" {
-		spec.ServiceName = s.ServiceName
-	}
-
-	spec.Mechanism = s.Mechanism
-	spec.MechanismArgs = s.MechanismArgs
-	spec.Agent = s.AgentName
-	spec.TargetHost = "127.0.0.1"
-
-	// Parse port into spec based on how it's formatted
-	var err error
-	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun)
-	if err != nil {
-		return nil, err
-	}
-	spec.TargetPort = int32(s.localPort)
-	if iputil.Parse(s.Address) == nil {
-		return nil, fmt.Errorf("--address %s is not a valid IP address", s.Address)
-	}
-	spec.TargetHost = s.Address
-
-	mountEnabled, mountPoint := s.GetMountPoint()
-	if !mountEnabled {
-		s.mountDisabled = true
-	} else {
-		if err = s.checkMountCapability(ctx); err != nil {
-			err = fmt.Errorf("remote volume mounts are disabled: %w", err)
-			if mountPoint != "" {
-				return nil, err
-			}
-			// Log a warning and disable, but continue
-			s.mountDisabled = true
-			dlog.Warning(ctx, err)
-		}
-
-		if !s.mountDisabled {
-			ir.LocalMountPort = int32(s.LocalMountPort)
-			var cwd string
-			if cwd, err = os.Getwd(); err != nil {
-				return nil, err
-			}
-			if ir.MountPoint, err = PrepareMount(cwd, mountPoint); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	for _, toPod := range s.ToPod {
-		pp, err := agentconfig.NewPortAndProto(toPod)
-		if err != nil {
-			return nil, errcat.User.New(err)
-		}
-		spec.LocalPorts = append(spec.LocalPorts, pp.String())
-		if pp.Proto == core.ProtocolTCP {
-			// For backward compatibility
-			spec.ExtraPorts = append(spec.ExtraPorts, int32(pp.Port))
-		}
-	}
-
-	if s.DockerMount != "" {
-		if !s.DockerRun {
-			return nil, errcat.User.New("--docker-mount must be used together with --docker-run")
-		}
-		if s.mountDisabled {
-			return nil, errcat.User.New("--docker-mount cannot be used with --mount=false")
-		}
-	}
-	return ir, nil
 }
 
 func (s *state) writeEnvFile() error {
