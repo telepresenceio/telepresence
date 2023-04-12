@@ -243,7 +243,7 @@ ifeq ($(GOHOSTOS), windows)
 	AWS_PAGER="" aws s3api put-object \
 		--region us-east-1 \
 		--bucket datawire-static-files \
-		--key tel2/windows/$(GOARCH)/$(TELEPRESENCE_VERSIONDIR)/telepresence-setup.exe \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence-setup.exe \
 		--body $(BINDIR)/telepresence-setup.exe
 else
 	AWS_PAGER="" aws s3api put-object \
