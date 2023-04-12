@@ -1,5 +1,5 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="Telepresence" Language="1033" Codepage="1252" Version="v2.12.3-80-g47d7cf772-1lSLpd2iA7S5vDMaH0JsFg"
+  <Package Name="Telepresence" Language="1033" Codepage="1252" Version="v2.12.3-94-g89d49ebc3-aqjl98PLHPgcvenAY0unGA"
     Manufacturer="Ambassador Labs" InstallerVersion="100" ProductCode="*"
     UpgradeCode="fdac1021-3405-4097-84e3-1e683ba9eee5">
     <SummaryInformation Keywords="Installer" Description="Ambassador's Telepresence Installer"
@@ -15,8 +15,6 @@
       <ComponentRef Id="sshfsENV" />
     </Feature>
 
-    <Icon Id="logo.exe" SourceFile="favicon.ico" />
-
     <StandardDirectory Id="ProgramFilesFolder">
       <Directory Id="Ambassador" Name="Ambassador">
         <Directory Id="INSTALLDIR" Name="Telepresence">
@@ -25,7 +23,7 @@
             <File Id="TelepresenceEXE" Name="telepresence.exe" DiskId="1" Source="telepresence.exe"
               KeyPath="yes">
               <Shortcut Id="startmenuFoobar10" Directory="ProgramMenuDir" Name="Telepresence"
-                WorkingDirectory="INSTALLDIR" Icon="logo.exe" IconIndex="0" Advertise="yes" />
+                WorkingDirectory="INSTALLDIR" Advertise="yes" />
             </File>
 
             <Environment

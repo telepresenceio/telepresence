@@ -15,8 +15,6 @@
       <ComponentRef Id="sshfsENV" />
     </Feature>
 
-    <Icon Id="logo.exe" SourceFile="favicon.ico" />
-
     <StandardDirectory Id="ProgramFilesFolder">
       <Directory Id="Ambassador" Name="Ambassador">
         <Directory Id="INSTALLDIR" Name="Telepresence">
@@ -25,7 +23,7 @@
             <File Id="TelepresenceEXE" Name="telepresence.exe" DiskId="1" Source="telepresence.exe"
               KeyPath="yes">
               <Shortcut Id="startmenuFoobar10" Directory="ProgramMenuDir" Name="Telepresence"
-                WorkingDirectory="INSTALLDIR" Icon="logo.exe" IconIndex="0" Advertise="yes" />
+                WorkingDirectory="INSTALLDIR" Advertise="yes" />
             </File>
 
             <Environment
