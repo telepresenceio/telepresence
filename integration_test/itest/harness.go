@@ -15,6 +15,7 @@ type Harness interface {
 	RunSuite(TestingSuite)
 
 	HarnessContext() context.Context
+	SetHarnessContext(ctx context.Context)
 	SetupSuite()
 	HarnessT() *testing.T
 	PopHarness()
@@ -48,6 +49,13 @@ func (h *harness) HarnessContext() context.Context {
 		return h.upAndDowns[l].setupWith
 	}
 	return h.ctx
+}
+
+func (h *harness) SetHarnessContext(ctx context.Context) {
+	if l := len(h.upAndDowns) - 1; l >= 0 {
+		h.upAndDowns[l].setupWith = ctx
+	}
+	h.ctx = ctx
 }
 
 func (h *harness) RunSuite(s TestingSuite) {
@@ -91,7 +99,7 @@ func (h *harness) PopHarness() {
 	if upDown.setupWith != nil {
 		if tearDown := upDown.tearDown; tearDown != nil {
 			upDown.tearDown = nil // Never tear down twice
-			if h.wasSetup {
+			if upDown.wasSetup {
 				safeTearDown(upDown.setupWith, tearDown)
 			}
 		}
