@@ -72,6 +72,15 @@ Root Daemon: v2.6.7 (api v3)
 User Daemon: v2.6.7 (api v3)
 ```
 
+### Setup Traffic Manager in the cluster
+
+Install Traffic Manager in your cluster. By default, it will reside in the `ambassador` namespace:
+```console
+$ telepresence helm install
+
+Traffic Manager installed successfully
+```
+
 ### Establish a connection to  the cluster (outbound traffic)
 
 Let telepresence connect:
@@ -335,7 +344,7 @@ You can uninstall the traffic-agent from specific deployments or from all deploy
 case the traffic-manager and all traffic-agents will be uninstalled.
 
 ```
-telepresence uninstall --everything
+$ telepresence helm uninstall
 ```
 will remove everything that was automatically installed by telepresence from the cluster.
 
