@@ -48,7 +48,8 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 	flags.StringVarP(&a.Port, "port", "p", "", ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
 		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
-		`With --docker-run, use <local port>:<container port> or <local port>:<container port>:<svcPortIdentifier>.`,
+		`With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or `+
+		`<local port>:<container port>:<svcPortIdentifier>.`,
 	)
 
 	flags.StringVar(&a.Address, "address", "127.0.0.1", ``+
