@@ -18,7 +18,7 @@ type singleService struct {
 
 func WithSingleService(h NamespacePair, serviceName string, f func(SingleService)) {
 	h.HarnessT().Run(fmt.Sprintf("Test_Service_%s", serviceName), func(t *testing.T) {
-		ctx := withT(h.HarnessContext(), t)
+		ctx := WithT(h.HarnessContext(), t)
 		s := &singleService{NamespacePair: h, serviceName: serviceName}
 		s.PushHarness(ctx, s.setup, s.tearDown)
 		defer h.PopHarness()

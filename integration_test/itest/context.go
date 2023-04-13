@@ -54,10 +54,10 @@ func TestContext(t *testing.T, ossRoot, moduleRoot string) context.Context {
 	ctx = SetOSSRoot(ctx, ossRoot)
 	ctx = SetModuleRoot(ctx, moduleRoot)
 	ctx = withProfile(ctx)
-	return withT(ctx, t)
+	return WithT(ctx, t)
 }
 
-func withT(ctx context.Context, t *testing.T) context.Context {
+func WithT(ctx context.Context, t *testing.T) context.Context {
 	ctx, cancel := context.WithCancel(dlog.WithLogger(context.WithValue(ctx, tContextKey{}, t), log.NewTestLogger(t, dlog.LogLevelDebug)))
 	t.Cleanup(cancel)
 	return ctx

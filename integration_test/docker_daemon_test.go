@@ -12,6 +12,7 @@ import (
 type dockerDaemonSuite struct {
 	itest.Suite
 	itest.NamespacePair
+	ctx context.Context
 }
 
 func (s *dockerDaemonSuite) SuiteName() string {
@@ -24,23 +25,24 @@ func init() {
 	})
 }
 
-func (s *dockerDaemonSuite) Context() context.Context {
-	ctx := itest.WithConfig(s.Suite.Context(), func(cfg *client.Config) {
-		cfg.Intercept.UseFtp = false
-	})
-	return itest.WithUseDocker(ctx, true)
-}
-
 func (s *dockerDaemonSuite) SetupSuite() {
 	if s.IsCI() && goRuntime.GOOS != "linux" {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 		return
 	}
 	s.Suite.SetupSuite()
+	ctx := itest.WithConfig(s.HarnessContext(), func(cfg *client.Config) {
+		cfg.Intercept.UseFtp = false
+	})
+	s.ctx = itest.WithUseDocker(ctx, true)
 }
 
 func (s *dockerDaemonSuite) TearDownTest() {
 	itest.TelepresenceQuitOk(s.Context())
+}
+
+func (s *dockerDaemonSuite) Context() context.Context {
+	return itest.WithT(s.ctx, s.T())
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
