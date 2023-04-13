@@ -321,7 +321,10 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 }
 
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
-	g.Go("RecursionCheck", s.performRecursionCheck)
+	g.Go("RecursionCheck", func(c context.Context) error {
+		_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, []string{tel2SubDomain})
+		return s.performRecursionCheck(c)
+	})
 
 	g.Go("SearchPaths", func(c context.Context) error {
 		var prevPaths []string
@@ -468,7 +471,7 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 	const maxRetry = 10
 	defer dlog.Debug(c, "Recursion check finished")
 	var rc string
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS != "darwin" {
 		rc = recursionCheck + tel2SubDomain
 	} else {
 		rc = recursionCheck + s.clusterDomain
