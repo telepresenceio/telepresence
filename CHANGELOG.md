@@ -9,6 +9,11 @@
 
 - Feature: There's a new --address flag to the intercept command allowing users to set the target IP of the intercept.
 
+- Feature: The new flags `--docker-build`, and `--docker-build-opt` was added to `telepresence intercept` to facilitate a
+  docker run directly from a docker context. 
+
+- Bugfix: Using `telepresence intercept --docker-run` now works with a container based daemon started with `telepresence connect --docker`
+
 - Bugfix: DNS works properly even when no cluster subnet is routed by the Telepresence VIF.
 
 - Bugfix: The Traffic Manager uses a fail-proof way to determine the cluster domain.
