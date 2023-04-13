@@ -185,7 +185,9 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 		// Some tests disable scout reporting by setting the host IP to 127.0.0.1. This spams
 		// the logs with lots of "connection refused" messages and makes them hard to read.
 		mh, _ := url.Parse(metriton.DefaultEndpoint)
-		if ips, err := net.LookupIP(mh.Host); err == nil && len(ips) > 0 {
+		luc, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		if ips, err := net.DefaultResolver.LookupIP(luc, "tcp", mh.Host); err == nil {
 			if ips[0].Equal(net.IP{127, 0, 0, 1}) {
 				env.ScoutDisable = true
 				_ = os.Setenv("SCOUT_DISABLE", "1")
