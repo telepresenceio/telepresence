@@ -478,7 +478,8 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 	if err != nil {
 		return err
 	}
-	willProxy := s.proxyClusterSvcs || s.proxyClusterPods
+	s.readAdditionalRouting(ctx, mgrInfo)
+	willProxy := s.proxyClusterSvcs || s.proxyClusterPods || len(s.alsoProxySubnets) > 0
 
 	// We'll need to synthesize a subnet where we can attach the DNS service when the VIF isn't configured
 	// from cluster subnets. But not on darwin systems, because there the DNS is controlled by /etc/resolver
@@ -507,15 +508,7 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		}
 	}
 
-	if r := mgrInfo.Routing; r != nil {
-		as := subnet.Unique(append(s.alsoProxySubnets, iputil.ConvertSubnets(r.AlsoProxySubnets)...))
-		dlog.Infof(ctx, "also-proxy subnets %v", as)
-		s.alsoProxySubnets = as
-
-		ns := subnet.Unique(append(s.neverProxySubnets, iputil.ConvertSubnets(r.NeverProxySubnets)...))
-		dlog.Infof(ctx, "never-proxy subnets %v", ns)
-		s.neverProxySubnets = ns
-	}
+	s.readAdditionalRouting(ctx, mgrInfo)
 
 	var subnets []*net.IPNet
 	if s.proxyClusterSvcs {
@@ -566,6 +559,18 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		attribute.Stringer("tel2.cluster-dns", net.IP(dns.KubeIp)),
 		attribute.String("tel2.cluster-domain", dns.ClusterDomain),
 	)
+}
+
+func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+	if r := mgrInfo.Routing; r != nil {
+		as := subnet.Unique(append(s.alsoProxySubnets, iputil.ConvertSubnets(r.AlsoProxySubnets)...))
+		dlog.Infof(ctx, "also-proxy subnets %v", as)
+		s.alsoProxySubnets = as
+
+		ns := subnet.Unique(append(s.neverProxySubnets, iputil.ConvertSubnets(r.NeverProxySubnets)...))
+		dlog.Infof(ctx, "never-proxy subnets %v", ns)
+		s.neverProxySubnets = ns
+	}
 }
 
 func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
