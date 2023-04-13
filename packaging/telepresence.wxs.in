@@ -1,0 +1,71 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Telepresence" Language="1033" Codepage="1252" Version="TELEPRESENCE_VERSION"
+    Manufacturer="Ambassador Labs" InstallerVersion="100" ProductCode="*"
+    UpgradeCode="fdac1021-3405-4097-84e3-1e683ba9eee5">
+    <SummaryInformation Keywords="Installer" Description="Ambassador's Telepresence Installer"
+      Manufacturer="Ambassador Labs" />
+
+    <Media Id="1" Cabinet="Sample.cab" EmbedCab="yes" DiskPrompt="CD-ROM #1" />
+    <Property Id="DiskPrompt" Value="Ambassador's Telepresence Installer" />
+
+    <Feature Id="Complete" Level="1">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="WintunLibrary" />
+      <ComponentRef Id="ProgramMenuDir" />
+      <ComponentRef Id="sshfsENV" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="Ambassador" Name="Ambassador">
+        <Directory Id="INSTALLDIR" Name="Telepresence">
+
+          <Component Id="MainExecutable" Guid="*">
+            <File Id="TelepresenceEXE" Name="telepresence.exe" DiskId="1" Source="telepresence.exe"
+              KeyPath="yes">
+              <Shortcut Id="startmenuFoobar10" Directory="ProgramMenuDir" Name="Telepresence"
+                WorkingDirectory="INSTALLDIR" Advertise="yes" />
+            </File>
+
+            <Environment
+              Id="telePATH"
+              Name="PATH"
+              Value="[INSTALLDIR]"
+              Part="last"
+              Action="set"
+              System="yes" />
+          </Component>
+
+          <Component Id="WintunLibrary" Guid="*">
+            <File Id="WintunDLL" Name="wintun.dll" DiskId="1" Source="wintun.dll" KeyPath="yes" />
+          </Component>
+
+          <!--HACK
+          add sshfs to PATH-->
+          <Component Id="sshfsENV" Guid="37f61466-6207-44ba-a2ae-d3a712b1e10a">
+            <Environment
+              Id="sshfsPATH"
+              Name="PATH"
+              Value="C:\Program Files\SSHFS-Win\bin"
+              Part="last"
+              Action="set"
+              System="yes" />
+          </Component>
+
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="Telepresence">
+
+        <Component Id="ProgramMenuDir" Guid="*">
+          <RemoveFolder Id="ProgramMenuDir" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\[Manufacturer]\[ProductName]" Type="string"
+            Value="" KeyPath="yes" />
+        </Component>
+
+      </Directory>
+    </StandardDirectory>
+
+  </Package>
+</Wix>
