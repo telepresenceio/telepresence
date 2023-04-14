@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -84,7 +84,13 @@ func (s *Server) shouldApplySearch(query string) bool {
 // use-case.
 func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.RRs, int, error) {
 	query := strings.ToLower(q.Name)
+
+	// Drop all known search path suffixes before sending the query to the cluster. The
+	// cluster has its own DNS resolver and its own set of search paths.
 	query = strings.TrimSuffix(query, tel2SubDomainDot)
+	for _, sfx := range s.dropSuffixes {
+		query = strings.TrimSuffix(query, sfx)
+	}
 
 	if !s.shouldDoClusterLookup(query) {
 		return nil, dns.RcodeNameError, nil
@@ -98,8 +104,8 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 				q.Name = origQuery
 				return rrs, rCode, err
 			}
-			q.Name = origQuery
 		}
+		q.Name = origQuery
 	}
 	return s.resolveInCluster(c, q)
 }
@@ -117,11 +123,10 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			dlog.Infof(c, "Automatically set -dns=%s", ip)
 		}
 
-		// The search entry in /etc/resolv.conf is not intended for this resolver so
-		// ensure that we just forward such queries without sending them to the cluster
-		// by adding corresponding entries to excludeSuffixes
+		// The search entries in /etc/resolv.conf is not intended for this resolver so
+		// ensure that we strip them off when we send queries to the cluster.
 		for _, sp := range rf.search {
-			s.config.ExcludeSuffixes = append(s.config.ExcludeSuffixes, "."+sp)
+			s.dropSuffixes = append(s.dropSuffixes, sp+".")
 		}
 	}
 	if s.config.LocalIp == nil {
