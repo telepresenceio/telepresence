@@ -106,29 +106,22 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	if s.config.LocalIp == nil {
-		dat, err := os.ReadFile("/etc/resolv.conf")
+		rf, err := readResolveFile("/etc/resolv.conf")
 		if err != nil {
 			return err
 		}
-		for _, line := range strings.Split(string(dat), "\n") {
-			if s.config.LocalIp == nil && strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
-				fields := strings.Fields(line)
-				ip := net.ParseIP(fields[1])
-				if ip.To4() != nil {
-					s.config.LocalIp = ip.To4()
-					dlog.Infof(c, "Automatically set -dns=%s", net.IP(s.config.LocalIp))
-				}
-			}
+		dlog.Debug(c, rf.String())
+		if len(rf.nameservers) > 0 {
+			ip := iputil.Parse(rf.nameservers[0])
+			s.config.LocalIp = ip
+			dlog.Infof(c, "Automatically set -dns=%s", ip)
+		}
 
-			// The search entry in /etc/resolv.conf is not intended for this resolver so
-			// ensure that we just forward such queries without sending them to the cluster
-			// by adding corresponding entries to excludeSuffixes
-			if strings.HasPrefix(strings.TrimSpace(line), "search") {
-				fields := strings.Fields(line)
-				for _, field := range fields[1:] {
-					s.config.ExcludeSuffixes = append(s.config.ExcludeSuffixes, "."+field)
-				}
-			}
+		// The search entry in /etc/resolv.conf is not intended for this resolver so
+		// ensure that we just forward such queries without sending them to the cluster
+		// by adding corresponding entries to excludeSuffixes
+		for _, sp := range rf.search {
+			s.config.ExcludeSuffixes = append(s.config.ExcludeSuffixes, "."+sp)
 		}
 	}
 	if s.config.LocalIp == nil {
