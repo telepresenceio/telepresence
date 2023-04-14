@@ -59,7 +59,7 @@ type Server struct {
 	cache        sync.Map
 	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
 	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
-	dropSuffixes []string
+	dropSuffixes []string //nolint:unused // only used on linux
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
