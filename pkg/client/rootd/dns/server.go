@@ -470,7 +470,6 @@ func (d dfs) String() string {
 
 func (s *Server) performRecursionCheck(c context.Context) error {
 	defer close(s.ready)
-	const maxRetry = 10
 	defer dlog.Debug(c, "Recursion check finished")
 	var rc string
 	if runtime.GOOS != "darwin" {
@@ -481,13 +480,13 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
 	atomic.StoreInt32(&s.recursive, recursionTestInProgress)
-	for ; i < maxRetry && atomic.LoadInt32(&s.recursive) == recursionTestInProgress; i++ {
+	for ; i < maxRecursionTestRetries && atomic.LoadInt32(&s.recursive) == recursionTestInProgress; i++ {
 		// Recursion is typically very fast (all on the same host) so let's
 		// use short timeouts
 		if i > 0 {
 			dlog.Debug(c, "retrying recursion check")
 		}
-		tc, cancel := context.WithTimeout(c, 500*time.Millisecond)
+		tc, cancel := context.WithTimeout(c, recursionTestTimeout)
 		_, err := net.DefaultResolver.LookupIP(tc, "ip4", rc)
 		cancel()
 		if err != nil {
@@ -498,7 +497,7 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 					}
 				}
 				if derr.IsTimeout {
-					dtime.SleepWithContext(c, 100*time.Millisecond)
+					dtime.SleepWithContext(c, 200*time.Millisecond)
 					continue
 				}
 			}
@@ -510,7 +509,7 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 		// Check didn't hit our resolver. Try again
 		dtime.SleepWithContext(c, 100*time.Millisecond)
 	}
-	if i == maxRetry {
+	if i == maxRecursionTestRetries {
 		err := errors.New("recursion check failed. The DNS isn't working properly")
 		s.ready <- err
 		return err

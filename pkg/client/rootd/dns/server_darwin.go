@@ -7,11 +7,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
+)
+
+const (
+	maxRecursionTestRetries = 10
+	recursionTestTimeout    = 500 * time.Millisecond
 )
 
 func (r *resolveFile) setSearchPaths(paths ...string) {

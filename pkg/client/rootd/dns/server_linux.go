@@ -24,6 +24,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
+const (
+	maxRecursionTestRetries = 10
+	recursionTestTimeout    = 500 * time.Millisecond
+)
+
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
 func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
