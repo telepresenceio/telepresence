@@ -14,7 +14,7 @@ type trafficManager struct {
 
 func WithTrafficManager(np NamespacePair, f func(ctx context.Context, ch NamespacePair)) {
 	np.HarnessT().Run("Test_TrafficManager", func(t *testing.T) {
-		ctx := withT(np.HarnessContext(), t)
+		ctx := WithT(np.HarnessContext(), t)
 		require.NoError(t, np.GeneralError())
 		th := &trafficManager{NamespacePair: np}
 		th.PushHarness(ctx, th.setup, th.tearDown)

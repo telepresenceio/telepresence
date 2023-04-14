@@ -149,9 +149,10 @@ service ManagerProxy {
 message Interceptor {
   // The ID of the intercept that is served by this interceptor process
   string intercept_id = 1;
-
   // The pid of the interceptor process
   int32  pid = 2;
+  // Name or ID of container, in case the intercept handler runs in Docker
+  string container_name = 3;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.

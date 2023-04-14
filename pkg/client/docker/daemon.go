@@ -440,3 +440,19 @@ func tryLaunch(ctx context.Context, port int, name string, args []string) (strin
 			KubeContext: name,
 		}, cache.DaemonInfoFile(name, port))
 }
+
+// CancelWhenRmFromCache watches for the file to be removed from the cache, then calls cancel.
+func CancelWhenRmFromCache(ctx context.Context, cancel context.CancelFunc, filename string) error {
+	return cache.WatchDaemonInfos(ctx, func(ctx context.Context) error {
+		exists, err := cache.DaemonInfoExists(ctx, filename)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			// spec removed from cache, shut down gracefully
+			dlog.Infof(ctx, "daemon file %s removed from cache, shutting down gracefully", filename)
+			cancel()
+		}
+		return nil
+	}, filename)
+}

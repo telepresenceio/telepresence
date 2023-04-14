@@ -30,7 +30,7 @@ following Free and Open Source software:
     github.com/davecgh/go-spew                                                   v1.1.1                                ISC license
     github.com/docker/cli                                                        v20.10.22+incompatible                Apache License 2.0
     github.com/docker/distribution                                               v2.8.1+incompatible                   Apache License 2.0
-    github.com/docker/docker                                                     v20.10.22+incompatible                Apache License 2.0
+    github.com/docker/docker                                                     v20.10.24+incompatible                Apache License 2.0
     github.com/docker/docker-credential-helpers                                  v0.7.0                                MIT license
     github.com/docker/go-connections                                             v0.4.0                                Apache License 2.0
     github.com/docker/go-metrics                                                 v0.0.1                                Apache License 2.0

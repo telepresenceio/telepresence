@@ -12,7 +12,7 @@ import (
 )
 
 func Result(r *connector.InterceptResult, err error) error {
-	if err != nil {
+	if r == nil || err != nil {
 		return err
 	}
 	msg := ""

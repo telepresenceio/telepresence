@@ -262,6 +262,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 	} else {
 		s.dnsServer = dns.NewServer(mi.Dns, s.legacyClusterLookup, true)
 	}
+	s.SetSearchPath(c, nil, nil)
 	dlog.Infof(c, "also-proxy subnets %v", as)
 	dlog.Infof(c, "never-proxy subnets %v", ns)
 	return s
@@ -718,7 +719,11 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
-		return s.dnsServer.Worker(ctx, s.tunVif.Device, s.configureDNS)
+		var dev vif.Device
+		if s.tunVif != nil {
+			dev = s.tunVif.Device
+		}
+		return s.dnsServer.Worker(ctx, dev, s.configureDNS)
 	})
 
 	if s.tunVif != nil {

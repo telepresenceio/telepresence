@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
@@ -55,10 +56,16 @@ type intercept struct {
 	// cancel is called when the intercept is no longer present
 	cancel context.CancelFunc
 
-	// pid of interceptor owned by an intercept. This entry will only be present when
+	// pid of intercept handler for an intercept. This entry will only be present when
 	// the telepresence intercept command spawns a new command. The int value reflects
 	// the pid of that new command.
 	pid int
+
+	// containerName is the name or ID of the container that the intercept handler is
+	// running in, when it runs in Docker. As with pid, this entry will only be present when
+	// the telepresence intercept command spawns a new command using --docker-run or
+	// --docker-build
+	containerName string
 
 	// The mounter of the remote file system.
 	remotefs.Mounter
@@ -765,13 +772,24 @@ func (s *session) RemoveIntercept(c context.Context, name string) error {
 
 func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 	name := ic.Spec.Name
-	if ic.pid != 0 {
-		p, err := os.FindProcess(ic.pid)
-		if err != nil {
-			dlog.Errorf(c, "unable to find interceptor for intercept %s with pid %d", name, ic.pid)
-		} else {
-			dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, ic.pid)
-			_ = proc.Terminate(p)
+
+	// No use trying to kill processes when using a container based daemon, unless
+	// that container based daemon runs as a normal user daemon with separate root daemon.
+	// Some users run a standard telepresence client together with intercepts in one
+	// single container.
+	if !(proc.RunningInContainer() && userd.GetService(c).RootSessionInProcess()) {
+		if ic.containerName != "" {
+			if err := docker.StopContainer(c, ic.containerName); err != nil {
+				dlog.Error(c, err)
+			}
+		} else if ic.pid != 0 {
+			p, err := os.FindProcess(ic.pid)
+			if err != nil {
+				dlog.Errorf(c, "unable to find interceptor for intercept %s with pid %d", name, ic.pid)
+			} else {
+				dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, ic.pid)
+				_ = proc.Terminate(p)
+			}
 		}
 	}
 
@@ -785,12 +803,13 @@ func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 	return err
 }
 
-// AddInterceptor associates the given interceptId with a pid of a running process. This ensures that
+// AddInterceptor associates the given intercept with a running process. This ensures that
 // the running process will be signalled when the intercept is removed.
-func (s *session) AddInterceptor(id string, i int) error {
+func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 	s.currentInterceptsLock.Lock()
 	if ci, ok := s.currentIntercepts[id]; ok {
-		ci.pid = i
+		ci.pid = int(ih.Pid)
+		ci.containerName = ih.ContainerName
 	}
 	s.currentInterceptsLock.Unlock()
 	return nil
@@ -800,6 +819,7 @@ func (s *session) RemoveInterceptor(id string) error {
 	s.currentInterceptsLock.Lock()
 	if ci, ok := s.currentIntercepts[id]; ok {
 		ci.pid = 0
+		ci.containerName = ""
 	}
 	s.currentInterceptsLock.Unlock()
 	return nil
@@ -822,10 +842,17 @@ func (s *session) GetInterceptSpec(name string) *manager.InterceptSpec {
 // GetInterceptInfo returns the InterceptInfo for the given name, or nil if no such info exists.
 func (s *session) GetInterceptInfo(name string) *manager.InterceptInfo {
 	if _, ok := s.localIntercepts[name]; ok {
-		return nil
+		return &manager.InterceptInfo{Spec: s.GetInterceptSpec(name)}
 	}
 	if ic := s.getInterceptByName(name); ic != nil {
-		return ic.InterceptInfo
+		ii := ic.InterceptInfo
+		if ic.containerName != "" {
+			if ii.Environment == nil {
+				ii.Environment = make(map[string]string, 1)
+			}
+			ii.Environment["TELEPRESENCE_HANDLER_CONTAINER_NAME"] = ic.containerName
+		}
+		return ii
 	}
 	return nil
 }

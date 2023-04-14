@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,6 +40,7 @@ type FallbackPool interface {
 	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
 	RemoteAddr() string
 	LocalAddrs() []*net.UDPAddr
+	Close()
 }
 
 const (
@@ -57,6 +59,7 @@ type Server struct {
 	cache        sync.Map
 	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
 	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
+	dropSuffixes []string //nolint:unused // only used on linux
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
@@ -166,6 +169,15 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	}
 
 	query = query[:len(query)-1] // skip last dot
+
+	if strings.Contains(query, "."+tel2SubDomainDot) {
+		// Reject "xxx.tel2-search.xxx" (we know it doesn't end with tel2SubDomain because we just removed the last dot)
+		// Addresses like that can come into existence if the daemon runs in a docker container
+		// with --dns-search tel2-search and docker in turn uses a DNS server from a VPN that
+		// applies search paths to multi-label names.
+		// Example when using Tailscape: hello.default.tel2-search.tailbfa9e.ts.net.
+		return false
+	}
 
 	// Always include configured includeSuffixes
 	for _, sfx := range s.config.IncludeSuffixes {
@@ -311,7 +323,10 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 }
 
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
-	g.Go("RecursionCheck", s.performRecursionCheck)
+	g.Go("RecursionCheck", func(c context.Context) error {
+		_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, []string{tel2SubDomain})
+		return s.performRecursionCheck(c)
+	})
 
 	g.Go("SearchPaths", func(c context.Context) error {
 		var prevPaths []string
@@ -418,13 +433,11 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
 		oldDv := v.(*cacheEntry)
-		if atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
-			if q.Name == recursionCheck {
-				atomic.StoreInt32(&s.recursive, recursionDetected)
-			}
-			if atomic.LoadInt32(&s.recursive) == recursionDetected {
-				return nil, dns.RcodeNameError, nil
-			}
+		if strings.HasPrefix(q.Name, recursionCheck) {
+			atomic.StoreInt32(&s.recursive, recursionDetected)
+		}
+		if atomic.LoadInt32(&s.recursive) == recursionDetected {
+			return nil, dns.RcodeNameError, nil
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
@@ -434,7 +447,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 	}
 
 	answer, rCode, err := s.resolveQuery(q, newDv)
-	if q.Name == recursionCheck {
+	if strings.HasPrefix(q.Name, recursionCheck) {
 		if atomic.LoadInt32(&s.recursive) == recursionDetected {
 			dlog.Debug(s.ctx, "DNS resolver is recursive")
 		} else {
@@ -457,36 +470,46 @@ func (d dfs) String() string {
 
 func (s *Server) performRecursionCheck(c context.Context) error {
 	defer close(s.ready)
-	const maxRetry = 10
 	defer dlog.Debug(c, "Recursion check finished")
-	rc := strings.TrimSuffix(recursionCheck, ".")
+	var rc string
+	if runtime.GOOS != "darwin" {
+		rc = recursionCheck + tel2SubDomain
+	} else {
+		rc = recursionCheck + s.clusterDomain
+	}
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
-	for ; i < maxRetry; i++ {
-		_, err := net.DefaultResolver.LookupIP(c, "ip4", rc)
+	atomic.StoreInt32(&s.recursive, recursionTestInProgress)
+	for ; i < maxRecursionTestRetries && atomic.LoadInt32(&s.recursive) == recursionTestInProgress; i++ {
+		// Recursion is typically very fast (all on the same host) so let's
+		// use short timeouts
+		if i > 0 {
+			dlog.Debug(c, "retrying recursion check")
+		}
+		tc, cancel := context.WithTimeout(c, recursionTestTimeout)
+		_, err := net.DefaultResolver.LookupIP(tc, "ip4", rc)
+		cancel()
 		if err != nil {
-			if derr, ok := err.(*net.DNSError); ok && derr.IsNotFound {
-				err = nil
+			if derr, ok := err.(*net.DNSError); ok {
+				if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
+					if derr.IsTimeout || derr.IsNotFound {
+						return nil
+					}
+				}
+				if derr.IsTimeout {
+					dtime.SleepWithContext(c, 200*time.Millisecond)
+					continue
+				}
 			}
-		}
-		if err != nil {
-			dlog.Errorf(c, "recursion check ended with %v", err)
+			dlog.Errorf(c, "unexpected error during recursion check: %v", err)
 		}
 		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
 			return nil
 		}
-		// Check didn't hit our resolver. Try again after a second
-		dtime.SleepWithContext(c, time.Second)
-
-		// Check that the resolver didn't get hit during our wait. We don't want
-		// to retry if it did, because that will give the false impression that
-		// the resolver is recursive.
-		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
-			return nil
-		}
-		dlog.Debug(c, "retrying recursion check")
+		// Check didn't hit our resolver. Try again
+		dtime.SleepWithContext(c, 100*time.Millisecond)
 	}
-	if i == maxRetry {
+	if i == maxRecursionTestRetries {
 		err := errors.New("recursion check failed. The DNS isn't working properly")
 		s.ready <- err
 		return err
@@ -607,6 +630,25 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	} else {
 		rCode = msg.Rcode
 		txt = func() string { return dnsproxy.RRs(msg.Answer).String() }
+		// When the fallback fails an AAAA, we must look for a successful A, and vice versa. If a hit of
+		// the other type is found, then the returned value must be EMPTY here instead of an NXNAME
+		if rCode == dns.RcodeNameError {
+			var counterType uint16
+			switch q.Qtype {
+			case dns.TypeA:
+				counterType = dns.TypeAAAA
+			case dns.TypeAAAA:
+				counterType = dns.TypeA
+			default:
+				return
+			}
+			if _, ok := s.cache.Load(cacheKey{name: q.Name, qType: counterType}); ok {
+				rCode = dns.RcodeSuccess
+				msg.Rcode = rCode
+				msg.Answer = []dns.RR{}
+				txt = func() string { return "EMPTY" }
+			}
+		}
 	}
 }
 

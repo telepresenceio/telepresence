@@ -84,7 +84,7 @@ func WithNamespacePair(ctx context.Context, suffix string, f func(NamespacePair)
 	namespace, s.Namespace = AppAndMgrNSName(suffix)
 	s.ManagedNamespaces = []string{namespace}
 	getT(ctx).Run(fmt.Sprintf("Test_Namespaces_%s", suffix), func(t *testing.T) {
-		ctx = withT(ctx, t)
+		ctx = WithT(ctx, t)
 		ctx = WithUser(ctx, s.Namespace+":"+TestUser)
 		ctx = WithNamespaces(ctx, &s.Namespaces)
 		s.Harness = NewContextHarness(ctx)

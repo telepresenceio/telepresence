@@ -5,9 +5,15 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
+)
+
+const (
+	maxRecursionTestRetries = 20
+	recursionTestTimeout    = 1500 * time.Millisecond
 )
 
 func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {

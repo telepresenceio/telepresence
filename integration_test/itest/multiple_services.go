@@ -21,7 +21,7 @@ type multipleServices struct {
 
 func WithMultipleServices(np NamespacePair, name string, serviceCount int, f func(MultipleServices)) {
 	np.HarnessT().Run(fmt.Sprintf("Test_Services_%d", serviceCount), func(t *testing.T) {
-		ctx := withT(np.HarnessContext(), t)
+		ctx := WithT(np.HarnessContext(), t)
 		ms := &multipleServices{NamespacePair: np, name: name, serviceCount: serviceCount}
 		ms.PushHarness(ctx, ms.setup, ms.tearDown)
 		defer ms.PopHarness()

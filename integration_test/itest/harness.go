@@ -91,7 +91,7 @@ func (h *harness) PopHarness() {
 	if upDown.setupWith != nil {
 		if tearDown := upDown.tearDown; tearDown != nil {
 			upDown.tearDown = nil // Never tear down twice
-			if h.wasSetup {
+			if upDown.wasSetup {
 				safeTearDown(upDown.setupWith, tearDown)
 			}
 		}

@@ -23,5 +23,5 @@ type Suite struct {
 }
 
 func (s *Suite) Context() context.Context {
-	return withT(s.HarnessContext(), s.T())
+	return WithT(s.HarnessContext(), s.T())
 }

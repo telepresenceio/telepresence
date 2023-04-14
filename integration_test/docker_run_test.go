@@ -11,6 +11,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 )
 
 func (s *singleServiceSuite) Test_DockerRun() {
@@ -48,6 +49,130 @@ func (s *singleServiceSuite) Test_DockerRun() {
 			// condition
 			func() bool {
 				out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", svc)
+				if err != nil {
+					dlog.Error(ctx, err)
+					return false
+				}
+				dlog.Info(ctx, out)
+				return expectedOutput.MatchString(out)
+			},
+			10*time.Second, // waitFor
+			2*time.Second,  // polling interval
+			`body of %q matches %q`, "http://"+svc, expectedOutput,
+		)
+	}
+
+	assertNotIntercepted := func(ctx context.Context) {
+		s.Eventually(func() bool {
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			return err == nil && !strings.Contains(stdout, svc+": intercepted")
+		}, 10*time.Second, 2*time.Second)
+	}
+
+	s.Run("<ctrl>-C", func() {
+		// Use a soft context to send a <ctrl>-c to telepresence in order to end it
+		ctx := s.Context()
+		soft, softCancel := context.WithCancel(dcontext.WithSoftness(ctx))
+		wch := make(chan struct{})
+		go runDockerRun(soft, wch)
+		assertInterceptResponse(ctx)
+		softCancel()
+		assertNotIntercepted(ctx)
+	})
+
+	s.Run("leave", func() {
+		// End the intercept from another telepresence invocation
+		ctx := s.Context()
+		wch := make(chan struct{})
+		go runDockerRun(ctx, wch)
+		assertInterceptResponse(ctx)
+		itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
+		select {
+		case <-wch:
+		case <-time.After(30 * time.Second):
+			s.Fail("interceptor did not terminate")
+		}
+		assertNotIntercepted(ctx)
+	})
+
+	s.Run("disconnect", func() {
+		// End the intercept from another telepresence invocation
+		ctx := s.Context()
+		wch := make(chan struct{})
+		go runDockerRun(ctx, wch)
+		assertInterceptResponse(ctx)
+		itest.TelepresenceDisconnectOk(ctx)
+		select {
+		case <-wch:
+		case <-time.After(30 * time.Second):
+			s.Fail("interceptor did not terminate")
+		}
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		assertNotIntercepted(ctx)
+	})
+
+	s.Run("quit", func() {
+		// End the intercept from another telepresence invocation
+		ctx := s.Context()
+		wch := make(chan struct{})
+		go runDockerRun(ctx, wch)
+		assertInterceptResponse(ctx)
+		itest.TelepresenceQuitOk(ctx)
+		select {
+		case <-wch:
+		case <-time.After(30 * time.Second):
+			s.Fail("interceptor did not terminate")
+		}
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		assertNotIntercepted(ctx)
+	})
+}
+
+func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
+	if s.IsCI() && goRuntime.GOOS != "linux" {
+		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
+	}
+	svc := "echo"
+	ctx := s.Context()
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	require := s.Require()
+	stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	defer itest.TelepresenceQuitOk(ctx)
+
+	match := regexp.MustCompile(`Connected to context ?(.+) \(`).FindStringSubmatch(stdout)
+	require.Len(match, 2)
+
+	daemonName := docker.SafeContainerName("tp-" + match[1])
+	tag := "telepresence/echo-test"
+	testDir := "testdata/echo-server"
+
+	_, err := itest.Output(ctx, "docker", "build", "-t", tag, testDir)
+	require.NoError(err)
+
+	abs, err := filepath.Abs(testDir)
+	require.NoError(err)
+
+	runDockerRun := func(ctx context.Context, wch chan<- struct{}) {
+		defer close(wch)
+		_, _, _ = itest.Telepresence(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc,
+			"--docker-run", "--", "--rm", "-v", abs+":/usr/src/app", tag)
+	}
+
+	assertInterceptResponse := func(ctx context.Context) {
+		s.Eventually(func() bool {
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			return err == nil && strings.Contains(stdout, svc+": intercepted")
+		}, 30*time.Second, 3*time.Second)
+
+		// Response contains env variables TELEPRESENCE_CONTAINER and TELEPRESENCE_INTERCEPT_ID
+		expectedOutput := regexp.MustCompile(`Intercept id [0-9a-f-]+:` + svc)
+		s.Eventually(
+			// condition
+			func() bool {
+				out, err := itest.Output(ctx,
+					"docker", "run", "--network", "container:"+daemonName, "--rm", "curlimages/curl", "--silent", "--max-time", "1", svc)
 				if err != nil {
 					dlog.Error(ctx, err)
 					return false

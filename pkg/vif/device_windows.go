@@ -178,23 +178,31 @@ func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server 
 	if err != nil {
 		return err
 	}
-	if oldLen := len(gss); oldLen > 0 {
-		// Windows does not use a dot suffix in the search path.
-		clusterDomain = strings.TrimSuffix(clusterDomain, ".")
+	// Windows does not use a dot suffix in the search path.
+	clusterDomain = strings.TrimSuffix(clusterDomain, ".")
 
-		// Put our new search path in front of other entries. Then include those
-		// that don't end with our cluster domain (these are entries that aren't
-		// managed by Telepresence).
-		newGss := make([]string, len(searchList), oldLen)
-		copy(newGss, searchList)
-		for _, gs := range gss {
-			if !strings.HasSuffix(gs, clusterDomain) {
-				newGss = append(newGss, gs)
+	// Put our new search path in front of other entries. Then include those
+	// that don't end with our cluster domain (these are entries that aren't
+	// managed by Telepresence).
+	uniq := make(map[string]int, len(searchList)+len(gss))
+	i := 0
+	for _, gs := range searchList {
+		if _, ok := uniq[gs]; !ok {
+			uniq[gs] = i
+			i++
+		}
+	}
+	for _, gs := range gss {
+		if !strings.HasSuffix(gs, clusterDomain) {
+			if _, ok := uniq[gs]; !ok {
+				uniq[gs] = i
+				i++
 			}
 		}
-		gss = newGss
-	} else {
-		gss = searchList
+	}
+	gss = make([]string, len(uniq))
+	for gs, i := range uniq {
+		gss[i] = gs
 	}
 	t.dns = server
 	return setGlobalSearchList(ctx, gss)
