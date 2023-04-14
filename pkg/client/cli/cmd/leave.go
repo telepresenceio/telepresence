@@ -16,7 +16,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 func leave() *cobra.Command {
@@ -71,7 +70,8 @@ func removeIntercept(ctx context.Context, name string) error {
 	ic, err := userD.GetIntercept(ctx, &manager.GetInterceptRequest{Name: name})
 	if err != nil {
 		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			return errcat.User.New(st.Message())
+			// Obviously not there. That's ok.
+			return nil
 		}
 		return err
 	}
