@@ -40,6 +40,7 @@ type FallbackPool interface {
 	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
 	RemoteAddr() string
 	LocalAddrs() []*net.UDPAddr
+	Close()
 }
 
 const (
@@ -58,6 +59,7 @@ type Server struct {
 	cache        sync.Map
 	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
 	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
+	dropSuffixes []string
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces map[string]struct{}
@@ -629,6 +631,25 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	} else {
 		rCode = msg.Rcode
 		txt = func() string { return dnsproxy.RRs(msg.Answer).String() }
+		// When the fallback fails an AAAA, we must look for a successful A, and vice versa. If a hit of
+		// the other type is found, then the returned value must be EMPTY here instead of an NXNAME
+		if rCode == dns.RcodeNameError {
+			var counterType uint16
+			switch q.Qtype {
+			case dns.TypeA:
+				counterType = dns.TypeAAAA
+			case dns.TypeAAAA:
+				counterType = dns.TypeA
+			default:
+				return
+			}
+			if _, ok := s.cache.Load(cacheKey{name: q.Name, qType: counterType}); ok {
+				rCode = dns.RcodeSuccess
+				msg.Rcode = rCode
+				msg.Answer = []dns.RR{}
+				txt = func() string { return "EMPTY" }
+			}
+		}
 	}
 }
 
