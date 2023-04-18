@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.13.0 (TBD)
+### 2.13.0 (April 18, 2023)
 
 - Feature: The Docker network used by a Kind or Minikube (using the "docker" driver) installation, is automatically
   detected and connected to a Docker container running the Telepresence daemon.
