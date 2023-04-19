@@ -78,3 +78,12 @@ func (s *Subnet) UnmarshalYAML(node *yaml.Node) error {
 func (s *Subnet) String() string {
 	return (*net.IPNet)(s).String()
 }
+
+func IsZeroMask(n *net.IPNet) bool {
+	for _, b := range n.Mask {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
