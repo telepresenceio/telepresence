@@ -148,6 +148,25 @@ func (s *RoutingSuite) Test_RoutingTable() {
 	s.Require().True(cidrFound)
 }
 
+func (s *RoutingSuite) Test_ConflictingRoutes() {
+	// Start two routers with conflicting routes
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cidr1 := "192.0.2.0/26"
+	cidr2 := "192.0.2.32/27"
+
+	_, routerCancel1, err := s.runRouter(ctx, cidr1)
+	s.Require().NoError(err)
+	defer routerCancel1()
+
+	_, routerCancel2, err := s.runRouter(ctx, cidr2)
+	if routerCancel2 != nil {
+		// Make sure the second router doesn't leak
+		defer routerCancel2()
+	}
+	s.Require().Error(err)
+}
+
 func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, context.CancelFunc, error) {
 	pc, _, _, ok := runtime.Caller(1)
 	s.Require().True(ok)

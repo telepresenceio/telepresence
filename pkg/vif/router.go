@@ -2,11 +2,13 @@ package vif
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"go.opentelemetry.io/otel"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -40,7 +42,31 @@ func (rt *Router) GetRoutedSubnets() []*net.IPNet {
 	return rt.routedSubnets
 }
 
+func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error {
+	// We need the entire table because we need to check for any overlaps, not just "is this IP already routed"
+	table, err := routing.GetRoutingTable(ctx)
+	if err != nil {
+		return err
+	}
+	for _, tr := range table {
+		dlog.Tracef(ctx, "checking for overlap with route %q", tr)
+		if iputil.IsZeroMask(tr.RoutedNet) || tr.Default {
+			// This is a default route, so we'll overlap it if needed
+			continue
+		}
+		for _, r := range routes {
+			if routing.SubnetsOverlap(r, tr.RoutedNet) {
+				return fmt.Errorf("subnet %s overlaps with existing route %q", r, tr)
+			}
+		}
+	}
+	return nil
+}
+
 func (rt *Router) UpdateRoutes(ctx context.Context, plaseProxy, dontProxy []*net.IPNet) (err error) {
+	if err := rt.ValidateRoutes(ctx, plaseProxy); err != nil {
+		return err
+	}
 	for _, n := range dontProxy {
 		if !rt.isNeverProxied(n) {
 			r, err := routing.GetRoute(ctx, n)
