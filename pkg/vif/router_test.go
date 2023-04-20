@@ -167,8 +167,6 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 
 	var cmd *dexec.Cmd
 	if runtime.GOOS == "windows" {
-		// args = append([]string{"/user:Administrator", "testdata\\router\\router.exe"}, args...)
-		// cmd = dexec.CommandContext(pCtx, "runas", args...)
 		cmd = dexec.CommandContext(pCtx, "testdata\\router\\router.exe", args...)
 	} else {
 		args = append([]string{"./testdata/router/router"}, args...)
