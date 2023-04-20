@@ -4,7 +4,7 @@
 
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication Theme="hyperlinkSidebarLicense"
-        LicenseUrl="https://www.getambassador.io/docs/telepresence/latest/licenses"
+        LicenseUrl="https://www.getambassador.io/eula/enterprise"
         xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal" LogoSideFile="sidebar.png"
         SuppressOptionsUI="yes" ShowVersion="yes" />
     </BootstrapperApplication>
