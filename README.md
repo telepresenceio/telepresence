@@ -2,9 +2,9 @@
 
 [<img src="https://cncf-branding.netlify.app/img/projects/telepresence/horizontal/color/telepresence-horizontal-color.png" width="80"/>](https://cncf-branding.netlify.app/img/projects/telepresence/horizontal/color/telepresence-horizontal-color.png)
 
-Telepresence gives developers infinite scale development environments for Kubernetes. 
+Telepresence gives developers infinite scale development environments for Kubernetes.
 
-Website: [https://www.getambassador.io/products/telepresence/](https://www.getambassador.io/products/telepresence/)  
+Website: [https://www.getambassador.io/products/telepresence/](https://www.getambassador.io/products/telepresence/)
 Slack: [Discuss](https://datawire-oss.slack.com/signup#/domain-signup)
 
 **With Telepresence:**
@@ -28,7 +28,7 @@ A few quick ways to start using Telepresence
 * **Meetings:** Check out our community [meeting schedule](https://github.com/telepresenceio/telepresence/blob/release/v2/MEETING_SCHEDULE.md) for opportunities to interact with Telepresence developers
 
 ## Documentation
-Telepresence documentation is available on the Ambassador Labs webside:  
+Telepresence documentation is available on the Ambassador Labs webside:
 [Documentation](https://www.getambassador.io/docs/telepresence/)
 
 ## Telepresence 2
@@ -214,7 +214,7 @@ The traffic-agent is installed too, in the hello pod. Here together with an init
 `targetPort`.
 
 ```console
-$ kubectl describe pod hello-774455b6f5-6x6vs 
+$ kubectl describe pod hello-774455b6f5-6x6vs
 Name:         hello-774455b6f5-6x6vs
 Namespace:    default
 Priority:     0
@@ -286,10 +286,10 @@ Containers:
       /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-wzhhs (ro)
 Conditions:
   Type              Status
-  Initialized       True 
-  Ready             True 
-  ContainersReady   True 
-  PodScheduled      True 
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
 Volumes:
   kube-api-access-wzhhs:
     Type:                    Projected (a volume that contains injected data from multiple sources)
@@ -307,7 +307,7 @@ Volumes:
     Optional:  false
   export-volume:
     Type:        EmptyDir (a temporary directory that shares a pod's lifetime)
-    Medium:      
+    Medium:
     SizeLimit:   <unset>
 QoS Class:       BestEffort
 Node-Selectors:  <none>
@@ -348,5 +348,5 @@ encountered. The files are named `daemon.log` and `connector.log`. The location 
 - Linux `~/.cache/telepresence/logs`
 - Windows `"%USERPROFILE%\AppData\Local\logs"`
 
-Visit the troubleshooting section in the Telepresence documentation for more advice:  
+Visit the troubleshooting section in the Telepresence documentation for more advice:
 [Troubleshooting](https://www.getambassador.io/docs/telepresence/latest/troubleshooting/)
