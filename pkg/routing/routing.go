@@ -43,14 +43,6 @@ func Subnets(routes []*Route) []*net.IPNet {
 	return ns
 }
 
-func SubnetsOverlap(one, other *net.IPNet) bool {
-	// Ensure they're both IPV4 or both IPV6
-	if one.IP.To4() == nil && other.IP.To4() != nil || one.IP.To4() != nil && other.IP.To4() == nil {
-		return false
-	}
-	return one.Contains(other.IP) || other.Contains(one.IP)
-}
-
 func Routes(c context.Context, ms []*net.IPNet) []*Route {
 	rs := make([]*Route, 0, len(ms))
 	for _, n := range ms {
