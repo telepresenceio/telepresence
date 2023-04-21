@@ -19,6 +19,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 type RoutingSuite struct {
@@ -125,7 +126,7 @@ func (s *RoutingSuite) Test_RoutingTable() {
 		if route.Interface.Name == device {
 			deviceFound = true
 			s.Require().False(route.Default, fmt.Sprintf("Route %s is default", route.String()))
-			s.Require().False(iputil.IsZeroMask(route.RoutedNet), fmt.Sprintf("Route %s has zero mask", route.String()))
+			s.Require().False(subnet.IsZeroMask(route.RoutedNet), fmt.Sprintf("Route %s has zero mask", route.String()))
 			// Linux and Windows will automatically add a bunch of multicast routes, which we can ignore as they're not actually for routing through the device.
 			if !route.RoutedNet.IP.IsMulticast() {
 				if route.RoutedNet.IP.To4() == nil {

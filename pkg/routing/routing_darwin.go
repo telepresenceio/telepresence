@@ -12,6 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 const findInterfaceRegex = "(?:gateway:\\s+([0-9.]+)\\s+.*)?interface:\\s+([a-z0-9]+)"
@@ -70,7 +71,7 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 				Gateway:   gwIP,
 				LocalIP:   localIP,
 				RoutedNet: routedNet,
-				Default:   iputil.IsZeroMask(routedNet),
+				Default:   subnet.IsZeroMask(routedNet),
 			})
 		case *route.Inet6Addr:
 			localIP, err := interfaceLocalIP(iface, false)
@@ -104,7 +105,7 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 				Gateway:   gwIP,
 				LocalIP:   localIP,
 				RoutedNet: routedNet,
-				Default:   iputil.IsZeroMask(routedNet),
+				Default:   subnet.IsZeroMask(routedNet),
 			})
 		}
 	}

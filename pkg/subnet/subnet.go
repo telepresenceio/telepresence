@@ -256,3 +256,12 @@ func RandomIPv4Subnet(mask net.IPMask, avoid []*net.IPNet) (*net.IPNet, error) {
 	}
 	return nil, fmt.Errorf("unable to find a free subnet")
 }
+
+func IsZeroMask(n *net.IPNet) bool {
+	for _, b := range n.Mask {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
