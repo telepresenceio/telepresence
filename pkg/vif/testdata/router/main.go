@@ -30,6 +30,7 @@ func main() {
 	}()
 	yesRoutes := []*net.IPNet{}
 	noRoutes := []*net.IPNet{}
+	whitelist := []*net.IPNet{}
 	for _, cidr := range os.Args[1:] {
 		var ipnet *net.IPNet
 		var err error
@@ -37,6 +38,10 @@ func main() {
 			_, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "!"))
 			fmt.Printf("Blacklisting route: %s\n", ipnet)
 			noRoutes = append(noRoutes, ipnet)
+		} else if strings.HasPrefix(cidr, "+") {
+			_, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "+"))
+			fmt.Printf("Whitelisting route: %s\n", ipnet)
+			whitelist = append(whitelist, ipnet)
 		} else {
 			_, ipnet, err = net.ParseCIDR(cidr)
 			fmt.Printf("Adding route: %s\n", ipnet)
@@ -46,6 +51,7 @@ func main() {
 			panic(err)
 		}
 	}
+	dev.Router.UpdateWhitelist(whitelist)
 	err = dev.Router.UpdateRoutes(ctx, yesRoutes, noRoutes)
 	if err != nil {
 		panic(err)

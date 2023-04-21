@@ -265,3 +265,9 @@ func IsZeroMask(n *net.IPNet) bool {
 	}
 	return true
 }
+
+// IsHalfOfDefault route returns true if the given subnet covers half the address space with a /1 mask.
+func IsHalfOfDefault(n *net.IPNet) bool {
+	ones, _ := n.Mask.Size()
+	return ones == 1
+}
