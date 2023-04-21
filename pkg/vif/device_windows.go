@@ -40,7 +40,24 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 			dlog.Errorf(ctx, "%+v", err)
 		}
 	}()
-	interfaceName := "tel0"
+	interfaceFmt := "tel%d"
+	ifaceNumber := 0
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get interfaces: %w", err)
+	}
+	for _, iface := range ifaces {
+		dlog.Infof(ctx, "Found interface %s", iface.Name)
+		// Parse the tel%d number if it's there
+		var num int
+		if _, err := fmt.Sscanf(iface.Name, interfaceFmt, &num); err == nil {
+			if num >= ifaceNumber {
+				ifaceNumber = num + 1
+			}
+		}
+	}
+	interfaceName := fmt.Sprintf(interfaceFmt, ifaceNumber)
+	dlog.Infof(ctx, "Creating interface %s", interfaceName)
 	td = &nativeDevice{}
 	if td.Device, err = tun.CreateTUN(interfaceName, 0); err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
