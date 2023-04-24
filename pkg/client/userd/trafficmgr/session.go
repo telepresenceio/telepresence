@@ -2,6 +2,7 @@ package trafficmgr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -600,7 +601,7 @@ func (s *session) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
 	iMap map[string][]*manager.InterceptInfo,
-	aMap map[string]*manager.AgentInfo,
+	aMap map[string]*rpc.WorkloadInfo_Sidecar,
 	filter rpc.ListRequest_Filter,
 ) []*rpc.WorkloadInfo {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
@@ -615,30 +616,17 @@ func (s *session) getInfosForWorkloads(
 			}
 			name := workload.GetName()
 			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
-			ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
-			for _, p := range svc.Spec.Ports {
-				ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
-					Name: p.Name,
-					Port: p.Port,
-				})
-			}
 			wlInfo := &rpc.WorkloadInfo{
 				Name:                 name,
 				Namespace:            workload.GetNamespace(),
 				WorkloadResourceType: workload.GetKind(),
 				Uid:                  string(workload.GetUID()),
-				Service: &rpc.WorkloadInfo_ServiceReference{
-					Name:      svc.Name,
-					Namespace: svc.Namespace,
-					Uid:       string(svc.UID),
-					Ports:     ports,
-				},
 			}
 			var ok bool
 			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
 				continue
 			}
-			if wlInfo.AgentInfo, ok = aMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			if wlInfo.Sidecar, ok = aMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
 				continue
 			}
 			wiMap[workload.GetUID()] = wlInfo
@@ -790,12 +778,18 @@ nextIs:
 			}
 		}
 	}
-	aMap := make(map[string]*manager.AgentInfo)
+
+	aMap := make(map[string]*rpc.WorkloadInfo_Sidecar)
 	for _, ns := range nss {
-		for k, v := range s.getCurrentAgentsInNamespace(ns) {
-			aMap[k] = v
+		for k, v := range s.getCurrentSidecarsInNamespace(ctx, ns) {
+			data, err := json.Marshal(v)
+			if err != nil {
+				continue
+			}
+			aMap[k] = &rpc.WorkloadInfo_Sidecar{Json: data}
 		}
 	}
+
 	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
 
 	if includeLocalIntercepts {
