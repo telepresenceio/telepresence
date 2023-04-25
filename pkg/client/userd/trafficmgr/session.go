@@ -601,7 +601,7 @@ func (s *session) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
 	iMap map[string][]*manager.InterceptInfo,
-	aMap map[string]*rpc.WorkloadInfo_Sidecar,
+	sMap map[string]*rpc.WorkloadInfo_Sidecar,
 	filter rpc.ListRequest_Filter,
 ) []*rpc.WorkloadInfo {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
@@ -626,7 +626,7 @@ func (s *session) getInfosForWorkloads(
 			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
 				continue
 			}
-			if wlInfo.Sidecar, ok = aMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			if wlInfo.Sidecar, ok = sMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
 				continue
 			}
 			wiMap[workload.GetUID()] = wlInfo
@@ -779,18 +779,18 @@ nextIs:
 		}
 	}
 
-	aMap := make(map[string]*rpc.WorkloadInfo_Sidecar)
+	sMap := make(map[string]*rpc.WorkloadInfo_Sidecar)
 	for _, ns := range nss {
 		for k, v := range s.getCurrentSidecarsInNamespace(ctx, ns) {
 			data, err := json.Marshal(v)
 			if err != nil {
 				continue
 			}
-			aMap[k] = &rpc.WorkloadInfo_Sidecar{Json: data}
+			sMap[k] = &rpc.WorkloadInfo_Sidecar{Json: data}
 		}
 	}
 
-	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
+	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, sMap, filter)
 
 	if includeLocalIntercepts {
 		s.currentInterceptsLock.Lock()
