@@ -41,13 +41,25 @@ func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.S
 	for _, informer := range informers {
 		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
-				w.onPodAdded(ctx, obj.(*corev1.Pod))
+				if pod, ok := obj.(*corev1.Pod); ok {
+					w.onPodAdded(ctx, pod)
+				}
 			},
 			DeleteFunc: func(obj any) {
-				w.onPodDeleted(ctx, obj.(*corev1.Pod))
+				if pod, ok := obj.(*corev1.Pod); ok {
+					w.onPodDeleted(ctx, pod)
+				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
+					if pod, ok := dfsu.Obj.(*corev1.Pod); ok {
+						w.onPodDeleted(ctx, pod)
+					}
+				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
-				w.onPodUpdated(ctx, oldObj.(*corev1.Pod), newObj.(*corev1.Pod))
+				if oldPod, ok := oldObj.(*corev1.Pod); ok {
+					if newPod, ok := newObj.(*corev1.Pod); ok {
+						w.onPodUpdated(ctx, oldPod, newPod)
+					}
+				}
 			},
 		})
 		if err != nil {
