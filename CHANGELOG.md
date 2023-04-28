@@ -1,5 +1,13 @@
 # Changelog
 
+### 2.13.2 (TBD)
+
+- Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
+
+### 2.13.1 (April 20, 2023)
+
+- Change: Update ambassador-agent to version 1.13.13
+
 ### 2.13.0 (April 18, 2023)
 
 - Feature: The Docker network used by a Kind or Minikube (using the "docker" driver) installation, is automatically
