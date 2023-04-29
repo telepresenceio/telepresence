@@ -8,11 +8,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
+	cfg := client.GetDefaultConfig()
+	ctx, cancel := context.WithCancel(client.WithConfig(context.Background(), &cfg))
 	defer cancel()
 	vif.InitLogger(ctx)
 	dev, err := vif.NewTunnelingDevice(ctx, nil)

@@ -51,6 +51,10 @@ func (n *Network) merge(o *Network) {
 	}
 }
 
+func (n Network) IsZero() bool {
+	return n.GlobalDNSSearchConfigStrategy == defaultGlobalDNSSearchConfigStrategy
+}
+
 func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(withLoc("network must be an object", node))
