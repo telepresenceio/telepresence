@@ -2,6 +2,9 @@
 
 ### 2.13.2 (TBD)
 
+- Feature: Configurable strategy (`auto`, `powershell`. or `registry`) to set the global DNS search path on Windows. Default
+  is `auto` which means try `powershell` first, and if it fails, fall back to `registry`.
+
 - Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
 
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.

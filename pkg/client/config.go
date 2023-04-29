@@ -29,14 +29,15 @@ const ConfigFile = "config.yml"
 
 // Config contains all configuration values for the telepresence CLI.
 type Config struct {
-	Timeouts        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
-	LogLevels       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
-	Images          Images          `json:"images,omitempty" yaml:"images,omitempty"`
-	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
-	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
-	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
-	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
-	Cluster         Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+	OSSpecificConfig `yaml:",inline"`
+	Timeouts         Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
+	LogLevels        LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
+	Images           Images          `json:"images,omitempty" yaml:"images,omitempty"`
+	Cloud            Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
+	Grpc             Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	TelepresenceAPI  TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
+	Intercept        Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
+	Cluster          Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
 }
 
 func ParseConfigYAML(data []byte) (*Config, error) {
@@ -49,6 +50,7 @@ func ParseConfigYAML(data []byte) (*Config, error) {
 
 // Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) Merge(o *Config) {
+	c.OSSpecificConfig.Merge(&o.OSSpecificConfig)
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
 	c.Images.merge(&o.Images)
@@ -873,6 +875,7 @@ func GetConfigFile(c context.Context) string {
 // GetDefaultConfig returns the default configuration settings.
 func GetDefaultConfig() Config {
 	return Config{
+		OSSpecificConfig: GetDefaultOSSpecificConfig(),
 		Timeouts: Timeouts{
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 			PrivateApply:                 defaultTimeoutsApply,

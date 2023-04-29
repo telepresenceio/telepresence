@@ -18,6 +18,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
@@ -26,6 +27,7 @@ import (
 // See: https://www.wintun.net/ for more info.
 type nativeDevice struct {
 	tun.Device
+	strategy       client.GSCStrategy
 	name           string
 	dns            net.IP
 	interfaceIndex int32
@@ -51,6 +53,7 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
 	}
 	td.interfaceIndex = int32(iface.InterfaceIndex)
+	td.strategy = client.GetConfig(ctx).Network.GlobalDNSSearchConfigStrategy
 
 	return td, nil
 }
@@ -122,11 +125,13 @@ func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server 
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
 	parentCtx := ctx
 	ctx, cancel := context.WithCancel(dcontext.WithoutCancel(ctx))
+	defer cancel()
+
 	go func() {
 		<-parentCtx.Done()
-		// Give this function some time to complete its task. Configuring DSN on windows is slow.
-		time.Sleep(10 * time.Second)
-		cancel()
+		// Give this function some time to complete its task after the parentCtx is done. Configuring DSN on windows is slow
+		// and we don't want to interrupt it.
+		time.AfterFunc(10*time.Second, cancel)
 	}()
 
 	ipFamily := func(ip net.IP) winipcfg.AddressFamily {
@@ -205,7 +210,7 @@ func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server 
 		gss[i] = gs
 	}
 	t.dns = server
-	return setGlobalSearchList(ctx, gss)
+	return t.setGlobalSearchList(ctx, gss)
 }
 
 func psList(values []string) string {
@@ -223,15 +228,21 @@ func psList(values []string) string {
 	return sb.String()
 }
 
+const (
+	tcpParamKey   = `System\CurrentControlSet\Services\Tcpip\Parameters`
+	searchListKey = `SearchList`
+)
+
 func getGlobalSearchList() ([]string, error) {
-	rk, err := registry.OpenKey(registry.LOCAL_MACHINE, `System\CurrentControlSet\Services\Tcpip\Parameters`, registry.QUERY_VALUE)
+	rk, err := registry.OpenKey(registry.LOCAL_MACHINE, tcpParamKey, registry.QUERY_VALUE)
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = nil
 		}
 		return nil, err
 	}
-	csv, _, err := rk.GetStringValue("SearchList")
+	defer rk.Close()
+	csv, _, err := rk.GetStringValue(searchListKey)
 	if err != nil {
 		if os.IsNotExist(err) {
 			err = nil
@@ -244,9 +255,37 @@ func getGlobalSearchList() ([]string, error) {
 	return strings.Split(csv, ","), nil
 }
 
-func setGlobalSearchList(ctx context.Context, gss []string) error {
-	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
-	_, err := proc.CaptureErr(ctx, cmd)
+func (t *nativeDevice) setGlobalSearchList(ctx context.Context, gss []string) error {
+	var err error
+	if t.strategy == client.GSCAuto || t.strategy == client.GSCPowershell {
+		cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
+		if _, err = proc.CaptureErr(ctx, cmd); err != nil {
+			if t.strategy != client.GSCAuto {
+				dlog.Error(ctx, "setting DNS using Powershell failed")
+				return err
+			}
+			dlog.Warnf(ctx, `setting DNS using Powershell failed. Will attempt to set the registry value %s\%s directly`, tcpParamKey, searchListKey)
+			t.strategy = client.GSCRegistry
+		}
+	}
+	if t.strategy == client.GSCRegistry {
+		// Try setting the DNS directly in the registry. It's known to work in some situations where powershell fails.
+		err = t.setRegistryGlobalSearchList(ctx, gss)
+	}
+	return err
+}
+
+func (t *nativeDevice) setRegistryGlobalSearchList(ctx context.Context, gss []string) error {
+	// Try setting the DNS directly in the registry. It's known to work in some situations.
+	rk, _, err := registry.CreateKey(registry.LOCAL_MACHINE, tcpParamKey, registry.SET_VALUE)
+	if err != nil {
+		dlog.Errorf(ctx, `creating/opening registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
+	} else {
+		defer rk.Close()
+		if err = rk.SetStringValue(searchListKey, strings.Join(gss, ",")); err != nil {
+			dlog.Errorf(ctx, `setting registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
+		}
+	}
 	return err
 }
 
