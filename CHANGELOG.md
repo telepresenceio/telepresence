@@ -2,6 +2,8 @@
 
 ### 2.13.2 (TBD)
 
+- Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
+
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
 
 ### 2.13.1 (April 20, 2023)

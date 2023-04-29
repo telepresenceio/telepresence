@@ -975,6 +975,7 @@ type RoutingSnake struct {
 }
 
 type DNS struct {
+	Error           string        `json:"error,omitempty" yaml:"error,omitempty"`
 	LocalIP         net.IP        `json:"localIP,omitempty" yaml:"localIP,omitempty"`
 	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
 	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
@@ -984,6 +985,7 @@ type DNS struct {
 
 // DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
+	Error           string        `json:"error,omitempty" yaml:"error,omitempty"`
 	LocalIP         net.IP        `json:"local_ip,omitempty" yaml:"local_ip,omitempty"`
 	RemoteIP        net.IP        `json:"remote_ip,omitempty" yaml:"remote_ip,omitempty"`
 	IncludeSuffixes []string      `json:"include_suffixes,omitempty" yaml:"include_suffixes,omitempty"`

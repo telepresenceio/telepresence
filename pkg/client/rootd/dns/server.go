@@ -85,7 +85,7 @@ type Server struct {
 	onlyNames bool
 
 	// ready is closed when the DNS server is fully configured
-	ready chan error
+	ready chan struct{}
 }
 
 type cacheEntry struct {
@@ -129,7 +129,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 		clusterDomain: defaultClusterDomain,
 		clusterLookup: clusterLookup,
 		onlyNames:     onlyNames,
-		ready:         make(chan error, 2),
+		ready:         make(chan struct{}),
 	}
 	s.cacheResolve = s.resolveWithRecursionCheck
 	return s
@@ -250,17 +250,18 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 }
 
 func (s *Server) GetConfig() *rpc.DNSConfig {
-	dnsConfig := &rpc.DNSConfig{}
-	if s.config != nil {
-		dnsConfig.LocalIp = s.config.LocalIp
-		dnsConfig.ExcludeSuffixes = s.config.ExcludeSuffixes
-		dnsConfig.IncludeSuffixes = s.config.IncludeSuffixes
-		dnsConfig.LookupTimeout = s.config.LookupTimeout
+	sc := s.config
+	return &rpc.DNSConfig{
+		LocalIp:         sc.LocalIp,
+		RemoteIp:        sc.RemoteIp,
+		ExcludeSuffixes: sc.ExcludeSuffixes,
+		IncludeSuffixes: sc.IncludeSuffixes,
+		LookupTimeout:   sc.LookupTimeout,
+		Error:           sc.Error,
 	}
-	return dnsConfig
 }
 
-func (s *Server) Ready() <-chan error {
+func (s *Server) Ready() <-chan struct{} {
 	return s.ready
 }
 
@@ -325,7 +326,8 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
 	g.Go("RecursionCheck", func(c context.Context) error {
 		_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, []string{tel2SubDomain})
-		return s.performRecursionCheck(c)
+		s.performRecursionCheck(c)
+		return nil
 	})
 
 	g.Go("SearchPaths", func(c context.Context) error {
@@ -468,7 +470,7 @@ func (d dfs) String() string {
 	return d()
 }
 
-func (s *Server) performRecursionCheck(c context.Context) error {
+func (s *Server) performRecursionCheck(c context.Context) {
 	defer close(s.ready)
 	defer dlog.Debug(c, "Recursion check finished")
 	var rc string
@@ -493,7 +495,7 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 			if derr, ok := err.(*net.DNSError); ok {
 				if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
 					if derr.IsTimeout || derr.IsNotFound {
-						return nil
+						return
 					}
 				}
 				if derr.IsTimeout {
@@ -504,17 +506,14 @@ func (s *Server) performRecursionCheck(c context.Context) error {
 			dlog.Errorf(c, "unexpected error during recursion check: %v", err)
 		}
 		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
-			return nil
+			return
 		}
 		// Check didn't hit our resolver. Try again
 		dtime.SleepWithContext(c, 100*time.Millisecond)
 	}
 	if i == maxRecursionTestRetries {
-		err := errors.New("recursion check failed. The DNS isn't working properly")
-		s.ready <- err
-		return err
+		s.config.Error = "DNS doesn't seem to work properly"
 	}
-	return nil
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.

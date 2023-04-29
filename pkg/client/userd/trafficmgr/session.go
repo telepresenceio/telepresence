@@ -207,10 +207,15 @@ func NewSession(
 		}
 	}
 
+	var daemonStatus *rootdRpc.DaemonStatus
 	if rdRunning {
 		tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, tmgr.getOutboundInfo(ctx))
 		if err != nil {
 			tmgr.managerConn.Close()
+			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
+		daemonStatus, err = tmgr.rootDaemon.Status(ctx, &empty.Empty{})
+		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
 	} else {
@@ -232,6 +237,7 @@ func NewSession(
 		SessionInfo:      tmgr.SessionInfo(),
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
+		DaemonStatus:     daemonStatus,
 	}
 	return ctx, tmgr, ret
 }
