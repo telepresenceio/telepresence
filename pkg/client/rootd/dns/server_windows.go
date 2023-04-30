@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxRecursionTestRetries = 20
+	maxRecursionTestRetries = 40
 	recursionTestTimeout    = 1500 * time.Millisecond
 )
 
