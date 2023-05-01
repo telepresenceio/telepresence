@@ -69,6 +69,9 @@ message DNSConfig {
   // The maximum time wait for a cluster side host lookup.
   google.protobuf.Duration lookup_timeout = 6;
 
+  // If set, this error indicates why DNS is not working.
+  string error = 7;
+
   reserved 5;
 }
 

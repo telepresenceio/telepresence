@@ -206,6 +206,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 				// Local IP is only set when the overriding resolver is used
 				rs.DNS.LocalIP = dns.LocalIp
 			}
+			rs.DNS.Error = dns.Error
 			rs.DNS.RemoteIP = dns.RemoteIp
 			rs.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
 			rs.DNS.IncludeSuffixes = dns.IncludeSuffixes
@@ -278,6 +279,9 @@ func (ds *rootDaemonStatus) printNetwork(kvf *ioutil.KeyValueFormatter) {
 func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 	dnsKvf := ioutil.DefaultKeyValueFormatter()
 	kvf.Indent = "  "
+	if d.Error != "" {
+		dnsKvf.Add("Error", d.Error)
+	}
 	if len(d.LocalIP) > 0 {
 		dnsKvf.Add("Local IP", d.LocalIP.String())
 	}

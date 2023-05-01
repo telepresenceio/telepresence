@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 func leave() *cobra.Command {
@@ -70,17 +72,24 @@ func removeIntercept(ctx context.Context, name string) error {
 	ic, err := userD.GetIntercept(ctx, &manager.GetInterceptRequest{Name: name})
 	if err != nil {
 		if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-			// Obviously not there. That's ok.
-			return nil
+			// User probably misspelled the name of the intercept
+			return errcat.User.Newf("Intercept named %q not found", name)
 		}
 		return err
 	}
-	if handlerContainer, ok := ic.Environment["TELEPRESENCE_HANDLER_CONTAINER_NAME"]; ok {
+	handlerContainer, stopContainer := ic.Environment["TELEPRESENCE_HANDLER_CONTAINER_NAME"]
+	if stopContainer {
 		// Stop the intercept handler's container. The daemon is most likely running in another
 		// container, and won't be able to.
 		if err = docker.StopContainer(ctx, handlerContainer); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}
-	return intercept.Result(userD.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: name}))
+	if err := intercept.Result(userD.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: name})); err != nil {
+		if stopContainer && strings.Contains(err.Error(), fmt.Sprintf("%q not found", name)) {
+			// race condition between stopping the intercept handler, which causes the intercept to leave, and this call
+			err = nil
+		}
+	}
+	return err
 }

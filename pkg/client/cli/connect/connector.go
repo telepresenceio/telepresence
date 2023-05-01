@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -204,6 +205,9 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 	}
 	if s == nil {
 		return ctx, nil
+	}
+	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
+		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
 	}
 	return daemon.WithSession(ctx, s), nil
 }

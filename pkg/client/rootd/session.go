@@ -385,10 +385,7 @@ func (s *Session) networkReady(ctx context.Context) <-chan error {
 			} else {
 				select {
 				case <-ctx.Done():
-				case err, ok = <-s.dnsServer.Ready():
-					if ok {
-						rdy <- err
-					}
+				case <-s.dnsServer.Ready():
 				}
 			}
 		}
@@ -576,7 +573,7 @@ func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.Cl
 
 func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
 	// The traffic-manager service is headless, which means we can't try a GRPC connection to its ClusterIP.
-	// Instead we try an HTTP health check on the agent-injector server, since that one does expose a ClusterIP.
+	// Instead, we try an HTTP health check on the agent-injector server, since that one does expose a ClusterIP.
 	// This is less precise than if we could check for our own GRPC, since /healthz is a common enough health check path,
 	// but hopefully the server on the other end isn't configured to respond to the hostname "agent-injector" if it isn't the agent-injector.
 	if info.InjectorSvcIp == nil {
