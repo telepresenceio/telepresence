@@ -29,18 +29,19 @@ import (
 // The Env is responsible for all parsing of the environment strings. No parsing of such
 // strings should be made elsewhere in the code.
 type Env struct {
-	LogLevel               string   `env:"LOG_LEVEL,                parser=logLevel"`
-	User                   string   `env:"USER,                     parser=string,      default="`
-	ServerHost             string   `env:"SERVER_HOST,              parser=string,      default="`
-	ServerPort             uint16   `env:"SERVER_PORT,              parser=port-number"`
-	PrometheusPort         uint16   `env:"PROMETHEUS_PORT,          parser=port-number, default=0"`
-	MutatorWebhookPort     uint16   `env:"MUTATOR_WEBHOOK_PORT,     parser=port-number, default=0"`
-	SystemAHost            string   `env:"SYSTEMA_HOST,             parser=string,      default="`
-	SystemAPort            uint16   `env:"SYSTEMA_PORT,             parser=port-number, default=0"`
-	ManagerNamespace       string   `env:"MANAGER_NAMESPACE,        parser=string,      default="`
-	ManagedNamespaces      []string `env:"MANAGED_NAMESPACES,       parser=split-trim,  default="`
-	APIPort                uint16   `env:"AGENT_REST_API_PORT,      parser=port-number, default=0"`
-	InterceptDisableGlobal bool     `env:"INTERCEPT_DISABLE_GLOBAL, parser=bool"`
+	LogLevel               string        `env:"LOG_LEVEL,                parser=logLevel"`
+	User                   string        `env:"USER,                     parser=string,      default="`
+	ServerHost             string        `env:"SERVER_HOST,              parser=string,      default="`
+	ServerPort             uint16        `env:"SERVER_PORT,              parser=port-number"`
+	PrometheusPort         uint16        `env:"PROMETHEUS_PORT,          parser=port-number, default=0"`
+	MutatorWebhookPort     uint16        `env:"MUTATOR_WEBHOOK_PORT,     parser=port-number, default=0"`
+	SystemAHost            string        `env:"SYSTEMA_HOST,             parser=string,      default="`
+	SystemAPort            uint16        `env:"SYSTEMA_PORT,             parser=port-number, default=0"`
+	ManagerNamespace       string        `env:"MANAGER_NAMESPACE,        parser=string,      default="`
+	ManagedNamespaces      []string      `env:"MANAGED_NAMESPACES,       parser=split-trim,  default="`
+	APIPort                uint16        `env:"AGENT_REST_API_PORT,      parser=port-number, default=0"`
+	InterceptDisableGlobal bool          `env:"INTERCEPT_DISABLE_GLOBAL, parser=bool"`
+	AgentArrivalTimeout    time.Duration `env:"AGENT_ARRIVAL_TIMEOUT,    parser=time.ParseDuration"`
 
 	TracingGrpcPort uint16            `env:"TRACING_GRPC_PORT,     parser=port-number,default=0"`
 	MaxReceiveSize  resource.Quantity `env:"GRPC_MAX_RECEIVE_SIZE, parser=quantity"`

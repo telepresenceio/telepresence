@@ -2,6 +2,10 @@
 
 ### 2.13.2 (TBD)
 
+- Feature: The timeout for the traffic manager to wait for traffic agent to arrive can
+  now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
+  timeout is still 30 seconds.
+
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
 
 ### 2.13.1 (April 20, 2023)
