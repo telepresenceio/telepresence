@@ -5,6 +5,10 @@
 - Feature: Configurable strategy (`auto`, `powershell`. or `registry`) to set the global DNS search path on Windows. Default
   is `auto` which means try `powershell` first, and if it fails, fall back to `registry`.
 
+- Feature: The timeout for the traffic manager to wait for traffic agent to arrive can
+  now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
+  timeout is still 30 seconds.
+
 - Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
 
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.

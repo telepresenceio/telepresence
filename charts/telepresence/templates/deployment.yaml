@@ -79,6 +79,8 @@ spec:
           {{- end }}
           - name: INTERCEPT_DISABLE_GLOBAL
             value: {{ quote (default .intercept.disableGlobal false) }}
+          - name: AGENT_ARRIVAL_TIMEOUT
+            value: {{ quote (default .timeouts.agentArrival "30s") }}
         {{- /*
         Traffic agent injector configuration
         */}}
