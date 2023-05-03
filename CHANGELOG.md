@@ -9,6 +9,10 @@
   now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
   timeout is still 30 seconds.
 
+- Bugfix: FTP Stability improvements. Multiple simultaneous intercepts can transfer large files in bidirectionally and in parallel.
+
+- Bugfix: Pods using persistent volumes no longer causes timeouts when intercepted.
+
 - Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
 
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
