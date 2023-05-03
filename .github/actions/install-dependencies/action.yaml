@@ -5,7 +5,7 @@ runs:
   steps:
     - uses: actions/setup-go@v3
       with:
-        go-version: '~1.20.3'
+        go-version: '~1.20.4'
     - uses: azure/setup-kubectl@v3
       with:
         version: 'v1.25.3'
@@ -26,7 +26,7 @@ runs:
         brew install --cask macfuse
         brew install gromgit/fuse/sshfs-mac
         brew link --overwrite sshfs-mac
-        
+
         if [[ ${RUNNER_ARCH} == "ARM64" ]]; then
           brew install jq
         fi
@@ -35,12 +35,12 @@ runs:
       shell: powershell
       run: |
         choco install make
-        
+
         # Download sshfs
         curl -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
         curl -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
 
         Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
         Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
-        
+
         [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
