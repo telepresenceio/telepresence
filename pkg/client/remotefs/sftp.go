@@ -18,11 +18,12 @@ import (
 
 type sftpMounter struct {
 	sync.Mutex
-	podWG *sync.WaitGroup
+	iceptWG *sync.WaitGroup
+	podWG   *sync.WaitGroup
 }
 
-func NewSFTPMounter(wg *sync.WaitGroup) Mounter {
-	return &sftpMounter{podWG: wg}
+func NewSFTPMounter(iceptWG, podWG *sync.WaitGroup) Mounter {
+	return &sftpMounter{iceptWG: iceptWG, podWG: podWG}
 }
 
 func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint string, podIP net.IP, port uint16) error {
@@ -31,7 +32,9 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 	// The mount is terminated and restarted when the intercept pod changes, so we
 	// must set up a wait/done pair here to ensure that this happens synchronously
 	m.podWG.Add(1)
+	m.iceptWG.Add(1)
 	go func() {
+		defer m.iceptWG.Done()
 		defer m.podWG.Done()
 
 		// Be really sure that the following doesn't happen in parallel using multiple
@@ -71,7 +74,9 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 			// sshfs sometimes leave the mount point in a bad state. This will clean it up
 			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
 			defer cancel()
-			_ = proc.CommandContext(ctx, "fusermount", "-uz", clientMountPoint).Run()
+			umount := proc.CommandContext(ctx, "fusermount", "-uz", clientMountPoint)
+			umount.DisableLogging = true
+			_ = umount.Run()
 			return err
 		}, 3*time.Second, 6*time.Second)
 		if err != nil {

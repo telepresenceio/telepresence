@@ -18,7 +18,7 @@ func (ic *intercept) shouldMount() bool {
 
 // startMount starts the mount for the given podInterceptKey.
 // It assumes that the user has called shouldMount and is sure that something will be started.
-func (ic *intercept) startMount(ctx context.Context, podWG *sync.WaitGroup) {
+func (ic *intercept) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGroup) {
 	var fuseftp rpc.FuseFTPClient
 	useFtp := client.GetConfig(ctx).Intercept.UseFtp
 	var port int32
@@ -32,7 +32,7 @@ func (ic *intercept) startMount(ctx context.Context, podWG *sync.WaitGroup) {
 			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP can be used with --local-mount-port")
 			return
 		}
-		// The FTP mounter survives multiple starts for the same intercept. It just resets the port
+		// The FTP mounter survives multiple starts for the same intercept. It just resets the address
 		mountCtx = ic.ctx
 		if fuseftp = userd.GetService(ctx).FuseFTPMgr().GetFuseFTPClient(ctx); fuseftp == nil {
 			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
@@ -54,9 +54,9 @@ func (ic *intercept) startMount(ctx context.Context, podWG *sync.WaitGroup) {
 			session := userd.GetSession(ctx)
 			m = remotefs.NewBridgeMounter(session.SessionInfo().SessionId, session.ManagerClient(), uint16(ic.localMountPort))
 		case useFtp:
-			m = remotefs.NewFTPMounter(fuseftp)
+			m = remotefs.NewFTPMounter(fuseftp, iceptWG)
 		default:
-			m = remotefs.NewSFTPMounter(podWG)
+			m = remotefs.NewSFTPMounter(iceptWG, podWG)
 		}
 		ic.Mounter = m
 	}

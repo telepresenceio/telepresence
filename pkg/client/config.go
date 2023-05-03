@@ -148,6 +148,10 @@ type Timeouts struct {
 	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty" yaml:"trafficManagerAPI,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty" yaml:"trafficManagerConnect,omitempty"`
+	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
+	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite,omitempty" yaml:"ftpReadWrite,omitempty"`
+	// PrivateFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
+	PrivateFtpShutdown time.Duration `json:"ftpShutdown,omitempty" yaml:"ftpShutdown,omitempty"`
 }
 
 type TimeoutID int
@@ -164,6 +168,8 @@ const (
 	TimeoutRoundtripLatency
 	TimeoutTrafficManagerAPI
 	TimeoutTrafficManagerConnect
+	TimeoutFtpReadWrite
+	TimeoutFtpShutdown
 )
 
 type timeoutContext struct {
@@ -210,6 +216,10 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
 		timeoutVal = t.PrivateTrafficManagerConnect
+	case TimeoutFtpReadWrite:
+		timeoutVal = t.PrivateFtpReadWrite
+	case TimeoutFtpShutdown:
+		timeoutVal = t.PrivateFtpShutdown
 	default:
 		panic("should not happen")
 	}
@@ -270,6 +280,12 @@ func (e timeoutError) Error() string {
 	case TimeoutTrafficManagerConnect:
 		yamlName = "trafficManagerConnect"
 		humanName = "port-forward connection to the traffic manager"
+	case TimeoutFtpReadWrite:
+		yamlName = "ftpReadWrite"
+		humanName = "FTP client read/write"
+	case TimeoutFtpShutdown:
+		yamlName = "ftpShutdown"
+		humanName = "FTP client shutdown grace period"
 	default:
 		panic("should not happen")
 	}
@@ -324,6 +340,10 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 			dp = &t.PrivateTrafficManagerAPI
 		case "trafficManagerConnect":
 			dp = &t.PrivateTrafficManagerConnect
+		case "ftpReadWrite":
+			dp = &t.PrivateFtpReadWrite
+		case "ftpShutdown":
+			dp = &t.PrivateFtpShutdown
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -362,6 +382,8 @@ const (
 	defaultTimeoutsRoundtripLatency      = 2 * time.Second
 	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
 	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+	defaultTimeoutsFtpReadWrite          = 1 * time.Minute
+	defaultTimeoutsFtpShutdown           = 2 * time.Minute
 )
 
 var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
@@ -376,6 +398,8 @@ var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
 	PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
 	PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+	PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
+	PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
 }
 
 // IsZero controls whether this element will be included in marshalled output.
@@ -419,6 +443,12 @@ func (t Timeouts) MarshalYAML() (any, error) {
 	if t.PrivateTrafficManagerConnect != 0 && t.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
 		tm["trafficManagerConnect"] = t.PrivateTrafficManagerConnect.String()
 	}
+	if t.PrivateFtpReadWrite != 0 && t.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
+		tm["ftpReadWrite"] = t.PrivateFtpReadWrite.String()
+	}
+	if t.PrivateFtpShutdown != 0 && t.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
+		tm["ftpShutdown"] = t.PrivateFtpShutdown.String()
+	}
 	return tm, nil
 }
 
@@ -456,6 +486,12 @@ func (t *Timeouts) merge(o *Timeouts) {
 	}
 	if o.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
 		t.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
+	}
+	if o.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
+		t.PrivateFtpReadWrite = o.PrivateFtpReadWrite
+	}
+	if o.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
+		t.PrivateFtpShutdown = o.PrivateFtpShutdown
 	}
 }
 
@@ -888,6 +924,8 @@ func GetDefaultConfig() Config {
 			PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
 			PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 			PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+			PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
+			PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
 		},
 		LogLevels: LogLevels{
 			UserDaemon: defaultLogLevelsUserDaemon,
