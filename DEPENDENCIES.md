@@ -23,8 +23,8 @@ following Free and Open Source software:
     github.com/datawire/dlib                                                     v1.3.1-0.20221228104658-e373c6d44961  Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f    Apache License 2.0
     github.com/datawire/envconfig                                                v0.0.0-20221012222025-09524dc7d59b    Apache License 2.0
-    github.com/datawire/go-ftpserver                                             v0.1.1                                Apache License 2.0
-    github.com/datawire/go-fuseftp/rpc                                           v0.3.2                                Apache License 2.0
+    github.com/datawire/go-ftpserver                                             v0.1.3                                Apache License 2.0
+    github.com/datawire/go-fuseftp/rpc                                           v0.4.0                                Apache License 2.0
     github.com/datawire/k8sapi                                                   v0.1.2                                Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                Apache License 2.0
     github.com/davecgh/go-spew                                                   v1.1.1                                ISC license
@@ -40,7 +40,7 @@ following Free and Open Source software:
     github.com/exponent-io/jsonpath                                              v0.0.0-20210407135951-1de76d718b3f    MIT license
     github.com/fatih/camelcase                                                   v1.0.0                                MIT license
     github.com/fatih/color                                                       v1.13.0                               MIT license
-    github.com/fclairamb/ftpserverlib                                            v0.20.0                               MIT license
+    github.com/fclairamb/ftpserverlib                                            v0.21.0                               MIT license
     github.com/fclairamb/go-log                                                  v0.4.1                                MIT license
     github.com/felixge/httpsnoop                                                 v1.0.3                                MIT license
     github.com/fsnotify/fsnotify                                                 v1.6.0                                3-clause BSD license
