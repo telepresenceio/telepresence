@@ -713,8 +713,10 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
 	stdout, stderr, err := Telepresence(ctx, args...)
-	assert.NoError(t, err, "telepresence was unable to run, stdout %s, stderr: %s", stdout, stderr)
-	assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
+	assert.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
+	if err == nil {
+		assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
+	}
 	return stdout
 }
 

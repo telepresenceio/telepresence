@@ -37,6 +37,10 @@ func init() {
 }
 
 func (s *interceptMountSuite) SetupSuite() {
+	if s.IsCI() && runtime.GOOS == "darwin" {
+		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
+		return
+	}
 	s.Suite.SetupSuite()
 	switch runtime.GOOS {
 	case "darwin":
@@ -66,7 +70,7 @@ func (s *interceptMountSuite) TearDownSuite() {
 		return err == nil && !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
-	if goRuntime.GOOS != "windows" && goRuntime.GOOS != "darwin" {
+	if goRuntime.GOOS != "windows" {
 		// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
 		go func() {
 			time.Sleep(2 * time.Second)
@@ -76,9 +80,6 @@ func (s *interceptMountSuite) TearDownSuite() {
 }
 
 func (s *interceptMountSuite) Test_InterceptMount() {
-	if runtime.GOOS == "darwin" {
-		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
-	}
 	require := s.Require()
 	ctx := s.Context()
 
