@@ -77,6 +77,8 @@ func (s *largeFilesSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	require := s.Require()
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "timeouts.agentArrival=90s"))
+	itest.TelepresenceOk(ctx, "connect", "--manager-namepasce", s.ManagerNamespace())
 	wg := sync.WaitGroup{}
 	wg.Add(s.ServiceCount())
 	k8s := filepath.Join("testdata", "k8s")
