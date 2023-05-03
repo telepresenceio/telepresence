@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -305,7 +307,7 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sessionID := uuid.New().String()
+	sessionID := "agent:" + uuid.New().String()
 	if oldAgent, hasConflict := s.agents.LoadOrStore(sessionID, agent); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldAgent, agent))
 	}
@@ -563,7 +565,7 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		s.mu.RUnlock()
 	} else {
 		span.SetAttributes(attribute.String("session-type", "userd"))
-		peerSession = s.getRandomAgentSession(sessionID)
+		peerSession = s.getRandomAgentSession(sessionID, stream.ID().Destination())
 	}
 
 	var endPoint tunnel.Endpoint
@@ -580,13 +582,27 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	return nil
 }
 
-func (s *State) getRandomAgentSession(clientSessionID string) (agent SessionState) {
-	if agentIDs := s.getAgentsInterceptedByClient(clientSessionID); len(agentIDs) > 0 {
+func (s *State) getRandomAgentSession(clientSessionID string, podIP net.IP) SessionState {
+	var agentKey string
+	_ = s.agents.LoadAllMatching(func(key string, ai *rpc.AgentInfo) bool {
+		if podIP.Equal(iputil.Parse(ai.PodIp)) {
+			agentKey = key
+			return true
+		}
+		return false
+	})
+	if agentKey == "" {
+		if agentIDs := s.getAgentsInterceptedByClient(clientSessionID); len(agentIDs) > 0 {
+			agentKey = agentIDs[0]
+		}
+	}
+	var agent SessionState
+	if agentKey != "" {
 		s.mu.RLock()
-		agent = s.sessions[agentIDs[0]]
+		agent = s.sessions[agentKey]
 		s.mu.RUnlock()
 	}
-	return
+	return agent
 }
 
 func (s *State) WatchDial(sessionID string) chan *rpc.DialRequest {
