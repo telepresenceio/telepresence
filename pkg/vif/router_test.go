@@ -190,6 +190,8 @@ func (s *RoutingSuite) Test_WhitelistedRoutes() {
 	s.Require().NotNil(ip)
 	ipnet := &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
 
+	s.printRoutingTable(ctx)
+
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
 	// Ensure that the route is for the right device
@@ -240,7 +242,6 @@ func (s *RoutingSuite) Test_VPNConflictsWithWhitelist() {
 
 	ip[3] += 1
 	route, err := routing.GetRoute(ctx, &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)})
-	s.printRoutingTable(ctx)
 	s.Require().NoError(err)
 	s.Require().Equal(device, route.Interface.Name)
 }
@@ -257,7 +258,16 @@ func (s *RoutingSuite) printRoutingTable(ctx context.Context) { //nolint:unused 
 		err = dexec.CommandContext(ctx, "route", "print").Run()
 	}
 	s.Require().NoError(err)
-
+	// Print out the table rules for debugging
+	switch runtime.GOOS {
+	case "darwin":
+		err = dexec.CommandContext(ctx, "netstat", "-nr", "-f", "inet", "-f", "inet6").Run()
+	case "linux":
+		err = dexec.CommandContext(ctx, "ip", "rule", "show").Run()
+	case "windows":
+		err = dexec.CommandContext(ctx, "netsh", "interface", "ipv4", "show", "route").Run()
+	}
+	s.Require().NoError(err)
 }
 
 func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, context.CancelFunc, error) {

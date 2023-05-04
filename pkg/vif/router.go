@@ -16,6 +16,8 @@ import (
 type Router struct {
 	// The vif device that packets will be routed through
 	device Device
+	// The routing table that will be used to route packets
+	routingTable routing.Table
 	// Original routes for subnets configured not to be proxied
 	neverProxyRoutes []*routing.Route
 	// A list of never proxied routes that have already been added to routing table
@@ -26,8 +28,8 @@ type Router struct {
 	whitelistedSubnets []*net.IPNet
 }
 
-func NewRouter(device Device) *Router {
-	return &Router{device: device}
+func NewRouter(device Device, table routing.Table) *Router {
+	return &Router{device: device, routingTable: table}
 }
 
 func (rt *Router) firstAndLastIPs(n *net.IPNet) (net.IP, net.IP) {
@@ -174,7 +176,7 @@ adding:
 				continue adding
 			}
 		}
-		if err := r.AddStatic(ctx); err != nil {
+		if err := rt.routingTable.Add(ctx, r); err != nil {
 			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
 		}
 	}
@@ -186,7 +188,7 @@ removing:
 				continue removing
 			}
 		}
-		if err := c.RemoveStatic(ctx); err != nil {
+		if err := rt.routingTable.Remove(ctx, c); err != nil {
 			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
 		}
 	}
@@ -202,7 +204,7 @@ func (rt *Router) Close(ctx context.Context) {
 		}
 	}
 	for _, r := range rt.staticOverrides {
-		if err := r.RemoveStatic(ctx); err != nil {
+		if err := rt.routingTable.Remove(ctx, r); err != nil {
 			dlog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
 		}
 	}

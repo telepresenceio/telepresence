@@ -21,7 +21,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer dev.Close(context.Background())
+	defer func() {
+		if err := dev.Close(ctx); err != nil {
+			panic(err)
+		}
+	}()
 	go func() {
 		err := dev.Run(ctx)
 		if err != nil {

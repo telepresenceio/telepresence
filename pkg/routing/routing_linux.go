@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sort"
 	"syscall" //nolint:depguard // sys/unix does not have NetlinkRIB
 	"unsafe"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/vishvananda/netlink"
 )
 
 const findInterfaceRegex = `^(local\s)?[0-9.]+(\s+via\s+(?P<gw>[0-9.]+))?\s+dev\s+(?P<dev>[a-z0-9-]+)\s+(table\s+[a-z0-9]+\s+)?src\s+(?P<src>[0-9.]+)`
@@ -20,6 +23,11 @@ var (
 	devIdx          = findInterfaceRe.SubexpIndex("dev")     //nolint:gochecknoglobals // constant
 	srcIdx          = findInterfaceRe.SubexpIndex("src")     //nolint:gochecknoglobals // constant
 )
+
+type table struct {
+	index int
+	rule  *netlink.Rule
+}
 
 type rtmsg struct {
 	// Check out https://man7.org/linux/man-pages/man7/rtnetlink.7.html for the definition of rtmsg
@@ -162,6 +170,75 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 		RoutedNet: routedNet,
 		LocalIP:   localIP,
 	}, nil
+}
+
+func openTable(ctx context.Context) (Table, error) {
+	rules, err := netlink.RuleList(netlink.FAMILY_ALL)
+	if err != nil {
+		return nil, err
+	}
+	// Sort the rules by index ascending to make sure we find an open one
+	sort.Slice(rules, func(i, j int) bool {
+		return rules[i].Table < rules[j].Table
+	})
+	index := 775
+	priority := 32766 // default initial priority
+	for _, rule := range rules {
+		dlog.Tracef(ctx, "Found routing rule %+v", rule)
+		if rule.Table == 0 || rule.Table == 255 {
+			// System rules, ignore
+			continue
+		}
+		if rule.Priority <= priority {
+			priority = rule.Priority - 1
+		}
+		if rule.Table == index {
+			// There's already a table with the default index, get a new one
+			index++
+		}
+	}
+	dlog.Infof(ctx, "Creating routing table with index %d and priority %d", index, priority)
+	rule := netlink.NewRule()
+	rule.Table = index
+	rule.Priority = priority
+	rule.Family = netlink.FAMILY_V4
+	if err := netlink.RuleAdd(rule); err != nil {
+		return nil, err
+	}
+	return &table{
+		index: index,
+		rule:  rule,
+	}, nil
+}
+
+func (t *table) routeToNetlink(route *Route) *netlink.Route {
+	return &netlink.Route{
+		Dst:       route.RoutedNet,
+		Table:     t.index,
+		LinkIndex: route.Interface.Index,
+		Gw:        route.Gateway,
+		Src:       route.LocalIP,
+	}
+}
+
+func (t *table) Close(ctx context.Context) error {
+	return netlink.RuleDel(t.rule)
+}
+
+func (t *table) Add(ctx context.Context, r *Route) error {
+	route := t.routeToNetlink(r)
+	if err := netlink.RouteAdd(route); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *table) Remove(ctx context.Context, r *Route) error {
+	route := t.routeToNetlink(r)
+	if err := netlink.RouteDel(route); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *Route) addStatic(ctx context.Context) error {
