@@ -18,7 +18,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -29,6 +28,15 @@ type RoutingSuite struct {
 
 func TestRouting(t *testing.T) {
 	suite.Run(t, new(RoutingSuite))
+}
+
+func getCidr(byte3, byte4 byte, mask int) *net.IPNet {
+	// 198.18.0.0/15 is reserved for benchmarking.
+	ip := net.IPv4(198, 18, byte3, byte4)
+	return &net.IPNet{
+		IP:   ip,
+		Mask: net.CIDRMask(mask, 32),
+	}
 }
 
 func (s *RoutingSuite) SetupSuite() {
@@ -50,19 +58,22 @@ func (s *RoutingSuite) SetupSuite() {
 		err = dexec.CommandContext(context.Background(), "sudo", "true").Run()
 		s.Require().NoError(err)
 	}
+	// Make sure there's no existing route
+	cidr := getCidr(2, 1, 32)
+	route, err := routing.GetRoute(context.Background(), cidr)
+	s.Require().NoError(err)
+	s.Require().True(route.Default || subnet.IsHalfOfDefault(route.RoutedNet), "There should be no route for %s, or everything will fail. Route is: %s", cidr.IP, route)
 }
 
 // The routes are all gonna be inside 100.64.0.0/10 which is assigned as a reserved block for NAT. Github machines map 10/8 sometimes, so we wanna make sure not to conflict
 
 func (s *RoutingSuite) Test_RouteIsAdded() {
 	ctx := context.Background()
-	cidr := "100.64.2.0/24"
+	cidr := getCidr(2, 0, 24)
 
-	ip := iputil.Parse("100.64.2.1")
-	s.Require().NotNil(ip)
-	ipnet := &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
+	ipnet := getCidr(2, 1, 32)
 
-	device, routerCancel, err := s.runRouter(ctx, cidr)
+	device, routerCancel, err := s.runRouter(ctx, cidr.String())
 	s.Require().NoError(err)
 	defer routerCancel()
 
@@ -70,20 +81,17 @@ func (s *RoutingSuite) Test_RouteIsAdded() {
 	s.Require().NoError(err)
 	// Ensure that the route is for the right device
 	s.Require().Equal(device, route.Interface.Name)
-
 }
 
 func (s *RoutingSuite) Test_RouteIsRemoved() {
 	ctx := context.Background()
-	cidr := "100.64.2.0/24"
-	device, routerCancel, err := s.runRouter(ctx, cidr)
+	cidr := getCidr(2, 0, 24)
+	device, routerCancel, err := s.runRouter(ctx, cidr.String())
 	s.Require().NoError(err)
 
 	routerCancel()
 
-	ip := iputil.Parse("100.64.2.1")
-	s.Require().NotNil(ip)
-	ipnet := &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
+	ipnet := getCidr(2, 1, 32)
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
 
@@ -92,31 +100,27 @@ func (s *RoutingSuite) Test_RouteIsRemoved() {
 
 func (s *RoutingSuite) Test_RouteIsBlackListed() {
 	ctx := context.Background()
-	cidrYes := "100.64.2.0/24"
-	cidrNo := "100.64.2.4/32"
-	_, ipnet, err := net.ParseCIDR(cidrNo)
-	s.Require().NoError(err)
-	oldRoute, err := routing.GetRoute(ctx, ipnet)
+	cidrYes := getCidr(2, 0, 24)
+	cidrNo := getCidr(2, 4, 32)
+	oldRoute, err := routing.GetRoute(ctx, cidrNo)
 	s.Require().NoError(err)
 
-	device, routerCancel, err := s.runRouter(ctx, cidrYes, "!"+cidrNo)
+	device, routerCancel, err := s.runRouter(ctx, cidrYes.String(), "!"+cidrNo.String())
 	s.Require().NoError(err)
 	defer routerCancel()
 
-	route, err := routing.GetRoute(ctx, ipnet)
+	route, err := routing.GetRoute(ctx, cidrNo)
 	s.Require().NoError(err)
 
-	s.Require().Equal(oldRoute.Interface.Name, route.Interface.Name)
+	s.Require().Equal(oldRoute.Interface.Name, route.Interface.Name, "Expected route %s got %s", oldRoute, route)
 	s.Require().NotEqual(device, route.Interface.Name)
 }
 
 func (s *RoutingSuite) Test_RoutingTable() {
 	ctx := context.Background()
-	cidr := "100.64.2.0/24"
-	_, ipnet, err := net.ParseCIDR(cidr)
-	s.Require().NoError(err)
+	cidr := getCidr(2, 0, 24)
 
-	device, routerCancel, err := s.runRouter(ctx, cidr)
+	device, routerCancel, err := s.runRouter(ctx, cidr.String())
 	s.Require().NoError(err)
 	defer routerCancel()
 
@@ -136,13 +140,13 @@ func (s *RoutingSuite) Test_RoutingTable() {
 				} else {
 					// 255.255.255.255/32 is a special broadcast address that won't actually be used for routing
 					if !route.RoutedNet.IP.Equal(net.IPv4(255, 255, 255, 255)) {
-						s.Require().True(ipnet.Contains(route.RoutedNet.IP), fmt.Sprintf("Route %s is not contained in %s", route.String(), cidr))
+						s.Require().True(cidr.Contains(route.RoutedNet.IP), fmt.Sprintf("Route %s is not contained in %s", route.String(), cidr))
 					} else {
 						s.Require().Equal(net.CIDRMask(32, 32), route.RoutedNet.Mask, fmt.Sprintf("Route %s is not a /32 mask", route.String()))
 					}
 				}
 			}
-			if route.RoutedNet.String() == cidr {
+			if route.RoutedNet.String() == cidr.String() {
 				cidrFound = true
 			}
 		}
@@ -155,14 +159,14 @@ func (s *RoutingSuite) Test_ConflictingRoutes() {
 	// Start two routers with conflicting routes
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cidr1 := "100.64.2.0/26"
-	cidr2 := "100.64.2.32/27"
+	cidr1 := getCidr(2, 0, 26)
+	cidr2 := getCidr(2, 32, 27)
 
-	_, routerCancel1, err := s.runRouter(ctx, cidr1)
+	_, routerCancel1, err := s.runRouter(ctx, cidr1.String())
 	s.Require().NoError(err)
 	defer routerCancel1()
 
-	_, routerCancel2, err := s.runRouter(ctx, cidr2)
+	_, routerCancel2, err := s.runRouter(ctx, cidr2.String())
 	if routerCancel2 != nil {
 		// Make sure the second router doesn't leak
 		defer routerCancel2()
@@ -172,23 +176,21 @@ func (s *RoutingSuite) Test_ConflictingRoutes() {
 
 func (s *RoutingSuite) Test_WhitelistedRoutes() {
 	ctx := context.Background()
-	original := "100.70.0.0/16"
-	conflicting := "100.70.4.0/24"
-	whitelist := "100.70.0.0/21"
+	original := getCidr(0, 0, 16)
+	conflicting := getCidr(4, 0, 24)
+	whitelist := getCidr(0, 0, 21)
 
-	device1, routerCancel, err := s.runRouter(ctx, original)
+	device1, routerCancel, err := s.runRouter(ctx, original.String())
 	s.Require().NoError(err)
 	defer routerCancel()
 
-	device2, routerCancel2, err := s.runRouter(ctx, conflicting, "+"+whitelist)
+	device2, routerCancel2, err := s.runRouter(ctx, conflicting.String(), "+"+whitelist.String())
 	s.Require().NoError(err)
 	defer routerCancel2()
 
 	s.Require().NotEqual(device1, device2)
 
-	ip := iputil.Parse("100.70.4.2")
-	s.Require().NotNil(ip)
-	ipnet := &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
+	ipnet := getCidr(4, 2, 32)
 
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
@@ -221,7 +223,6 @@ func (s *RoutingSuite) Test_VPNConflicts() {
 func (s *RoutingSuite) Test_VPNConflictsWithWhitelist() {
 	ctx := context.Background()
 	cidr, ok := dos.LookupEnv(ctx, "VPN_CIDR")
-	s.Require().True(ok, "VPN_CIDR not set, skipping test")
 	if !ok {
 		s.T().Skip("VPN_CIDR not set, skipping test")
 	}
@@ -240,7 +241,6 @@ func (s *RoutingSuite) Test_VPNConflictsWithWhitelist() {
 
 	ip[3] += 1
 	route, err := routing.GetRoute(ctx, &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)})
-	s.printRoutingTable(ctx)
 	s.Require().NoError(err)
 	s.Require().Equal(device, route.Interface.Name)
 }
@@ -257,7 +257,16 @@ func (s *RoutingSuite) printRoutingTable(ctx context.Context) { //nolint:unused 
 		err = dexec.CommandContext(ctx, "route", "print").Run()
 	}
 	s.Require().NoError(err)
-
+	// Print out the table rules for debugging
+	switch runtime.GOOS {
+	case "darwin":
+		err = dexec.CommandContext(ctx, "netstat", "-nr", "-f", "inet", "-f", "inet6").Run()
+	case "linux":
+		err = dexec.CommandContext(ctx, "ip", "rule", "show").Run()
+	case "windows":
+		err = dexec.CommandContext(ctx, "netsh", "interface", "ipv4", "show", "route").Run()
+	}
+	s.Require().NoError(err)
 }
 
 func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, context.CancelFunc, error) {

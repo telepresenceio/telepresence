@@ -248,3 +248,7 @@ func (r *Route) addStatic(ctx context.Context) error {
 func (r *Route) removeStatic(ctx context.Context) error {
 	return Clear(1, r.RoutedNet, r.Gateway)
 }
+
+func openTable(ctx context.Context) (Table, error) {
+	panic("not yet")
+}

@@ -22,6 +22,19 @@ type Route struct {
 	Default   bool
 }
 
+type Table interface {
+	// Add adds a route to the routing table
+	Add(ctx context.Context, r *Route) error
+	// Remove removes a route from the routing table
+	Remove(ctx context.Context, r *Route) error
+	// Close closes the routing table
+	Close(ctx context.Context) error
+}
+
+func OpenTable(ctx context.Context) (Table, error) {
+	return openTable(ctx)
+}
+
 func DefaultRoute(ctx context.Context) (*Route, error) {
 	rt, err := GetRoutingTable(ctx)
 	if err != nil {

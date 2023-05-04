@@ -155,3 +155,7 @@ func (r *Route) removeStatic(ctx context.Context) error {
 	}
 	return nil
 }
+
+func openTable(ctx context.Context) (Table, error) {
+	panic("not yet")
+}

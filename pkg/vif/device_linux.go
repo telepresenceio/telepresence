@@ -10,7 +10,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/datawire/dlib/dexec"
+	"github.com/vishvananda/netlink"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
@@ -91,12 +92,33 @@ func openTun(_ context.Context) (*nativeDevice, error) {
 	return &nativeDevice{File: os.NewFile(uintptr(fd), devicePath), name: name, interfaceIndex: index}, nil
 }
 
+func (t *nativeDevice) Close() error {
+	err := t.File.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (t *nativeDevice) addSubnet(ctx context.Context, subnet *net.IPNet) error {
-	return dexec.CommandContext(ctx, "ip", "a", "add", subnet.String(), "dev", t.name).Run()
+	link, err := netlink.LinkByIndex(int(t.interfaceIndex))
+	if err != nil {
+		return fmt.Errorf("failed to find link for interface %s: %w", t.name, err)
+	}
+	addr := &netlink.Addr{IPNet: subnet}
+	if err := netlink.AddrAdd(link, addr); err != nil {
+		return fmt.Errorf("failed to add address %s to interface %s: %w", subnet, t.name, err)
+	}
+	return nil
 }
 
 func (t *nativeDevice) removeSubnet(ctx context.Context, subnet *net.IPNet) error {
-	return dexec.CommandContext(ctx, "ip", "a", "del", subnet.String(), "dev", t.name).Run()
+	link, err := netlink.LinkByIndex(int(t.interfaceIndex))
+	if err != nil {
+		return err
+	}
+	addr := &netlink.Addr{IPNet: subnet}
+	return netlink.AddrDel(link, addr)
 }
 
 func (t *nativeDevice) index() int32 {
