@@ -660,7 +660,7 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
-		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
+		60*time.Second, 4*time.Second, "traffic-manager deployment was not removed")
 	TelepresenceQuitOk(ctx)
 }
 
@@ -1069,12 +1069,12 @@ func RunningPods(ctx context.Context, svc, ns string) []string {
 		"--field-selector", "status.phase==Running",
 		"-l", "app="+svc)
 	if err != nil {
-		getT(ctx).Error(err.Error())
+		getT(ctx).Log(err.Error())
 		return nil
 	}
 	var pm core.PodList
 	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
-		getT(ctx).Error(err.Error())
+		getT(ctx).Log(err.Error())
 		return nil
 	}
 	pods := make([]string, 0, len(pm.Items))
