@@ -13,6 +13,8 @@
 
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
 
+- Bugfix: The helm chart now correctly handles custom `agentInjector.webhook.port` that was not being set in hook URLs.
+
 ### 2.13.1 (April 20, 2023)
 
 - Change: Update ambassador-agent to version 1.13.13
