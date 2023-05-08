@@ -319,6 +319,7 @@ func enableK8SAuthenticator(ctx context.Context) error {
 	// Store the file using its context name under the <telepresence cache>/kube directory
 	const kubeConfigs = "kube"
 	kubeConfigFile := config.CurrentContext
+	kubeConfigFile = strings.ReplaceAll(kubeConfigFile, "/", "-")
 	kubeConfigDir := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeConfigs)
 	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
 		return err

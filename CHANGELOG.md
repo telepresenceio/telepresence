@@ -1,6 +1,7 @@
 # Changelog
 
 ### 2.13.2 (TBD)
+- Bugfix: Replaced `/` characters with a `-` when the authenticator service creates the kubeconfig in the Telepresence cache.
 
 - Feature: Configurable strategy (`auto`, `powershell`. or `registry`) to set the global DNS search path on Windows. Default
   is `auto` which means try `powershell` first, and if it fails, fall back to `registry`.
@@ -37,7 +38,7 @@
 - Feature: There's a new --address flag to the intercept command allowing users to set the target IP of the intercept.
 
 - Feature: The new flags `--docker-build`, and `--docker-build-opt` was added to `telepresence intercept` to facilitate a
-  docker run directly from a docker context. 
+  docker run directly from a docker context.
 
 - Bugfix: Using `telepresence intercept --docker-run` now works with a container based daemon started with `telepresence connect --docker`
 
