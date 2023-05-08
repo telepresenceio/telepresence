@@ -9,6 +9,10 @@
   now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
   timeout is still 30 seconds.
 
+- Bugfix: The automatic discovery of a local container based cluster (minikube or kind) used when the
+  Telepresence daemon runs in a container, now works on macOS and Windows, and with different profiles,
+  ports, and cluster names
+
 - Bugfix: FTP Stability improvements. Multiple simultaneous intercepts can transfer large files in bidirectionally and in parallel.
 
 - Bugfix: Pods using persistent volumes no longer causes timeouts when intercepted.
