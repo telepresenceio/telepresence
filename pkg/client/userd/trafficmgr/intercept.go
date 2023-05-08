@@ -56,6 +56,9 @@ type intercept struct {
 	// cancel is called when the intercept is no longer present
 	cancel context.CancelFunc
 
+	// wg is the group to wait for after a call to cancel
+	wg sync.WaitGroup
+
 	// pid of intercept handler for an intercept. This entry will only be present when
 	// the telepresence intercept command spawns a new command. The int value reflects
 	// the pid of that new command.
@@ -181,7 +184,7 @@ func newPodIntercepts() *podIntercepts {
 }
 
 // start a port forward for the given intercept and remembers that it's alive.
-func (lpf *podIntercepts) start(ctx context.Context, ic *intercept) {
+func (lpf *podIntercepts) start(ic *intercept) {
 	if !ic.shouldForward() && !ic.shouldMount() {
 		return
 	}
@@ -205,10 +208,10 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ic.ctx)
 	lp := &podIntercept{cancelPod: cancel}
 	if ic.shouldMount() {
-		ic.startMount(ctx, &lp.wg)
+		ic.startMount(ctx, &ic.wg, &lp.wg)
 	}
 	if ic.shouldForward() {
 		ic.startForwards(ctx, &lp.wg)
@@ -322,7 +325,7 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 			ic.FtpPort = 0
 			ic.SftpPort = 0
 		}
-		podIcepts.start(ctx, ic)
+		podIcepts.start(ic)
 	}
 	if active == 0 {
 		ins = ""
@@ -378,6 +381,8 @@ func (s *session) setCurrentIntercepts(ctx context.Context, iis []*manager.Inter
 			sb.WriteByte(',')
 		}
 		sb.WriteString(ii.Spec.Name)
+		sb.WriteByte('=')
+		sb.WriteString(ii.PodIp)
 	}
 	sb.WriteByte(']')
 	dlog.Debugf(ctx, "setCurrentIntercepts(%s)", sb.String())
@@ -792,6 +797,10 @@ func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 			}
 		}
 	}
+
+	// Unmount filesystems before telling the manager to remove the intercept
+	ic.cancel()
+	ic.wg.Wait()
 
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerAPI)

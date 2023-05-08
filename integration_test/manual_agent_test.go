@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -145,5 +146,9 @@ func (s *connectedSuite) Test_ManualAgent() {
 	require.Regexp(regexp.MustCompile(`.*`+ac.WorkloadName+`\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)
 
 	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--namespace", s.AppNamespace(), "--port", "9094")
+	s.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return err == nil && strings.Contains(stdout, ac.WorkloadName+": intercepted")
+	}, 30*time.Second, 3*time.Second)
 	itest.TelepresenceOk(ctx, "leave", ac.WorkloadName+"-"+s.AppNamespace())
 }

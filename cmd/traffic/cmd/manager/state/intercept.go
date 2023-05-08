@@ -365,7 +365,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 					!strings.HasPrefix(e.Note, "(combined from similar events):") {
 					n := e.Regarding.Name
 					if strings.HasPrefix(n, nd) || n == name {
-						dlog.Errorf(ctx, "%s", e.Note)
+						dlog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
 						ec <- e
 					}
 				}
@@ -394,6 +394,13 @@ func (s *State) waitForAgent(ctx context.Context, name, namespace string, failed
 					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
 				case "FailedCreate", "FailedScheduling":
 					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
+					if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
+						strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
+						strings.Contains(msg, "skip schedule deleting pod")) {
+						// This isn't fatal.
+						fes = append(fes, fe)
+						continue
+					}
 					msg = fmt.Sprintf(
 						"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
 						msg)

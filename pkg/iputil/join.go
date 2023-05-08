@@ -10,8 +10,8 @@ func JoinIpPort(ip net.IP, port uint16) string {
 	if ip4 := ip.To4(); ip4 != nil {
 		return ip4.String() + ":" + ps
 	}
-	if ip6 := ip.To4(); ip6 != nil {
-		return "[" + ip6.String() + "]:" + ps
+	if ip16 := ip.To16(); ip16 != nil {
+		return "[" + ip16.String() + "]:" + ps
 	}
 	return ":" + ps
 }
