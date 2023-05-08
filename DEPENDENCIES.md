@@ -11,6 +11,7 @@ following Free and Open Source software:
     github.com/Masterminds/semver/v3                                             v3.2.0                                MIT license
     github.com/Masterminds/sprig/v3                                              v3.2.3                                MIT license
     github.com/Masterminds/squirrel                                              v1.5.3                                MIT license
+    github.com/Microsoft/go-winio                                                v0.6.0                                MIT license
     github.com/asaskevich/govalidator                                            v0.0.0-20210307081110-f21760c49a8d    MIT license
     github.com/beorn7/perks                                                      v1.0.1                                MIT license
     github.com/blang/semver                                                      v3.5.1+incompatible                   MIT license

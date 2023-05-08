@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -175,7 +176,12 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	var ud *daemon.UserClient
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-		conn, err := docker.ConnectDaemon(ctx, addr)
+		// NOTE: The UserDaemonAddress does not imply that the daemon runs in Docker
+		conn, err := grpc.DialContext(ctx, addr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithNoProxy(),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true))
 		if err != nil {
 			return ctx, err
 		}
@@ -248,11 +254,6 @@ func connectSession(ctx context.Context, userD *daemon.UserClient, request *daem
 
 	if !required {
 		return nil, nil
-	}
-	if userD.Remote {
-		if err = docker.EnableK8SAuthenticator(ctx); err != nil {
-			return nil, err
-		}
 	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err

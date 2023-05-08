@@ -9,6 +9,10 @@
   now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
   timeout is still 30 seconds.
 
+- Bugfix: The automatic discovery of a local container based cluster (minikube or kind) used when the
+  Telepresence daemon runs in a container, now works on macOS and Windows, and with different profiles,
+  ports, and cluster names
+
 - Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
 
 - Bugfix: The traffic-manager would sometimes panic with a "close of closed channel" message and exit.
