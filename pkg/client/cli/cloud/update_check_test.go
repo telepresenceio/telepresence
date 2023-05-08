@@ -53,10 +53,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 	ft := dtime.NewFakeTime()
 	dtime.SetNow(ft.Now)
 
-	uc, err := newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	uc := newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	// Virgin call should always trigger a check. Nothing is cached.
 	if !uc.timeToCheck() {
 		t.Fatal("Expected timeToCheck() to return true")
@@ -80,20 +77,14 @@ func Test_NewUpdateChecker(t *testing.T) {
 
 	// An hour later it should not be time to check yet
 	ft.Step(time.Hour)
-	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	uc = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if uc.timeToCheck() {
 		t.Fatal("Expected timeToCheck() to return false")
 	}
 
 	// A day later it should be time to check
 	ft.Step(checkDuration)
-	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	uc = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if !uc.timeToCheck() {
 		t.Fatal("Expected timeToCheck() to return true")
 	}
@@ -116,10 +107,7 @@ func Test_NewUpdateChecker(t *testing.T) {
 
 	// A day later and one second it should be time to check again
 	ft.Step(checkDuration + 1)
-	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	uc = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if !uc.timeToCheck() {
 		t.Fatal("Expected timeToCheck() to return true")
 	}

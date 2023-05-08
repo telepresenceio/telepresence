@@ -323,9 +323,6 @@ func (is *installSuite) Test_No_Upgrade() {
 		Type:       connector.HelmRequest_UPGRADE,
 		ValuesJson: jvp,
 	}))
-	// check that dns values were propagated from values file to traffic manager
-	is.CapturePodLogs(ctx, "AlsoProxySubnet:", "traffic-manager", is.ManagerNamespace())
-	is.CapturePodLogs(ctx, "NeverProxySubnet:", "traffic-manager", is.ManagerNamespace())
 }
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {

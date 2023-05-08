@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
@@ -43,12 +42,10 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 		return false
 	}, 30*time.Second, 3*time.Second)
 
-	if runtime.GOOS != "darwin" {
-		// Verify that volume mount is broken
-		time.Sleep(time.Second) // avoid a stat just when the intercept became inactive as it sometimes causes a hang
-		_, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
-		assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
-	}
+	// Verify that volume mount is broken
+	time.Sleep(time.Second) // avoid a stat just when the intercept became inactive as it sometimes causes a hang
+	_, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
+	assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
 
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
@@ -67,14 +64,12 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 		return false
 	}, 30*time.Second, 3*time.Second)
 
-	if runtime.GOOS != "darwin" {
-		// Verify that volume mount is restored
-		time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
-		assert.Eventually(func() bool {
-			st, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
-			return err == nil && st.IsDir()
-		}, 5*time.Second, time.Second)
-	}
+	// Verify that volume mount is restored
+	time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
+	assert.Eventually(func() bool {
+		st, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
+		return err == nil && st.IsDir()
+	}, 5*time.Second, time.Second)
 }
 
 // Test_StopInterceptedPodOfMany build belongs to the interceptMountSuite because we want to
@@ -156,12 +151,10 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}, 30*time.Second, time.Second)
 
 	// Verify that volume mount is restored
-	if runtime.GOOS != "darwin" {
-		time.Sleep(3 * time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
-		st, err := os.Stat(filepath.Join(s.mountPoint, "var"))
-		require.NoError(err, "Stat on <mount point>/var failed")
-		require.True(st.IsDir(), "<mount point>/var is not a directory")
-	}
+	time.Sleep(3 * time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
+	st, err := os.Stat(filepath.Join(s.mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
 
 // Return the names of running pods with app=<service name>. Running here means

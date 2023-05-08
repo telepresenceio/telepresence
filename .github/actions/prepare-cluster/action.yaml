@@ -42,6 +42,7 @@ runs:
         version: ${{ inputs.cluster-version }}
         kubeconfig: "${{ steps.kubeconfig.outputs.KUBECONFIG }}"
         kubeceptionToken: ${{ inputs.kubeception-token }}
+        kubeceptionProfile: small
         gkeCredentials: ${{ inputs.gke-credentials }}
     - name: Load image
       shell: bash

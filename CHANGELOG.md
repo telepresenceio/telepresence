@@ -13,6 +13,10 @@
   Telepresence daemon runs in a container, now works on macOS and Windows, and with different profiles,
   ports, and cluster names
 
+- Bugfix: FTP Stability improvements. Multiple simultaneous intercepts can transfer large files in bidirectionally and in parallel.
+
+- Bugfix: Pods using persistent volumes no longer causes timeouts when intercepted.
+
 - Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
 
 - Bugfix: The traffic-manager would sometimes panic with a "close of closed channel" message and exit.
