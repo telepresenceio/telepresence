@@ -612,15 +612,31 @@ func (s *session) getInfosForWorkloads(
 		}
 		for _, workload := range wls {
 			if _, ok := wiMap[workload.GetUID()]; ok {
+				if _, ok := wiMap[workload.GetUID()].Services[string(svc.UID)]; !ok {
+					wiMap[workload.GetUID()].Services[string(svc.UID)] = &rpc.WorkloadInfo_ServiceReference{
+						Name:      svc.Name,
+						Namespace: svc.Namespace,
+						Ports:     getServicePorts(svc),
+					}
+				}
 				continue
 			}
+
 			name := workload.GetName()
 			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
+
 			wlInfo := &rpc.WorkloadInfo{
 				Name:                 name,
 				Namespace:            workload.GetNamespace(),
 				WorkloadResourceType: workload.GetKind(),
 				Uid:                  string(workload.GetUID()),
+				Services: map[string]*rpc.WorkloadInfo_ServiceReference{
+					string(svc.UID): {
+						Name:      svc.Name,
+						Namespace: svc.Namespace,
+						Ports:     getServicePorts(svc),
+					},
+				},
 			}
 			var ok bool
 			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
@@ -640,6 +656,17 @@ func (s *session) getInfosForWorkloads(
 	}
 	sort.Slice(wiz, func(i, j int) bool { return wiz[i].Name < wiz[j].Name })
 	return wiz
+}
+
+func getServicePorts(svc *core.Service) []*rpc.WorkloadInfo_ServiceReference_Port {
+	ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
+	for _, p := range svc.Spec.Ports {
+		ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
+			Name: p.Name,
+			Port: p.Port,
+		})
+	}
+	return ports
 }
 
 func (s *session) waitForSync(ctx context.Context) {

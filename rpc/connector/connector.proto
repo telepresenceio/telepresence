@@ -298,6 +298,19 @@ message WorkloadInfo {
   // Workload Resource type (e.g. Deployment, ReplicaSet, StatefulSet)
   string workload_resource_type = 5;
 
+  message ServiceReference {
+    string name = 1;
+    string namespace = 2;
+    string uid = 3;
+    message Port {
+      string name = 1;
+      int32 port = 2;
+    }
+    repeated Port ports = 4;
+  }
+
+  map<string, ServiceReference> services = 11;
+
   string uid = 8;
 
   reserved 4;
