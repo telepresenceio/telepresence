@@ -287,10 +287,10 @@ message WorkloadInfo {
   string not_interceptable_reason = 2;
 
   message Sidecar {
-    bytes json = 1;
+    bytes JSON = 1;
   }
   // Sidecar
-  Sidecar sidecar = 3;
+  Sidecar sidecar = 10;
 
   // InterceptInfos reported from the traffic manager in case the workload is currently intercepted
   repeated telepresence.manager.InterceptInfo intercept_infos = 9;

@@ -59,22 +59,26 @@ func (s *session) getCurrentAgentsInNamespace(ns string) map[string]*manager.Age
 }
 
 func (s *session) getCurrentSidecarsInNamespace(ctx context.Context, ns string) map[string]*agentconfig.Sidecar {
-	sidecars := make(map[string]*agentconfig.Sidecar)
-
 	// Load configmap entry from the telepresence-agents configmap
 	cm, err := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err != nil {
 		if !k8sErrors.IsNotFound(err) {
 			dlog.Error(ctx, errcat.User.New(err))
 		}
-		return sidecars
+		return nil
 	}
 
+	if cm.Data == nil {
+		dlog.Errorf(ctx, "Unable to read data in configmap %q", agentconfig.ConfigMap)
+		return nil
+	}
+
+	sidecars := make(map[string]*agentconfig.Sidecar, len(cm.Data))
 	for workload, sidecar := range cm.Data {
 		var cfg agentconfig.Sidecar
 		if err = yaml.Unmarshal([]byte(sidecar), &cfg); err != nil {
 			dlog.Errorf(ctx, "Unable to parse entry for %q in configmap %q: %v", workload, agentconfig.ConfigMap, err)
-			return sidecars
+			continue
 		}
 		sidecars[workload] = &cfg
 	}

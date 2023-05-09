@@ -29,7 +29,7 @@ type listCommand struct {
 	watch             bool
 }
 
-type workloadJsonOutput struct {
+type workloadJSONOutput struct {
 	*connector.WorkloadInfo
 	Sidecar *agentconfig.Sidecar `json:"sidecar,omitempty"`
 }
@@ -172,18 +172,17 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 	}
 
 	if formattedOut {
-		var o []*workloadJsonOutput
-		for _, v := range workloads {
-			var l workloadJsonOutput
-			l.WorkloadInfo = v
+		o := make([]*workloadJSONOutput, len(workloads))
+		for i, v := range workloads {
+			l := workloadJSONOutput{WorkloadInfo: v}
 
 			if v.Sidecar != nil {
 				var sidecar agentconfig.Sidecar
-				_ = json.Unmarshal(v.Sidecar.Json, &sidecar)
+				_ = json.Unmarshal(v.Sidecar.JSON, &sidecar)
 				l.Sidecar = &sidecar
 			}
 
-			o = append(o, &l)
+			o[i] = &l
 		}
 
 		output.Object(ctx, o, false)
