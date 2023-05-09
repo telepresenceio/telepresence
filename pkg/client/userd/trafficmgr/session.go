@@ -786,7 +786,7 @@ nextIs:
 			if err != nil {
 				continue
 			}
-			sMap[k] = &rpc.WorkloadInfo_Sidecar{JSON: data}
+			sMap[k] = &rpc.WorkloadInfo_Sidecar{Json: data}
 		}
 	}
 

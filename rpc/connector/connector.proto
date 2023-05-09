@@ -287,7 +287,7 @@ message WorkloadInfo {
   string not_interceptable_reason = 2;
 
   message Sidecar {
-    bytes JSON = 1;
+    bytes json = 1;
   }
   // Sidecar
   Sidecar sidecar = 10;

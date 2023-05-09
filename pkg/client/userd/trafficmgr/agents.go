@@ -69,8 +69,7 @@ func (s *session) getCurrentSidecarsInNamespace(ctx context.Context, ns string) 
 	}
 
 	if cm.Data == nil {
-		dlog.Errorf(ctx, "Unable to read data in configmap %q", agentconfig.ConfigMap)
-		return nil
+		dlog.Debugf(ctx, "unable to read data in configmap %q", agentconfig.ConfigMap)
 	}
 
 	sidecars := make(map[string]*agentconfig.Sidecar, len(cm.Data))

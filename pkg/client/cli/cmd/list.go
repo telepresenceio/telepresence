@@ -178,7 +178,7 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 
 			if v.Sidecar != nil {
 				var sidecar agentconfig.Sidecar
-				_ = json.Unmarshal(v.Sidecar.JSON, &sidecar)
+				_ = json.Unmarshal(v.Sidecar.Json, &sidecar)
 				l.Sidecar = &sidecar
 			}
 
