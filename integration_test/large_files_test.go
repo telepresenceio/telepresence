@@ -74,6 +74,10 @@ func (s *largeFilesSuite) SetupSuite() {
 		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
 		return
 	}
+	if s.IsCI() && goRuntime.GOOS == "windows" {
+		s.T().Skip("Mount tests don't run on windows due to race condition when assigning drive letters")
+		return
+	}
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	require := s.Require()

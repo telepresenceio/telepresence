@@ -11,13 +11,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+
+	//nolint:depguard // We really do want the socat to be minimal
+	"os/exec"
 	"path"
 	"regexp"
 	"strings"
 	"time"
-
-	//nolint:depguard // We really do want the socat to be minimal
-	"os/exec"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/pkg/kubelet/cri/streaming/portforward"
@@ -57,7 +57,7 @@ type mockAPIServer struct {
 	onShutdown chan struct{}
 }
 
-func (s *mockAPIServer) PortForward(_ string, _ types.UID, port int32, stream io.ReadWriteCloser) error {
+func (s *mockAPIServer) PortForward(_ context.Context, _ string, _ types.UID, port int32, stream io.ReadWriteCloser) error {
 	if port <= 0 || port > math.MaxUint16 {
 		return fmt.Errorf("invalid port %d", port)
 	}

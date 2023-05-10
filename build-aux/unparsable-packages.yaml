@@ -8,3 +8,5 @@ github.com/fclairamb/go-log/noop:
   - MIT
 github.com/fclairamb/ftpserverlib:
   - MIT
+github.com/Masterminds/squirrel:
+  - MIT
