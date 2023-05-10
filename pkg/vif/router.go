@@ -87,7 +87,8 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 		} else if subnet.IsHalfOfDefault(tr.RoutedNet) {
 			// Some VPN providers will cover one half of the address space with a /1 mask, and the other half with another.
 			// When we run into that just keep going and treat it as a default route that we can overlap.
-			// Crucially, OpenVPN is one of the providers who does this; luckily they will also add specific routes for the subnets that are covered by the VPC (e.g. /8 or /24 routes); the /1 routes are just for the public internet.
+			// Crucially, OpenVPN is one of the providers who does this; luckily they will also add specific routes for
+			// the subnets that are covered by the VPC (e.g. /8 or /24 routes); the /1 routes are just for the public internet.
 			continue
 		}
 		for _, r := range nonWhitelisted {

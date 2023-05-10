@@ -143,9 +143,10 @@ func (d *device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) (err error
 	if err := d.table.Remove(ctx, route); err != nil {
 		return err
 	}
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "RemoveSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
+	// Staticcheck screams if this is ctx, span := because it thinks the context argument is being overwritten before being used.
+	sCtx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "RemoveSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
 	defer tracing.EndAndRecord(span, err)
-	return d.dev.removeSubnet(ctx, subnet)
+	return d.dev.removeSubnet(sCtx, subnet)
 }
 
 func (d *device) Wait() {

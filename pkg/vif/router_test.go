@@ -70,7 +70,6 @@ func (s *RoutingSuite) Test_RouteIsAdded() {
 	s.Require().NoError(err)
 	// Ensure that the route is for the right device
 	s.Require().Equal(device, route.Interface.Name)
-
 }
 
 func (s *RoutingSuite) Test_RouteIsRemoved() {

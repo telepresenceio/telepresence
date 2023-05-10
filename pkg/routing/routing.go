@@ -31,8 +31,6 @@ type Table interface {
 	Close(ctx context.Context) error
 }
 
-var DefaultTable Table
-
 func OpenTable(ctx context.Context) (Table, error) {
 	return openTable(ctx)
 }

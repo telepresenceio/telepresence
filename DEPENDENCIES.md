@@ -132,10 +132,10 @@ following Free and Open Source software:
     go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp                v0.41.1                               Apache License 2.0
     go.opentelemetry.io/otel                                                     v1.15.1                               Apache License 2.0
     go.opentelemetry.io/otel/exporters/otlp/internal/retry                       v1.15.1                               Apache License 2.0
-    go.opentelemetry.io/otel/exporters/otlp/otlptrace                            v1.14.0                               Apache License 2.0
-    go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc              v1.14.0                               Apache License 2.0
+    go.opentelemetry.io/otel/exporters/otlp/otlptrace                            v1.15.1                               Apache License 2.0
+    go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc              v1.15.1                               Apache License 2.0
     go.opentelemetry.io/otel/metric                                              v0.38.1                               Apache License 2.0
-    go.opentelemetry.io/otel/sdk                                                 v1.14.0                               Apache License 2.0
+    go.opentelemetry.io/otel/sdk                                                 v1.15.1                               Apache License 2.0
     go.opentelemetry.io/otel/trace                                               v1.15.1                               Apache License 2.0
     go.opentelemetry.io/proto/otlp                                               v0.19.0                               Apache License 2.0
     go.starlark.net                                                              v0.0.0-20230302034142-4b1e35fe2254    3-clause BSD license
