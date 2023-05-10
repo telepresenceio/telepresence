@@ -611,9 +611,11 @@ func (s *session) getInfosForWorkloads(
 			return
 		}
 		for _, workload := range wls {
-			if _, ok := wiMap[workload.GetUID()]; ok {
-				if _, ok := wiMap[workload.GetUID()].Services[string(svc.UID)]; !ok {
-					wiMap[workload.GetUID()].Services[string(svc.UID)] = &rpc.WorkloadInfo_ServiceReference{
+			serviceUID := string(svc.UID)
+
+			if wlInfo, ok := wiMap[workload.GetUID()]; ok {
+				if _, ok := wlInfo.Services[serviceUID]; !ok {
+					wlInfo.Services[serviceUID] = &rpc.WorkloadInfo_ServiceReference{
 						Name:      svc.Name,
 						Namespace: svc.Namespace,
 						Ports:     getServicePorts(svc),
