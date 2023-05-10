@@ -301,7 +301,6 @@ message WorkloadInfo {
   message ServiceReference {
     string name = 1;
     string namespace = 2;
-    string uid = 3;
     message Port {
       string name = 1;
       int32 port = 2;
