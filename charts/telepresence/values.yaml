@@ -342,6 +342,10 @@ client:
     # array of strings, example ["8.8.8.8/32", "6.7.8.9/32"]
     neverProxySubnets: []
 
+    ## Allow the following subnets to be routed even if they conflict with other routes on the local machine
+    ## array of strings, example ["10.0.0.0/8"]
+    allowConflictingSubnets: []
+
   dns:
     # Tell client's DNS resolver to never send names with these suffixes to the cluster side resolver
     excludeSuffixes: [".com", ".io", ".net", ".org", ".ru"]

@@ -161,18 +161,25 @@ func NewInfo(ctx context.Context) Info {
 
 	alsoProxy := env.ClientRoutingAlsoProxySubnets
 	neverProxy := env.ClientRoutingNeverProxySubnets
+	allowConflicting := env.ClientRoutingAllowConflictingSubnets
 	dlog.Infof(ctx, "Using AlsoProxy: %v", alsoProxy)
 	dlog.Infof(ctx, "Using NeverProxy: %v", neverProxy)
+	dlog.Infof(ctx, "Using AllowConflicting: %v", allowConflicting)
 
 	oi.Routing = &rpc.Routing{
-		AlsoProxySubnets:  make([]*rpc.IPNet, len(alsoProxy)),
-		NeverProxySubnets: make([]*rpc.IPNet, len(neverProxy)),
+		AlsoProxySubnets:        make([]*rpc.IPNet, len(alsoProxy)),
+		NeverProxySubnets:       make([]*rpc.IPNet, len(neverProxy)),
+		AllowConflictingSubnets: make([]*rpc.IPNet, len(allowConflicting)),
 	}
 	for i, sn := range alsoProxy {
 		oi.Routing.AlsoProxySubnets[i] = iputil.IPNetToRPC(sn)
 	}
 	for i, sn := range neverProxy {
 		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(sn)
+	}
+
+	for i, sn := range allowConflicting {
+		oi.Routing.AllowConflictingSubnets[i] = iputil.IPNetToRPC(sn)
 	}
 
 	clusterDomain := getClusterDomain(ctx, oi.InjectorSvcIp, env)
