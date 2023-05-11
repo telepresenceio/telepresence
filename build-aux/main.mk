@@ -356,7 +356,7 @@ private-registry: $(tools/helm) ## (Test) Add a private docker registry to the c
 	kubectl wait --for=condition=ready pod --all
 	kubectl port-forward daemonset/private-registry-proxy 5000:5000 > /dev/null &
 
-WIX_VERSION != cut -d "-" -f 1 <<< $(TELEPRESENCE_VERSION)
+WIX_VERSION = $(shell echo $(TELEPRESENCE_VERSION) | sed 's/v//;s/-.*//')
 .PHONY: wix
 wix:
 	sed s/TELEPRESENCE_VERSION/$(WIX_VERSION)/ packaging/telepresence.wxs.in > packaging/telepresence.wxs
