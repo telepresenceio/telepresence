@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.13.2 (TBD)
+### 2.13.2 (May 12, 2023)
 - Bugfix: Replaced `/` characters with a `-` when the authenticator service creates the kubeconfig in the Telepresence cache.
 
 - Feature: Configurable strategy (`auto`, `powershell`. or `registry`) to set the global DNS search path on Windows. Default
