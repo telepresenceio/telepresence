@@ -94,6 +94,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 	if s.AgentName == "" {
 		// local-only
+		s.mountDisabled = true
 		return ir, nil
 	}
 
