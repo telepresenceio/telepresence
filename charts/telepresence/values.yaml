@@ -320,11 +320,13 @@ hooks:
     registry: docker.io
     image: busybox
     tag: latest
+    imagePullSecrets: []
 
   curl:
     registry: docker.io
     image: "curlimages/curl"
     tag: latest
+    imagePullSecrets: []
 
 client:
   # Max time that the traffic-manager will keep a client connection alive when it doesn't receive

@@ -9,6 +9,10 @@ metadata:
   annotations:
     "helm.sh/hook": test-success
 spec:
+  {{- with .Values.hooks.busybox.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
   containers:
     - name: wget
       image: "{{ .Values.hooks.busybox.registry }}/{{ .Values.hooks.busybox.image }}:{{ .Values.hooks.busybox.tag }}"

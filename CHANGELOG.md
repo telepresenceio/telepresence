@@ -1,6 +1,9 @@
 # Changelog
 
 ### 2.13.3 (TBD)
+
+- Feature: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
+
 - Bugfix: Running `telepresence intercept --local-only --docker-run` no longer results in a panic.
   Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
 
