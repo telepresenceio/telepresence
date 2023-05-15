@@ -1,6 +1,9 @@
 # Changelog
 
 ### 2.13.3 (TBD)
+
+- Feature: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
+
 - Bugfix: Running `telepresence intercept --local-only --docker-run` no longer results in a panic.
   Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
 
@@ -95,8 +98,6 @@
 - Change: Telepresence will now detect if services and pods are routable, independently of one another, before adding their routes. This is a change from before, when being already able to connect to pods prevented the addition of routes for services too.
 
 - Bugfix: The traffic-manager will no longer panic when the CNAME of kubernetes.default doesn't contain .svc.
-
-- Change: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
 
 - Bugfix: The `telepresence helm install/upgrade --set` family of flags now work correctly with comma separated values.
 
