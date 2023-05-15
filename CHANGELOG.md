@@ -8,6 +8,8 @@
   saying "a local-only intercept cannot have mounts".
   Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
 
+- Bugfix: The helm chart now correctly handles custom `agentInjector.webhook.port` that was not being set in hook URLs.
+
 ### 2.13.2 (May 12, 2023)
 - Bugfix: Replaced `/` characters with a `-` when the authenticator service creates the kubeconfig in the Telepresence cache.
   PR [3167](https://github.com/telepresenceio/telepresence/issues/3167).
@@ -40,8 +42,6 @@
 
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
   Ticket [3149](https://github.com/telepresenceio/telepresence/issues/3149).
-
-- Bugfix: The helm chart now correctly handles custom `agentInjector.webhook.port` that was not being set in hook URLs.
 
 ### 2.13.1 (April 20, 2023)
 
