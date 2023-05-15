@@ -133,11 +133,16 @@ func (s *State) startLookup(agentSessionID, rid string, request *rpc.DNSRequest)
 	}
 	s.mu.Unlock()
 	if as != nil {
-		// the as.lookups channel may be closed at this point, so guard for panic
+		// the as.dnsRequests channel may be closed at this point, so guard for panic
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					close(rch)
+					select {
+					case <-rch:
+						// rch is already closed
+					default:
+						close(rch)
+					}
 				}
 			}()
 			as.dnsRequests <- request

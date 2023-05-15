@@ -120,7 +120,9 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 			return errcat.User.New("a local-only intercept cannot have a port")
 		}
 		if cmd.Flag("mount").Changed {
-			return errcat.User.New("a local-only intercept cannot have mounts")
+			if doMount, _ := a.GetMountPoint(); doMount {
+				return errcat.User.New("a local-only intercept cannot have mounts")
+			}
 		}
 		return nil
 	}

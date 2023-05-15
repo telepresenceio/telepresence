@@ -1,17 +1,45 @@
 # Changelog
 
-### 2.13.2 (TBD)
+### 2.13.3 (TBD)
+- Bugfix: Running `telepresence intercept --local-only --docker-run` no longer results in a panic.
+  Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
+
+- Bugfix: Running `telepresence intercept --local-only --mount false` no longer results in an incorrect error message
+  saying "a local-only intercept cannot have mounts".
+  Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
+
+### 2.13.2 (May 12, 2023)
+- Bugfix: Replaced `/` characters with a `-` when the authenticator service creates the kubeconfig in the Telepresence cache.
+  PR [3167](https://github.com/telepresenceio/telepresence/issues/3167).
 
 - Feature: Configurable strategy (`auto`, `powershell`. or `registry`) to set the global DNS search path on Windows. Default
   is `auto` which means try `powershell` first, and if it fails, fall back to `registry`.
+  Ticket [3152](https://github.com/telepresenceio/telepresence/issues/3152).
 
 - Feature: The timeout for the traffic manager to wait for traffic agent to arrive can
   now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
   timeout is still 30 seconds.
+  PR [3148](https://github.com/telepresenceio/telepresence/issues/3148).
+
+- Bugfix: The automatic discovery of a local container based cluster (minikube or kind) used when the
+  Telepresence daemon runs in a container, now works on macOS and Windows, and with different profiles,
+  ports, and cluster names
+  PR [3165](https://github.com/telepresenceio/telepresence/issues/3165).
+
+- Bugfix: FTP Stability improvements. Multiple simultaneous intercepts can transfer large files in bidirectionally and in parallel.
+  PR [3157](https://github.com/telepresenceio/telepresence/issues/3157).
+
+- Bugfix: Pods using persistent volumes no longer causes timeouts when intercepted.
 
 - Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
+  Ticket [3143](https://github.com/telepresenceio/telepresence/issues/3143).
+  PR [3154](https://github.com/telepresenceio/telepresence/issues/3154).
+
+- Bugfix: The traffic-manager would sometimes panic with a "close of closed channel" message and exit.
+  PR [3160](https://github.com/telepresenceio/telepresence/issues/3160).
 
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
+  Ticket [3149](https://github.com/telepresenceio/telepresence/issues/3149).
 
 - Bugfix: The helm chart now correctly handles custom `agentInjector.webhook.port` that was not being set in hook URLs.
 
@@ -29,7 +57,7 @@
 - Feature: There's a new --address flag to the intercept command allowing users to set the target IP of the intercept.
 
 - Feature: The new flags `--docker-build`, and `--docker-build-opt` was added to `telepresence intercept` to facilitate a
-  docker run directly from a docker context. 
+  docker run directly from a docker context.
 
 - Bugfix: Using `telepresence intercept --docker-run` now works with a container based daemon started with `telepresence connect --docker`
 

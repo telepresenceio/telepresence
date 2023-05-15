@@ -461,7 +461,13 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	if cfg.Intercept.UseFtp {
-		g.Go("fuseftp-server", s.fuseFtpMgr.DeferInit)
+		g.Go("fuseftp-server", func(c context.Context) error {
+			if err := s.fuseFtpMgr.DeferInit(c); err != nil {
+				dlog.Error(c, err)
+			}
+			<-c.Done()
+			return nil
+		})
 	}
 
 	g.Go("server-grpc", func(c context.Context) (err error) {

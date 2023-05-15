@@ -326,6 +326,10 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
 	g.Go("RecursionCheck", func(c context.Context) error {
 		_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, []string{tel2SubDomain})
+		if runtime.GOOS == "windows" {
+			// Give the DNS setting some time to take effect.
+			dtime.SleepWithContext(c, 500*time.Millisecond)
+		}
 		s.performRecursionCheck(c)
 		return nil
 	})

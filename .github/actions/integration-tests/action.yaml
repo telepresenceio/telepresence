@@ -13,8 +13,8 @@ runs:
         DTEST_REGISTRY: "docker.io/datawire"
       uses: nick-invision/retry@v2.8.2
       with:
-        max_attempts: 3
-        timeout_minutes: 30
+        max_attempts: 2
+        timeout_minutes: 40
         shell: bash
         command: |
           set -ex

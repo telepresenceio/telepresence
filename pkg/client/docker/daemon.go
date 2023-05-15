@@ -8,8 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,8 +18,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
+	dockerClient "github.com/docker/docker/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	runtime2 "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
@@ -137,17 +142,20 @@ func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, er
 		// The host relies on that the daemon has exposed a port to localhost
 		addr = fmt.Sprintf(":%d", port)
 	}
-	return ConnectDaemon(ctx, addr)
+	return connectDaemon(ctx, addr)
 }
 
-// ConnectDaemon connects to a daemon at the given address.
-func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
+// connectDaemon connects to a daemon at the given address.
+func connectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
+	if err = enableK8SAuthenticator(ctx); err != nil {
+		return nil, err
+	}
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
 	for i := 1; ; i++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		conn, err := grpc.DialContext(ctx, address,
+		conn, err = grpc.DialContext(ctx, address,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
@@ -261,7 +269,7 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 	return startAuthenticatorService(ctx, portFile, kubeFlags, configFiles)
 }
 
-func EnableK8SAuthenticator(ctx context.Context) error {
+func enableK8SAuthenticator(ctx context.Context) error {
 	cr := daemon.GetRequest(ctx)
 	dlog.Debugf(ctx, "kubeflags = %v", cr.KubeFlags)
 	configFlags, err := client.ConfigFlags(cr.KubeFlags)
@@ -311,15 +319,14 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 	// Store the file using its context name under the <telepresence cache>/kube directory
 	const kubeConfigs = "kube"
 	kubeConfigFile := config.CurrentContext
+	kubeConfigFile = strings.ReplaceAll(kubeConfigFile, "/", "-")
 	kubeConfigDir := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeConfigs)
 	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
 		return err
 	}
-
-	// Special hack for the "kind-kind" cluster, replacing its 127.0.0.1 access on the host network with
-	// the docker internal control plane address
-	if cl, ok := config.Clusters["kind-kind"]; ok && strings.HasPrefix(cl.Server, "https://127.0.0.1:") {
-		cl.Server = "https://kind-control-plane:6443"
+	err = handleLocalK8s(ctx, cc.Cluster, config.Clusters[cc.Cluster])
+	if err != nil {
+		dlog.Errorf(ctx, "unable to handle local K8s: %v", err)
 	}
 
 	if err = clientcmd.WriteToFile(config, filepath.Join(kubeConfigDir, kubeConfigFile)); err != nil {
@@ -331,15 +338,77 @@ func EnableK8SAuthenticator(ctx context.Context) error {
 	return nil
 }
 
+// handleLocalK8s checks if the cluster is using a well known provider (currently minikube or kind)
+// and ensures that the service is modified to access the docker internal address instead of an
+// address available on the host.
+func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) error {
+	isKind := strings.HasPrefix(clusterName, "kind-")
+	isMinikube := false
+	if !isKind {
+		if ex, ok := cl.Extensions["cluster_info"].(*runtime2.Unknown); ok {
+			var data map[string]any
+			isMinikube = json.Unmarshal(ex.Raw, &data) == nil && data["provider"] == "minikube.sigs.k8s.io"
+		}
+	}
+	if !(isKind || isMinikube) {
+		return nil
+	}
+
+	server, err := url.Parse(cl.Server)
+	if err != nil {
+		return err
+	}
+	host, portStr, err := net.SplitHostPort(server.Host)
+	if err != nil {
+		return err
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		if host == "localhost" {
+			addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
+		}
+	}
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err != nil {
+		return err
+	}
+
+	addrPort := netip.AddrPortFrom(addr, uint16(port))
+
+	// Let's check if we have a container with port bindings for the
+	// given addrPort that is a known k8sapi provider
+	cli, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+	cjs := runningContainers(ctx, cli)
+
+	var hostPort, network string
+	if isKind {
+		hostPort, network = detectKind(cjs, addrPort)
+	} else if isMinikube {
+		hostPort, network = detectMinikube(cjs, addrPort, clusterName)
+	}
+	if hostPort != "" {
+		server.Host = hostPort
+		cl.Server = server.String()
+	}
+	if network != "" {
+		dcName := SafeContainerName(containerNamePrefix + clusterName)
+		if err = cli.NetworkConnect(ctx, network, dcName, nil); err != nil {
+			dlog.Debugf(ctx, "failed to connect network %s to container %s", network, dcName)
+		}
+	}
+	return nil
+}
+
 // LaunchDaemon ensures that the image returned by ClientImage exists by calling PullImage. It then uses the
-// options DaemonOptions and DaemonArgs to start the image, and finally ConnectDaemon to connect to it. A
+// options DaemonOptions and DaemonArgs to start the image, and finally connectDaemon to connect to it. A
 // successful start yields a cache.DaemonInfo entry in the cache.
 func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err error) {
 	if proc.RunningInContainer() {
 		return nil, errors.New("unable to start a docker container from within a container")
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cidfile: %v", err)
 	}
 	image := ClientImage(ctx)
 	if err = PullImage(ctx, image); err != nil {
@@ -362,9 +431,8 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	allArgs = append(allArgs, opts...)
 	allArgs = append(allArgs, image)
 	allArgs = append(allArgs, args...)
-	var cid string
 	for i := 1; ; i++ {
-		cid, err = tryLaunch(ctx, addr.Port, name, allArgs)
+		_, err = tryLaunch(ctx, addr.Port, name, allArgs)
 		if err != nil {
 			if i < 6 && strings.Contains(err.Error(), "already in use by container") {
 				// This may happen if the daemon has died (and hence, we never discovered it), but
@@ -376,44 +444,85 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 		}
 		break
 	}
-	detectAndAddLocalKubeNetwork(ctx, "minikube", cid)
-	detectAndAddLocalKubeNetwork(ctx, "kind", cid)
-
-	return ConnectDaemon(ctx, addr.String())
+	return connectDaemon(ctx, addr.String())
 }
 
-// detectAndAddLocalKubeNetwork checks for a network with the given name, and adds it to the
-// running container if present.
-//
-// This takes care of the use-case when Minikube or Kind is installed with a docker driver and
-// uses the default docker network name.
-func detectAndAddLocalKubeNetwork(ctx context.Context, network, cid string) {
-	// Check that the network exists and that at least one container is connected to it
-	stdout := bytes.Buffer{}
-	cmd := proc.CommandContext(ctx, "docker", "network", "inspect", network, "-f", "{{len .Containers}}")
-	cmd.DisableLogging = true
-	cmd.Stderr = io.Discard
-	cmd.Stdout = &stdout
-	if cmd.Run() != nil {
-		return
-	}
-	cnt, err := strconv.Atoi(strings.TrimSpace(stdout.String()))
-	if err != nil || cnt == 0 {
-		return
-	}
-
-	// The network is present. Let's try and add it.
-	stderr := bytes.Buffer{}
-	cmd = proc.StdCommand(ctx, "docker", "network", "connect", network, cid)
-	cmd.Stderr = &stderr
-	cmd.Stdout = io.Discard
-	if err := cmd.Run(); err != nil {
-		es := stderr.String()
-		if es != "" {
-			dlog.Error(ctx, es)
+// containerPort returns the port that the container uses internally to expose the given
+// addrPort on the host. An empty string is returned when the addrPort is not found among
+// the container's port bindings.
+func containerPort(addrPort netip.AddrPort, ns *types.NetworkSettings) string {
+	for port, bindings := range ns.Ports {
+		for _, binding := range bindings {
+			addr, err := netip.ParseAddr(binding.HostIP)
+			if err != nil {
+				continue
+			}
+			pn, err := strconv.ParseUint(binding.HostPort, 10, 16)
+			if err != nil {
+				continue
+			}
+			if netip.AddrPortFrom(addr, uint16(pn)) == addrPort {
+				return port.Port()
+			}
 		}
-		dlog.Errorf(ctx, "failed to add %s network: %v", network, err)
 	}
+	return ""
+}
+
+// runningContainers returns the inspect data for all containers with status=running.
+func runningContainers(ctx context.Context, cli dockerClient.APIClient) []types.ContainerJSON {
+	cl, err := cli.ContainerList(ctx, types.ContainerListOptions{
+		Filters: filters.NewArgs(filters.KeyValuePair{Key: "status", Value: "running"}),
+	})
+	if err != nil {
+		dlog.Errorf(ctx, "failed to list containers: %v", err)
+		return nil
+	}
+	cjs := make([]types.ContainerJSON, 0, len(cl))
+	for _, cn := range cl {
+		cj, err := cli.ContainerInspect(ctx, cn.ID)
+		if err != nil {
+			dlog.Errorf(ctx, "container inspect on %v failed: %v", cn.Names, err)
+		} else {
+			cjs = append(cjs, cj)
+		}
+	}
+	return cjs
+}
+
+// detectMinikube returns the container IP:port for the given hostAddrPort for a container where the
+// "name.minikube.sigs.k8s.io" label is equal to the given cluster name.
+// Returns the internal IP:port for the given hostAddrPort and the name of a network that makes the
+// IP available.
+func detectMinikube(cns []types.ContainerJSON, hostAddrPort netip.AddrPort, clusterName string) (string, string) {
+	for _, cn := range cns {
+		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["name.minikube.sigs.k8s.io"] == clusterName {
+			if port := containerPort(hostAddrPort, ns); port != "" {
+				for networkName, network := range ns.Networks {
+					return net.JoinHostPort(network.IPAddress, port), networkName
+				}
+			}
+		}
+	}
+	return "", ""
+}
+
+// detectKind returns the container hostname:port for the given hostAddrPort for a container where the
+// "io.x-k8s.kind.role" label is equal to "control-plane".
+// Returns the internal hostname:port for the given hostAddrPort and the name of a network that makes the
+// hostname available.
+func detectKind(cns []types.ContainerJSON, hostAddrPort netip.AddrPort) (string, string) {
+	for _, cn := range cns {
+		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["io.x-k8s.kind.role"] == "control-plane" {
+			if port := containerPort(hostAddrPort, ns); port != "" {
+				hostPort := net.JoinHostPort(cfg.Hostname, port)
+				for networkName := range ns.Networks {
+					return hostPort, networkName
+				}
+			}
+		}
+	}
+	return "", ""
 }
 
 func tryLaunch(ctx context.Context, port int, name string, args []string) (string, error) {
