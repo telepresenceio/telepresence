@@ -29,14 +29,15 @@ const ConfigFile = "config.yml"
 
 // Config contains all configuration values for the telepresence CLI.
 type Config struct {
-	Timeouts        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
-	LogLevels       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
-	Images          Images          `json:"images,omitempty" yaml:"images,omitempty"`
-	Cloud           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
-	Grpc            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
-	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
-	Intercept       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
-	Cluster         Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+	OSSpecificConfig `yaml:",inline"`
+	Timeouts         Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
+	LogLevels        LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
+	Images           Images          `json:"images,omitempty" yaml:"images,omitempty"`
+	Cloud            Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
+	Grpc             Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	TelepresenceAPI  TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
+	Intercept        Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
+	Cluster          Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
 }
 
 func ParseConfigYAML(data []byte) (*Config, error) {
@@ -49,6 +50,7 @@ func ParseConfigYAML(data []byte) (*Config, error) {
 
 // Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) Merge(o *Config) {
+	c.OSSpecificConfig.Merge(&o.OSSpecificConfig)
 	c.Timeouts.merge(&o.Timeouts)
 	c.LogLevels.merge(&o.LogLevels)
 	c.Images.merge(&o.Images)
@@ -146,6 +148,10 @@ type Timeouts struct {
 	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty" yaml:"trafficManagerAPI,omitempty"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty" yaml:"trafficManagerConnect,omitempty"`
+	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
+	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite,omitempty" yaml:"ftpReadWrite,omitempty"`
+	// PrivateFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
+	PrivateFtpShutdown time.Duration `json:"ftpShutdown,omitempty" yaml:"ftpShutdown,omitempty"`
 }
 
 type TimeoutID int
@@ -162,6 +168,8 @@ const (
 	TimeoutRoundtripLatency
 	TimeoutTrafficManagerAPI
 	TimeoutTrafficManagerConnect
+	TimeoutFtpReadWrite
+	TimeoutFtpShutdown
 )
 
 type timeoutContext struct {
@@ -208,6 +216,10 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
 		timeoutVal = t.PrivateTrafficManagerConnect
+	case TimeoutFtpReadWrite:
+		timeoutVal = t.PrivateFtpReadWrite
+	case TimeoutFtpShutdown:
+		timeoutVal = t.PrivateFtpShutdown
 	default:
 		panic("should not happen")
 	}
@@ -268,6 +280,12 @@ func (e timeoutError) Error() string {
 	case TimeoutTrafficManagerConnect:
 		yamlName = "trafficManagerConnect"
 		humanName = "port-forward connection to the traffic manager"
+	case TimeoutFtpReadWrite:
+		yamlName = "ftpReadWrite"
+		humanName = "FTP client read/write"
+	case TimeoutFtpShutdown:
+		yamlName = "ftpShutdown"
+		humanName = "FTP client shutdown grace period"
 	default:
 		panic("should not happen")
 	}
@@ -322,6 +340,10 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 			dp = &t.PrivateTrafficManagerAPI
 		case "trafficManagerConnect":
 			dp = &t.PrivateTrafficManagerConnect
+		case "ftpReadWrite":
+			dp = &t.PrivateFtpReadWrite
+		case "ftpShutdown":
+			dp = &t.PrivateFtpShutdown
 		default:
 			if parseContext != nil {
 				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
@@ -360,6 +382,8 @@ const (
 	defaultTimeoutsRoundtripLatency      = 2 * time.Second
 	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
 	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+	defaultTimeoutsFtpReadWrite          = 1 * time.Minute
+	defaultTimeoutsFtpShutdown           = 2 * time.Minute
 )
 
 var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
@@ -374,6 +398,8 @@ var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
 	PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
 	PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+	PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
+	PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
 }
 
 // IsZero controls whether this element will be included in marshalled output.
@@ -417,6 +443,12 @@ func (t Timeouts) MarshalYAML() (any, error) {
 	if t.PrivateTrafficManagerConnect != 0 && t.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
 		tm["trafficManagerConnect"] = t.PrivateTrafficManagerConnect.String()
 	}
+	if t.PrivateFtpReadWrite != 0 && t.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
+		tm["ftpReadWrite"] = t.PrivateFtpReadWrite.String()
+	}
+	if t.PrivateFtpShutdown != 0 && t.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
+		tm["ftpShutdown"] = t.PrivateFtpShutdown.String()
+	}
 	return tm, nil
 }
 
@@ -454,6 +486,12 @@ func (t *Timeouts) merge(o *Timeouts) {
 	}
 	if o.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
 		t.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
+	}
+	if o.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
+		t.PrivateFtpReadWrite = o.PrivateFtpReadWrite
+	}
+	if o.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
+		t.PrivateFtpShutdown = o.PrivateFtpShutdown
 	}
 }
 
@@ -814,10 +852,6 @@ func (cc *Cluster) merge(o *Cluster) {
 	}
 }
 
-var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
-	DefaultManagerNamespace: defaultDefaultManagerNamespace,
-}
-
 // IsZero controls whether this element will be included in marshalled output.
 func (cc Cluster) IsZero() bool {
 	return cc.DefaultManagerNamespace == defaultDefaultManagerNamespace && len(cc.MappedNamespaces) == 0
@@ -871,13 +905,13 @@ func ReplaceConfig(ctx context.Context, config *Config) {
 
 // GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
 func GetConfigFile(c context.Context) string {
-	dir, _ := filelocation.AppUserConfigDir(c)
-	return filepath.Join(dir, ConfigFile)
+	return filepath.Join(filelocation.AppUserConfigDir(c), ConfigFile)
 }
 
 // GetDefaultConfig returns the default configuration settings.
 func GetDefaultConfig() Config {
 	return Config{
+		OSSpecificConfig: GetDefaultOSSpecificConfig(),
 		Timeouts: Timeouts{
 			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
 			PrivateApply:                 defaultTimeoutsApply,
@@ -890,6 +924,8 @@ func GetDefaultConfig() Config {
 			PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
 			PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 			PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+			PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
+			PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
 		},
 		LogLevels: LogLevels{
 			UserDaemon: defaultLogLevelsUserDaemon,
@@ -921,12 +957,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 		}
 	}()
 
-	var dirs []string
-	dirs, err = filelocation.AppSystemConfigDirs(c)
-	if err != nil {
-		return nil, err
-	}
-
+	dirs := filelocation.AppSystemConfigDirs(c)
 	dflt := GetDefaultConfig()
 	cfg = &dflt
 	readMerge := func(dir string) error {
@@ -958,13 +989,7 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 			return nil, err
 		}
 	}
-	appDir, err := filelocation.AppUserConfigDir(c)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
-		}
-		return nil, err
-	}
+	appDir := filelocation.AppUserConfigDir(c)
 	if err = readMerge(appDir); err != nil {
 		return nil, err
 	}
@@ -991,6 +1016,7 @@ type RoutingSnake struct {
 }
 
 type DNS struct {
+	Error           string        `json:"error,omitempty" yaml:"error,omitempty"`
 	LocalIP         net.IP        `json:"localIP,omitempty" yaml:"localIP,omitempty"`
 	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
 	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
@@ -1000,6 +1026,7 @@ type DNS struct {
 
 // DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
+	Error           string        `json:"error,omitempty" yaml:"error,omitempty"`
 	LocalIP         net.IP        `json:"local_ip,omitempty" yaml:"local_ip,omitempty"`
 	RemoteIP        net.IP        `json:"remote_ip,omitempty" yaml:"remote_ip,omitempty"`
 	IncludeSuffixes []string      `json:"include_suffixes,omitempty" yaml:"include_suffixes,omitempty"`

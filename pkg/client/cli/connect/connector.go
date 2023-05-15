@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -22,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -56,7 +59,7 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
 	}
 	if _, err = ud.Quit(ctx, &emptypb.Empty{}); err == nil || status.Code(err) == codes.Unavailable {
-		err = socket.WaitUntilVanishes("user daemon", socket.ConnectorName, 5*time.Second)
+		err = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 	}
 	if err != nil && status.Code(err) == codes.Unavailable {
 		if quitDaemons {
@@ -87,7 +90,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
-	conn, err := socket.Dial(ctx, socket.ConnectorName)
+	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err == nil {
 		if cr.Docker {
 			return nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
@@ -129,13 +132,17 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if _, err = ensureAppUserConfigDir(ctx); err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	if err = proc.StartInBackground(false, connectorDaemon, "connector-foreground"); err != nil {
+	args := []string{connectorDaemon, "connector-foreground"}
+	if cr.UserDaemonProfilingPort > 0 {
+		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
+	}
+	if err = proc.StartInBackground(false, args...); err != nil {
 		return nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 	}
-	if err = socket.WaitUntilAppears("connector", socket.ConnectorName, 10*time.Second); err != nil {
+	if err = socket.WaitUntilAppears("connector", socket.UserDaemonPath(ctx), 10*time.Second); err != nil {
 		return nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
 	}
-	conn, err = socket.Dial(ctx, socket.ConnectorName)
+	conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +176,12 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	var ud *daemon.UserClient
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-		conn, err := docker.ConnectDaemon(ctx, addr)
+		// NOTE: The UserDaemonAddress does not imply that the daemon runs in Docker
+		conn, err := grpc.DialContext(ctx, addr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithNoProxy(),
+			grpc.WithBlock(),
+			grpc.FailOnNonTempDialError(true))
 		if err != nil {
 			return ctx, err
 		}
@@ -199,6 +211,9 @@ func ensureSession(ctx context.Context, required bool) (context.Context, error) 
 	}
 	if s == nil {
 		return ctx, nil
+	}
+	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
+		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
 	}
 	return daemon.WithSession(ctx, s), nil
 }
@@ -239,11 +254,6 @@ func connectSession(ctx context.Context, userD *daemon.UserClient, request *daem
 
 	if !required {
 		return nil, nil
-	}
-	if userD.Remote {
-		if err = docker.EnableK8SAuthenticator(ctx); err != nil {
-			return nil, err
-		}
 	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err

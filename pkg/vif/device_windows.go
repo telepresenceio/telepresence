@@ -6,16 +6,20 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
-	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
@@ -23,6 +27,7 @@ import (
 // See: https://www.wintun.net/ for more info.
 type nativeDevice struct {
 	tun.Device
+	strategy       client.GSCStrategy
 	name           string
 	dns            net.IP
 	interfaceIndex int32
@@ -48,6 +53,7 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
 	}
 	td.interfaceIndex = int32(iface.InterfaceIndex)
+	td.strategy = client.GetConfig(ctx).Network.GlobalDNSSearchConfigStrategy
 
 	return td, nil
 }
@@ -115,7 +121,19 @@ func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error 
 	return t.getLUID().DeleteIPAddress(prefixFromIPNet(subnet))
 }
 
-func (t *nativeDevice) setDNS(ctx context.Context, server net.IP, domains []string) (err error) {
+func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server net.IP, searchList []string) (err error) {
+	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
+	parentCtx := ctx
+	ctx, cancel := context.WithCancel(dcontext.WithoutCancel(ctx))
+	defer cancel()
+
+	go func() {
+		<-parentCtx.Done()
+		// Give this function some time to complete its task after the parentCtx is done. Configuring DSN on windows is slow
+		// and we don't want to interrupt it.
+		time.AfterFunc(10*time.Second, cancel)
+	}()
+
 	ipFamily := func(ip net.IP) winipcfg.AddressFamily {
 		f := winipcfg.AddressFamily(windows.AF_INET6)
 		if ip4 := ip.To4(); ip4 != nil {
@@ -130,46 +148,145 @@ func (t *nativeDevice) setDNS(ctx context.Context, server net.IP, domains []stri
 			_ = luid.FlushDNS(oldFamily)
 		}
 	}
-	if err = luid.SetDNS(family, []netip.Addr{addrFromIP(server)}, domains); err != nil {
+	serverStr := server.String()
+	servers16, err := windows.UTF16PtrFromString(serverStr)
+	if err != nil {
+		return err
+	}
+	searchList16, err := windows.UTF16PtrFromString(strings.Join(searchList, ","))
+	if err != nil {
+		return err
+	}
+	guid, err := luid.GUID()
+	if err != nil {
+		return err
+	}
+	dnsInterfaceSettings := &winipcfg.DnsInterfaceSettings{
+		Version:    winipcfg.DnsInterfaceSettingsVersion1,
+		Flags:      winipcfg.DnsInterfaceSettingsFlagNameserver | winipcfg.DnsInterfaceSettingsFlagSearchList,
+		NameServer: servers16,
+		SearchList: searchList16,
+	}
+	if family == windows.AF_INET6 {
+		dnsInterfaceSettings.Flags |= winipcfg.DnsInterfaceSettingsFlagIPv6
+	}
+	if err = winipcfg.SetInterfaceDnsSettings(*guid, dnsInterfaceSettings); err != nil {
 		return err
 	}
 
-	// On some systems (e.g. CircleCI but not josecv's windows box), SetDNS isn't enough to allow the domains to be resolved,
-	// and the network adapter's domain has to be set explicitly.
-	// It's actually way easier to do this via powershell than any system calls that can be run from go code
-	domain := ""
-	if len(domains) > 0 {
-		// Quote the domain to prevent powershell injection
-		domain = shellquote.ShellArgsString([]string{strings.TrimSuffix(domains[0], ".")})
+	// Unless we also update the global DNS search path, the one for the device doesn't work on some platforms.
+	// This behavior is mainly observed on Windows Server editions.
+
+	// Retrieve the current global search paths so that paths that aren't related to
+	// the cluster domain (i.e. not managed by us) can be retained.
+	gss, err := getGlobalSearchList()
+	if err != nil {
+		return err
 	}
-	// It's apparently well known that WMI queries can hang under various conditions, so we add a timeout here to prevent hanging the daemon
-	// Fun fact: terminating the context that powershell is running in will not stop a hanging WMI call (!) perhaps because it is considered uninterruptible
-	// For more on WMI queries hanging, see:
-	//     * http://www.yusufozturk.info/windows-powershell/how-to-avoid-wmi-query-hangs-in-powershell.html
-	//     * https://theolddogscriptingblog.wordpress.com/2012/05/11/wmi-hangs-and-how-to-avoid-them/
-	//     * https://stackoverflow.com/questions/24294408/gwmi-query-hangs-powershell-script
-	//     * http://use-powershell.blogspot.com/2018/03/get-wmiobject-hangs.html
-	pshScript := fmt.Sprintf(`
-$job = Get-WmiObject Win32_NetworkAdapterConfiguration -filter "interfaceindex='%d'" -AsJob | Wait-Job -Timeout 30
-if ($job.State -ne 'Completed') {
-	throw "timed out getting network adapter after 30 seconds."
-}
-$obj = $job | Receive-Job
-$job = Invoke-WmiMethod -InputObject $obj -Name SetDNSDomain -ArgumentList "%s" -AsJob | Wait-Job -Timeout 30
-if ($job.State -ne 'Completed') {
-	throw "timed out setting network adapter DNS Domain after 30 seconds."
-}
-$job | Receive-Job
-`, t.interfaceIndex, domain)
-	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
-	cmd.DisableLogging = true // disable chatty logging
-	dlog.Debugf(ctx, "Calling powershell's SetDNSDomain %q", domain)
-	if err := cmd.Run(); err != nil {
-		// Log the error, but don't actually fail on it: This is all just a fallback for SetDNS, so the domains might actually be working
-		dlog.Errorf(ctx, "Failed to set NetworkAdapterConfiguration DNS Domain: %v. Will proceed, but namespace mapping might not be functional.", err)
+	// Windows does not use a dot suffix in the search path.
+	clusterDomain = strings.TrimSuffix(clusterDomain, ".")
+
+	// Put our new search path in front of other entries. Then include those
+	// that don't end with our cluster domain (these are entries that aren't
+	// managed by Telepresence).
+	uniq := make(map[string]int, len(searchList)+len(gss))
+	i := 0
+	for _, gs := range searchList {
+		if _, ok := uniq[gs]; !ok {
+			uniq[gs] = i
+			i++
+		}
+	}
+	for _, gs := range gss {
+		if !strings.HasSuffix(gs, clusterDomain) {
+			if _, ok := uniq[gs]; !ok {
+				uniq[gs] = i
+				i++
+			}
+		}
+	}
+	gss = make([]string, len(uniq))
+	for gs, i := range uniq {
+		gss[i] = gs
 	}
 	t.dns = server
-	return nil
+	return t.setGlobalSearchList(ctx, gss)
+}
+
+func psList(values []string) string {
+	var sb strings.Builder
+	sb.WriteString("@(")
+	for i, gs := range values {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteByte('"')
+		sb.WriteString(strings.TrimSuffix(gs, "."))
+		sb.WriteByte('"')
+	}
+	sb.WriteByte(')')
+	return sb.String()
+}
+
+const (
+	tcpParamKey   = `System\CurrentControlSet\Services\Tcpip\Parameters`
+	searchListKey = `SearchList`
+)
+
+func getGlobalSearchList() ([]string, error) {
+	rk, err := registry.OpenKey(registry.LOCAL_MACHINE, tcpParamKey, registry.QUERY_VALUE)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		return nil, err
+	}
+	defer rk.Close()
+	csv, _, err := rk.GetStringValue(searchListKey)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		return nil, err
+	}
+	if csv == "" {
+		return nil, nil
+	}
+	return strings.Split(csv, ","), nil
+}
+
+func (t *nativeDevice) setGlobalSearchList(ctx context.Context, gss []string) error {
+	var err error
+	if t.strategy == client.GSCAuto || t.strategy == client.GSCPowershell {
+		cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
+		if _, err = proc.CaptureErr(ctx, cmd); err != nil {
+			if t.strategy != client.GSCAuto {
+				dlog.Error(ctx, "setting DNS using Powershell failed")
+				return err
+			}
+			dlog.Warnf(ctx, `setting DNS using Powershell failed. Will attempt to set the registry value %s\%s directly`, tcpParamKey, searchListKey)
+			t.strategy = client.GSCRegistry
+		}
+	}
+	if t.strategy == client.GSCRegistry {
+		// Try setting the DNS directly in the registry. It's known to work in some situations where powershell fails.
+		err = t.setRegistryGlobalSearchList(ctx, gss)
+	}
+	return err
+}
+
+func (t *nativeDevice) setRegistryGlobalSearchList(ctx context.Context, gss []string) error {
+	// Try setting the DNS directly in the registry. It's known to work in some situations.
+	rk, _, err := registry.CreateKey(registry.LOCAL_MACHINE, tcpParamKey, registry.SET_VALUE)
+	if err != nil {
+		dlog.Errorf(ctx, `creating/opening registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
+	} else {
+		defer rk.Close()
+		if err = rk.SetStringValue(searchListKey, strings.Join(gss, ",")); err != nil {
+			dlog.Errorf(ctx, `setting registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
+		}
+	}
+	return err
 }
 
 func (t *nativeDevice) setMTU(int) error {

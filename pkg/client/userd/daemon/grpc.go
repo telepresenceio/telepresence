@@ -31,8 +31,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -194,8 +196,8 @@ func (s *Service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, 
 	return true, false
 }
 
-func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc.InterceptResult) ([]scout.Entry, bool) {
-	// The scout belongs to the session and can only contain session specific meta-data
+func (s *Service) scoutInterceptEntries(ctx context.Context, spec *manager.InterceptSpec, result *rpc.InterceptResult) ([]scout.Entry, bool) {
+	// The scout belongs to the session and can only contain session specific meta-data,
 	// so we don't want to use scout.SetMetadatum() here.
 	entries := make([]scout.Entry, 0, 7)
 	if spec != nil {
@@ -216,7 +218,12 @@ func (s *Service) scoutInterceptEntries(spec *manager.InterceptSpec, result *rpc
 	if result != nil {
 		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
 		if result.Error != common.InterceptError_UNSPECIFIED {
-			entries = append(entries, scout.Entry{Key: "error", Value: result.Error.String()})
+			es := result.Error.String()
+			if result.ErrorText != "" {
+				es = fmt.Sprintf("%s: %s", es, result.ErrorText)
+			}
+			dlog.Debugf(ctx, "reporting error: %s", es)
+			entries = append(entries, scout.Entry{Key: "error", Value: es})
 			return entries, false
 		}
 	}
@@ -242,7 +249,7 @@ func (s *Service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
-		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result)
+		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
 		return nil
 	})
 	return
@@ -267,7 +274,7 @@ func (s *Service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		if result != nil && result.InterceptInfo != nil {
 			tracing.RecordInterceptInfo(span, result.InterceptInfo)
 		}
-		entries, ok = s.scoutInterceptEntries(ir.GetSpec(), result)
+		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
 		return nil
 	})
 	return
@@ -304,7 +311,7 @@ func (s *Service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
-		entries, ok = s.scoutInterceptEntries(spec, result)
+		entries, ok = s.scoutInterceptEntries(c, spec, result)
 		return nil
 	})
 	return result, err
@@ -320,7 +327,7 @@ func (s *Service) UpdateIntercept(c context.Context, rr *manager.UpdateIntercept
 
 func (s *Service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
 	return &empty.Empty{}, s.WithSession(ctx, "AddInterceptor", func(_ context.Context, session userd.Session) error {
-		return session.AddInterceptor(interceptor.InterceptId, int(interceptor.Pid))
+		return session.AddInterceptor(interceptor.InterceptId, interceptor)
 	})
 }
 
@@ -486,8 +493,25 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 		}
 
 		sr := s.scout
+		cr := req.GetConnectRequest()
+		if cr == nil {
+			dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
+			cr = &rpc.ConnectRequest{}
+		}
+
+		cluster, err := k8s.ConnectCluster(ctx, cr, config)
+		if err != nil {
+			if req.Type == rpc.HelmRequest_UNINSTALL {
+				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
+			} else {
+				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
+			}
+			result = errcat.ToResult(err)
+			return
+		}
+
 		if req.Type == rpc.HelmRequest_UNINSTALL {
-			err := trafficmgr.DeleteManager(c, req, config)
+			err := helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req)
 			if err != nil {
 				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
 				result = errcat.ToResult(err)
@@ -495,7 +519,10 @@ func (s *Service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 				sr.Report(ctx, "helm_uninstall_success")
 			}
 		} else {
-			err := trafficmgr.EnsureManager(c, req, config)
+			dlog.Debug(ctx, "ensuring that traffic-manager exists")
+			c := cluster.WithK8sInterface(ctx)
+			err := helm.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
+
 			if err != nil {
 				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
 				result = errcat.ToResult(err)
@@ -636,7 +663,7 @@ func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context
 	if s.rootSessionInProc {
 		return status.Error(codes.Unavailable, "root daemon is embedded")
 	}
-	conn, err := socket.Dial(ctx, socket.DaemonName)
+	conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx))
 	if err == nil {
 		defer conn.Close()
 		err = f(ctx, daemon.NewDaemonClient(conn))

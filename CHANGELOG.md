@@ -1,14 +1,87 @@
 # Changelog
 
-### 2.12.2 (TBD)
+### 2.13.3 (TBD)
+- Bugfix: Running `telepresence intercept --local-only --docker-run` no longer results in a panic.
+  Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
+
+- Bugfix: Running `telepresence intercept --local-only --mount false` no longer results in an incorrect error message
+  saying "a local-only intercept cannot have mounts".
+  Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
+
+- Bugfix: The helm chart now correctly handles custom `agentInjector.webhook.port` that was not being set in hook URLs.
+
+### 2.13.2 (May 12, 2023)
+- Bugfix: Replaced `/` characters with a `-` when the authenticator service creates the kubeconfig in the Telepresence cache.
+  PR [3167](https://github.com/telepresenceio/telepresence/issues/3167).
+
+- Feature: Configurable strategy (`auto`, `powershell`. or `registry`) to set the global DNS search path on Windows. Default
+  is `auto` which means try `powershell` first, and if it fails, fall back to `registry`.
+  Ticket [3152](https://github.com/telepresenceio/telepresence/issues/3152).
+
+- Feature: The timeout for the traffic manager to wait for traffic agent to arrive can
+  now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
+  timeout is still 30 seconds.
+  PR [3148](https://github.com/telepresenceio/telepresence/issues/3148).
+
+- Bugfix: The automatic discovery of a local container based cluster (minikube or kind) used when the
+  Telepresence daemon runs in a container, now works on macOS and Windows, and with different profiles,
+  ports, and cluster names
+  PR [3165](https://github.com/telepresenceio/telepresence/issues/3165).
+
+- Bugfix: FTP Stability improvements. Multiple simultaneous intercepts can transfer large files in bidirectionally and in parallel.
+  PR [3157](https://github.com/telepresenceio/telepresence/issues/3157).
+
+- Bugfix: Pods using persistent volumes no longer causes timeouts when intercepted.
+
+- Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
+  Ticket [3143](https://github.com/telepresenceio/telepresence/issues/3143).
+  PR [3154](https://github.com/telepresenceio/telepresence/issues/3154).
+
+- Bugfix: The traffic-manager would sometimes panic with a "close of closed channel" message and exit.
+  PR [3160](https://github.com/telepresenceio/telepresence/issues/3160).
+
+- Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
+  Ticket [3149](https://github.com/telepresenceio/telepresence/issues/3149).
+
+### 2.13.1 (April 20, 2023)
+
+- Change: Update ambassador-agent to version 1.13.13
+
+### 2.13.0 (April 18, 2023)
+
+- Feature: The Docker network used by a Kind or Minikube (using the "docker" driver) installation, is automatically
+  detected and connected to a Docker container running the Telepresence daemon.
+
+- Feature: Mapped namespaces are included in the output of the `telepresence status` command.
+
+- Feature: There's a new --address flag to the intercept command allowing users to set the target IP of the intercept.
+
+- Feature: The new flags `--docker-build`, and `--docker-build-opt` was added to `telepresence intercept` to facilitate a
+  docker run directly from a docker context.
+
+- Bugfix: Using `telepresence intercept --docker-run` now works with a container based daemon started with `telepresence connect --docker`
+
+- Bugfix: DNS works properly even when no cluster subnet is routed by the Telepresence VIF.
+
+- Bugfix: The Traffic Manager uses a fail-proof way to determine the cluster domain.
+
+- Bugfix: DNS on windows is more reliable and performant.
+
+- Bugfix: The agent is now correctly injected even with a high number of deployment starting at the same time.
 
 - Bugfix: The kubeconfig is made self-contained before running Telepresence daemon in a Docker container.
 
 - Bugfix: The client will no longer need cluster wide permissions when connected to a namespace scoped Traffic Manager.
 
+- BugFix: The version command won't throw an error anymore if there is no kubeconfig file defined.
+
+### 2.12.2 (April 4, 2023)
+
+- Security: Update golang to 1.20.3 to address CVE-2023-24534, CVE-2023-24536, CVE-2023-24537, CVE-2023-24538
+
 ### 2.12.1 (March 22, 2023)
 
-- Bugfix: Illegal characters are now replaced when a docker container name is generated from a kubernetes context name. 
+- Bugfix: Illegal characters are now replaced when a docker container name is generated from a kubernetes context name.
 
 ### 2.12.0 (March 20, 2023)
 
@@ -362,7 +435,6 @@ Security release to rebuild with go 1.19.6
 - Bugfix: Telepresence help message functionality without a running user daemon has been restored.
 
 - Bugfix: The `telepresence list` command no longer includes the `traffic-manager` deployment.
-
 
 ### 2.7.1 (August 10, 2022)
 

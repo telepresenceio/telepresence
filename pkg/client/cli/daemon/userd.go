@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"google.golang.org/grpc"
 
@@ -44,4 +46,16 @@ func GetSession(ctx context.Context) *Session {
 
 func WithSession(ctx context.Context, s *Session) context.Context {
 	return context.WithValue(ctx, sessionKey{}, s)
+}
+
+func (ud *UserClient) DaemonPort() int {
+	if ud.Remote {
+		addr := ud.Conn.Target()
+		if lc := strings.LastIndexByte(addr, ':'); lc >= 0 {
+			if port, err := strconv.Atoi(addr[lc+1:]); err == nil {
+				return port
+			}
+		}
+	}
+	return -1
 }

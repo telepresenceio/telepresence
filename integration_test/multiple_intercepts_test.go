@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
@@ -23,8 +21,12 @@ type multipleInterceptsSuite struct {
 	serviceCancel []context.CancelFunc
 }
 
+func (s *multipleInterceptsSuite) SuiteName() string {
+	return "MultipleIntercepts"
+}
+
 func init() {
-	itest.AddMultipleServicesSuite("", "hello", func(h itest.MultipleServices) suite.TestingSuite {
+	itest.AddMultipleServicesSuite("", "hello", func(h itest.MultipleServices) itest.TestingSuite {
 		return &multipleInterceptsSuite{
 			Suite:            itest.Suite{Harness: h},
 			MultipleServices: h,

@@ -3,6 +3,7 @@ package ioutil
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 // Println is like Fprintln but panics on error.
@@ -30,4 +31,13 @@ func WriteString(out io.Writer, s string) int {
 		panic(err)
 	}
 	return n
+}
+
+func WriterToString(wt func(w io.Writer) (int64, error)) string {
+	var sb strings.Builder
+	_, err := wt(&sb)
+	if err != nil {
+		panic(err)
+	}
+	return sb.String()
 }

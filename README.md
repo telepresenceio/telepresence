@@ -5,7 +5,7 @@
 Telepresence gives developers infinite scale development environments for Kubernetes. 
 
 Website: [https://www.getambassador.io/products/telepresence/](https://www.getambassador.io/products/telepresence/)  
-Slack: [Discuss](https://datawire-oss.slack.com/signup#/domain-signup)
+Slack: [Discuss](https://a8r.io/slack) in the #telepresence channel (https://datawire-oss.slack.com/archives/CAUBBJSQZ)
 
 **With Telepresence:**
 

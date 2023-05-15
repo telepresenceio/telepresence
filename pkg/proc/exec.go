@@ -7,11 +7,12 @@ import (
 	"os/signal"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-// Start will start the given executable with given args and env,, and return the command. The signals are
+// Start will start the given executable with given args and env, and return the command. The signals are
 // dispatched as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
 func Start(ctx context.Context, env map[string]string, exe string, args ...string) (*dexec.Cmd, error) {
@@ -25,6 +26,7 @@ func Start(ctx context.Context, env map[string]string, exe string, args ...strin
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
+	dlog.Debug(ctx, shellquote.ShellString(exe, args))
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("%s: %w", shellquote.ShellString(exe, args), err)
 	}

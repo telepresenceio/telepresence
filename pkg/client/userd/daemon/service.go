@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -45,7 +46,7 @@ Launch the Telepresence ` + titleName + `:
     telepresence connect
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), userd.ProcessName+".log") + `
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), userd.ProcessName+".log") + `
 to troubleshoot problems.
 `
 }
@@ -148,6 +149,7 @@ const (
 	nameFlag         = "name"
 	addressFlag      = "address"
 	embedNetworkFlag = "embed-network"
+	pprofFlag        = "pprof"
 )
 
 // Command returns the CLI sub-command for "connector-foreground".
@@ -162,8 +164,9 @@ func Command() *cobra.Command {
 	}
 	flags := c.Flags()
 	flags.String(nameFlag, userd.ProcessName, "Daemon name")
-	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.ConnectorName)
+	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.UserDaemonPath(context.Background()))
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
+	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
 	return c
 }
 
@@ -359,23 +362,11 @@ func run(cmd *cobra.Command, _ []string) error {
 	// the connection/socket/pipe to appear before it gives up.
 	var grpcListener net.Listener
 	flags := cmd.Flags()
-	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
-	var daemonAddress *net.TCPAddr
-	if addr, _ := flags.GetString(addressFlag); addr != "" {
-		lc := net.ListenConfig{}
-		if grpcListener, err = lc.Listen(c, "tcp", addr); err != nil {
-			return err
-		}
-		daemonAddress = grpcListener.Addr().(*net.TCPAddr)
-		defer func() {
-			_ = grpcListener.Close()
-		}()
-	} else {
-		if grpcListener, err = socket.Listen(c, userd.ProcessName, socket.ConnectorName); err != nil {
-			return err
-		}
-		defer func() {
-			_ = socket.Remove(grpcListener)
+	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
+		go func() {
+			if err := pprof.PprofServer(c, pprofPort); err != nil {
+				dlog.Error(c, err)
+			}
 		}()
 	}
 
@@ -389,6 +380,28 @@ func run(cmd *cobra.Command, _ []string) error {
 	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true)
 	if err != nil {
 		return err
+	}
+	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
+	var daemonAddress *net.TCPAddr
+	if addr, _ := flags.GetString(addressFlag); addr != "" {
+		lc := net.ListenConfig{}
+		if grpcListener, err = lc.Listen(c, "tcp", addr); err != nil {
+			return err
+		}
+		daemonAddress = grpcListener.Addr().(*net.TCPAddr)
+		defer func() {
+			_ = grpcListener.Close()
+		}()
+	} else {
+		socketPath := socket.UserDaemonPath(c)
+		dlog.Infof(c, "Starting socket listener for %s", socketPath)
+		if grpcListener, err = socket.Listen(c, userd.ProcessName, socketPath); err != nil {
+			dlog.Errorf(c, "socket listener for %s failed: %v", socketPath, err)
+			return err
+		}
+		defer func() {
+			_ = socket.Remove(grpcListener)
+		}()
 	}
 	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
@@ -448,7 +461,13 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	if cfg.Intercept.UseFtp {
-		g.Go("fuseftp-server", s.fuseFtpMgr.DeferInit)
+		g.Go("fuseftp-server", func(c context.Context) error {
+			if err := s.fuseFtpMgr.DeferInit(c); err != nil {
+				dlog.Error(c, err)
+			}
+			<-c.Done()
+			return nil
+		})
 	}
 
 	g.Go("server-grpc", func(c context.Context) (err error) {

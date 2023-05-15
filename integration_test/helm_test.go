@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -18,8 +16,12 @@ type helmSuite struct {
 	appSpace2 string
 }
 
+func (s *helmSuite) SuiteName() string {
+	return "Helm"
+}
+
 func init() {
-	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) suite.TestingSuite {
+	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) itest.TestingSuite {
 		s := &helmSuite{Suite: itest.Suite{Harness: h}, SingleService: h}
 		suffix := itest.GetGlobalHarness(h.HarnessContext()).Suffix()
 		s.appSpace2, s.mgrSpace2 = itest.AppAndMgrNSName(suffix + "-2")
@@ -55,7 +57,8 @@ func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	s.Error(err)
 	s.True(
 		strings.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`) ||
-			strings.Contains(stderr, `cannot get resource "deployments" in API group "apps" in the namespace`))
+			strings.Contains(stderr, `cannot get resource "deployments" in API group "apps" in the namespace`),
+		"stderr = %s", stderr)
 }
 
 func (s *helmSuite) Test_HelmWebhookInjectsInManagedNamespace() {
@@ -129,6 +132,11 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 }
 
 func (s *helmSuite) Test_CollidingInstalls() {
+	defer func() {
+		ctx := s.Context()
+		itest.TelepresenceDisconnectOk(ctx)
+		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	}()
 	ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
 		Namespace:         s.AppNamespace(),
 		ManagedNamespaces: []string{s.appSpace2},

@@ -48,7 +48,7 @@ import (
 // It's expected that the client that makes the call will update any unqualified service port identifiers
 // with the ones in the returned PreparedIntercept.
 func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (pi *managerrpc.PreparedIntercept, err error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, managerutil.GetEnv(ctx).AgentArrivalTimeout)
 	defer cancel()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
 	defer tracing.EndAndRecord(span, err)
@@ -365,7 +365,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 					!strings.HasPrefix(e.Note, "(combined from similar events):") {
 					n := e.Regarding.Name
 					if strings.HasPrefix(n, nd) || n == name {
-						dlog.Errorf(ctx, "%s", e.Note)
+						dlog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
 						ec <- e
 					}
 				}
@@ -394,6 +394,13 @@ func (s *State) waitForAgent(ctx context.Context, name, namespace string, failed
 					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
 				case "FailedCreate", "FailedScheduling":
 					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
+					if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
+						strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
+						strings.Contains(msg, "skip schedule deleting pod")) {
+						// This isn't fatal.
+						fes = append(fes, fe)
+						continue
+					}
 					msg = fmt.Sprintf(
 						"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
 						msg)

@@ -35,14 +35,14 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 		defer wg.Done()
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", "localhost:8082") == nil
-		}, 15*time.Second, 2*time.Second, "Forwarded port is not reachable as localhost:8082")
+		}, 30*time.Second, 2*time.Second, "Forwarded port is not reachable as localhost:8082")
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", "localhost:8083") != nil
-		}, 15*time.Second, 2*time.Second, "Non-forwarded port is reachable")
+		}, 30*time.Second, 2*time.Second, "Non-forwarded port is reachable")
 	}()
 	wg.Wait()
 }

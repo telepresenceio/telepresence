@@ -61,15 +61,16 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 			if gwAddr, ok := gw.(*route.Inet4Addr); ok {
 				gwIP = gwAddr.IP[:]
 			}
+			routedNet := &net.IPNet{
+				IP:   a.IP[:],
+				Mask: net.IPv4Mask(mask.IP[0], mask.IP[1], mask.IP[2], mask.IP[3]),
+			}
 			routes = append(routes, &Route{
 				Interface: iface,
 				Gateway:   gwIP,
 				LocalIP:   localIP,
-				RoutedNet: &net.IPNet{
-					IP:   a.IP[:],
-					Mask: net.IPv4Mask(mask.IP[0], mask.IP[1], mask.IP[2], mask.IP[3]),
-				},
-				Default: rm.Flags&unix.RTF_IFSCOPE == 0,
+				RoutedNet: routedNet,
+				Default:   iputil.IsZeroMask(routedNet),
 			})
 		case *route.Inet6Addr:
 			localIP, err := interfaceLocalIP(iface, false)
@@ -94,14 +95,16 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 				}
 				i++
 			}
+			routedNet := &net.IPNet{
+				IP:   a.IP[:],
+				Mask: net.CIDRMask(i*8, 128),
+			}
 			routes = append(routes, &Route{
 				Interface: iface,
 				Gateway:   gwIP,
 				LocalIP:   localIP,
-				RoutedNet: &net.IPNet{
-					IP:   net.IP(a.IP[:]),
-					Mask: net.CIDRMask(i*8, 128),
-				},
+				RoutedNet: routedNet,
+				Default:   iputil.IsZeroMask(routedNet),
 			})
 		}
 	}

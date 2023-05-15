@@ -86,7 +86,7 @@ generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).
 	mkdir -p $(BUILDDIR)
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external \
 		--unparsable-packages build-aux/unparsable-packages.yaml >$(BUILDDIR)/DEPENDENCIES.txt
-	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[1-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
+	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[0-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
 
 	printf "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n\n" > DEPENDENCY_LICENSES.md
 	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
@@ -209,7 +209,7 @@ clobber: ## (Build) Remove all build artifacts and tools
 # ===========================================================
 
 .PHONY: prepare-release
-prepare-release: generate
+prepare-release: generate wix
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
 	rm -f CHANGELOG.md.bak
 	git add CHANGELOG.md
@@ -220,6 +220,9 @@ prepare-release: generate
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
 	git add charts/telepresence/CHANGELOG.md
+
+	git add packaging/telepresence.wxs
+	git add packaging/bundle.wxs
 
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 
@@ -237,6 +240,11 @@ ifeq ($(GOHOSTOS), windows)
 		--bucket datawire-static-files \
 		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
 		--body $(BINDIR)/telepresence.zip
+	AWS_PAGER="" aws s3api put-object \
+		--region us-east-1 \
+		--bucket datawire-static-files \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence-setup.exe \
+		--body $(BINDIR)/telepresence-setup.exe
 else
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
@@ -347,6 +355,12 @@ private-registry: $(tools/helm) ## (Test) Add a private docker registry to the c
 	sleep 5
 	kubectl wait --for=condition=ready pod --all
 	kubectl port-forward daemonset/private-registry-proxy 5000:5000 > /dev/null &
+
+WIX_VERSION = $(shell echo $(TELEPRESENCE_VERSION) | sed 's/v//;s/-.*//')
+.PHONY: wix
+wix:
+	sed s/TELEPRESENCE_VERSION/$(WIX_VERSION)/ packaging/telepresence.wxs.in > packaging/telepresence.wxs
+	sed s/TELEPRESENCE_VERSION/$(WIX_VERSION)/ packaging/bundle.wxs.in > packaging/bundle.wxs
 
 # Aliases
 # =======

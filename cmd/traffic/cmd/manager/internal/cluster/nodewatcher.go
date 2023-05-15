@@ -32,13 +32,25 @@ func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer ca
 	}
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			w.onNodeAdded(ctx, obj.(*corev1.Node))
+			if node, ok := obj.(*corev1.Node); ok {
+				w.onNodeAdded(ctx, node)
+			}
 		},
 		DeleteFunc: func(obj any) {
-			w.onNodeDeleted(ctx, obj.(*corev1.Node))
+			if node, ok := obj.(*corev1.Node); ok {
+				w.onNodeDeleted(ctx, node)
+			} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
+				if node, ok := dfsu.Obj.(*corev1.Node); ok {
+					w.onNodeDeleted(ctx, node)
+				}
+			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			w.onNodeUpdated(ctx, oldObj.(*corev1.Node), newObj.(*corev1.Node))
+			if oldNode, ok := oldObj.(*corev1.Node); ok {
+				if newNode, ok := newObj.(*corev1.Node); ok {
+					w.onNodeUpdated(ctx, oldNode, newNode)
+				}
+			}
 		},
 	})
 	if err != nil {

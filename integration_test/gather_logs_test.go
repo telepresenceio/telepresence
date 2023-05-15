@@ -133,8 +133,8 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherOne, "--mount", "false", svc)
 	s.Eventually(
 		func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", otherOne, "--intercepts")
-			return strings.Contains(stdout, svc+": intercepted")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherOne, "--intercepts")
+			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
@@ -145,8 +145,8 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherTwo, "--mount", "false", svc)
 	s.Eventually(
 		func() bool {
-			stdout := itest.TelepresenceOk(ctx, "list", "--namespace", otherTwo, "--intercepts")
-			return strings.Contains(stdout, svc+": intercepted")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherTwo, "--intercepts")
+			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
@@ -179,8 +179,7 @@ func (s *multipleInterceptsSuite) cleanLogDir(ctx context.Context) {
 }
 
 func cleanLogDir(ctx context.Context, require *require.Assertions, nsRx, mgrNamespace, svcNameRx string) {
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(err)
+	logDir := filelocation.AppUserLogDir(ctx)
 	files, err := os.ReadDir(logDir)
 	require.NoError(err)
 	match := regexp.MustCompile(

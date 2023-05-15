@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
@@ -33,19 +32,20 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
 	assert.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
+		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list")
+		if err != nil {
+			return false
+		}
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "WAITING" || strings.Contains(match[1], `No agent found for "`+s.ServiceName()+`"`)
 		}
 		return false
 	}, 30*time.Second, 3*time.Second)
 
-	if runtime.GOOS != "darwin" {
-		// Verify that volume mount is broken
-		time.Sleep(time.Second) // avoid a stat just when the intercept became inactive as it sometimes causes a hang
-		_, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
-		assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
-	}
+	// Verify that volume mount is broken
+	time.Sleep(time.Second) // avoid a stat just when the intercept became inactive as it sometimes causes a hang
+	_, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
+	assert.Error(err, "Stat on <mount point>/var succeeded although no agent was found")
 
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
@@ -54,21 +54,22 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Verify that intercept becomes active
 	assert.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list")
+		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list")
+		if err != nil {
+			return false
+		}
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "ACTIVE"
 		}
 		return false
 	}, 30*time.Second, 3*time.Second)
 
-	if runtime.GOOS != "darwin" {
-		// Verify that volume mount is restored
-		time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
-		assert.Eventually(func() bool {
-			st, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
-			return err == nil && st.IsDir()
-		}, 5*time.Second, time.Second)
-	}
+	// Verify that volume mount is restored
+	time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
+	assert.Eventually(func() bool {
+		st, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
+		return err == nil && st.IsDir()
+	}, 5*time.Second, time.Second)
 }
 
 // Test_StopInterceptedPodOfMany build belongs to the interceptMountSuite because we want to
@@ -123,7 +124,10 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	// Verify that intercept is still active
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `-` + s.AppNamespace() + `\s+State\s*: ([^\n]+)\n`))
 	assert.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
+		if err != nil {
+			return false
+		}
 		dlog.Debugf(ctx, "match %q in %q", rx.String(), stdout)
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "ACTIVE"
@@ -147,12 +151,10 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	}, 30*time.Second, time.Second)
 
 	// Verify that volume mount is restored
-	if runtime.GOOS != "darwin" {
-		time.Sleep(3 * time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
-		st, err := os.Stat(filepath.Join(s.mountPoint, "var"))
-		require.NoError(err, "Stat on <mount point>/var failed")
-		require.True(st.IsDir(), "<mount point>/var is not a directory")
-	}
+	time.Sleep(3 * time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
+	st, err := os.Stat(filepath.Join(s.mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
 
 // Return the names of running pods with app=<service name>. Running here means

@@ -13,6 +13,7 @@ import (
 	"github.com/blang/semver"
 	"github.com/spf13/cobra"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
@@ -46,26 +47,26 @@ func ForcedUpdateCheck(cmd *cobra.Command, _ []string) error {
 }
 
 // newUpdateChecker returns a new update checker, possibly initialized from the users cache.
-func newUpdateChecker(ctx context.Context, url string) (*updateChecker, error) {
+func newUpdateChecker(ctx context.Context, url string) *updateChecker {
 	ts := &updateChecker{
 		url: url,
 	}
 
 	if err := cache.LoadFromUserCache(ctx, ts, cacheFilename); err != nil {
 		if !os.IsNotExist(err) {
-			return nil, err
+			dlog.Debugf(ctx, "failed to load %s: %v", cacheFilename, err)
 		}
 		ts.NextCheck = make(map[string]time.Time)
 	}
-	return ts, nil
+	return ts
 }
 
 func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	cloudCfg := client.GetConfig(cmd.Context()).Cloud
 	format := cmd.Annotations[ann.UpdateCheckFormat]
-	uc, err := newUpdateChecker(cmd.Context(), fmt.Sprintf(format, cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
-	if err != nil || !(forceCheck || uc.timeToCheck()) {
-		return err
+	uc := newUpdateChecker(cmd.Context(), fmt.Sprintf(format, cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
+	if !(forceCheck || uc.timeToCheck()) {
+		return nil
 	}
 
 	ourVersion := client.Semver()

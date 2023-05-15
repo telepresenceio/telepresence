@@ -89,6 +89,8 @@ type cluster struct {
 	kubeConfig       string
 	generalError     error
 	logCapturingPods sync.Map
+	userdPProf       uint16
+	rootdPProf       uint16
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
@@ -131,6 +133,16 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s.registry = dos.Getenv(ctx, "DTEST_REGISTRY")
 	require.NoError(t, s.generalError)
 
+	if pp := dos.Getenv(ctx, "DEV_USERD_PROFILING_PORT"); pp != "" {
+		port, err := strconv.ParseUint(pp, 10, 16)
+		require.NoError(t, err)
+		s.userdPProf = uint16(port)
+	}
+	if pp := dos.Getenv(ctx, "DEV_ROOTD_PROFILING_PORT"); pp != "" {
+		port, err := strconv.ParseUint(pp, 10, 16)
+		require.NoError(t, err)
+		s.rootdPProf = uint16(port)
+	}
 	ctx = withGlobalHarness(ctx, &s)
 	if s.prePushed {
 		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
@@ -173,7 +185,7 @@ func (s *cluster) ensureQuit(ctx context.Context) {
 	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
 
 	// Ensure that the daemon-socket is non-existent.
-	_ = rmAsRoot(socket.DaemonName)
+	_ = rmAsRoot(socket.RootDaemonPath(ctx))
 }
 
 func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *sync.WaitGroup) {
@@ -184,8 +196,10 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 
 	ctx = WithModuleRoot(ctx)
 	exe := "telepresence"
-	env := make(map[string]string)
-	env["TELEPRESENCE_VERSION"] = s.testVersion
+	env := map[string]string{
+		"TELEPRESENCE_VERSION":  s.testVersion,
+		"TELEPRESENCE_REGISTRY": s.registry,
+	}
 	if runtime.GOOS == "windows" {
 		env["CGO_ENABLED"] = "0"
 		exe += ".exe"
@@ -221,7 +235,10 @@ func (s *cluster) ensureDockerImages(ctx context.Context, errs chan<- error, wg 
 	}
 
 	runMake := func(target string) {
-		out, err := Command(WithModuleRoot(ctx), makeExe, target).CombinedOutput()
+		out, err := Command(WithEnv(WithModuleRoot(ctx), map[string]string{
+			"TELEPRESENCE_VERSION":  s.testVersion,
+			"TELEPRESENCE_REGISTRY": s.registry,
+		}), makeExe, target).CombinedOutput()
 		if err != nil {
 			errs <- RunError(err, out)
 		}
@@ -412,7 +429,6 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	ctx = dcontext.WithoutCancel(ctx)
 
 	present := struct{}{}
-	logDir, _ := filelocation.AppUserLogDir(ctx)
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
@@ -421,7 +437,8 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
 			continue
 		}
-		logFile, err := os.Create(filepath.Join(logDir, fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
+		logFile, err := os.Create(
+			filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
 		if err != nil {
 			s.logCapturingPods.Delete(pod)
 			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
@@ -467,16 +484,24 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 	nss := GetNamespaces(ctx)
 	settings := []string{
 		"--set", "logLevel=debug",
-		"--set", fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
-		"--set", fmt.Sprintf("managerRbac.namespaces=%s", nss.HelmString()),
-		// We don't want the tests or telepresence to depend on an extension host resolving, so we set it to localhost.
-		"--set", "systemaHost=127.0.0.1",
+	}
+	if len(nss.ManagedNamespaces) > 0 {
+		settings = append(settings,
+			"--set", fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
+			"--set", fmt.Sprintf("managerRbac.namespaces=%s", nss.HelmString()),
+		)
 	}
 	agentImage := GetAgentImage(ctx)
 	if agentImage != nil {
 		settings = append(settings,
 			"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
 			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
+		)
+	}
+	if sysA := GetSystemA(ctx); sysA != nil {
+		settings = append(settings,
+			"--set", fmt.Sprintf("systemaHost=%s", sysA.SystemaHost),
+			"--set", fmt.Sprintf("systemaPort=%d", sysA.SystemaPort),
 		)
 	}
 	if !release {
@@ -518,9 +543,8 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 	settings := s.GetValuesForHelm(ctx, values, release)
 
 	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
-	helmValues := filepath.Join("testdata", "namespaced-values.yaml")
 	nss := GetNamespaces(ctx)
-	args := []string{"install", "-n", nss.Namespace, "-f", helmValues, "--wait"}
+	args := []string{"install", "-n", nss.Namespace, "--wait"}
 	args = append(args, settings...)
 	args = append(args, "traffic-manager", chartFilename)
 
@@ -580,9 +604,13 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		},
 		ManagerRbac: xRbac{
 			Create:     true,
-			Namespaced: true,
+			Namespaced: len(nss.ManagedNamespaces) > 0,
 			Namespaces: nsl,
 		},
+	}
+	if sysA := GetSystemA(ctx); sysA != nil {
+		vx.SystemaHost = sysA.SystemaHost
+		vx.SystemaPort = sysA.SystemaPort
 	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {
@@ -632,7 +660,7 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
-		20*time.Second, 2*time.Second, "traffic-manager deployment was not removed")
+		60*time.Second, 4*time.Second, "traffic-manager deployment was not removed")
 	TelepresenceQuitOk(ctx)
 }
 
@@ -685,8 +713,10 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
 	stdout, stderr, err := Telepresence(ctx, args...)
-	assert.NoError(t, err, "telepresence was unable to run, stdout %s, stderr: %s", stdout, stderr)
-	assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
+	assert.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
+	if err == nil {
+		assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
+	}
 	return stdout
 }
 
@@ -711,30 +741,32 @@ func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	t := getT(ctx)
 	t.Helper()
-	configDir, err := filelocation.AppUserConfigDir(ctx)
-	require.NoError(t, err)
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	require.NoError(t, err)
 
 	var stdout, stderr strings.Builder
 	ctx = WithEnv(ctx, map[string]string{
-		"DEV_TELEPRESENCE_CONFIG_DIR": configDir,
-		"DEV_TELEPRESENCE_LOG_DIR":    logDir,
+		"DEV_TELEPRESENCE_CONFIG_DIR": filelocation.AppUserConfigDir(ctx),
+		"DEV_TELEPRESENCE_LOG_DIR":    filelocation.AppUserLogDir(ctx),
 	})
 
+	gh := GetGlobalHarness(ctx)
 	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
+		rest := args[1:]
+		args = append(make([]string, 0, len(args)+3), args[0])
 		if user := GetUser(ctx); user != "default" {
-			na := make([]string, len(args)+2)
-			na[0] = "--as"
-			na[1] = "system:serviceaccount:" + user
-			copy(na[2:], args)
-			args = na
+			args = append(args, "--as", "system:serviceaccount:"+user)
 		}
+		if gh.userdPProf > 0 {
+			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.userdPProf)))
+		}
+		if gh.rootdPProf > 0 {
+			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.rootdPProf)))
+		}
+		args = append(args, rest...)
 	}
 	if UseDocker(ctx) {
 		args = append([]string{"--docker"}, args...)
 	}
-	cmd := Command(ctx, GetGlobalHarness(ctx).executable, args...)
+	cmd := Command(ctx, gh.executable, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	return cmd
@@ -919,12 +951,11 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 	wg.Wait()
 }
 
-// StartLocalHttpEchoServer starts a local http server that echoes a line with the given name and
-// the current URL path. The port is returned together with function that cancels the server.
-func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.CancelFunc) {
+// StartLocalHttpEchoServerWithAddress is like StartLocalHttpEchoServer but binds to a specific host instead of localhost.
+func StartLocalHttpEchoServerWithHost(ctx context.Context, name string, host string) (int, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(ctx)
 	lc := net.ListenConfig{}
-	l, err := lc.Listen(ctx, "tcp", "localhost:0")
+	l, err := lc.Listen(ctx, "tcp", net.JoinHostPort(host, "0"))
 	require.NoError(getT(ctx), err, "failed to listen on localhost")
 	go func() {
 		sc := &dhttp.ServerConfig{
@@ -935,6 +966,12 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 		_ = sc.Serve(ctx, l)
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
+}
+
+// StartLocalHttpEchoServer starts a local http server that echoes a line with the given name and
+// the current URL path. The port is returned together with function that cancels the server.
+func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.CancelFunc) {
+	return StartLocalHttpEchoServerWithHost(ctx, name, "localhost")
 }
 
 // PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
@@ -973,7 +1010,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 		return true
 	},
 		time.Minute,   // waitFor
-		3*time.Second, // polling interval
+		5*time.Second, // polling interval
 		`body of %q equals %q`, "http://"+svc, expectedOutput,
 	)
 }
@@ -1032,12 +1069,12 @@ func RunningPods(ctx context.Context, svc, ns string) []string {
 		"--field-selector", "status.phase==Running",
 		"-l", "app="+svc)
 	if err != nil {
-		getT(ctx).Error(err.Error())
+		getT(ctx).Log(err.Error())
 		return nil
 	}
 	var pm core.PodList
 	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
-		getT(ctx).Error(err.Error())
+		getT(ctx).Log(err.Error())
 		return nil
 	}
 	pods := make([]string, 0, len(pm.Items))

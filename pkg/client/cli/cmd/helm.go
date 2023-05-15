@@ -14,7 +14,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
@@ -189,12 +188,6 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 		NoHooks:        ha.NoHooks,
 	}
 	ud := daemon.GetUserClient(ctx)
-	if ud.Remote && daemon.GetSession(ctx) == nil {
-		// This is needed here, because we never establish a session.
-		if err := docker.EnableK8SAuthenticator(ctx); err != nil {
-			return err
-		}
-	}
 	resp, err := ud.Helm(ctx, request)
 	if err != nil {
 		return err

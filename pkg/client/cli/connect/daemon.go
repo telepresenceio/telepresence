@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"google.golang.org/grpc"
@@ -21,15 +22,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func launchDaemon(ctx context.Context) error {
+func launchDaemon(ctx context.Context, cr *daemon.Request) error {
 	fmt.Fprintln(output.Info(ctx), "Launching Telepresence Root Daemon")
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
-	logDir, err := filelocation.AppUserLogDir(ctx)
-	if err != nil {
-		return err
-	}
+	logDir := filelocation.AppUserLogDir(ctx)
 	logFile := filepath.Join(logDir, "daemon.log")
 	if _, err := os.Stat(logFile); err != nil {
 		if !os.IsNotExist(err) {
@@ -49,7 +47,12 @@ func launchDaemon(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return proc.StartInBackgroundAsRoot(ctx, client.GetExe(), "daemon-foreground", logDir, configDir)
+	args := []string{client.GetExe(), "daemon-foreground"}
+	if cr != nil && cr.RootDaemonProfilingPort > 0 {
+		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
+	}
+	args = append(args, logDir, configDir)
+	return proc.StartInBackgroundAsRoot(ctx, args...)
 }
 
 // ensureRootDaemonRunning ensures that the daemon is running.
@@ -58,7 +61,8 @@ func ensureRootDaemonRunning(ctx context.Context) error {
 		// Never start root daemon when running remote
 		return nil
 	}
-	if cr := daemon.GetRequest(ctx); cr != nil && cr.Docker {
+	cr := daemon.GetRequest(ctx)
+	if cr != nil && cr.Docker {
 		// Never start root daemon when connecting using a docker container.
 		return nil
 	}
@@ -66,14 +70,14 @@ func ensureRootDaemonRunning(ctx context.Context) error {
 		// Always assume that root daemon is running when a user daemon address is provided
 		return nil
 	}
-	running, err := socket.IsRunning(ctx, socket.DaemonName)
+	running, err := socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
 	if err != nil || running {
 		return err
 	}
-	if err = launchDaemon(ctx); err != nil {
+	if err = launchDaemon(ctx, cr); err != nil {
 		return fmt.Errorf("failed to launch the daemon service: %w", err)
 	}
-	if err = socket.WaitUntilRunning(ctx, "daemon", socket.DaemonName, 10*time.Second); err != nil {
+	if err = socket.WaitUntilRunning(ctx, "daemon", socket.RootDaemonPath(ctx), 10*time.Second); err != nil {
 		return fmt.Errorf("daemon service did not start: %w", err)
 	}
 	return nil
@@ -91,9 +95,9 @@ func Disconnect(ctx context.Context, quitDaemons bool) error {
 	if quitDaemons {
 		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
 		// the fact that the user daemon might have been killed ungracefully.
-		if err = socket.WaitUntilVanishes("root daemon", socket.DaemonName, 5*time.Second); err != nil {
+		if err = socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); err != nil {
 			var conn *grpc.ClientConn
-			if conn, err = socket.Dial(ctx, socket.DaemonName); err == nil {
+			if conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
 				if _, err = rpc.NewDaemonClient(conn).Quit(ctx, &empty.Empty{}); err != nil {
 					err = fmt.Errorf("error when quitting root daemon: %w", err)
 				}
@@ -104,11 +108,8 @@ func Disconnect(ctx context.Context, quitDaemons bool) error {
 }
 
 func ensureAppUserConfigDir(ctx context.Context) (string, error) {
-	configDir, err := filelocation.AppUserConfigDir(ctx)
-	if err != nil {
-		return "", errcat.NoDaemonLogs.New(err)
-	}
-	if err = os.MkdirAll(configDir, 0o700); err != nil {
+	configDir := filelocation.AppUserConfigDir(ctx)
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return "", errcat.NoDaemonLogs.Newf("unable to ensure that config directory %q exists: %w", configDir, err)
 	}
 	return configDir, nil

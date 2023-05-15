@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
@@ -28,13 +26,21 @@ type interceptMountSuite struct {
 	cancelLocal context.CancelFunc
 }
 
+func (s *interceptMountSuite) SuiteName() string {
+	return "InterceptMount"
+}
+
 func init() {
-	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) suite.TestingSuite {
+	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) itest.TestingSuite {
 		return &interceptMountSuite{Suite: itest.Suite{Harness: h}, SingleService: h}
 	})
 }
 
 func (s *interceptMountSuite) SetupSuite() {
+	if s.IsCI() && runtime.GOOS == "darwin" {
+		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
+		return
+	}
 	s.Suite.SetupSuite()
 	switch runtime.GOOS {
 	case "darwin":
@@ -60,11 +66,11 @@ func (s *interceptMountSuite) TearDownSuite() {
 	itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
 	s.cancelLocal()
 	s.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return err == nil && !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
-	if goRuntime.GOOS != "windows" && goRuntime.GOOS != "darwin" {
+	if goRuntime.GOOS != "windows" {
 		// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
 		go func() {
 			time.Sleep(2 * time.Second)
@@ -74,9 +80,6 @@ func (s *interceptMountSuite) TearDownSuite() {
 }
 
 func (s *interceptMountSuite) Test_InterceptMount() {
-	if runtime.GOOS == "darwin" {
-		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
-	}
 	require := s.Require()
 	ctx := s.Context()
 

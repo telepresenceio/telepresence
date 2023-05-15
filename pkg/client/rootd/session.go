@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,7 +28,6 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -47,8 +47,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/routing"
 )
 
 // Session resolves DNS names and routes outbound traffic that is centered around a TUN device. The router is
@@ -73,10 +71,7 @@ import (
 type Session struct {
 	scout *scout.Reporter
 
-	// dev is the TUN device that gets configured with the subnets found in the cluster
-	dev vif.Device
-
-	stack *stack.Stack
+	tunVif *vif.TunnelingDevice
 
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
@@ -90,9 +85,6 @@ type Session struct {
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
 	handlers *tunnel.Pool
-
-	// fragmentMap is when concatenating ipv4 fragments
-	fragmentMap map[uint16][]*buffer.Data
 
 	// The local dns server
 	dnsServer *dns.Server
@@ -112,12 +104,8 @@ type Session struct {
 	// Subnets configured by the user
 	alsoProxySubnets []*net.IPNet
 
-	// Subnets configured not to be proxied
-	neverProxyRoutes []*routing.Route
-	// Subnets that the router is currently configured with. Managed, and only used in
-	// the refreshSubnets() method.
-	curSubnets      []*net.IPNet
-	curStaticRoutes []*routing.Route
+	// Subnets configured by the user to never be proxied
+	neverProxySubnets []*net.IPNet
 
 	// closing is set during shutdown and can have the values:
 	//   0 = running
@@ -137,8 +125,24 @@ type Session struct {
 
 	// Whether pods should be proxied by the TUN-device
 	proxyClusterPods bool
+
 	// Whether services should be proxied by the TUN-device
 	proxyClusterSvcs bool
+
+	// dnsServerSubnet is normally never set. It is only used when neither proxyClusterPods nor the
+	// proxyClusterSvcs are set. In this situation, the VIF would be left without a primary subnet, so
+	// it will instead route very small subnet with 30 bit mask, large enough to hold:
+	//
+	//   n.n.n.0 The IP identifying the subnet
+	//   n.n.n.1 The IP of the (non existent) gateway
+	//   n.n.n.2 The IP of the DNS server
+	//   n.n.n.3 Unused
+	//
+	// The subnet is guaranteed to be free from all other routed subnets.
+	//
+	// NOTE: On macOS, where DNS is controlled by adding entries in /etc/resolver that points directly
+	// to a port on localhost, there's no need for this subnet.
+	dnsServerSubnet *net.IPNet
 
 	// vifReady is closed when the virtual network interface has been configured.
 	vifReady chan error
@@ -174,7 +178,7 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err := socket.Dial(tc, socket.ConnectorName,
+	conn, err := socket.Dial(tc, socket.UserDaemonPath(c),
 		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
 	)
@@ -210,15 +214,6 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 	return conn, mc, mgrVer, nil
 }
 
-func convertSubnets(ms []*manager.IPNet) []*net.IPNet {
-	ns := make([]*net.IPNet, len(ms))
-	for i, m := range ms {
-		n := iputil.IPNetFromRPC(m)
-		ns[i] = n
-	}
-	return ns
-}
-
 // NewSession returns a new properly initialized session object.
 func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
@@ -227,16 +222,12 @@ func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) 
 	if mc == nil || err != nil {
 		return nil, err
 	}
-	s, err := newSession(c, scout, mi, mc, ver)
-	if err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
+	s := newSession(c, scout, mi, mc, ver)
 	s.clientConn = conn
 	return s, nil
 }
 
-func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) (*Session, error) {
+func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
 	cfg := client.GetDefaultConfig()
 	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
 	if err != nil {
@@ -248,28 +239,22 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 		}
 	}
 
-	as := convertSubnets(mi.AlsoProxySubnets)
-	ns := convertSubnets(mi.NeverProxySubnets)
+	as := iputil.ConvertSubnets(mi.AlsoProxySubnets)
+	ns := iputil.ConvertSubnets(mi.NeverProxySubnets)
 	s := &Session{
-		scout:            scout,
-		handlers:         tunnel.NewPool(),
-		fragmentMap:      make(map[uint16][]*buffer.Data),
-		rndSource:        rand.NewSource(time.Now().UnixNano()),
-		session:          mi.Session,
-		managerClient:    mc,
-		managerVersion:   ver,
-		alsoProxySubnets: as,
-		neverProxyRoutes: routing.Routes(c, ns),
-		proxyClusterPods: true,
-		proxyClusterSvcs: true,
-		vifReady:         make(chan error, 2),
-		config:           cfg,
-		done:             make(chan struct{}),
-	}
-
-	s.dev, err = vif.OpenTun(c)
-	if err != nil {
-		return nil, err
+		scout:             scout,
+		handlers:          tunnel.NewPool(),
+		rndSource:         rand.NewSource(time.Now().UnixNano()),
+		session:           mi.Session,
+		managerClient:     mc,
+		managerVersion:    ver,
+		alsoProxySubnets:  as,
+		neverProxySubnets: ns,
+		proxyClusterPods:  true,
+		proxyClusterSvcs:  true,
+		vifReady:          make(chan error, 2),
+		config:            cfg,
+		done:              make(chan struct{}),
 	}
 
 	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
@@ -277,9 +262,10 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 	} else {
 		s.dnsServer = dns.NewServer(mi.Dns, s.legacyClusterLookup, true)
 	}
+	s.SetSearchPath(c, nil, nil)
 	dlog.Infof(c, "also-proxy subnets %v", as)
 	dlog.Infof(c, "never-proxy subnets %v", ns)
-	return s, nil
+	return s
 }
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
@@ -349,15 +335,18 @@ func (s *Session) getNetworkConfig() *rpc.NetworkConfig {
 		}
 	}
 
-	if len(s.neverProxyRoutes) > 0 {
-		info.NeverProxySubnets = make([]*manager.IPNet, len(s.neverProxyRoutes))
-		for i, np := range s.neverProxyRoutes {
-			info.NeverProxySubnets[i] = iputil.IPNetToRPC(np.RoutedNet)
+	if len(s.neverProxySubnets) > 0 {
+		info.NeverProxySubnets = make([]*manager.IPNet, len(s.neverProxySubnets))
+		for i, np := range s.neverProxySubnets {
+			info.NeverProxySubnets[i] = iputil.IPNetToRPC(np)
 		}
 	}
-	nc.Subnets = make([]*manager.IPNet, len(s.curSubnets))
-	for i, sn := range s.curSubnets {
-		nc.Subnets[i] = iputil.IPNetToRPC(sn)
+	if s.tunVif != nil {
+		curSubnets := s.tunVif.Router.GetRoutedSubnets()
+		nc.Subnets = make([]*manager.IPNet, len(curSubnets))
+		for i, sn := range curSubnets {
+			nc.Subnets[i] = iputil.IPNetToRPC(sn)
+		}
 	}
 	return nc
 }
@@ -367,51 +356,11 @@ func (s *Session) configureDNS(dnsIP net.IP, dnsLocalAddr *net.UDPAddr) {
 	s.dnsLocalAddr = dnsLocalAddr
 }
 
-func (s *Session) reconcileStaticRoutes(ctx context.Context) (err error) {
-	desired := []*routing.Route{}
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "reconcileStaticRoutes")
-	defer tracing.EndAndRecord(span, err)
-
-	// We're not going to add static routes unless they're actually needed
-	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
-	for _, r := range s.neverProxyRoutes {
-		for _, s := range s.curSubnets {
-			if s.Contains(r.RoutedNet.IP) || r.Routes(s.IP) {
-				desired = append(desired, r)
-				break
-			}
-		}
-	}
-
-adding:
-	for _, r := range desired {
-		for _, c := range s.curStaticRoutes {
-			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
-				continue adding
-			}
-		}
-		if err := r.AddStatic(ctx); err != nil {
-			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
-		}
-	}
-
-removing:
-	for _, c := range s.curStaticRoutes {
-		for _, r := range desired {
-			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
-				continue removing
-			}
-		}
-		if err := c.RemoveStatic(ctx); err != nil {
-			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
-		}
-	}
-	s.curStaticRoutes = desired
-
-	return nil
-}
-
 func (s *Session) refreshSubnets(ctx context.Context) (err error) {
+	if s.tunVif == nil {
+		dlog.Debug(ctx, "no tunnel, not refreshing subnets")
+		return nil
+	}
 	// Create a unique slice of all desired subnets.
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "refreshSubnets")
 	defer tracing.EndAndRecord(span, err)
@@ -420,43 +369,7 @@ func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 	copy(desired[len(s.clusterSubnets):], s.alsoProxySubnets)
 	desired = subnet.Unique(desired)
 
-	// Remove all no longer desired subnets from the t.curSubnets
-	var removed []*net.IPNet
-	s.curSubnets, removed = subnet.Partition(s.curSubnets, func(_ int, sn *net.IPNet) bool {
-		for _, d := range desired {
-			if subnet.Equal(sn, d) {
-				return true
-			}
-		}
-		return false
-	})
-
-	// Remove already routed subnets from the desiredSubnets
-	added, _ := subnet.Partition(desired, func(_ int, sn *net.IPNet) bool {
-		for _, d := range s.curSubnets {
-			if subnet.Equal(sn, d) {
-				return false
-			}
-		}
-		return true
-	})
-
-	// Add desiredSubnets to the currently routed subnets
-	s.curSubnets = append(s.curSubnets, added...)
-
-	for _, sn := range removed {
-		if err := s.dev.RemoveSubnet(ctx, sn); err != nil {
-			dlog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
-		}
-	}
-
-	for _, sn := range added {
-		if err := s.dev.AddSubnet(ctx, sn); err != nil {
-			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
-		}
-	}
-
-	return s.reconcileStaticRoutes(ctx)
+	return s.tunVif.Router.UpdateRoutes(ctx, desired, s.neverProxySubnets)
 }
 
 // networkReady returns a channel that is close when both the VIF and DNS are ready.
@@ -472,10 +385,7 @@ func (s *Session) networkReady(ctx context.Context) <-chan error {
 			} else {
 				select {
 				case <-ctx.Done():
-				case err, ok = <-s.dnsServer.Ready():
-					if ok {
-						rdy <- err
-					}
+				case <-s.dnsServer.Ready():
 				}
 			}
 		}
@@ -533,6 +443,31 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 	}
 }
 
+// createSubnetForDNSOnly will find a random IPv4 subnet that isn't currently routed and
+// attach the DNS server to that subnet.
+func (s *Session) createSubnetForDNSOnly(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+	// Avoid alsoProxied and neverProxied
+	avoid := make([]*net.IPNet, 0, len(s.alsoProxySubnets)+len(s.neverProxySubnets))
+	avoid = append(avoid, s.alsoProxySubnets...)
+	avoid = append(avoid, s.neverProxySubnets...)
+
+	// Avoid the service subnet. It might be mapped with iptables (if running bare-metal) and
+	// hence invisible when listing known routes.
+	if mgrInfo.ServiceSubnet != nil {
+		avoid = append(avoid, iputil.IPNetFromRPC(mgrInfo.ServiceSubnet))
+	}
+
+	// Avoid the pod subnets. They are probably visible as known routes, but we add them to
+	// the avoid table to be sure.
+	for _, ps := range mgrInfo.PodSubnets {
+		avoid = append(avoid, iputil.IPNetFromRPC(ps))
+	}
+	var err error
+	if s.dnsServerSubnet, err = subnet.RandomIPv4Subnet(net.CIDRMask(30, 32), avoid); err != nil {
+		dlog.Error(ctx, err)
+	}
+}
+
 func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
 	defer close(s.vifReady)
 	s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
@@ -541,8 +476,21 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 	if err != nil {
 		return err
 	}
-	if s.stack, err = vif.NewStack(ctx, s.dev, s.streamCreator()); err != nil {
-		return fmt.Errorf("NewStack: %v", err)
+	s.readAdditionalRouting(ctx, mgrInfo)
+	willProxy := s.proxyClusterSvcs || s.proxyClusterPods || len(s.alsoProxySubnets) > 0
+
+	// We'll need to synthesize a subnet where we can attach the DNS service when the VIF isn't configured
+	// from cluster subnets. But not on darwin systems, because there the DNS is controlled by /etc/resolver
+	// entries appointing the DNS service directly via localhost:<port>.
+	if !willProxy && runtime.GOOS != "darwin" {
+		s.createSubnetForDNSOnly(ctx, mgrInfo)
+	}
+
+	// Do we need a VIF? A darwin system with full cluster access doesn't.
+	if willProxy || s.dnsServerSubnet != nil {
+		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator()); err != nil {
+			return fmt.Errorf("NewTunnelVIF: %v", err)
+		}
 	}
 	s.onClusterInfo(ctx, mgrInfo, span)
 	return nil
@@ -558,41 +506,9 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		}
 	}
 
-	// We use the ManagerPodIp as the dnsIP. The reason for this is that no one should ever
-	// talk to the traffic-manager directly using the TUN device, so it's safe to use its
-	// IP to impersonate the DNS server. All traffic sent to that IP, will be routed to
-	// the local DNS server.
-	dnsIP := net.IP(mgrInfo.ManagerPodIp)
-	dlog.Infof(ctx, "Setting cluster DNS to %s", dnsIP)
-	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
-	s.dnsServer.SetClusterDNS(dns, dnsIP)
+	s.readAdditionalRouting(ctx, mgrInfo)
 
-	if r := mgrInfo.Routing; r != nil {
-		as := subnet.Unique(append(s.alsoProxySubnets, convertSubnets(r.AlsoProxySubnets)...))
-		dlog.Infof(ctx, "also-proxy subnets %v", as)
-		s.alsoProxySubnets = as
-
-		hasRoute := func(n *net.IPNet) bool {
-			for _, r := range s.neverProxyRoutes {
-				if subnet.Equal(r.RoutedNet, n) {
-					return true
-				}
-			}
-			return false
-		}
-		for _, n := range convertSubnets(r.NeverProxySubnets) {
-			if !hasRoute(n) {
-				r, err := routing.GetRoute(ctx, n)
-				if err != nil {
-					dlog.Error(ctx, err)
-				}
-				s.neverProxyRoutes = append(s.neverProxyRoutes, r)
-			}
-		}
-		dlog.Infof(ctx, "never-proxy subnets %v", routing.Subnets(s.neverProxyRoutes))
-	}
-
-	subnets := make([]*net.IPNet, 0, 1+len(mgrInfo.PodSubnets))
+	var subnets []*net.IPNet
 	if s.proxyClusterSvcs {
 		if mgrInfo.ServiceSubnet != nil {
 			cidr := iputil.IPNetFromRPC(mgrInfo.ServiceSubnet)
@@ -609,11 +525,30 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		}
 	}
 
-	if s.proxyClusterPods || s.proxyClusterSvcs {
-		s.clusterSubnets = subnet.Unique(subnets)
-		if err := s.refreshSubnets(ctx); err != nil {
-			dlog.Error(ctx, err)
-		}
+	var dnsIP net.IP
+	if s.dnsServerSubnet != nil {
+		// None of the cluster's subnets are routed, so add this subnet instead and unconditionally
+		// use the first available IP for our DNS server.
+		dlog.Infof(ctx, "Adding Service subnet %s (for DNS only)", s.dnsServerSubnet)
+		subnets = append(subnets, s.dnsServerSubnet)
+		dnsIP = make(net.IP, len(s.dnsServerSubnet.IP))
+		copy(dnsIP, s.dnsServerSubnet.IP)
+		dnsIP[len(dnsIP)-1] = 2
+	} else {
+		// We use the ManagerPodIp as the dnsIP. The reason for this is that no one should ever
+		// talk to the traffic-manager directly using the TUN device, so it's safe to use its
+		// IP to impersonate the DNS server. All traffic sent to that IP, will be routed to
+		// the local DNS server.
+		dnsIP = mgrInfo.ManagerPodIp
+	}
+
+	dlog.Infof(ctx, "Setting cluster DNS to %s", dnsIP)
+	dlog.Infof(ctx, "Setting cluster domain to %q", dns.ClusterDomain)
+	s.dnsServer.SetClusterDNS(dns, dnsIP)
+
+	s.clusterSubnets = subnet.Unique(subnets)
+	if err := s.refreshSubnets(ctx); err != nil {
+		dlog.Error(ctx, err)
 	}
 
 	span.SetAttributes(
@@ -624,12 +559,26 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	)
 }
 
+func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+	if r := mgrInfo.Routing; r != nil {
+		as := subnet.Unique(append(s.alsoProxySubnets, iputil.ConvertSubnets(r.AlsoProxySubnets)...))
+		dlog.Infof(ctx, "also-proxy subnets %v", as)
+		s.alsoProxySubnets = as
+
+		ns := subnet.Unique(append(s.neverProxySubnets, iputil.ConvertSubnets(r.NeverProxySubnets)...))
+		dlog.Infof(ctx, "never-proxy subnets %v", ns)
+		s.neverProxySubnets = ns
+	}
+}
+
 func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
 	// The traffic-manager service is headless, which means we can't try a GRPC connection to its ClusterIP.
-	// Instead we try an HTTP health check on the agent-injector server, since that one does expose a ClusterIP.
+	// Instead, we try an HTTP health check on the agent-injector server, since that one does expose a ClusterIP.
 	// This is less precise than if we could check for our own GRPC, since /healthz is a common enough health check path,
 	// but hopefully the server on the other end isn't configured to respond to the hostname "agent-injector" if it isn't the agent-injector.
 	if info.InjectorSvcIp == nil {
+		dlog.Debugf(ctx, "No injector service IP given; usually this is because the traffic-manager is older than the telepresence binary."+
+			"Connectivity check for services set to pass.")
 		return true
 	}
 	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
@@ -767,13 +716,16 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
-		return s.dnsServer.Worker(ctx, s.dev, s.proxyClusterPods || s.proxyClusterSvcs, s.configureDNS)
+		var dev vif.Device
+		if s.tunVif != nil {
+			dev = s.tunVif.Device
+		}
+		return s.dnsServer.Worker(ctx, dev, s.configureDNS)
 	})
 
-	g.Go("stack", func(_ context.Context) error {
-		s.stack.Wait()
-		return nil
-	})
+	if s.tunVif != nil {
+		g.Go("vif", s.tunVif.Run)
+	}
 	return nil
 }
 
@@ -797,17 +749,12 @@ func (s *Session) stop(c context.Context) {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
-	s.stack.Close()
-
-	cc = dcontext.WithoutCancel(c)
-	for _, np := range s.curStaticRoutes {
-		err := np.RemoveStatic(cc)
-		if err != nil {
-			dlog.Warnf(c, "error removing route %s: %v", np, err)
+	if s.tunVif != nil {
+		cc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 1*time.Second)
+		defer cancel()
+		if err := s.tunVif.Close(cc); err != nil {
+			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)
 		}
-	}
-	if err := s.dev.Close(); err != nil {
-		dlog.Errorf(c, "unable to close %s: %v", s.dev.Name(), err)
 	}
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
@@ -55,10 +56,19 @@ type intercept struct {
 	// cancel is called when the intercept is no longer present
 	cancel context.CancelFunc
 
-	// pid of interceptor owned by an intercept. This entry will only be present when
+	// wg is the group to wait for after a call to cancel
+	wg sync.WaitGroup
+
+	// pid of intercept handler for an intercept. This entry will only be present when
 	// the telepresence intercept command spawns a new command. The int value reflects
 	// the pid of that new command.
 	pid int
+
+	// containerName is the name or ID of the container that the intercept handler is
+	// running in, when it runs in Docker. As with pid, this entry will only be present when
+	// the telepresence intercept command spawns a new command using --docker-run or
+	// --docker-build
+	containerName string
 
 	// The mounter of the remote file system.
 	remotefs.Mounter
@@ -174,7 +184,7 @@ func newPodIntercepts() *podIntercepts {
 }
 
 // start a port forward for the given intercept and remembers that it's alive.
-func (lpf *podIntercepts) start(ctx context.Context, ic *intercept) {
+func (lpf *podIntercepts) start(ic *intercept) {
 	if !ic.shouldForward() && !ic.shouldMount() {
 		return
 	}
@@ -198,10 +208,10 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ic.ctx)
 	lp := &podIntercept{cancelPod: cancel}
 	if ic.shouldMount() {
-		ic.startMount(ctx, &lp.wg)
+		ic.startMount(ctx, &ic.wg, &lp.wg)
 	}
 	if ic.shouldForward() {
 		ic.startForwards(ctx, &lp.wg)
@@ -315,7 +325,7 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 			ic.FtpPort = 0
 			ic.SftpPort = 0
 		}
-		podIcepts.start(ctx, ic)
+		podIcepts.start(ic)
 	}
 	if active == 0 {
 		ins = ""
@@ -324,7 +334,8 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 	podIcepts.cancelUnwanted(ctx)
 }
 
-// getCurrentIntercepts returns a copy of the current intercept snapshot.
+// getCurrentIntercepts returns a copy of the current intercept snapshot. This snapshot does
+// not include any local-only intercepts.
 func (s *session) getCurrentIntercepts() []*intercept {
 	// Copy the current snapshot
 	s.currentInterceptsLock.Lock()
@@ -370,6 +381,8 @@ func (s *session) setCurrentIntercepts(ctx context.Context, iis []*manager.Inter
 			sb.WriteByte(',')
 		}
 		sb.WriteString(ii.Spec.Name)
+		sb.WriteByte('=')
+		sb.WriteString(ii.PodIp)
 	}
 	sb.WriteByte(']')
 	dlog.Debugf(ctx, "setCurrentIntercepts(%s)", sb.String())
@@ -731,12 +744,12 @@ func (s *session) InterceptEpilog(context.Context, *rpc.CreateInterceptRequest, 
 }
 
 func waitForDNS(c context.Context, host string) bool {
-	c, cancel := context.WithTimeout(c, 5*time.Second)
+	c, cancel := context.WithTimeout(c, 12*time.Second)
 	defer cancel()
 	for c.Err() == nil {
 		dtime.SleepWithContext(c, 200*time.Millisecond)
 		dlog.Debugf(c, "Attempting to resolve DNS for %s", host)
-		ips := dnsproxy.TimedExternalLookup(c, host, 3*time.Second)
+		ips := dnsproxy.TimedExternalLookup(c, host, 5*time.Second)
 		if len(ips) > 0 {
 			dlog.Debugf(c, "Attempt succeeded, DNS for %s is %v", host, ips)
 			return true
@@ -750,7 +763,8 @@ func (s *session) RemoveIntercept(c context.Context, name string) error {
 	dlog.Debugf(c, "Removing intercept %s", name)
 
 	if _, ok := s.localIntercepts[name]; ok {
-		return s.RemoveLocalOnlyIntercept(c, name)
+		s.RemoveLocalOnlyIntercept(c, name)
+		return nil
 	}
 
 	ii := s.getInterceptByName(name)
@@ -763,15 +777,30 @@ func (s *session) RemoveIntercept(c context.Context, name string) error {
 
 func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 	name := ic.Spec.Name
-	if ic.pid != 0 {
-		p, err := os.FindProcess(ic.pid)
-		if err != nil {
-			dlog.Errorf(c, "unable to find interceptor for intercept %s with pid %d", name, ic.pid)
-		} else {
-			dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, ic.pid)
-			_ = proc.Terminate(p)
+
+	// No use trying to kill processes when using a container based daemon, unless
+	// that container based daemon runs as a normal user daemon with separate root daemon.
+	// Some users run a standard telepresence client together with intercepts in one
+	// single container.
+	if !(proc.RunningInContainer() && userd.GetService(c).RootSessionInProcess()) {
+		if ic.containerName != "" {
+			if err := docker.StopContainer(c, ic.containerName); err != nil {
+				dlog.Error(c, err)
+			}
+		} else if ic.pid != 0 {
+			p, err := os.FindProcess(ic.pid)
+			if err != nil {
+				dlog.Errorf(c, "unable to find interceptor for intercept %s with pid %d", name, ic.pid)
+			} else {
+				dlog.Debugf(c, "terminating interceptor for intercept %s with pid %d", name, ic.pid)
+				_ = proc.Terminate(p)
+			}
 		}
 	}
+
+	// Unmount filesystems before telling the manager to remove the intercept
+	ic.cancel()
+	ic.wg.Wait()
 
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
@@ -783,12 +812,13 @@ func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 	return err
 }
 
-// AddInterceptor associates the given interceptId with a pid of a running process. This ensures that
+// AddInterceptor associates the given intercept with a running process. This ensures that
 // the running process will be signalled when the intercept is removed.
-func (s *session) AddInterceptor(id string, i int) error {
+func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 	s.currentInterceptsLock.Lock()
 	if ci, ok := s.currentIntercepts[id]; ok {
-		ci.pid = i
+		ci.pid = int(ih.Pid)
+		ci.containerName = ih.ContainerName
 	}
 	s.currentInterceptsLock.Unlock()
 	return nil
@@ -798,6 +828,7 @@ func (s *session) RemoveInterceptor(id string) error {
 	s.currentInterceptsLock.Lock()
 	if ci, ok := s.currentIntercepts[id]; ok {
 		ci.pid = 0
+		ci.containerName = ""
 	}
 	s.currentInterceptsLock.Unlock()
 	return nil
@@ -820,10 +851,17 @@ func (s *session) GetInterceptSpec(name string) *manager.InterceptSpec {
 // GetInterceptInfo returns the InterceptInfo for the given name, or nil if no such info exists.
 func (s *session) GetInterceptInfo(name string) *manager.InterceptInfo {
 	if _, ok := s.localIntercepts[name]; ok {
-		return nil
+		return &manager.InterceptInfo{Spec: s.GetInterceptSpec(name)}
 	}
 	if ic := s.getInterceptByName(name); ic != nil {
-		return ic.InterceptInfo
+		ii := ic.InterceptInfo
+		if ic.containerName != "" {
+			if ii.Environment == nil {
+				ii.Environment = make(map[string]string, 1)
+			}
+			ii.Environment["TELEPRESENCE_HANDLER_CONTAINER_NAME"] = ic.containerName
+		}
+		return ii
 	}
 	return nil
 }
@@ -860,6 +898,10 @@ func (s *session) ClearIntercepts(c context.Context) error {
 		if err != nil && grpcStatus.Code(err) != grpcCodes.NotFound {
 			return err
 		}
+	}
+	for ic := range s.localIntercepts {
+		dlog.Debugf(c, "Clearing local-only intercept %s", ic)
+		s.RemoveLocalOnlyIntercept(c, ic)
 	}
 	return nil
 }
@@ -986,7 +1028,7 @@ func (s *session) addLocalOnlyIntercept(c context.Context, spec *manager.Interce
 	}
 }
 
-func (s *session) RemoveLocalOnlyIntercept(c context.Context, name string) error {
+func (s *session) RemoveLocalOnlyIntercept(c context.Context, name string) {
 	dlog.Debugf(c, "removing local-only intercept %s", name)
 
 	// Ensure that namespace is removed from localInterceptedNamespaces if this was the last local intercept
@@ -998,5 +1040,4 @@ func (s *session) RemoveLocalOnlyIntercept(c context.Context, name string) error
 	}
 	s.currentInterceptsLock.Unlock()
 	s.updateDaemonNamespaces(c)
-	return nil
 }

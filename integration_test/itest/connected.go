@@ -14,7 +14,7 @@ type connected struct {
 
 func WithConnected(np NamespacePair, f func(ctx context.Context, ch NamespacePair)) {
 	np.HarnessT().Run("Test_Connected", func(t *testing.T) {
-		ctx := withT(np.HarnessContext(), t)
+		ctx := WithT(np.HarnessContext(), t)
 		require.NoError(t, np.GeneralError())
 		ch := &connected{NamespacePair: np}
 		ch.PushHarness(ctx, ch.setup, ch.tearDown)

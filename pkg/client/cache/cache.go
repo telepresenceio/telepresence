@@ -18,13 +18,8 @@ func SaveToUserCache(ctx context.Context, object any, file string) error {
 		return err
 	}
 
-	// get base path of user cache
-	cacheDir, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return err
-	}
 	// add file path (ex. "ispec/00-00-0000.json")
-	fullFilePath := filepath.Join(cacheDir, file)
+	fullFilePath := filepath.Join(filelocation.AppUserCacheDir(ctx), file)
 	// get dir of joined path
 	dir := filepath.Dir(fullFilePath)
 	if err := dos.MkdirAll(ctx, dir, 0o700); err != nil {
@@ -34,11 +29,7 @@ func SaveToUserCache(ctx context.Context, object any, file string) error {
 }
 
 func LoadFromUserCache(ctx context.Context, dest any, file string) error {
-	dir, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(dir, file)
+	path := filepath.Join(filelocation.AppUserCacheDir(ctx), file)
 	jsonContent, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -50,22 +41,14 @@ func LoadFromUserCache(ctx context.Context, dest any, file string) error {
 }
 
 func DeleteFromUserCache(ctx context.Context, file string) error {
-	dir, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(filepath.Join(dir, file)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(filepath.Join(filelocation.AppUserCacheDir(ctx), file)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
 }
 
 func ExistsInCache(ctx context.Context, fileName string) (bool, error) {
-	dir, err := filelocation.AppUserCacheDir(ctx)
-	if err != nil {
-		return false, err
-	}
-	path := filepath.Join(dir, fileName)
+	path := filepath.Join(filelocation.AppUserCacheDir(ctx), fileName)
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil

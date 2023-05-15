@@ -2,6 +2,7 @@ package flags
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -32,4 +33,24 @@ func GetUnparsedValue(args []string, flag string) (string, error) {
 		return v, nil
 	}
 	return "", nil
+}
+
+// GetUnparsedBoolean returns the value of a boolean flag that has been provided after a "--" on the command
+// line, and hence hasn't been parsed as a normal flag. Typical use case is:
+//
+//	telepresence intercept --docker-run ... -- --rm
+func GetUnparsedBoolean(args []string, flag string) (bool, bool, error) {
+	feq := flag + "="
+	for _, arg := range args {
+		switch {
+		case arg == flag:
+			return true, true, nil
+		case strings.HasPrefix(arg, feq):
+			set, err := strconv.ParseBool(arg[len(feq):])
+			return set, true, err
+		default:
+			continue
+		}
+	}
+	return false, false, nil
 }

@@ -137,6 +137,18 @@ func (kc *Cluster) canAccessNS(ctx context.Context, namespace string) bool {
 	if err != nil {
 		dlog.Errorf(ctx, `unable to do "can-i --list" on namespace %s`, namespace)
 	}
+	if rr.Status.Incomplete {
+		// Incomplete is most commonly encountered when an authorizer, such as an external authorizer, doesn't support rules evaluation.
+		// When this happens, we must default to using standard can-i semantics and only check deployments (checking every single
+		// resource here takes a long time, so this is a best-effort).
+		ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+			Namespace: namespace,
+			Verb:      "get",
+			Resource:  "deployments",
+			Group:     "apps",
+		})
+		return err == nil && ok
+	}
 	ras := []*auth.ResourceAttributes{
 		{
 			Resource: "services",

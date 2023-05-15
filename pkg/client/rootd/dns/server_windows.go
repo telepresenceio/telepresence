@@ -5,12 +5,18 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, configureDNS func(net.IP, *net.UDPAddr)) error {
+const (
+	maxRecursionTestRetries = 40
+	recursionTestTimeout    = 1500 * time.Millisecond
+)
+
+func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return err
@@ -26,7 +32,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, proxyCluster bool, co
 	g.Go("Server", func(c context.Context) error {
 		// No need to close listener. It's closed by the dns server.
 		s.processSearchPaths(g, s.updateRouterDNS, dev)
-		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster, proxyCluster)
+		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
 	})
 	return g.Wait()
 }
@@ -45,7 +51,7 @@ func (s *Server) updateRouterDNS(c context.Context, paths []string, dev vif.Devi
 	s.namespaces = namespaces
 	s.search = search
 	s.domainsLock.Unlock()
-	err := dev.SetDNS(c, s.config.RemoteIp, search)
+	err := dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, search)
 	s.flushDNS()
 	if err != nil {
 		return fmt.Errorf("failed to set DNS: %w", err)

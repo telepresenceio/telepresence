@@ -171,6 +171,11 @@ managerRbac:
 intercept:
   disableGlobal: false
 
+timeouts:
+  # The duration the traffic manager should wait for an agent to arrive (i.e., to be registered in the traffic manager's state)
+  # Default: 30s
+  agentArrival: 30s
+
 ################################################################################
 ## Agent Injector Configuration
 ################################################################################

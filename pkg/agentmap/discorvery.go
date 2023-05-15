@@ -14,11 +14,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload, error) {
+func FindOwnerWorkload(ctx context.Context, workloadCache map[string]k8sapi.Workload, obj k8sapi.Object) (k8sapi.Workload, error) {
 	refs := obj.GetOwnerReferences()
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			wl, err := tracing.GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
+			wl, err := tracing.GetWorkloadFromCache(ctx, workloadCache, or.Name, obj.GetNamespace(), or.Kind)
 			if err != nil {
 				var uwkErr k8sapi.UnsupportedWorkloadKindError
 				if errors.As(err, &uwkErr) {
@@ -29,7 +29,7 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 				}
 				return nil, err
 			}
-			return FindOwnerWorkload(ctx, wl)
+			return FindOwnerWorkload(ctx, workloadCache, wl)
 		}
 	}
 	if wl, ok := obj.(k8sapi.Workload); ok {

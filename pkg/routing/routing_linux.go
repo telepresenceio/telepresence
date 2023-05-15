@@ -5,16 +5,14 @@ import (
 	"fmt"
 	"net"
 	"regexp"
-
-	//nolint:depguard // sys/unix does not have NetlinkRIB
-	"syscall"
+	"syscall" //nolint:depguard // sys/unix does not have NetlinkRIB
 	"unsafe"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
-const findInterfaceRegex = `^(local\s)?[0-9.]+(\s+via\s+(?P<gw>[0-9.]+))?\s+dev\s+(?P<dev>[a-z0-9-]+)\s+src\s+(?P<src>[0-9.]+)`
+const findInterfaceRegex = `^(local\s)?[0-9.]+(\s+via\s+(?P<gw>[0-9.]+))?\s+dev\s+(?P<dev>[a-z0-9-]+)\s+(table\s+[a-z0-9]+\s+)?src\s+(?P<src>[0-9.]+)`
 
 var (
 	findInterfaceRe = regexp.MustCompile(findInterfaceRegex) //nolint:gochecknoglobals // constant
@@ -103,7 +101,7 @@ msgLoop:
 					}
 				}
 			}
-			if gw != nil && dstNet != nil && ifaceIdx > 0 {
+			if dstNet != nil && ifaceIdx > 0 {
 				iface, err := net.InterfaceByIndex(ifaceIdx)
 				if err != nil {
 					return nil, fmt.Errorf("unable to get interface at index %d: %w", ifaceIdx, err)
@@ -119,8 +117,9 @@ msgLoop:
 					LocalIP:   srcIP,
 					RoutedNet: dstNet,
 					Interface: iface,
-					Gateway:   gw,
-					Default:   dfltGw,
+					// gw might be nil here, indicating a local route, i.e. directly connected without the packets having to go through a gateway.
+					Gateway: gw,
+					Default: dfltGw,
 				})
 			}
 		}

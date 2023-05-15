@@ -42,7 +42,8 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 
 	require.Eventually(
 		func() bool {
-			return !strings.Contains(itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--agents"), svc)
+			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+			return err == nil && !strings.Contains(stdout, svc)
 		},
 		180*time.Second, // waitFor
 		6*time.Second,   // polling interval

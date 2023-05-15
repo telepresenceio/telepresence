@@ -86,7 +86,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if conn, err := socket.Dial(ctx, socket.DaemonName); err == nil {
+	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
 		defer conn.Close()
 		return daemonRpc.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}
