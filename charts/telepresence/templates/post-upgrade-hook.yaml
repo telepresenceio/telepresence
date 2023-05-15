@@ -61,7 +61,7 @@ spec:
             - '--fail'
             - '--request'
             - POST
-            - 'https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" . }}/upgrade-legacy'
+            - 'https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" . }}:{{ .Values.agentInjector.webhook.port }}/upgrade-legacy'
       volumes:
         - name: secret-volume
           secret:
