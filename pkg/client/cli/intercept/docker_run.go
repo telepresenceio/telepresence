@@ -196,7 +196,7 @@ func (s *state) startInDocker(ctx context.Context, daemonName, envFile string, a
 		if !set {
 			ourArgs = append(ourArgs, "--rm")
 		}
-		if !s.mountDisabled {
+		if !(s.mountDisabled || s.info == nil) {
 			m := s.info.Mount
 			if m != nil {
 				if err := docker.EnsureVolumePlugin(ctx); err != nil {
