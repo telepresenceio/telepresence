@@ -123,7 +123,7 @@ following Free and Open Source software:
     github.com/stretchr/testify                                                  v1.8.2                                MIT license
     github.com/telepresenceio/telepresence/rpc/v2                                (modified)                            Apache License 2.0
     github.com/vishvananda/netlink                                               v1.2.1-beta.2                         Apache License 2.0
-    github.com/vishvananda/netns                                                 v0.0.0-20210104183010-2eb08e3e575f    Apache License 2.0
+    github.com/vishvananda/netns                                                 v0.0.4                                Apache License 2.0
     github.com/xeipuuv/gojsonpointer                                             v0.0.0-20190905194746-02993c407bfb    Apache License 2.0
     github.com/xeipuuv/gojsonreference                                           v0.0.0-20180127040603-bd5ef7bd5415    Apache License 2.0
     github.com/xeipuuv/gojsonschema                                              v1.2.0                                Apache License 2.0

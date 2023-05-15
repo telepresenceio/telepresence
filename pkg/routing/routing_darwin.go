@@ -16,8 +16,10 @@ import (
 )
 
 const findInterfaceRegex = "(?:gateway:\\s+([0-9.]+)\\s+.*)?interface:\\s+([a-z0-9]+)"
+const defaultRegex = "destination:\\s+default"
 
 var findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
+var defaultRe = regexp.MustCompile(defaultRegex)
 
 func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	b, err := route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
@@ -142,11 +144,16 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	if err != nil {
 		return nil, err
 	}
+	isDefault := false
+	if match := defaultRe.FindStringSubmatch(string(out)); match != nil {
+		isDefault = true
+	}
 	return &Route{
 		RoutedNet: routedNet,
 		LocalIP:   localIP,
 		Interface: iface,
 		Gateway:   gatewayIp,
+		Default:   isDefault,
 	}, nil
 }
 
@@ -249,6 +256,20 @@ func (r *Route) removeStatic(ctx context.Context) error {
 	return Clear(1, r.RoutedNet, r.Gateway)
 }
 
+type table struct{}
+
 func openTable(ctx context.Context) (Table, error) {
-	panic("not yet")
+	return &table{}, nil
+}
+
+func (t *table) Close(ctx context.Context) error {
+	return nil
+}
+
+func (t *table) Add(ctx context.Context, r *Route) error {
+	return r.addStatic(ctx)
+}
+
+func (t *table) Remove(ctx context.Context, r *Route) error {
+	return r.removeStatic(ctx)
 }

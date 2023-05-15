@@ -211,6 +211,10 @@ func openTable(ctx context.Context) (Table, error) {
 	}, nil
 }
 
+func (t *table) Close(ctx context.Context) error {
+	return netlink.RuleDel(t.rule)
+}
+
 func (t *table) routeToNetlink(route *Route) *netlink.Route {
 	return &netlink.Route{
 		Dst:       route.RoutedNet,
@@ -219,10 +223,6 @@ func (t *table) routeToNetlink(route *Route) *netlink.Route {
 		Gw:        route.Gateway,
 		Src:       route.LocalIP,
 	}
-}
-
-func (t *table) Close(ctx context.Context) error {
-	return netlink.RuleDel(t.rule)
 }
 
 func (t *table) Add(ctx context.Context, r *Route) error {

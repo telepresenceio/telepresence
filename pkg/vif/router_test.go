@@ -50,6 +50,14 @@ func (s *RoutingSuite) SetupSuite() {
 		err = dexec.CommandContext(context.Background(), "sudo", "true").Run()
 		s.Require().NoError(err)
 	}
+	s.printRoutingTable(context.Background())
+	// Make sure there's no existing route
+	route, err := routing.GetRoute(context.Background(), &net.IPNet{
+		IP:   net.IPv4(100, 64, 2, 1),
+		Mask: net.CIDRMask(32, 32),
+	})
+	s.Require().NoError(err)
+	s.Require().True(route.Default, "There should be no route for 100.64.2.1, or everything will fail. Route is: %s", route)
 }
 
 // The routes are all gonna be inside 100.64.0.0/10 which is assigned as a reserved block for NAT. Github machines map 10/8 sometimes, so we wanna make sure not to conflict
@@ -189,8 +197,6 @@ func (s *RoutingSuite) Test_WhitelistedRoutes() {
 	s.Require().NotNil(ip)
 	ipnet := &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}
 
-	s.printRoutingTable(ctx)
-
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
 	// Ensure that the route is for the right device
@@ -222,7 +228,6 @@ func (s *RoutingSuite) Test_VPNConflicts() {
 func (s *RoutingSuite) Test_VPNConflictsWithWhitelist() {
 	ctx := context.Background()
 	cidr, ok := dos.LookupEnv(ctx, "VPN_CIDR")
-	s.Require().True(ok, "VPN_CIDR not set, skipping test")
 	if !ok {
 		s.T().Skip("VPN_CIDR not set, skipping test")
 	}
