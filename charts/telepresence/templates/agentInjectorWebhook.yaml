@@ -44,7 +44,7 @@ webhooks:
 {{- if .Values.managerRbac.namespaced }}
   namespaceSelector:
     matchExpressions:
-{{- if and (eq (int .Capabilities.KubeVersion.Major)  1) (lt (int .Capabilities.KubeVersion.Minor) 21) }}
+{{- if and (eq (int (include "kube.version.major" .))  1) (lt (int (include "kube.version.minor" .)) 21) }}
       - key: app.kubernetes.io/name
 {{- else }}
       - key: kubernetes.io/metadata.name

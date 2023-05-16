@@ -89,3 +89,16 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
   resources: ["deployments", "replicasets", "statefulsets"]
   verbs: ["get", "watch", "list"]
 {{- end }}
+
+{{/*
+Kubernetes version
+*/}}
+{{- define "kube.version.major" }}
+{{- $version := regexFind "^[0-9]+" .Capabilities.KubeVersion.Major -}}
+{{- printf "%s" $version -}}
+{{- end -}}
+
+{{- define "kube.version.minor" }}
+{{- $version := regexFind "^[0-9]+" .Capabilities.KubeVersion.Minor -}}
+{{- printf "%s" $version -}}
+{{- end -}}
