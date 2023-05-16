@@ -11,15 +11,22 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
-const findInterfaceRegex = "(?:gateway:\\s+([0-9.]+)\\s+.*)?interface:\\s+([a-z0-9]+)"
-const defaultRegex = "destination:\\s+default"
+const (
+	findInterfaceRegex = "(?:gateway:\\s+([0-9.]+)\\s+.*)?interface:\\s+([a-z0-9]+)"
+	defaultRegex       = "destination:\\s+default"
+	maskRegex          = "mask:\\s+([0-9.]+)"
+)
 
-var findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
-var defaultRe = regexp.MustCompile(defaultRegex)
+var (
+	findInterfaceRe = regexp.MustCompile(findInterfaceRegex)
+	defaultRe       = regexp.MustCompile(defaultRegex)
+	maskRe          = regexp.MustCompile(maskRegex)
+)
 
 func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	b, err := route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
@@ -117,7 +124,7 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	cmd := dexec.CommandContext(ctx, "route", "-n", "get", ip.String())
-	cmd.DisableLogging = true
+	cmd.DisableLogging = false
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("unable to run 'route -n get %s': %w", ip, err)
@@ -144,12 +151,23 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	if err != nil {
 		return nil, err
 	}
+	routed := &net.IPNet{
+		IP:   ip,
+		Mask: routedNet.Mask,
+	}
+	if match := maskRe.FindStringSubmatch(string(out)); match != nil {
+		ip := net.ParseIP(match[1])
+		routed.Mask = net.IPv4Mask(ip[0], ip[1], ip[2], ip[3])
+		dlog.Debugf(ctx, "Found mask: %s", ip)
+	}
+	dlog.Debugf(ctx, "Routed is %s", routed)
 	isDefault := false
 	if match := defaultRe.FindStringSubmatch(string(out)); match != nil {
 		isDefault = true
 	}
+	isDefault = isDefault || subnet.IsZeroMask(routed)
 	return &Route{
-		RoutedNet: routedNet,
+		RoutedNet: routed,
 		LocalIP:   localIP,
 		Interface: iface,
 		Gateway:   gatewayIp,
@@ -267,9 +285,9 @@ func (t *table) Close(ctx context.Context) error {
 }
 
 func (t *table) Add(ctx context.Context, r *Route) error {
-	return r.addStatic(ctx)
+	return r.AddStatic(ctx)
 }
 
 func (t *table) Remove(ctx context.Context, r *Route) error {
-	return r.removeStatic(ctx)
+	return r.RemoveStatic(ctx)
 }

@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/datawire/dlib/dlog"
+	"github.com/sirupsen/logrus"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -16,6 +18,9 @@ func main() {
 	cfg := client.GetDefaultConfig()
 	ctx, cancel := context.WithCancel(client.WithConfig(context.Background(), &cfg))
 	defer cancel()
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
 	vif.InitLogger(ctx)
 	dev, err := vif.NewTunnelingDevice(ctx, nil)
 	if err != nil {
