@@ -5,6 +5,12 @@
 - Feature: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
 
 - Bugfix: Running `telepresence intercept --local-only --docker-run` no longer results in a panic.
+
+- Bugfix: The "telepresence" Docker network will now propagate DNS AAAA queries to the Telepresence DNS resolver when
+  it runs in a Docker container.
+  Ticket [3179](https://github.com/telepresenceio/telepresence/issues/3179).
+
+- Bugfix: Running `telepresence intercept --local-only --docker-run` no longer  results in a panic.
   Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
 
 - Bugfix: Running `telepresence intercept --local-only --mount false` no longer results in an incorrect error message

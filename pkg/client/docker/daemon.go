@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
@@ -56,14 +55,6 @@ const (
 func ClientImage(ctx context.Context) string {
 	registry := client.GetConfig(ctx).Images.Registry(ctx)
 	return registry + "/" + telepresenceImage + ":" + strings.TrimPrefix(version.Version, "v")
-}
-
-// EnsureNetwork checks if that a network with the given name exists, and creates it if that is not the case.
-func EnsureNetwork(ctx context.Context, name string) {
-	// Ensure that the telepresence bridge network exists
-	cmd := dexec.CommandContext(ctx, "docker", "network", "create", name)
-	cmd.DisableLogging = true
-	_ = cmd.Run()
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
@@ -415,7 +406,9 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 		return nil, err
 	}
 
-	EnsureNetwork(ctx, "telepresence")
+	if err = EnsureNetwork(ctx, "telepresence"); err != nil {
+		return nil, err
+	}
 	opts, addr, err := DaemonOptions(ctx, name)
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
