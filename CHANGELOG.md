@@ -3,11 +3,18 @@
 ### 2.13.3 (TBD)
 
 - Feature: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
+  PR [3079](https://github.com/telepresenceio/telepresence/pull/3079).
 
 - Change: The default setting of the reinvocationPolicy for the mutating webhook dealing with agent injections
   changed from `Never` to `IfNeeded`.
 
-- Bugfix: Running `telepresence intercept --local-only --docker-run` no longer results in a panic.
+- Bugfix: The `eks.amazonaws.com/serviceaccount` volume injected by EKS is now exported and remotely mounted
+  during an intercept.
+  Ticket [3166](https://github.com/telepresenceio/telepresence/issues/3166).
+
+- Bugfix: The mutating webhook now correctly applies the namespace selector even if the cluster version contains
+  non-numeric characters. For example, it can now handle versions such as Major:"1", Minor:"22+".
+  PR [3184](https://github.com/telepresenceio/telepresence/pull/3184).
 
 - Bugfix: The "telepresence" Docker network will now propagate DNS AAAA queries to the Telepresence DNS resolver when
   it runs in a Docker container.
@@ -21,12 +28,11 @@
   Ticket [3171](https://github.com/telepresenceio/telepresence/issues/3171).
 
 - Bugfix: The helm chart now correctly handles custom `agentInjector.webhook.port` that was not being set in hook URLs.
-
-- Bugfix: The mutating webhook now correctly applies the namespace selector even if the cluster version contains non-numeric characters. For example, it can now handle versions such as Major:"1", Minor:"22+".
+  PR [3161](https://github.com/telepresenceio/telepresence/pull/3161).
 
 ### 2.13.2 (May 12, 2023)
 - Bugfix: Replaced `/` characters with a `-` when the authenticator service creates the kubeconfig in the Telepresence cache.
-  PR [3167](https://github.com/telepresenceio/telepresence/issues/3167).
+  PR [3167](https://github.com/telepresenceio/telepresence/pull/3167).
 
 - Feature: Configurable strategy (`auto`, `powershell`. or `registry`) to set the global DNS search path on Windows. Default
   is `auto` which means try `powershell` first, and if it fails, fall back to `registry`.
@@ -35,24 +41,24 @@
 - Feature: The timeout for the traffic manager to wait for traffic agent to arrive can
   now be configured in the `values.yaml` file using `timeouts.agentArrival`. The default
   timeout is still 30 seconds.
-  PR [3148](https://github.com/telepresenceio/telepresence/issues/3148).
+  PR [3148](https://github.com/telepresenceio/telepresence/pull/3148).
 
 - Bugfix: The automatic discovery of a local container based cluster (minikube or kind) used when the
   Telepresence daemon runs in a container, now works on macOS and Windows, and with different profiles,
   ports, and cluster names
-  PR [3165](https://github.com/telepresenceio/telepresence/issues/3165).
+  PR [3165](https://github.com/telepresenceio/telepresence/pull/3165).
 
 - Bugfix: FTP Stability improvements. Multiple simultaneous intercepts can transfer large files in bidirectionally and in parallel.
-  PR [3157](https://github.com/telepresenceio/telepresence/issues/3157).
+  PR [3157](https://github.com/telepresenceio/telepresence/pull/3157).
 
 - Bugfix: Pods using persistent volumes no longer causes timeouts when intercepted.
 
 - Bugfix: Ensure that `telepresence connect` succeeds even though DNS isn't configured correctly.
   Ticket [3143](https://github.com/telepresenceio/telepresence/issues/3143).
-  PR [3154](https://github.com/telepresenceio/telepresence/issues/3154).
+  PR [3154](https://github.com/telepresenceio/telepresence/pull/3154).
 
 - Bugfix: The traffic-manager would sometimes panic with a "close of closed channel" message and exit.
-  PR [3160](https://github.com/telepresenceio/telepresence/issues/3160).
+  PR [3160](https://github.com/telepresenceio/telepresence/pull/3160).
 
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
   Ticket [3149](https://github.com/telepresenceio/telepresence/issues/3149).
