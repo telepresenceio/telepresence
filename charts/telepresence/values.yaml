@@ -192,7 +192,7 @@ agentInjector:
     servicePath: /traffic-agent
     port: 443
     failurePolicy: Ignore
-    reinvocationPolicy: Never
+    reinvocationPolicy: IfNeeded
     sideEffects: None
     timeoutSeconds: 5
   agentImage: {}

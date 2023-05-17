@@ -4,6 +4,9 @@
 
 - Feature: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
 
+- Change: The default setting of the reinvocationPolicy for the mutating webhook dealing with agent injections
+  changed from `Never` to `IfNeeded`.
+
 - Bugfix: Running `telepresence intercept --local-only --docker-run` no longer results in a panic.
 
 - Bugfix: The "telepresence" Docker network will now propagate DNS AAAA queries to the Telepresence DNS resolver when
