@@ -1,0 +1,34 @@
+# The YAML in this file should contain:
+#
+# changelog: An (optional) URL to the CHANGELOG for the product.
+# items: An array of releases with the following attributes:
+#     - version: The (optional) version number of the release, if applicable.
+#     - date: The date of the release in the format YYYY-MM-DD.
+#     - notes: An array of noteworthy changes included in the release, each having the following attributes:
+#         - type: The type of change, one of `bugfix`, `feature`, `security` or `change`.
+#         - title: A short title of the noteworthy change.
+#         - body: >-
+#             Two or three sentences describing the change and why it
+#             is noteworthy.  This is HTML, not plain text or
+#             markdown.  It is handy to use YAML's ">-" feature to
+#             allow line-wrapping.
+#         - image: >-
+#             The URL of an image that visually represents the
+#             noteworthy change.  This path is relative to the
+#             `release-notes` directory; if this file is
+#             `FOO/releaseNotes.yml`, then the image paths are
+#             relative to `FOO/release-notes/`.
+#         - docs: The path to the documentation page where additional information can be found.
+#         - href: A path from the root to a resource on the getambassador website, takes precedence over a docs link.
+#
+# For older changes, see CHANGELOG.OLD.md
+
+docTitle: Telepresence Release Notes
+docDescription: >-
+  Release notes for Telepresence by Ambassador Labs, a CNCF project
+  that enables developers to iterate rapidly on Kubernetes
+  microservices by arming them with infinite-scale development
+  environments, access to instantaneous feedback loops, and highly
+  customizable development environments.
+
+items:
