@@ -1585,6 +1585,8 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
+    - name: A_TELEPRESENCE_MOUNTS
+      value: /var/run/secrets/kubernetes.io/serviceaccount
     image: docker.io/datawire/tel2:2.6.0
     name: traffic-agent
     ports:
@@ -1598,7 +1600,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
-    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+    - mountPath: /tel_app_mounts/some-container/var/run/secrets/kubernetes.io/serviceaccount
       name: $(_TEL_APP_A_TOKEN_VOLUME)
       readOnly: true
     - mountPath: /tel_pod_info

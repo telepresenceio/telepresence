@@ -1,5 +1,16 @@
 package slice
 
+// AppendUnique appends all elements that are not already present in dest to dest
+// and returns the result.
+func AppendUnique[E comparable](dest []E, src ...E) []E {
+	for _, v := range src {
+		if !Contains(dest, v) {
+			dest = append(dest, v)
+		}
+	}
+	return dest
+}
+
 // Contains returns true if the given slice contains the given element.
 func Contains[E comparable](vs []E, e E) bool {
 	for _, v := range vs {
