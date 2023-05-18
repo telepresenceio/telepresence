@@ -28,7 +28,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 			ps = append(ps, p)
 		}
 	}
-	ps = append(ps, r.domain)
+	ps = append([]string{tel2SubDomainDot + r.domain}, ps...)
 	r.search = ps
 }
 
@@ -76,13 +76,15 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	if kubernetesZone == "" {
 		kubernetesZone = "cluster.local."
 	}
+
 	kubernetesZone = kubernetesZone[:len(kubernetesZone)-1] // strip trailing dot
 	rf := resolveFile{
 		port:        dnsAddr.Port,
 		domain:      kubernetesZone,
 		nameservers: []string{dnsAddr.IP.String()},
-		search:      []string{kubernetesZone},
+		search:      []string{tel2SubDomainDot + kubernetesZone},
 	}
+
 	if err = rf.write(resolverFileName); err != nil {
 		return err
 	}

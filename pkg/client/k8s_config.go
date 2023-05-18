@@ -19,10 +19,31 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
+
+// DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
+// to resolve the alias instead.
+type DNSMapping struct {
+	Name     string `json:"name,omitempty" yaml:"name,omitempty"`
+	AliasFor string `json:"aliasFor,omitempty" yaml:"aliasFor,omitempty"`
+}
+
+type DNSMappings []*DNSMapping
+
+func (d DNSMappings) ToRPC() []*rpc.DNSMapping {
+	rpcMappings := make([]*rpc.DNSMapping, 0, len(d))
+	for i := range d {
+		rpcMappings = append(rpcMappings, &rpc.DNSMapping{
+			Name:     d[i].Name,
+			AliasFor: d[i].AliasFor,
+		})
+	}
+	return rpcMappings
+}
 
 // The DnsConfig is part of the KubeconfigExtension struct.
 type DnsConfig struct {
@@ -43,6 +64,13 @@ type DnsConfig struct {
 	// IncludeSuffixes are suffixes for which the DNS resolver will always attempt to do
 	// a lookup. Includes have higher priority than excludes.
 	IncludeSuffixes []string `json:"include-suffixes,omitempty"`
+
+	// Excludes are a list of hostname that the DNS resolver will not resolve even if they exist.
+	Excludes []string `json:"excludes,omitempty"`
+
+	// Mappings contains a list of DNS Mappings. Each item references a hostname, and an associated alias. If a
+	// request is made for the name, the alias will be resolved instead.
+	Mappings DNSMappings `json:"mappings,omitempty"`
 
 	// The maximum time to wait for a cluster side host lookup.
 	LookupTimeout v1.Duration `json:"lookup-timeout,omitempty"`

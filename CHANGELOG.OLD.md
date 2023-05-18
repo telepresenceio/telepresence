@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.14.0 (TBD)
+
+- Feature: The DNS configuration now supports two new fields, excludes and mappings. The excludes field allows you to
+  exclude a given list of hostnames from resolution, while the mappings field can be used to resolve a hostname with
+  another.
+
 ### 2.13.3 (May 25, 2023)
 
 - Feature: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
