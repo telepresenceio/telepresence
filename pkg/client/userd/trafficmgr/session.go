@@ -1106,6 +1106,8 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 		info.Dns = &rootdRpc.DNSConfig{
 			ExcludeSuffixes: s.DNS.ExcludeSuffixes,
 			IncludeSuffixes: s.DNS.IncludeSuffixes,
+			Excludes:        s.DNS.Excludes,
+			Mappings:        s.DNS.Mappings.ToRPC(),
 			LookupTimeout:   durationpb.New(s.DNS.LookupTimeout.Duration),
 		}
 		if len(s.DNS.LocalIP) > 0 {

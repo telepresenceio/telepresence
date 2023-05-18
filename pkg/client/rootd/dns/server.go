@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -158,6 +159,16 @@ var (
 	localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1} //nolint:gochecknoglobals // constant
 )
 
+func (s *Server) tel2SubDomainHostname(query string) string {
+	// Has to be trimmed since value for an unqualified hostname can be :
+	// - <hostname>.tel2-search.cluster.local
+	uqHostSuffix := "." + tel2SubDomainDot + s.clusterDomain
+	if strings.HasSuffix(query, uqHostSuffix) {
+		return strings.TrimSuffix(query, uqHostSuffix) + "."
+	}
+	return ""
+}
+
 func (s *Server) shouldDoClusterLookup(query string) bool {
 	if strings.HasPrefix(query, wpadDot) {
 		// Reject "wpad.*"
@@ -169,6 +180,11 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	}
 
 	query = query[:len(query)-1] // skip last dot
+
+	if slice.Contains(s.config.Excludes, query) {
+		// Reject any host explicitly added to the exclude list.
+		return false
+	}
 
 	if strings.Contains(query, "."+tel2SubDomainDot) {
 		// Reject "xxx.tel2-search.xxx" (we know it doesn't end with tel2SubDomain because we just removed the last dot)
@@ -247,6 +263,17 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 		}
 	}
 	return result, rCode, nil
+}
+
+func (s *Server) ResolveMapping(query string) *string {
+	for i := range s.config.Mappings {
+		mappingName := s.config.Mappings[i].Name + "."
+		if mappingName == query {
+			dotName := s.config.Mappings[i].AliasFor + "."
+			return &dotName
+		}
+	}
+	return nil
 }
 
 func (s *Server) GetConfig() *rpc.DNSConfig {
@@ -413,7 +440,7 @@ type cacheKey struct {
 // resolveThruCache resolves the given query by first performing a cache lookup. If a cached
 // entry is found that hasn't expired, it's returned. If not, this function will call
 // resolveQuery() to resolve and store in the case.
-func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
+func (s *Server) resolveThruCache(q *dns.Question, isMapping bool) (dnsproxy.RRs, int, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
@@ -424,11 +451,43 @@ func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, q.Qtype), oldDv.rCode, nil
+			copyQType := q.Qtype
+			// If is a mapping.
+			if isMapping {
+				copyQType = dns.TypeCNAME
+			}
+			return copyRRs(oldDv.answer, copyQType), oldDv.rCode, nil
 		}
 		s.cache.Store(key, newDv)
 	}
 	return s.resolveQuery(q, newDv)
+}
+
+func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnsproxy.RRs, int, error) {
+	// Only DNS aliases result in queries belonging to the tel2-search subdomain, which isn't a real one, so we
+	// strip so we can process it later
+	// Example:
+	// 	my-alias.tel2-search.cluster.local -> my-alias.
+
+	// Other unqualified hostname generally refer to a specific subdomain associated with an intercept running in
+	// a namespace, so they won't be stripped.
+	// Example:
+	// 	my-svc.blue.cluster.local -> <empty>
+	uhm := s.tel2SubDomainHostname(q.Name)
+	originalName := q.Name
+	if uhm != "" {
+		q.Name = uhm
+	}
+
+	rrs, rCode, err := s.resolveThruCache(q, uhm != "")
+
+	// Restore the original query name which was stripped before, or the response won't be formed correctly.
+	if uhm != "" && len(rrs) > 0 {
+		rrs[0].Header().Name = originalName
+		q.Name = originalName
+	}
+
+	return rrs, rCode, err
 }
 
 // resolveWithRecursionCheck is a special version of resolveThruCache which is only used until the
@@ -460,7 +519,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 			atomic.StoreInt32(&s.recursive, recursionNotDetected)
 			dlog.Debug(s.ctx, "DNS resolver is not recursive")
 		}
-		s.cacheResolve = s.resolveThruCache
+		s.cacheResolve = s.resolveThruCacheWithUnqualifiedHostName
 	}
 	return answer, rCode, err
 }
@@ -665,6 +724,16 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
 		close(dv.wait)
 	}()
+
+	// Returns a CNAME pointing to the mapping when there is a hit.
+	if alias := s.ResolveMapping(q.Name); alias != nil {
+		dv.answer = dnsproxy.RRs{&dns.CNAME{
+			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
+			Target: *alias,
+		}}
+		dv.rCode = dns.RcodeSuccess
+		return copyRRs(dv.answer, dns.TypeCNAME), dv.rCode, nil
+	}
 
 	var err error
 	dv.answer, dv.rCode, err = s.resolve(s.ctx, q)
