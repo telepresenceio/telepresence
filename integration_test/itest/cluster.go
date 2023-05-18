@@ -108,7 +108,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	if s.prePushed {
 		dlog.Infof(ctx, "Using pre-pushed binary %s", s.testVersion)
 	} else {
-		s.testVersion = "v2.9.0-gotest.z" + s.suffix
+		s.testVersion = "v2.14.0-gotest.z" + s.suffix
 		dlog.Infof(ctx, "Building temp binary %s", s.testVersion)
 	}
 	version.Version, version.Structured = version.Init(s.testVersion, "TELEPRESENCE_VERSION")

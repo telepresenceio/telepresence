@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/blang/semver"
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
@@ -66,9 +67,16 @@ func AgentContainer(
 		})
 
 	mounts := make([]core.VolumeMount, 0, len(config.Containers)*3)
+	var agentVersion semver.Version
+	if sep := strings.LastIndexByte(config.AgentImage, ':'); sep > 0 {
+		var err error
+		if agentVersion, err = semver.Parse(config.AgentImage[sep+1:]); err != nil {
+			dlog.Errorf(ctx, "unable to parse agent version from image name %s", config.AgentImage)
+		}
+	}
 	EachContainer(pod, config, func(app *core.Container, cc *Container) {
 		var volPaths []string
-		volPaths, mounts = appendAppContainerVolumeMounts(app, cc, mounts, pod.ObjectMeta.Annotations)
+		volPaths, mounts = appendAppContainerVolumeMounts(app, cc, mounts, pod.ObjectMeta.Annotations, agentVersion)
 		if len(volPaths) > 0 {
 			evs = append(evs, core.EnvVar{
 				Name:  cc.EnvPrefix + EnvInterceptMounts,
@@ -254,12 +262,32 @@ func EachContainer(pod *core.Pod, config *Sidecar, f func(*core.Container, *Cont
 	}
 }
 
-func appendAppContainerVolumeMounts(app *core.Container, cc *Container, mounts []core.VolumeMount, annotations map[string]string) ([]string, []core.VolumeMount) {
+func appendAppContainerVolumeMounts(
+	app *core.Container,
+	cc *Container,
+	mounts []core.VolumeMount,
+	annotations map[string]string,
+	av semver.Version,
+) ([]string, []core.VolumeMount) {
 	ignoredVolumeMounts := getIgnoredVolumeMounts(annotations)
+
+	// Older agents will error if we include /var/run/secrets/ volumes here, so we don't.
+	stripVarRunSecret := false
+	if av.Major == 1 && (av.Minor < 13 || av.Minor == 13 && av.Patch <= 13) {
+		// Smart agent <=1.13.13
+		stripVarRunSecret = true
+	}
+	if av.Major == 2 && (av.Minor < 13 || av.Minor == 13 && av.Patch <= 2) {
+		// OSS agent <=2.13.2
+		stripVarRunSecret = true
+	}
 
 	volPaths := make([]string, 0, len(app.VolumeMounts))
 	for _, m := range app.VolumeMounts {
 		if _, ok := ignoredVolumeMounts[m.Name]; ok {
+			continue
+		}
+		if stripVarRunSecret && strings.HasPrefix(m.MountPath, "/var/run/secrets/") {
 			continue
 		}
 		volPaths = append(volPaths, m.MountPath)
