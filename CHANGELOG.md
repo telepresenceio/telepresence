@@ -21,6 +21,8 @@
 
 - Bugfix: The mutating webhook now correctly applies the namespace selector even if the cluster version contains non-numeric characters. For example, it can now handle versions such as Major:"1", Minor:"22+".
 
+- Bugfix: `.timeouts.agentArrival` is now correctly honored.
+
 ### 2.13.2 (May 12, 2023)
 - Bugfix: Replaced `/` characters with a `-` when the authenticator service creates the kubeconfig in the Telepresence cache.
   PR [3167](https://github.com/telepresenceio/telepresence/issues/3167).
