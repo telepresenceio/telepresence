@@ -2,8 +2,6 @@ package agent_test
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -96,14 +94,6 @@ func Test_AppEnvironment(t *testing.T) {
 		agentconfig.EnvPrefixApp + "B_" + "BRAVO": "bravo", // skip
 	})
 
-	ksDir := "/var/run/secrets/kubernetes.io/serviceaccount"
-	require.NoError(t, dos.MkdirAll(ctx, ksDir, 0o700))
-	f, err := dos.Create(ctx, filepath.Join(ksDir, "namespace"))
-	require.NoError(t, err)
-	_, err = fmt.Fprintln(f, "default")
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-
 	config, err := agent.LoadConfig(ctx)
 	require.NoError(t, err)
 
@@ -114,15 +104,6 @@ func Test_AppEnvironment(t *testing.T) {
 		"ALPHA":                           "alpha",
 		"ZULU":                            "zulu",
 		agentconfig.EnvInterceptContainer: "test-echo",
-		agentconfig.EnvInterceptMounts:    "/home/bob:/var/run/secrets/kubernetes.io",
+		agentconfig.EnvInterceptMounts:    "/home/bob",
 	}, env)
-
-	// Check symlink to container's remote mount point
-	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
-	f, err = dos.Open(ctx, filepath.Join(cnMountPoint, ksDir, "namespace"))
-	require.NoError(t, err, "not symlinked")
-	data, err := io.ReadAll(f)
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
-	require.Equal(t, "default\n", string(data))
 }

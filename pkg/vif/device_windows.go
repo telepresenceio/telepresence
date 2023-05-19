@@ -272,6 +272,12 @@ func (t *nativeDevice) setGlobalSearchList(ctx context.Context, gss []string) er
 		// Try setting the DNS directly in the registry. It's known to work in some situations where powershell fails.
 		err = t.setRegistryGlobalSearchList(ctx, gss)
 	}
+	if err == nil {
+		cmd := proc.CommandContext(ctx, "ipconfig.exe", "/flushdns")
+		if _, flushErr := proc.CaptureErr(ctx, cmd); flushErr != nil {
+			dlog.Errorf(ctx, "flushing DNS cache failed: %v", flushErr)
+		}
+	}
 	return err
 }
 

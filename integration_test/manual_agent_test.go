@@ -128,7 +128,13 @@ func (s *connectedSuite) Test_ManualAgent() {
 			require.NoError(s.Kubectl(ctx, "delete", "configmap", agentconfig.ConfigMap))
 		} else {
 			// Restore original configmap
-			writeFile(cfgYaml, []byte(origCfgYaml))
+			cfgMap.ObjectMeta = meta.ObjectMeta{
+				Name:      agentconfig.ConfigMap,
+				Namespace: s.AppNamespace(),
+			}
+			cleanMapYaml, err := yaml.Marshal(cfgMap)
+			require.NoError(err)
+			writeFile(cfgYaml, cleanMapYaml)
 			require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml))
 		}
 	}()

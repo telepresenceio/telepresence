@@ -50,7 +50,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 		ManagerNamespace: "default",
 		AgentRegistry:    "docker.io/datawire",
-		AgentImage:       "tel2:2.9.0",
+		AgentImage:       "tel2:2.14.0",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)
@@ -474,7 +474,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podNamedPort,
 			&agentconfig.Sidecar{
 				AgentName:    "named-port",
-				AgentImage:   "docker.io/datawire/tel2:2.6.0",
+				AgentImage:   "docker.io/datawire/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "named-port",
 				WorkloadKind: "Deployment",
@@ -508,7 +508,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podNumericPort,
 			&agentconfig.Sidecar{
 				AgentName:    "numeric-port",
-				AgentImage:   "docker.io/datawire/tel2:2.6.0",
+				AgentImage:   "docker.io/datawire/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "numeric-port",
 				WorkloadKind: "Deployment",
@@ -542,7 +542,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podUnnamedNumericPort,
 			&agentconfig.Sidecar{
 				AgentName:    "unnamed-numeric-port",
-				AgentImage:   "docker.io/datawire/tel2:2.6.0",
+				AgentImage:   "docker.io/datawire/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "unnamed-numeric-port",
 				WorkloadKind: "Deployment",
@@ -575,7 +575,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podNamedAndNumericPort,
 			&agentconfig.Sidecar{
 				AgentName:    "named-and-numeric",
-				AgentImage:   "docker.io/datawire/tel2:2.6.0",
+				AgentImage:   "docker.io/datawire/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "named-and-numeric",
 				WorkloadKind: "Deployment",
@@ -627,7 +627,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podMultiPort,
 			&agentconfig.Sidecar{
 				AgentName:    "multi-port",
-				AgentImage:   "docker.io/datawire/tel2:2.6.0",
+				AgentImage:   "docker.io/datawire/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "multi-port",
 				WorkloadKind: "Deployment",
@@ -672,7 +672,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podMultiSplitPort,
 			&agentconfig.Sidecar{
 				AgentName:    "multi-container",
-				AgentImage:   "docker.io/datawire/tel2:2.6.0",
+				AgentImage:   "docker.io/datawire/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "multi-container",
 				WorkloadKind: "Deployment",
@@ -724,7 +724,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		test := test // pin it
 		ctx := k8sapi.WithK8sInterface(ctx, clientset)
 		t.Run(test.name, func(t *testing.T) {
-			gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.6.0")
+			gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.13.3")
 			require.NoError(t, err)
 			actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
@@ -747,7 +747,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 
 		ManagerNamespace:  "default",
 		AgentRegistry:     "docker.io/datawire",
-		AgentImage:        "tel2:2.6.0",
+		AgentImage:        "tel2:2.13.3",
 		AgentPort:         9900,
 		AgentInjectPolicy: agentconfig.WhenEnabled,
 	}
@@ -978,7 +978,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.6.0
+    image: docker.io/datawire/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1063,7 +1063,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.6.0
+    image: docker.io/datawire/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1197,7 +1197,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.6.0
+    image: docker.io/datawire/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1265,7 +1265,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
   - args:
     - agent-init
-    image: docker.io/datawire/tel2:2.6.0
+    image: docker.io/datawire/tel2:2.13.3
     name: tel-agent-init
     resources: {}
     securityContext:
@@ -1291,7 +1291,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.6.0
+    image: docker.io/datawire/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1359,7 +1359,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     args:
     - agent-init
-    image: docker.io/datawire/tel2:2.6.0
+    image: docker.io/datawire/tel2:2.13.3
     name: tel-agent-init
     resources: {}
     securityContext:
@@ -1385,7 +1385,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.6.0
+    image: docker.io/datawire/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1456,7 +1456,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 						},
 						{
 							Name:            install.AgentContainerName,
-							Image:           "docker.io/datawire/tel2:2.6.0",
+							Image:           "docker.io/datawire/tel2:2.13.3",
 							ImagePullPolicy: "IfNotPresent",
 							Args:            []string{"agent"},
 							Ports: []core.ContainerPort{{
@@ -1585,7 +1585,9 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.6.0
+    - name: A_TELEPRESENCE_MOUNTS
+      value: /var/run/secrets/kubernetes.io/serviceaccount
+    image: docker.io/datawire/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1598,7 +1600,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
-    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+    - mountPath: /tel_app_mounts/some-container/var/run/secrets/kubernetes.io/serviceaccount
       name: $(_TEL_APP_A_TOKEN_VOLUME)
       readOnly: true
     - mountPath: /tel_pod_info
@@ -1672,7 +1674,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			var actualErr error
 			cw := NewWatcher("")
 			if test.generateConfig {
-				gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.6.0")
+				gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.13.3")
 				require.NoError(t, err)
 				var ac *agentconfig.Sidecar
 				if ac, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
