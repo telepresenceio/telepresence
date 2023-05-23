@@ -605,7 +605,7 @@ func (s *State) getRandomAgentSession(clientSessionID string, podIP net.IP) Sess
 	return agent
 }
 
-func (s *State) WatchDial(sessionID string) chan *rpc.DialRequest {
+func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
 	s.mu.RLock()
 	ss, ok := s.sessions[sessionID]
 	s.mu.RUnlock()
