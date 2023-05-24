@@ -19,6 +19,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -805,6 +808,8 @@ func (m *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
 	}
 
+	rIReq.Environment = m.removeExlcudedEnvVars(ctx, rIReq.Environment)
+
 	intercept := m.state.UpdateIntercept(ceptID, func(intercept *rpc.InterceptInfo) {
 		// Sanity check: The reviewing agent must be an agent for the intercept.
 		if intercept.Spec.Namespace != agent.Namespace || intercept.Spec.Agent != agent.Name {
@@ -832,6 +837,36 @@ func (m *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	}
 
 	return &empty.Empty{}, nil
+}
+
+func (m *service) removeExlcudedEnvVars(ctx context.Context, envVars map[string]string) map[string]string {
+	k8sConfig, err := rest.InClusterConfig()
+	if err != nil {
+		dlog.Errorf(ctx, "Unable to create in cluster config: %w", err)
+		return envVars
+	}
+
+	clientset, err := kubernetes.NewForConfig(k8sConfig)
+	if err != nil {
+		dlog.Errorf(ctx, "unable to create kubernetes clientset: %w", err)
+		return envVars
+	}
+
+	cm, err := clientset.CoreV1().ConfigMaps(managerutil.GetEnv(ctx).ManagerNamespace).Get(ctx, "telepresence-excluded-variables", v1.GetOptions{})
+	if err != nil {
+		dlog.Errorf(ctx, "cannot read excluded variables configmap: %w", err)
+		return envVars
+	}
+
+	if cm != nil {
+		for key := range cm.Data {
+			if _, ok := envVars[key]; ok {
+				delete(envVars, key)
+			}
+		}
+	}
+
+	return envVars
 }
 
 func (m *service) Tunnel(server rpc.Manager_TunnelServer) error {
