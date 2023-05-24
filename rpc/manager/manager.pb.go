@@ -12,12 +12,13 @@
 package manager
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -3877,64 +3878,66 @@ func file_manager_manager_proto_rawDescGZIP() []byte {
 	return file_manager_manager_proto_rawDescData
 }
 
-var file_manager_manager_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_manager_manager_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
-var file_manager_manager_proto_goTypes = []interface{}{
-	(InterceptDispositionType)(0),     // 0: telepresence.manager.InterceptDispositionType
-	(*ClientInfo)(nil),                // 1: telepresence.manager.ClientInfo
-	(*AgentInfo)(nil),                 // 2: telepresence.manager.AgentInfo
-	(*InterceptSpec)(nil),             // 3: telepresence.manager.InterceptSpec
-	(*IngressInfo)(nil),               // 4: telepresence.manager.IngressInfo
-	(*PreviewSpec)(nil),               // 5: telepresence.manager.PreviewSpec
-	(*InterceptInfo)(nil),             // 6: telepresence.manager.InterceptInfo
-	(*SessionInfo)(nil),               // 7: telepresence.manager.SessionInfo
-	(*AgentsRequest)(nil),             // 8: telepresence.manager.AgentsRequest
-	(*AgentInfoSnapshot)(nil),         // 9: telepresence.manager.AgentInfoSnapshot
-	(*InterceptInfoSnapshot)(nil),     // 10: telepresence.manager.InterceptInfoSnapshot
-	(*CreateInterceptRequest)(nil),    // 11: telepresence.manager.CreateInterceptRequest
-	(*PreparedIntercept)(nil),         // 12: telepresence.manager.PreparedIntercept
-	(*UpdateInterceptRequest)(nil),    // 13: telepresence.manager.UpdateInterceptRequest
-	(*RemoveInterceptRequest2)(nil),   // 14: telepresence.manager.RemoveInterceptRequest2
-	(*GetInterceptRequest)(nil),       // 15: telepresence.manager.GetInterceptRequest
-	(*ReviewInterceptRequest)(nil),    // 16: telepresence.manager.ReviewInterceptRequest
-	(*RemainRequest)(nil),             // 17: telepresence.manager.RemainRequest
-	(*LogLevelRequest)(nil),           // 18: telepresence.manager.LogLevelRequest
-	(*GetLogsRequest)(nil),            // 19: telepresence.manager.GetLogsRequest
-	(*LogsResponse)(nil),              // 20: telepresence.manager.LogsResponse
-	(*TelepresenceAPIInfo)(nil),       // 21: telepresence.manager.TelepresenceAPIInfo
-	(*VersionInfo2)(nil),              // 22: telepresence.manager.VersionInfo2
-	(*License)(nil),                   // 23: telepresence.manager.License
-	(*AmbassadorCloudConfig)(nil),     // 24: telepresence.manager.AmbassadorCloudConfig
-	(*AmbassadorCloudConnection)(nil), // 25: telepresence.manager.AmbassadorCloudConnection
-	(*ConnMessage)(nil),               // 26: telepresence.manager.ConnMessage
-	(*TunnelMessage)(nil),             // 27: telepresence.manager.TunnelMessage
-	(*DialRequest)(nil),               // 28: telepresence.manager.DialRequest
-	(*LookupHostRequest)(nil),         // 29: telepresence.manager.LookupHostRequest
-	(*LookupHostResponse)(nil),        // 30: telepresence.manager.LookupHostResponse
-	(*LookupHostAgentResponse)(nil),   // 31: telepresence.manager.LookupHostAgentResponse
-	(*DNSRequest)(nil),                // 32: telepresence.manager.DNSRequest
-	(*DNSResponse)(nil),               // 33: telepresence.manager.DNSResponse
-	(*DNSAgentResponse)(nil),          // 34: telepresence.manager.DNSAgentResponse
-	(*IPNet)(nil),                     // 35: telepresence.manager.IPNet
-	(*ClusterInfo)(nil),               // 36: telepresence.manager.ClusterInfo
-	(*Routing)(nil),                   // 37: telepresence.manager.Routing
-	(*DNS)(nil),                       // 38: telepresence.manager.DNS
-	(*CLIConfig)(nil),                 // 39: telepresence.manager.CLIConfig
-	(*AgentInfo_Mechanism)(nil),       // 40: telepresence.manager.AgentInfo.Mechanism
-	nil,                               // 41: telepresence.manager.AgentInfo.EnvironmentEntry
-	nil,                               // 42: telepresence.manager.PreviewSpec.AddRequestHeadersEntry
-	nil,                               // 43: telepresence.manager.InterceptInfo.HeadersEntry
-	nil,                               // 44: telepresence.manager.InterceptInfo.MetadataEntry
-	nil,                               // 45: telepresence.manager.InterceptInfo.EnvironmentEntry
-	nil,                               // 46: telepresence.manager.ReviewInterceptRequest.HeadersEntry
-	nil,                               // 47: telepresence.manager.ReviewInterceptRequest.MetadataEntry
-	nil,                               // 48: telepresence.manager.ReviewInterceptRequest.EnvironmentEntry
-	nil,                               // 49: telepresence.manager.LogsResponse.PodLogsEntry
-	nil,                               // 50: telepresence.manager.LogsResponse.PodYamlEntry
-	nil,                               // 51: telepresence.manager.DialRequest.TraceContextEntry
-	(*durationpb.Duration)(nil),       // 52: google.protobuf.Duration
-	(*emptypb.Empty)(nil),             // 53: google.protobuf.Empty
-}
+var (
+	file_manager_manager_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+	file_manager_manager_proto_msgTypes  = make([]protoimpl.MessageInfo, 51)
+	file_manager_manager_proto_goTypes   = []interface{}{
+		(InterceptDispositionType)(0),     // 0: telepresence.manager.InterceptDispositionType
+		(*ClientInfo)(nil),                // 1: telepresence.manager.ClientInfo
+		(*AgentInfo)(nil),                 // 2: telepresence.manager.AgentInfo
+		(*InterceptSpec)(nil),             // 3: telepresence.manager.InterceptSpec
+		(*IngressInfo)(nil),               // 4: telepresence.manager.IngressInfo
+		(*PreviewSpec)(nil),               // 5: telepresence.manager.PreviewSpec
+		(*InterceptInfo)(nil),             // 6: telepresence.manager.InterceptInfo
+		(*SessionInfo)(nil),               // 7: telepresence.manager.SessionInfo
+		(*AgentsRequest)(nil),             // 8: telepresence.manager.AgentsRequest
+		(*AgentInfoSnapshot)(nil),         // 9: telepresence.manager.AgentInfoSnapshot
+		(*InterceptInfoSnapshot)(nil),     // 10: telepresence.manager.InterceptInfoSnapshot
+		(*CreateInterceptRequest)(nil),    // 11: telepresence.manager.CreateInterceptRequest
+		(*PreparedIntercept)(nil),         // 12: telepresence.manager.PreparedIntercept
+		(*UpdateInterceptRequest)(nil),    // 13: telepresence.manager.UpdateInterceptRequest
+		(*RemoveInterceptRequest2)(nil),   // 14: telepresence.manager.RemoveInterceptRequest2
+		(*GetInterceptRequest)(nil),       // 15: telepresence.manager.GetInterceptRequest
+		(*ReviewInterceptRequest)(nil),    // 16: telepresence.manager.ReviewInterceptRequest
+		(*RemainRequest)(nil),             // 17: telepresence.manager.RemainRequest
+		(*LogLevelRequest)(nil),           // 18: telepresence.manager.LogLevelRequest
+		(*GetLogsRequest)(nil),            // 19: telepresence.manager.GetLogsRequest
+		(*LogsResponse)(nil),              // 20: telepresence.manager.LogsResponse
+		(*TelepresenceAPIInfo)(nil),       // 21: telepresence.manager.TelepresenceAPIInfo
+		(*VersionInfo2)(nil),              // 22: telepresence.manager.VersionInfo2
+		(*License)(nil),                   // 23: telepresence.manager.License
+		(*AmbassadorCloudConfig)(nil),     // 24: telepresence.manager.AmbassadorCloudConfig
+		(*AmbassadorCloudConnection)(nil), // 25: telepresence.manager.AmbassadorCloudConnection
+		(*ConnMessage)(nil),               // 26: telepresence.manager.ConnMessage
+		(*TunnelMessage)(nil),             // 27: telepresence.manager.TunnelMessage
+		(*DialRequest)(nil),               // 28: telepresence.manager.DialRequest
+		(*LookupHostRequest)(nil),         // 29: telepresence.manager.LookupHostRequest
+		(*LookupHostResponse)(nil),        // 30: telepresence.manager.LookupHostResponse
+		(*LookupHostAgentResponse)(nil),   // 31: telepresence.manager.LookupHostAgentResponse
+		(*DNSRequest)(nil),                // 32: telepresence.manager.DNSRequest
+		(*DNSResponse)(nil),               // 33: telepresence.manager.DNSResponse
+		(*DNSAgentResponse)(nil),          // 34: telepresence.manager.DNSAgentResponse
+		(*IPNet)(nil),                     // 35: telepresence.manager.IPNet
+		(*ClusterInfo)(nil),               // 36: telepresence.manager.ClusterInfo
+		(*Routing)(nil),                   // 37: telepresence.manager.Routing
+		(*DNS)(nil),                       // 38: telepresence.manager.DNS
+		(*CLIConfig)(nil),                 // 39: telepresence.manager.CLIConfig
+		(*AgentInfo_Mechanism)(nil),       // 40: telepresence.manager.AgentInfo.Mechanism
+		nil,                               // 41: telepresence.manager.AgentInfo.EnvironmentEntry
+		nil,                               // 42: telepresence.manager.PreviewSpec.AddRequestHeadersEntry
+		nil,                               // 43: telepresence.manager.InterceptInfo.HeadersEntry
+		nil,                               // 44: telepresence.manager.InterceptInfo.MetadataEntry
+		nil,                               // 45: telepresence.manager.InterceptInfo.EnvironmentEntry
+		nil,                               // 46: telepresence.manager.ReviewInterceptRequest.HeadersEntry
+		nil,                               // 47: telepresence.manager.ReviewInterceptRequest.MetadataEntry
+		nil,                               // 48: telepresence.manager.ReviewInterceptRequest.EnvironmentEntry
+		nil,                               // 49: telepresence.manager.LogsResponse.PodLogsEntry
+		nil,                               // 50: telepresence.manager.LogsResponse.PodYamlEntry
+		nil,                               // 51: telepresence.manager.DialRequest.TraceContextEntry
+		(*durationpb.Duration)(nil),       // 52: google.protobuf.Duration
+		(*emptypb.Empty)(nil),             // 53: google.protobuf.Empty
+	}
+)
 var file_manager_manager_proto_depIdxs = []int32{
 	40, // 0: telepresence.manager.AgentInfo.mechanisms:type_name -> telepresence.manager.AgentInfo.Mechanism
 	41, // 1: telepresence.manager.AgentInfo.environment:type_name -> telepresence.manager.AgentInfo.EnvironmentEntry

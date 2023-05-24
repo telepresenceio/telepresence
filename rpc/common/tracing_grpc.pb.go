@@ -8,6 +8,7 @@ package common
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -56,8 +57,7 @@ type TracingServer interface {
 }
 
 // UnimplementedTracingServer must be embedded to have forward compatible implementations.
-type UnimplementedTracingServer struct {
-}
+type UnimplementedTracingServer struct{}
 
 func (UnimplementedTracingServer) DumpTraces(context.Context, *emptypb.Empty) (*Trace, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DumpTraces not implemented")

@@ -8,6 +8,7 @@ package authenticator
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -55,8 +56,7 @@ type AuthenticatorServer interface {
 }
 
 // UnimplementedAuthenticatorServer must be embedded to have forward compatible implementations.
-type UnimplementedAuthenticatorServer struct {
-}
+type UnimplementedAuthenticatorServer struct{}
 
 func (UnimplementedAuthenticatorServer) GetContextExecCredentials(context.Context, *GetContextExecCredentialsRequest) (*GetContextExecCredentialsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetContextExecCredentials not implemented")

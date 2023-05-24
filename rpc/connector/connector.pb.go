@@ -7,6 +7,9 @@
 package connector
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	daemon "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -14,8 +17,6 @@ import (
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -2825,70 +2826,72 @@ func file_connector_connector_proto_rawDescGZIP() []byte {
 	return file_connector_connector_proto_rawDescData
 }
 
-var file_connector_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_connector_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
-var file_connector_connector_proto_goTypes = []interface{}{
-	(ConnectInfo_ErrType)(0),                   // 0: telepresence.connector.ConnectInfo.ErrType
-	(HelmRequest_Type)(0),                      // 1: telepresence.connector.HelmRequest.Type
-	(UninstallRequest_UninstallType)(0),        // 2: telepresence.connector.UninstallRequest.UninstallType
-	(ListRequest_Filter)(0),                    // 3: telepresence.connector.ListRequest.Filter
-	(LoginResult_Code)(0),                      // 4: telepresence.connector.LoginResult.Code
-	(LogLevelRequest_Scope)(0),                 // 5: telepresence.connector.LogLevelRequest.Scope
-	(*Interceptor)(nil),                        // 6: telepresence.connector.Interceptor
-	(*ConnectRequest)(nil),                     // 7: telepresence.connector.ConnectRequest
-	(*ConnectInfo)(nil),                        // 8: telepresence.connector.ConnectInfo
-	(*HelmRequest)(nil),                        // 9: telepresence.connector.HelmRequest
-	(*UninstallRequest)(nil),                   // 10: telepresence.connector.UninstallRequest
-	(*CreateInterceptRequest)(nil),             // 11: telepresence.connector.CreateInterceptRequest
-	(*ListRequest)(nil),                        // 12: telepresence.connector.ListRequest
-	(*WatchWorkloadsRequest)(nil),              // 13: telepresence.connector.WatchWorkloadsRequest
-	(*WorkloadInfo)(nil),                       // 14: telepresence.connector.WorkloadInfo
-	(*WorkloadInfoSnapshot)(nil),               // 15: telepresence.connector.WorkloadInfoSnapshot
-	(*InterceptResult)(nil),                    // 16: telepresence.connector.InterceptResult
-	(*LoginRequest)(nil),                       // 17: telepresence.connector.LoginRequest
-	(*LoginResult)(nil),                        // 18: telepresence.connector.LoginResult
-	(*UserInfoRequest)(nil),                    // 19: telepresence.connector.UserInfoRequest
-	(*UserInfo)(nil),                           // 20: telepresence.connector.UserInfo
-	(*KeyRequest)(nil),                         // 21: telepresence.connector.KeyRequest
-	(*KeyData)(nil),                            // 22: telepresence.connector.KeyData
-	(*LicenseRequest)(nil),                     // 23: telepresence.connector.LicenseRequest
-	(*LicenseData)(nil),                        // 24: telepresence.connector.LicenseData
-	(*LogLevelRequest)(nil),                    // 25: telepresence.connector.LogLevelRequest
-	(*LogsRequest)(nil),                        // 26: telepresence.connector.LogsRequest
-	(*TracesRequest)(nil),                      // 27: telepresence.connector.TracesRequest
-	(*LogsResponse)(nil),                       // 28: telepresence.connector.LogsResponse
-	(*GetNamespacesRequest)(nil),               // 29: telepresence.connector.GetNamespacesRequest
-	(*GetNamespacesResponse)(nil),              // 30: telepresence.connector.GetNamespacesResponse
-	(*ClientConfig)(nil),                       // 31: telepresence.connector.ClientConfig
-	(*ClusterSubnets)(nil),                     // 32: telepresence.connector.ClusterSubnets
-	nil,                                        // 33: telepresence.connector.ConnectRequest.KubeFlagsEntry
-	(*WorkloadInfo_ServiceReference)(nil),      // 34: telepresence.connector.WorkloadInfo.ServiceReference
-	(*WorkloadInfo_ServiceReference_Port)(nil), // 35: telepresence.connector.WorkloadInfo.ServiceReference.Port
-	nil,                                     // 36: telepresence.connector.LogsResponse.PodInfoEntry
-	(*common.VersionInfo)(nil),              // 37: telepresence.common.VersionInfo
-	(*manager.InterceptInfoSnapshot)(nil),   // 38: telepresence.manager.InterceptInfoSnapshot
-	(*manager.SessionInfo)(nil),             // 39: telepresence.manager.SessionInfo
-	(*daemon.DaemonStatus)(nil),             // 40: telepresence.daemon.DaemonStatus
-	(*manager.InterceptSpec)(nil),           // 41: telepresence.manager.InterceptSpec
-	(*manager.AgentInfo)(nil),               // 42: telepresence.manager.AgentInfo
-	(*manager.InterceptInfo)(nil),           // 43: telepresence.manager.InterceptInfo
-	(common.InterceptError)(0),              // 44: telepresence.common.InterceptError
-	(*durationpb.Duration)(nil),             // 45: google.protobuf.Duration
-	(*manager.IPNet)(nil),                   // 46: telepresence.manager.IPNet
-	(*emptypb.Empty)(nil),                   // 47: google.protobuf.Empty
-	(*manager.GetInterceptRequest)(nil),     // 48: telepresence.manager.GetInterceptRequest
-	(*manager.RemoveInterceptRequest2)(nil), // 49: telepresence.manager.RemoveInterceptRequest2
-	(*manager.UpdateInterceptRequest)(nil),  // 50: telepresence.manager.UpdateInterceptRequest
-	(*manager.DNSRequest)(nil),              // 51: telepresence.manager.DNSRequest
-	(*manager.LookupHostRequest)(nil),       // 52: telepresence.manager.LookupHostRequest
-	(*manager.TunnelMessage)(nil),           // 53: telepresence.manager.TunnelMessage
-	(*common.Result)(nil),                   // 54: telepresence.common.Result
-	(*manager.VersionInfo2)(nil),            // 55: telepresence.manager.VersionInfo2
-	(*manager.CLIConfig)(nil),               // 56: telepresence.manager.CLIConfig
-	(*manager.ClusterInfo)(nil),             // 57: telepresence.manager.ClusterInfo
-	(*manager.DNSResponse)(nil),             // 58: telepresence.manager.DNSResponse
-	(*manager.LookupHostResponse)(nil),      // 59: telepresence.manager.LookupHostResponse
-}
+var (
+	file_connector_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+	file_connector_connector_proto_msgTypes  = make([]protoimpl.MessageInfo, 31)
+	file_connector_connector_proto_goTypes   = []interface{}{
+		(ConnectInfo_ErrType)(0),                   // 0: telepresence.connector.ConnectInfo.ErrType
+		(HelmRequest_Type)(0),                      // 1: telepresence.connector.HelmRequest.Type
+		(UninstallRequest_UninstallType)(0),        // 2: telepresence.connector.UninstallRequest.UninstallType
+		(ListRequest_Filter)(0),                    // 3: telepresence.connector.ListRequest.Filter
+		(LoginResult_Code)(0),                      // 4: telepresence.connector.LoginResult.Code
+		(LogLevelRequest_Scope)(0),                 // 5: telepresence.connector.LogLevelRequest.Scope
+		(*Interceptor)(nil),                        // 6: telepresence.connector.Interceptor
+		(*ConnectRequest)(nil),                     // 7: telepresence.connector.ConnectRequest
+		(*ConnectInfo)(nil),                        // 8: telepresence.connector.ConnectInfo
+		(*HelmRequest)(nil),                        // 9: telepresence.connector.HelmRequest
+		(*UninstallRequest)(nil),                   // 10: telepresence.connector.UninstallRequest
+		(*CreateInterceptRequest)(nil),             // 11: telepresence.connector.CreateInterceptRequest
+		(*ListRequest)(nil),                        // 12: telepresence.connector.ListRequest
+		(*WatchWorkloadsRequest)(nil),              // 13: telepresence.connector.WatchWorkloadsRequest
+		(*WorkloadInfo)(nil),                       // 14: telepresence.connector.WorkloadInfo
+		(*WorkloadInfoSnapshot)(nil),               // 15: telepresence.connector.WorkloadInfoSnapshot
+		(*InterceptResult)(nil),                    // 16: telepresence.connector.InterceptResult
+		(*LoginRequest)(nil),                       // 17: telepresence.connector.LoginRequest
+		(*LoginResult)(nil),                        // 18: telepresence.connector.LoginResult
+		(*UserInfoRequest)(nil),                    // 19: telepresence.connector.UserInfoRequest
+		(*UserInfo)(nil),                           // 20: telepresence.connector.UserInfo
+		(*KeyRequest)(nil),                         // 21: telepresence.connector.KeyRequest
+		(*KeyData)(nil),                            // 22: telepresence.connector.KeyData
+		(*LicenseRequest)(nil),                     // 23: telepresence.connector.LicenseRequest
+		(*LicenseData)(nil),                        // 24: telepresence.connector.LicenseData
+		(*LogLevelRequest)(nil),                    // 25: telepresence.connector.LogLevelRequest
+		(*LogsRequest)(nil),                        // 26: telepresence.connector.LogsRequest
+		(*TracesRequest)(nil),                      // 27: telepresence.connector.TracesRequest
+		(*LogsResponse)(nil),                       // 28: telepresence.connector.LogsResponse
+		(*GetNamespacesRequest)(nil),               // 29: telepresence.connector.GetNamespacesRequest
+		(*GetNamespacesResponse)(nil),              // 30: telepresence.connector.GetNamespacesResponse
+		(*ClientConfig)(nil),                       // 31: telepresence.connector.ClientConfig
+		(*ClusterSubnets)(nil),                     // 32: telepresence.connector.ClusterSubnets
+		nil,                                        // 33: telepresence.connector.ConnectRequest.KubeFlagsEntry
+		(*WorkloadInfo_ServiceReference)(nil),      // 34: telepresence.connector.WorkloadInfo.ServiceReference
+		(*WorkloadInfo_ServiceReference_Port)(nil), // 35: telepresence.connector.WorkloadInfo.ServiceReference.Port
+		nil,                                     // 36: telepresence.connector.LogsResponse.PodInfoEntry
+		(*common.VersionInfo)(nil),              // 37: telepresence.common.VersionInfo
+		(*manager.InterceptInfoSnapshot)(nil),   // 38: telepresence.manager.InterceptInfoSnapshot
+		(*manager.SessionInfo)(nil),             // 39: telepresence.manager.SessionInfo
+		(*daemon.DaemonStatus)(nil),             // 40: telepresence.daemon.DaemonStatus
+		(*manager.InterceptSpec)(nil),           // 41: telepresence.manager.InterceptSpec
+		(*manager.AgentInfo)(nil),               // 42: telepresence.manager.AgentInfo
+		(*manager.InterceptInfo)(nil),           // 43: telepresence.manager.InterceptInfo
+		(common.InterceptError)(0),              // 44: telepresence.common.InterceptError
+		(*durationpb.Duration)(nil),             // 45: google.protobuf.Duration
+		(*manager.IPNet)(nil),                   // 46: telepresence.manager.IPNet
+		(*emptypb.Empty)(nil),                   // 47: google.protobuf.Empty
+		(*manager.GetInterceptRequest)(nil),     // 48: telepresence.manager.GetInterceptRequest
+		(*manager.RemoveInterceptRequest2)(nil), // 49: telepresence.manager.RemoveInterceptRequest2
+		(*manager.UpdateInterceptRequest)(nil),  // 50: telepresence.manager.UpdateInterceptRequest
+		(*manager.DNSRequest)(nil),              // 51: telepresence.manager.DNSRequest
+		(*manager.LookupHostRequest)(nil),       // 52: telepresence.manager.LookupHostRequest
+		(*manager.TunnelMessage)(nil),           // 53: telepresence.manager.TunnelMessage
+		(*common.Result)(nil),                   // 54: telepresence.common.Result
+		(*manager.VersionInfo2)(nil),            // 55: telepresence.manager.VersionInfo2
+		(*manager.CLIConfig)(nil),               // 56: telepresence.manager.CLIConfig
+		(*manager.ClusterInfo)(nil),             // 57: telepresence.manager.ClusterInfo
+		(*manager.DNSResponse)(nil),             // 58: telepresence.manager.DNSResponse
+		(*manager.LookupHostResponse)(nil),      // 59: telepresence.manager.LookupHostResponse
+	}
+)
 var file_connector_connector_proto_depIdxs = []int32{
 	33, // 0: telepresence.connector.ConnectRequest.kube_flags:type_name -> telepresence.connector.ConnectRequest.KubeFlagsEntry
 	0,  // 1: telepresence.connector.ConnectInfo.error:type_name -> telepresence.connector.ConnectInfo.ErrType

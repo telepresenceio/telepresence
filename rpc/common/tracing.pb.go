@@ -7,11 +7,12 @@
 package common
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -101,11 +102,13 @@ func file_common_tracing_proto_rawDescGZIP() []byte {
 	return file_common_tracing_proto_rawDescData
 }
 
-var file_common_tracing_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_common_tracing_proto_goTypes = []interface{}{
-	(*Trace)(nil),         // 0: telepresence.common.Trace
-	(*emptypb.Empty)(nil), // 1: google.protobuf.Empty
-}
+var (
+	file_common_tracing_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+	file_common_tracing_proto_goTypes  = []interface{}{
+		(*Trace)(nil),         // 0: telepresence.common.Trace
+		(*emptypb.Empty)(nil), // 1: google.protobuf.Empty
+	}
+)
 var file_common_tracing_proto_depIdxs = []int32{
 	1, // 0: telepresence.common.Tracing.DumpTraces:input_type -> google.protobuf.Empty
 	0, // 1: telepresence.common.Tracing.DumpTraces:output_type -> telepresence.common.Trace

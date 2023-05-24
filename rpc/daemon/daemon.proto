@@ -51,11 +51,6 @@ message Paths {
   repeated string namespaces = 2;
 }
 
-message DNSMapping {
-  string name = 1;
-  string alias_for = 2;
-}
-
 // DNS configuration for the local DNS resolver
 message DNSConfig {
   // local_ip is the address of the local DNS server. Only used by Linux systems that have no
@@ -71,14 +66,6 @@ message DNSConfig {
   // Suffixes to include. Has higher prio than the excludes
   repeated string include_suffixes = 4;
 
-  // Exclude are a list of hostname that the DNS resolver will not resolve even if they exist.
-  repeated string excludes = 8;
-
-  // DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
-  // to resolve the alias instead.
-  repeated DNSMapping mappings = 9;
-
-  //
   // The maximum time wait for a cluster side host lookup.
   google.protobuf.Duration lookup_timeout = 6;
 

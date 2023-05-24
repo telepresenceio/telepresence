@@ -8,6 +8,7 @@ package systema
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -68,8 +69,7 @@ type SystemACliServer interface {
 }
 
 // UnimplementedSystemACliServer must be embedded to have forward compatible implementations.
-type UnimplementedSystemACliServer struct {
-}
+type UnimplementedSystemACliServer struct{}
 
 func (UnimplementedSystemACliServer) GetUnauthenticatedCommandMessages(context.Context, *emptypb.Empty) (*CommandMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetUnauthenticatedCommandMessages not implemented")

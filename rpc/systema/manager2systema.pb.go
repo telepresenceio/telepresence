@@ -12,13 +12,14 @@
 package systema
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -451,19 +452,21 @@ func file_systema_manager2systema_proto_rawDescGZIP() []byte {
 	return file_systema_manager2systema_proto_rawDescData
 }
 
-var file_systema_manager2systema_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_systema_manager2systema_proto_goTypes = []interface{}{
-	(*Chunk)(nil),                  // 0: telepresence.systema.Chunk
-	(*CreateDomainRequest)(nil),    // 1: telepresence.systema.CreateDomainRequest
-	(*CreateDomainResponse)(nil),   // 2: telepresence.systema.CreateDomainResponse
-	(*RemoveDomainRequest)(nil),    // 3: telepresence.systema.RemoveDomainRequest
-	(*InterceptRemoval)(nil),       // 4: telepresence.systema.InterceptRemoval
-	(*PreferredAgentResponse)(nil), // 5: telepresence.systema.PreferredAgentResponse
-	nil,                            // 6: telepresence.systema.CreateDomainRequest.AddRequestHeadersEntry
-	(*manager.InterceptSpec)(nil),  // 7: telepresence.manager.InterceptSpec
-	(*common.VersionInfo)(nil),     // 8: telepresence.common.VersionInfo
-	(*emptypb.Empty)(nil),          // 9: google.protobuf.Empty
-}
+var (
+	file_systema_manager2systema_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+	file_systema_manager2systema_proto_goTypes  = []interface{}{
+		(*Chunk)(nil),                  // 0: telepresence.systema.Chunk
+		(*CreateDomainRequest)(nil),    // 1: telepresence.systema.CreateDomainRequest
+		(*CreateDomainResponse)(nil),   // 2: telepresence.systema.CreateDomainResponse
+		(*RemoveDomainRequest)(nil),    // 3: telepresence.systema.RemoveDomainRequest
+		(*InterceptRemoval)(nil),       // 4: telepresence.systema.InterceptRemoval
+		(*PreferredAgentResponse)(nil), // 5: telepresence.systema.PreferredAgentResponse
+		nil,                            // 6: telepresence.systema.CreateDomainRequest.AddRequestHeadersEntry
+		(*manager.InterceptSpec)(nil),  // 7: telepresence.manager.InterceptSpec
+		(*common.VersionInfo)(nil),     // 8: telepresence.common.VersionInfo
+		(*emptypb.Empty)(nil),          // 9: google.protobuf.Empty
+	}
+)
 var file_systema_manager2systema_proto_depIdxs = []int32{
 	7, // 0: telepresence.systema.CreateDomainRequest.intercept_spec:type_name -> telepresence.manager.InterceptSpec
 	6, // 1: telepresence.systema.CreateDomainRequest.add_request_headers:type_name -> telepresence.systema.CreateDomainRequest.AddRequestHeadersEntry

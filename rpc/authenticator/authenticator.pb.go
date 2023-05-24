@@ -7,10 +7,11 @@
 package authenticator
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -160,11 +161,13 @@ func file_authenticator_authenticator_proto_rawDescGZIP() []byte {
 	return file_authenticator_authenticator_proto_rawDescData
 }
 
-var file_authenticator_authenticator_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_authenticator_authenticator_proto_goTypes = []interface{}{
-	(*GetContextExecCredentialsRequest)(nil),  // 0: telepresence.authenticator.GetContextExecCredentialsRequest
-	(*GetContextExecCredentialsResponse)(nil), // 1: telepresence.authenticator.GetContextExecCredentialsResponse
-}
+var (
+	file_authenticator_authenticator_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+	file_authenticator_authenticator_proto_goTypes  = []interface{}{
+		(*GetContextExecCredentialsRequest)(nil),  // 0: telepresence.authenticator.GetContextExecCredentialsRequest
+		(*GetContextExecCredentialsResponse)(nil), // 1: telepresence.authenticator.GetContextExecCredentialsResponse
+	}
+)
 var file_authenticator_authenticator_proto_depIdxs = []int32{
 	0, // 0: telepresence.authenticator.Authenticator.GetContextExecCredentials:input_type -> telepresence.authenticator.GetContextExecCredentialsRequest
 	1, // 1: telepresence.authenticator.Authenticator.GetContextExecCredentials:output_type -> telepresence.authenticator.GetContextExecCredentialsResponse

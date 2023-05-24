@@ -8,6 +8,7 @@ package connector
 
 import (
 	context "context"
+
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
@@ -507,96 +508,124 @@ type ConnectorServer interface {
 }
 
 // UnimplementedConnectorServer must be embedded to have forward compatible implementations.
-type UnimplementedConnectorServer struct {
-}
+type UnimplementedConnectorServer struct{}
 
 func (UnimplementedConnectorServer) Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
+
 func (UnimplementedConnectorServer) RootDaemonVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RootDaemonVersion not implemented")
 }
+
 func (UnimplementedConnectorServer) TrafficManagerVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TrafficManagerVersion not implemented")
 }
+
 func (UnimplementedConnectorServer) GetIntercept(context.Context, *manager.GetInterceptRequest) (*manager.InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetIntercept not implemented")
 }
+
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
+
 func (UnimplementedConnectorServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
 }
+
 func (UnimplementedConnectorServer) GetClusterSubnets(context.Context, *emptypb.Empty) (*ClusterSubnets, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClusterSubnets not implemented")
 }
+
 func (UnimplementedConnectorServer) Status(context.Context, *emptypb.Empty) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
+
 func (UnimplementedConnectorServer) CanIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CanIntercept not implemented")
 }
+
 func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
 }
+
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
+
 func (UnimplementedConnectorServer) UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
+
 func (UnimplementedConnectorServer) Helm(context.Context, *HelmRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Helm not implemented")
 }
+
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
 }
+
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
 }
+
 func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
 }
+
 func (UnimplementedConnectorServer) Login(context.Context, *LoginRequest) (*LoginResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
 }
+
 func (UnimplementedConnectorServer) Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
 }
+
 func (UnimplementedConnectorServer) GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudUserInfo not implemented")
 }
+
 func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAPIKey not implemented")
 }
+
 func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
 }
+
 func (UnimplementedConnectorServer) SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
+
 func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
+
 func (UnimplementedConnectorServer) GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GatherLogs not implemented")
 }
+
 func (UnimplementedConnectorServer) GatherTraces(context.Context, *TracesRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GatherTraces not implemented")
 }
+
 func (UnimplementedConnectorServer) AddInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddInterceptor not implemented")
 }
+
 func (UnimplementedConnectorServer) RemoveInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveInterceptor not implemented")
 }
+
 func (UnimplementedConnectorServer) GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNamespaces not implemented")
 }
+
 func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoteMountAvailability not implemented")
 }
+
 func (UnimplementedConnectorServer) GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfig not implemented")
 }
@@ -1462,24 +1491,28 @@ type ManagerProxyServer interface {
 }
 
 // UnimplementedManagerProxyServer must be embedded to have forward compatible implementations.
-type UnimplementedManagerProxyServer struct {
-}
+type UnimplementedManagerProxyServer struct{}
 
 func (UnimplementedManagerProxyServer) Version(context.Context, *emptypb.Empty) (*manager.VersionInfo2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
+
 func (UnimplementedManagerProxyServer) GetClientConfig(context.Context, *emptypb.Empty) (*manager.CLIConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClientConfig not implemented")
 }
+
 func (UnimplementedManagerProxyServer) WatchClusterInfo(*manager.SessionInfo, ManagerProxy_WatchClusterInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
 }
+
 func (UnimplementedManagerProxyServer) LookupDNS(context.Context, *manager.DNSRequest) (*manager.DNSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
 }
+
 func (UnimplementedManagerProxyServer) LookupHost(context.Context, *manager.LookupHostRequest) (*manager.LookupHostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
 }
+
 func (UnimplementedManagerProxyServer) Tunnel(ManagerProxy_TunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
 }

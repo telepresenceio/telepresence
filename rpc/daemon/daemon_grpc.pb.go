@@ -8,6 +8,7 @@ package daemon
 
 import (
 	context "context"
+
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
@@ -172,33 +173,40 @@ type DaemonServer interface {
 }
 
 // UnimplementedDaemonServer must be embedded to have forward compatible implementations.
-type UnimplementedDaemonServer struct {
-}
+type UnimplementedDaemonServer struct{}
 
 func (UnimplementedDaemonServer) Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
+
 func (UnimplementedDaemonServer) Status(context.Context, *emptypb.Empty) (*DaemonStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
+
 func (UnimplementedDaemonServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
+
 func (UnimplementedDaemonServer) Connect(context.Context, *OutboundInfo) (*DaemonStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
+
 func (UnimplementedDaemonServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Disconnect not implemented")
 }
+
 func (UnimplementedDaemonServer) GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNetworkConfig not implemented")
 }
+
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
 }
+
 func (UnimplementedDaemonServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
+
 func (UnimplementedDaemonServer) WaitForNetwork(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WaitForNetwork not implemented")
 }

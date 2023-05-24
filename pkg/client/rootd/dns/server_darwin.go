@@ -28,7 +28,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 			ps = append(ps, p)
 		}
 	}
-	ps = append([]string{tel2SubDomainDot + r.domain}, ps...)
+	ps = append(ps, r.domain)
 	r.search = ps
 }
 
@@ -82,9 +82,8 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		port:        dnsAddr.Port,
 		domain:      kubernetesZone,
 		nameservers: []string{dnsAddr.IP.String()},
-		search:      []string{tel2SubDomainDot + kubernetesZone},
+		search:      []string{kubernetesZone},
 	}
-
 	if err = rf.write(resolverFileName); err != nil {
 		return err
 	}

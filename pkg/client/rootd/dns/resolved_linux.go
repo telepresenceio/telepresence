@@ -115,7 +115,6 @@ func (s *Server) updateLinkDomains(c context.Context, paths []string, dev vif.De
 		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
 	}
 	paths = append(paths, "~"+s.clusterDomain)
-	paths = append([]string{tel2SubDomainDot + "cluster.local"}, paths...)
 
 	s.domainsLock.Lock()
 	s.namespaces = namespaces

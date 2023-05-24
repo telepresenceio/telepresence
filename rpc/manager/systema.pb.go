@@ -7,10 +7,11 @@
 package manager
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -154,10 +155,12 @@ func file_manager_systema_proto_rawDescGZIP() []byte {
 	return file_manager_systema_proto_rawDescData
 }
 
-var file_manager_systema_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_manager_systema_proto_goTypes = []interface{}{
-	(*ConnectionChunk)(nil), // 0: telepresence.manager.ConnectionChunk
-}
+var (
+	file_manager_systema_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+	file_manager_systema_proto_goTypes  = []interface{}{
+		(*ConnectionChunk)(nil), // 0: telepresence.manager.ConnectionChunk
+	}
+)
 var file_manager_systema_proto_depIdxs = []int32{
 	0, // 0: telepresence.manager.ManagerProxy.HandleConnection:input_type -> telepresence.manager.ConnectionChunk
 	0, // 1: telepresence.manager.ManagerProxy.HandleConnection:output_type -> telepresence.manager.ConnectionChunk

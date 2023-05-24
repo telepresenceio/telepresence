@@ -13,6 +13,7 @@ package manager
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -847,105 +848,136 @@ type ManagerServer interface {
 }
 
 // UnimplementedManagerServer must be embedded to have forward compatible implementations.
-type UnimplementedManagerServer struct {
-}
+type UnimplementedManagerServer struct{}
 
 func (UnimplementedManagerServer) Version(context.Context, *emptypb.Empty) (*VersionInfo2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
+
 func (UnimplementedManagerServer) GetLicense(context.Context, *emptypb.Empty) (*License, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLicense not implemented")
 }
+
 func (UnimplementedManagerServer) CanConnectAmbassadorCloud(context.Context, *emptypb.Empty) (*AmbassadorCloudConnection, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CanConnectAmbassadorCloud not implemented")
 }
+
 func (UnimplementedManagerServer) GetCloudConfig(context.Context, *emptypb.Empty) (*AmbassadorCloudConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudConfig not implemented")
 }
+
 func (UnimplementedManagerServer) GetClientConfig(context.Context, *emptypb.Empty) (*CLIConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClientConfig not implemented")
 }
+
 func (UnimplementedManagerServer) GetTelepresenceAPI(context.Context, *emptypb.Empty) (*TelepresenceAPIInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTelepresenceAPI not implemented")
 }
+
 func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsClient not implemented")
 }
+
 func (UnimplementedManagerServer) ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsAgent not implemented")
 }
+
 func (UnimplementedManagerServer) Remain(context.Context, *RemainRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Remain not implemented")
 }
+
 func (UnimplementedManagerServer) Depart(context.Context, *SessionInfo) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Depart not implemented")
 }
+
 func (UnimplementedManagerServer) SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
 }
+
 func (UnimplementedManagerServer) GetLogs(context.Context, *GetLogsRequest) (*LogsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLogs not implemented")
 }
+
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgents not implemented")
 }
+
 func (UnimplementedManagerServer) WatchAgentsNS(*AgentsRequest, Manager_WatchAgentsNSServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgentsNS not implemented")
 }
+
 func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchIntercepts not implemented")
 }
+
 func (UnimplementedManagerServer) WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
 }
+
 func (UnimplementedManagerServer) PrepareIntercept(context.Context, *CreateInterceptRequest) (*PreparedIntercept, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PrepareIntercept not implemented")
 }
+
 func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
 }
+
 func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
+
 func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
+
 func (UnimplementedManagerServer) GetIntercept(context.Context, *GetInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetIntercept not implemented")
 }
+
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
 }
+
 func (UnimplementedManagerServer) ClientTunnel(Manager_ClientTunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method ClientTunnel not implemented")
 }
+
 func (UnimplementedManagerServer) AgentTunnel(Manager_AgentTunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method AgentTunnel not implemented")
 }
+
 func (UnimplementedManagerServer) LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
 }
+
 func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupHostResponse not implemented")
 }
+
 func (UnimplementedManagerServer) WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLookupHost not implemented")
 }
+
 func (UnimplementedManagerServer) LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
 }
+
 func (UnimplementedManagerServer) AgentLookupDNSResponse(context.Context, *DNSAgentResponse) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupDNSResponse not implemented")
 }
+
 func (UnimplementedManagerServer) WatchLookupDNS(*SessionInfo, Manager_WatchLookupDNSServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLookupDNS not implemented")
 }
+
 func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, Manager_WatchLogLevelServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLogLevel not implemented")
 }
+
 func (UnimplementedManagerServer) Tunnel(Manager_TunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
 }
+
 func (UnimplementedManagerServer) WatchDial(*SessionInfo, Manager_WatchDialServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchDial not implemented")
 }

@@ -7,11 +7,12 @@
 package systema
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -106,11 +107,13 @@ func file_systema_cli2systema_proto_rawDescGZIP() []byte {
 	return file_systema_cli2systema_proto_rawDescData
 }
 
-var file_systema_cli2systema_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_systema_cli2systema_proto_goTypes = []interface{}{
-	(*CommandMessageResponse)(nil), // 0: telepresence.systema.CommandMessageResponse
-	(*emptypb.Empty)(nil),          // 1: google.protobuf.Empty
-}
+var (
+	file_systema_cli2systema_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+	file_systema_cli2systema_proto_goTypes  = []interface{}{
+		(*CommandMessageResponse)(nil), // 0: telepresence.systema.CommandMessageResponse
+		(*emptypb.Empty)(nil),          // 1: google.protobuf.Empty
+	}
+)
 var file_systema_cli2systema_proto_depIdxs = []int32{
 	1, // 0: telepresence.systema.SystemACli.GetUnauthenticatedCommandMessages:input_type -> google.protobuf.Empty
 	0, // 1: telepresence.systema.SystemACli.GetUnauthenticatedCommandMessages:output_type -> telepresence.systema.CommandMessageResponse

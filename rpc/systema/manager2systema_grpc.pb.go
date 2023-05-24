@@ -13,6 +13,7 @@ package systema
 
 import (
 	context "context"
+
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -122,18 +123,20 @@ type SystemACRUDServer interface {
 }
 
 // UnimplementedSystemACRUDServer must be embedded to have forward compatible implementations.
-type UnimplementedSystemACRUDServer struct {
-}
+type UnimplementedSystemACRUDServer struct{}
 
 func (UnimplementedSystemACRUDServer) CreateDomain(context.Context, *CreateDomainRequest) (*CreateDomainResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateDomain not implemented")
 }
+
 func (UnimplementedSystemACRUDServer) RemoveDomain(context.Context, *RemoveDomainRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveDomain not implemented")
 }
+
 func (UnimplementedSystemACRUDServer) RemoveIntercept(context.Context, *InterceptRemoval) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
+
 func (UnimplementedSystemACRUDServer) PreferredAgent(context.Context, *common.VersionInfo) (*PreferredAgentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PreferredAgent not implemented")
 }
@@ -317,8 +320,7 @@ type SystemAProxyServer interface {
 }
 
 // UnimplementedSystemAProxyServer must be embedded to have forward compatible implementations.
-type UnimplementedSystemAProxyServer struct {
-}
+type UnimplementedSystemAProxyServer struct{}
 
 func (UnimplementedSystemAProxyServer) ReverseConnection(SystemAProxy_ReverseConnectionServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReverseConnection not implemented")

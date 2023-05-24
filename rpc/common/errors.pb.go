@@ -7,10 +7,11 @@
 package common
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -289,13 +290,15 @@ func file_common_errors_proto_rawDescGZIP() []byte {
 	return file_common_errors_proto_rawDescData
 }
 
-var file_common_errors_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_common_errors_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_common_errors_proto_goTypes = []interface{}{
-	(InterceptError)(0),       // 0: telepresence.common.InterceptError
-	(Result_ErrorCategory)(0), // 1: telepresence.common.Result.ErrorCategory
-	(*Result)(nil),            // 2: telepresence.common.Result
-}
+var (
+	file_common_errors_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+	file_common_errors_proto_msgTypes  = make([]protoimpl.MessageInfo, 1)
+	file_common_errors_proto_goTypes   = []interface{}{
+		(InterceptError)(0),       // 0: telepresence.common.InterceptError
+		(Result_ErrorCategory)(0), // 1: telepresence.common.Result.ErrorCategory
+		(*Result)(nil),            // 2: telepresence.common.Result
+	}
+)
 var file_common_errors_proto_depIdxs = []int32{
 	1, // 0: telepresence.common.Result.error_category:type_name -> telepresence.common.Result.ErrorCategory
 	1, // [1:1] is the sub-list for method output_type
