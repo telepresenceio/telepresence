@@ -33,6 +33,7 @@
    hosted in that cluster, then you can use `make private-registry`. It
    will deploy a registry and set it up so that it is reachable at
    `localhost:5000`, both from the cluster and from the local workstation.
+TEST
 
  - `DEV_TELEPRESENCE_VERSION` (optional) if set to a version such as
    `v2.12.1-alpha.0`, the integration tests will assume that this version
