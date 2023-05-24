@@ -440,7 +440,7 @@ type cacheKey struct {
 // resolveThruCache resolves the given query by first performing a cache lookup. If a cached
 // entry is found that hasn't expired, it's returned. If not, this function will call
 // resolveQuery() to resolve and store in the case.
-func (s *Server) resolveThruCache(q *dns.Question, isMapping bool) (dnsproxy.RRs, int, error) {
+func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
@@ -452,8 +452,8 @@ func (s *Server) resolveThruCache(q *dns.Question, isMapping bool) (dnsproxy.RRs
 		<-oldDv.wait
 		if !oldDv.expired() {
 			copyQType := q.Qtype
-			// If is a mapping.
-			if isMapping {
+			// If answer is a mapping, the copy type should be a CNAME.
+			if len(oldDv.answer) == 1 && oldDv.answer[0].Header().Rrtype == dns.TypeCNAME {
 				copyQType = dns.TypeCNAME
 			}
 			return copyRRs(oldDv.answer, copyQType), oldDv.rCode, nil
@@ -467,24 +467,26 @@ func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnspr
 	// Only DNS aliases result in queries belonging to the tel2-search subdomain, which isn't a real one, so we
 	// strip so we can process it later
 	// Example:
-	// 	my-alias.tel2-search.cluster.local -> my-alias.
-
+	//	 my-alias.tel2-search.cluster.local -> my-alias.
+	//
 	// Other unqualified hostname generally refer to a specific subdomain associated with an intercept running in
 	// a namespace, so they won't be stripped.
 	// Example:
-	// 	my-svc.blue.cluster.local -> <empty>
+	//	 my-svc.blue.cluster.local -> <empty>
 	uhm := s.tel2SubDomainHostname(q.Name)
 	originalName := q.Name
 	if uhm != "" {
 		q.Name = uhm
 	}
 
-	rrs, rCode, err := s.resolveThruCache(q, uhm != "")
+	rrs, rCode, err := s.resolveThruCache(q)
 
 	// Restore the original query name which was stripped before, or the response won't be formed correctly.
-	if uhm != "" && len(rrs) > 0 {
-		rrs[0].Header().Name = originalName
+	if uhm != "" {
 		q.Name = originalName
+		if len(rrs) > 0 {
+			rrs[0].Header().Name = originalName
+		}
 	}
 
 	return rrs, rCode, err

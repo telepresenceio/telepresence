@@ -25,6 +25,10 @@ func init() {
 	})
 }
 
+func (s *unqualifiedHostNameDNSSuite) TearDownTest() {
+	itest.TelepresenceQuitOk(s.Context())
+}
+
 func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 	// given
 	ctx := s.Context()
@@ -46,7 +50,6 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 
 	// when
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
-	defer itest.TelepresenceQuitOk(ctx)
 
 	// then
 	for _, excluded := range excludes {
@@ -91,7 +94,6 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 
 	// when
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
-	defer itest.TelepresenceQuitOk(ctx)
 
 	// then
 	for _, mapping := range mappings {
