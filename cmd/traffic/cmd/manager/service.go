@@ -849,6 +849,10 @@ func (m *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDi
 	lrCh := m.state.WatchDial(session.SessionId)
 	for {
 		select {
+		// connection broken
+		case <-ctx.Done():
+			return nil
+		// service stopped
 		case <-m.ctx.Done():
 			return nil
 		case lr := <-lrCh:
@@ -856,15 +860,9 @@ func (m *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDi
 				return nil
 			}
 			if err := stream.Send(lr); err != nil {
-				dlog.Errorf(ctx, "WatchDial.Send() failed: %v", err)
+				dlog.Errorf(ctx, "failed to send dial request: %v", err)
 				// We couldnt stream the dial request. This likely means
-				// that we lost connection. Pass lr to the next WatchDial call
-				select {
-				// If it has been longer than 30s, everyone has probably moved
-				// on with their lives.
-				case <-time.After(time.Second * 30):
-				case lrCh <- lr:
-				}
+				// that we lost connection.
 				return nil
 			}
 		}

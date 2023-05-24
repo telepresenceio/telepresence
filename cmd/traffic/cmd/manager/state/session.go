@@ -20,7 +20,7 @@ type SessionState interface {
 	Done() <-chan struct{}
 	LastMarked() time.Time
 	SetLastMarked(lastMarked time.Time)
-	Dials() chan *rpc.DialRequest
+	Dials() <-chan *rpc.DialRequest
 	EstablishBidiPipe(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
 	OnConnect(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
 }
@@ -118,7 +118,7 @@ func (ss *sessionState) Cancel() {
 	close(ss.dials)
 }
 
-func (ss *sessionState) Dials() chan *rpc.DialRequest {
+func (ss *sessionState) Dials() <-chan *rpc.DialRequest {
 	return ss.dials
 }
 
