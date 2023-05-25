@@ -31,3 +31,57 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.13.3
+    date: TBD
+    notes:
+      - type: feature
+        title: Add imagePullSecrets to hooks
+        body: >-
+          Add .Values.hooks.curl.imagePullSecrets and .Values.hooks curl.imagePullSecrets to Helm values.
+        docs: https://github.com/telepresenceio/telepresence/pull/3079
+
+      - type: change
+        title: Change reinvocation policy to Never for the mutating webhook
+        body: >-
+          The default setting of the reinvocationPolicy for the mutating webhook dealing with agent injections changed from Never to IfNeeded.
+
+      - type: bugfix
+        title: Fix mounting fail of IAM roles for service accounts web identity token
+        body: >-
+          The eks.amazonaws.com/serviceaccount volume injected by EKS is now exported and remotely mounted during an intercept.
+        docs: https://github.com/telepresenceio/telepresence/issues/3166
+
+      - type: bugfix
+        title: Correct namespace selector for cluster versions with non-numeric characters
+        body: >-
+          The mutating webhook now correctly applies the namespace selector even if the cluster version contains non-numeric characters. For example, it can now handle versions such as Major:"1", Minor:"22+".
+        docs: https://github.com/telepresenceio/telepresence/pull/3184
+
+      - type: bugfix
+        title: Enable IPv6 on the telepresence docker network
+        body: >-
+          The "telepresence" Docker network will now propagate DNS AAAA queries to the Telepresence DNS resolver when it runs in a Docker container.
+        docs: https://github.com/telepresenceio/telepresence/issues/3179
+
+      - type: bugfix
+        title: Fix the crash when intercepting with --local-only and --docker-run
+        body: >-
+          Running telepresence intercept --local-only --docker-run no longer  results in a panic.
+        docs: https://github.com/telepresenceio/telepresence/issues/3171
+
+      - type: bugfix
+        title: Fix incorrect error message with local-only mounts
+        body: >-
+          Running telepresence intercept --local-only --mount false no longer results in an incorrect error message saying "a local-only intercept cannot have mounts".
+        docs: https://github.com/telepresenceio/telepresence/issues/3171
+
+      - type: bugfix
+        title: specify port in hook urls
+        body: >-
+          The helm chart now correctly handles custom agentInjector.webhook.port that was not being set in hook URLs.
+        docs: https://github.com/telepresenceio/telepresence/pull/3161
+
+      - type: bugfix
+        title: Fix wrong default value for disableGlobal and agentArrival
+        body: >-
+          Params .intercept.disableGlobal and .timeouts.agentArrival are now correctly honored.
