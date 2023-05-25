@@ -106,18 +106,25 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if err != nil {
 		return nil, err
 	}
-	conn, err = docker.DiscoverDaemon(ctx, name)
-	if err == nil {
-		return newUserDaemon(conn, true), nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
+	ctx, err = docker.EnableClient(ctx)
+	if err != nil && cr.Docker {
 		return nil, errcat.NoDaemonLogs.New(err)
+	}
+
+	if err == nil {
+		conn, err = docker.DiscoverDaemon(ctx, name)
+		if err == nil {
+			return newUserDaemon(conn, true), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, errcat.NoDaemonLogs.New(err)
+		}
 	}
 	if cr.Docker {
 		if required {
 			conn, err = docker.LaunchDaemon(ctx, name)
 			if err != nil {
-				return nil, err
+				return nil, errcat.NoDaemonLogs.New(err)
 			}
 			return newUserDaemon(conn, true), nil
 		}
