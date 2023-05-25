@@ -32,7 +32,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.13.3
-    date: TBD
+    date: "2023-05-25"
     notes:
       - type: feature
         title: Add imagePullSecrets to hooks
