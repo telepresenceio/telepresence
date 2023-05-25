@@ -329,6 +329,8 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 
 	reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
 
+	initErrCh := make(chan error, 1)
+
 	// Run the session asynchronously. We must be able to respond to connect (with getNetworkConfig) while
 	// the session is running. The d.session.cancel is called from Disconnect
 	wg.Add(1)
@@ -343,10 +345,18 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 			s.sessionLock.Unlock()
 			wg.Done()
 		}()
-		if err := s.session.run(s.sessionContext); err != nil {
+		if err := s.session.run(s.sessionContext, initErrCh); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}()
+	select {
+	case <-ctx.Done():
+	case err := <-initErrCh:
+		if err != nil {
+			reply.err = err
+			s.cancelSessionReadLocked()
+		}
+	}
 	return reply
 }
 

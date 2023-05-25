@@ -393,7 +393,7 @@ func (s *Session) networkReady(ctx context.Context) <-chan error {
 	return rdy
 }
 
-func (s *Session) watchClusterInfo(ctx context.Context) {
+func (s *Session) watchClusterInfo(ctx context.Context) error {
 	backoff := 100 * time.Millisecond
 
 	for ctx.Err() == nil {
@@ -401,9 +401,10 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 		if err != nil {
 			err = fmt.Errorf("error when calling WatchClusterInfo: %w", err)
 			dlog.Warn(ctx, err)
+			return err
 		}
 
-		for err == nil && ctx.Err() == nil {
+		for ctx.Err() == nil {
 			mgrInfo, err := infoStream.Recv()
 			if err != nil {
 				if gErr, ok := status.FromError(err); ok {
@@ -411,7 +412,7 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 					case codes.Canceled:
 						// The connector, which is routing this connection, cancelled it, which means that the client
 						// session is dead.
-						return
+						return nil
 					case codes.Unavailable:
 						// Abrupt shutdown. This is nothing that the session should survive
 						dlog.Errorf(ctx, "WatchClusterInfo recv: Unavailable: %v", gErr.Message())
@@ -424,13 +425,17 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 			ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "ClusterInfoUpdate")
 			select {
 			case <-s.vifReady:
-				s.onClusterInfo(ctx, mgrInfo, span)
+				if err := s.onClusterInfo(ctx, mgrInfo, span); err != nil {
+					if !errors.Is(err, context.Canceled) {
+						dlog.Error(ctx, err)
+					}
+				}
 			default:
 				if err = s.onFirstClusterInfo(ctx, mgrInfo, span); err != nil {
 					if !errors.Is(err, context.Canceled) {
 						dlog.Error(ctx, err)
 					}
-					return
+					return err
 				}
 			}
 			span.End()
@@ -441,6 +446,7 @@ func (s *Session) watchClusterInfo(ctx context.Context) {
 			backoff = 15 * time.Second
 		}
 	}
+	return nil
 }
 
 // createSubnetForDNSOnly will find a random IPv4 subnet that isn't currently routed and
@@ -468,13 +474,17 @@ func (s *Session) createSubnetForDNSOnly(ctx context.Context, mgrInfo *manager.C
 	}
 }
 
-func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
-	defer close(s.vifReady)
+func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) (err error) {
+	defer func() {
+		if err != nil {
+			s.vifReady <- err
+		}
+		close(s.vifReady)
+	}()
 	s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
 	s.proxyClusterSvcs = s.checkSvcConnectivity(ctx, mgrInfo)
-	err := ctx.Err()
-	if err != nil {
-		return err
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	s.readAdditionalRouting(ctx, mgrInfo)
 	willProxy := s.proxyClusterSvcs || s.proxyClusterPods || len(s.alsoProxySubnets) > 0
@@ -492,11 +502,10 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 			return fmt.Errorf("NewTunnelVIF: %v", err)
 		}
 	}
-	s.onClusterInfo(ctx, mgrInfo, span)
-	return nil
+	return s.onClusterInfo(ctx, mgrInfo, span)
 }
 
-func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) {
+func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
 	dlog.Debugf(ctx, "WatchClusterInfo update")
 	dns := mgrInfo.Dns
 	if dns == nil {
@@ -548,7 +557,7 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 
 	s.clusterSubnets = subnet.Unique(subnets)
 	if err := s.refreshSubnets(ctx); err != nil {
-		dlog.Error(ctx, err)
+		return err
 	}
 
 	span.SetAttributes(
@@ -557,6 +566,7 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		attribute.Stringer("tel2.cluster-dns", net.IP(dns.KubeIp)),
 		attribute.String("tel2.cluster-domain", dns.ClusterDomain),
 	)
+	return nil
 }
 
 func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.ClusterInfo) {
@@ -658,7 +668,7 @@ func (s *Session) checkPodConnectivity(ctx context.Context, info *manager.Cluste
 	return false
 }
 
-func (s *Session) run(c context.Context) error {
+func (s *Session) run(c context.Context, initErrs chan error) error {
 	defer func() {
 		dlog.Info(c, "-- Session ended")
 		if s.clientConn != nil {
@@ -672,8 +682,11 @@ func (s *Session) run(c context.Context) error {
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	if err := s.Start(c, g); err != nil {
+		defer close(initErrs)
+		initErrs <- err
 		return err
 	}
+	close(initErrs)
 	return g.Wait()
 }
 
@@ -687,8 +700,7 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 			cancelDNS()
 			cancelDNSLock.Unlock()
 		}()
-		s.watchClusterInfo(ctx)
-		return nil
+		return s.watchClusterInfo(ctx)
 	})
 
 	// At this point, we wait until the VIF is ready. It will be, shortly after
@@ -703,7 +715,11 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		s.vifReady <- wc.Err()
 		s.dnsServer.Stop()
 		return wc.Err()
-	case <-s.vifReady:
+	case err := <-s.vifReady:
+		if err != nil {
+			s.dnsServer.Stop()
+			return err
+		}
 	}
 
 	// Start the router and the DNS Service and wait for the context
