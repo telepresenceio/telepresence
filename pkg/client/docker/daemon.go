@@ -368,11 +368,10 @@ func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) er
 
 	// Let's check if we have a container with port bindings for the
 	// given addrPort that is a known k8sapi provider
-	cli, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
-	if err != nil {
-		return err
+	cli := GetClient(ctx)
+	if cli == nil {
+		return errors.New("docker client not initialized")
 	}
-	defer cli.Close()
 	cjs := runningContainers(ctx, cli)
 
 	var hostPort, network string

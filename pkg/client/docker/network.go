@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -15,11 +16,10 @@ import (
 
 // EnsureNetwork checks if a network with the given name exists, and creates it if that is not the case.
 func EnsureNetwork(ctx context.Context, name string) error {
-	cli, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
-	if err != nil {
-		return err
+	cli := GetClient(ctx)
+	if cli == nil {
+		return errors.New("docker client not initialized")
 	}
-	defer cli.Close()
 	resource, err := cli.NetworkInspect(ctx, name, types.NetworkInspectOptions{})
 	if err != nil {
 		if !dockerClient.IsErrNotFound(err) {
