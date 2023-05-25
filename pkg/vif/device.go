@@ -83,7 +83,7 @@ func (d *device) subnetToRoute(subnet *net.IPNet) (*routing.Route, error) {
 	gw := make(net.IP, len(subnet.IP))
 	copy(gw, subnet.IP)
 	gw[len(gw)-1] += 1
-	iface, err := net.InterfaceByIndex(int(d.Index()))
+	iface, err := net.InterfaceByName(d.Name())
 	if err != nil {
 		return nil, err
 	}
