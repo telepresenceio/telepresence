@@ -15,6 +15,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
+type table struct{}
+
 func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
 	if err != nil {
@@ -152,5 +154,17 @@ func (r *Route) removeStatic(ctx context.Context) error {
 }
 
 func openTable(ctx context.Context) (Table, error) {
-	panic("not yet")
+	return &table{}, nil
+}
+
+func (t *table) Add(ctx context.Context, r *Route) error {
+	return r.AddStatic(ctx)
+}
+
+func (t *table) Remove(ctx context.Context, r *Route) error {
+	return r.RemoveStatic(ctx)
+}
+
+func (t *table) Close(ctx context.Context) error {
+	return nil
 }

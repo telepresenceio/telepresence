@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -317,9 +318,24 @@ func (t *nativeDevice) setMTU(int) error {
 }
 
 func (t *nativeDevice) readPacket(into *buffer.Data) (int, error) {
-	return t.Device.Read(into.Raw(), 0)
+	sz := make([]int, 1)
+	packetsN, err := t.Device.Read([][]byte{into.Raw()}, sz, 0)
+	if err != nil {
+		return 0, err
+	}
+	if packetsN == 0 {
+		return 0, io.EOF
+	}
+	return sz[0], nil
 }
 
 func (t *nativeDevice) writePacket(from *buffer.Data, offset int) (int, error) {
-	return t.Device.Write(from.Raw(), offset)
+	packetsN, err := t.Device.Write([][]byte{from.Raw()}, offset)
+	if err != nil {
+		return 0, err
+	}
+	if packetsN == 0 {
+		return 0, io.EOF
+	}
+	return len(from.Raw()), nil
 }
