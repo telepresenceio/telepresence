@@ -1,0 +1,10 @@
+{{- if not .Values.rbac.only }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telepresence-excluded-variables
+  namespace:  {{ include "traffic-manager.namespace" . }}
+  data: {{ range .Values.variables.excluded }}
+    {{ . }}: "true"
+  {{- end }}
+{{- end }}

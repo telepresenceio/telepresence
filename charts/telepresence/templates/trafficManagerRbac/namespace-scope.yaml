@@ -54,6 +54,7 @@ rules:
   - delete
   resourceNames:
   - telepresence-agents
+  - telepresence-excluded-variables
 - apiGroups:
   - "apps"
   resources:
