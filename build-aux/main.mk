@@ -211,10 +211,10 @@ clobber: ## (Build) Remove all build artifacts and tools
 .PHONY: prepare-release
 prepare-release: generate wix
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.OLD.md
-	rm -f CHANGELOG.md.bak
-	git add CHANGELOG.md
+	rm -f CHANGELOG.OLD.md.bak
+	git add CHANGELOG.OLD.md
 
-	sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%M-%d')\"/" CHANGELOG.yml
+	sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%m-%d')\"/" CHANGELOG.yml
 	rm -f CHANGELOG.yml.bak
 	git add CHANGELOG.yml
 
