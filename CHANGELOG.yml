@@ -1,0 +1,87 @@
+# The YAML in this file should contain:
+#
+# changelog: An (optional) URL to the CHANGELOG for the product.
+# items: An array of releases with the following attributes:
+#     - version: The (optional) version number of the release, if applicable.
+#     - date: The date of the release in the format YYYY-MM-DD.
+#     - notes: An array of noteworthy changes included in the release, each having the following attributes:
+#         - type: The type of change, one of `bugfix`, `feature`, `security` or `change`.
+#         - title: A short title of the noteworthy change.
+#         - body: >-
+#             Two or three sentences describing the change and why it
+#             is noteworthy.  This is HTML, not plain text or
+#             markdown.  It is handy to use YAML's ">-" feature to
+#             allow line-wrapping.
+#         - image: >-
+#             The URL of an image that visually represents the
+#             noteworthy change.  This path is relative to the
+#             `release-notes` directory; if this file is
+#             `FOO/releaseNotes.yml`, then the image paths are
+#             relative to `FOO/release-notes/`.
+#         - docs: The path to the documentation page where additional information can be found.
+#         - href: A path from the root to a resource on the getambassador website, takes precedence over a docs link.
+#
+# For older changes, see CHANGELOG.OLD.md
+
+docTitle: Telepresence Release Notes
+docDescription: >-
+  Release notes for Telepresence by Ambassador Labs, a CNCF project
+  that enables developers to iterate rapidly on Kubernetes
+  microservices by arming them with infinite-scale development
+  environments, access to instantaneous feedback loops, and highly
+  customizable development environments.
+items:
+  - version: 2.13.3
+    date: "2023-05-25"
+    notes:
+      - type: feature
+        title: Add imagePullSecrets to hooks
+        body: >-
+          Add .Values.hooks.curl.imagePullSecrets and .Values.hooks curl.imagePullSecrets to Helm values.
+        docs: https://github.com/telepresenceio/telepresence/pull/3079
+
+      - type: change
+        title: Change reinvocation policy to Never for the mutating webhook
+        body: >-
+          The default setting of the reinvocationPolicy for the mutating webhook dealing with agent injections changed from Never to IfNeeded.
+
+      - type: bugfix
+        title: Fix mounting fail of IAM roles for service accounts web identity token
+        body: >-
+          The eks.amazonaws.com/serviceaccount volume injected by EKS is now exported and remotely mounted during an intercept.
+        docs: https://github.com/telepresenceio/telepresence/issues/3166
+
+      - type: bugfix
+        title: Correct namespace selector for cluster versions with non-numeric characters
+        body: >-
+          The mutating webhook now correctly applies the namespace selector even if the cluster version contains non-numeric characters. For example, it can now handle versions such as Major:"1", Minor:"22+".
+        docs: https://github.com/telepresenceio/telepresence/pull/3184
+
+      - type: bugfix
+        title: Enable IPv6 on the telepresence docker network
+        body: >-
+          The "telepresence" Docker network will now propagate DNS AAAA queries to the Telepresence DNS resolver when it runs in a Docker container.
+        docs: https://github.com/telepresenceio/telepresence/issues/3179
+
+      - type: bugfix
+        title: Fix the crash when intercepting with --local-only and --docker-run
+        body: >-
+          Running telepresence intercept --local-only --docker-run no longer  results in a panic.
+        docs: https://github.com/telepresenceio/telepresence/issues/3171
+
+      - type: bugfix
+        title: Fix incorrect error message with local-only mounts
+        body: >-
+          Running telepresence intercept --local-only --mount false no longer results in an incorrect error message saying "a local-only intercept cannot have mounts".
+        docs: https://github.com/telepresenceio/telepresence/issues/3171
+
+      - type: bugfix
+        title: specify port in hook urls
+        body: >-
+          The helm chart now correctly handles custom agentInjector.webhook.port that was not being set in hook URLs.
+        docs: https://github.com/telepresenceio/telepresence/pull/3161
+
+      - type: bugfix
+        title: Fix wrong default value for disableGlobal and agentArrival
+        body: >-
+          Params .intercept.disableGlobal and .timeouts.agentArrival are now correctly honored.

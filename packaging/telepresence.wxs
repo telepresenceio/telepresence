@@ -1,5 +1,5 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="Telepresence" Language="1033" Codepage="1252" Version="2.13.2"
+  <Package Name="Telepresence" Language="1033" Codepage="1252" Version="2.13.3"
     Manufacturer="Ambassador Labs" InstallerVersion="100" ProductCode="*"
     UpgradeCode="fdac1021-3405-4097-84e3-1e683ba9eee5">
     <SummaryInformation Keywords="Installer" Description="Ambassador's Telepresence Installer"

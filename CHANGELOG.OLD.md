@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.13.3 (TBD)
+### 2.13.3 (May 25, 2023)
 
 - Feature: Add `.Values.hooks.curl.imagePullSecrets` and `.Values.hooks.curl.imagePullSecrets` to Helm values.
   PR [3079](https://github.com/telepresenceio/telepresence/pull/3079).
