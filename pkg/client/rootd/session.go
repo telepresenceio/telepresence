@@ -501,6 +501,8 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator()); err != nil {
 			return fmt.Errorf("NewTunnelVIF: %v", err)
 		}
+		// TODO: Set a 0.0.0.0/0 whitelist until we wire in user-configured whitelist.
+		s.tunVif.Router.UpdateWhitelist([]*net.IPNet{{IP: net.IPv4zero, Mask: net.IPv4Mask(0, 0, 0, 0)}})
 	}
 	return s.onClusterInfo(ctx, mgrInfo, span)
 }
