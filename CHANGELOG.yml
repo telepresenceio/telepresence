@@ -41,7 +41,12 @@ items:
           exclude a given list of hostnames from resolution, while the mappings field can be used to resolve a hostname with
           another.
         docs: https://github.com/telepresenceio/telepresence/pull/3172
-
+        
+      - type: feature
+        title: Added the ability to exclude environment variables
+        body: >-
+          Added a new config map that can take an array of environment variables that will
+          then be excluded from an intercept that retrieves the environment of a pod.
   - version: 2.13.3
     date: "2023-05-25"
     notes:
