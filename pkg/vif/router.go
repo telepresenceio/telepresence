@@ -110,6 +110,11 @@ func (rt *Router) UpdateRoutes(ctx context.Context, plaseProxy, dontProxy []*net
 			if err != nil {
 				dlog.Error(ctx, err)
 			} else {
+				// Ensure the route we append is the one the user requested, not whatever is in the routing table.
+				// This is important because if, say, the route requested is 10.0.2.0/24 and the routing table has something like 10.0.0.0/8,
+				// we would end up routing all of 10.0.0.0/8 without meaning to.
+				r.RoutedNet = n
+				r.Default = false
 				rt.neverProxyRoutes = append(rt.neverProxyRoutes, r)
 			}
 		}

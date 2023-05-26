@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 func GetRoutingTable(ctx context.Context) ([]*Route, error) {
@@ -52,27 +52,22 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 				mask = net.CIDRMask(dst.Bits(), 128)
 			}
 		}
-		var dflt bool
-		if len(gwc) == 4 {
-			dflt = !bytes.Equal(gwc, []byte{0, 0, 0, 0})
-		} else {
-			dflt = !bytes.Equal(gwc, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+		routedNet := &net.IPNet{
+			IP:   ip,
+			Mask: mask,
 		}
 		routes = append(routes, &Route{
-			LocalIP: localIP,
-			Gateway: gwc,
-			RoutedNet: &net.IPNet{
-				IP:   ip,
-				Mask: mask,
-			},
+			LocalIP:   localIP,
+			Gateway:   gwc,
+			RoutedNet: routedNet,
 			Interface: iface,
-			Default:   dflt,
+			Default:   subnet.IsZeroMask(routedNet),
 		})
 	}
 	return routes, nil
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	pshScript := fmt.Sprintf(`
 $job = Find-NetRoute -RemoteIPAddress "%s" -AsJob | Wait-Job -Timeout 30

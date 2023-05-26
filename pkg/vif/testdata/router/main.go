@@ -16,18 +16,20 @@ import (
 
 func main() {
 	cfg := client.GetDefaultConfig()
-	ctx, cancel := context.WithCancel(client.WithConfig(context.Background(), &cfg))
-	defer cancel()
+	bCtx := client.WithConfig(context.Background(), &cfg)
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
-	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
-	vif.InitLogger(ctx)
+	bCtx = dlog.WithLogger(bCtx, dlog.WrapLogrus(logger))
+	vif.InitLogger(bCtx)
+
+	ctx, cancel := context.WithCancel(client.WithConfig(bCtx, &cfg))
+	defer cancel()
 	dev, err := vif.NewTunnelingDevice(ctx, nil)
 	if err != nil {
 		panic(err)
 	}
 	defer func() {
-		if err := dev.Close(ctx); err != nil {
+		if err := dev.Close(bCtx); err != nil {
 			panic(err)
 		}
 	}()

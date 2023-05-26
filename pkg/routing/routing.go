@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -85,10 +86,11 @@ func (r *Route) Routes(ip net.IP) bool {
 }
 
 func (r *Route) String() string {
-	if r.Default {
-		return fmt.Sprintf("default via %s dev %s, gw %s", r.LocalIP, r.Interface.Name, r.Gateway)
+	isDefault := " (default)"
+	if !r.Default {
+		isDefault = ""
 	}
-	return fmt.Sprintf("%s via %s dev %s, gw %s", r.RoutedNet, r.LocalIP, r.Interface.Name, r.Gateway)
+	return fmt.Sprintf("%s via %s dev %s, gw %s%s", r.RoutedNet, r.LocalIP, r.Interface.Name, r.Gateway, isDefault)
 }
 
 // AddStatic adds a specific route. This can be used to prevent certain IP addresses
@@ -129,4 +131,59 @@ func interfaceLocalIP(iface *net.Interface, ipv4 bool) (net.IP, error) {
 		return ip, nil
 	}
 	return nil, nil
+}
+
+func compareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
+	dlog.Tracef(ctx, "Comparing OS route %s to table route %s", osRoute, tableRoute)
+	if runtime.GOOS == "linux" {
+		// On Linux, when we ask about an IP address assigned to the machine, the OS will give us a loopback route
+		if osRoute.LocalIP.Equal(osRoute.RoutedNet.IP) && osRoute.Interface.Flags&net.FlagLoopback != 0 {
+			addrs, err := tableRoute.Interface.Addrs()
+			if err != nil {
+				return false, err
+			}
+			for _, addr := range addrs {
+				dlog.Tracef(ctx, "Checking address %s against %s", addr.String(), osRoute.RoutedNet.IP.String())
+				if addr.(*net.IPNet).IP.Equal(osRoute.LocalIP) {
+					return true, nil
+				}
+			}
+		}
+	}
+	return osRoute.Interface.Index == tableRoute.Interface.Index, nil
+}
+
+func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+	// This is a two-step process. First the OS will be queried for the route directly.
+	// Whatever it gives back is not necessarily gonna look exactly like the route from the routing table.
+	// i.e. the OS will not tell us, for example, if this is the default route.
+	// So once we have the route from the OS, we'll query the routing table to get the full route.
+	// If this seems a little contrived, it's because it is. But there are NO system calls that directly query an OS for
+	// a route's corresponding entry in the table, and we shouldn't re-implement the OS' routing logic itself by
+	// trying to route the packet analytically from the table.
+	osRoute, err := getRoute(ctx, routedNet)
+	if err != nil {
+		return nil, err
+	}
+	rt, err := GetRoutingTable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var defaultRoute *Route
+	for _, r := range rt {
+		if ok, err := compareRoutes(ctx, osRoute, r); ok && err == nil {
+			if r.Routes(routedNet.IP) {
+				return r, nil
+			} else if r.Default {
+				defaultRoute = r
+			}
+		} else if err != nil {
+			dlog.Errorf(ctx, "Unable to compare routes %s and %s: %v", r, osRoute, err)
+		}
+	}
+	if defaultRoute != nil {
+		dlog.Tracef(ctx, "Picked default route %s for network %s", defaultRoute, routedNet)
+		return defaultRoute, nil
+	}
+	return nil, fmt.Errorf("unable to find route for %s", routedNet)
 }

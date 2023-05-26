@@ -34,7 +34,7 @@ func getCidr(byte3, byte4 byte, mask int) *net.IPNet {
 	// 198.18.0.0/15 is reserved for benchmarking.
 	ip := net.IPv4(198, 18, byte3, byte4)
 	return &net.IPNet{
-		IP:   ip,
+		IP:   ip.To4(),
 		Mask: net.CIDRMask(mask, 32),
 	}
 }
@@ -195,7 +195,7 @@ func (s *RoutingSuite) Test_WhitelistedRoutes() {
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
 	// Ensure that the route is for the right device
-	s.Require().Equal(device2, route.Interface.Name)
+	s.Require().Equal(device2, route.Interface.Name, "Route %s is not for device %s", route, device2)
 }
 
 func (s *RoutingSuite) Test_VPNConflicts() {
@@ -243,6 +243,27 @@ func (s *RoutingSuite) Test_VPNConflictsWithWhitelist() {
 	route, err := routing.GetRoute(ctx, &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)})
 	s.Require().NoError(err)
 	s.Require().Equal(device, route.Interface.Name)
+}
+
+func (s *RoutingSuite) Test_GetRoute() {
+	ctx := context.Background()
+	cidr := getCidr(2, 0, 24)
+
+	ipnet := getCidr(2, 1, 32)
+
+	device, routerCancel, err := s.runRouter(ctx, cidr.String())
+	s.Require().NoError(err)
+	defer routerCancel()
+
+	route, err := routing.GetRoute(ctx, ipnet)
+
+	// We know what this route is supposed to look like cause we just added it. Make sure it matches.
+	s.Require().NoError(err)
+	s.Require().Equal(device, route.Interface.Name)
+	s.Require().Equal(cidr, route.RoutedNet)
+	s.Require().False(route.Default)
+	s.Require().NotNil(route.Gateway)
+	s.Require().Equal(cidr.IP, route.LocalIP)
 }
 
 func (s *RoutingSuite) printRoutingTable(ctx context.Context) { //nolint:unused // Useful for debugging

@@ -136,7 +136,7 @@ msgLoop:
 	return routes, nil
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	cmd := dexec.CommandContext(ctx, "ip", "route", "get", ip.String())
 	cmd.DisableLogging = true
