@@ -4,7 +4,7 @@ kind: ConfigMap
 metadata:
   name: telepresence-excluded-variables
   namespace:  {{ include "traffic-manager.namespace" . }}
-  data: {{ range .Values.variables.excluded }}
-    {{ . }}: "true"
+data: {{ range .Values.variables.excluded }}
+  {{ . }}: "forbid"
   {{- end }}
 {{- end }}
