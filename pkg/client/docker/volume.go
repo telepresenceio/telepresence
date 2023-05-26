@@ -13,12 +13,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-const telemountPlugin = "datawire/telemount:" + runtime.GOARCH
+const TelemountPlugin = "datawire/telemount:" + runtime.GOARCH
 
 // EnsureVolumePlugin checks if the datawire/telemount plugin is installed and installs it if that is
 // not the case. The plugin is also enabled.
 func EnsureVolumePlugin(ctx context.Context) error {
-	cmd := proc.CommandContext(ctx, "docker", "plugin", "inspect", "--format", "{{.Enabled}}", telemountPlugin)
+	cmd := proc.CommandContext(ctx, "docker", "plugin", "inspect", "--format", "{{.Enabled}}", TelemountPlugin)
 	out, err := proc.CaptureErr(ctx, cmd)
 	if err != nil {
 		if !strings.Contains(err.Error(), "not found") {
@@ -33,25 +33,25 @@ func EnsureVolumePlugin(ctx context.Context) error {
 }
 
 func enableVolumePlugin(ctx context.Context) error {
-	cmd := proc.CommandContext(ctx, "docker", "plugin", "enable", "--timeout", "5", telemountPlugin)
+	cmd := proc.CommandContext(ctx, "docker", "plugin", "enable", "--timeout", "5", TelemountPlugin)
 	_, err := proc.CaptureErr(ctx, cmd)
 	if err != nil {
-		err = fmt.Errorf("docker plugin enable %s: %w", telemountPlugin, err)
+		err = fmt.Errorf("docker plugin enable %s: %w", TelemountPlugin, err)
 	}
 	return err
 }
 
 func installVolumePlugin(ctx context.Context) error {
-	cmd := proc.CommandContext(ctx, "docker", "plugin", "install", "--grant-all-permissions", telemountPlugin, "DEBUG=true")
+	cmd := proc.CommandContext(ctx, "docker", "plugin", "install", "--grant-all-permissions", TelemountPlugin, "DEBUG=true")
 	_, err := proc.CaptureErr(ctx, cmd)
 	if err != nil {
-		err = fmt.Errorf("docker plugin install %s: %w", telemountPlugin, err)
+		err = fmt.Errorf("docker plugin install %s: %w", TelemountPlugin, err)
 	}
 	return err
 }
 
 func StartVolumeMounts(ctx context.Context, dcName, container string, sftpPort int32, mounts, vols, args []string) ([]string, []string, error) {
-	host, err := containerIP(ctx, dcName)
+	host, err := ContainerIP(ctx, dcName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to retrieved container ip for %s: %w", dcName, err)
 	}
@@ -76,7 +76,7 @@ func StopVolumeMounts(ctx context.Context, vols []string) {
 
 func startVolumeMount(ctx context.Context, host string, port int32, volume, container, dir string) error {
 	cmd := proc.CommandContext(ctx, "docker", "volume", "create",
-		"-d", telemountPlugin,
+		"-d", TelemountPlugin,
 		"-o", "host="+host,
 		"-o", fmt.Sprintf("port=%d", port),
 		"-o", "container="+container,
@@ -98,8 +98,8 @@ func stopVolumeMount(ctx context.Context, volume string) error {
 	return err
 }
 
-// containerIP returns the IP assigned to the container with the given name on the telepresence network.
-func containerIP(ctx context.Context, name string) (string, error) {
+// ContainerIP returns the IP assigned to the container with the given name on the telepresence network.
+func ContainerIP(ctx context.Context, name string) (string, error) {
 	cmd := proc.CommandContext(ctx, "docker", "container", "inspect", name,
 		"--format", "{{ range $key, $value := .NetworkSettings.Networks }}{{ $key }}:{{ $value.IPAddress }}\n{{ end }}")
 	out, err := proc.CaptureErr(ctx, cmd)
