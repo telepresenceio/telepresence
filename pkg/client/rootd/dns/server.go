@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -733,10 +734,9 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
 			Target: *mappingAlias,
 		}}
-		// On Windows, just returning the cname isn't enough, and the DNS resolver won't try
-		// to get the record with a subsequent request, so we need resolve it here until
-		// we find a better solution.
-		if runtime.GOOS == "windows" {
+		// On Windows, or in a Linux container, just returning the cname isn't enough, and the DNS resolver won't try
+		// to get the record with a subsequent request, so we need to resolve the record until we get a better solution.
+		if runtime.GOOS == "windows" || proc.RunningInContainer() {
 			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
 				Name:   *mappingAlias,
 				Qtype:  q.Qtype,
