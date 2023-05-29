@@ -419,13 +419,13 @@ func (s *Server) RequestCount() int {
 	return int(atomic.LoadInt64(&s.requestCount))
 }
 
-func copyRRs(rrs dnsproxy.RRs, qType uint16) dnsproxy.RRs {
+func copyRRs(rrs dnsproxy.RRs, qTypes []uint16) dnsproxy.RRs {
 	if len(rrs) == 0 {
 		return rrs
 	}
 	cp := make(dnsproxy.RRs, 0, len(rrs))
 	for _, rr := range rrs {
-		if rr.Header().Rrtype == qType {
+		if slice.Contains(qTypes, rr.Header().Rrtype) {
 			cp = append(cp, dns.Copy(rr))
 		}
 	}
@@ -456,7 +456,7 @@ func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 			if len(oldDv.answer) == 1 && oldDv.answer[0].Header().Rrtype == dns.TypeCNAME {
 				copyQType = dns.TypeCNAME
 			}
-			return copyRRs(oldDv.answer, copyQType), oldDv.rCode, nil
+			return copyRRs(oldDv.answer, []uint16{copyQType}), oldDv.rCode, nil
 		}
 		s.cache.Store(key, newDv)
 	}
@@ -508,7 +508,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, q.Qtype), oldDv.rCode, nil
+			return copyRRs(oldDv.answer, []uint16{q.Qtype}), oldDv.rCode, nil
 		}
 		s.cache.Store(key, newDv)
 	}
@@ -733,8 +733,21 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
 			Target: *alias,
 		}}
+		// On Windows, just returning the cname isn't enough, and the DNS resolver won't try
+		// to get the record with a subsequent request, so we need resolve it here until
+		// we find a better solution.
+		if runtime.GOOS == "windows" {
+			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
+				Name:   *alias,
+				Qtype:  q.Qtype,
+				Qclass: q.Qclass,
+			})
+			if err == nil && rCode == dns.RcodeSuccess && len(answer) > 0 {
+				dv.answer = append(dv.answer, answer[0])
+			}
+		}
 		dv.rCode = dns.RcodeSuccess
-		return copyRRs(dv.answer, dns.TypeCNAME), dv.rCode, nil
+		return copyRRs(dv.answer, []uint16{dns.TypeCNAME, q.Qtype}), dv.rCode, nil
 	}
 
 	var err error
@@ -747,7 +760,7 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 	// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
 	// also be empty if no RRs were found for the given query type and that is OK.
 	// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
-	return copyRRs(dv.answer, q.Qtype), dv.rCode, err
+	return copyRRs(dv.answer, []uint16{q.Qtype}), dv.rCode, err
 }
 
 // Run starts the DNS server(s) and waits for them to end.
