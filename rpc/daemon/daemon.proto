@@ -32,6 +32,12 @@ service Daemon {
   // SetDnsSearchPath sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
 
+  // SetDNSExcludes sets the excludes field of DNSConfig.
+  rpc SetDNSExcludes(SetDNSExcludesRequest) returns (google.protobuf.Empty);
+
+  // SetDNSMappings sets the Mappings field of DNSConfig.
+  rpc SetDNSMappings(SetDNSMappingsRequest) returns (google.protobuf.Empty);
+
   // SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
   rpc SetLogLevel(manager.LogLevelRequest) returns (google.protobuf.Empty);
 
@@ -78,7 +84,6 @@ message DNSConfig {
   // to resolve the alias instead.
   repeated DNSMapping mappings = 9;
 
-  //
   // The maximum time wait for a cluster side host lookup.
   google.protobuf.Duration lookup_timeout = 6;
 
@@ -122,4 +127,12 @@ message OutboundInfo {
 message NetworkConfig {
   repeated manager.IPNet subnets = 1;
   OutboundInfo outbound_info = 2;
+}
+
+message SetDNSExcludesRequest {
+  repeated string excludes = 1;
+}
+
+message SetDNSMappingsRequest {
+  repeated DNSMapping mappings = 1;
 }

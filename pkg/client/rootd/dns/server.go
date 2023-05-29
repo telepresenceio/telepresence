@@ -11,8 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/miekg/dns"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"github.com/miekg/dns"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -284,6 +285,8 @@ func (s *Server) GetConfig() *rpc.DNSConfig {
 		RemoteIp:        sc.RemoteIp,
 		ExcludeSuffixes: sc.ExcludeSuffixes,
 		IncludeSuffixes: sc.IncludeSuffixes,
+		Excludes:        sc.Excludes,
+		Mappings:        sc.Mappings,
 		LookupTimeout:   sc.LookupTimeout,
 		Error:           sc.Error,
 	}
@@ -346,6 +349,25 @@ func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) 
 	}
 }
 
+// SetExcludes sets the excludes list in the config.
+func (s *Server) SetExcludes(ctx context.Context, excludes []string) {
+	s.config.Excludes = excludes
+}
+
+// SetMappings sets the Mappings list in the config.
+func (s *Server) SetMappings(ctx context.Context, mappings []*rpc.DNSMapping) {
+	// Flush the mappings.
+	for i := range s.config.Mappings {
+		toDeleteTypes := []uint16{dns.TypeA, dns.TypeAAAA}
+		name := strings.TrimSuffix(s.config.Mappings[i].Name, ".") + "."
+		for i := range toDeleteTypes {
+			toDeleteKey := cacheKey{name: name, qType: toDeleteTypes[i]}
+			s.cache.Delete(toDeleteKey)
+		}
+	}
+	s.config.Mappings = mappings
+}
+
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	lc := &net.ListenConfig{}
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
@@ -354,7 +376,7 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
 	g.Go("RecursionCheck", func(c context.Context) error {
 		_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, []string{tel2SubDomain})
-		if runtime.GOOS == "windows" {
+		if runtime.GOOS == "windows" || proc.RunningInContainer() {
 			// Give the DNS setting some time to take effect.
 			dtime.SleepWithContext(c, 500*time.Millisecond)
 		}
@@ -746,6 +768,7 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 				dv.answer = append(dv.answer, answer[0])
 			}
 		}
+		//}
 		dv.rCode = dns.RcodeSuccess
 		return copyRRs(dv.answer, []uint16{dns.TypeCNAME, q.Qtype}), dv.rCode, nil
 	}

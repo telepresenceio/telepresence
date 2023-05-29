@@ -778,6 +778,14 @@ func (s *Session) SetSearchPath(ctx context.Context, paths []string, namespaces 
 	s.dnsServer.SetSearchPath(ctx, paths, namespaces)
 }
 
+func (s *Session) SetExcludes(ctx context.Context, excludes []string) {
+	s.dnsServer.SetExcludes(ctx, excludes)
+}
+
+func (s *Session) SetMappings(ctx context.Context, mappings []*rpc.DNSMapping) {
+	s.dnsServer.SetMappings(ctx, mappings)
+}
+
 func (s *Session) applyConfig(ctx context.Context) error {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
