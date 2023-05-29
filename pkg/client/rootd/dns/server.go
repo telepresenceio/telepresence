@@ -265,7 +265,7 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	return result, rCode, nil
 }
 
-func (s *Server) ResolveMapping(query string) *string {
+func (s *Server) ResolveMappingAlias(query string) *string {
 	for i := range s.config.Mappings {
 		mappingName := s.config.Mappings[i].Name + "."
 		if mappingName == query {
@@ -728,17 +728,17 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 	}()
 
 	// Returns a CNAME pointing to the mapping when there is a hit.
-	if alias := s.ResolveMapping(q.Name); alias != nil {
+	if mappingAlias := s.ResolveMappingAlias(q.Name); mappingAlias != nil {
 		dv.answer = dnsproxy.RRs{&dns.CNAME{
 			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
-			Target: *alias,
+			Target: *mappingAlias,
 		}}
 		// On Windows, just returning the cname isn't enough, and the DNS resolver won't try
 		// to get the record with a subsequent request, so we need resolve it here until
 		// we find a better solution.
 		if runtime.GOOS == "windows" {
 			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
-				Name:   *alias,
+				Name:   *mappingAlias,
 				Qtype:  q.Qtype,
 				Qclass: q.Qclass,
 			})
