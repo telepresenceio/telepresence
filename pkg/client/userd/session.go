@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -85,6 +86,7 @@ type Session interface {
 
 	Reporter() *scout.Reporter
 	SessionInfo() *manager.SessionInfo
+	RootDaemon() rootdRpc.DaemonClient
 
 	ApplyConfig(context.Context) error
 	GetConfig(context.Context) (*client.SessionConfig, error)

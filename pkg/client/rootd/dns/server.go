@@ -11,8 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/miekg/dns"
 	"google.golang.org/protobuf/types/known/durationpb"
+
+	"github.com/miekg/dns"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -284,6 +285,8 @@ func (s *Server) GetConfig() *rpc.DNSConfig {
 		RemoteIp:        sc.RemoteIp,
 		ExcludeSuffixes: sc.ExcludeSuffixes,
 		IncludeSuffixes: sc.IncludeSuffixes,
+		Excludes:        sc.Excludes,
+		Mappings:        sc.Mappings,
 		LookupTimeout:   sc.LookupTimeout,
 		Error:           sc.Error,
 	}
@@ -344,6 +347,25 @@ func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) 
 	case <-ctx.Done():
 	case s.searchPathCh <- paths:
 	}
+}
+
+// SetExcludes sets the excludes list in the config.
+func (s *Server) SetExcludes(ctx context.Context, excludes []string) {
+	s.config.Excludes = excludes
+}
+
+// SetMappings sets the Mappings list in the config.
+func (s *Server) SetMappings(ctx context.Context, mappings []*rpc.DNSMapping) {
+	// Flush the mappings.
+	for i := range s.config.Mappings {
+		toDeleteTypes := []uint16{dns.TypeA, dns.TypeAAAA}
+		name := strings.TrimSuffix(s.config.Mappings[i].Name, ".") + "."
+		for i := range toDeleteTypes {
+			toDeleteKey := cacheKey{name: name, qType: toDeleteTypes[i]}
+			s.cache.Delete(toDeleteKey)
+		}
+	}
+	s.config.Mappings = mappings
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {

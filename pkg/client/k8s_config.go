@@ -34,6 +34,16 @@ type DNSMapping struct {
 
 type DNSMappings []*DNSMapping
 
+func (d *DNSMappings) FromRPC(rpcMappings []*rpc.DNSMapping) {
+	*d = make(DNSMappings, 0, len(rpcMappings))
+	for i := range rpcMappings {
+		*d = append(*d, &DNSMapping{
+			Name:     rpcMappings[i].Name,
+			AliasFor: rpcMappings[i].AliasFor,
+		})
+	}
+}
+
 func (d DNSMappings) ToRPC() []*rpc.DNSMapping {
 	rpcMappings := make([]*rpc.DNSMapping, 0, len(d))
 	for i := range d {
@@ -349,6 +359,9 @@ func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml 
 		}
 		kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, dns.ExcludeSuffixes...)
 		kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, dns.IncludeSuffixes...)
+		kf.DNS.Excludes = append(kf.DNS.Excludes, dns.Excludes...)
+		kf.DNS.Mappings = append(kf.DNS.Mappings, dns.Mappings...)
+
 		if kf.DNS.LookupTimeout.Duration == 0 {
 			kf.DNS.LookupTimeout.Duration = dns.LookupTimeout
 		}
