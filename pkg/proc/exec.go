@@ -75,6 +75,12 @@ func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error 
 	return nil
 }
 
+// CreateNewProcessGroup ensures that the process uses a process group of its own to prevent
+// it getting affected by <ctrl-c> in the terminal.
+func CreateNewProcessGroup(cmd *dexec.Cmd) {
+	createNewProcessGroup(cmd.Cmd)
+}
+
 // Run will run the given executable with given args and env, wait for it to terminate, and return
 // the result. The run will dispatch signals as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).

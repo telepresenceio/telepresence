@@ -14,8 +14,12 @@ var SignalsToForward = []os.Signal{os.Interrupt} //nolint:gochecknoglobals // OS
 
 func CommandContext(ctx context.Context, name string, args ...string) *dexec.Cmd {
 	cmd := dexec.CommandContext(ctx, name, args...)
-	cmd.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
+	createNewProcessGroup(cmd.Cmd)
 	return cmd
+}
+
+func createNewProcessGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
 }
 
 func startInBackground(_ bool, args ...string) error {
