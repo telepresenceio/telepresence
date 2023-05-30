@@ -270,19 +270,36 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
 func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
-	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
-	s.dnsLookups++
-
-	r, err := s.managerClient.LookupDNS(ctx, &manager.DNSRequest{
-		Session: s.session,
-		Name:    q.Name,
-		Type:    uint32(q.Qtype),
-	})
-	if err != nil {
-		s.dnsFailures++
-		return nil, dns2.RcodeServerFailure, err
+	typesToTry := []uint16{q.Qtype}
+	if retries, ok := dns.AlternativeQueryTypes[q.Qtype]; ok {
+		typesToTry = append(typesToTry, retries...)
 	}
-	return dnsproxy.FromRPC(r)
+
+	var originalAnswer dnsproxy.RRs
+	var originalCode int
+	for i := range typesToTry {
+		dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
+		s.dnsLookups++
+
+		r, err := s.managerClient.LookupDNS(ctx, &manager.DNSRequest{
+			Session: s.session,
+			Name:    q.Name,
+			Type:    uint32(typesToTry[i]),
+		})
+		if err != nil {
+			s.dnsFailures++
+			return nil, dns2.RcodeServerFailure, err
+		}
+
+		if r.Rrs != nil {
+			return dnsproxy.FromRPC(r)
+		}
+
+		if i == 0 {
+			originalAnswer, originalCode, _ = dnsproxy.FromRPC(r)
+		}
+	}
+	return originalAnswer, originalCode, nil
 }
 
 // clusterLookup sends a LookupHost request to the traffic-manager and returns the result.

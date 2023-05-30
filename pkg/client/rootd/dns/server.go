@@ -452,12 +452,7 @@ func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			copyQType := q.Qtype
-			// If answer is a mapping, the copy type should be a CNAME.
-			if len(oldDv.answer) == 1 && oldDv.answer[0].Header().Rrtype == dns.TypeCNAME {
-				copyQType = dns.TypeCNAME
-			}
-			return copyRRs(oldDv.answer, []uint16{copyQType}), oldDv.rCode, nil
+			return copyRRs(oldDv.answer, []uint16{oldDv.answer[0].Header().Rrtype}), oldDv.rCode, nil
 		}
 		s.cache.Store(key, newDv)
 	}
@@ -717,6 +712,11 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 }
 
+var AlternativeQueryTypes = map[uint16][]uint16{
+	dns.TypeA:    {dns.TypeAAAA},
+	dns.TypeAAAA: {dns.TypeA},
+}
+
 // dnsTTL is the number of seconds that a found DNS record should be allowed to live in the callers cache. We
 // keep this low to avoid such caching.
 const dnsTTL = 4
@@ -757,10 +757,15 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 		return nil, dv.rCode, err
 	}
 
+	copyQTypes := []uint16{q.Qtype}
+	if alternatives, ok := AlternativeQueryTypes[q.Qtype]; ok {
+		copyQTypes = append(copyQTypes, alternatives...)
+	}
+
 	// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
 	// also be empty if no RRs were found for the given query type and that is OK.
 	// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
-	return copyRRs(dv.answer, []uint16{q.Qtype}), dv.rCode, err
+	return copyRRs(dv.answer, copyQTypes), dv.rCode, err
 }
 
 // Run starts the DNS server(s) and waits for them to end.

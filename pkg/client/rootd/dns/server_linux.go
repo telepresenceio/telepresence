@@ -32,10 +32,10 @@ const (
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
 func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net.IP, *net.UDPAddr)) error {
-	if proc.RunningInContainer() {
-		// Don't bother with systemd-resolved when running in a docker container
-		return s.runOverridingServer(c, dev)
-	}
+	// if proc.RunningInContainer() {
+	// Don't bother with systemd-resolved when running in a docker container
+	return s.runOverridingServer(c, dev)
+	//}
 
 	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
 	if err == errResolveDNotConfigured {
@@ -167,7 +167,10 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 		// Server will close the listener, so no need to close it here.
 		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
 			namespaces := make(map[string]struct{})
-			search := make([]string, 0)
+			// search := make([]string, 0)
+			search := []string{
+				tel2SubDomainDot + s.clusterDomain,
+			}
 			for _, path := range paths {
 				if strings.ContainsRune(path, '.') {
 					search = append(search, path)
@@ -339,27 +342,32 @@ func routeDNS(c context.Context, dnsIP net.IP, toAddr *net.UDPAddr, localDNSs []
 		return err
 	}
 
+	protocols := []string{"udp", "tcp"}
 	// This rule prevents that any rules in this table applies to the localDNS address when
 	// used as a source. I.e. we let the local DNS server reach the original DNS server
 	for _, localDNS := range localDNSs {
-		if err = runNatTableCmd(c, "-A", tpDNSChain,
-			"-p", "udp",
-			"--source", localDNS.IP.String(),
-			"--sport", strconv.Itoa(localDNS.Port),
-			"-j", "RETURN",
-		); err != nil {
-			return err
+		for _, protocol := range protocols {
+			if err = runNatTableCmd(c, "-A", tpDNSChain,
+				"-p", protocol,
+				"--source", localDNS.IP.String(),
+				"--sport", strconv.Itoa(localDNS.Port),
+				"-j", "RETURN",
+			); err != nil {
+				return err
+			}
 		}
 	}
 	// This rule redirects all packets intended for the DNS service to our local DNS service
-	if err = runNatTableCmd(c, "-A", tpDNSChain,
-		"-p", "udp",
-		"--dest", dnsIP.String()+"/32",
-		"--dport", "53",
-		"-j", "DNAT",
-		"--to-destination", toAddr.String(),
-	); err != nil {
-		return err
+	for _, protocol := range protocols {
+		if err = runNatTableCmd(c, "-A", tpDNSChain,
+			"-p", protocol,
+			"--dest", dnsIP.String()+"/32",
+			"--dport", "53",
+			"-j", "DNAT",
+			"--to-destination", toAddr.String(),
+		); err != nil {
+			return err
+		}
 	}
 
 	// Alter locally generated packets before routing
