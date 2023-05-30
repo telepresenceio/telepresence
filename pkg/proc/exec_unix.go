@@ -7,9 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	//nolint:depguard // Because startInBackground{,AsRoot}() won't ever .Wait() for the process
-	// and we'd turn off logging, using dexec would just be extra overhead.
-	"os/exec"
+	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
 
 	"golang.org/x/sys/unix"
 
@@ -86,5 +84,11 @@ func terminate(p *os.Process) error {
 func createNewProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &unix.SysProcAttr{
 		Setpgid: true,
+	}
+}
+
+func killProcessGroup(_ context.Context, cmd *exec.Cmd, signal os.Signal) {
+	if p := cmd.Process; p != nil {
+		_ = unix.Kill(-p.Pid, signal.(unix.Signal))
 	}
 }

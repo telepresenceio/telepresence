@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
 	"os/signal"
 
 	"github.com/datawire/dlib/dexec"
@@ -79,6 +80,10 @@ func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error 
 // it getting affected by <ctrl-c> in the terminal.
 func CreateNewProcessGroup(cmd *dexec.Cmd) {
 	createNewProcessGroup(cmd.Cmd)
+}
+
+func KillProcessGroup(ctx context.Context, cmd *exec.Cmd, signal os.Signal) {
+	killProcessGroup(ctx, cmd, signal)
 }
 
 // Run will run the given executable with given args and env, wait for it to terminate, and return
