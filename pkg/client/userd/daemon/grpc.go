@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
@@ -657,6 +658,14 @@ func (s *Service) GetIntercept(ctx context.Context, request *manager.GetIntercep
 		return nil
 	})
 	return ii, err
+}
+
+func (s *Service) SetDNSExcludes(ctx context.Context, req *daemon.SetDNSExcludesRequest) (*emptypb.Empty, error) {
+	return s.session.RootDaemon().SetDNSExcludes(ctx, req)
+}
+
+func (s *Service) SetDNSMappings(ctx context.Context, req *daemon.SetDNSMappingsRequest) (*emptypb.Empty, error) {
+	return s.session.RootDaemon().SetDNSMappings(ctx, req)
 }
 
 func (s *Service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
