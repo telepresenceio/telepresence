@@ -170,6 +170,8 @@ managerRbac:
 
 intercept:
   disableGlobal: false
+  environment:
+    excluded: []
 
 timeouts:
   # The duration the traffic manager should wait for an agent to arrive (i.e., to be registered in the traffic manager's state)
@@ -348,6 +350,3 @@ client:
 
     # Tell client's DNS resolver to always send names with these suffixes to the cluster side resolver
     includeSuffixes: []
-
-variables:
-  excluded: []

@@ -9,6 +9,7 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -852,16 +853,15 @@ func (m *service) removeExlcudedEnvVars(ctx context.Context, envVars map[string]
 		return envVars
 	}
 
-	cm, err := clientset.CoreV1().ConfigMaps(managerutil.GetEnv(ctx).ManagerNamespace).Get(ctx, "telepresence-excluded-variables", v1.GetOptions{})
+	cm, err := clientset.CoreV1().ConfigMaps(managerutil.GetEnv(ctx).ManagerNamespace).Get(ctx, "telepresence-intercept-env", v1.GetOptions{})
 	if err != nil {
 		dlog.Errorf(ctx, "cannot read excluded variables configmap: %v", err)
 		return envVars
 	}
 
-	if cm != nil {
-		for key := range cm.Data {
-			delete(envVars, key)
-		}
+	keys := strings.Split(cm.Data["excluded"], "\n")
+	for _, key := range keys {
+		delete(envVars, key)
 	}
 
 	return envVars

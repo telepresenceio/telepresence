@@ -2,9 +2,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: telepresence-excluded-variables
+  name: telepresence-intercept-env
   namespace:  {{ include "traffic-manager.namespace" . }}
-data: {{ range .Values.variables.excluded }}
-  {{ . }}: "forbid"
+data:
+  excluded: |
+  {{- range .Values.intercept.environment.excluded }}
+    {{ . }}
   {{- end }}
 {{- end }}
