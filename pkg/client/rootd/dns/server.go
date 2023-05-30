@@ -355,7 +355,7 @@ func (s *Server) SetExcludes(ctx context.Context, excludes []string) {
 }
 
 // SetMappings sets the Mappings list in the config.
-func (s *Server) SetMappings(ctx context.Context, mappings []*rpc.DNSMapping) {
+func (s *Server) SetMappings(mappings []*rpc.DNSMapping) {
 	// Flush the mappings.
 	for i := range s.config.Mappings {
 		toDeleteTypes := []uint16{dns.TypeA, dns.TypeAAAA}

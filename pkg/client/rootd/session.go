@@ -783,7 +783,7 @@ func (s *Session) SetExcludes(ctx context.Context, excludes []string) {
 }
 
 func (s *Session) SetMappings(ctx context.Context, mappings []*rpc.DNSMapping) {
-	s.dnsServer.SetMappings(ctx, mappings)
+	s.dnsServer.SetMappings(mappings)
 }
 
 func (s *Session) applyConfig(ctx context.Context) error {

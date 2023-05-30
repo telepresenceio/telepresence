@@ -1,10 +1,12 @@
-package integration
+package integration_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -61,6 +63,11 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 			return err != nil
 		}, 10*time.Second, 1*time.Second, "should not be able to reach %s", excluded)
 	}
+
+	var status statusResponse
+	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
+	assert.NoError(s.T(), json.Unmarshal([]byte(stdout), &status), "Output can be parsed")
+	assert.Equal(s.T(), excludes, status.RootDaemon.DNS.Excludes, "Excludes in output")
 }
 
 func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
@@ -105,4 +112,9 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 			return err == nil
 		}, 10*time.Second, 1*time.Second, "can find alias %s", mapping["name"])
 	}
+
+	var status statusResponse
+	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
+	assert.NoError(s.T(), json.Unmarshal([]byte(stdout), &status), "Output can be parsed")
+	assert.Equal(s.T(), mappings, status.RootDaemon.DNS.Mappings, "Mappings in output")
 }

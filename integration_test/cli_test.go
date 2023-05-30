@@ -135,9 +135,15 @@ func (s *cliSuite) Test_StatusWithJSON() {
 }
 
 type statusResponseRootDaemon struct {
-	Running           bool     `json:"running,omitempty"`
-	AlsoProxySubnets  []string `json:"also_proxy_subnets,omitempty"`
-	NeverProxySubnets []string `json:"never_proxy_subnets,omitempty"`
+	Running           bool                        `json:"running,omitempty"`
+	AlsoProxySubnets  []string                    `json:"also_proxy_subnets,omitempty"`
+	NeverProxySubnets []string                    `json:"never_proxy_subnets,omitempty"`
+	DNS               statusResponseRootDaemonDNS `json:"dns,omitempty"`
+}
+
+type statusResponseRootDaemonDNS struct {
+	Mappings []map[string]string `json:"mappings,omitempty"`
+	Excludes []string            `json:"excludes,omitempty"`
 }
 
 type statusResponseUserDaemon struct {
