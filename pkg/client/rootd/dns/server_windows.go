@@ -39,7 +39,10 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 
 func (s *Server) updateRouterDNS(c context.Context, paths []string, dev vif.Device) error {
 	namespaces := make(map[string]struct{})
-	search := make([]string, 0)
+	search := []string{
+		tel2SubDomain + "." + s.clusterDomain,
+	}
+
 	for _, path := range paths {
 		if strings.ContainsRune(path, '.') {
 			search = append(search, path)

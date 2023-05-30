@@ -23,6 +23,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -158,6 +160,16 @@ var (
 	localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1} //nolint:gochecknoglobals // constant
 )
 
+func (s *Server) tel2SubDomainHostname(query string) string {
+	// Has to be trimmed since value for an unqualified hostname can be :
+	// - <hostname>.tel2-search.cluster.local
+	uqHostSuffix := "." + tel2SubDomainDot + s.clusterDomain
+	if strings.HasSuffix(query, uqHostSuffix) {
+		return strings.TrimSuffix(query, uqHostSuffix) + "."
+	}
+	return ""
+}
+
 func (s *Server) shouldDoClusterLookup(query string) bool {
 	if strings.HasPrefix(query, wpadDot) {
 		// Reject "wpad.*"
@@ -169,6 +181,11 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	}
 
 	query = query[:len(query)-1] // skip last dot
+
+	if slice.Contains(s.config.Excludes, query) {
+		// Reject any host explicitly added to the exclude list.
+		return false
+	}
 
 	if strings.Contains(query, "."+tel2SubDomainDot) {
 		// Reject "xxx.tel2-search.xxx" (we know it doesn't end with tel2SubDomain because we just removed the last dot)
@@ -247,6 +264,17 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 		}
 	}
 	return result, rCode, nil
+}
+
+func (s *Server) ResolveMappingAlias(query string) *string {
+	for i := range s.config.Mappings {
+		mappingName := s.config.Mappings[i].Name + "."
+		if mappingName == query {
+			dotName := s.config.Mappings[i].AliasFor + "."
+			return &dotName
+		}
+	}
+	return nil
 }
 
 func (s *Server) GetConfig() *rpc.DNSConfig {
@@ -392,13 +420,13 @@ func (s *Server) RequestCount() int {
 	return int(atomic.LoadInt64(&s.requestCount))
 }
 
-func copyRRs(rrs dnsproxy.RRs, qType uint16) dnsproxy.RRs {
+func copyRRs(rrs dnsproxy.RRs, qTypes []uint16) dnsproxy.RRs {
 	if len(rrs) == 0 {
 		return rrs
 	}
 	cp := make(dnsproxy.RRs, 0, len(rrs))
 	for _, rr := range rrs {
-		if rr.Header().Rrtype == qType {
+		if slice.Contains(qTypes, rr.Header().Rrtype) {
 			cp = append(cp, dns.Copy(rr))
 		}
 	}
@@ -424,11 +452,45 @@ func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, q.Qtype), oldDv.rCode, nil
+			copyQType := q.Qtype
+			// If answer is a mapping, the copy type should be a CNAME.
+			if len(oldDv.answer) == 1 && oldDv.answer[0].Header().Rrtype == dns.TypeCNAME {
+				copyQType = dns.TypeCNAME
+			}
+			return copyRRs(oldDv.answer, []uint16{copyQType}), oldDv.rCode, nil
 		}
 		s.cache.Store(key, newDv)
 	}
 	return s.resolveQuery(q, newDv)
+}
+
+func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnsproxy.RRs, int, error) {
+	// Only DNS aliases result in queries belonging to the tel2-search subdomain, which isn't a real one, so we
+	// strip so we can process it later
+	// Example:
+	//	 my-alias.tel2-search.cluster.local -> my-alias.
+	//
+	// Other unqualified hostname generally refer to a specific subdomain associated with an intercept running in
+	// a namespace, so they won't be stripped.
+	// Example:
+	//	 my-svc.blue.cluster.local -> <empty>
+	uhm := s.tel2SubDomainHostname(q.Name)
+	originalName := q.Name
+	if uhm != "" {
+		q.Name = uhm
+	}
+
+	rrs, rCode, err := s.resolveThruCache(q)
+
+	// Restore the original query name which was stripped before, or the response won't be formed correctly.
+	if uhm != "" {
+		q.Name = originalName
+		if len(rrs) > 0 {
+			rrs[0].Header().Name = originalName
+		}
+	}
+
+	return rrs, rCode, err
 }
 
 // resolveWithRecursionCheck is a special version of resolveThruCache which is only used until the
@@ -447,7 +509,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, q.Qtype), oldDv.rCode, nil
+			return copyRRs(oldDv.answer, []uint16{q.Qtype}), oldDv.rCode, nil
 		}
 		s.cache.Store(key, newDv)
 	}
@@ -460,7 +522,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 			atomic.StoreInt32(&s.recursive, recursionNotDetected)
 			dlog.Debug(s.ctx, "DNS resolver is not recursive")
 		}
-		s.cacheResolve = s.resolveThruCache
+		s.cacheResolve = s.resolveThruCacheWithUnqualifiedHostName
 	}
 	return answer, rCode, err
 }
@@ -666,6 +728,28 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 		close(dv.wait)
 	}()
 
+	// Returns a CNAME pointing to the mapping when there is a hit.
+	if mappingAlias := s.ResolveMappingAlias(q.Name); mappingAlias != nil {
+		dv.answer = dnsproxy.RRs{&dns.CNAME{
+			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
+			Target: *mappingAlias,
+		}}
+		// On Windows, or in a Linux container, just returning the cname isn't enough, and the DNS resolver won't try
+		// to get the record with a subsequent request, so we need to resolve the record until we get a better solution.
+		if runtime.GOOS == "windows" || proc.RunningInContainer() {
+			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
+				Name:   *mappingAlias,
+				Qtype:  q.Qtype,
+				Qclass: q.Qclass,
+			})
+			if err == nil && rCode == dns.RcodeSuccess && len(answer) > 0 {
+				dv.answer = append(dv.answer, answer[0])
+			}
+		}
+		dv.rCode = dns.RcodeSuccess
+		return copyRRs(dv.answer, []uint16{dns.TypeCNAME, q.Qtype}), dv.rCode, nil
+	}
+
 	var err error
 	dv.answer, dv.rCode, err = s.resolve(s.ctx, q)
 	if err != nil || dv.rCode != dns.RcodeSuccess {
@@ -676,7 +760,7 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 	// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
 	// also be empty if no RRs were found for the given query type and that is OK.
 	// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
-	return copyRRs(dv.answer, q.Qtype), dv.rCode, err
+	return copyRRs(dv.answer, []uint16{q.Qtype}), dv.rCode, err
 }
 
 // Run starts the DNS server(s) and waits for them to end.

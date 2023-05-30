@@ -114,7 +114,7 @@ func (s *Server) updateLinkDomains(c context.Context, paths []string, dev vif.De
 	for _, sfx := range s.config.IncludeSuffixes {
 		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
 	}
-	paths = append(paths, "~"+s.clusterDomain)
+	paths = append(paths, "~"+s.clusterDomain, tel2SubDomainDot+s.clusterDomain)
 
 	s.domainsLock.Lock()
 	s.namespaces = namespaces
