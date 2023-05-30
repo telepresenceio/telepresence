@@ -1,13 +1,15 @@
 package docker
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
+	"strconv"
+
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/volume"
+	"github.com/docker/docker/client"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -18,25 +20,16 @@ const TelemountPlugin = "datawire/telemount:" + runtime.GOARCH
 // EnsureVolumePlugin checks if the datawire/telemount plugin is installed and installs it if that is
 // not the case. The plugin is also enabled.
 func EnsureVolumePlugin(ctx context.Context) error {
-	cmd := proc.CommandContext(ctx, "docker", "plugin", "inspect", "--format", "{{.Enabled}}", TelemountPlugin)
-	out, err := proc.CaptureErr(ctx, cmd)
+	cli := GetClient(ctx)
+	pi, _, err := cli.PluginInspectWithRaw(ctx, TelemountPlugin)
 	if err != nil {
-		if !strings.Contains(err.Error(), "not found") {
+		if !client.IsErrNotFound(err) {
 			dlog.Errorf(ctx, "docker plugin inspect: %v", err)
 		}
 		return installVolumePlugin(ctx)
 	}
-	if strings.TrimSpace(string(out)) == "true" {
-		return nil
-	}
-	return enableVolumePlugin(ctx)
-}
-
-func enableVolumePlugin(ctx context.Context) error {
-	cmd := proc.CommandContext(ctx, "docker", "plugin", "enable", "--timeout", "5", TelemountPlugin)
-	_, err := proc.CaptureErr(ctx, cmd)
-	if err != nil {
-		err = fmt.Errorf("docker plugin enable %s: %w", TelemountPlugin, err)
+	if !pi.Enabled {
+		err = cli.PluginEnable(ctx, TelemountPlugin, types.PluginEnableOptions{Timeout: 5})
 	}
 	return err
 }
@@ -50,20 +43,19 @@ func installVolumePlugin(ctx context.Context) error {
 	return err
 }
 
-func StartVolumeMounts(ctx context.Context, dcName, container string, sftpPort int32, mounts, vols, args []string) ([]string, []string, error) {
+func StartVolumeMounts(ctx context.Context, dcName, container string, sftpPort int32, mounts, vols []string) ([]string, error) {
 	host, err := ContainerIP(ctx, dcName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to retrieved container ip for %s: %w", dcName, err)
+		return nil, fmt.Errorf("failed to retrieved container ip for %s: %w", dcName, err)
 	}
 	for i, dir := range mounts {
 		v := fmt.Sprintf("%s-%d", container, i)
 		if err := startVolumeMount(ctx, host, sftpPort, v, container, dir); err != nil {
-			return vols, args, err
+			return vols, err
 		}
 		vols = append(vols, v)
-		args = append(args, "-v", fmt.Sprintf("%s:%s", v, dir))
 	}
-	return vols, args, nil
+	return vols, nil
 }
 
 func StopVolumeMounts(ctx context.Context, vols []string) {
@@ -74,15 +66,17 @@ func StopVolumeMounts(ctx context.Context, vols []string) {
 	}
 }
 
-func startVolumeMount(ctx context.Context, host string, port int32, volume, container, dir string) error {
-	cmd := proc.CommandContext(ctx, "docker", "volume", "create",
-		"-d", TelemountPlugin,
-		"-o", "host="+host,
-		"-o", fmt.Sprintf("port=%d", port),
-		"-o", "container="+container,
-		"-o", "dir="+dir,
-		volume)
-	_, err := proc.CaptureErr(ctx, cmd)
+func startVolumeMount(ctx context.Context, host string, port int32, volumeName, container, dir string) error {
+	_, err := GetClient(ctx).VolumeCreate(ctx, volume.CreateOptions{
+		Driver: TelemountPlugin,
+		DriverOpts: map[string]string{
+			"host":      host,
+			"container": container,
+			"port":      strconv.Itoa(int(port)),
+			"dir":       dir,
+		},
+		Name: volumeName,
+	})
 	if err != nil {
 		err = fmt.Errorf("docker volume create %d %s %s: %w", port, container, dir, err)
 	}
@@ -90,8 +84,7 @@ func startVolumeMount(ctx context.Context, host string, port int32, volume, cont
 }
 
 func stopVolumeMount(ctx context.Context, volume string) error {
-	cmd := proc.CommandContext(ctx, "docker", "volume", "rm", volume)
-	_, err := proc.CaptureErr(ctx, cmd)
+	err := GetClient(ctx).VolumeRemove(ctx, volume, false)
 	if err != nil {
 		err = fmt.Errorf("docker volume rm %s: %w", volume, err)
 	}
@@ -100,17 +93,13 @@ func stopVolumeMount(ctx context.Context, volume string) error {
 
 // ContainerIP returns the IP assigned to the container with the given name on the telepresence network.
 func ContainerIP(ctx context.Context, name string) (string, error) {
-	cmd := proc.CommandContext(ctx, "docker", "container", "inspect", name,
-		"--format", "{{ range $key, $value := .NetworkSettings.Networks }}{{ $key }}:{{ $value.IPAddress }}\n{{ end }}")
-	out, err := proc.CaptureErr(ctx, cmd)
+	ci, err := GetClient(ctx).ContainerInspect(ctx, name)
 	if err != nil {
 		return "", fmt.Errorf("docker container inspect %s: %w", "userd", err)
 	}
-	s := bufio.NewScanner(bytes.NewReader(out))
-	for s.Scan() {
-		e := strings.Split(s.Text(), ":")
-		if len(e) == 2 && e[0] == "telepresence" {
-			return e[1], nil
+	if ns := ci.NetworkSettings; ns != nil {
+		if tn, ok := ns.Networks["telepresence"]; ok {
+			return tn.IPAddress, nil
 		}
 	}
 	return "", os.ErrNotExist

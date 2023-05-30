@@ -24,7 +24,7 @@ func EnableClient(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("unable to retrieve docker context: %v", err)
 	}
 	if host := strings.TrimSpace(string(stdout)); host != "" {
-		dlog.Debugf(ctx, "Using docker context %q", host)
+		dlog.Debugf(ctx, "Using docker host %q", host)
 		opts = append(opts, client.WithHost(host))
 	}
 	cli, err := client.NewClientWithOpts(opts...)
@@ -38,5 +38,5 @@ func GetClient(ctx context.Context) *client.Client {
 	if cli, ok := ctx.Value(clientKey{}).(*client.Client); ok {
 		return cli
 	}
-	return nil
+	panic("docker client not initialized")
 }
