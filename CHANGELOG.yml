@@ -96,3 +96,7 @@ items:
         title: Fix wrong default value for disableGlobal and agentArrival
         body: >-
           Params .intercept.disableGlobal and .timeouts.agentArrival are now correctly honored.
+      - type: bugfix
+        title: Fix static route configuration error when no gateway is specified (linux)
+        body: >-
+          When directly connected to a network, the static route configuration no longer passes '<nil>' as the gateway.
