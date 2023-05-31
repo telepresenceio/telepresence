@@ -262,6 +262,10 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 
 func enableK8SAuthenticator(ctx context.Context) error {
 	cr := daemon.GetRequest(ctx)
+	if kkf, ok := cr.KubeFlags["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
+		// Been there, done that
+		return nil
+	}
 	dlog.Debugf(ctx, "kubeflags = %v", cr.KubeFlags)
 	configFlags, err := client.ConfigFlags(cr.KubeFlags)
 	if err != nil {
