@@ -1,0 +1,49 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "echo-easy"
+spec:
+  type: ClusterIP
+  selector:
+    service: echo-easy
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "echo-easy"
+  labels:
+    service: echo-easy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: echo-easy
+  template:
+    metadata:
+      labels:
+        service: echo-easy
+    spec:
+      containers:
+        - name: echo-easy
+          image: jmalloc/echo-server
+          env:
+            - name: TEST
+              value: "DATA"
+            - name: INTERCEPT
+              value: "ENV"
+            - name: DATABASE_HOST
+              value: "HOST_NAME"
+            - name: DATABASE_PASSWORD
+              value: "SUPER_SECRET_PASSWORD"
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
