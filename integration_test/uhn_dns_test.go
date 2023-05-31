@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -35,14 +36,16 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 	// given
 	ctx := s.Context()
 	serviceName := "echo"
-	port := 80
+	port, svcCancel := itest.StartLocalHttpEchoServer(ctx, serviceName)
+	defer svcCancel()
+
 	itest.ApplyEchoService(ctx, serviceName, s.AppNamespace(), port)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", serviceName)
 
 	excludes := []string{
-		"echo-easy",
-		"echo-easy.blue",
-		"echo-easy.blue.svc.cluster.local",
+		"echo",
+		fmt.Sprintf("echo.%s", s.AppNamespace()),
+		fmt.Sprintf("echo.%s.svc.cluster.local", s.AppNamespace()),
 	}
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		return map[string]any{"dns": map[string][]string{
@@ -52,6 +55,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 
 	// when
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	itest.TelepresenceOk(ctx, "intercept", serviceName, "--namespace", s.AppNamespace(), "--port", strconv.Itoa(port))
 
 	// then
 	for _, excluded := range excludes {

@@ -59,6 +59,50 @@ func (s *suiteServer) TestSetMappings() {
 	assert.Equal(s.T(), []*rpc.DNSMapping{}, s.server.config.Mappings)
 }
 
+func (s *suiteServer) TestSetExcludes() {
+	// given
+	entry := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
+	toDeleteARecordKey := cacheKey{name: "echo-easy.", qType: dns.TypeA}
+	toDelete4ARecordKey := cacheKey{name: "echo-easy.", qType: dns.TypeAAAA}
+	toDeleteNewARecordKey := cacheKey{name: "new-excluded.", qType: dns.TypeAAAA}
+
+	s.server.cache.Store(toDeleteARecordKey, entry)
+	s.server.cache.Store(toDelete4ARecordKey, entry)
+	s.server.cache.Store(toDeleteNewARecordKey, entry)
+
+	s.server.config.Excludes = []string{"echo-easy"}
+
+	// when
+	newExcluded := []string{"new-excluded"}
+	s.server.SetExcludes(newExcluded)
+
+	// then
+	_, exists := s.server.cache.Load(toDeleteARecordKey)
+	assert.False(s.T(), exists, "Excluded A record was purged")
+	_, exists = s.server.cache.Load(toDelete4ARecordKey)
+	assert.False(s.T(), exists, "Excluded AAAA record was purged")
+	_, exists = s.server.cache.Load(toDeleteNewARecordKey)
+	assert.False(s.T(), exists, "New excluded record was purged")
+	assert.Equal(s.T(), newExcluded, s.server.config.Excludes)
+}
+
+func (s *suiteServer) TestIsExcluded() {
+	// given
+	s.server.config.Excludes = []string{
+		"echo-easy",
+	}
+	s.server.search = []string{
+		tel2SubDomainDot + "cluster.local.",
+		"blue.svc.cluster.local.",
+	}
+
+	// when & then
+	assert.True(s.T(), s.server.isExcluded("echo-easy."))
+	assert.True(s.T(), s.server.isExcluded("echo-easy.tel2-search.cluster.local."))
+	assert.True(s.T(), s.server.isExcluded("echo-easy.blue.svc.cluster.local."))
+	assert.False(s.T(), s.server.isExcluded("something-else."))
+}
+
 func TestServerTestSuite(t *testing.T) {
 	suite.Run(t, new(suiteServer))
 }

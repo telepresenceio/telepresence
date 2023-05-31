@@ -779,7 +779,7 @@ func (s *Session) SetSearchPath(ctx context.Context, paths []string, namespaces 
 }
 
 func (s *Session) SetExcludes(ctx context.Context, excludes []string) {
-	s.dnsServer.SetExcludes(ctx, excludes)
+	s.dnsServer.SetExcludes(excludes)
 }
 
 func (s *Session) SetMappings(ctx context.Context, mappings []*rpc.DNSMapping) {
