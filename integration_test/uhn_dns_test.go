@@ -40,9 +40,8 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", serviceName)
 
 	excludes := []string{
-		"echo-easy",
-		"echo-easy.blue",
-		"echo-easy.blue.svc.cluster.local",
+		fmt.Sprintf("echo.%s", s.AppNamespace()),
+		fmt.Sprintf("echo.%s.svc.cluster.local", s.AppNamespace()),
 	}
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		return map[string]any{"dns": map[string][]string{
