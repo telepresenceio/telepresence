@@ -1,0 +1,12 @@
+{{- if not .Values.rbac.only }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telepresence-intercept-env
+  namespace:  {{ include "traffic-manager.namespace" . }}
+data:
+  excluded: |
+  {{- range .Values.intercept.environment.excluded }}
+    {{ . }}
+  {{- end }}
+{{- end }}
