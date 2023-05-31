@@ -65,9 +65,9 @@ func (r *Route) Routes(ip net.IP) bool {
 
 func (r *Route) String() string {
 	if r.Default {
-		return fmt.Sprintf("default via %s dev %s, gw %s", r.LocalIP, r.Interface.Name, r.Gateway)
+		return fmt.Sprintf("default, gw %s, dev %s, src %s", r.Gateway, r.Interface.Name, r.LocalIP)
 	}
-	return fmt.Sprintf("%s via %s dev %s, gw %s", r.RoutedNet, r.LocalIP, r.Interface.Name, r.Gateway)
+	return fmt.Sprintf("%s, gw %s, dev %s, src %s", r.RoutedNet, r.Gateway, r.Interface.Name, r.LocalIP)
 }
 
 // AddStatic adds a specific route. This can be used to prevent certain IP addresses
