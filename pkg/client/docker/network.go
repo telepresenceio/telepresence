@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -17,13 +16,10 @@ import (
 // EnsureNetwork checks if a network with the given name exists, and creates it if that is not the case.
 func EnsureNetwork(ctx context.Context, name string) error {
 	cli := GetClient(ctx)
-	if cli == nil {
-		return errors.New("docker client not initialized")
-	}
 	resource, err := cli.NetworkInspect(ctx, name, types.NetworkInspectOptions{})
 	if err != nil {
 		if !dockerClient.IsErrNotFound(err) {
-			return err
+			return fmt.Errorf("docker network inspect failed: %w", err)
 		}
 	} else {
 		// this is required, or services like apache will fail to do DNS lookups (even

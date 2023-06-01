@@ -3,11 +3,9 @@ package docker
 import (
 	"context"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/docker/docker/api/types/container"
 )
 
 func StopContainer(ctx context.Context, nameOrID string) error {
-	cmd := proc.CommandContext(ctx, "docker", "stop", "--time", "5", nameOrID)
-	_, err := proc.CaptureErr(ctx, cmd)
-	return err
+	return GetClient(ctx).ContainerStop(ctx, nameOrID, container.StopOptions{})
 }

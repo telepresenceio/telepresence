@@ -204,9 +204,12 @@ func (s *state) startInDocker(ctx context.Context, daemonName, envFile string, a
 				}
 				container := s.env["TELEPRESENCE_CONTAINER"]
 				dlog.Infof(ctx, "Mounting %v from container %s", m.Mounts, container)
-				dr.volumes, ourArgs, dr.err = docker.StartVolumeMounts(ctx, daemonName, container, m.Port, m.Mounts, nil, ourArgs)
+				dr.volumes, dr.err = docker.StartVolumeMounts(ctx, daemonName, container, m.Port, m.Mounts, nil)
 				if dr.err != nil {
 					return dr
+				}
+				for i, vol := range dr.volumes {
+					ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", vol, m.Mounts[i]))
 				}
 			}
 		}

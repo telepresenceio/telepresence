@@ -81,7 +81,11 @@ func removeIntercept(ctx context.Context, name string) error {
 	if stopContainer {
 		// Stop the intercept handler's container. The daemon is most likely running in another
 		// container, and won't be able to.
-		if err = docker.StopContainer(ctx, handlerContainer); err != nil {
+		ctx, err := docker.EnableClient(ctx)
+		if err == nil {
+			err = docker.StopContainer(ctx, handlerContainer)
+		}
+		if err != nil {
 			dlog.Error(ctx, err)
 		}
 	}

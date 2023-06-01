@@ -262,6 +262,10 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 
 func enableK8SAuthenticator(ctx context.Context) error {
 	cr := daemon.GetRequest(ctx)
+	if kkf, ok := cr.KubeFlags["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
+		// Been there, done that
+		return nil
+	}
 	dlog.Debugf(ctx, "kubeflags = %v", cr.KubeFlags)
 	configFlags, err := client.ConfigFlags(cr.KubeFlags)
 	if err != nil {
@@ -369,9 +373,6 @@ func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) er
 	// Let's check if we have a container with port bindings for the
 	// given addrPort that is a known k8sapi provider
 	cli := GetClient(ctx)
-	if cli == nil {
-		return errors.New("docker client not initialized")
-	}
 	cjs := runningContainers(ctx, cli)
 
 	var hostPort, network string

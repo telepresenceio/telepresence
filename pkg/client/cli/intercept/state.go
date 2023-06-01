@@ -196,7 +196,11 @@ func Run(ctx context.Context, sif State) error {
 	var s *state
 	sif.As(&s)
 	if s.DockerRun {
-		if err := s.prepareDockerRun(ctx); err != nil {
+		var err error
+		if ctx, err = docker.EnableClient(ctx); err != nil {
+			return errcat.NoDaemonLogs.New(err)
+		}
+		if err = s.prepareDockerRun(ctx); err != nil {
 			return err
 		}
 	}

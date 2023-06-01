@@ -88,72 +88,72 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 }
 
-func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (*daemon.UserClient, error) {
+func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
 	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err == nil {
 		if cr.Docker {
-			return nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
+			return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
 		}
-		return newUserDaemon(conn, false), nil
+		return ctx, newUserDaemon(conn, false), nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return nil, errcat.NoDaemonLogs.New(err)
+		return ctx, nil, errcat.NoDaemonLogs.New(err)
 	}
 
 	// Check if a running daemon can be discovered.
 	name, err := contextName(ctx)
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
 	ctx, err = docker.EnableClient(ctx)
 	if err != nil && cr.Docker {
-		return nil, errcat.NoDaemonLogs.New(err)
+		return ctx, nil, errcat.NoDaemonLogs.New(err)
 	}
 
 	if err == nil {
 		conn, err = docker.DiscoverDaemon(ctx, name)
 		if err == nil {
-			return newUserDaemon(conn, true), nil
+			return ctx, newUserDaemon(conn, true), nil
 		}
 		if !errors.Is(err, os.ErrNotExist) {
-			return nil, errcat.NoDaemonLogs.New(err)
+			return ctx, nil, errcat.NoDaemonLogs.New(err)
 		}
 	}
 	if cr.Docker {
 		if required {
 			conn, err = docker.LaunchDaemon(ctx, name)
 			if err != nil {
-				return nil, errcat.NoDaemonLogs.New(err)
+				return ctx, nil, errcat.NoDaemonLogs.New(err)
 			}
-			return newUserDaemon(conn, true), nil
+			return ctx, newUserDaemon(conn, true), nil
 		}
-		return nil, ErrNoUserDaemon
+		return ctx, nil, ErrNoUserDaemon
 	}
 
 	if !required {
-		return nil, ErrNoUserDaemon
+		return ctx, nil, ErrNoUserDaemon
 	}
 
 	fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")
 	if _, err = ensureAppUserConfigDir(ctx); err != nil {
-		return nil, errcat.NoDaemonLogs.New(err)
+		return ctx, nil, errcat.NoDaemonLogs.New(err)
 	}
 	args := []string{connectorDaemon, "connector-foreground"}
 	if cr.UserDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
 	}
 	if err = proc.StartInBackground(false, args...); err != nil {
-		return nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
+		return ctx, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 	}
 	if err = socket.WaitUntilAppears("connector", socket.UserDaemonPath(ctx), 10*time.Second); err != nil {
-		return nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
+		return ctx, nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
 	}
 	conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
-	return newUserDaemon(conn, false), nil
+	return ctx, newUserDaemon(conn, false), nil
 }
 
 func contextName(ctx context.Context) (string, error) {
@@ -195,7 +195,7 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 		ud = newUserDaemon(conn, true)
 	} else {
 		var err error
-		ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)
+		ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)
 		if err != nil {
 			return ctx, err
 		}
