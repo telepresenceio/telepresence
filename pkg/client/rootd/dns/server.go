@@ -219,14 +219,20 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 func (s *Server) isExcluded(query string) bool {
 	s.configLock.RLock()
 	defer s.configLock.RUnlock()
+
+	if slice.Contains(s.config.Excludes, query[:len(query)-1]) {
+		return true
+	}
+
 	// When intercepting, this function will potentially receive the hostname of any search param, so their
 	// unqualified hostname should be evaluated too.
-	unqualifiedHostnames := make([]string, 0)
-	for i := range s.search {
-		withoutDomain := strings.TrimSuffix(query, s.search[i])
-		unqualifiedHostnames = append(unqualifiedHostnames, strings.TrimSuffix(withoutDomain, "."))
+	for _, sp := range s.search {
+		if strings.HasSuffix(query, sp) && slice.Contains(s.config.Excludes, query[:len(query)-len(sp)-1]) {
+			return true
+		}
 	}
-	return slice.ContainsAny(s.config.Excludes, append(unqualifiedHostnames, query))
+
+	return false
 }
 
 func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
