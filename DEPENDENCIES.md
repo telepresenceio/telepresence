@@ -122,6 +122,8 @@ following Free and Open Source software:
     github.com/spf13/pflag                                                       v1.0.5                                3-clause BSD license
     github.com/stretchr/testify                                                  v1.8.2                                MIT license
     github.com/telepresenceio/telepresence/rpc/v2                                (modified)                            Apache License 2.0
+    github.com/vishvananda/netlink                                               v1.2.1-beta.2                         Apache License 2.0
+    github.com/vishvananda/netns                                                 v0.0.4                                Apache License 2.0
     github.com/xeipuuv/gojsonpointer                                             v0.0.0-20190905194746-02993c407bfb    Apache License 2.0
     github.com/xeipuuv/gojsonreference                                           v0.0.0-20180127040603-bd5ef7bd5415    Apache License 2.0
     github.com/xeipuuv/gojsonschema                                              v1.2.0                                Apache License 2.0
@@ -149,7 +151,7 @@ following Free and Open Source software:
     golang.org/x/time                                                            v0.3.0                                3-clause BSD license
     golang.org/x/tools                                                           v0.9.1                                3-clause BSD license
     golang.zx2c4.com/wintun                                                      v0.0.0-20230126152724-0fa3db229ce2    MIT license
-    golang.zx2c4.com/wireguard                                                   v0.0.0-20230223181233-21636207a675    MIT license
+    golang.zx2c4.com/wireguard                                                   v0.0.0-20230325221338-052af4a8072b    MIT license
     golang.zx2c4.com/wireguard/windows                                           v0.5.3                                MIT license
     google.golang.org/appengine                                                  v1.6.7                                Apache License 2.0
     google.golang.org/genproto                                                   v0.0.0-20230410155749-daa745c078e1    Apache License 2.0

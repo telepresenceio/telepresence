@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -13,7 +12,10 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
+
+type table struct{}
 
 func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
@@ -52,27 +54,22 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 				mask = net.CIDRMask(dst.Bits(), 128)
 			}
 		}
-		var dflt bool
-		if len(gwc) == 4 {
-			dflt = !bytes.Equal(gwc, []byte{0, 0, 0, 0})
-		} else {
-			dflt = !bytes.Equal(gwc, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+		routedNet := &net.IPNet{
+			IP:   ip,
+			Mask: mask,
 		}
 		routes = append(routes, &Route{
-			LocalIP: localIP,
-			Gateway: gwc,
-			RoutedNet: &net.IPNet{
-				IP:   ip,
-				Mask: mask,
-			},
+			LocalIP:   localIP,
+			Gateway:   gwc,
+			RoutedNet: routedNet,
 			Interface: iface,
-			Default:   dflt,
+			Default:   subnet.IsZeroMask(routedNet),
 		})
 	}
 	return routes, nil
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	pshScript := fmt.Sprintf(`
 $job = Find-NetRoute -RemoteIPAddress "%s" -AsJob | Wait-Job -Timeout 30
@@ -154,4 +151,24 @@ func (r *Route) removeStatic(ctx context.Context) error {
 		return fmt.Errorf("failed to delete route %s: %w", r, err)
 	}
 	return nil
+}
+
+func openTable(ctx context.Context) (Table, error) {
+	return &table{}, nil
+}
+
+func (t *table) Add(ctx context.Context, r *Route) error {
+	return r.AddStatic(ctx)
+}
+
+func (t *table) Remove(ctx context.Context, r *Route) error {
+	return r.RemoveStatic(ctx)
+}
+
+func (t *table) Close(ctx context.Context) error {
+	return nil
+}
+
+func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
+	return false, nil
 }

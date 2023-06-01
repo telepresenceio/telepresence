@@ -256,3 +256,18 @@ func RandomIPv4Subnet(mask net.IPMask, avoid []*net.IPNet) (*net.IPNet, error) {
 	}
 	return nil, fmt.Errorf("unable to find a free subnet")
 }
+
+func IsZeroMask(n *net.IPNet) bool {
+	for _, b := range n.Mask {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// IsHalfOfDefault route returns true if the given subnet covers half the address space with a /1 mask.
+func IsHalfOfDefault(n *net.IPNet) bool {
+	ones, _ := n.Mask.Size()
+	return ones == 1
+}

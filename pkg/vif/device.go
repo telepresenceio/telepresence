@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
@@ -24,9 +25,10 @@ import (
 type device struct {
 	sync.Mutex
 	*channel.Endpoint
-	ctx context.Context
-	wg  sync.WaitGroup
-	dev *nativeDevice
+	ctx   context.Context
+	wg    sync.WaitGroup
+	dev   *nativeDevice
+	table routing.Table
 }
 
 type Device interface {
@@ -48,7 +50,7 @@ const defaultDevOutQueueLen = 1024
 var _ Device = (*device)(nil)
 
 // OpenTun creates a new TUN device and ensures that it is up and running.
-func OpenTun(ctx context.Context) (Device, error) {
+func OpenTun(ctx context.Context, routingTable routing.Table) (Device, error) {
 	dev, err := openTun(ctx)
 	if err != nil {
 		return nil, err
@@ -58,6 +60,7 @@ func OpenTun(ctx context.Context) (Device, error) {
 		Endpoint: channel.New(defaultDevOutQueueLen, defaultDevMtu, ""),
 		ctx:      ctx,
 		dev:      dev,
+		table:    routingTable,
 	}, nil
 }
 
@@ -76,12 +79,35 @@ func (d *device) Attach(dp stack.NetworkDispatcher) {
 	go d.dispatchToTun(ctx)
 }
 
+func (d *device) subnetToRoute(subnet *net.IPNet) (*routing.Route, error) {
+	gw := make(net.IP, len(subnet.IP))
+	copy(gw, subnet.IP)
+	gw[len(gw)-1] += 1
+	iface, err := net.InterfaceByName(d.Name())
+	if err != nil {
+		return nil, err
+	}
+	return &routing.Route{
+		LocalIP:   subnet.IP,
+		RoutedNet: subnet,
+		Interface: iface,
+		Gateway:   gw,
+	}, nil
+}
+
 // AddSubnet adds a subnet to this TUN device and creates a route for that subnet which
 // is associated with the device (removing the device will automatically remove the route).
 func (d *device) AddSubnet(ctx context.Context, subnet *net.IPNet) (err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "AddSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
 	defer tracing.EndAndRecord(span, err)
-	return d.dev.addSubnet(ctx, subnet)
+	if err := d.dev.addSubnet(ctx, subnet); err != nil {
+		return err
+	}
+	route, err := d.subnetToRoute(subnet)
+	if err != nil {
+		return err
+	}
+	return d.table.Add(ctx, route)
 }
 
 func (d *device) Close() error {
@@ -110,9 +136,17 @@ func (d *device) SetMTU(mtu int) error {
 // RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
 // is associated with the device.
 func (d *device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) (err error) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "RemoveSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
+	route, err := d.subnetToRoute(subnet)
+	if err != nil {
+		return err
+	}
+	if err := d.table.Remove(ctx, route); err != nil {
+		return err
+	}
+	// Staticcheck screams if this is ctx, span := because it thinks the context argument is being overwritten before being used.
+	sCtx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "RemoveSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
 	defer tracing.EndAndRecord(span, err)
-	return d.dev.removeSubnet(ctx, subnet)
+	return d.dev.removeSubnet(sCtx, subnet)
 }
 
 func (d *device) Wait() {

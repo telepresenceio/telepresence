@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sort"
 	"syscall" //nolint:depguard // sys/unix does not have NetlinkRIB
 	"unsafe"
 
+	"github.com/vishvananda/netlink"
+
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -20,6 +24,11 @@ var (
 	devIdx          = findInterfaceRe.SubexpIndex("dev")     //nolint:gochecknoglobals // constant
 	srcIdx          = findInterfaceRe.SubexpIndex("src")     //nolint:gochecknoglobals // constant
 )
+
+type table struct {
+	index int
+	rule  *netlink.Rule
+}
 
 type rtmsg struct {
 	// Check out https://man7.org/linux/man-pages/man7/rtnetlink.7.html for the definition of rtmsg
@@ -127,7 +136,7 @@ msgLoop:
 	return routes, nil
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	cmd := dexec.CommandContext(ctx, "ip", "route", "get", ip.String())
 	cmd.DisableLogging = true
@@ -164,10 +173,96 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	}, nil
 }
 
+func openTable(ctx context.Context) (Table, error) {
+	rules, err := netlink.RuleList(netlink.FAMILY_ALL)
+	if err != nil {
+		return nil, err
+	}
+	// Sort the rules by index ascending to make sure we find an open one
+	sort.Slice(rules, func(i, j int) bool {
+		return rules[i].Table < rules[j].Table
+	})
+	index := 775
+	priority := 32766 // default initial priority
+	for _, rule := range rules {
+		dlog.Tracef(ctx, "Found routing rule %+v", rule)
+		if rule.Table == 0 || rule.Table == 255 {
+			// System rules, ignore
+			continue
+		}
+		if rule.Priority <= priority {
+			priority = rule.Priority - 1
+		}
+		if rule.Table == index {
+			// There's already a table with the default index, get a new one
+			index++
+		}
+	}
+	dlog.Infof(ctx, "Creating routing table with index %d and priority %d", index, priority)
+	rule := netlink.NewRule()
+	rule.Table = index
+	rule.Priority = priority
+	rule.Family = netlink.FAMILY_V4
+	if err := netlink.RuleAdd(rule); err != nil {
+		return nil, err
+	}
+	return &table{
+		index: index,
+		rule:  rule,
+	}, nil
+}
+
+func (t *table) routeToNetlink(route *Route) *netlink.Route {
+	return &netlink.Route{
+		Dst:       route.RoutedNet,
+		Table:     t.index,
+		LinkIndex: route.Interface.Index,
+		Gw:        route.Gateway,
+		Src:       route.LocalIP,
+	}
+}
+
+func (t *table) Close(ctx context.Context) error {
+	return netlink.RuleDel(t.rule)
+}
+
+func (t *table) Add(ctx context.Context, r *Route) error {
+	route := t.routeToNetlink(r)
+	if err := netlink.RouteAdd(route); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *table) Remove(ctx context.Context, r *Route) error {
+	route := t.routeToNetlink(r)
+	if err := netlink.RouteDel(route); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *Route) addStatic(ctx context.Context) error {
 	return dexec.CommandContext(ctx, "ip", "route", "add", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
 }
 
 func (r *Route) removeStatic(ctx context.Context) error {
 	return dexec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
+}
+
+func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
+	// On Linux, when we ask about an IP address assigned to the machine, the OS will give us a loopback route
+	if osRoute.LocalIP.Equal(osRoute.RoutedNet.IP) && osRoute.Interface.Flags&net.FlagLoopback != 0 {
+		addrs, err := tableRoute.Interface.Addrs()
+		if err != nil {
+			return false, err
+		}
+		for _, addr := range addrs {
+			dlog.Tracef(ctx, "Checking address %s against %s", addr.String(), osRoute.RoutedNet.IP.String())
+			if addr.(*net.IPNet).IP.Equal(osRoute.LocalIP) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
