@@ -48,7 +48,7 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 		return nil, fmt.Errorf("failed to get interfaces: %w", err)
 	}
 	for _, iface := range ifaces {
-		dlog.Infof(ctx, "Found interface %s", iface.Name)
+		dlog.Tracef(ctx, "Found interface %s", iface.Name)
 		// Parse the tel%d number if it's there
 		var num int
 		if _, err := fmt.Sscanf(iface.Name, interfaceFmt, &num); err == nil {

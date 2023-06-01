@@ -168,3 +168,7 @@ func (t *table) Remove(ctx context.Context, r *Route) error {
 func (t *table) Close(ctx context.Context) error {
 	return nil
 }
+
+func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
+	return false, nil
+}

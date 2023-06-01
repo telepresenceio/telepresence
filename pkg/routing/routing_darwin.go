@@ -289,3 +289,7 @@ func (t *table) Add(ctx context.Context, r *Route) error {
 func (t *table) Remove(ctx context.Context, r *Route) error {
 	return r.RemoveStatic(ctx)
 }
+
+func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
+	return false, nil
+}

@@ -249,3 +249,20 @@ func (r *Route) addStatic(ctx context.Context) error {
 func (r *Route) removeStatic(ctx context.Context) error {
 	return dexec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
 }
+
+func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
+	// On Linux, when we ask about an IP address assigned to the machine, the OS will give us a loopback route
+	if osRoute.LocalIP.Equal(osRoute.RoutedNet.IP) && osRoute.Interface.Flags&net.FlagLoopback != 0 {
+		addrs, err := tableRoute.Interface.Addrs()
+		if err != nil {
+			return false, err
+		}
+		for _, addr := range addrs {
+			dlog.Tracef(ctx, "Checking address %s against %s", addr.String(), osRoute.RoutedNet.IP.String())
+			if addr.(*net.IPNet).IP.Equal(osRoute.LocalIP) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}

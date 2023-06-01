@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/sirupsen/logrus"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -24,7 +26,9 @@ func main() {
 
 	ctx, cancel := context.WithCancel(client.WithConfig(bCtx, &cfg))
 	defer cancel()
-	dev, err := vif.NewTunnelingDevice(ctx, nil)
+	dev, err := vif.NewTunnelingDevice(ctx, func(context.Context, tunnel.ConnID) (tunnel.Stream, error) {
+		return nil, errors.New("stream routing not enabled; refusing to forward")
+	})
 	if err != nil {
 		panic(err)
 	}

@@ -3,9 +3,8 @@ package vif
 import (
 	"context"
 
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
-
 	"github.com/hashicorp/go-multierror"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"

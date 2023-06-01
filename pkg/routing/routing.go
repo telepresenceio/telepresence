@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"runtime"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -47,38 +46,6 @@ func DefaultRoute(ctx context.Context) (*Route, error) {
 		}
 	}
 	return nil, errors.New("unable to find a default route")
-}
-
-func Subnets(routes []*Route) []*net.IPNet {
-	ns := make([]*net.IPNet, len(routes))
-	for i, r := range routes {
-		ns[i] = r.RoutedNet
-	}
-	return ns
-}
-
-func SubnetsOverlap(one, other *net.IPNet) bool {
-	// Ensure they're both IPV4 or both IPV6
-	if one.IP.To4() == nil && other.IP.To4() != nil || one.IP.To4() != nil && other.IP.To4() == nil {
-		return false
-	}
-	return one.Contains(other.IP) || other.Contains(one.IP)
-}
-
-func Routes(c context.Context, ms []*net.IPNet) []*Route {
-	rs := make([]*Route, 0, len(ms))
-	for _, n := range ms {
-		r, err := GetRoute(c, n)
-		if err != nil {
-			dlog.Errorf(c, "unable to get route for subnet %s. "+
-				"If this is your kubernetes API server you may want to open an issue, since telepresence may "+
-				"not work if it falls within the CIDR for pods/services. Error: %v",
-				n, err)
-			continue
-		}
-		rs = append(rs, r)
-	}
-	return rs
 }
 
 func (r *Route) Routes(ip net.IP) bool {
@@ -135,22 +102,14 @@ func interfaceLocalIP(iface *net.Interface, ipv4 bool) (net.IP, error) {
 
 func compareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
 	dlog.Tracef(ctx, "Comparing OS route %s to table route %s", osRoute, tableRoute)
-	if runtime.GOOS == "linux" {
-		// On Linux, when we ask about an IP address assigned to the machine, the OS will give us a loopback route
-		if osRoute.LocalIP.Equal(osRoute.RoutedNet.IP) && osRoute.Interface.Flags&net.FlagLoopback != 0 {
-			addrs, err := tableRoute.Interface.Addrs()
-			if err != nil {
-				return false, err
-			}
-			for _, addr := range addrs {
-				dlog.Tracef(ctx, "Checking address %s against %s", addr.String(), osRoute.RoutedNet.IP.String())
-				if addr.(*net.IPNet).IP.Equal(osRoute.LocalIP) {
-					return true, nil
-				}
-			}
-		}
+	if osRoute.Interface.Index == tableRoute.Interface.Index {
+		return true, nil
 	}
-	return osRoute.Interface.Index == tableRoute.Interface.Index, nil
+	osCompare, err := osCompareRoutes(ctx, osRoute, tableRoute)
+	if err != nil {
+		return false, err
+	}
+	return osCompare, nil
 }
 
 func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
