@@ -105,11 +105,7 @@ func compareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error
 	if osRoute.Interface.Index == tableRoute.Interface.Index {
 		return true, nil
 	}
-	osCompare, err := osCompareRoutes(ctx, osRoute, tableRoute)
-	if err != nil {
-		return false, err
-	}
-	return osCompare, nil
+	return osCompareRoutes(ctx, osRoute, tableRoute)
 }
 
 func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
