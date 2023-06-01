@@ -210,6 +210,8 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 			rs.DNS.RemoteIP = dns.RemoteIp
 			rs.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
 			rs.DNS.IncludeSuffixes = dns.IncludeSuffixes
+			rs.DNS.Excludes = dns.Excludes
+			rs.DNS.Mappings.FromRPC(dns.Mappings)
 			rs.DNS.LookupTimeout = dns.LookupTimeout.AsDuration()
 			rs.RoutingSnake = &client.RoutingSnake{}
 			for _, subnet := range obc.AlsoProxySubnets {
@@ -290,6 +292,16 @@ func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 	}
 	dnsKvf.Add("Exclude suffixes", fmt.Sprintf("%v", d.ExcludeSuffixes))
 	dnsKvf.Add("Include suffixes", fmt.Sprintf("%v", d.IncludeSuffixes))
+	if len(d.Excludes) > 0 {
+		dnsKvf.Add("Excludes", fmt.Sprintf("%v", d.Excludes))
+	}
+	if len(d.Mappings) > 0 {
+		mappingsKvf := ioutil.DefaultKeyValueFormatter()
+		for i := range d.Mappings {
+			mappingsKvf.Add(d.Mappings[i].Name, d.Mappings[i].AliasFor)
+		}
+		dnsKvf.Add("Mappings", "\n"+mappingsKvf.String())
+	}
 	dnsKvf.Add("Timeout", fmt.Sprintf("%v", d.LookupTimeout))
 	kvf.Add("DNS", "\n"+dnsKvf.String())
 }

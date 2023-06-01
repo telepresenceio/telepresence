@@ -29,6 +29,8 @@ const (
 	Daemon_Disconnect_FullMethodName       = "/telepresence.daemon.Daemon/Disconnect"
 	Daemon_GetNetworkConfig_FullMethodName = "/telepresence.daemon.Daemon/GetNetworkConfig"
 	Daemon_SetDnsSearchPath_FullMethodName = "/telepresence.daemon.Daemon/SetDnsSearchPath"
+	Daemon_SetDNSExcludes_FullMethodName   = "/telepresence.daemon.Daemon/SetDNSExcludes"
+	Daemon_SetDNSMappings_FullMethodName   = "/telepresence.daemon.Daemon/SetDNSMappings"
 	Daemon_SetLogLevel_FullMethodName      = "/telepresence.daemon.Daemon/SetLogLevel"
 	Daemon_WaitForNetwork_FullMethodName   = "/telepresence.daemon.Daemon/WaitForNetwork"
 )
@@ -51,6 +53,10 @@ type DaemonClient interface {
 	GetNetworkConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*NetworkConfig, error)
 	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetDNSExcludes sets the excludes field of DNSConfig.
+	SetDNSExcludes(ctx context.Context, in *SetDNSExcludesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetDNSMappings sets the Mappings field of DNSConfig.
+	SetDNSMappings(ctx context.Context, in *SetDNSMappingsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
 	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WaitForNetwork waits for the network of the currently connected session to become ready.
@@ -128,6 +134,24 @@ func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...
 	return out, nil
 }
 
+func (c *daemonClient) SetDNSExcludes(ctx context.Context, in *SetDNSExcludesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Daemon_SetDNSExcludes_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonClient) SetDNSMappings(ctx context.Context, in *SetDNSMappingsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Daemon_SetDNSMappings_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonClient) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Daemon_SetLogLevel_FullMethodName, in, out, opts...)
@@ -164,6 +188,10 @@ type DaemonServer interface {
 	GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error)
 	// SetDnsSearchPath sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error)
+	// SetDNSExcludes sets the excludes field of DNSConfig.
+	SetDNSExcludes(context.Context, *SetDNSExcludesRequest) (*emptypb.Empty, error)
+	// SetDNSMappings sets the Mappings field of DNSConfig.
+	SetDNSMappings(context.Context, *SetDNSMappingsRequest) (*emptypb.Empty, error)
 	// SetLogLevel will temporarily set the log-level for the daemon for a duration that is determined b the request.
 	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
 	// WaitForNetwork waits for the network of the currently connected session to become ready.
@@ -195,6 +223,12 @@ func (UnimplementedDaemonServer) GetNetworkConfig(context.Context, *emptypb.Empt
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
+}
+func (UnimplementedDaemonServer) SetDNSExcludes(context.Context, *SetDNSExcludesRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetDNSExcludes not implemented")
+}
+func (UnimplementedDaemonServer) SetDNSMappings(context.Context, *SetDNSMappingsRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetDNSMappings not implemented")
 }
 func (UnimplementedDaemonServer) SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
@@ -341,6 +375,42 @@ func _Daemon_SetDnsSearchPath_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_SetDNSExcludes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetDNSExcludesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).SetDNSExcludes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_SetDNSExcludes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).SetDNSExcludes(ctx, req.(*SetDNSExcludesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Daemon_SetDNSMappings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetDNSMappingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).SetDNSMappings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_SetDNSMappings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).SetDNSMappings(ctx, req.(*SetDNSMappingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Daemon_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(manager.LogLevelRequest)
 	if err := dec(in); err != nil {
@@ -411,6 +481,14 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetDnsSearchPath",
 			Handler:    _Daemon_SetDnsSearchPath_Handler,
+		},
+		{
+			MethodName: "SetDNSExcludes",
+			Handler:    _Daemon_SetDNSExcludes_Handler,
+		},
+		{
+			MethodName: "SetDNSMappings",
+			Handler:    _Daemon_SetDNSMappings_Handler,
 		},
 		{
 			MethodName: "SetLogLevel",

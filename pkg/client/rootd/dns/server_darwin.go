@@ -28,7 +28,6 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 			ps = append(ps, p)
 		}
 	}
-	ps = append([]string{tel2SubDomainDot + r.domain}, ps...)
 	r.search = ps
 }
 
@@ -175,6 +174,8 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 			additions = append(additions, domain)
 		}
 	}
+
+	search = append([]string{tel2SubDomainDot + s.clusterDomain}, search...)
 
 	s.search = search
 	s.namespaces = namespaces

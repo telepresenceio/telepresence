@@ -76,6 +76,9 @@ type Server struct {
 
 	config *rpc.DNSConfig
 
+	// configLock ensures thread safety for the DNS config for certain fields that can be modified remotely.
+	configLock sync.RWMutex
+
 	// clusterDomain reported by the traffic-manager
 	clusterDomain string
 
@@ -124,6 +127,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 	}
 	s := &Server{
 		config:        config,
+		configLock:    sync.RWMutex{},
 		namespaces:    make(map[string]struct{}),
 		domains:       make(map[string]struct{}),
 		search:        []string{""},
@@ -180,12 +184,12 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 		return false
 	}
 
-	query = query[:len(query)-1] // skip last dot
-
-	if slice.Contains(s.config.Excludes, query) {
+	if s.isExcluded(query) {
 		// Reject any host explicitly added to the exclude list.
 		return false
 	}
+
+	query = query[:len(query)-1] // skip last dot
 
 	if strings.Contains(query, "."+tel2SubDomainDot) {
 		// Reject "xxx.tel2-search.xxx" (we know it doesn't end with tel2SubDomain because we just removed the last dot)
@@ -210,6 +214,25 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 		}
 	}
 	return true
+}
+
+func (s *Server) isExcluded(query string) bool {
+	s.configLock.RLock()
+	defer s.configLock.RUnlock()
+
+	if slice.Contains(s.config.Excludes, query[:len(query)-1]) {
+		return true
+	}
+
+	// When intercepting, this function will potentially receive the hostname of any search param, so their
+	// unqualified hostname should be evaluated too.
+	for _, sp := range s.search {
+		if strings.HasSuffix(query, sp) && slice.Contains(s.config.Excludes, query[:len(query)-len(sp)-1]) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
@@ -267,6 +290,8 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 }
 
 func (s *Server) ResolveMappingAlias(query string) *string {
+	s.configLock.RLock()
+	defer s.configLock.RUnlock()
 	for i := range s.config.Mappings {
 		mappingName := s.config.Mappings[i].Name + "."
 		if mappingName == query {
@@ -284,6 +309,8 @@ func (s *Server) GetConfig() *rpc.DNSConfig {
 		RemoteIp:        sc.RemoteIp,
 		ExcludeSuffixes: sc.ExcludeSuffixes,
 		IncludeSuffixes: sc.IncludeSuffixes,
+		Excludes:        sc.Excludes,
+		Mappings:        sc.Mappings,
 		LookupTimeout:   sc.LookupTimeout,
 		Error:           sc.Error,
 	}
@@ -344,6 +371,39 @@ func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) 
 	case <-ctx.Done():
 	case s.searchPathCh <- paths:
 	}
+}
+
+func (s *Server) purgeRecordsFromCache(keyName string) {
+	keyName = strings.TrimSuffix(keyName, ".") + "."
+	for _, qType := range []uint16{dns.TypeA, dns.TypeAAAA} {
+		toDeleteKey := cacheKey{name: keyName, qType: qType}
+		s.cache.Delete(toDeleteKey)
+	}
+}
+
+// SetExcludes sets the excludes list in the config.
+func (s *Server) SetExcludes(excludes []string) {
+	s.configLock.Lock()
+	toFlush := excludes
+	toFlush = append(toFlush, s.config.Excludes...)
+
+	// Flush the excludes
+	for i := range toFlush {
+		s.purgeRecordsFromCache(toFlush[i])
+	}
+	s.config.Excludes = excludes
+	s.configLock.Unlock()
+}
+
+// SetMappings sets the Mappings list in the config.
+func (s *Server) SetMappings(mappings []*rpc.DNSMapping) {
+	s.configLock.Lock()
+	// Flush the mappings.
+	for i := range s.config.Mappings {
+		s.purgeRecordsFromCache(s.config.Mappings[i].Name)
+	}
+	s.config.Mappings = mappings
+	s.configLock.Unlock()
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {

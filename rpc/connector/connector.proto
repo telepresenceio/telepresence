@@ -111,6 +111,12 @@ service Connector {
 
   // GetConfig returns the current configuration
   rpc GetConfig(google.protobuf.Empty) returns (ClientConfig);
+
+  // SetDNSExcludes sets the excludes field of DNSConfig.
+  rpc SetDNSExcludes(daemon.SetDNSExcludesRequest) returns (google.protobuf.Empty);
+
+  // SetDNSMappings sets the Mappings field of DNSConfig.
+  rpc SetDNSMappings(daemon.SetDNSMappingsRequest) returns (google.protobuf.Empty);
 }
 
 // ManagerProxy is a small subset of the traffic-manager API that the

@@ -1021,6 +1021,8 @@ type DNS struct {
 	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
 	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
 	ExcludeSuffixes []string      `json:"excludeSuffixes,omitempty" yaml:"excludeSuffixes,omitempty"`
+	Excludes        []string      `json:"excludes,omitempty" yaml:"excludes,omitempty"`
+	Mappings        DNSMappings   `json:"mappings,omitempty" yaml:"mappings,omitempty"`
 	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty" yaml:"lookupTimeout,omitempty"`
 }
 
@@ -1031,6 +1033,8 @@ type DNSSnake struct {
 	RemoteIP        net.IP        `json:"remote_ip,omitempty" yaml:"remote_ip,omitempty"`
 	IncludeSuffixes []string      `json:"include_suffixes,omitempty" yaml:"include_suffixes,omitempty"`
 	ExcludeSuffixes []string      `json:"exclude_suffixes,omitempty" yaml:"exclude_suffixes,omitempty"`
+	Excludes        []string      `json:"excludes,omitempty" yaml:"excludes,omitempty"`
+	Mappings        DNSMappings   `json:"mappings,omitempty" yaml:"mappings,omitempty"`
 	LookupTimeout   time.Duration `json:"lookup_timeout,omitempty" yaml:"lookup_timeout,omitempty"`
 }
 

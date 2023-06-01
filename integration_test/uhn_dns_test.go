@@ -1,10 +1,13 @@
-package integration
+package integration_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -33,14 +36,16 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 	// given
 	ctx := s.Context()
 	serviceName := "echo"
-	port := 80
+	port, svcCancel := itest.StartLocalHttpEchoServer(ctx, serviceName)
+	defer svcCancel()
+
 	itest.ApplyEchoService(ctx, serviceName, s.AppNamespace(), port)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", serviceName)
 
 	excludes := []string{
-		"echo-easy",
-		"echo-easy.blue",
-		"echo-easy.blue.svc.cluster.local",
+		"echo",
+		fmt.Sprintf("echo.%s", s.AppNamespace()),
+		fmt.Sprintf("echo.%s.svc.cluster.local", s.AppNamespace()),
 	}
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		return map[string]any{"dns": map[string][]string{
@@ -50,6 +55,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 
 	// when
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	itest.TelepresenceOk(ctx, "intercept", serviceName, "--namespace", s.AppNamespace(), "--port", strconv.Itoa(port))
 
 	// then
 	for _, excluded := range excludes {
@@ -61,6 +67,11 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 			return err != nil
 		}, 10*time.Second, 1*time.Second, "should not be able to reach %s", excluded)
 	}
+
+	var status statusResponse
+	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
+	assert.NoError(s.T(), json.Unmarshal([]byte(stdout), &status), "Output can be parsed")
+	assert.Equal(s.T(), excludes, status.RootDaemon.DNS.Excludes, "Excludes in output")
 }
 
 func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
@@ -105,4 +116,9 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 			return err == nil
 		}, 10*time.Second, 1*time.Second, "can find alias %s", mapping["name"])
 	}
+
+	var status statusResponse
+	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
+	assert.NoError(s.T(), json.Unmarshal([]byte(stdout), &status), "Output can be parsed")
+	assert.Equal(s.T(), mappings, status.RootDaemon.DNS.Mappings, "Mappings in output")
 }

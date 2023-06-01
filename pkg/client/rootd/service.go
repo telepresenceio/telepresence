@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
@@ -170,6 +171,22 @@ func (s *Service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empt
 		return nil
 	})
 	return &empty.Empty{}, err
+}
+
+func (s *Service) SetDNSExcludes(ctx context.Context, req *rpc.SetDNSExcludesRequest) (*emptypb.Empty, error) {
+	err := s.WithSession(func(c context.Context, session *Session) error {
+		session.SetExcludes(c, req.Excludes)
+		return nil
+	})
+	return &emptypb.Empty{}, err
+}
+
+func (s *Service) SetDNSMappings(ctx context.Context, req *rpc.SetDNSMappingsRequest) (*emptypb.Empty, error) {
+	err := s.WithSession(func(c context.Context, session *Session) error {
+		session.SetMappings(c, req.Mappings)
+		return nil
+	})
+	return &emptypb.Empty{}, err
 }
 
 func (s *Service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.DaemonStatus, error) {

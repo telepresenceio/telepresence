@@ -242,6 +242,10 @@ func NewSession(
 	return ctx, tmgr, ret
 }
 
+func (s *session) RootDaemon() rootdRpc.DaemonClient {
+	return s.rootDaemon
+}
+
 func (s *session) As(ptr any) {
 	switch ptr := ptr.(type) {
 	case **session:

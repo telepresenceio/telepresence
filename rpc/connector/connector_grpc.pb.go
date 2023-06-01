@@ -9,6 +9,7 @@ package connector
 import (
 	context "context"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
+	daemon "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -52,6 +53,8 @@ const (
 	Connector_GetNamespaces_FullMethodName           = "/telepresence.connector.Connector/GetNamespaces"
 	Connector_RemoteMountAvailability_FullMethodName = "/telepresence.connector.Connector/RemoteMountAvailability"
 	Connector_GetConfig_FullMethodName               = "/telepresence.connector.Connector/GetConfig"
+	Connector_SetDNSExcludes_FullMethodName          = "/telepresence.connector.Connector/SetDNSExcludes"
+	Connector_SetDNSMappings_FullMethodName          = "/telepresence.connector.Connector/SetDNSMappings"
 )
 
 // ConnectorClient is the client API for Connector service.
@@ -127,6 +130,10 @@ type ConnectorClient interface {
 	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.Result, error)
 	// GetConfig returns the current configuration
 	GetConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClientConfig, error)
+	// SetDNSExcludes sets the excludes field of DNSConfig.
+	SetDNSExcludes(ctx context.Context, in *daemon.SetDNSExcludesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetDNSMappings sets the Mappings field of DNSConfig.
+	SetDNSMappings(ctx context.Context, in *daemon.SetDNSMappingsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type connectorClient struct {
@@ -430,6 +437,24 @@ func (c *connectorClient) GetConfig(ctx context.Context, in *emptypb.Empty, opts
 	return out, nil
 }
 
+func (c *connectorClient) SetDNSExcludes(ctx context.Context, in *daemon.SetDNSExcludesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_SetDNSExcludes_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) SetDNSMappings(ctx context.Context, in *daemon.SetDNSMappingsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_SetDNSMappings_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility
@@ -503,6 +528,10 @@ type ConnectorServer interface {
 	RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error)
 	// GetConfig returns the current configuration
 	GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error)
+	// SetDNSExcludes sets the excludes field of DNSConfig.
+	SetDNSExcludes(context.Context, *daemon.SetDNSExcludesRequest) (*emptypb.Empty, error)
+	// SetDNSMappings sets the Mappings field of DNSConfig.
+	SetDNSMappings(context.Context, *daemon.SetDNSMappingsRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -599,6 +628,12 @@ func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *em
 }
 func (UnimplementedConnectorServer) GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfig not implemented")
+}
+func (UnimplementedConnectorServer) SetDNSExcludes(context.Context, *daemon.SetDNSExcludesRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetDNSExcludes not implemented")
+}
+func (UnimplementedConnectorServer) SetDNSMappings(context.Context, *daemon.SetDNSMappingsRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetDNSMappings not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 
@@ -1156,6 +1191,42 @@ func _Connector_GetConfig_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_SetDNSExcludes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(daemon.SetDNSExcludesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).SetDNSExcludes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_SetDNSExcludes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).SetDNSExcludes(ctx, req.(*daemon.SetDNSExcludesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_SetDNSMappings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(daemon.SetDNSMappingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).SetDNSMappings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_SetDNSMappings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).SetDNSMappings(ctx, req.(*daemon.SetDNSMappingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1278,6 +1349,14 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetConfig",
 			Handler:    _Connector_GetConfig_Handler,
+		},
+		{
+			MethodName: "SetDNSExcludes",
+			Handler:    _Connector_SetDNSExcludes_Handler,
+		},
+		{
+			MethodName: "SetDNSMappings",
+			Handler:    _Connector_SetDNSMappings_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

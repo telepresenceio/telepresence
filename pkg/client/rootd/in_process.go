@@ -83,6 +83,16 @@ func (rd *InProcSession) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths,
 	return &empty.Empty{}, nil
 }
 
+func (rd *InProcSession) SetDNSExcludes(ctx context.Context, in *rpc.SetDNSExcludesRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	rd.SetExcludes(ctx, in.Excludes)
+	return &empty.Empty{}, nil
+}
+
+func (rd *InProcSession) SetDNSMappings(ctx context.Context, in *rpc.SetDNSMappingsRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	rd.SetMappings(ctx, in.Mappings)
+	return &empty.Empty{}, nil
+}
+
 func (rd *InProcSession) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
 	// No loglevel when session runs in the same process as the user daemon.
 	return &empty.Empty{}, nil
