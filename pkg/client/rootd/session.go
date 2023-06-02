@@ -107,6 +107,9 @@ type Session struct {
 	// Subnets configured by the user to never be proxied
 	neverProxySubnets []*net.IPNet
 
+	// Subnets that will be mapped even if they conflict with local routes
+	allowConflictingSubnets []*net.IPNet
+
 	// closing is set during shutdown and can have the values:
 	//   0 = running
 	//   1 = closing
@@ -361,9 +364,13 @@ func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 		dlog.Debug(ctx, "no tunnel, not refreshing subnets")
 		return nil
 	}
-	// Create a unique slice of all desired subnets.
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "refreshSubnets")
 	defer tracing.EndAndRecord(span, err)
+
+	// Apply whitelist
+	s.tunVif.Router.UpdateWhitelist(s.allowConflictingSubnets)
+
+	// Create a unique slice of all desired subnets.
 	desired := make([]*net.IPNet, len(s.clusterSubnets)+len(s.alsoProxySubnets))
 	copy(desired, s.clusterSubnets)
 	copy(desired[len(s.clusterSubnets):], s.alsoProxySubnets)
@@ -501,8 +508,6 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator()); err != nil {
 			return fmt.Errorf("NewTunnelVIF: %v", err)
 		}
-		// TODO: Set a 0.0.0.0/0 whitelist until we wire in user-configured whitelist.
-		s.tunVif.Router.UpdateWhitelist([]*net.IPNet{{IP: net.IPv4zero, Mask: net.IPv4Mask(0, 0, 0, 0)}})
 	}
 	return s.onClusterInfo(ctx, mgrInfo, span)
 }
@@ -580,6 +585,10 @@ func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.Cl
 		ns := subnet.Unique(append(s.neverProxySubnets, iputil.ConvertSubnets(r.NeverProxySubnets)...))
 		dlog.Infof(ctx, "never-proxy subnets %v", ns)
 		s.neverProxySubnets = ns
+
+		if r.AllowConflictingSubnets != nil {
+			s.allowConflictingSubnets = iputil.ConvertSubnets(r.AllowConflictingSubnets)
+		}
 	}
 }
 
