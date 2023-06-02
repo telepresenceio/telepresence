@@ -108,6 +108,14 @@ func (dv *cacheEntry) expired() bool {
 	return time.Since(dv.created) > cacheTTL
 }
 
+func (dv *cacheEntry) close() {
+	select {
+	case <-dv.wait:
+	default:
+		close(dv.wait)
+	}
+}
+
 // NewServer returns a new dns.Server.
 func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *Server {
 	if config == nil {
@@ -377,7 +385,9 @@ func (s *Server) purgeRecordsFromCache(keyName string) {
 	keyName = strings.TrimSuffix(keyName, ".") + "."
 	for _, qType := range []uint16{dns.TypeA, dns.TypeAAAA} {
 		toDeleteKey := cacheKey{name: keyName, qType: qType}
-		s.cache.Delete(toDeleteKey)
+		if old, ok := s.cache.LoadAndDelete(toDeleteKey); ok {
+			old.(*cacheEntry).close()
+		}
 	}
 }
 
@@ -460,7 +470,9 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 
 func (s *Server) flushDNS() {
 	s.cache.Range(func(key, _ any) bool {
-		s.cache.Delete(key)
+		if old, ok := s.cache.LoadAndDelete(key); ok {
+			old.(*cacheEntry).close()
+		}
 		return true
 	})
 }
@@ -785,7 +797,7 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
 	defer func() {
 		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
-		close(dv.wait)
+		dv.close()
 	}()
 
 	// Returns a CNAME pointing to the mapping when there is a hit.
