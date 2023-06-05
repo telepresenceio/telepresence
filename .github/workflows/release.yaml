@@ -8,7 +8,47 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+
 
 jobs:
+  check_workflows_status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Validate workflows status
+        id: workflow
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const requiredWorkflows = ["Build and Unit test", "Integration Tests"];
+            for (const workflowName of requiredWorkflows) {
+              const workflows = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                status: 'success',
+                head_sha: context.sha,
+              })
+              const workflow = workflows.data.workflow_runs.find(
+                (workflow) => workflow.name === workflowName
+              )
+              if (!workflow) {
+                console.log(`Workflow ${workflowName} did not run or finish successfully for this commit`)
+                return 'not_run'
+              }
+            }
+            return 'success'
+      - name: Print the result
+        run: |
+          if [ "${{ steps.workflow.outputs.result }}" = "success" ]; then
+            echo "All workflows were successful for this commit. Proceeding..."
+          else
+            echo "Not all workflows were successful for this commit. Exiting..."
+            exit 1
+          fi
+
   build-release:
+    needs:
+      - check_workflows_status
     strategy:
       fail-fast: false
       matrix:
