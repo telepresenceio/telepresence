@@ -5,7 +5,7 @@
 Security updates will be provided for the latest 2.x release.
 
 
-### Howe do we handle vulnerabilities
+### How do we handle vulnerabilities
 
 #### User reports
 
