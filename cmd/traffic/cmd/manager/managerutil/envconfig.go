@@ -64,11 +64,12 @@ type Env struct {
 	AgentEnvoyAdminPort      uint16                      `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
 	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string"`
 
-	ClientRoutingAlsoProxySubnets  []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  parser=split-ipnet, default="`
-	ClientRoutingNeverProxySubnets []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, parser=split-ipnet, default="`
-	ClientDnsExcludeSuffixes       []string      `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,        parser=split-trim"`
-	ClientDnsIncludeSuffixes       []string      `env:"CLIENT_DNS_INCLUDE_SUFFIXES,        parser=split-trim,  default="`
-	ClientConnectionTTL            time.Duration `env:"CLIENT_CONNECTION_TTL,              parser=time.ParseDuration"`
+	ClientRoutingAlsoProxySubnets        []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
+	ClientRoutingNeverProxySubnets       []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
+	ClientRoutingAllowConflictingSubnets []*net.IPNet  `env:"CLIENT_ROUTING_ALLOW_CONFLICTING_SUBNETS, 	parser=split-ipnet, default="`
+	ClientDnsExcludeSuffixes             []string      `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,        		parser=split-trim"`
+	ClientDnsIncludeSuffixes             []string      `env:"CLIENT_DNS_INCLUDE_SUFFIXES,       		parser=split-trim,  default="`
+	ClientConnectionTTL                  time.Duration `env:"CLIENT_CONNECTION_TTL,              		parser=time.ParseDuration"`
 }
 
 type envKey struct{}

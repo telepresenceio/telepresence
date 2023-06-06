@@ -81,14 +81,9 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 	// In any case, we really wanna run over the table as the outer loop, since it's bigger.
 	for _, tr := range table {
 		dlog.Tracef(ctx, "checking for overlap with route %q", tr)
-		if subnet.IsZeroMask(tr.RoutedNet) || tr.Default {
-			// This is a default route, so we'll overlap it if needed
-			continue
-		} else if subnet.IsHalfOfDefault(tr.RoutedNet) {
-			// Some VPN providers will cover one half of the address space with a /1 mask, and the other half with another.
-			// When we run into that just keep going and treat it as a default route that we can overlap.
-			// Crucially, OpenVPN is one of the providers who does this; luckily they will also add specific routes for
-			// the subnets that are covered by the VPC (e.g. /8 or /24 routes); the /1 routes are just for the public internet.
+		if (subnet.IsZeroMask(tr.RoutedNet) || tr.Default) || // Default route, overlapped if needed
+			subnet.IsHalfOfDefault(tr.RoutedNet) || // OpenVPN covers half the address space with a /1 route and the other half with another. This is its way of doing a default route.
+			tr.Interface.Name == rt.device.Name() { // This is the interface we're routing through, so we can overlap it
 			continue
 		}
 		for _, r := range nonWhitelisted {

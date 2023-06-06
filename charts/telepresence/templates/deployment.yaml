@@ -215,6 +215,10 @@ spec:
           - name: CLIENT_ROUTING_NEVER_PROXY_SUBNETS
             value: "{{ join " " .neverProxySubnets }}"
           {{- end }}
+          {{- if .allowConflictingSubnets }}
+          - name: CLIENT_ROUTING_ALLOW_CONFLICTING_SUBNETS
+            value: "{{ join " " .allowConflictingSubnets }}"
+          {{- end }}
           {{- end }}
           {{- end }}
           {{- with .dns }}

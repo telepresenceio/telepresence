@@ -535,6 +535,7 @@ message ClusterInfo {
 message Routing {
   repeated IPNet also_proxy_subnets = 1;
   repeated IPNet never_proxy_subnets = 2;
+  repeated IPNet allow_conflicting_subnets = 3;
 }
 
 message DNS {

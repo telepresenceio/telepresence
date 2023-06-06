@@ -484,6 +484,7 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 	nss := GetNamespaces(ctx)
 	settings := []string{
 		"--set", "logLevel=debug",
+		"--set", "client.routing.allowConflictingSubnets={10.0.0.0/8}",
 	}
 	if len(nss.ManagedNamespaces) > 0 {
 		settings = append(settings,
@@ -583,6 +584,9 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	if agentImage := GetAgentImage(ctx); agentImage != nil {
 		agent = &xAgent{Image: agentImage}
 	}
+	type xClient struct {
+		Routing map[string][]string `json:"routing"`
+	}
 	nsl := nss.UniqueList()
 	vx := struct {
 		SystemaHost string  `json:"systemaHost"`
@@ -592,6 +596,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		Agent       *xAgent `json:"agent,omitempty"`
 		ClientRbac  xRbac   `json:"clientRbac"`
 		ManagerRbac xRbac   `json:"managerRbac"`
+		Client      xClient `json:"client"`
 	}{
 		LogLevel: "debug",
 		Image:    GetImage(ctx),
@@ -606,6 +611,11 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 			Create:     true,
 			Namespaced: len(nss.ManagedNamespaces) > 0,
 			Namespaces: nsl,
+		},
+		Client: xClient{
+			Routing: map[string][]string{
+				"allowConflictingSubnets": {"10.0.0.0/8"},
+			},
 		},
 	}
 	if sysA := GetSystemA(ctx); sysA != nil {
