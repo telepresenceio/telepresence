@@ -30,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
@@ -200,7 +201,16 @@ func (s *Service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.Dae
 	case <-ctx.Done():
 		return nil, status.Error(codes.Canceled, ctx.Err().Error())
 	case reply := <-s.connectReplyCh:
-		return reply.status, reply.err
+		if reply.err == nil {
+			return reply.status, nil
+		}
+		st := status.New(codes.Unknown, reply.err.Error())
+		st, err := st.WithDetails(&common.Result{Data: []byte(reply.err.Error()), ErrorCategory: common.Result_ErrorCategory(errcat.GetCategory(reply.err))})
+		if err != nil {
+			dlog.Errorf(ctx, "Failed to add details to error: %v", err)
+			return reply.status, reply.err
+		}
+		return reply.status, st.Err()
 	}
 }
 

@@ -448,6 +448,16 @@ func CheckTrafficManagerService(ctx context.Context, namespace string) error {
 }
 
 func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
+	st := status.Convert(err)
+	for _, detail := range st.Details() {
+		if detail, ok := detail.(*common.Result); ok {
+			return &rpc.ConnectInfo{
+				Error:         t,
+				ErrorText:     string(detail.Data),
+				ErrorCategory: int32(detail.ErrorCategory),
+			}
+		}
+	}
 	return &rpc.ConnectInfo{
 		Error:         t,
 		ErrorText:     err.Error(),
