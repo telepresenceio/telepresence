@@ -327,7 +327,7 @@ hooks:
   curl:
     registry: docker.io
     image: "curlimages/curl"
-    tag: latest
+    tag: 8.1.1
     imagePullSecrets: []
 
 client:
