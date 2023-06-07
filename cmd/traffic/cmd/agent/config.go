@@ -106,22 +106,58 @@ func addAppMounts(ctx context.Context, ag *agentconfig.Container) error {
 		ag.Mounts = slice.AppendUnique(ag.Mounts, strings.Split(volPaths, ":")...)
 	}
 
-	appMountsDir, err := dos.Open(ctx, ag.MountPoint)
+	if appMountsDir, err := dos.Open(ctx, ag.MountPoint); err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+	} else {
+		defer appMountsDir.Close()
+		mounts, err := appMountsDir.ReadDir(-1)
+		if err != nil {
+			return err
+		}
+		for _, mount := range mounts {
+			if err = dos.Symlink(ctx, filepath.Join(ag.MountPoint, mount.Name()), filepath.Join(cnMountPoint, mount.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return mountVRS(ctx, ag, cnMountPoint)
+}
+
+func mountVRS(ctx context.Context, ag *agentconfig.Container, cnMountPoint string) error {
+	const vrsDir = "/var/run/secrets"
+	// Capture /var/run/secrets subdirs that has been injected but not added by
+	// the injector. That might be because the injector is older than 2.13.3 or
+	// because the injectors reinvocationStrategy is set to "Never".
+	var vrsMounts []string
+	vrs, err := dos.ReadDir(ctx, vrsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			err = nil // Nothing is mounted from this app container. That's ok
+			err = nil
 		}
 		return err
 	}
 
-	defer appMountsDir.Close()
-	mounts, err := appMountsDir.ReadDir(-1)
-	if err != nil {
+	for _, vr := range vrs {
+		if vr.IsDir() {
+			subDir := filepath.Join(vrsDir, vr.Name())
+			ag.Mounts = append(ag.Mounts, subDir)
+			vrsMounts = append(vrsMounts, subDir)
+		}
+	}
+	if len(vrsMounts) == 0 {
+		return nil
+	}
+
+	vrsExportDir := filepath.Join(cnMountPoint, vrsDir)
+	if err := dos.MkdirAll(ctx, vrsExportDir, 0o700); err != nil {
 		return err
 	}
-	for _, mount := range mounts {
-		if err = dos.Symlink(ctx, filepath.Join(ag.MountPoint, mount.Name()), filepath.Join(cnMountPoint, mount.Name())); err != nil {
-			return err
+	for _, mount := range vrsMounts {
+		newName := filepath.Join(vrsExportDir, filepath.Base(mount))
+		if err = dos.Symlink(ctx, mount, newName); err != nil {
+			dlog.Warnf(ctx, "can't symlink %s to %s", mount, newName)
 		}
 	}
 	return nil
