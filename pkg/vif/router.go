@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -88,7 +89,10 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 		}
 		for _, r := range nonWhitelisted {
 			if subnet.Overlaps(tr.RoutedNet, r) {
-				return fmt.Errorf("subnet %s overlaps with existing route %q", r, tr)
+				return errcat.Config.New(fmt.Sprintf(
+					"subnet %s overlaps with existing route %q. Please see %s for more information",
+					r, tr, "https://www.getambassador.io/docs/telepresence/latest/reference/vpn",
+				))
 			}
 		}
 	}
