@@ -47,6 +47,12 @@ items:
         body: >-
           Added a new config map that can take an array of environment variables that will
           then be excluded from an intercept that retrieves the environment of a pod.
+
+      - type: bugfix
+        title: Fixed traffic-agent backward incompatibility issue causing lack of remote mounts
+        body: >-
+          A traffic-agent of version 2.13.3 (or 1.13.15) would not propagate the directories under
+          <code>/var/run/secrets</code> when used with a traffic manager older than 2.13.3.
   - version: 2.13.3
     date: "2023-05-25"
     notes:
