@@ -15,8 +15,10 @@ The following metrics are collected:
 | `Used legacy syntax`                  | A [legacy command](https://www.telepresence.io/docs/latest/install/migrate-from-legacy/#using-legacy-telepresence-commands) has been used            |
 | `incluster_dns_queries`               | Number of queries made by Telepresence to resolve a name to a cluster service (e.g. `kubernetes.default`). Inclues a `total` and a `failures` trait. |
 | `connect`                             | Telepresence has attempted to connect to the cluster.                                                                                                |
+| `connect_error`                       | Telepresence has failed to connect to the cluster. Includes `error`, `error_type`, and `error_category` fields detailing the failure.                |
 | `connecting_traffic_manager`          | Telepresence has attempted to connect to the Traffic Manager.                                                                                        |
 | `finished_connecting_traffic_manager` | Telepresence has succeeded at connecting to the Traffic Manager.                                                                                     |
+| `updated_routes`                      | Telepresence has updated the routes on the client machine. Includes `cluster_`, `also_proxy_`, `never_proxy_` and `allow_conflicting_subnets` traits |
 | `login_failure`                       | A `telepresence login` has failed. Includes an `error` trait detailing the error, and a `method` trait detailing the login method.                   |
 | `login_interrupted`                   | A `telepresence login` has been interrupted by the user, includes a `method` trait detailing the login method.                                       |
 | `login_success`                       | A `telepresence login` has succeded, includes a `method` trait detailing the login method.                                                           |

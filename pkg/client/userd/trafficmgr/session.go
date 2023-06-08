@@ -149,9 +149,24 @@ func NewSession(
 	sr *scout.Reporter,
 	cr *rpc.ConnectRequest,
 	config *client.Kubeconfig,
-) (context.Context, userd.Session, *connector.ConnectInfo) {
+) (_ context.Context, _ userd.Session, cErr *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 	sr.Report(ctx, "connect")
+
+	defer func() {
+		if cErr != nil {
+			sr.Report(ctx, "connect_error", scout.Entry{
+				Key:   "error",
+				Value: cErr.ErrorText,
+			}, scout.Entry{
+				Key:   "error_type",
+				Value: cErr.Error.String(),
+			}, scout.Entry{
+				Key:   "error_category",
+				Value: cErr.ErrorCategory,
+			})
+		}
+	}()
 
 	dlog.Info(ctx, "Connecting to k8s cluster...")
 	cluster, err := k8s.ConnectCluster(ctx, cr, config)
