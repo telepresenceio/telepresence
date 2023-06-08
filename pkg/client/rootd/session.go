@@ -370,6 +370,16 @@ func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 	// Apply whitelist
 	s.tunVif.Router.UpdateWhitelist(s.allowConflictingSubnets)
 
+	// Fire and forget to send metrics out.
+	go func() {
+		s.scout.Report(ctx, "update_routes",
+			scout.Entry{Key: "cluster_subnets", Value: len(s.clusterSubnets)},
+			scout.Entry{Key: "also_proxy_subnets", Value: len(s.alsoProxySubnets)},
+			scout.Entry{Key: "never_proxy_subnets", Value: len(s.neverProxySubnets)},
+			scout.Entry{Key: "allow_conflicting_subnets", Value: len(s.allowConflictingSubnets)},
+		)
+	}()
+
 	// Create a unique slice of all desired subnets.
 	desired := make([]*net.IPNet, len(s.clusterSubnets)+len(s.alsoProxySubnets))
 	copy(desired, s.clusterSubnets)

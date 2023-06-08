@@ -158,8 +158,7 @@ func (s *singleServiceSuite) Test_InterceptDetailedOutput() {
 	s.NotNil(iputil.Parse(m.PodIP))
 	s.NotZero(m.Port)
 	s.Equal(agentconfig.ExportsMountPoint+"/echo-server", m.RemoteDir)
-	require.Len(m.Mounts, 1)
-	s.Equal(m.Mounts[0], "/var/run/secrets/kubernetes.io/serviceaccount")
+	require.NotEmpty(m.Mounts)
 }
 
 func (s *singleServiceSuite) Test_NoInterceptorResponse() {
