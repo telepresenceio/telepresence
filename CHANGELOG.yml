@@ -53,6 +53,18 @@ items:
         body: >-
           A traffic-agent of version 2.13.3 (or 1.13.15) would not propagate the directories under
           <code>/var/run/secrets</code> when used with a traffic manager older than 2.13.3.
+
+      - type: change
+        title: Routing conflict reporting.
+        body: >-
+          Telepresence will now attempt to detect and report routing conflicts with other running VPN software on client machines.
+          There is a new configuration flag that can be tweaked to allow certain CIDRs to be overridden by Telepresence.
+
+      - type: change
+        title: test-vpn command deprecated
+        body: >-
+          Running telepresence test-vpn will now print a deprecation warning and exit. The command will be removed in a future release.
+          Instead, please configure telepresence for your VPN's routes.
   - version: 2.13.3
     date: "2023-05-25"
     notes:
