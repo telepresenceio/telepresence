@@ -255,8 +255,8 @@ github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.8.2 h1:+h33VjcLVPDHtOdpUCuF+7gSuG3yGIftsP1YvFihtJ8=
-github.com/telepresenceio/telepresence/rpc/v2 v2.14.0-rc.1 h1:Dahza7smea9uMNtdBdTIzf+jfY/tXNhm2soG7ZySTzw=
-github.com/telepresenceio/telepresence/rpc/v2 v2.14.0-rc.1/go.mod h1:jM0Ke6ak8WGUqenJdrNxoAJF7L2gc/+HnyeXBN0qIK4=
+github.com/telepresenceio/telepresence/rpc/v2 v2.14.0-rc.2 h1:zBnryNwbexR6xzeZ+y5ex/lXCCWm5VALifzIM39ZUtk=
+github.com/telepresenceio/telepresence/rpc/v2 v2.14.0-rc.2/go.mod h1:jM0Ke6ak8WGUqenJdrNxoAJF7L2gc/+HnyeXBN0qIK4=
 github.com/vishvananda/netlink v1.2.1-beta.2 h1:Llsql0lnQEbHj0I1OuKyp8otXp0r3q0mPkuhwHfStVs=
 github.com/vishvananda/netlink v1.2.1-beta.2/go.mod h1:twkDnbuQxJYemMlGd4JFIcuhgX83tXhKS2B/PRMpOho=
 github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae/go.mod h1:DD4vA1DwXk04H54A1oHXtwZmA0grkVMdPxx/VGLCah0=

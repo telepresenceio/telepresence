@@ -139,11 +139,21 @@ func mountVRS(ctx context.Context, ag *agentconfig.Container, cnMountPoint strin
 		return err
 	}
 
+	hasMount := func(m string) bool {
+		for _, em := range ag.Mounts {
+			if strings.HasPrefix(em, m) {
+				return true
+			}
+		}
+		return false
+	}
 	for _, vr := range vrs {
 		if vr.IsDir() {
 			subDir := filepath.Join(vrsDir, vr.Name())
-			ag.Mounts = append(ag.Mounts, subDir)
-			vrsMounts = append(vrsMounts, subDir)
+			if !hasMount(subDir) {
+				ag.Mounts = append(ag.Mounts, subDir)
+				vrsMounts = append(vrsMounts, subDir)
+			}
 		}
 	}
 	if len(vrsMounts) == 0 {
