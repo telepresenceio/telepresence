@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 
@@ -50,7 +51,11 @@ func TestGetRouteConsistency(t *testing.T) {
 	table, err := GetRoutingTable(ctx)
 	assert.NoError(t, err)
 	for _, route := range table {
-		if ip := route.LocalIP.To4(); ip != nil {
+		if ip := route.RoutedNet.IP.To4(); ip != nil {
+			if ip.String() == "0.0.0.0" || ip.IsMulticast() {
+				// Don't test 0.0.0.0 or any multicast addresses.
+				continue
+			}
 			dlog.Debugf(ctx, "Adding route %s", route)
 			addresses[ip.String()] = struct{}{}
 			if n, _ := route.RoutedNet.Mask.Size(); n < 32 {
@@ -58,6 +63,7 @@ func TestGetRouteConsistency(t *testing.T) {
 				copy(ip2, ip)
 				ip2[3]++
 				addresses[ip2.String()] = struct{}{}
+				dlog.Debugf(ctx, "Adding IP %s", ip2)
 			}
 		}
 	}
@@ -68,9 +74,9 @@ func TestGetRouteConsistency(t *testing.T) {
 				Mask: net.CIDRMask(32, 32),
 			}
 			osRoute, err := getRoute(ctx, testNet)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			route, err := GetRoute(ctx, testNet)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			// This is about as much as we can actually assert, because OSs tend to create
 			// routes on the fly when, for example, a default route is hit. So there's no guarantee
 			// that the matching "original" route in the table will be identical to the route returned on the fly.
@@ -86,9 +92,9 @@ func TestGetRouteConsistency(t *testing.T) {
 					return false
 				}(), "Interface addresses %v don't include route's local IP %s", addrs, osRoute.LocalIP)
 			} else {
-				assert.Equal(t, osRoute.Interface.Index, route.Interface.Index, "Routes %s and %s differ", osRoute, route)
+				require.Equal(t, osRoute.Interface.Index, route.Interface.Index, "Routes %s and %s differ", osRoute, route)
 			}
-			assert.True(t, route.RoutedNet.Contains(osRoute.RoutedNet.IP) || route.Default, "Route %s doesn't route requested IP %s", route, osRoute.RoutedNet.IP)
+			require.True(t, route.RoutedNet.Contains(osRoute.RoutedNet.IP) || route.Default, "Route %s doesn't route requested IP %s", route, osRoute.RoutedNet.IP)
 		})
 	}
 }
