@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/datawire/dlib v1.3.1-0.20221228104658-e373c6d44961
 	github.com/sirupsen/logrus v1.9.2
-	github.com/telepresenceio/telepresence/v2 v2.14.0-rc.4
+	github.com/telepresenceio/telepresence/v2 v2.13.3
 )
 
 require (
@@ -89,5 +89,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
+
+replace github.com/telepresenceio/telepresence/rpc/v2 => ./../../../../rpc
 
 replace github.com/telepresenceio/telepresence/v2 => ./../../../..
