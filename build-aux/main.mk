@@ -220,7 +220,11 @@ prepare-release: generate wix
 	git add CHANGELOG.yml
 
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
-	git add go.mod go.sum
+	git add go.mod
+
+	(cd pkg/vif/testdata/router && \
+	  go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION) && \
+	  git add go.mod)
 
 	sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
 	rm -f charts/telepresence/CHANGELOG.md.bak
