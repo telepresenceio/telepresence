@@ -21,7 +21,7 @@ func Result(r *connector.InterceptResult, err error) error {
 	case common.InterceptError_UNSPECIFIED:
 		return nil
 	case common.InterceptError_INTERNAL:
-		msg = "Local network is not connected to the cluster"
+		msg = r.ErrorText
 	case common.InterceptError_NO_CONNECTION:
 		msg = "Local network is not connected to the cluster"
 	case common.InterceptError_NO_TRAFFIC_MANAGER:
