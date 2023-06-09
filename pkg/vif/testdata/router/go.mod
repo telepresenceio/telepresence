@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/datawire/dlib v1.3.1-0.20221228104658-e373c6d44961
 	github.com/sirupsen/logrus v1.9.2
-	github.com/telepresenceio/telepresence/v2 v2.12.2
+	github.com/telepresenceio/telepresence/v2 v2.14.0-rc.4
 )
 
 require (
@@ -48,7 +48,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.14.0-rc.2 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.14.0-rc.4 // indirect
 	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
