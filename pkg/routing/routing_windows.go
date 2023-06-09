@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -35,7 +36,8 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 		ifaceIdx := int(row.InterfaceIndex)
 		iface, err := net.InterfaceByIndex(ifaceIdx)
 		if err != nil {
-			return nil, fmt.Errorf("unable to get interface at index %d: %w", ifaceIdx, err)
+			dlog.Warnf(ctx, "unable to get interface at index %d for destination %s: %v", ifaceIdx, dst, err)
+			continue
 		}
 		localIP, err := interfaceLocalIP(iface, dst.Addr().Is4())
 		if err != nil {
@@ -74,7 +76,13 @@ func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	pshScript := fmt.Sprintf(`
 $job = Find-NetRoute -RemoteIPAddress "%s" -AsJob | Wait-Job -Timeout 30
 if ($job.State -ne 'Completed') {
-	throw "timed out getting route after 30 seconds."
+    $errorMessage = $job.ChildJobs[0].JobStateInfo.Reason
+    if ($errorMessage -ne $null) {
+        $errorMessage = $errorMessage.Message
+    } else {
+        $errorMessage = "Unknown error occurred; timed out getting route after 30s."
+    }
+    throw "Error getting route: $errorMessage"
 }
 $obj = $job | Receive-Job
 $obj.IPAddress
@@ -83,9 +91,11 @@ $obj.InterfaceIndex[0]
 `, ip)
 	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
 	cmd.DisableLogging = true
+	stderr := &strings.Builder{}
+	cmd.Stderr = stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("unable to run 'Find-Netroute -RemoteIPAddress %s': %w", ip, err)
+		return nil, fmt.Errorf("unable to run 'Find-Netroute -RemoteIPAddress %s': %s (%w)", ip, stderr, err)
 	}
 	lines := strings.Split(string(out), "\n")
 	localIP := iputil.Parse(strings.TrimSpace(lines[0]))
