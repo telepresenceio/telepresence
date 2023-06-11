@@ -49,7 +49,7 @@ const (
 )
 
 func init() {
-	itest.AddConnectedSuite("", func(h itest.NamespacePair) itest.TestingSuite {
+	itest.AddTrafficManagerSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &largeFilesSuite{
 			Suite:         itest.Suite{Harness: h},
 			NamespacePair: h,
@@ -81,28 +81,29 @@ func (s *largeFilesSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	require := s.Require()
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "timeouts.agentArrival=90s"))
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	wg := sync.WaitGroup{}
 	wg.Add(s.ServiceCount())
 	k8s := filepath.Join("testdata", "k8s")
 	for i := 0; i < s.ServiceCount(); i++ {
 		go func(i int) {
 			defer wg.Done()
+			svc := fmt.Sprintf("%s-%d", s.Name(), i)
 			rdr, err := itest.OpenTemplate(ctx, filepath.Join(k8s, "hello-pv-volume.yaml"), &qname{
-				Name:       fmt.Sprintf("%s-%d", s.Name(), i),
+				Name:       svc,
 				Namespace:  s.AppNamespace(),
 				VolumeSize: "350Mi", // must cover fileCountPerSvc * fileSize
 			})
 			require.NoError(err)
 			require.NoError(s.Kubectl(dos.WithStdin(ctx, rdr), "apply", "-f", "-"))
+			s.NoError(itest.RolloutStatusWait(ctx, s.AppNamespace(), "deploy/"+svc))
 		}(i)
 	}
 	wg.Wait()
 }
 
 func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
-	require := s.Require()
+	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+
 	wg := sync.WaitGroup{}
 	wg.Add(s.ServiceCount())
 	for i := 0; i < s.ServiceCount(); i++ {
@@ -117,6 +118,7 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 				svc,
 			)
 			var info intercept.Info
+			require := s.Require()
 			require.NoError(json.Unmarshal([]byte(stdout), &info))
 			require.Equal(fmt.Sprintf("%s-%s", svc, s.AppNamespace()), info.Name, ioutil.WriterToString(info.WriteTo))
 			require.NotNil(info.Mount)
@@ -146,6 +148,7 @@ func (s *largeFilesSuite) TearDownSuite() {
 			s.NoError(s.Kubectl(dos.WithStdin(ctx, rdr), "delete", "-f", "-"))
 		}(i)
 	}
+	itest.TelepresenceQuitOk(ctx)
 	wg.Wait()
 }
 
@@ -215,6 +218,7 @@ func (s *largeFilesSuite) largeFileIntercepts(ctx context.Context) {
 		s.T().FailNow()
 	}
 	s.createIntercepts(ctx)
+	defer s.leaveIntercepts(ctx)
 
 	// Validate the first entry
 	wg.Add(s.ServiceCount())
