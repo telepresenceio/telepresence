@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -31,18 +32,18 @@ type messageCache struct {
 }
 
 // newMessageCache returns a new messageCache, initialized from the users' if it exists.
-func newMessageCache(ctx context.Context) (*messageCache, error) {
+func newMessageCache(ctx context.Context) *messageCache {
 	cmc := &messageCache{}
 
 	if err := cache.LoadFromUserCache(ctx, cmc, messagesCacheFilename); err != nil {
 		if !os.IsNotExist(err) {
-			return nil, err
+			dlog.Warn(ctx, err)
 		}
 		cmc.NextCheck = time.Time{}
 		cmc.MessagesDelivered = make(map[string]struct{})
 		_ = cache.SaveToUserCache(ctx, cmc, messagesCacheFilename)
 	}
-	return cmc, nil
+	return cmc
 }
 
 // getMessages communicates with Ambassador Cloud and stores those messages
@@ -112,10 +113,7 @@ func RaiseMessage(cmd *cobra.Command, _ []string) error {
 	cmdUsed := strings.Split(cmd.Use, " ")[0]
 
 	// Load the config
-	cmc, err := newMessageCache(ctx)
-	if err != nil {
-		return err
-	}
+	cmc := newMessageCache(ctx)
 
 	// Check if it is time to get new messages from Ambassador Cloud
 	if dtime.Now().After(cmc.NextCheck) {

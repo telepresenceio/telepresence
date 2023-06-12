@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -71,10 +72,18 @@ func (s *multipleInterceptsSuite) TearDownSuite() {
 
 func (s *multipleInterceptsSuite) Test_Intercepts() {
 	ctx := s.Context()
-	stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
-	for i := 0; i < s.ServiceCount(); i++ {
-		s.Regexp(fmt.Sprintf(`%s-%d\s*: intercepted`, s.Name(), i), stdout)
-	}
+	s.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		if err != nil {
+			return false
+		}
+		for i := 0; i < s.ServiceCount(); i++ {
+			if !regexp.MustCompile(fmt.Sprintf(`%s-%d\s*: intercepted`, s.Name(), i)).MatchString(stdout) {
+				return false
+			}
+		}
+		return true
+	}, 10*time.Second, time.Second)
 
 	wg := sync.WaitGroup{}
 	wg.Add(s.ServiceCount())

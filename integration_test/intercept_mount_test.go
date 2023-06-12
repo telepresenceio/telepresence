@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	goRuntime "runtime"
 	"strconv"
@@ -83,8 +84,10 @@ func (s *interceptMountSuite) Test_InterceptMount() {
 	require := s.Require()
 	ctx := s.Context()
 
-	stdout := itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
-	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
+	s.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
+	}, 10*time.Second, time.Second)
 
 	time.Sleep(200 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
 	st, err := os.Stat(s.mountPoint)
@@ -118,8 +121,10 @@ func (s *singleServiceSuite) Test_InterceptMountRelative() {
 	}()
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 
-	stdout = itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
-	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
+	s.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
+	}, 10*time.Second, time.Second)
 
 	time.Sleep(200 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
 	mountPoint := filepath.Join(nwd, "rel-dir")
@@ -183,8 +188,10 @@ func (s *singleServiceSuite) Test_NoInterceptorResponse() {
 		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
 	}()
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
-	stdout = itest.TelepresenceOk(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
-	s.Regexp(s.ServiceName()+`\s*: intercepted`, stdout)
+	s.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
+	}, 10*time.Second, time.Second)
 
 	time.Sleep(2000 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
 	s.CapturePodLogs(ctx, "app="+s.ServiceName(), "traffic-agent", s.AppNamespace())

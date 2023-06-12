@@ -3,6 +3,7 @@ package integration_test
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"sync"
 	"time"
 
@@ -19,8 +20,10 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", "8080", "--to-pod", "8081", "--to-pod", "8082")
 	defer itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
 	require.Contains(stdout, "Using Deployment "+svc)
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
-	require.Contains(stdout, svc+": intercepted")
+	s.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		return err == nil && regexp.MustCompile(svc+`\s*: intercepted`).MatchString(stdout)
+	}, 10*time.Second, time.Second)
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
