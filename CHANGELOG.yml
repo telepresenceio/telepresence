@@ -32,7 +32,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.14.0
-    date: (TBD)
+    date: "2023-06-12"
     notes:
       - type: feature
         title: DNS configuration now supports excludes and mappings.
