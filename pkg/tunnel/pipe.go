@@ -44,7 +44,7 @@ func (s channelStream) ID() ConnID {
 func (s channelStream) Receive(ctx context.Context) (Message, error) {
 	select {
 	case <-ctx.Done():
-		return nil, nil
+		return nil, ctx.Err()
 	case m, ok := <-s.recvCh:
 		if !ok {
 			return nil, io.EOF

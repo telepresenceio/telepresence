@@ -32,7 +32,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.14.0
-    date: (TBD)
+    date: "2023-06-12"
     notes:
       - type: feature
         title: DNS configuration now supports excludes and mappings.
@@ -47,6 +47,31 @@ items:
         body: >-
           Added a new config map that can take an array of environment variables that will
           then be excluded from an intercept that retrieves the environment of a pod.
+
+      - type: bugfix
+        title: Fixed traffic-agent backward incompatibility issue causing lack of remote mounts
+        body: >-
+          A traffic-agent of version 2.13.3 (or 1.13.15) would not propagate the directories under
+          <code>/var/run/secrets</code> when used with a traffic manager older than 2.13.3.
+
+      - type: bugfix
+        title: Fixed race condition causing segfaults on rare occasions when a tunnel stream timed out.
+        body: >-
+          A context cancellation could sometimes be trapped in a stream reader, causing it to incorrectly return
+          an undefined message which in turn caused the parent reader to panic on a <code>nil</code> pointer reference.
+        docs: https://github.com/telepresenceio/telepresence/pull/2963
+
+      - type: change
+        title: Routing conflict reporting.
+        body: >-
+          Telepresence will now attempt to detect and report routing conflicts with other running VPN software on client machines.
+          There is a new configuration flag that can be tweaked to allow certain CIDRs to be overridden by Telepresence.
+
+      - type: change
+        title: test-vpn command deprecated
+        body: >-
+          Running telepresence test-vpn will now print a deprecation warning and exit. The command will be removed in a future release.
+          Instead, please configure telepresence for your VPN's routes.
   - version: 2.13.3
     date: "2023-05-25"
     notes:

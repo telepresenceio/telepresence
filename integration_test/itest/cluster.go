@@ -725,7 +725,12 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	stdout, stderr, err := Telepresence(ctx, args...)
 	assert.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
 	if err == nil {
-		assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
+		if strings.HasPrefix(stderr, "Warning:") && !strings.ContainsRune(stderr, '\n') {
+			// Accept warnings, but log them.
+			dlog.Warn(ctx, stderr)
+		} else {
+			assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
+		}
 	}
 	return stdout
 }

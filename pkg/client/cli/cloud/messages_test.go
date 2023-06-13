@@ -34,12 +34,9 @@ func Test_GetMessageFromCache(t *testing.T) {
 	ctx := newTestContext(t)
 
 	// Pre-load cmc with a message for intercept
-	cmc, err := newMessageCache(ctx)
+	cmc := newMessageCache(ctx)
 	ceptMessage := "Test Intercept Message"
 	cmc.Intercept = ceptMessage
-	if err != nil {
-		t.Error(err)
-	}
 
 	tests := []struct {
 		name string
@@ -82,12 +79,9 @@ func Test_UpdateMessages(t *testing.T) {
 	ctx := newTestContext(t)
 
 	// Pre-load cmc with a message for intercept
-	cmc, err := newMessageCache(ctx)
+	cmc := newMessageCache(ctx)
 	ceptMessage := "Test Old Intercept Message"
 	cmc.Intercept = ceptMessage
-	if err != nil {
-		t.Error(err)
-	}
 
 	// Ensure we get the current message in the cache
 	res := cmc.getMessageFromCache(ctx, "intercept")
@@ -142,10 +136,7 @@ func Test_RefreshMessagesConfig(t *testing.T) {
 		t.Error(err)
 	}
 
-	cmc, err := newMessageCache(ctx)
-	if err != nil {
-		t.Error(err)
-	}
+	cmc := newMessageCache(ctx)
 	// Mock what we get from `GetUnauthenticatedCommandMessages`
 	ceptMessage := "Intercept message, testing config"
 	updatedMessageResponse := &systema.CommandMessageResponse{
