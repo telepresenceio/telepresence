@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"regexp"
-	goRuntime "runtime"
 	"strings"
 	"time"
 
@@ -15,9 +14,7 @@ import (
 )
 
 func (s *singleServiceSuite) Test_DockerRun() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
-		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
-	}
+	itest.MaybeSkipDocker(&s.Suite)
 	require := s.Require()
 	ctx := s.Context()
 
@@ -129,9 +126,7 @@ func (s *singleServiceSuite) Test_DockerRun() {
 }
 
 func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
-		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
-	}
+	itest.MaybeSkipDocker(&s.Suite)
 	svc := "echo"
 	ctx := s.Context()
 	s.ApplyEchoService(ctx, svc, 80)
