@@ -176,7 +176,7 @@ func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 func openTable(ctx context.Context) (Table, error) {
 	rules, err := netlink.RuleList(netlink.FAMILY_ALL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("netlink.RuleList: %w", err)
 	}
 	// Sort the rules by index ascending to make sure we find an open one
 	sort.Slice(rules, func(i, j int) bool {
@@ -204,7 +204,7 @@ func openTable(ctx context.Context) (Table, error) {
 	rule.Priority = priority
 	rule.Family = netlink.FAMILY_V4
 	if err := netlink.RuleAdd(rule); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("netlink.RuleAdd: %w", err)
 	}
 	return &table{
 		index: index,
@@ -229,7 +229,7 @@ func (t *table) Close(ctx context.Context) error {
 func (t *table) Add(ctx context.Context, r *Route) error {
 	route := t.routeToNetlink(r)
 	if err := netlink.RouteAdd(route); err != nil {
-		return err
+		return fmt.Errorf("netlink.RouteAdd: %w", err)
 	}
 	return nil
 }
@@ -237,7 +237,7 @@ func (t *table) Add(ctx context.Context, r *Route) error {
 func (t *table) Remove(ctx context.Context, r *Route) error {
 	route := t.routeToNetlink(r)
 	if err := netlink.RouteDel(route); err != nil {
-		return err
+		return fmt.Errorf("netlink.RouteDel: %w", err)
 	}
 	return nil
 }
