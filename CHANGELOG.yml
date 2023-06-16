@@ -34,6 +34,11 @@ items:
   - version: 2.14.1
     date: (TBD)
     notes:
+      - type: feature
+        title: Add more gauges to the Traffic manager's Prometheus client.
+        body: >-
+          Several gauges were added to the Prometheus client to make it easier to monitor
+          what the Traffic manager spends resources on.
       - type: bugfix
         title: Fixed problem setting traffic manager namespace using the kubeconfig extension.
         body: >-

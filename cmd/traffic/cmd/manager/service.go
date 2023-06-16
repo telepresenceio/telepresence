@@ -50,22 +50,27 @@ type Service interface {
 	rpc.ManagerServer
 	InstallID() string
 	RegisterServers(grpcHandler *grpc.Server)
-	RunConfigWatcher(context.Context) error
-	ServePrometheus(context.Context) error
-	RunSessionGCLoop(context.Context) error
 	TrafficManagerConfig() []byte
 	State() *state.State
+
+	// unexported methods.
+	runConfigWatcher(context.Context) error
+	runSessionGCLoop(context.Context) error
+	servePrometheus(context.Context) error
+	serveHTTP(context.Context) error
 }
 
 type service struct {
-	ctx           context.Context
-	clock         Clock
-	ID            string
-	state         *state.State
-	clusterInfo   cluster.Info
-	cloudConfig   *rpc.AmbassadorCloudConfig
-	configWatcher config.Watcher
-	tokenService  cloudtoken.Service
+	ctx                context.Context
+	clock              Clock
+	ID                 string
+	state              *state.State
+	clusterInfo        cluster.Info
+	cloudConfig        *rpc.AmbassadorCloudConfig
+	configWatcher      config.Watcher
+	tokenService       cloudtoken.Service
+	activeHttpRequests int32
+	activeGrpcRequests int32
 
 	rpc.UnsafeManagerServer
 }
@@ -141,7 +146,7 @@ func (m *service) TrafficManagerConfig() []byte {
 	return m.configWatcher.GetTrafficManagerConfigYaml()
 }
 
-func (m *service) RunConfigWatcher(ctx context.Context) error {
+func (m *service) runConfigWatcher(ctx context.Context) error {
 	return m.configWatcher.Run(ctx)
 }
 
@@ -894,7 +899,7 @@ func (m *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDi
 			}
 			if err := stream.Send(lr); err != nil {
 				dlog.Errorf(ctx, "failed to send dial request: %v", err)
-				// We couldnt stream the dial request. This likely means
+				// We couldn't stream the dial request. This likely means
 				// that we lost connection.
 				return nil
 			}

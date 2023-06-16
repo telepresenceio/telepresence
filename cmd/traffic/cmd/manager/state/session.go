@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -22,7 +22,7 @@ type SessionState interface {
 	SetLastMarked(lastMarked time.Time)
 	Dials() <-chan *rpc.DialRequest
 	EstablishBidiPipe(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
-	OnConnect(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
+	OnConnect(context.Context, tunnel.Stream, *int32) (tunnel.Endpoint, error)
 }
 
 type awaitingBidiPipe struct {
@@ -88,7 +88,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 // OnConnect checks if a stream is waiting for the given stream to arrive in order to create a BidiPipe.
 // If that's the case, the BidiPipe is created, started, and returned by both this method and the EstablishBidiPipe
 // method that registered the waiting stream. Otherwise, this method returns nil.
-func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
+func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream, counter *int32) (tunnel.Endpoint, error) {
 	id := stream.ID()
 	ss.Lock()
 	abp, ok := ss.awaitingBidiPipeMap[id]
@@ -100,8 +100,8 @@ func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream) (tu
 	if !ok {
 		return nil, nil
 	}
-	dlog.Debugf(ctx, "   FWD %s, connect session %s with %s", id, abp.stream.SessionID(), stream.SessionID())
-	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream)
+	name := fmt.Sprintf("%s: session %s -> %s", id, abp.stream.SessionID(), stream.SessionID())
+	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream, name, counter)
 	bidiPipe.Start(ctx)
 
 	defer close(abp.bidiPipeCh)

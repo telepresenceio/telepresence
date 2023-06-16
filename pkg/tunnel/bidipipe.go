@@ -3,22 +3,27 @@ package tunnel
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/datawire/dlib/dlog"
 )
 
 type bidiPipe struct {
-	a    Stream
-	b    Stream
-	done chan struct{}
+	a       Stream
+	b       Stream
+	name    string
+	counter *int32
+	done    chan struct{}
 }
 
 // NewBidiPipe creates a bidirectional pipe between the two given streams.
-func NewBidiPipe(a, b Stream) Endpoint {
+func NewBidiPipe(a, b Stream, name string, counter *int32) Endpoint {
 	return &bidiPipe{
-		a:    a,
-		b:    b,
-		done: make(chan struct{}),
+		a:       a,
+		b:       b,
+		name:    name,
+		counter: counter,
+		done:    make(chan struct{}),
 	}
 }
 
@@ -26,9 +31,15 @@ func NewBidiPipe(a, b Stream) Endpoint {
 // closes the Done() channel when the streams are closed or the context is cancelled.
 func (p *bidiPipe) Start(ctx context.Context) {
 	go func() {
-		defer close(p.done)
+		defer func() {
+			close(p.done)
+			atomic.AddInt32(p.counter, -1)
+			dlog.Debugf(ctx, "   FWD disconnect %s", p.name)
+		}()
 		wg := sync.WaitGroup{}
 		wg.Add(2)
+		dlog.Debugf(ctx, "   FWD connect %s", p.name)
+		atomic.AddInt32(p.counter, 1)
 		go doPipe(ctx, p.a, p.b, &wg)
 		go doPipe(ctx, p.b, p.a, &wg)
 		wg.Wait()

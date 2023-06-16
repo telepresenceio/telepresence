@@ -275,6 +275,7 @@ func TestStream_Xfer(t *testing.T) {
 		ta := newBidi(10, ctx.Done())
 		tb := newBidi(10, ctx.Done())
 
+		var counter int32
 		aCh := make(chan Stream)
 		bCh := make(chan Stream)
 		wg := sync.WaitGroup{}
@@ -325,7 +326,7 @@ func TestStream_Xfer(t *testing.T) {
 				case b = <-bCh:
 				}
 			}
-			fwd := NewBidiPipe(a, b)
+			fwd := NewBidiPipe(a, b, "pipe", &counter)
 			fwd.Start(ctx)
 			select {
 			case <-ctx.Done():
