@@ -260,7 +260,9 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 		k.KubeconfigExtension.Manager = &ManagerConfig{}
 	}
 
-	k.KubeconfigExtension.Manager.Namespace = managerNamespaceOverride
+	if managerNamespaceOverride != "" {
+		k.KubeconfigExtension.Manager.Namespace = managerNamespaceOverride
+	}
 
 	if k.KubeconfigExtension.Manager.Namespace == "" {
 		k.KubeconfigExtension.Manager.Namespace = GetEnv(c).ManagerNamespace
