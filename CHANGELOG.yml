@@ -46,6 +46,11 @@ items:
           Several gauges were added to the Prometheus client to make it easier to monitor
           what the Traffic manager spends resources on.
       - type: bugfix
+        title: Resource leak in the Traffic manager.
+        body: >-
+          Fixes a resource leak in the Traffic manager caused by lingering tunnels between the clients and
+          Traffic agents. The tunnels are now closed correctly when terminated from the side that created them.
+      - type: bugfix
         title: Fixed problem setting traffic manager namespace using the kubeconfig extension.
         body: >-
           Fixes a regression introduced in version 2.10.5, making it impossible to set the traffic-manager namespace

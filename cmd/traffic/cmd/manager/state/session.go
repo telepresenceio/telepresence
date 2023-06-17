@@ -26,6 +26,7 @@ type SessionState interface {
 }
 
 type awaitingBidiPipe struct {
+	ctx        context.Context
 	stream     tunnel.Stream
 	bidiPipeCh chan tunnel.Endpoint
 }
@@ -46,7 +47,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	// Dispatch directly to agent and let the dial happen there
 	bidiPipeCh := make(chan tunnel.Endpoint)
 	id := stream.ID()
-	abp := &awaitingBidiPipe{stream: stream, bidiPipeCh: bidiPipeCh}
+	abp := &awaitingBidiPipe{ctx: ctx, stream: stream, bidiPipeCh: bidiPipeCh}
 
 	ss.Lock()
 	if ss.awaitingBidiPipeMap == nil {
@@ -88,7 +89,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 // OnConnect checks if a stream is waiting for the given stream to arrive in order to create a BidiPipe.
 // If that's the case, the BidiPipe is created, started, and returned by both this method and the EstablishBidiPipe
 // method that registered the waiting stream. Otherwise, this method returns nil.
-func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream, counter *int32) (tunnel.Endpoint, error) {
+func (ss *sessionState) OnConnect(_ context.Context, stream tunnel.Stream, counter *int32) (tunnel.Endpoint, error) {
 	id := stream.ID()
 	ss.Lock()
 	abp, ok := ss.awaitingBidiPipeMap[id]
@@ -102,7 +103,7 @@ func (ss *sessionState) OnConnect(ctx context.Context, stream tunnel.Stream, cou
 	}
 	name := fmt.Sprintf("%s: session %s -> %s", id, abp.stream.SessionID(), stream.SessionID())
 	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream, name, counter)
-	bidiPipe.Start(ctx)
+	bidiPipe.Start(abp.ctx)
 
 	defer close(abp.bidiPipeCh)
 	select {
