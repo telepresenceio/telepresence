@@ -35,6 +35,12 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Envoy's http idle timout is now configurable.
+        body: >-
+          A new <code>agent.helm.httpIdleTimeout</code> setting was added to the Helm chart that controls
+          the proprietary Traffic agent's http idle timeout. The default of one hour, which in some situations
+          would cause a lot of resource consuming and lingering connections, was changed to 70 seconds.
+      - type: feature
         title: Add more gauges to the Traffic manager's Prometheus client.
         body: >-
           Several gauges were added to the Prometheus client to make it easier to monitor
