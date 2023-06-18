@@ -21,10 +21,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/ambassadoragent/cloudtoken"
@@ -814,7 +813,7 @@ func (m *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
 	}
 
-	rIReq.Environment = m.removeExlcudedEnvVars(ctx, rIReq.Environment)
+	rIReq.Environment = m.removeExcludedEnvVars(ctx, rIReq.Environment)
 
 	intercept := m.state.UpdateIntercept(ceptID, func(intercept *rpc.InterceptInfo) {
 		// Sanity check: The reviewing agent must be an agent for the intercept.
@@ -845,20 +844,8 @@ func (m *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	return &empty.Empty{}, nil
 }
 
-func (m *service) removeExlcudedEnvVars(ctx context.Context, envVars map[string]string) map[string]string {
-	k8sConfig, err := rest.InClusterConfig()
-	if err != nil {
-		dlog.Errorf(ctx, "Unable to create in cluster config: %v", err)
-		return envVars
-	}
-
-	clientset, err := kubernetes.NewForConfig(k8sConfig)
-	if err != nil {
-		dlog.Errorf(ctx, "unable to create kubernetes clientset: %v", err)
-		return envVars
-	}
-
-	cm, err := clientset.CoreV1().ConfigMaps(managerutil.GetEnv(ctx).ManagerNamespace).Get(ctx, "telepresence-intercept-env", v1.GetOptions{})
+func (m *service) removeExcludedEnvVars(ctx context.Context, envVars map[string]string) map[string]string {
+	cm, err := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(managerutil.GetEnv(ctx).ManagerNamespace).Get(ctx, "telepresence-intercept-env", v1.GetOptions{})
 	if err != nil {
 		dlog.Errorf(ctx, "cannot read excluded variables configmap: %v", err)
 		return envVars
