@@ -83,6 +83,7 @@ generate: generate-clean
 generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/vif/testdata/router && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+	cd ./tools/src/test-report && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 
@@ -333,22 +334,24 @@ format: lint-deps ## (QA) Automatically fix linter complaints
 check-all: check-integration check-unit ## (QA) Run the test suite
 
 .PHONY: check-unit
-check-unit: build-deps ## (QA) Run the test suite
+check-unit: build-deps $(tools/test-report) ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -failfast -timeout=20m ./cmd/... ./pkg/...
+	set -o pipefail
+	TELEPRESENCE_MAX_LOGFILES=300 SCOUT_DISABLE=1 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./cmd/... ./pkg/... | $(tools/test-report)
 
 .PHONY: check-integration
 ifeq ($(GOHOSTOS), linux)
-check-integration: client-image $(tools/helm) ## (QA) Run the test suite
+check-integration: client-image $(tools/test-report) $(tools/helm) ## (QA) Run the test suite
 else
-check-integration: build-deps $(tools/helm) ## (QA) Run the test suite
+check-integration: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the test suite
 endif
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -failfast -v -timeout=55m ./integration_test/...
+	set -o pipefail
+	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -failfast -json -timeout=55m ./integration_test/... | $(tools/test-report)
 
 .PHONY: _login
 _login:
