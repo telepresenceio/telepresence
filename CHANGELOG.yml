@@ -34,6 +34,22 @@ items:
   - version: 2.14.1
     date: (TBD)
     notes:
+      - type: feature
+        title: Envoy's http idle timout is now configurable.
+        body: >-
+          A new <code>agent.helm.httpIdleTimeout</code> setting was added to the Helm chart that controls
+          the proprietary Traffic agent's http idle timeout. The default of one hour, which in some situations
+          would cause a lot of resource consuming and lingering connections, was changed to 70 seconds.
+      - type: feature
+        title: Add more gauges to the Traffic manager's Prometheus client.
+        body: >-
+          Several gauges were added to the Prometheus client to make it easier to monitor
+          what the Traffic manager spends resources on.
+      - type: bugfix
+        title: Resource leak in the Traffic manager.
+        body: >-
+          Fixes a resource leak in the Traffic manager caused by lingering tunnels between the clients and
+          Traffic agents. The tunnels are now closed correctly when terminated from the side that created them.
       - type: bugfix
         title: Fixed problem setting traffic manager namespace using the kubeconfig extension.
         body: >-

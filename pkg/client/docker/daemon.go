@@ -388,7 +388,9 @@ func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) er
 	if network != "" {
 		dcName := SafeContainerName(containerNamePrefix + clusterName)
 		if err = cli.NetworkConnect(ctx, network, dcName, nil); err != nil {
-			dlog.Debugf(ctx, "failed to connect network %s to container %s", network, dcName)
+			if !strings.Contains(err.Error(), "already exists") {
+				dlog.Debugf(ctx, "failed to connect network %s to container %s: %v", network, dcName, err)
+			}
 		}
 	}
 	return nil

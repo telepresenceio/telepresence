@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -83,14 +84,12 @@ func Main(ctx context.Context, _ ...string) error {
 		SoftShutdownTimeout:  5 * time.Second,
 	})
 
-	g.Go("cli-config", mgr.RunConfigWatcher)
+	g.Go("cli-config", mgr.runConfigWatcher)
 
 	// Serve HTTP (including gRPC)
-	g.Go("httpd", func(ctx context.Context) error {
-		return serveHTTP(ctx, mgr)
-	})
+	g.Go("httpd", mgr.serveHTTP)
 
-	g.Go("prometheus", mgr.ServePrometheus)
+	g.Go("prometheus", mgr.servePrometheus)
 
 	if imgRetErr != nil {
 		dlog.Errorf(ctx, "unable to initialize agent injector: %v", imgRetErr)
@@ -98,7 +97,7 @@ func Main(ctx context.Context, _ ...string) error {
 		g.Go("agent-injector", mutator.ServeMutator)
 	}
 
-	g.Go("session-gc", mgr.RunSessionGCLoop)
+	g.Go("session-gc", mgr.runSessionGCLoop)
 
 	if tracer != nil {
 		g.Go("tracer-grpc", func(c context.Context) error {
@@ -111,28 +110,41 @@ func Main(ctx context.Context, _ ...string) error {
 }
 
 // ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.
-func (m *service) ServePrometheus(ctx context.Context) error {
+func (m *service) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
-	port := env.PrometheusPort
-	if env.PrometheusPort != 0 {
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Name: "client_count",
-			Help: "Number of Clients Connected",
-		}, func() float64 {
-			return float64(m.state.CountAllClients())
-		})
-
-		sc := &dhttp.ServerConfig{
-			Handler: promhttp.Handler(),
-		}
-		dlog.Infof(ctx, "Prometheus metrics server started on port: %d", port)
-		return sc.ListenAndServe(ctx, fmt.Sprintf(":%d", port))
+	if env.PrometheusPort == 0 {
+		dlog.Info(ctx, "Prometheus metrics server not started")
+		return nil
 	}
-	dlog.Info(ctx, "Prometheus metrics server not started")
-	return nil
+	newGaugeFunc := func(n, h string, f func() int) {
+		promauto.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: n,
+			Help: h,
+		}, func() float64 { return float64(f()) })
+	}
+	newGaugeFunc("agent_count", "Number of connected traffic agents", m.state.CountAgents)
+	newGaugeFunc("client_count", "Number of connected clients", m.state.CountClients)
+	newGaugeFunc("intercept_count", "Number of active intercepts", m.state.CountIntercepts)
+	newGaugeFunc("session_count", "Number of sessions", m.state.CountSessions)
+	newGaugeFunc("tunnel_count", "Number of tunnels", m.state.CountTunnels)
+
+	newGaugeFunc("active_http_request_count", "Number of currently served http requests", func() int {
+		return int(atomic.LoadInt32(&m.activeHttpRequests))
+	})
+
+	newGaugeFunc("active_grpc_request_count", "Number of currently served gRPC requests", func() int {
+		return int(atomic.LoadInt32(&m.activeGrpcRequests))
+	})
+
+	sc := &dhttp.ServerConfig{
+		Handler: promhttp.Handler(),
+	}
+	dlog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
+	defer dlog.Info(ctx, "Prometheus metrics server stopped")
+	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", env.ServerHost, env.PrometheusPort))
 }
 
-func serveHTTP(ctx context.Context, m Service) error {
+func (m *service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
@@ -151,9 +163,13 @@ func serveHTTP(ctx context.Context, m Service) error {
 	sc := &dhttp.ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+				atomic.AddInt32(&m.activeGrpcRequests, 1)
 				grpcHandler.ServeHTTP(w, r)
+				atomic.AddInt32(&m.activeGrpcRequests, -1)
 			} else {
+				atomic.AddInt32(&m.activeHttpRequests, 1)
 				httpHandler.ServeHTTP(w, r)
+				atomic.AddInt32(&m.activeHttpRequests, -1)
 			}
 		}),
 	}
@@ -166,7 +182,7 @@ func (m *service) RegisterServers(grpcHandler *grpc.Server) {
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 }
 
-func (m *service) RunSessionGCLoop(ctx context.Context) error {
+func (m *service) runSessionGCLoop(ctx context.Context) error {
 	// Loop calling Expire
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()

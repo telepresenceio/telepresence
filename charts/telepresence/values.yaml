@@ -217,6 +217,12 @@ agent:
     logLevel: warning
     serverPort: 18000
     adminPort: 19000
+    # Envoy will use a default of one hour. That's a very long given that each connection in this state
+    # will occupy a tunnel that is routed via the traffic-manager to the client. So rather than being
+    # paranoid about connection leaks caused by lost TCP FIN packets or overhead when reestablishing
+    # lost connections, we terminate after 70 seconds of inactivity (TCP keep-alives are often sent at
+    # least every 60 seconds).
+    httpIdleTimeout: 70s
 
 ################################################################################
 ## Telepresence API Server Configuration

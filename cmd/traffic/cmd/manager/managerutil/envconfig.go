@@ -50,19 +50,20 @@ type Env struct {
 	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
 	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
 
-	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=nonempty-string"`
-	AgentImage               string                      `env:"AGENT_IMAGE,              parser=string,         default="`
-	AgentImagePullSecrets    []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`
-	AgentInjectPolicy        agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
-	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
-	AgentLogLevel            string                      `env:"AGENT_LOG_LEVEL,          parser=logLevel,       defaultFrom=LogLevel"`
-	AgentPort                uint16                      `env:"AGENT_PORT,               parser=port-number"`
-	AgentResources           *core.ResourceRequirements  `env:"AGENT_RESOURCES,          parser=json-resources, default="`
-	AgentInitResources       *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
-	AgentEnvoyLogLevel       string                      `env:"AGENT_ENVOY_LOG_LEVEL,    parser=logLevel,       defaultFrom=AgentLogLevel"`
-	AgentEnvoyServerPort     uint16                      `env:"AGENT_ENVOY_SERVER_PORT,  parser=port-number"`
-	AgentEnvoyAdminPort      uint16                      `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
-	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string"`
+	AgentRegistry             string                      `env:"AGENT_REGISTRY,           parser=nonempty-string"`
+	AgentImage                string                      `env:"AGENT_IMAGE,              parser=string,         default="`
+	AgentImagePullSecrets     []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`
+	AgentInjectPolicy         agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
+	AgentAppProtocolStrategy  k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
+	AgentLogLevel             string                      `env:"AGENT_LOG_LEVEL,          parser=logLevel,       defaultFrom=LogLevel"`
+	AgentPort                 uint16                      `env:"AGENT_PORT,               parser=port-number"`
+	AgentResources            *core.ResourceRequirements  `env:"AGENT_RESOURCES,          parser=json-resources, default="`
+	AgentInitResources        *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
+	AgentEnvoyLogLevel        string                      `env:"AGENT_ENVOY_LOG_LEVEL,    parser=logLevel,       defaultFrom=AgentLogLevel"`
+	AgentEnvoyServerPort      uint16                      `env:"AGENT_ENVOY_SERVER_PORT,  parser=port-number"`
+	AgentEnvoyAdminPort       uint16                      `env:"AGENT_ENVOY_ADMIN_PORT,   parser=port-number"`
+	AgentEnvoyHttpIdleTimeout time.Duration               `env:"AGENT_ENVOY_HTTP_IDLE_TIMEOUT, parser=time.ParseDuration"`
+	AgentInjectorName         string                      `env:"AGENT_INJECTOR_NAME,      parser=string"`
 
 	ClientRoutingAlsoProxySubnets        []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets       []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
@@ -76,19 +77,20 @@ type envKey struct{}
 
 func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
 	return &agentmap.GeneratorConfig{
-		AgentPort:           e.AgentPort,
-		APIPort:             e.APIPort,
-		TracingPort:         e.TracingGrpcPort,
-		ManagerPort:         e.ServerPort,
-		QualifiedAgentImage: qualifiedAgentImage,
-		ManagerNamespace:    e.ManagerNamespace,
-		LogLevel:            e.AgentLogLevel,
-		InitResources:       e.AgentInitResources,
-		Resources:           e.AgentResources,
-		PullSecrets:         e.AgentImagePullSecrets,
-		EnvoyServerPort:     e.AgentEnvoyServerPort,
-		EnvoyAdminPort:      e.AgentEnvoyAdminPort,
-		EnvoyLogLevel:       e.AgentEnvoyLogLevel,
+		AgentPort:            e.AgentPort,
+		APIPort:              e.APIPort,
+		TracingPort:          e.TracingGrpcPort,
+		ManagerPort:          e.ServerPort,
+		QualifiedAgentImage:  qualifiedAgentImage,
+		ManagerNamespace:     e.ManagerNamespace,
+		LogLevel:             e.AgentLogLevel,
+		InitResources:        e.AgentInitResources,
+		Resources:            e.AgentResources,
+		PullSecrets:          e.AgentImagePullSecrets,
+		EnvoyServerPort:      e.AgentEnvoyServerPort,
+		EnvoyAdminPort:       e.AgentEnvoyAdminPort,
+		EnvoyLogLevel:        e.AgentEnvoyLogLevel,
+		EnvoyHttpIdleTimeout: e.AgentEnvoyHttpIdleTimeout,
 	}, nil
 }
 

@@ -165,7 +165,7 @@ func (h *dialer) startDisconnect(ctx context.Context, reason string) {
 	id := h.stream.ID()
 	dlog.Tracef(ctx, "   CONN %s closing connection: %s", id, reason)
 	if err := h.conn.Close(); err != nil {
-		dlog.Debugf(ctx, "!! CONN %s, Close failed: %v", id, err)
+		dlog.Tracef(ctx, "!! CONN %s, Close failed: %v", id, err)
 	}
 }
 

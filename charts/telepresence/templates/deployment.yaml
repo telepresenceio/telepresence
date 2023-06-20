@@ -168,6 +168,10 @@ spec:
           - name: AGENT_ENVOY_ADMIN_PORT
             value: {{ .adminPort | quote }}
           {{- end }}
+          {{- if .httpIdleTimeout }}
+          - name: AGENT_ENVOY_HTTP_IDLE_TIMEOUT
+            value: {{ .httpIdleTimeout }}
+          {{- end }}
           {{- end }}
           {{- if .prometheus.port }}  # 0 is false
           - name: PROMETHEUS_PORT

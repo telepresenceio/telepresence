@@ -117,92 +117,83 @@ func setNIC(ctx context.Context, s *stack.Stack, ep stack.LinkEndpoint) error {
 	return nil
 }
 
+func forwardTCP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *tcp.ForwarderRequest) {
+	var ep tcpip.Endpoint
+	var err tcpip.Error
+	id := fr.ID()
+
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "TCPHandler",
+		trace.WithNewRoot(),
+		trace.WithAttributes(
+			attribute.String("tel2.remote-ip", id.RemoteAddress.To4().String()),
+			attribute.String("tel2.local-ip", id.LocalAddress.To4().String()),
+			attribute.Int("tel2.local-port", int(id.LocalPort)),
+			attribute.Int("tel2.remote-port", int(id.RemotePort)),
+		))
+	defer func() {
+		if err != nil {
+			msg := fmt.Sprintf("forward TCP %s: %s", idStringer(id), err)
+			span.SetStatus(codes.Error, msg)
+			dlog.Errorf(ctx, msg)
+		}
+		span.End()
+	}()
+
+	wq := waiter.Queue{}
+	if ep, err = fr.CreateEndpoint(&wq); err != nil {
+		fr.Complete(true)
+		return
+	}
+	defer fr.Complete(false)
+
+	so := ep.SocketOptions()
+	so.SetKeepAlive(true)
+
+	idle := tcpip.KeepaliveIdleOption(keepAliveIdle)
+	if err = ep.SetSockOpt(&idle); err != nil {
+		return
+	}
+
+	ivl := tcpip.KeepaliveIntervalOption(keepAliveInterval)
+	if err = ep.SetSockOpt(&ivl); err != nil {
+		return
+	}
+
+	if err = ep.SetSockOptInt(tcpip.KeepaliveCountOption, keepAliveCount); err != nil {
+		return
+	}
+	dispatchToStream(ctx, newConnID(header.TCPProtocolNumber, id), gonet.NewTCPConn(&wq, ep), streamCreator)
+}
+
 func setTCPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator) {
+	if err := s.SetTransportProtocolOption(tcp.ProtocolNumber,
+		&tcpip.TCPSendBufferSizeRangeOption{
+			Min:     tcp.MinBufferSize,
+			Default: tcp.DefaultSendBufferSize,
+			Max:     tcp.MaxBufferSize,
+		}); err != nil {
+		return
+	}
+
+	if err := s.SetTransportProtocolOption(tcp.ProtocolNumber,
+		&tcpip.TCPReceiveBufferSizeRangeOption{
+			Min:     tcp.MinBufferSize,
+			Default: tcp.DefaultSendBufferSize,
+			Max:     tcp.MaxBufferSize,
+		}); err != nil {
+		return
+	}
+
+	sa := tcpip.TCPSACKEnabled(true)
+	s.SetTransportProtocolOption(tcp.ProtocolNumber, &sa)
+
+	// Enable Receive Buffer Auto-Tuning, see:
+	// https://github.com/google/gvisor/issues/1666
+	mo := tcpip.TCPModerateReceiveBufferOption(true)
+	s.SetTransportProtocolOption(tcp.ProtocolNumber, &mo)
+
 	f := tcp.NewForwarder(s, maxReceiveWindow, maxInFlight, func(fr *tcp.ForwarderRequest) {
-		var ep tcpip.Endpoint
-		var err tcpip.Error
-		id := fr.ID()
-
-		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "TCPHandler",
-			trace.WithNewRoot(),
-			trace.WithAttributes(
-				attribute.String("tel2.remote-ip", id.RemoteAddress.To4().String()),
-				attribute.String("tel2.local-ip", id.LocalAddress.To4().String()),
-				attribute.Int("tel2.local-port", int(id.LocalPort)),
-				attribute.Int("tel2.remote-port", int(id.RemotePort)),
-			))
-		defer func() {
-			if err != nil {
-				msg := fmt.Sprintf("forward TCP %s: %s", idStringer(id), err)
-				span.SetStatus(codes.Error, msg)
-				dlog.Errorf(ctx, msg)
-			}
-			span.End()
-		}()
-
-		wq := waiter.Queue{}
-		if ep, err = fr.CreateEndpoint(&wq); err != nil {
-			fr.Complete(true)
-			return
-		}
-		defer fr.Complete(false)
-
-		so := ep.SocketOptions()
-		so.SetKeepAlive(true)
-
-		idle := tcpip.KeepaliveIdleOption(keepAliveIdle)
-		if err = ep.SetSockOpt(&idle); err != nil {
-			return
-		}
-
-		ivl := tcpip.KeepaliveIntervalOption(keepAliveInterval)
-		if err = ep.SetSockOpt(&ivl); err != nil {
-			return
-		}
-
-		if err = ep.SetSockOptInt(tcpip.KeepaliveCountOption, keepAliveCount); err != nil {
-			return
-		}
-
-		var rs tcpip.TCPReceiveBufferSizeRangeOption
-		if err = s.TransportProtocolOption(header.TCPProtocolNumber, &rs); err != nil {
-			return
-		}
-		so.SetReceiveBufferSize(int64(rs.Default), false)
-
-		var ss tcpip.TCPSendBufferSizeRangeOption
-		if err = s.TransportProtocolOption(header.TCPProtocolNumber, &ss); err != nil {
-			return
-		}
-		so.SetSendBufferSize(int64(ss.Default), false)
-
-		if err = s.SetTransportProtocolOption(tcp.ProtocolNumber,
-			&tcpip.TCPSendBufferSizeRangeOption{
-				Min:     tcp.MinBufferSize,
-				Default: tcp.DefaultSendBufferSize,
-				Max:     tcp.MaxBufferSize,
-			}); err != nil {
-			return
-		}
-
-		if err = s.SetTransportProtocolOption(tcp.ProtocolNumber,
-			&tcpip.TCPReceiveBufferSizeRangeOption{
-				Min:     tcp.MinBufferSize,
-				Default: tcp.DefaultSendBufferSize,
-				Max:     tcp.MaxBufferSize,
-			}); err != nil {
-			return
-		}
-
-		sa := tcpip.TCPSACKEnabled(true)
-		s.SetTransportProtocolOption(tcp.ProtocolNumber, &sa)
-
-		// Enable Receive Buffer Auto-Tuning, see:
-		// https://github.com/google/gvisor/issues/1666
-		mo := tcpip.TCPModerateReceiveBufferOption(true)
-		s.SetTransportProtocolOption(tcp.ProtocolNumber, &mo)
-
-		dispatchToStream(ctx, newConnID(header.TCPProtocolNumber, id), gonet.NewTCPConn(&wq, ep), streamCreator)
+		forwardTCP(ctx, streamCreator, fr)
 	})
 	s.SetTransportProtocolHandler(tcp.ProtocolNumber, f.HandlePacket)
 }
@@ -213,34 +204,38 @@ var blockedUDPPorts = map[uint16]bool{ //nolint:gochecknoglobals // constant
 	139: true, // NETBIOS
 }
 
+func forwardUDP(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator, fr *udp.ForwarderRequest) {
+	id := fr.ID()
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "UDPHandler",
+		trace.WithNewRoot(),
+		trace.WithAttributes(
+			attribute.String("tel2.remote-ip", id.RemoteAddress.To4().String()),
+			attribute.String("tel2.local-ip", id.LocalAddress.To4().String()),
+			attribute.Int("tel2.local-port", int(id.LocalPort)),
+			attribute.Int("tel2.remote-port", int(id.RemotePort)),
+			attribute.Bool("tel2.port-blocked", false),
+		))
+	defer span.End()
+
+	if _, ok := blockedUDPPorts[id.LocalPort]; ok {
+		span.SetAttributes(attribute.Bool("tel2.port-blocked", true))
+		return
+	}
+
+	wq := waiter.Queue{}
+	ep, err := fr.CreateEndpoint(&wq)
+	if err != nil {
+		msg := fmt.Sprintf("forward UDP %s: %s", idStringer(id), err)
+		span.SetStatus(codes.Error, msg)
+		dlog.Errorf(ctx, msg)
+		return
+	}
+	dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(s, &wq, ep), streamCreator)
+}
+
 func setUDPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator) {
 	f := udp.NewForwarder(s, func(fr *udp.ForwarderRequest) {
-		id := fr.ID()
-		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "UDPHandler",
-			trace.WithNewRoot(),
-			trace.WithAttributes(
-				attribute.String("tel2.remote-ip", id.RemoteAddress.To4().String()),
-				attribute.String("tel2.local-ip", id.LocalAddress.To4().String()),
-				attribute.Int("tel2.local-port", int(id.LocalPort)),
-				attribute.Int("tel2.remote-port", int(id.RemotePort)),
-				attribute.Bool("tel2.port-blocked", false),
-			))
-		defer span.End()
-
-		if _, ok := blockedUDPPorts[id.LocalPort]; ok {
-			span.SetAttributes(attribute.Bool("tel2.port-blocked", true))
-			return
-		}
-
-		wq := waiter.Queue{}
-		ep, err := fr.CreateEndpoint(&wq)
-		if err != nil {
-			msg := fmt.Sprintf("forward UDP %s: %s", idStringer(id), err)
-			span.SetStatus(codes.Error, msg)
-			dlog.Errorf(ctx, msg)
-			return
-		}
-		dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(s, &wq, ep), streamCreator)
+		forwardUDP(ctx, s, streamCreator, fr)
 	})
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, f.HandlePacket)
 }
@@ -251,13 +246,7 @@ func newConnID(proto tcpip.TransportProtocolNumber, id stack.TransportEndpointID
 
 func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, streamCreator tunnel.StreamCreator) {
 	ctx, cancel := context.WithCancel(ctx)
-	var err error
-	var stream tunnel.Stream
-	if streamCreator == nil {
-		err = fmt.Errorf("no stream creator given; refusing to forward")
-	} else {
-		stream, err = streamCreator(ctx, id)
-	}
+	stream, err := streamCreator(ctx, id)
 	if err != nil {
 		dlog.Errorf(ctx, "forward %s: %s", id, err)
 		cancel()

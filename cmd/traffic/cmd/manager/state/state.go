@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,6 +56,7 @@ type State struct {
 	timedLogLevel   log.TimedLevel
 	llSubs          *loglevelSubscribers
 	cfgMapLocks     map[string]*sync.Mutex
+	tunnelCounter   int32
 }
 
 func NewState(ctx context.Context) *State {
@@ -286,8 +288,27 @@ func (s *State) GetAllClients() map[string]*rpc.ClientInfo {
 	return s.clients.LoadAll()
 }
 
-func (s *State) CountAllClients() int {
+func (s *State) CountAgents() int {
+	return s.agents.CountAll()
+}
+
+func (s *State) CountClients() int {
 	return s.clients.CountAll()
+}
+
+func (s *State) CountIntercepts() int {
+	return s.intercepts.CountAll()
+}
+
+func (s *State) CountSessions() int {
+	s.mu.RLock()
+	count := len(s.sessions)
+	s.mu.RUnlock()
+	return count
+}
+
+func (s *State) CountTunnels() int {
+	return int(atomic.LoadInt32(&s.tunnelCounter))
 }
 
 func (s *State) WatchClients(
@@ -528,7 +549,7 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		return status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
-	bidiPipe, err := ss.OnConnect(ctx, stream)
+	bidiPipe, err := ss.OnConnect(ctx, stream, &s.tunnelCounter)
 	if err != nil {
 		return err
 	}

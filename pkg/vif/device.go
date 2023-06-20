@@ -23,7 +23,6 @@ import (
 )
 
 type device struct {
-	sync.Mutex
 	*channel.Endpoint
 	ctx   context.Context
 	wg    sync.WaitGroup
@@ -65,18 +64,18 @@ func OpenTun(ctx context.Context, routingTable routing.Table) (Device, error) {
 }
 
 func (d *device) Attach(dp stack.NetworkDispatcher) {
-	d.Lock()
-	d.Endpoint.Attach(dp)
-	d.Unlock()
-	if dp == nil {
-		// Stack is closing
-		return
-	}
-	dlog.Info(d.ctx, "Starting Endpoint")
-	ctx, cancel := context.WithCancel(d.ctx)
-	d.wg.Add(2)
-	go d.tunToDispatch(cancel)
-	go d.dispatchToTun(ctx)
+	go func() {
+		d.Endpoint.Attach(dp)
+		if dp == nil {
+			// Stack is closing
+			return
+		}
+		dlog.Info(d.ctx, "Starting Endpoint")
+		ctx, cancel := context.WithCancel(d.ctx)
+		d.wg.Add(2)
+		go d.tunToDispatch(cancel)
+		d.dispatchToTun(ctx)
+	}()
 }
 
 func (d *device) subnetToRoute(subnet *net.IPNet) (*routing.Route, error) {
@@ -164,9 +163,7 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 	for ok := true; ok; {
 		n, err := d.dev.readPacket(buf)
 		if err != nil {
-			d.Lock()
 			ok = d.IsAttached()
-			d.Unlock()
 			if ok && d.ctx.Err() == nil {
 				dlog.Errorf(d.ctx, "read packet error: %v", err)
 			}
@@ -190,11 +187,7 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 			Payload: bufferv2.MakeWithData(data[:n]),
 		})
 
-		d.Lock()
-		if ok = d.IsAttached(); ok {
-			d.InjectInbound(ipv, pb)
-		}
-		d.Unlock()
+		d.InjectInbound(ipv, pb)
 		pb.DecRef()
 	}
 }
