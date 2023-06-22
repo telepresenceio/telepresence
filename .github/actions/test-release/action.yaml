@@ -8,19 +8,21 @@ runs:
   using: composite
   steps:
     - name: check version binaries
+      env:
+        DOWNLOAD_URL: "https://app.getambassador.io/download/tel2oss/releases/download"
       shell: bash
       run: |
         if [ "${{ runner.os }}" = "macOS" ] && [ "${{ runner.arch }}" = "X64" ]; then
-          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-darwin-amd64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-darwin-amd64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
         fi
         if [ "${{ runner.os }}" = "macOS" ] && [ "${{ runner.arch }}" = "ARM64" ]; then
-          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-darwin-arm64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-darwin-arm64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
         fi
         if [ "${{ runner.os }}" = "Windows" ]; then
-          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-windows-amd64.exe -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-windows-amd64.exe -o ./telepresence || { echo "Curl command failed" ; exit 1; }
         fi
         if [ "${{ runner.os }}" = "Linux" ]; then
-          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-linux-amd64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-linux-amd64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
         fi
         chmod +x ./telepresence
 
