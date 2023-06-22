@@ -1,0 +1,43 @@
+name: Test OSS Release binaries
+description: Test OSS Release binaries
+inputs:
+  release_version:
+    description: "The current release of Telepresence in the form of v2.x.x"
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: check version binaries
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "macOS" ] && [ "${{ runner.arch }}" = "X64" ]; then
+          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-darwin-amd64 -o ./telepresence
+        fi
+        if [ "${{ runner.os }}" = "macOS" ] && [ "${{ runner.arch }}" = "ARM64" ]; then
+          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-darwin-arm64 -o ./telepresence
+        fi
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-windows-amd64.exe -o ./telepresence
+        fi
+        if [ "${{ runner.os }}" = "Linux" ]; then
+          curl -fL https://app.getambassador.io/download/tel2oss/releases/download/${{ inputs.release_version }}/telepresence-linux-amd64 -o ./telepresence
+        fi
+        chmod +x ./telepresence
+
+        output=$(./telepresence version)
+
+        if [ $? -eq 0 ]; then
+            echo "Telepresence command executed successfully"
+        else
+            echo "Telepresence command failed"
+            exit 1
+        fi
+
+        echo "$output" | grep -q "${{ inputs.release_version }}"
+
+        if [ $? -eq 0 ]; then
+            echo "Version match!"
+        else
+            echo "Version does not match!"
+            exit 1
+        fi

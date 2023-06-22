@@ -64,3 +64,21 @@ jobs:
             And for more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
 
             ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
+
+  test-release:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        runners:
+          - ubuntu-latest
+          - macos-latest
+          - macOS-arm64
+          - windows-2019
+    runs-on: ${{ matrix.runners }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test release
+        uses: ./.github/actions/test-release
+        with:
+          release_version: ${{ github.ref_name }}
