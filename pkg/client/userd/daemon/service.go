@@ -89,14 +89,14 @@ type Service struct {
 	daemonAddress *net.TCPAddr
 }
 
-func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg *client.Config, srv *grpc.Server) (userd.Service, error) {
+func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
 	s := &Service{
 		srv:             srv,
 		scout:           sr,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy:    &mgrProxy{},
-		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels.UserDaemon.String(), log.SetLevel),
+		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
 		fuseFtpMgr:      remotefs.NewFuseFTPManager(),
 	}
 	if srv != nil {
@@ -427,10 +427,8 @@ func run(cmd *cobra.Command, _ []string) error {
 			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
 			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
 		}
-		if !cfg.Grpc.MaxReceiveSize.IsZero() {
-			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-				opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
-			}
+		if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
+			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 		}
 		sr := scout.NewReporter(c, "connector")
 		si, err := userd.GetNewServiceFunc(c)(c, g, sr, cfg, grpc.NewServer(opts...))
@@ -460,7 +458,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if cfg.Intercept.UseFtp {
+	if cfg.Intercept().UseFtp {
 		g.Go("fuseftp-server", func(c context.Context) error {
 			if err := s.fuseFtpMgr.DeferInit(c); err != nil {
 				dlog.Error(c, err)

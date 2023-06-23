@@ -40,12 +40,8 @@ func (*traceCollector) tracesFor(ctx context.Context, conn *grpc.ClientConn, ch 
 	cli := common.NewTracingClient(conn)
 	cfg := client.GetConfig(ctx)
 	maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. There might be a lot of traces.
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			if mz > maxRecSize {
-				maxRecSize = mz
-			}
-		}
+	if mz := cfg.Grpc().MaxReceiveSize(); mz > maxRecSize {
+		maxRecSize = mz
 	}
 	result, err := cli.DumpTraces(ctx, &emptypb.Empty{}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 	if err != nil {

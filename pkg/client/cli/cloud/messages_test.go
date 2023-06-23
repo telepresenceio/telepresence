@@ -127,14 +127,9 @@ func Test_UpdateMessages(t *testing.T) {
 
 func Test_RefreshMessagesConfig(t *testing.T) {
 	ctx := newTestContext(t)
-	confDir := t.TempDir()
 
 	// Update the config to a shorter time
-	configYml := "cloud:\n  refreshMessages: 24h"
-	ctx, err := client.SetConfig(ctx, confDir, configYml)
-	if err != nil {
-		t.Error(err)
-	}
+	client.GetConfig(ctx).Cloud().RefreshMessages = 24 * time.Hour
 
 	cmc := newMessageCache(ctx)
 	// Mock what we get from `GetUnauthenticatedCommandMessages`

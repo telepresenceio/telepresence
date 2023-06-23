@@ -1,29 +1,13 @@
-package client
+package itest
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/datawire/dtest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
-
-// SetDefaultConfig creates a config that has the registry set correctly.
-// This ensures that the config on the machine of whatever is running the test,
-// isn't used, which could cause conflict with the tests.
-func SetDefaultConfig(ctx context.Context, configDir string) (context.Context, error) {
-	registry := dtest.DockerRegistry(ctx)
-	configYml := fmt.Sprintf(`
-images:
-  registry: %[1]s
-  webhookRegistry: %[1]s
-cloud:
-  systemaHost: 127.0.0.1
-`, registry)
-	return SetConfig(ctx, configDir, configYml)
-}
 
 // SetConfig creates a config from the configYml provided and assigns it to a new context which
 // is returned. Use this if you are testing components of the config.yml, otherwise you can use setDefaultConfig.
@@ -41,18 +25,18 @@ func SetConfig(ctx context.Context, configDir, configYml string) (context.Contex
 
 	// Load env if it isn't loaded already
 	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-	if env := GetEnv(ctx); env == nil {
-		env, err = LoadEnv()
+	if env := client.GetEnv(ctx); env == nil {
+		env, err = client.LoadEnv()
 		if err != nil {
 			return ctx, err
 		}
-		ctx = WithEnv(ctx, env)
+		ctx = client.WithEnv(ctx, env)
 	}
 
-	cfg, err := LoadConfig(ctx)
+	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
 		return ctx, err
 	}
-	ctx = WithConfig(ctx, cfg)
+	ctx = client.WithConfig(ctx, cfg)
 	return ctx, nil
 }

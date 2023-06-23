@@ -403,7 +403,7 @@ func legacyEnsureAgent(
 
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
 func waitForApply(c context.Context, name, namespace string, obj k8sapi.Workload) error {
-	tos := &client.GetConfig(c).Timeouts
+	tos := client.GetConfig(c).Timeouts()
 	c, cancel := tos.TimeoutContext(c, client.TimeoutApply)
 	defer cancel()
 
@@ -679,7 +679,7 @@ func addAgentToWorkload(
 			trafficManagerNamespace: trafficManagerNamespace,
 			ContainerPortName:       containerPort.Name,
 			ContainerPortProto:      containerPort.Protocol,
-			ContainerPortAppProto:   k8sapi.GetAppProto(c, client.GetConfig(c).Intercept.AppProtocolStrategy, servicePort),
+			ContainerPortAppProto:   k8sapi.GetAppProto(c, client.GetConfig(c).Intercept().AppProtocolStrategy, servicePort),
 			ContainerPortNumber:     containerPort.Number,
 			APIPortNumber:           telepresenceAPIPort,
 			ImageName:               agentImageName,

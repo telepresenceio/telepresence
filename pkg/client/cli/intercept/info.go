@@ -77,7 +77,7 @@ func NewMount(ctx context.Context, ii *manager.InterceptInfo, mountError string)
 	}
 	if ii.MountPoint != "" {
 		var port int32
-		if client.GetConfig(ctx).Intercept.UseFtp {
+		if client.GetConfig(ctx).Intercept().UseFtp {
 			port = ii.FtpPort
 		} else {
 			port = ii.SftpPort

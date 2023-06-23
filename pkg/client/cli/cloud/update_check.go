@@ -62,7 +62,7 @@ func newUpdateChecker(ctx context.Context, url string) *updateChecker {
 }
 
 func updateCheck(cmd *cobra.Command, forceCheck bool) error {
-	cloudCfg := client.GetConfig(cmd.Context()).Cloud
+	cloudCfg := client.GetConfig(cmd.Context()).Cloud()
 	format := cmd.Annotations[ann.UpdateCheckFormat]
 	uc := newUpdateChecker(cmd.Context(), fmt.Sprintf(format, cloudCfg.SystemaHost, runtime.GOOS, runtime.GOARCH))
 	if !(forceCheck || uc.timeToCheck()) {

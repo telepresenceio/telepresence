@@ -57,12 +57,12 @@ func (n Network) IsZero() bool {
 
 func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("network must be an object", node))
+		return errors.New(WithLoc("network must be an object", node))
 	}
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
+		kv, err := StringKey(ms[i])
 		if err != nil {
 			return err
 		}
@@ -74,13 +74,13 @@ func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
 				n.GlobalDNSSearchConfigStrategy = GSCStrategy(v.Value)
 			default:
 				if parseContext != nil {
-					dlog.Warn(parseContext, withLoc(fmt.Sprintf("invalid globalDNSSearchConfigStrategy %q. Valid values are %q, %q or %q",
+					dlog.Warn(parseContext, WithLoc(fmt.Sprintf("invalid globalDNSSearchConfigStrategy %q. Valid values are %q, %q or %q",
 						v.Value, GSCAuto, GSCRegistry, GSCPowershell), ms[i+1]))
 				}
 			}
 		default:
 			if parseContext != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+				dlog.Warn(parseContext, WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 			}
 		}
 	}

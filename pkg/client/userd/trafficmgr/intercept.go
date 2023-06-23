@@ -612,7 +612,7 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 	}
 
 	cfg := client.GetConfig(c)
-	apiPort := uint16(cfg.TelepresenceAPI.Port)
+	apiPort := uint16(cfg.TelepresenceAPI().Port)
 	if apiPort == 0 {
 		// Default to the API port declared by the traffic-manager
 		if apiInfo, err := s.managerClient.GetTelepresenceAPI(c, &empty.Empty{}); err != nil {
@@ -651,7 +651,7 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 	spec.WorkloadKind = result.WorkloadKind
 
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
-	tos := &client.GetConfig(c).Timeouts
+	tos := client.GetConfig(c).Timeouts()
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
 	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
 	c, cancel := tos.TimeoutContext(c, client.TimeoutIntercept)
@@ -807,7 +807,7 @@ func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 	ic.wg.Wait()
 
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
-	c, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
+	c, cancel := client.GetConfig(c).Timeouts().TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 	_, err := s.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: s.SessionInfo(),

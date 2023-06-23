@@ -69,7 +69,7 @@ func (cmc *messageCache) updateCacheMessages(ctx context.Context, resp *systema.
 	cmc.Intercept = resp.GetIntercept()
 
 	// Update the time to do the next check since we were successful
-	refreshMsgs := client.GetConfig(ctx).Cloud.RefreshMessages
+	refreshMsgs := client.GetConfig(ctx).Cloud().RefreshMessages
 	cmc.NextCheck = dtime.Now().Add(refreshMsgs)
 
 	// We reset the messages delivered for all commands since they
@@ -104,7 +104,7 @@ func RaiseMessage(cmd *cobra.Command, _ []string) error {
 
 	// If the user has specified they are in an air-gapped cluster,
 	// we shouldn't try to get messages
-	cloudCfg := client.GetConfig(cmd.Context()).Cloud
+	cloudCfg := client.GetConfig(cmd.Context()).Cloud()
 	if cloudCfg.SkipLogin {
 		return nil
 	}

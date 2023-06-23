@@ -288,8 +288,8 @@ func (s *session) ManagerVersion() semver.Version {
 	return s.managerVersion
 }
 
-func (s *session) GetSessionConfig() *client.Config {
-	return &s.sessionConfig
+func (s *session) GetSessionConfig() client.Config {
+	return s.sessionConfig
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
@@ -301,7 +301,7 @@ func connectMgr(
 	cr *rpc.ConnectRequest,
 ) (*session, error) {
 	clientConfig := client.GetConfig(ctx)
-	tos := &clientConfig.Timeouts
+	tos := clientConfig.Timeouts()
 
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
@@ -382,10 +382,8 @@ func connectMgr(
 
 	var opts []grpc.CallOption
 	cfg := client.GetConfig(ctx)
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-		}
+	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
+		opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
 	}
 	svc.SetManagerClient(mClient, opts...)
 
@@ -566,12 +564,12 @@ func (s *session) ApplyConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = client.MergeAndReplace(ctx, &s.sessionConfig, cfg, false)
+	err = client.MergeAndReplace(ctx, s.sessionConfig, cfg, false)
 	if err != nil {
 		return err
 	}
 	if len(s.MappedNamespaces) == 0 {
-		mns := client.GetConfig(ctx).Cluster.MappedNamespaces
+		mns := client.GetConfig(ctx).Cluster().MappedNamespaces
 		if len(mns) > 0 {
 			s.SetMappedNamespaces(ctx, mns)
 		}
@@ -719,7 +717,7 @@ func (s *session) ensureWatchers(ctx context.Context,
 		})
 	}
 	wg.Wait()
-	wc, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutRoundtripLatency)
+	wc, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutRoundtripLatency)
 	defer cancel()
 	if needWait {
 		select {
@@ -860,7 +858,7 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 		namespaces = nil
 	}
 	if len(namespaces) == 0 {
-		namespaces = client.GetConfig(c).Cluster.MappedNamespaces
+		namespaces = client.GetConfig(c).Cluster().MappedNamespaces
 	}
 
 	if s.SetMappedNamespaces(c, namespaces) {
@@ -891,7 +889,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		},
 		ManagerNamespace: cfg.GetManagerNamespace(),
 	}
-	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster.MappedNamespaces) > 0 {
+	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster().MappedNamespaces) > 0 {
 		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
 	}
 	if s.rootDaemon != nil {
@@ -1212,7 +1210,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 	// The root daemon needs time to set up the TUN-device and DNS, which involves interacting
 	// with the cluster-side traffic-manager. We know that the traffic-manager is up and
 	// responding at this point, so it shouldn't take too long.
-	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
+	ctx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 	if _, err = rd.WaitForNetwork(ctx, &empty.Empty{}); err != nil {
 		if se, ok := status.FromError(err); ok {

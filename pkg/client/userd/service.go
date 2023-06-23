@@ -38,7 +38,7 @@ type Service interface {
 	RootSessionInProcess() bool
 }
 
-type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)
+type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, client.Config, *grpc.Server) (Service, error)
 
 type newServiceKey struct{}
 

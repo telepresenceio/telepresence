@@ -41,9 +41,9 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 
 func getValues(ctx context.Context) map[string]any {
 	clientConfig := client.GetConfig(ctx)
-	imgConfig := clientConfig.Images
+	imgConfig := clientConfig.Images()
 	imageRegistry := imgConfig.Registry(ctx)
-	cloudConfig := clientConfig.Cloud
+	cloudConfig := clientConfig.Cloud()
 	imageTag := strings.TrimPrefix(client.Version(), "v")
 	values := map[string]any{
 		"image": map[string]any{
@@ -53,9 +53,9 @@ func getValues(ctx context.Context) map[string]any {
 		"systemaHost": cloudConfig.SystemaHost,
 		"systemaPort": cloudConfig.SystemaPort,
 	}
-	if !clientConfig.Grpc.MaxReceiveSize.IsZero() {
+	if !clientConfig.Grpc().MaxReceiveSizeV.IsZero() {
 		values["grpc"] = map[string]any{
-			"maxReceiveSize": clientConfig.Grpc.MaxReceiveSize.String(),
+			"maxReceiveSize": clientConfig.Grpc().MaxReceiveSizeV.String(),
 		}
 	}
 	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" {
@@ -77,12 +77,12 @@ func getValues(ctx context.Context) map[string]any {
 		values["agent"] = map[string]any{"image": image}
 	}
 
-	if apc := clientConfig.Intercept.AppProtocolStrategy; apc != k8sapi.Http2Probe {
+	if apc := clientConfig.Intercept().AppProtocolStrategy; apc != k8sapi.Http2Probe {
 		values["agentInjector"] = map[string]any{"appProtocolStrategy": apc.String()}
 	}
-	if clientConfig.TelepresenceAPI.Port != 0 {
+	if clientConfig.TelepresenceAPI().Port != 0 {
 		values["telepresenceAPI"] = map[string]any{
-			"port": clientConfig.TelepresenceAPI.Port,
+			"port": clientConfig.TelepresenceAPI().Port,
 		}
 	}
 
@@ -90,7 +90,7 @@ func getValues(ctx context.Context) map[string]any {
 }
 
 func timedRun(ctx context.Context, run func(time.Duration) error) error {
-	timeouts := client.GetConfig(ctx).Timeouts
+	timeouts := client.GetConfig(ctx).Timeouts()
 	ctx, cancel := timeouts.TimeoutContext(ctx, client.TimeoutHelm)
 	defer cancel()
 
@@ -176,7 +176,7 @@ func isInstalled(ctx context.Context, configFlags *genericclioptions.ConfigFlags
 
 	var existing *release.Release
 	transitionStart := time.Now()
-	timeout := client.GetConfig(ctx).Timeouts.Get(client.TimeoutHelm)
+	timeout := client.GetConfig(ctx).Timeouts().Get(client.TimeoutHelm)
 	for time.Since(transitionStart) < timeout {
 		dlog.Debugf(ctx, "getHelmRelease")
 		if existing, err = getHelmRelease(ctx, releaseName, helmConfig); err != nil {

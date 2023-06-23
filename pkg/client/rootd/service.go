@@ -39,7 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-type NewServiceFunc func(*scout.Reporter, *client.Config) *Service
+type NewServiceFunc func(*scout.Reporter, client.Config) *Service
 
 type newServiceKey struct{}
 
@@ -94,10 +94,10 @@ type Service struct {
 	scout *scout.Reporter
 }
 
-func NewService(sr *scout.Reporter, cfg *client.Config) *Service {
+func NewService(sr *scout.Reporter, cfg client.Config) *Service {
 	return &Service{
 		scout:          sr,
-		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels.RootDaemon.String(), log.SetLevel),
+		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon.String(), log.SetLevel),
 		connectCh:      make(chan *rpc.OutboundInfo),
 		connectReplyCh: make(chan sessionReply),
 	}
@@ -400,10 +400,8 @@ func (s *Service) serveGrpc(c context.Context, l net.Listener, tracer common.Tra
 		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
 	}
 	cfg := client.GetConfig(c)
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
-		}
+	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
+		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
 	svc := grpc.NewServer(opts...)
 	rpc.RegisterDaemonServer(svc, s)

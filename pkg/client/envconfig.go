@@ -23,7 +23,7 @@ type Env struct {
 	ManagerNamespace   string   `env:"TELEPRESENCE_MANAGER_NAMESPACE,   parser=nonempty-string"`
 
 	// This environment variable becomes the default for the images.registry and images.webhookRegistry
-	Registry string `env:"TELEPRESENCE_REGISTRY,                        parser=nonempty-string,default=docker.io/datawire"`
+	Registry string `env:"TELEPRESENCE_REGISTRY,                        parser=possibly-empty-string,default="`
 
 	// This environment variable becomes the default for the images.agentImage and images.webhookAgentImage
 	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,                   parser=possibly-empty-string,default="`

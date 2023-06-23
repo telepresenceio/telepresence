@@ -540,7 +540,7 @@ func (s *Service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (
 		// We mount using docker volumes and the telemount driver plugin.
 		return errcat.ToResult(nil), nil
 	}
-	if client.GetConfig(ctx).Intercept.UseFtp {
+	if client.GetConfig(ctx).Intercept().UseFtp {
 		return errcat.ToResult(s.FuseFTPError()), nil
 	}
 

@@ -127,7 +127,7 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 		return nil
 	}
 
-	if a.LocalMountPort > 0 && client.GetConfig(cmd.Context()).Intercept.UseFtp {
+	if a.LocalMountPort > 0 && client.GetConfig(cmd.Context()).Intercept().UseFtp {
 		return errcat.User.New("only SFTP can be used with --local-mount-port. Client is configured to perform remote mounts using FTP")
 	}
 
@@ -139,7 +139,7 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 		}
 	}
 	if a.Port == "" {
-		a.Port = strconv.Itoa(client.GetConfig(cmd.Context()).Intercept.DefaultPort)
+		a.Port = strconv.Itoa(client.GetConfig(cmd.Context()).Intercept().DefaultPort)
 	}
 	a.MountSet = cmd.Flag("mount").Changed
 	if a.DockerBuild != "" {

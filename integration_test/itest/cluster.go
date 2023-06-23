@@ -293,10 +293,10 @@ func PodCreateTimeout(c context.Context) time.Duration {
 
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
 	config := client.GetDefaultConfig()
-	config.LogLevels.UserDaemon = logrus.DebugLevel
-	config.LogLevels.RootDaemon = logrus.DebugLevel
+	config.LogLevels().UserDaemon = logrus.DebugLevel
+	config.LogLevels().RootDaemon = logrus.DebugLevel
 
-	to := &config.Timeouts
+	to := config.Timeouts()
 	to.PrivateAgentInstall = PodCreateTimeout(c)
 	to.PrivateApply = PodCreateTimeout(c)
 	to.PrivateClusterConnect = 60 * time.Second
@@ -308,17 +308,15 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerAPI = 120 * time.Second
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
-	config.Images.PrivateRegistry = s.Registry()
+	config.Images().PrivateRegistry = s.Registry()
 	if agentImage := GetAgentImage(c); agentImage != nil {
-		config.Images.PrivateWebhookRegistry = agentImage.Registry
+		config.Images().PrivateWebhookRegistry = agentImage.Registry
 	} else {
-		config.Images.PrivateWebhookRegistry = s.Registry()
+		config.Images().PrivateWebhookRegistry = s.Registry()
 	}
 
-	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
-	config.Cloud.SystemaHost = "127.0.0.1"
-
-	config.Intercept.UseFtp = true
+	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
+	config.Intercept().UseFtp = true
 
 	configYaml, err := yaml.Marshal(&config)
 	require.NoError(t, err)
@@ -326,7 +324,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 	configDir := t.TempDir()
 	c = filelocation.WithAppUserConfigDir(c, configDir)
-	c, err = client.SetConfig(c, configDir, configYamlStr)
+	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c
 }
@@ -1030,19 +1028,19 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 	)
 }
 
-func WithConfig(c context.Context, modifierFunc func(config *client.Config)) context.Context {
+func WithConfig(c context.Context, modifierFunc func(config client.Config)) context.Context {
 	// Quit a running daemon. We're changing the directory where its config resides.
 	TelepresenceQuitOk(c)
 
 	t := getT(c)
-	configCopy := *client.GetConfig(c)
-	modifierFunc(&configCopy)
+	configCopy := client.GetConfig(c)
+	modifierFunc(configCopy)
 	configYaml, err := yaml.Marshal(&configCopy)
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
 	configDir := t.TempDir()
 	c = filelocation.WithAppUserConfigDir(c, configDir)
-	c, err = client.SetConfig(c, configDir, configYamlStr)
+	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c
 }

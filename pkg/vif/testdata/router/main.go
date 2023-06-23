@@ -9,8 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/sirupsen/logrus"
+
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -18,13 +19,13 @@ import (
 
 func main() {
 	cfg := client.GetDefaultConfig()
-	bCtx := client.WithConfig(context.Background(), &cfg)
-	logger := logrus.New()
+	bCtx := client.WithConfig(context.Background(), cfg)
+	logger := logrus.StandardLogger()
 	logger.SetLevel(logrus.DebugLevel)
 	bCtx = dlog.WithLogger(bCtx, dlog.WrapLogrus(logger))
 	vif.InitLogger(bCtx)
 
-	ctx, cancel := context.WithCancel(client.WithConfig(bCtx, &cfg))
+	ctx, cancel := context.WithCancel(client.WithConfig(bCtx, cfg))
 	defer cancel()
 	dev, err := vif.NewTunnelingDevice(ctx, func(context.Context, tunnel.ConnID) (tunnel.Stream, error) {
 		return nil, errors.New("stream routing not enabled; refusing to forward")
