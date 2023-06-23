@@ -75,8 +75,8 @@ func (c *reverseConnClient) Close(ctx context.Context) error {
 	return c.wait()
 }
 
-func (m *service) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
-	intercept, _ := m.state.GetIntercept(interceptID)
+func (s *service) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
+	intercept, _ := s.state.GetIntercept(interceptID)
 	if intercept == nil || intercept.PreviewSpec.Ingress == nil {
 		return nil, fmt.Errorf("missing ingress information for intercept %s", interceptID)
 	}

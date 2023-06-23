@@ -110,7 +110,7 @@ func Main(ctx context.Context, _ ...string) error {
 }
 
 // ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.
-func (m *service) servePrometheus(ctx context.Context) error {
+func (s *service) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	if env.PrometheusPort == 0 {
 		dlog.Info(ctx, "Prometheus metrics server not started")
@@ -122,18 +122,18 @@ func (m *service) servePrometheus(ctx context.Context) error {
 			Help: h,
 		}, func() float64 { return float64(f()) })
 	}
-	newGaugeFunc("agent_count", "Number of connected traffic agents", m.state.CountAgents)
-	newGaugeFunc("client_count", "Number of connected clients", m.state.CountClients)
-	newGaugeFunc("intercept_count", "Number of active intercepts", m.state.CountIntercepts)
-	newGaugeFunc("session_count", "Number of sessions", m.state.CountSessions)
-	newGaugeFunc("tunnel_count", "Number of tunnels", m.state.CountTunnels)
+	newGaugeFunc("agent_count", "Number of connected traffic agents", s.state.CountAgents)
+	newGaugeFunc("client_count", "Number of connected clients", s.state.CountClients)
+	newGaugeFunc("intercept_count", "Number of active intercepts", s.state.CountIntercepts)
+	newGaugeFunc("session_count", "Number of sessions", s.state.CountSessions)
+	newGaugeFunc("tunnel_count", "Number of tunnels", s.state.CountTunnels)
 
 	newGaugeFunc("active_http_request_count", "Number of currently served http requests", func() int {
-		return int(atomic.LoadInt32(&m.activeHttpRequests))
+		return int(atomic.LoadInt32(&s.activeHttpRequests))
 	})
 
 	newGaugeFunc("active_grpc_request_count", "Number of currently served gRPC requests", func() int {
-		return int(atomic.LoadInt32(&m.activeGrpcRequests))
+		return int(atomic.LoadInt32(&s.activeGrpcRequests))
 	})
 
 	sc := &dhttp.ServerConfig{
@@ -144,7 +144,7 @@ func (m *service) servePrometheus(ctx context.Context) error {
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", env.ServerHost, env.PrometheusPort))
 }
 
-func (m *service) serveHTTP(ctx context.Context) error {
+func (s *service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
@@ -163,26 +163,26 @@ func (m *service) serveHTTP(ctx context.Context) error {
 	sc := &dhttp.ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-				atomic.AddInt32(&m.activeGrpcRequests, 1)
+				atomic.AddInt32(&s.activeGrpcRequests, 1)
 				grpcHandler.ServeHTTP(w, r)
-				atomic.AddInt32(&m.activeGrpcRequests, -1)
+				atomic.AddInt32(&s.activeGrpcRequests, -1)
 			} else {
-				atomic.AddInt32(&m.activeHttpRequests, 1)
+				atomic.AddInt32(&s.activeHttpRequests, 1)
 				httpHandler.ServeHTTP(w, r)
-				atomic.AddInt32(&m.activeHttpRequests, -1)
+				atomic.AddInt32(&s.activeHttpRequests, -1)
 			}
 		}),
 	}
-	m.RegisterServers(grpcHandler)
+	s.RegisterServers(grpcHandler)
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
-func (m *service) RegisterServers(grpcHandler *grpc.Server) {
-	rpc.RegisterManagerServer(grpcHandler, m)
+func (s *service) RegisterServers(grpcHandler *grpc.Server) {
+	rpc.RegisterManagerServer(grpcHandler, s)
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 }
 
-func (m *service) runSessionGCLoop(ctx context.Context) error {
+func (s *service) runSessionGCLoop(ctx context.Context) error {
 	// Loop calling Expire
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -190,7 +190,7 @@ func (m *service) runSessionGCLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			m.expire(ctx)
+			s.expire(ctx)
 		case <-ctx.Done():
 			return nil
 		}
