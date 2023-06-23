@@ -35,7 +35,7 @@ runs:
             exit 1
         fi
 
-        echo "$output" | grep -q "${{ inputs.release_version }}"
+        echo "$output" | grep -q "Client\s*:\s*${{ inputs.release_version }}"
 
         if [ $? -eq 0 ]; then
             echo "Version match!"
