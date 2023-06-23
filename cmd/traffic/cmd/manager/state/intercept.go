@@ -47,7 +47,7 @@ import (
 //
 // It's expected that the client that makes the call will update any unqualified service port identifiers
 // with the ones in the returned PreparedIntercept.
-func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (pi *managerrpc.PreparedIntercept, err error) {
+func (s *state) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (pi *managerrpc.PreparedIntercept, err error) {
 	ctx, cancel := context.WithTimeout(ctx, managerutil.GetEnv(ctx).AgentArrivalTimeout)
 	defer cancel()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
@@ -96,7 +96,7 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	}, nil
 }
 
-func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc *agentconfig.Sidecar, err error) {
+func (s *state) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc *agentconfig.Sidecar, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
@@ -154,7 +154,7 @@ func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespac
 	return cm, err
 }
 
-func (s *State) loadAgentConfig(
+func (s *state) loadAgentConfig(
 	ctx context.Context,
 	cmAPI typed.ConfigMapInterface,
 	cm *core.ConfigMap,
@@ -375,7 +375,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 	return ec, nil
 }
 
-func (s *State) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
+func (s *state) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
 	snapshotCh := s.WatchAgents(ctx, nil)
 
 	// fes collects events from the failedCreatedCh and is included in the error message in case

@@ -50,7 +50,7 @@ type Service interface {
 	InstallID() string
 	RegisterServers(grpcHandler *grpc.Server)
 	TrafficManagerConfig() []byte
-	State() *state.State
+	State() state.State
 
 	// unexported methods.
 	runConfigWatcher(context.Context) error
@@ -63,7 +63,7 @@ type service struct {
 	ctx                context.Context
 	clock              Clock
 	ID                 string
-	state              *state.State
+	state              state.State
 	clusterInfo        cluster.Info
 	cloudConfig        *rpc.AmbassadorCloudConfig
 	configWatcher      config.Watcher
@@ -133,7 +133,7 @@ func NewService(ctx context.Context) (Service, context.Context, error) {
 	return ret, ctx, nil
 }
 
-func (m *service) State() *state.State {
+func (m *service) State() state.State {
 	return m.state
 }
 
@@ -519,7 +519,6 @@ func (m *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
-	apiKey := ciReq.GetApiKey()
 	dlog.Debug(ctx, "CreateIntercept called")
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, spec)
@@ -534,7 +533,7 @@ func (m *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	interceptInfo, err := m.state.AddIntercept(sessionID, m.clusterInfo.GetClusterID(), apiKey, client, spec)
+	interceptInfo, err := m.state.AddIntercept(sessionID, m.clusterInfo.GetClusterID(), client, ciReq)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-package state_test
+package state
 
 import (
 	"fmt"
@@ -6,73 +6,77 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 func TestPresence(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
-	a := assertNew(t)
 
-	p := state.NewState(ctx)
+	p := NewState(ctx)
 
 	now := time.Now()
 
-	p.Add("a", "item-a", now)
-	p.Add("b", "item-b", now)
+	sa := p.AddClient(&rpc.ClientInfo{Name: "item-a"}, now)
+	sb := p.AddClient(&rpc.ClientInfo{Name: "item-b"}, now)
 
 	// A@0 B@0
 
-	a.True(p.IsPresent("a"))
-	a.True(p.IsPresent("b"))
-	a.False(p.IsPresent("c"))
-	a.False(p.IsPresent("d"))
+	isPresent := func(sessionID string) bool {
+		_, err := p.SessionDone(sessionID)
+		return err == nil
+	}
 
-	a.NotNil(p.Get("a"))
-	a.Equal("item-a", p.Get("a").Item())
-	a.Nil(p.Get("c"))
+	a := assertNew(t)
+	a.True(isPresent(sa))
+	a.True(isPresent(sb))
+	a.False(isPresent("c"))
+	a.False(isPresent("d"))
 
-	a.True(p.Mark("a", now))
-	a.True(p.Mark("b", now))
-	a.False(p.Mark("c", now))
-	a.False(p.Mark("d", now))
+	a.NotNil(p.GetClient(sa))
+	a.Equal("item-a", p.GetClient(sa).Name)
+	a.Nil(p.GetClient("c"))
+
+	a.True(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: sa}}, now))
+	a.True(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: sb}}, now))
+	a.False(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: "c"}}, now))
 
 	now = now.Add(time.Second)
-	a.True(p.Mark("b", now))
-	p.Add("c", "item-c", now)
+	a.True(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: sb}}, now))
+	sc := p.AddClient(&rpc.ClientInfo{Name: "item-c"}, now)
 
 	// A@0 B@1 C@1
 
-	a.True(p.IsPresent("a"))
-	a.True(p.IsPresent("b"))
-	a.True(p.IsPresent("c"))
-	a.False(p.IsPresent("d"))
+	a.True(isPresent(sa))
+	a.True(isPresent(sb))
+	a.True(isPresent(sc))
+	a.False(isPresent("d"))
 
-	collected := []string{}
+	collected := make([]string, 0, 3)
 	for id, item := range p.GetAllClients() {
 		collected = append(collected, fmt.Sprintf("%s/%v", id, item.Name))
 	}
-	a.Contains(collected, "a/item-a")
-	a.Contains(collected, "b/item-b")
-	a.Contains(collected, "c/item-c")
+	a.Contains(collected, fmt.Sprintf("%s/item-a", sa))
+	a.Contains(collected, fmt.Sprintf("%s/item-b", sb))
+	a.Contains(collected, fmt.Sprintf("%s/item-c", sc))
 
 	p.ExpireSessions(ctx, now, now)
 
 	// B@1 C@1
 
-	a.False(p.IsPresent("a"))
-	a.True(p.IsPresent("b"))
-	a.True(p.IsPresent("c"))
-	a.False(p.IsPresent("d"))
+	a.False(isPresent(sa))
+	a.True(isPresent(sb))
+	a.True(isPresent(sc))
+	a.False(isPresent("d"))
 
-	p.RemoveSession(ctx, "a")
-	p.RemoveSession(ctx, "c")
+	p.RemoveSession(ctx, sa)
+	p.RemoveSession(ctx, sc)
 
 	// B@1
 
-	a.False(p.IsPresent("a"))
-	a.True(p.IsPresent("b"))
-	a.False(p.IsPresent("c"))
-	a.False(p.IsPresent("d"))
+	a.False(isPresent(sa))
+	a.True(isPresent(sb))
+	a.False(isPresent(sc))
+	a.False(isPresent("d"))
 
-	a.Panics(func() { p.Add("b", "duplicate-item", now) })
+	a.Panics(func() { p.(*state).addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, now) })
 }

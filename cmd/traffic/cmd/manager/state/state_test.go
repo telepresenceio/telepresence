@@ -1,11 +1,11 @@
-package state_test
+package state
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	manager "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 )
 
@@ -34,39 +34,42 @@ func TestStateInternal(topT *testing.T) {
 		demoAgent2 := testAgents["demo2"]
 
 		clock := &FakeClock{}
-		state := manager.NewState(ctx)
+		s := NewState(ctx).(*state)
 
-		h := state.AddAgent(helloAgent, clock.Now())
-		hp := state.AddAgent(helloProAgent, clock.Now())
-		d1 := state.AddAgent(demoAgent1, clock.Now())
-		d2 := state.AddAgent(demoAgent2, clock.Now())
+		h := s.AddAgent(helloAgent, clock.Now())
+		hp := s.AddAgent(helloProAgent, clock.Now())
+		d1 := s.AddAgent(demoAgent1, clock.Now())
+		d2 := s.AddAgent(demoAgent2, clock.Now())
 
-		a.Equal(helloAgent, state.GetAgent(h))
-		a.Equal(helloProAgent, state.GetAgent(hp))
-		a.Equal(demoAgent1, state.GetAgent(d1))
-		a.Equal(demoAgent2, state.GetAgent(d2))
+		a.Equal(helloAgent, s.GetAgent(h))
+		a.Equal(helloProAgent, s.GetAgent(hp))
+		a.Equal(demoAgent1, s.GetAgent(d1))
+		a.Equal(demoAgent2, s.GetAgent(d2))
 
-		agents := state.GetAllAgents()
+		agents := s.getAllAgents()
 		a.Len(agents, 4)
 		a.Contains(agents, helloAgent)
 		a.Contains(agents, helloProAgent)
 		a.Contains(agents, demoAgent1)
 		a.Contains(agents, demoAgent2)
 
-		agents = state.GetAgentsByName("hello", "default")
+		agents = s.getAgentsByName("hello", "default")
 		a.Len(agents, 1)
 		a.Contains(agents, helloAgent)
 
-		agents = state.GetAgentsByName("hello-pro", "default")
+		agents = s.getAgentsByName("hello-pro", "default")
 		a.Len(agents, 1)
 		a.Contains(agents, helloProAgent)
 
-		agents = state.GetAgentsByName("demo", "default")
+		agents = s.getAgentsByName("demo", "default")
 		a.Len(agents, 2)
 		a.Contains(agents, demoAgent1)
 		a.Contains(agents, demoAgent2)
 
-		agents = state.GetAgentsByName("does-not-exist", "default")
+		agents = s.getAgentsByName("does-not-exist", "default")
+		a.Len(agents, 0)
+
+		agents = s.getAgentsByName("hello", "does-not-exist")
 		a.Len(agents, 0)
 	})
 
@@ -75,53 +78,53 @@ func TestStateInternal(topT *testing.T) {
 
 		clock := &FakeClock{}
 		epoch := clock.Now()
-		state := manager.NewState(ctx)
+		s := NewState(ctx)
 
-		c1 := state.AddClient(testClients["alice"], clock.Now())
-		c2 := state.AddClient(testClients["bob"], clock.Now())
-		c3 := state.AddClient(testClients["cameron"], clock.Now())
+		c1 := s.AddClient(testClients["alice"], clock.Now())
+		c2 := s.AddClient(testClients["bob"], clock.Now())
+		c3 := s.AddClient(testClients["cameron"], clock.Now())
 
-		a.True(state.HasClient(c1))
-		a.True(state.HasClient(c2))
-		a.True(state.HasClient(c3))
-		a.False(state.HasClient("asdf"))
+		a.NotNil(s.GetClient(c1))
+		a.NotNil(s.GetClient(c2))
+		a.NotNil(s.GetClient(c3))
+		a.Nil(s.GetClient("asdf"))
 
-		a.Equal(testClients["alice"], state.GetClient(c1))
+		a.Equal(testClients["alice"], s.GetClient(c1))
 
 		clock.When = 10
 
-		a.True(state.Mark(c1, clock.Now()))
-		a.True(state.Mark(c2, clock.Now()))
-		a.False(state.Mark("asdf", clock.Now()))
+		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c1}}, clock.Now()))
+		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c2}}, clock.Now()))
+		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: "asdf"}}, clock.Now()))
 
 		moment := epoch.Add(5 * time.Second)
-		state.ExpireSessions(ctx, moment, moment)
+		s.ExpireSessions(ctx, moment, moment)
 
-		a.True(state.HasClient(c1))
-		a.True(state.HasClient(c2))
-		a.False(state.HasClient(c3))
+		a.NotNil(s.GetClient(c1))
+		a.NotNil(s.GetClient(c2))
+		a.Nil(s.GetClient(c3))
 
 		clock.When = 20
 
-		a.True(state.Mark(c1, clock.Now()))
-		a.True(state.Mark(c2, clock.Now()))
-		a.False(state.Mark(c3, clock.Now()))
+		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c1}}, clock.Now()))
+		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c2}}, clock.Now()))
+		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c3}}, clock.Now()))
 
 		moment = epoch.Add(5 * time.Second)
-		state.ExpireSessions(ctx, moment, moment)
+		s.ExpireSessions(ctx, moment, moment)
 
-		a.True(state.HasClient(c1))
-		a.True(state.HasClient(c2))
-		a.False(state.HasClient(c3))
+		a.NotNil(s.GetClient(c1))
+		a.NotNil(s.GetClient(c2))
+		a.Nil(s.GetClient(c3))
 
-		state.RemoveSession(ctx, c2)
+		s.RemoveSession(ctx, c2)
 
-		a.True(state.HasClient(c1))
-		a.False(state.HasClient(c2))
-		a.False(state.HasClient(c3))
+		a.NotNil(s.GetClient(c1))
+		a.Nil(s.GetClient(c2))
+		a.Nil(s.GetClient(c3))
 
-		a.True(state.Mark(c1, clock.Now()))
-		a.False(state.Mark(c2, clock.Now()))
-		a.False(state.Mark(c3, clock.Now()))
+		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c1}}, clock.Now()))
+		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c2}}, clock.Now()))
+		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c3}}, clock.Now()))
 	})
 }
