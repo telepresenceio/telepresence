@@ -52,6 +52,7 @@ type State interface {
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
+	ValidateAgentImage(string, bool) error
 	WaitForTempLogLevel(rpc.Manager_WatchLogLevelServer) error
 	WatchAgents(context.Context, func(sessionID string, agent *rpc.AgentInfo) bool) <-chan watchable.Snapshot[*rpc.AgentInfo]
 	WatchDial(sessionID string) <-chan *rpc.DialRequest

@@ -26,14 +26,16 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	mutator2 "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 var (
-	DisplayName                                                            = "OSS Traffic Manager" //nolint:gochecknoglobals // extension point
-	NewServiceFunc func(context.Context) (Service, context.Context, error) = NewService            //nolint:gochecknoglobals // extension point
+	DisplayName                 = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
+	NewServiceFunc              = NewService                          //nolint:gochecknoglobals // extension point
+	WithAgentImageRetrieverFunc = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
 )
 
 // Main starts up the traffic manager and blocks until it ends.
@@ -81,7 +83,7 @@ func MainWithEnv(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
-	ctx, imgRetErr := managerutil.WithAgentImageRetriever(ctx, mutator2.RegenerateAgentMaps)
+	ctx, imgRetErr := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
@@ -98,7 +100,7 @@ func MainWithEnv(ctx context.Context) error {
 	if imgRetErr != nil {
 		dlog.Errorf(ctx, "unable to initialize agent injector: %v", imgRetErr)
 	} else {
-		g.Go("agent-injector", mutator2.ServeMutator)
+		g.Go("agent-injector", mutator.ServeMutator)
 	}
 
 	g.Go("session-gc", mgr.runSessionGCLoop)

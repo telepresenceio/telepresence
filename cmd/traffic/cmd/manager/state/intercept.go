@@ -96,6 +96,19 @@ func (s *state) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	}, nil
 }
 
+func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error) {
+	if agentImage == "" {
+		err = errcat.User.Newf(
+			"intercepts are disabled because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
+	} else if extended {
+		if si := strings.LastIndexByte(agentImage, '/'); si > 0 && strings.HasPrefix(agentImage[si:], "/ambassador-telepresence-agent:") {
+			return nil
+		}
+		return fmt.Errorf("%q doesn't appear to be the name of an extended ambassador traffic-agent", agentImage)
+	}
+	return err
+}
+
 func (s *state) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc *agentconfig.Sidecar, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
 	defer tracing.EndAndRecord(span, err)
@@ -176,18 +189,9 @@ func (s *state) loadAgentConfig(
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
 
-	var agentImage string
-	if extended {
-		agentImage, err = managerutil.GetExtendedAgentImage(ctx)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		agentImage = managerutil.GetAgentImage(ctx)
-	}
-	if agentImage == "" {
-		return nil, errcat.User.Newf(
-			"intercepts are disabled because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
+	agentImage := managerutil.GetAgentImage(ctx)
+	if err = s.self.ValidateAgentImage(agentImage, extended); err != nil {
+		return nil, err
 	}
 	span.SetAttributes(
 		attribute.String("tel2.agent-image", agentImage),

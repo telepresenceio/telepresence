@@ -2,7 +2,6 @@ package managerutil
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -10,8 +9,18 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-type imageRetriever interface {
-	getImage() string
+type ImageRetriever interface {
+	GetImage() string
+}
+
+type ImageFromEnv string
+
+func (p ImageFromEnv) GetImage() string {
+	return string(p)
+}
+
+func LogAgentImageInfo(ctx context.Context, img string) {
+	dlog.Infof(ctx, "Using traffic-agent image %q", img)
 }
 
 type imagePoller struct {
@@ -64,17 +73,11 @@ func (p *imagePoller) start(ctx context.Context) {
 	}()
 }
 
-func (p *imagePoller) getImage() (img string) {
+func (p *imagePoller) GetImage() (img string) {
 	p.RLock()
 	img = p.img
 	p.RUnlock()
 	return
-}
-
-type imageFromEnv string
-
-func (p imageFromEnv) getImage() string {
-	return string(p)
 }
 
 type irKey struct{}
@@ -88,7 +91,7 @@ type irKey struct{}
 // Ambassador Cloud.
 func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context, string) error) (context.Context, error) {
 	env := GetEnv(ctx)
-	var ir imageRetriever
+	var ir ImageRetriever
 	var img string
 	if env.AgentImage == "" {
 		var err error
@@ -108,11 +111,11 @@ func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context,
 		ir = ip
 	} else {
 		img = env.QualifiedAgentImage()
-		ir = imageFromEnv(img)
+		ir = ImageFromEnv(img)
 	}
-	ctx = context.WithValue(ctx, irKey{}, ir)
+	ctx = WithResolvedAgentImageRetriever(ctx, ir)
 	if img != "" {
-		logAgentImageInfo(ctx, img)
+		LogAgentImageInfo(ctx, img)
 		if err := onChange(ctx, img); err != nil {
 			dlog.Error(ctx, err)
 		}
@@ -120,28 +123,16 @@ func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context,
 	return ctx, nil
 }
 
+func WithResolvedAgentImageRetriever(ctx context.Context, ir ImageRetriever) context.Context {
+	return context.WithValue(ctx, irKey{}, ir)
+}
+
 // GetAgentImage returns the fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.7.4",
 // or an empty string if no agent image has been configured.
 func GetAgentImage(ctx context.Context) string {
-	if ir, ok := ctx.Value(irKey{}).(imageRetriever); ok {
-		return ir.getImage()
+	if ir, ok := ctx.Value(irKey{}).(ImageRetriever); ok {
+		return ir.GetImage()
 	}
 	// The code isn't doing what it's supposed to do during startup.
 	panic("no ImageRetriever has been configured")
-}
-
-// GetExtendedAgentImage returns the fully qualified name of the extended traffic-agent image, e.g.
-// "docker.io/datawire/ambassador-telepresence-agent:1.12.8", or error indicating that the image name
-// doesn't match.
-// An empty string will be returned when no image has been configured.
-func GetExtendedAgentImage(ctx context.Context) (string, error) {
-	img := GetAgentImage(ctx)
-	if img == "" {
-		// We treat the "no image" condition the same as GetAgentImage, i.e. it's OK to return an empty string
-		return "", nil
-	}
-	if si := strings.LastIndexByte(img, '/'); si > 0 && strings.HasPrefix(img[si:], "/ambassador-telepresence-agent:") {
-		return img, nil
-	}
-	return "", fmt.Errorf("%q doesn't appear to be the name of an extended ambassador traffic-agent", img)
 }
