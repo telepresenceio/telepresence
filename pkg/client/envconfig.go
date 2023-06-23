@@ -100,13 +100,21 @@ func LoadEnvWith(lookupFunc func(key string) (string, bool)) (*Env, error) {
 			return olf(key)
 		}
 	}
-
-	var env Env
-	parser, err := envconfig.GenerateParser(reflect.TypeOf(env), envconfig.DefaultFieldTypeHandlers())
+	env, err := LoadEnvWithInto(lookupFunc, Env{})
 	if err != nil {
 		return nil, err
 	}
-	parser.ParseFromEnv(&env, lookupFunc)
-	env.lookupFunc = lookupFunc
-	return &env, nil
+	return env.(*Env), nil
+}
+
+func LoadEnvWithInto(lookupFunc func(key string) (string, bool), env any) (any, error) {
+	et := reflect.ValueOf(env)
+	parser, err := envconfig.GenerateParser(et.Type(), envconfig.DefaultFieldTypeHandlers())
+	if err != nil {
+		return nil, err
+	}
+	ptr := reflect.New(et.Type())
+	ptr.Elem().Set(et)
+	parser.ParseFromEnv(ptr.Interface(), lookupFunc)
+	return ptr.Interface(), nil
 }
