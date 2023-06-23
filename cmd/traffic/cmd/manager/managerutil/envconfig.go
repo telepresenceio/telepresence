@@ -73,8 +73,6 @@ type Env struct {
 	ClientConnectionTTL                  time.Duration `env:"CLIENT_CONNECTION_TTL,              		parser=time.ParseDuration"`
 }
 
-type envKey struct{}
-
 func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
 	return &agentmap.GeneratorConfig{
 		AgentPort:            e.AgentPort,
@@ -217,20 +215,32 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 	return fhs
 }
 
+type envKey struct{}
+
 func LoadEnv(ctx context.Context, lookupFunc func(string) (string, bool)) (context.Context, error) {
-	env := Env{}
-	parser, err := envconfig.GenerateParser(reflect.TypeOf(env), fieldTypeHandlers())
+	env, err := LoadEnvInto(Env{}, lookupFunc)
+	if err != nil {
+		return ctx, err
+	}
+	return WithEnv(ctx, env.(*Env)), nil
+}
+
+func LoadEnvInto(env any, lookupFunc func(string) (string, bool)) (any, error) {
+	et := reflect.ValueOf(env)
+	parser, err := envconfig.GenerateParser(et.Type(), fieldTypeHandlers())
 	if err != nil {
 		panic(err)
 	}
 	var errs derror.MultiError
-	warn, fatal := parser.ParseFromEnv(&env, lookupFunc)
+	ptr := reflect.New(et.Type())
+	ptr.Elem().Set(et)
+	warn, fatal := parser.ParseFromEnv(ptr.Interface(), lookupFunc)
 	errs = append(errs, warn...)
 	errs = append(errs, fatal...)
 	if len(errs) > 0 {
-		return ctx, errs
+		return nil, errs
 	}
-	return WithEnv(ctx, &env), nil
+	return ptr.Interface(), nil
 }
 
 func WithEnv(ctx context.Context, env *Env) context.Context {
@@ -238,9 +248,8 @@ func WithEnv(ctx context.Context, env *Env) context.Context {
 }
 
 func GetEnv(ctx context.Context) *Env {
-	env, ok := ctx.Value(envKey{}).(*Env)
-	if !ok {
-		return nil
+	if env, ok := ctx.Value(envKey{}).(*Env); ok {
+		return env
 	}
-	return env
+	panic("no Env has been set")
 }

@@ -38,19 +38,23 @@ var (
 
 // Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
-	dlog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
-
 	ctx, err := managerutil.LoadEnv(ctx, os.LookupEnv)
 	if err != nil {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
+	return MainWithEnv(ctx)
+}
+
+func MainWithEnv(ctx context.Context) error {
+	dlog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
 
 	env := managerutil.GetEnv(ctx)
 	var tracer *tracing.TraceServer
 
 	if env.TracingGrpcPort != 0 {
+		var err error
 		tracer, err = tracing.NewTraceServer(ctx, "traffic-manager",
-			attribute.String("tel2.agent-image", env.AgentRegistry+"/"+env.AgentImage),
+			attribute.String("tel2.agent-image", env.QualifiedAgentImage()),
 			attribute.String("tel2.managed-namespaces", strings.Join(env.ManagedNamespaces, ",")),
 			attribute.String("tel2.systema-endpoint", fmt.Sprintf("%s:%d", env.SystemAHost, env.SystemAPort)),
 			attribute.String("k8s.namespace", env.ManagerNamespace),
