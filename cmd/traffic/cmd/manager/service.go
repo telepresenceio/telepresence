@@ -138,7 +138,7 @@ func (s *service) State() state.State {
 }
 
 func (s *service) InstallID() string {
-	return s.clusterInfo.GetClusterID()
+	return s.clusterInfo.ID()
 }
 
 func (s *service) TrafficManagerConfig() []byte {
@@ -159,7 +159,7 @@ func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // when installing the traffic-manager.
 func (s *service) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
 	resp := rpc.License{
-		ClusterId: s.clusterInfo.GetClusterID(),
+		ClusterId: s.clusterInfo.ID(),
 	}
 
 	lb := license.BundleFromContext(ctx)
@@ -219,7 +219,7 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	installId := client.GetInstallId()
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
-		ClusterId: s.clusterInfo.GetClusterID(),
+		ClusterId: s.clusterInfo.ID(),
 		InstallId: &installId,
 	}, nil
 }
@@ -236,7 +236,7 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
-		ClusterId: s.clusterInfo.GetClusterID(),
+		ClusterId: s.clusterInfo.ID(),
 	}, nil
 }
 
@@ -533,7 +533,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	interceptInfo, err := s.state.AddIntercept(sessionID, s.clusterInfo.GetClusterID(), client, ciReq)
+	interceptInfo, err := s.state.AddIntercept(sessionID, s.clusterInfo.ID(), client, ciReq)
 	if err != nil {
 		return nil, err
 	}

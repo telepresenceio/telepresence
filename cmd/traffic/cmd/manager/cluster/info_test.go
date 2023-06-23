@@ -58,7 +58,7 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 
 		info := NewInfo(ctx)
 		require.NotNil(t, info)
-		require.Equal(t, info.GetClusterID(), defaultUID)
+		require.Equal(t, info.ID(), defaultUID)
 	})
 
 	t.Run("from non-default namespace", func(t *testing.T) {
@@ -71,7 +71,7 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 
 		info := NewInfo(ctx)
 		require.NotNil(t, info)
-		require.Equal(t, info.GetClusterID(), testUID)
+		require.Equal(t, info.ID(), testUID)
 	})
 
 	t.Run("fail no license", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 
 		info := NewInfo(ctx)
 		require.NotNil(t, info)
-		require.Equal(t, info.GetClusterID(), license.ClusterIDZero)
+		require.Equal(t, info.ID(), IDZero)
 	})
 
 	t.Run("bad license jwt", func(t *testing.T) {
@@ -110,6 +110,6 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 
 		info := NewInfo(ctx)
 		require.NotNil(t, info)
-		require.Equal(t, info.GetClusterID(), license.ClusterIDZero)
+		require.Equal(t, info.ID(), IDZero)
 	})
 }

@@ -19,7 +19,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -32,8 +31,8 @@ type Info interface {
 	// Watch changes of an ClusterInfo and write them on the given stream
 	Watch(context.Context, rpc.Manager_WatchClusterInfoServer) error
 
-	// GetClusterID returns the ClusterID
-	GetClusterID() string
+	// ID of the cluster
+	ID() string
 
 	// GetTrafficManagerPods acquires all pods that have `traffic-manager` in
 	// their name
@@ -56,6 +55,8 @@ type info struct {
 	// clusterID is the UID of the default namespace
 	clusterID string
 }
+
+const IDZero = "00000000-0000-0000-0000-000000000000"
 
 func NewInfo(ctx context.Context) Info {
 	env := managerutil.GetEnv(ctx)
@@ -86,10 +87,10 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	client := ki.CoreV1()
-	if oi.clusterID, err = getClusterID(ctx, client, env.ManagerNamespace); err != nil {
+	if oi.clusterID, err = getID(ctx, client, env.ManagerNamespace); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
-		oi.clusterID = license.ClusterIDZero
+		oi.clusterID = IDZero
 		dlog.Warnf(ctx, "unable to get namespace \"default\", will use default clusterID: %s: %v",
 			oi.clusterID, err)
 	}
@@ -343,7 +344,7 @@ func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfo
 	return oi.ciSubs.subscriberLoop(ctx, oiStream)
 }
 
-func (oi *info) GetClusterID() string {
+func (oi *info) ID() string {
 	return oi.clusterID
 }
 

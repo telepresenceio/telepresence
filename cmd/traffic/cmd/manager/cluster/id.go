@@ -11,17 +11,17 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 )
 
-func getClusterID(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
+func getID(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
 	// Get the clusterID from the default namespace, or from the manager's namespace if
 	// the traffic-manager doesn't have access to the default namespace.
-	cid, err := clusterIDFromNamespace(ctx, client, "default")
+	cid, err := idFromNamespace(ctx, client, "default")
 	if err == nil {
 		return cid, nil
 	}
 
 	dlog.Infof(ctx, "unable to get namespace \"default\", will try %q instead: %v", namespace, err)
 
-	cid, err = clusterIDFromNamespace(ctx, client, namespace)
+	cid, err = idFromNamespace(ctx, client, namespace)
 	if err == nil {
 		return cid, nil
 	}
@@ -46,7 +46,7 @@ func getClusterID(ctx context.Context, client v1.CoreV1Interface, namespace stri
 	return cid, err
 }
 
-func clusterIDFromNamespace(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
+func idFromNamespace(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
 	opts := metav1.GetOptions{}
 	ns, err := client.Namespaces().Get(ctx, namespace, opts)
 	if err == nil {
