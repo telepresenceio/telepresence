@@ -87,7 +87,7 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	client := ki.CoreV1()
-	if oi.clusterID, err = getID(ctx, client, env.ManagerNamespace); err != nil {
+	if oi.clusterID, err = GetIDFunc(ctx, client, env.ManagerNamespace); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = IDZero

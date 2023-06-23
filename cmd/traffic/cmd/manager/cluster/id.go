@@ -11,7 +11,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 )
 
-func getID(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
+var GetIDFunc = GetID //nolint:gochecknoglobals // extension point
+
+func GetID(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
 	// Get the clusterID from the default namespace, or from the manager's namespace if
 	// the traffic-manager doesn't have access to the default namespace.
 	cid, err := idFromNamespace(ctx, client, "default")
