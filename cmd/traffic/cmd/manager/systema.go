@@ -12,8 +12,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	systemarpc "github.com/telepresenceio/telepresence/rpc/v2/systema"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/systema"
 )
 
 type ReverseConnProvider struct {

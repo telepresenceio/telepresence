@@ -19,8 +19,8 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"

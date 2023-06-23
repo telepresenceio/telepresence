@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
 	manager "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
+	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 )
 
 type FakeClock struct {

@@ -28,9 +28,9 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
-	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	mockmanagerutil "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil/mocks"
+	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
