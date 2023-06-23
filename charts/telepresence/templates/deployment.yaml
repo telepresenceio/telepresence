@@ -236,6 +236,9 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+        {{- if and .trafficManager .trafficManager.envTemplate }}
+          {{- template "traffic-manager-env" . }}
+        {{- end }}
           ports:
           - name: api
             containerPort: {{ .apiPort }}
@@ -275,6 +278,9 @@ spec:
           - name: tls
             mountPath: /var/run/secrets/tls
             readOnly: true
+        {{- if and .trafficManager .trafficManager.mountsTemplate }}
+          {{- template "traffic-manager-mounts" . }}
+        {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -307,6 +313,9 @@ spec:
         secret:
           defaultMode: 420
           secretName: {{ .agentInjector.secret.name }}
+    {{- if and .trafficManager .trafficManager.volsTemplate }}
+      {{- template "traffic-manager-vols" . }}
+    {{- end }}
       serviceAccount: traffic-manager
       serviceAccountName: traffic-manager
 {{- end }}
