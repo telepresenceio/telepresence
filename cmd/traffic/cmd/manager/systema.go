@@ -59,7 +59,7 @@ func (p *ReverseConnProvider) GetInstallID(ctx context.Context) (string, error) 
 
 func (p *ReverseConnProvider) GetExtraHeaders(ctx context.Context) (map[string]string, error) {
 	return map[string]string{
-		"X-Telepresence-ManagerID": p.mgr.ID,
+		"X-Telepresence-ManagerID": p.mgr.ID(),
 	}, nil
 }
 

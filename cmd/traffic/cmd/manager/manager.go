@@ -168,6 +168,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 	httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
 	}))
+
 	sc := &dhttp.ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
@@ -181,7 +182,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 			}
 		}),
 	}
-	s.RegisterServers(grpcHandler)
+	s.self.RegisterServers(grpcHandler)
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 

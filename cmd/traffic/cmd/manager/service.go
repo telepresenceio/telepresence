@@ -47,22 +47,24 @@ type Clock interface {
 
 type Service interface {
 	rpc.ManagerServer
+	ID() string
 	InstallID() string
-	RegisterServers(grpcHandler *grpc.Server)
+	MakeInterceptID(context.Context, string, string) (string, error)
+	RegisterServers(*grpc.Server)
 	TrafficManagerConfig() []byte
 	State() state.State
 
 	// unexported methods.
 	runConfigWatcher(context.Context) error
 	runSessionGCLoop(context.Context) error
-	servePrometheus(context.Context) error
 	serveHTTP(context.Context) error
+	servePrometheus(context.Context) error
 }
 
 type service struct {
 	ctx                context.Context
 	clock              Clock
-	ID                 string
+	id                 string
 	state              state.State
 	clusterInfo        cluster.Info
 	cloudConfig        *rpc.AmbassadorCloudConfig
@@ -70,6 +72,9 @@ type service struct {
 	tokenService       cloudtoken.Service
 	activeHttpRequests int32
 	activeGrpcRequests int32
+
+	// Possibly extended version of the service. Use when calling interface methods.
+	self Service
 
 	rpc.UnsafeManagerServer
 }
@@ -113,7 +118,7 @@ func NewService(ctx context.Context) (Service, context.Context, error) {
 	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &service{
 		clock:        wall{},
-		ID:           uuid.New().String(),
+		id:           uuid.New().String(),
 		tokenService: cloudtoken.NewPatchConfigmapIfNotPresent(ctx),
 	}
 	cloudConfig, err := getCloudConfig(ctx)
@@ -129,8 +134,21 @@ func NewService(ctx context.Context) (Service, context.Context, error) {
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
 	ret.clusterInfo = cluster.NewInfo(ctx)
-	ret.state = state.NewState(ctx)
+	ret.state = state.NewStateFunc(ctx)
+	ret.self = ret
 	return ret, ctx, nil
+}
+
+func (s *service) SetSelf(self Service) {
+	s.self = self
+}
+
+func (s *service) ClusterInfo() cluster.Info {
+	return s.clusterInfo
+}
+
+func (s *service) ID() string {
+	return s.id
 }
 
 func (s *service) State() state.State {
@@ -576,7 +594,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return interceptInfo, nil
 }
 
-func (s *service) makeinterceptID(_ context.Context, sessionID string, name string) (string, error) {
+func (s *service) MakeInterceptID(_ context.Context, sessionID string, name string) (string, error) {
 	// When something without a session ID (e.g. System A) calls this function,
 	// it is sending the intercept ID as the name, so we use that.
 	//
@@ -598,7 +616,7 @@ const systemaCallTimeout = 3 * time.Second
 
 func (s *service) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
 	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
-	interceptID, err := s.makeinterceptID(ctx, req.GetSession().GetSessionId(), req.GetName())
+	interceptID, err := s.MakeInterceptID(ctx, req.GetSession().GetSessionId(), req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -788,7 +806,7 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 // GetIntercept gets an intercept info from intercept name.
 func (s *service) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
-	interceptID, err := s.makeinterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
+	interceptID, err := s.MakeInterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())
 	if err != nil {
 		return nil, err
 	}
