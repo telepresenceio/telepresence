@@ -355,17 +355,6 @@ func (s *state) CountTunnels() int {
 	return int(atomic.LoadInt32(&s.tunnelCounter))
 }
 
-func (s *state) WatchClients(
-	ctx context.Context,
-	filter func(sessionID string, client *rpc.ClientInfo) bool,
-) <-chan watchable.Snapshot[*rpc.ClientInfo] {
-	if filter == nil {
-		return s.clients.Subscribe(ctx)
-	} else {
-		return s.clients.SubscribeSubset(ctx, filter)
-	}
-}
-
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////
 
 func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
