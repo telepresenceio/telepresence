@@ -17,7 +17,7 @@ type ambassadorCloudTunnel interface {
 	Recv() (*systema.Chunk, error)
 }
 
-// reverseConn is an unbufferedConn implementation that uses a gRPC
+// reverseConn is an UnbufferedConn implementation that uses a gRPC
 // "/telepresence.systema/SystemAProxy/ReverseConnection" stream as the underlying transport.
 type reverseConn struct {
 	conn  ambassadorCloudTunnel
@@ -31,7 +31,7 @@ type reverseConn struct {
 // resources associated with it.  The GC will not be able to collect it if you do not call
 // `.Close()`.
 func WrapAmbassadorCloudTunnelClient(impl systema.SystemAProxy_ReverseConnectionClient) Conn {
-	return wrapUnbufferedConn(reverseConn{conn: impl})
+	return WrapUnbufferedConn(reverseConn{conn: impl})
 }
 
 // WrapAmbassadorCloudTunnel takes a systema.SystemAProxy_ReverseConnectionServer and wraps it so
@@ -41,10 +41,10 @@ func WrapAmbassadorCloudTunnelClient(impl systema.SystemAProxy_ReverseConnection
 // resources associated with it.  The GC will not be able to collect it if you do not call
 // `.Close()`.
 func WrapAmbassadorCloudTunnelServer(impl systema.SystemAProxy_ReverseConnectionServer, closeFn func()) Conn {
-	return wrapUnbufferedConn(reverseConn{conn: impl, close: closeFn})
+	return WrapUnbufferedConn(reverseConn{conn: impl, close: closeFn})
 }
 
-// Recv implements unbufferedConn.
+// Recv implements UnbufferedConn.
 func (c reverseConn) Recv() ([]byte, error) {
 	chunk, err := c.conn.Recv()
 
@@ -56,14 +56,14 @@ func (c reverseConn) Recv() ([]byte, error) {
 	return data, err
 }
 
-// Send implements unbufferedConn.
+// Send implements UnbufferedConn.
 func (c reverseConn) Send(data []byte) error {
 	return c.conn.Send(&systema.Chunk{
 		Content: data,
 	})
 }
 
-// CloseOnce implements unbufferedConn.
+// CloseOnce implements UnbufferedConn.
 func (c reverseConn) CloseOnce() error {
 	var err error
 	if client, isClient := c.conn.(grpc.ClientStream); isClient {
@@ -75,41 +75,41 @@ func (c reverseConn) CloseOnce() error {
 	return err
 }
 
-// MTU implements unbufferedConn.
+// MTU implements UnbufferedConn.
 func (c reverseConn) MTU() int {
 	// 3MiB; assume the other end's gRPC library uses the go-grpc default 4MiB, plus plenty of
 	// room for overhead.
 	return 3 * 1024 * 1024
 }
 
-// LocalAddr implements unbufferedConn.
+// LocalAddr implements UnbufferedConn.
 func (c reverseConn) LocalAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
-		return addr{
-			net:  "tp-reverseconnection",
-			addr: "localrole=client,localhostname=manager",
+		return Addr{
+			Net:  "tp-reverseconnection",
+			Addr: "localrole=client,localhostname=manager",
 		}
 	} else {
-		return addr{
-			net:  "tp-reverseconnection",
-			addr: "localrole=server,localhostname=acloud",
+		return Addr{
+			Net:  "tp-reverseconnection",
+			Addr: "localrole=server,localhostname=acloud",
 		}
 	}
 }
 
-// RemoteAddr implements unbufferedConn.
+// RemoteAddr implements UnbufferedConn.
 func (c reverseConn) RemoteAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
-		return addr{
-			net:  "tp-reverseconnection",
-			addr: "localrole=client,remotehostname=acloud",
+		return Addr{
+			Net:  "tp-reverseconnection",
+			Addr: "localrole=client,remotehostname=acloud",
 		}
 	} else {
-		return addr{
-			net:  "tp-reverseconnection",
-			addr: "localrole=server,remotehostname=manager",
+		return Addr{
+			Net:  "tp-reverseconnection",
+			Addr: "localrole=server,remotehostname=manager",
 		}
 	}
 }

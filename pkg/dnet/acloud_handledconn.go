@@ -38,7 +38,7 @@ func DialFromAmbassadorCloud(ctx context.Context, managerClient manager.ManagerP
 		_ = impl.CloseSend()
 		return nil, err
 	}
-	return wrapUnbufferedConn(handledConn{conn: impl}), nil
+	return WrapUnbufferedConn(handledConn{conn: impl}), nil
 }
 
 // AcceptFromAmbassadorCloud is used by a Telepresence manger to accept a connection to an intercept
@@ -56,17 +56,17 @@ func AcceptFromAmbassadorCloud(systema manager.ManagerProxy_HandleConnectionServ
 	}
 	interceptID = chunkValue.InterceptId
 
-	return interceptID, wrapUnbufferedConn(handledConn{conn: systema, close: closeFn}), nil
+	return interceptID, WrapUnbufferedConn(handledConn{conn: systema, close: closeFn}), nil
 }
 
-// handledConn is an unbufferedConn implementation that uses a gRPC
+// handledConn is an UnbufferedConn implementation that uses a gRPC
 // "/telepresence.manager/ManagerProxy/HandleConnection" stream as the underlying transport.
 type handledConn struct {
 	conn  handledConnectionImpl
 	close func()
 }
 
-// Recv implements unbufferedConn.
+// Recv implements UnbufferedConn.
 func (c handledConn) Recv() ([]byte, error) {
 	chunk, err := c.conn.Recv()
 
@@ -91,7 +91,7 @@ func (c handledConn) Recv() ([]byte, error) {
 	return data, err
 }
 
-// Send implements unbufferedConn.
+// Send implements UnbufferedConn.
 func (c handledConn) Send(data []byte) error {
 	return c.conn.Send(&manager.ConnectionChunk{
 		Value: &manager.ConnectionChunk_Data{
@@ -100,7 +100,7 @@ func (c handledConn) Send(data []byte) error {
 	})
 }
 
-// CloseOnce implements unbufferedConn.
+// CloseOnce implements UnbufferedConn.
 func (c handledConn) CloseOnce() error {
 	var err error
 	if client, isClient := c.conn.(grpc.ClientStream); isClient {
@@ -112,41 +112,41 @@ func (c handledConn) CloseOnce() error {
 	return err
 }
 
-// MTU implements unbufferedConn.
+// MTU implements UnbufferedConn.
 func (c handledConn) MTU() int {
 	// 3MiB; assume the other end's gRPC library uses the go-grpc default 4MiB, plus plenty of
 	// room for overhead.
 	return 3 * 1024 * 1024
 }
 
-// LocalAddr implements unbufferedConn.
+// LocalAddr implements UnbufferedConn.
 func (c handledConn) LocalAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
-		return addr{
-			net:  "tp-handleconnection",
-			addr: "localrole=client,localhostname=acloud",
+		return Addr{
+			Net:  "tp-handleconnection",
+			Addr: "localrole=client,localhostname=acloud",
 		}
 	} else {
-		return addr{
-			net:  "tp-handleconnection",
-			addr: "localrole=server,localhostname=manager",
+		return Addr{
+			Net:  "tp-handleconnection",
+			Addr: "localrole=server,localhostname=manager",
 		}
 	}
 }
 
-// RemoteAddr implements unbufferedConn.
+// RemoteAddr implements UnbufferedConn.
 func (c handledConn) RemoteAddr() net.Addr {
 	_, isClient := c.conn.(grpc.ClientStream)
 	if isClient {
-		return addr{
-			net:  "tp-handleconnection",
-			addr: "localrole=client,remotehostname=manager",
+		return Addr{
+			Net:  "tp-handleconnection",
+			Addr: "localrole=client,remotehostname=manager",
 		}
 	} else {
-		return addr{
-			net:  "tp-handleconnection",
-			addr: "localrole=client,remotehostname=acloud",
+		return Addr{
+			Net:  "tp-handleconnection",
+			Addr: "localrole=client,remotehostname=acloud",
 		}
 	}
 }
