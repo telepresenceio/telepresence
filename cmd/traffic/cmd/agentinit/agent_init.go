@@ -14,7 +14,6 @@ import (
 
 	"github.com/coreos/go-iptables/iptables"
 	core "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
@@ -29,7 +28,7 @@ const (
 )
 
 type config struct {
-	agentconfig.Sidecar
+	agentconfig.SidecarExt
 }
 
 func loadConfig(ctx context.Context) (*config, error) {
@@ -39,7 +38,8 @@ func loadConfig(ctx context.Context) (*config, error) {
 	}
 
 	c := config{}
-	if err = yaml.Unmarshal(bs, &c.Sidecar); err != nil {
+	c.SidecarExt, err = agentconfig.UnmarshalYAML(bs)
+	if err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
 	return &c, nil
@@ -58,7 +58,7 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 	for _, proto := range []core.Protocol{core.ProtocolTCP, core.ProtocolUDP} {
 		hasRule := false
 	nextCn:
-		for _, cn := range c.Containers {
+		for _, cn := range c.AgentConfig().Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				if proto == ic.Protocol {
 					hasRule = true
@@ -79,7 +79,7 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 		}
 
 		// Use our inbound chain to direct traffic coming into the app port to the agent port.
-		for _, cn := range c.Containers {
+		for _, cn := range c.AgentConfig().Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				if proto == ic.Protocol {
 					err = iptables.AppendUnique(nat, chain,

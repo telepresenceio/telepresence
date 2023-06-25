@@ -44,6 +44,8 @@ func Main(ctx context.Context, _ ...string) error {
 	if err != nil {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
+	env := managerutil.GetEnv(ctx)
+	agentmap.GeneratorConfigFunc = env.GeneratorConfig
 	return MainWithEnv(ctx)
 }
 

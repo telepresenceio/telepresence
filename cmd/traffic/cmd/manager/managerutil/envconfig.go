@@ -73,8 +73,8 @@ type Env struct {
 	ClientConnectionTTL                  time.Duration `env:"CLIENT_CONNECTION_TTL,              		parser=time.ParseDuration"`
 }
 
-func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
-	return &agentmap.GeneratorConfig{
+func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorConfig, error) {
+	return &agentmap.BasicGeneratorConfig{
 		AgentPort:            e.AgentPort,
 		APIPort:              e.APIPort,
 		TracingPort:          e.TracingGrpcPort,

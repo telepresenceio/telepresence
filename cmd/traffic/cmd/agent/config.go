@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
-	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -18,14 +17,15 @@ import (
 )
 
 type Config interface {
+	Ext() agentconfig.SidecarExt
 	AgentConfig() *agentconfig.Sidecar
 	HasMounts(ctx context.Context) bool
 	PodIP() string
 }
 
 type config struct {
-	agentconfig.Sidecar
-	podIP string
+	sidecarExt agentconfig.SidecarExt
+	podIP      string
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
@@ -35,18 +35,20 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	}
 
 	c := config{}
-	if err = yaml.Unmarshal(bs, &c.Sidecar); err != nil {
+	c.sidecarExt, err = agentconfig.UnmarshalYAML(bs)
+	if err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
-	if c.LogLevel != "" {
+	sc := c.AgentConfig()
+	if sc.LogLevel != "" {
 		// Override default from environment
-		log.SetLevel(ctx, c.LogLevel)
+		log.SetLevel(ctx, sc.LogLevel)
 	}
-	if c.ManagerPort == 0 {
-		c.ManagerPort = 8081
+	if sc.ManagerPort == 0 {
+		sc.ManagerPort = 8081
 	}
 	c.podIP = dos.Getenv(ctx, "_TEL_AGENT_POD_IP")
-	for _, cn := range c.Containers {
+	for _, cn := range sc.Containers {
 		if err := addAppMounts(ctx, cn); err != nil {
 			return nil, err
 		}
@@ -54,17 +56,21 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	return &c, nil
 }
 
-func (c *config) AgentConfig() *agentconfig.Sidecar {
-	return &c.Sidecar
-}
-
 func (c *config) HasMounts(ctx context.Context) bool {
-	for _, cn := range c.Containers {
+	for _, cn := range c.AgentConfig().Containers {
 		if len(cn.Mounts) > 0 {
 			return true
 		}
 	}
 	return false
+}
+
+func (c *config) Ext() agentconfig.SidecarExt {
+	return c.sidecarExt
+}
+
+func (c *config) AgentConfig() *agentconfig.Sidecar {
+	return c.sidecarExt.AgentConfig()
 }
 
 func (c *config) PodIP() string {

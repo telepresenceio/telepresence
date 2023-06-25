@@ -233,7 +233,7 @@ func (i *genYAMLCommand) withK8sInterface(ctx context.Context, flagMap map[strin
 }
 
 type genConfigMap struct {
-	agentmap.GeneratorConfig
+	agentmap.BasicGeneratorConfig
 	*genYAMLCommand
 }
 
@@ -256,6 +256,7 @@ func genConfigMapSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 			return info.run(cmd, flags.Map(kubeFlags))
 		},
 	}
+
 	flags := cmd.Flags()
 	flags.StringVarP(&info.inputFile, "input", "i", "",
 		"Path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin.. Mutually exclusive to --workload")
@@ -276,11 +277,11 @@ func genConfigMapSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (i *genConfigMap) generateConfigMap(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
-	ac, err := agentmap.Generate(ctx, wl, &i.GeneratorConfig)
+	ac, err := i.BasicGeneratorConfig.Generate(ctx, wl)
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	return ac, nil
+	return ac.AgentConfig(), nil
 }
 
 func (g *genConfigMap) run(cmd *cobra.Command, kubeFlags map[string]string) error {

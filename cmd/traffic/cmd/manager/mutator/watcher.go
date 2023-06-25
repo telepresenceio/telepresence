@@ -18,7 +18,6 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
-	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -33,16 +32,12 @@ import (
 )
 
 type Map interface {
-	GetInto(string, string, any) (bool, error)
+	Get(string, string) (agentconfig.SidecarExt, error)
 	Run(context.Context) error
 	Delete(context.Context, string, string) error
-	Store(context.Context, *agentconfig.Sidecar, bool) error
+	Store(context.Context, agentconfig.SidecarExt, bool) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
 	UninstallV25(ctx context.Context)
-}
-
-func decode(v string, into any) error {
-	return yaml.Unmarshal([]byte(v), into)
 }
 
 func Load(ctx context.Context) (m Map, err error) {
@@ -59,11 +54,12 @@ func Load(ctx context.Context) (m Map, err error) {
 	return NewWatcher(agentconfig.ConfigMap, ns...), nil
 }
 
-func (e *entry) workload(ctx context.Context) (*agentconfig.Sidecar, k8sapi.Workload, error) {
-	ac := &agentconfig.Sidecar{}
-	if err := decode(e.value, ac); err != nil {
+func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Workload, error) {
+	scx, err := agentconfig.UnmarshalYAML([]byte(e.value))
+	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode ConfigMap entry %q into an agent config", e.value)
 	}
+	ac := scx.AgentConfig()
 	wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 	if err != nil {
 		return nil, nil, err
@@ -151,12 +147,11 @@ func triggerRolloutReplicaSet(ctx context.Context, wl k8sapi.Workload, rs *v1.Re
 // RegenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
 // and then, if any of the entries changed, it updates the map.
 func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
-	env := managerutil.GetEnv(ctx)
-	gc, err := env.GeneratorConfig(agentImage)
+	gc, err := agentmap.GeneratorConfigFunc(agentImage)
 	if err != nil {
 		return err
 	}
-	nss := env.ManagedNamespaces
+	nss := managerutil.GetEnv(ctx).ManagedNamespaces
 	if len(nss) == 0 {
 		return regenerateAgentMaps(ctx, "", gc)
 	}
@@ -170,7 +165,7 @@ func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
 
 // regenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
 // and then, if any of the entries changed, it updates the map.
-func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorConfig) error {
+func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorConfig) error {
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
 	cml, err := api.ConfigMaps(ns).List(ctx, meta.SingleObject(meta.ObjectMeta{
 		Name: agentconfig.ConfigMap,
@@ -185,7 +180,7 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorC
 		ns := cm.Namespace
 		for n, d := range cm.Data {
 			e := &entry{name: n, namespace: ns, value: d}
-			ac, wl, err := e.workload(ctx)
+			acx, wl, err := e.workload(ctx)
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					return err
@@ -194,18 +189,18 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc *agentmap.GeneratorC
 				changed = true
 				continue
 			}
-			nc, err := agentmap.Generate(ctx, wl, gc)
+			ncx, err := gc.Generate(ctx, wl)
 			if err != nil {
 				return err
 			}
-			if cmp.Equal(ac, nc) {
+			if cmp.Equal(acx, ncx) {
 				continue
 			}
-			js, err := yaml.Marshal(nc)
+			yml, err := ncx.Marshal()
 			if err != nil {
 				return err
 			}
-			cm.Data[n] = string(js)
+			cm.Data[n] = string(yml)
 			changed = true
 		}
 		if changed {
@@ -269,15 +264,16 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 	)
 	defer span.End()
 	dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
-	ac, wl, err := e.workload(ctx)
-	ac.RecordInSpan(span)
-	tracing.RecordWorkloadInfo(span, wl)
+	scx, wl, err := e.workload(ctx)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			dlog.Error(ctx, err)
 		}
 		return
 	}
+	scx.RecordInSpan(span)
+	tracing.RecordWorkloadInfo(span, wl)
+	ac := scx.AgentConfig()
 	if ac.Manual {
 		span.SetAttributes(attribute.Bool("tel2.manual", ac.Manual))
 		// Manually added, just ignore
@@ -289,14 +285,14 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 			// Unable to get image. This has been logged elsewhere
 			return
 		}
-		gc, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
+		gc, err := agentmap.GeneratorConfigFunc(img)
 		if err != nil {
 			dlog.Error(ctx, err)
 			return
 		}
-		if ac, err = agentmap.Generate(ctx, wl, gc); err != nil {
+		if acx, err := gc.Generate(ctx, wl); err != nil {
 			dlog.Error(ctx, err)
-		} else if err = c.Store(ctx, ac, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
+		} else if err = c.Store(ctx, acx, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
 		}
 		return
@@ -311,15 +307,16 @@ func (*configWatcher) handleDelete(ctx context.Context, e entry) {
 	)
 	defer span.End()
 	dlog.Debugf(ctx, "del %s.%s", e.name, e.namespace)
-	ac, wl, err := e.workload(ctx)
-	tracing.RecordWorkloadInfo(span, wl)
-	ac.RecordInSpan(span)
+	scx, wl, err := e.workload(ctx)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			dlog.Error(ctx, err)
 		}
 		return
 	}
+	tracing.RecordWorkloadInfo(span, wl)
+	scx.RecordInSpan(span)
+	ac := scx.AgentConfig()
 	if ac.Create || ac.Manual {
 		// Deleted before it was generated or manually added, just ignore
 		return
@@ -327,7 +324,7 @@ func (*configWatcher) handleDelete(ctx context.Context, e entry) {
 	triggerRollout(ctx, wl)
 }
 
-func (c *configWatcher) GetInto(key, ns string, into any) (bool, error) {
+func (c *configWatcher) Get(key, ns string) (agentconfig.SidecarExt, error) {
 	c.RLock()
 	var v string
 	vs, ok := c.data[ns]
@@ -336,12 +333,9 @@ func (c *configWatcher) GetInto(key, ns string, into any) (bool, error) {
 	}
 	c.RUnlock()
 	if !ok {
-		return false, nil
+		return nil, nil
 	}
-	if err := decode(v, into); err != nil {
-		return false, err
-	}
-	return true, nil
+	return agentconfig.UnmarshalYAML([]byte(v))
 }
 
 // Delete will delete an agent config from the agents ConfigMap for the given namespace. It will
@@ -360,11 +354,11 @@ func (c *configWatcher) Delete(ctx context.Context, name, namespace string) erro
 	if !ok {
 		return nil
 	}
-	var ac agentconfig.Sidecar
-	if err = decode(yml, &ac); err != nil {
+	scx, err := agentconfig.UnmarshalYAML([]byte(yml))
+	if err != nil {
 		return err
 	}
-	if ac.Manual {
+	if scx.AgentConfig().Manual {
 		return nil
 	}
 	delete(cm.Data, name)
@@ -376,12 +370,13 @@ func (c *configWatcher) Delete(ctx context.Context, name, namespace string) erro
 // Store will store an agent config in the agents ConfigMap for the given namespace. It will
 // also update the current snapshot if the updateSnapshot is true. This update will prevent
 // the rollout that otherwise occur when the ConfigMap is updated.
-func (c *configWatcher) Store(ctx context.Context, ac *agentconfig.Sidecar, updateSnapshot bool) error {
-	js, err := yaml.Marshal(ac)
+func (c *configWatcher) Store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error {
+	js, err := acx.Marshal()
 	if err != nil {
 		return err
 	}
 
+	ac := acx.AgentConfig()
 	yml := string(js)
 	ns := ac.Namespace
 	c.RLock()
@@ -513,9 +508,9 @@ func (c *configUpdater) updateConfigMap() error {
 	cmData = maps.Copy(c.cw.data[c.namespace])
 
 	for agentName, yml := range c.Config {
-		var currAc agentconfig.Sidecar
 		// Ensure that we're not about to overwrite a manually added config entry
-		if err = decode(yml, &currAc); err == nil && currAc.Manual {
+		scx, err := agentconfig.UnmarshalYAML([]byte(yml))
+		if err == nil && scx.AgentConfig().Manual {
 			dlog.Warnf(c.ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", agentName, c.namespace)
 			continue
 		}
@@ -656,7 +651,7 @@ func (c *configWatcher) configMapEventHandler(ctx context.Context, evCh <-chan w
 	}
 }
 
-func (c *configWatcher) configsAffectedBySvcUID(ctx context.Context, nsData map[string]string, uid types.UID) []*agentconfig.Sidecar {
+func (c *configWatcher) configsAffectedBySvcUID(ctx context.Context, nsData map[string]string, uid types.UID) []agentconfig.SidecarExt {
 	references := func(ac *agentconfig.Sidecar, uid types.UID) bool {
 		for _, cn := range ac.Containers {
 			for _, ic := range cn.Intercepts {
@@ -668,34 +663,34 @@ func (c *configWatcher) configsAffectedBySvcUID(ctx context.Context, nsData map[
 		return false
 	}
 
-	var affected []*agentconfig.Sidecar
+	var affected []agentconfig.SidecarExt
 	for _, cfg := range nsData {
-		ac := &agentconfig.Sidecar{}
-		if err := decode(cfg, ac); err != nil {
+		scx, err := agentconfig.UnmarshalYAML([]byte(cfg))
+		if err != nil {
 			dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", cfg)
-		} else if references(ac, uid) {
-			affected = append(affected, ac)
+		} else if references(scx.AgentConfig(), uid) {
+			affected = append(affected, scx)
 		}
 	}
 	return affected
 }
 
-func (c *configWatcher) configsAffectedByWorkloads(ctx context.Context, nsData map[string]string, wls []k8sapi.Workload) []*agentconfig.Sidecar {
-	var affected []*agentconfig.Sidecar
+func (c *configWatcher) configsAffectedByWorkloads(ctx context.Context, nsData map[string]string, wls []k8sapi.Workload) []agentconfig.SidecarExt {
+	var affected []agentconfig.SidecarExt
 	for _, wl := range wls {
 		if nsd, ok := nsData[wl.GetName()]; ok {
-			ac := &agentconfig.Sidecar{}
-			if err := decode(nsd, ac); err != nil {
+			scx, err := agentconfig.UnmarshalYAML([]byte(nsd))
+			if err != nil {
 				dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", nsd)
 			} else {
-				affected = append(affected, ac)
+				affected = append(affected, scx)
 			}
 		}
 	}
 	return affected
 }
 
-func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []*agentconfig.Sidecar {
+func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []agentconfig.SidecarExt {
 	ns := svc.Namespace
 
 	var wls []k8sapi.Workload
@@ -735,12 +730,13 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 	if img == "" {
 		return
 	}
-	cfg, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	cfg, err := agentmap.GeneratorConfigFunc(img)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
 	}
-	for _, ac := range c.affectedConfigs(ctx, svc, isDelete) {
+	for _, scx := range c.affectedConfigs(ctx, svc, isDelete) {
+		ac := scx.AgentConfig()
 		wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 		if err != nil {
 			if errors.IsNotFound(err) {
@@ -754,7 +750,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 			continue
 		}
 		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-		acn, err := agentmap.Generate(ctx, wl, cfg)
+		acn, err := cfg.Generate(ctx, wl)
 		if err != nil {
 			dlog.Error(ctx, err)
 			continue
@@ -849,13 +845,14 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 	for ns, wlm := range c.data {
 		for k, v := range wlm {
 			e := &entry{name: k, namespace: ns, value: v, link: trace.LinkFromContext(ctx)}
-			ac, wl, err := e.workload(ctx)
+			scx, wl, err := e.workload(ctx)
 			if err != nil {
 				if !errors.IsNotFound(err) {
 					dlog.Errorf(ctx, "unable to get workload for %s.%s %s: %v", k, ns, v, err)
 				}
 				continue
 			}
+			ac := scx.AgentConfig()
 			if ac.Create || ac.Manual {
 				// Deleted before it was generated or manually added, just ignore
 				continue
@@ -885,15 +882,15 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 		dlog.Warn(ctx, "no traffic-agents will be injected because the traffic-manager is unable to determine which image to use")
 		return
 	}
-	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
+	gc, err := agentmap.GeneratorConfigFunc(img)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
 	}
 	for _, wl := range affectedWorkloads {
-		ac, err := agentmap.Generate(ctx, wl, gc)
+		scx, err := gc.Generate(ctx, wl)
 		if err == nil {
-			err = c.Store(ctx, ac, false)
+			err = c.Store(ctx, scx, false)
 		}
 		if err != nil {
 			dlog.Warn(ctx, err)

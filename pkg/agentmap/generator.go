@@ -22,7 +22,13 @@ const (
 	ManagerAppName        = "traffic-manager"
 )
 
-type GeneratorConfig struct {
+type GeneratorConfig interface {
+	Generate(ctx context.Context, wl k8sapi.Workload) (sc agentconfig.SidecarExt, err error)
+}
+
+var GeneratorConfigFunc func(qualifiedAgentImage string) (GeneratorConfig, error) //nolint:gochecknoglobals // extension point
+
+type BasicGeneratorConfig struct {
 	ManagerPort          uint16
 	AgentPort            uint16
 	APIPort              uint16
@@ -39,7 +45,7 @@ type GeneratorConfig struct {
 	EnvoyHttpIdleTimeout time.Duration
 }
 
-func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc *agentconfig.Sidecar, err error) {
+func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workload) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "agentmap.Generate")
 	defer tracing.EndAndRecord(span, err)
 
