@@ -44,6 +44,7 @@ type State interface {
 	GetClient(string) *rpc.ClientInfo
 	GetIntercept(string) (*rpc.InterceptInfo, bool)
 	MarkSession(*rpc.RemainRequest, time.Time) bool
+	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(*rpc.DNSAgentResponse)
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(string) bool
@@ -446,19 +447,14 @@ func (s *state) AddIntercept(sessionID, clusterID string, client *rpc.ClientInfo
 
 	spec := cir.InterceptSpec
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
-	installId := client.GetInstallId()
-	cept := &rpc.InterceptInfo{
-		Spec:        spec,
-		Disposition: rpc.InterceptDispositionType_WAITING,
-		Message:     "Waiting for Agent approval",
-		Id:          interceptID,
-		ClientSession: &rpc.SessionInfo{
-			SessionId: sessionID,
-			ClusterId: clusterID,
-			InstallId: &installId,
-		},
-		ApiKey: cir.ApiKey,
+	installID := client.GetInstallId()
+	clientSession := rpc.SessionInfo{
+		SessionId: sessionID,
+		ClusterId: clusterID,
+		InstallId: &installID,
 	}
+
+	cept := s.self.NewInterceptInfo(interceptID, &clientSession, cir)
 
 	// Wrap each potential-state-change in a
 	//
@@ -480,6 +476,17 @@ func (s *state) AddIntercept(sessionID, clusterID string, client *rpc.ClientInfo
 	s.interceptStates[interceptID] = state
 
 	return cept, nil
+}
+
+func (s *state) NewInterceptInfo(interceptID string, session *rpc.SessionInfo, ciReq *rpc.CreateInterceptRequest) *rpc.InterceptInfo {
+	return &rpc.InterceptInfo{
+		Spec:          ciReq.InterceptSpec,
+		Disposition:   rpc.InterceptDispositionType_WAITING,
+		Message:       "Waiting for Agent approval",
+		Id:            interceptID,
+		ClientSession: session,
+		ApiKey:        ciReq.ApiKey,
+	}
 }
 
 func (s *state) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
