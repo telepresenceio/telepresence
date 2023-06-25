@@ -53,6 +53,7 @@ type State interface {
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
+	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo
 	ValidateAgentImage(string, bool) error
 	WaitForTempLogLevel(rpc.Manager_WatchLogLevelServer) error
 	WatchAgents(context.Context, func(sessionID string, agent *rpc.AgentInfo) bool) <-chan watchable.Snapshot[*rpc.AgentInfo]
@@ -540,6 +541,27 @@ func (s *state) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 		swapped := s.intercepts.CompareAndSwap(newInfo.Id, cur, newInfo)
 		if swapped {
 			// Success!
+			return newInfo
+		}
+	}
+}
+
+// UpdateClient applies a given mutator function to the stored client with sessionID;
+// storing and returning the result.  If the given client does not exist, then the mutator
+// function is not run, and nil is returned.
+func (s *state) UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo {
+	for {
+		cur, ok := s.clients.Load(sessionID)
+		if !ok || cur == nil {
+			// Doesn't exist (possibly was deleted while this loop was running).
+			return nil
+		}
+
+		newInfo := proto.Clone(cur).(*rpc.ClientInfo)
+		apply(newInfo)
+
+		swapped := s.clients.CompareAndSwap(sessionID, cur, newInfo)
+		if swapped {
 			return newInfo
 		}
 	}
