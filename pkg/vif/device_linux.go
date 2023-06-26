@@ -46,7 +46,7 @@ func openTun(_ context.Context) (*nativeDevice, error) {
 
 	err = unix.IoctlSetInt(fd, unix.TUNSETIFF, int(uintptr(unsafe.Pointer(&flagsRequest))))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to set TUN device flags: %w", err)
 	}
 
 	// Retrieve the name that was generated based on the "tel%d" template. The
@@ -71,18 +71,18 @@ func openTun(_ context.Context) (*nativeDevice, error) {
 	// Bring the device up. This is how it's done in ifconfig.
 	provisioningSocket, err := unix.Socket(unix.AF_PACKET, unix.SOCK_DGRAM, unix.IPPROTO_IP)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open provisioning socket: %w", err)
 	}
 	defer unix.Close(provisioningSocket)
 
 	flagsRequest.flags = 0
 	if err = ioctl(provisioningSocket, unix.SIOCGIFFLAGS, unsafe.Pointer(&flagsRequest)); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get flags for %s: %w", name, err)
 	}
 
 	flagsRequest.flags |= unix.IFF_UP | unix.IFF_RUNNING
 	if err = ioctl(provisioningSocket, unix.SIOCSIFFLAGS, unsafe.Pointer(&flagsRequest)); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to set flags for %s: %w", name, err)
 	}
 
 	index, err := getInterfaceIndex(provisioningSocket, name)
