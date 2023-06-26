@@ -36,6 +36,9 @@ type Service interface {
 	FuseFTPMgr() remotefs.FuseFTPManager
 
 	RootSessionInProcess() bool
+	WithSession(context.Context, string, func(context.Context, Session) error) error
+
+	ManageSessions(c context.Context) error
 }
 
 type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, client.Config, *grpc.Server) (Service, error)

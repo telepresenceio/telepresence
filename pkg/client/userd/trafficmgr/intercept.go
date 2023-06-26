@@ -490,13 +490,11 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func CanIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, *rpc.InterceptResult) {
-	var s *session
-	sif.As(&s)
-
+func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, *rpc.InterceptResult) {
 	s.waitForSync(c)
 	spec := ir.Spec
-	spec.Namespace = s.ActualNamespace(spec.Namespace)
+	self := s.self
+	spec.Namespace = self.ActualNamespace(spec.Namespace)
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
 		return nil, InterceptError(common.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent))
@@ -522,7 +520,7 @@ func CanIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 		Session:       s.SessionInfo(),
 		InterceptSpec: spec,
 	}
-	if er := sif.InterceptProlog(c, mgrIr); er != nil {
+	if er := self.InterceptProlog(c, mgrIr); er != nil {
 		return nil, er
 	}
 	pi, err := s.managerClient.PrepareIntercept(c, mgrIr)
@@ -591,15 +589,20 @@ func (s *session) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInte
 	return iInfo, nil
 }
 
+func (s *session) NewCreateInterceptRequest(spec *manager.InterceptSpec) *manager.CreateInterceptRequest {
+	return &manager.CreateInterceptRequest{
+		Session:       s.self.SessionInfo(),
+		InterceptSpec: spec,
+	}
+}
+
 // AddIntercept adds one intercept.
-func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptRequest) *rpc.InterceptResult {
-	iInfo, result := CanIntercept(sif, c, ir)
+func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest) *rpc.InterceptResult {
+	self := s.self
+	iInfo, result := self.CanIntercept(c, ir)
 	if result != nil {
 		return result
 	}
-
-	var s *session
-	sif.As(&s)
 
 	spec := ir.Spec
 	if iInfo == nil {
@@ -611,11 +614,12 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 		spec.Mechanism = "tcp"
 	}
 
+	mgrClient := self.ManagerClient()
 	cfg := client.GetConfig(c)
 	apiPort := uint16(cfg.TelepresenceAPI().Port)
 	if apiPort == 0 {
 		// Default to the API port declared by the traffic-manager
-		if apiInfo, err := s.managerClient.GetTelepresenceAPI(c, &empty.Empty{}); err != nil {
+		if apiInfo, err := mgrClient.GetTelepresenceAPI(c, &empty.Empty{}); err != nil {
 			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
 			dlog.Warnf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
 		} else {
@@ -676,11 +680,7 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 		s.currentInterceptsLock.Unlock()
 	}()
 
-	ii, err := sif.ManagerClient().CreateIntercept(c, &manager.CreateInterceptRequest{
-		Session:       sif.SessionInfo(),
-		InterceptSpec: spec,
-		ApiKey:        iInfo.APIKey(),
-	})
+	ii, err := mgrClient.CreateIntercept(c, self.NewCreateInterceptRequest(spec))
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		return InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
@@ -697,7 +697,7 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 			// context is already done.
 			rc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 5*time.Second)
 			defer cancel()
-			if removeErr := sif.RemoveIntercept(rc, ii.Spec.Name); removeErr != nil {
+			if removeErr := self.RemoveIntercept(rc, ii.Spec.Name); removeErr != nil {
 				dlog.Warnf(c, "failed to remove failed intercept %s: %v", ii.Spec.Name, removeErr)
 			}
 		}
@@ -726,7 +726,7 @@ func AddIntercept(sif userd.Session, c context.Context, ir *rpc.CreateInterceptR
 			if !waitForDNS(c, spec.ServiceName) {
 				dlog.Warningf(c, "DNS cannot resolve name of intercepted %q service", spec.ServiceName)
 			}
-			if er := sif.InterceptEpilog(c, ir, result); er != nil {
+			if er := self.InterceptEpilog(c, ir, result); er != nil {
 				return er
 			}
 			success = true // Prevent removal in deferred function

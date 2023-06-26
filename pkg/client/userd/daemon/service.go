@@ -51,8 +51,8 @@ to troubleshoot problems.
 `
 }
 
-// Service represents the long-running state of the Telepresence User Daemon.
-type Service struct {
+// service represents the long-running state of the Telepresence User Daemon.
+type service struct {
 	rpc.UnsafeConnectorServer
 	srv           *grpc.Server
 	managerProxy  *mgrProxy
@@ -87,10 +87,13 @@ type Service struct {
 
 	// The TCP address that the daemon listens to. Will be nil if the daemon listens to a unix socket.
 	daemonAddress *net.TCPAddr
+
+	// Possibly extended version of the service. Use when calling interface methods.
+	self userd.Service
 }
 
 func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
-	s := &Service{
+	s := &service{
 		srv:             srv,
 		scout:           sr,
 		connectRequest:  make(chan *rpc.ConnectRequest),
@@ -99,6 +102,7 @@ func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg cl
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
 		fuseFtpMgr:      remotefs.NewFuseFTPManager(),
 	}
+	s.self = s
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
@@ -112,36 +116,40 @@ func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg cl
 	return s, nil
 }
 
-func (s *Service) As(ptr any) {
+func (s *service) As(ptr any) {
 	switch ptr := ptr.(type) {
-	case **Service:
+	case **service:
 		*ptr = s
 	default:
 		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
 	}
 }
 
-func (s *Service) GetAPIKey(_ context.Context) (string, error) {
+func (s *service) SetSelf(self userd.Service) {
+	s.self = self
+}
+
+func (s *service) GetAPIKey(_ context.Context) (string, error) {
 	return "", nil
 }
 
-func (s *Service) FuseFTPMgr() remotefs.FuseFTPManager {
+func (s *service) FuseFTPMgr() remotefs.FuseFTPManager {
 	return s.fuseFtpMgr
 }
 
-func (s *Service) Reporter() *scout.Reporter {
+func (s *service) Reporter() *scout.Reporter {
 	return s.scout
 }
 
-func (s *Service) RootSessionInProcess() bool {
+func (s *service) RootSessionInProcess() bool {
 	return s.rootSessionInProc
 }
 
-func (s *Service) Server() *grpc.Server {
+func (s *service) Server() *grpc.Server {
 	return s.srv
 }
 
-func (s *Service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
+func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
 	s.managerProxy.setClient(managerClient, callOptions...)
 }
 
@@ -170,7 +178,7 @@ func Command() *cobra.Command {
 	return c
 }
 
-func (s *Service) configReload(c context.Context) error {
+func (s *service) configReload(c context.Context) error {
 	// Ensure that the directory to watch exists.
 	if err := os.MkdirAll(filepath.Dir(client.GetConfigFile(c)), 0o755); err != nil {
 		return err
@@ -188,12 +196,9 @@ func (s *Service) configReload(c context.Context) error {
 // ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
 // a session and writes a reply to the connectErrCh. The session is then started if it was
 // successfully created.
-func ManageSessions(c context.Context, si userd.Service) error {
+func (s *service) ManageSessions(c context.Context) error {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
-
-	var s *Service
-	si.As(&s)
 
 	for {
 		// Wait for a connection request
@@ -201,7 +206,7 @@ func ManageSessions(c context.Context, si userd.Service) error {
 		case <-c.Done():
 			return nil
 		case cr := <-s.connectRequest:
-			rsp := startSession(c, si, cr, &wg)
+			rsp := s.startSession(c, cr, &wg)
 			select {
 			case s.connectResponse <- rsp:
 			default:
@@ -213,9 +218,7 @@ func ManageSessions(c context.Context, si userd.Service) error {
 	}
 }
 
-func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
-	var s *Service
-	si.As(&s)
+func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
 	s.sessionLock.Lock() // Locked during creation
 	defer s.sessionLock.Unlock()
 
@@ -240,7 +243,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = userd.WithService(ctx, si)
+	ctx = userd.WithService(ctx, s.self)
 
 	if s.daemonAddress != nil {
 		go runAliveAndCancellation(ctx, cancel, config.Context, s.daemonAddress.Port)
@@ -268,7 +271,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 	go func(cr *rpc.ConnectRequest) {
 		defer func() {
 			s.sessionLock.Lock()
-			s.SetManagerClient(nil)
+			s.self.SetManagerClient(nil)
 			s.session = nil
 			s.sessionCancel = nil
 			if err := client.RestoreDefaults(ctx, false); err != nil {
@@ -277,7 +280,7 @@ func startSession(ctx context.Context, si userd.Service, cr *rpc.ConnectRequest,
 			s.sessionLock.Unlock()
 			wg.Done()
 		}()
-		if err := userd.RunSession(s.sessionContext, session); err != nil {
+		if err := session.RunSession(s.sessionContext); err != nil {
 			if errors.Is(err, trafficmgr.ErrSessionExpired) {
 				// Session has expired. We need to cancel the owner session and reconnect
 				dlog.Info(ctx, "refreshing session")
@@ -322,7 +325,7 @@ func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, nam
 	}
 }
 
-func (s *Service) cancelSessionReadLocked() {
+func (s *service) cancelSessionReadLocked() {
 	if s.sessionCancel != nil {
 		if err := s.session.ClearIntercepts(s.sessionContext); err != nil {
 			dlog.Errorf(s.sessionContext, "failed to clear intercepts: %v", err)
@@ -331,7 +334,7 @@ func (s *Service) cancelSessionReadLocked() {
 	}
 }
 
-func (s *Service) cancelSession() {
+func (s *service) cancelSession() {
 	if !atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
 		return
 	}
@@ -449,7 +452,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return g.Wait()
 	}
 
-	var s *Service
+	var s *service
 	si.As(&s)
 	s.rootSessionInProc = rootSessionInProc
 	s.daemonAddress = daemonAddress
@@ -490,7 +493,7 @@ func run(cmd *cobra.Command, _ []string) error {
 				cancel()
 			}
 		}
-		return ManageSessions(c, si)
+		return s.ManageSessions(c)
 	})
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
