@@ -27,6 +27,8 @@ const (
 	crdReleaseName            = "telepresence-crds"
 )
 
+var GetValuesFunc = GetValues //nolint:gochecknoglobals // extension point
+
 func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
 	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...any) {
@@ -39,19 +41,16 @@ func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFla
 	return helmConfig, nil
 }
 
-func getValues(ctx context.Context) map[string]any {
+func GetValues(ctx context.Context) map[string]any {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images()
 	imageRegistry := imgConfig.Registry(ctx)
-	cloudConfig := clientConfig.Cloud()
 	imageTag := strings.TrimPrefix(client.Version(), "v")
 	values := map[string]any{
 		"image": map[string]any{
 			"registry": imageRegistry,
 			"tag":      imageTag,
 		},
-		"systemaHost": cloudConfig.SystemaHost,
-		"systemaPort": cloudConfig.SystemaPort,
 	}
 	if !clientConfig.Grpc().MaxReceiveSizeV.IsZero() {
 		values["grpc"] = map[string]any{
@@ -270,9 +269,9 @@ func ensureIsInstalled(
 		if err := json.Unmarshal(req.ValuesJson, &vals); err != nil {
 			return fmt.Errorf("unable to parse values JSON: %w", err)
 		}
-		vals = chartutil.CoalesceTables(vals, getValues(ctx))
+		vals = chartutil.CoalesceTables(vals, GetValuesFunc(ctx))
 	} else {
-		vals = getValues(ctx)
+		vals = GetValuesFunc(ctx)
 	}
 
 	switch {

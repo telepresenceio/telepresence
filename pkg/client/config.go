@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,7 +35,6 @@ type Config interface {
 	Timeouts() *Timeouts
 	LogLevels() *LogLevels
 	Images() *Images
-	Cloud() *Cloud
 	Grpc() *Grpc
 	TelepresenceAPI() *TelepresenceAPI
 	Intercept() *Intercept
@@ -50,7 +48,6 @@ type BaseConfig struct {
 	TimeoutsV        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
 	LogLevelsV       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
 	ImagesV          Images          `json:"images,omitempty" yaml:"images,omitempty"`
-	CloudV           Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
 	GrpcV            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
 	TelepresenceAPIV TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
 	InterceptV       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
@@ -75,10 +72,6 @@ func (c *BaseConfig) LogLevels() *LogLevels {
 
 func (c *BaseConfig) Images() *Images {
 	return &c.ImagesV
-}
-
-func (c *BaseConfig) Cloud() *Cloud {
-	return &c.CloudV
 }
 
 func (c *BaseConfig) Grpc() *Grpc {
@@ -111,7 +104,6 @@ func (c *BaseConfig) Merge(lc Config) {
 	c.TimeoutsV.merge(lc.Timeouts())
 	c.LogLevelsV.merge(lc.LogLevels())
 	c.ImagesV.merge(lc.Images())
-	c.CloudV.merge(lc.Cloud())
 	c.GrpcV.merge(lc.Grpc())
 	c.TelepresenceAPIV.merge(lc.TelepresenceAPI())
 	c.InterceptV.merge(lc.Intercept())
@@ -708,104 +700,6 @@ func (img Images) MarshalYAML() (any, error) {
 		m["webhookRegistry"] = img.PrivateWebhookRegistry
 	}
 	return m, nil
-}
-
-type Cloud struct {
-	SkipLogin       bool          `json:"skipLogin,omitempty" yaml:"skipLogin,omitempty"`
-	RefreshMessages time.Duration `json:"refreshMessages,omitempty" yaml:"refreshMessages,omitempty"`
-	SystemaHost     string        `json:"systemaHost,omitempty" yaml:"systemaHost,omitempty"`
-	SystemaPort     string        `json:"systemaPort,omitempty" yaml:"systemaPort,omitempty"`
-}
-
-// UnmarshalYAML parses the images YAML.
-func (c *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(WithLoc("cloud must be an object", node))
-	}
-
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := StringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		v := ms[i+1]
-		switch kv {
-		case "skipLogin":
-			val, err := strconv.ParseBool(v.Value)
-			if err != nil {
-				logrus.Warn(WithLoc(fmt.Sprintf("bool expected for key %q", kv), ms[i]))
-			} else {
-				c.SkipLogin = val
-			}
-		case "refreshMessages":
-			duration, err := time.ParseDuration(v.Value)
-			if err != nil {
-				logrus.Warn(WithLoc(fmt.Sprintf("duration expected for key %q", kv), ms[i]))
-			} else {
-				c.RefreshMessages = duration
-			}
-		case "systemaHost":
-			c.SystemaHost = v.Value
-		case "systemaPort":
-			c.SystemaPort = v.Value
-		default:
-			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-		}
-	}
-	return nil
-}
-
-const (
-	defaultCloudSystemAHost     = "app.getambassador.io"
-	defaultCloudSystemAPort     = "443"
-	defaultCloudRefreshMessages = 24 * 7 * time.Hour
-)
-
-var defaultCloud = Cloud{ //nolint:gochecknoglobals // constant
-	SkipLogin:       false,
-	RefreshMessages: defaultCloudRefreshMessages,
-	SystemaHost:     defaultCloudSystemAHost,
-	SystemaPort:     defaultCloudSystemAPort,
-}
-
-// IsZero controls whether this element will be included in marshalled output.
-func (c Cloud) IsZero() bool {
-	return c == defaultCloud
-}
-
-// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct.
-func (c Cloud) MarshalYAML() (any, error) {
-	cm := make(map[string]any)
-	if c.RefreshMessages != 0 && c.RefreshMessages != defaultCloudRefreshMessages {
-		cm["refreshMessages"] = c.RefreshMessages.String()
-	}
-	if c.SkipLogin {
-		cm["skipLogin"] = true
-	}
-	if c.SystemaHost != defaultCloudSystemAHost {
-		cm["systemaHost"] = c.SystemaHost
-	}
-	if c.SystemaPort != defaultCloudSystemAPort {
-		cm["systemaPort"] = c.SystemaPort
-	}
-	return cm, nil
-}
-
-func (c *Cloud) merge(o *Cloud) {
-	if o.SkipLogin {
-		c.SkipLogin = o.SkipLogin
-	}
-	if o.RefreshMessages != defaultCloudRefreshMessages {
-		c.RefreshMessages = o.RefreshMessages
-	}
-	if o.SystemaHost != defaultCloudSystemAHost {
-		c.SystemaHost = o.SystemaHost
-	}
-	if o.SystemaPort != defaultCloudSystemAPort {
-		c.SystemaPort = o.SystemaPort
-	}
 }
 
 type Grpc struct {

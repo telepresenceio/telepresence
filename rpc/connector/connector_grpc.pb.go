@@ -34,16 +34,10 @@ const (
 	Connector_CanIntercept_FullMethodName            = "/telepresence.connector.Connector/CanIntercept"
 	Connector_CreateIntercept_FullMethodName         = "/telepresence.connector.Connector/CreateIntercept"
 	Connector_RemoveIntercept_FullMethodName         = "/telepresence.connector.Connector/RemoveIntercept"
-	Connector_UpdateIntercept_FullMethodName         = "/telepresence.connector.Connector/UpdateIntercept"
 	Connector_Helm_FullMethodName                    = "/telepresence.connector.Connector/Helm"
 	Connector_Uninstall_FullMethodName               = "/telepresence.connector.Connector/Uninstall"
 	Connector_List_FullMethodName                    = "/telepresence.connector.Connector/List"
 	Connector_WatchWorkloads_FullMethodName          = "/telepresence.connector.Connector/WatchWorkloads"
-	Connector_Login_FullMethodName                   = "/telepresence.connector.Connector/Login"
-	Connector_Logout_FullMethodName                  = "/telepresence.connector.Connector/Logout"
-	Connector_GetCloudUserInfo_FullMethodName        = "/telepresence.connector.Connector/GetCloudUserInfo"
-	Connector_GetCloudAPIKey_FullMethodName          = "/telepresence.connector.Connector/GetCloudAPIKey"
-	Connector_GetCloudLicense_FullMethodName         = "/telepresence.connector.Connector/GetCloudLicense"
 	Connector_SetLogLevel_FullMethodName             = "/telepresence.connector.Connector/SetLogLevel"
 	Connector_Quit_FullMethodName                    = "/telepresence.connector.Connector/Quit"
 	Connector_GatherLogs_FullMethodName              = "/telepresence.connector.Connector/GatherLogs"
@@ -91,7 +85,6 @@ type ConnectorClient interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
-	UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
 	Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*common.Result, error)
 	// Uninstalls traffic-agents from the cluster.
@@ -102,12 +95,6 @@ type ConnectorClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(ctx context.Context, in *WatchWorkloadsRequest, opts ...grpc.CallOption) (Connector_WatchWorkloadsClient, error)
-	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error)
-	// Returns an error with code=NotFound if not currently logged in.
-	Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
-	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
-	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
 	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
 	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
@@ -243,15 +230,6 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.Remov
 	return out, nil
 }
 
-func (c *connectorClient) UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error) {
-	out := new(manager.InterceptInfo)
-	err := c.cc.Invoke(ctx, Connector_UpdateIntercept_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *connectorClient) Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*common.Result, error) {
 	out := new(common.Result)
 	err := c.cc.Invoke(ctx, Connector_Helm_FullMethodName, in, out, opts...)
@@ -309,51 +287,6 @@ func (x *connectorWatchWorkloadsClient) Recv() (*WorkloadInfoSnapshot, error) {
 		return nil, err
 	}
 	return m, nil
-}
-
-func (c *connectorClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error) {
-	out := new(LoginResult)
-	err := c.cc.Invoke(ctx, Connector_Login_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, Connector_Logout_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error) {
-	out := new(UserInfo)
-	err := c.cc.Invoke(ctx, Connector_GetCloudUserInfo_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error) {
-	out := new(KeyData)
-	err := c.cc.Invoke(ctx, Connector_GetCloudAPIKey_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error) {
-	out := new(LicenseData)
-	err := c.cc.Invoke(ctx, Connector_GetCloudLicense_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *connectorClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
@@ -489,7 +422,6 @@ type ConnectorServer interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
-	UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
 	Helm(context.Context, *HelmRequest) (*common.Result, error)
 	// Uninstalls traffic-agents from the cluster.
@@ -500,12 +432,6 @@ type ConnectorServer interface {
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error
-	Login(context.Context, *LoginRequest) (*LoginResult, error)
-	// Returns an error with code=NotFound if not currently logged in.
-	Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
-	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
-	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
-	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
 	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
 	SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
@@ -572,9 +498,6 @@ func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInte
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
-func (UnimplementedConnectorServer) UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
-}
 func (UnimplementedConnectorServer) Helm(context.Context, *HelmRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Helm not implemented")
 }
@@ -586,21 +509,6 @@ func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*Worklo
 }
 func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
-}
-func (UnimplementedConnectorServer) Login(context.Context, *LoginRequest) (*LoginResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
-}
-func (UnimplementedConnectorServer) Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
-}
-func (UnimplementedConnectorServer) GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudUserInfo not implemented")
-}
-func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAPIKey not implemented")
-}
-func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
 }
 func (UnimplementedConnectorServer) SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
@@ -846,24 +754,6 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_UpdateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.UpdateInterceptRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).UpdateIntercept(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_UpdateIntercept_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).UpdateIntercept(ctx, req.(*manager.UpdateInterceptRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Connector_Helm_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HelmRequest)
 	if err := dec(in); err != nil {
@@ -937,96 +827,6 @@ type connectorWatchWorkloadsServer struct {
 
 func (x *connectorWatchWorkloadsServer) Send(m *WorkloadInfoSnapshot) error {
 	return x.ServerStream.SendMsg(m)
-}
-
-func _Connector_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LoginRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).Login(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_Login_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Login(ctx, req.(*LoginRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).Logout(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_Logout_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Logout(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_GetCloudUserInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UserInfoRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).GetCloudUserInfo(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_GetCloudUserInfo_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudUserInfo(ctx, req.(*UserInfoRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_GetCloudAPIKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(KeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).GetCloudAPIKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_GetCloudAPIKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudAPIKey(ctx, req.(*KeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_GetCloudLicense_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LicenseRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).GetCloudLicense(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_GetCloudLicense_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudLicense(ctx, req.(*LicenseRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _Connector_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1279,10 +1079,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_RemoveIntercept_Handler,
 		},
 		{
-			MethodName: "UpdateIntercept",
-			Handler:    _Connector_UpdateIntercept_Handler,
-		},
-		{
 			MethodName: "Helm",
 			Handler:    _Connector_Helm_Handler,
 		},
@@ -1293,26 +1089,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "List",
 			Handler:    _Connector_List_Handler,
-		},
-		{
-			MethodName: "Login",
-			Handler:    _Connector_Login_Handler,
-		},
-		{
-			MethodName: "Logout",
-			Handler:    _Connector_Logout_Handler,
-		},
-		{
-			MethodName: "GetCloudUserInfo",
-			Handler:    _Connector_GetCloudUserInfo_Handler,
-		},
-		{
-			MethodName: "GetCloudAPIKey",
-			Handler:    _Connector_GetCloudAPIKey_Handler,
-		},
-		{
-			MethodName: "GetCloudLicense",
-			Handler:    _Connector_GetCloudLicense_Handler,
 		},
 		{
 			MethodName: "SetLogLevel",

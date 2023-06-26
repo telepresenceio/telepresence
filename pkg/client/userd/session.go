@@ -27,7 +27,6 @@ type WatchWorkloadsStream interface {
 }
 
 type InterceptInfo interface {
-	APIKey() string
 	InterceptResult() *rpc.InterceptResult
 	PreparedIntercept() *manager.PreparedIntercept
 	PortIdentifier() (agentconfig.PortIdentifier, error)

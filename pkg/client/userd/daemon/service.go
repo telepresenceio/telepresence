@@ -129,10 +129,6 @@ func (s *service) SetSelf(self userd.Service) {
 	s.self = self
 }
 
-func (s *service) GetAPIKey(_ context.Context) (string, error) {
-	return "", nil
-}
-
 func (s *service) FuseFTPMgr() remotefs.FuseFTPManager {
 	return s.fuseFtpMgr
 }

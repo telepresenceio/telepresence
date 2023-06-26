@@ -410,9 +410,6 @@ type interceptInfo struct {
 	// Information provided by the traffic manager as response to the PrepareIntercept call
 	preparedIntercept *manager.PreparedIntercept
 
-	// apiKey if the user is logged in
-	apiKey string
-
 	// Fields below are all deprecated and only used with traffic-manager < 2.6.0
 	// Deprecated
 	service *core.Service
@@ -424,10 +421,6 @@ type interceptInfo struct {
 	container *core.Container
 	// Deprecated
 	containerPortIndex int
-}
-
-func (s *interceptInfo) APIKey() string {
-	return s.apiKey
 }
 
 func (s *interceptInfo) InterceptResult() *rpc.InterceptResult {
@@ -531,7 +524,7 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.Category(pi.ErrorCategory).Newf(pi.Error))
 	}
 
-	iInfo := &interceptInfo{preparedIntercept: pi, apiKey: mgrIr.ApiKey}
+	iInfo := &interceptInfo{preparedIntercept: pi}
 	return iInfo, nil
 }
 
@@ -539,38 +532,31 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 // install a version that is more recent than the traffic-manager currently
 // in use (it's legacy too, or we wouldn't end up here)
 // Deprecated.
-func (s *session) legacyImage(ctx context.Context, image string) (string, error) {
+func (s *session) legacyImage(image string) string {
 	if image == "" {
-		var err error
-		image, err = AgentImageFromSystemA(ctx, s.managerVersion)
-		if err != nil {
-			return "", err
-		}
+		return "datawire/tel2:" + s.managerVersion.String()
 	}
 	if lc := strings.LastIndexByte(image, ':'); lc > 0 {
 		lc++
 		img := image[:lc]
 		if iv, err := semver.Parse(image[lc:]); err == nil {
 			if strings.HasSuffix(img, "/tel2:") {
-				if iv.Major > 2 || iv.Minor > 5 {
+				if iv.Major == 2 || iv.Minor > 5 {
 					image = img + s.managerVersion.String()
 				}
 			} else if strings.HasSuffix(img, "/ambassador-telepresence-agent:") {
-				if iv.Major > 1 || iv.Minor > 11 {
+				if iv.Major == 1 || iv.Minor > 11 {
 					image = img + "1.11.11"
 				}
 			}
 		}
 	}
-	return image, nil
+	return image
 }
 
 // Deprecated.
 func (s *session) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInterceptRequest) (*interceptInfo, *rpc.InterceptResult) {
-	var err error
-	if ir.AgentImage, err = s.legacyImage(c, ir.AgentImage); err != nil {
-		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
-	}
+	ir.AgentImage = s.legacyImage(ir.AgentImage)
 	spec := ir.Spec
 	wl, err := tracing.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {

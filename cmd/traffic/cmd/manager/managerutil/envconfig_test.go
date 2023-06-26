@@ -38,23 +38,19 @@ func TestEnvconfig(t *testing.T) {
 	}
 
 	defaults := managerutil.Env{
-		AgentAppProtocolStrategy:  k8sapi.Http2Probe,
-		AgentEnvoyAdminPort:       19000,
-		AgentEnvoyLogLevel:        "info",
-		AgentEnvoyServerPort:      18000,
-		AgentEnvoyHttpIdleTimeout: 70 * time.Second,
-		AgentLogLevel:             "info",
-		AgentPort:                 9900,
-		AgentRegistry:             "docker.io/datawire",
-		AgentInjectorName:         "agent-injector",
-		AgentArrivalTimeout:       45 * time.Second,
-		ClientConnectionTTL:       24 * time.Hour,
-		ClientDnsExcludeSuffixes:  []string{".com", ".io", ".net", ".org", ".ru"},
-		LogLevel:                  "info",
-		MaxReceiveSize:            resource.MustParse("4Mi"),
-		PodCIDRStrategy:           "auto",
-		PodIP:                     net.IP{203, 0, 113, 18},
-		ServerPort:                8081,
+		AgentAppProtocolStrategy: k8sapi.Http2Probe,
+		AgentLogLevel:            "info",
+		AgentPort:                9900,
+		AgentRegistry:            "docker.io/datawire",
+		AgentInjectorName:        "agent-injector",
+		AgentArrivalTimeout:      45 * time.Second,
+		ClientConnectionTTL:      24 * time.Hour,
+		ClientDnsExcludeSuffixes: []string{".com", ".io", ".net", ".org", ".ru"},
+		LogLevel:                 "info",
+		MaxReceiveSize:           resource.MustParse("4Mi"),
+		PodCIDRStrategy:          "auto",
+		PodIP:                    net.IP{203, 0, 113, 18},
+		ServerPort:               8081,
 	}
 
 	testcases := map[string]struct {
@@ -67,10 +63,10 @@ func TestEnvconfig(t *testing.T) {
 		},
 		"simple": {
 			Input: map[string]string{
-				"SYSTEMA_HOST": "app.getambassador.io",
+				"AGENT_REGISTRY": "docker.io/datawire",
 			},
 			Output: func(e *managerutil.Env) {
-				e.SystemAHost = "app.getambassador.io"
+				e.AgentRegistry = "docker.io/datawire"
 			},
 		},
 		"complex": {

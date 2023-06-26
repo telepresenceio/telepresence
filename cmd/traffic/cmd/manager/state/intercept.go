@@ -101,10 +101,7 @@ func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error)
 		err = errcat.User.Newf(
 			"intercepts are disabled because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
 	} else if extended {
-		if si := strings.LastIndexByte(agentImage, '/'); si > 0 && strings.HasPrefix(agentImage[si:], "/ambassador-telepresence-agent:") {
-			return nil
-		}
-		return fmt.Errorf("%q doesn't appear to be the name of an extended ambassador traffic-agent", agentImage)
+		err = errcat.User.New("traffic-manager does not support intercepts that require an extended traffic-agent")
 	}
 	return err
 }

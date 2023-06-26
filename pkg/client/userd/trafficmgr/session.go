@@ -358,14 +358,7 @@ func connectMgr(
 	svc := userd.GetService(ctx)
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
-		apiKey, err := svc.GetAPIKey(ctx)
-		if err != nil {
-			dlog.Errorf(ctx, "failed to retrieve API key: %v", err)
-		}
-		_, err = mClient.Remain(ctx, &manager.RemainRequest{
-			Session: si,
-			ApiKey:  apiKey,
-		})
+		_, err = mClient.Remain(ctx, &manager.RemainRequest{Session: si})
 		if err == nil {
 			if ctx.Err() != nil {
 				// Call timed out, so the traffic-manager isn't responding at all
@@ -485,8 +478,8 @@ func CheckTrafficManagerService(ctx context.Context, namespace string) error {
 		se := &k8serrors.StatusError{}
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {
-				msg = ("traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
-					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in.")
+				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in."
 			}
 		}
 		return errcat.User.New(msg)
@@ -560,7 +553,7 @@ func (s *session) Epilog(ctx context.Context) {
 }
 
 func (s *session) StartServices(g *dgroup.Group) {
-	g.Go("remain", s.remain)
+	g.Go("remain", s.remainLoop)
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
 	g.Go("agent-watcher", s.agentInfoWatcher)
 	g.Go("dial-request-watcher", s.dialRequestWatcher)
@@ -830,7 +823,7 @@ nextIs:
 
 var ErrSessionExpired = errors.New("session expired")
 
-func (s *session) remain(c context.Context) error {
+func (s *session) remainLoop(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer func() {
 		ticker.Stop()
@@ -853,20 +846,8 @@ func (s *session) remain(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			apiKey, err := userd.GetService(c).GetAPIKey(c)
-			if err != nil {
-				dlog.Errorf(c, "failed to retrieve API key: %v", err)
-			}
-			_, err = s.managerClient.Remain(c, &manager.RemainRequest{
-				Session: s.SessionInfo(),
-				ApiKey:  apiKey,
-			})
-			if err != nil && c.Err() == nil {
-				dlog.Error(c, err)
-				if gErr, ok := status.FromError(err); ok && gErr.Code() == codes.NotFound {
-					// Session has expired. We need to cancel the owner session and reconnect
-					return ErrSessionExpired
-				}
+			if err := s.Remain(c); err != nil {
+				return err
 			}
 		}
 	}

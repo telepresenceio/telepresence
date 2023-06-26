@@ -5,7 +5,6 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/protobuf/types/known/durationpb"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -144,19 +143,6 @@ type Sidecar struct {
 
 	// The port used by the agent's GRPC tracing server
 	TracingPort uint16 `json:"tracingPort,omitempty"`
-
-	// LogLevel used by the envoy instance
-	EnvoyLogLevel string
-
-	// The port used by the Envoy server
-	EnvoyServerPort uint16
-
-	// The port used for Envoy administration
-	EnvoyAdminPort uint16
-
-	// The idle timeout for connections. The idle timeout is defined as the period in which there are no active requests.
-	// When the idle timeout is reached the connection will be closed.
-	EnvoyHttpIdleTimeout *durationpb.Duration `json:"envoyHttpIdleTimeout,omitempty"`
 
 	// Resources for the sidecar
 	Resources *core.ResourceRequirements `json:"resources,omitempty"`

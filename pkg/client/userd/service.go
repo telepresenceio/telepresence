@@ -29,9 +29,6 @@ type Service interface {
 	// a ManagerServer proxy
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 
-	// GetAPIKey returns the current API key
-	GetAPIKey(context.Context) (string, error)
-
 	// FuseFTPMgr returns the manager responsible for creating a client that can connect to the FuseFTP service.
 	FuseFTPMgr() remotefs.FuseFTPManager
 

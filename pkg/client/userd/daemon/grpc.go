@@ -317,14 +317,6 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return result, err
 }
 
-func (s *service) UpdateIntercept(c context.Context, rr *manager.UpdateInterceptRequest) (result *manager.InterceptInfo, err error) {
-	err = s.WithSession(c, "UpdateIntercept", func(c context.Context, session userd.Session) error {
-		result, err = session.ManagerClient().UpdateIntercept(c, rr)
-		return err
-	})
-	return
-}
-
 func (s *service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
 	return &empty.Empty{}, s.WithSession(ctx, "AddInterceptor", func(_ context.Context, session userd.Session) error {
 		return session.AddInterceptor(interceptor.InterceptId, interceptor)
@@ -373,26 +365,6 @@ func (s *service) GetConfig(ctx context.Context, empty *empty.Empty) (cfg *rpc.C
 		return nil
 	})
 	return
-}
-
-func (s *service) Login(context.Context, *rpc.LoginRequest) (result *rpc.LoginResult, err error) {
-	return nil, status.Error(codes.Unimplemented, "Login")
-}
-
-func (s *service) Logout(context.Context, *empty.Empty) (result *empty.Empty, err error) {
-	return nil, status.Error(codes.Unimplemented, "Logout")
-}
-
-func (s *service) GetCloudUserInfo(context.Context, *rpc.UserInfoRequest) (result *rpc.UserInfo, err error) {
-	return nil, status.Error(codes.Unimplemented, "GetCloudUserInfo")
-}
-
-func (s *service) GetCloudAPIKey(context.Context, *rpc.KeyRequest) (result *rpc.KeyData, err error) {
-	return nil, status.Error(codes.Unimplemented, "GetCloudAPIKey")
-}
-
-func (s *service) GetCloudLicense(ctx context.Context, req *rpc.LicenseRequest) (result *rpc.LicenseData, err error) {
-	return nil, status.Error(codes.Unimplemented, "GetCloudLicense")
 }
 
 func (s *service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {

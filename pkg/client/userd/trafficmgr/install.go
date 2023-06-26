@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/blang/semver"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -21,9 +20,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
@@ -32,30 +29,6 @@ import (
 )
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
-
-// AgentImageFromSystemA returns the systemA preferred agent
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func AgentImageFromSystemA(ctx context.Context, v semver.Version) (string, error) {
-	systemaPool, ok := a8rcloud.GetSystemAPool[a8rcloud.SessionClient](ctx, a8rcloud.UserdConnName)
-	if !ok {
-		return "", errors.New("unable to contact SystemA")
-	}
-	systemaClient, err := systemaPool.Get(ctx)
-	if err != nil {
-		return "", err
-	}
-	resp, err := systemaClient.PreferredAgent(ctx, &common.VersionInfo{
-		ApiVersion: client.APIVersion,
-		Version:    v.String(),
-	})
-	if err != nil {
-		return "", err
-	}
-	if err = systemaPool.Done(ctx); err != nil {
-		return "", err
-	}
-	return resp.GetImageName(), nil
-}
 
 // legacyRemoveAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
 // it will also remove the traffic-manager service and deployment.

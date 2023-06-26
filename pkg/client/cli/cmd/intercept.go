@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 )
 
@@ -24,8 +23,6 @@ func interceptCmd() *cobra.Command {
 		SilenceErrors:     true,
 		RunE:              ic.Run,
 		ValidArgsFunction: ic.ValidArgs,
-		PreRunE:           cloud.UpdateCheckIfDue,
-		PostRunE:          cloud.RaiseMessage,
 	}
 	ic.AddFlags(cmd.Flags())
 	if err := cmd.RegisterFlagCompletionFunc("namespace", ic.AutocompleteNamespace); err != nil {

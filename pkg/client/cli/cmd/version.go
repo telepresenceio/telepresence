@@ -13,7 +13,6 @@ import (
 	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -25,9 +24,8 @@ func version() *cobra.Command {
 		Use:  "version",
 		Args: cobra.NoArgs,
 
-		Short:   "Show version",
-		PreRunE: cloud.ForcedUpdateCheck,
-		RunE:    printVersion,
+		Short: "Show version",
+		RunE:  printVersion,
 		Annotations: map[string]string{
 			ann.RootDaemon:        ann.Optional,
 			ann.UserDaemon:        ann.Optional,

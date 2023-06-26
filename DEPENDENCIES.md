@@ -158,7 +158,6 @@ following Free and Open Source software:
     google.golang.org/grpc                                                       v1.55.0                               Apache License 2.0
     google.golang.org/protobuf                                                   v1.30.0                               3-clause BSD license
     gopkg.in/inf.v0                                                              v0.9.1                                3-clause BSD license
-    gopkg.in/square/go-jose.v2                                                   v2.6.0                                3-clause BSD license, Apache License 2.0
     gopkg.in/yaml.v2                                                             v2.4.0                                Apache License 2.0, MIT license
     gopkg.in/yaml.v3                                                             v3.0.1                                Apache License 2.0, MIT license
     gvisor.dev/gvisor                                                            v0.0.0-20230507020432-0330e87ca888    Apache License 2.0, MIT license

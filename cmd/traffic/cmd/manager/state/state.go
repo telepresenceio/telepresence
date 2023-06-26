@@ -194,12 +194,6 @@ func (s *state) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 
 	if sess, ok := s.sessions[sessionID]; ok {
 		sess.SetLastMarked(now)
-		if req.ApiKey != "" {
-			if client, ok := s.clients.Load(sessionID); ok {
-				client.ApiKey = req.ApiKey
-				s.clients.Store(sessionID, client)
-			}
-		}
 		return true
 	}
 
@@ -475,7 +469,6 @@ func (s *state) NewInterceptInfo(interceptID string, session *rpc.SessionInfo, c
 		Message:       "Waiting for Agent approval",
 		Id:            interceptID,
 		ClientSession: session,
-		ApiKey:        ciReq.ApiKey,
 	}
 }
 

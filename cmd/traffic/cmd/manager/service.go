@@ -2,13 +2,7 @@ package manager
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"net"
-	"os"
-	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -18,21 +12,16 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/rpc/v2/systema"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/ambassadoragent/cloudtoken"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
-	"github.com/telepresenceio/telepresence/v2/pkg/a8rcloud"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -67,9 +56,7 @@ type service struct {
 	id                 string
 	state              state.State
 	clusterInfo        cluster.Info
-	cloudConfig        *rpc.AmbassadorCloudConfig
 	configWatcher      config.Watcher
-	tokenService       cloudtoken.Service
 	activeHttpRequests int32
 	activeGrpcRequests int32
 
@@ -87,48 +74,10 @@ func (wall) Now() time.Time {
 	return time.Now()
 }
 
-func getCloudConfig(ctx context.Context) (*rpc.AmbassadorCloudConfig, error) {
-	const proxyCertsPath = "/var/run/secrets/proxy_tls"
-
-	env := managerutil.GetEnv(ctx)
-	if env.SystemAHost == "" || env.SystemAPort == 0 {
-		return nil, nil
-	}
-	ret := &rpc.AmbassadorCloudConfig{Host: env.SystemAHost, Port: strconv.Itoa(int(env.SystemAPort))} // Why is the port a string?
-	if _, err := os.Stat(proxyCertsPath); err != nil {
-		if os.IsNotExist(err) {
-			return ret, nil
-		}
-		return nil, fmt.Errorf("could not stat %s: %w", proxyCertsPath, err)
-	}
-	f, err := os.Open(path.Join(proxyCertsPath, "ca.crt"))
-	if err != nil {
-		return nil, fmt.Errorf("unable to to open %s/ca.crt: %w", proxyCertsPath, err)
-	}
-	defer f.Close()
-	b, err := io.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read %s/ca.crt: %w", proxyCertsPath, err)
-	}
-	ret.ProxyCa = b
-	return ret, nil
-}
-
 func NewService(ctx context.Context) (Service, context.Context, error) {
-	ctx = license.WithBundle(ctx, "/home/telepresence")
 	ret := &service{
-		clock:        wall{},
-		id:           uuid.New().String(),
-		tokenService: cloudtoken.NewPatchConfigmapIfNotPresent(ctx),
-	}
-	cloudConfig, err := getCloudConfig(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	if cloudConfig != nil && cloudConfig.Host != "" && cloudConfig.Port != "" {
-		ret.cloudConfig = cloudConfig
-		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.UnauthdTrafficManagerConnName, &managerutil.UnauthdConnProvider{Config: cloudConfig})
-		ctx = a8rcloud.WithSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName, &ReverseConnProvider{ret})
+		clock: wall{},
+		id:    uuid.New().String(),
 	}
 	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
 	ret.ctx = ctx
@@ -172,49 +121,16 @@ func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
 }
 
-// GetLicense returns the license for the cluster. This directory is mounted
-// via the connector if it detects the presence of a systema license secret
-// when installing the traffic-manager.
-func (s *service) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
-	resp := rpc.License{
-		ClusterId: s.clusterInfo.ID(),
-	}
-
-	lb := license.BundleFromContext(ctx)
-	if lb == nil {
-		resp.ErrMsg = "license not found"
-	} else {
-		resp.License = lb.License()
-		resp.Host = lb.Host()
-	}
-
-	return &resp, nil
+func (s *service) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
-// CanConnectAmbassadorCloud checks if Ambassador Cloud is resolvable
-// from within a cluster.
-func (s *service) CanConnectAmbassadorCloud(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
-	env := managerutil.GetEnv(ctx)
-	if env.SystemAHost == "" || env.SystemAPort == 0 {
-		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
-	}
-	timeout := 2 * time.Second
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", env.SystemAHost, env.SystemAPort), timeout)
-	if err != nil {
-		dlog.Debugf(ctx, "Failed to connect so assuming in air-gapped environment %s", err)
-		return &rpc.AmbassadorCloudConnection{CanConnect: false}, nil
-	}
-	conn.Close()
-	return &rpc.AmbassadorCloudConnection{CanConnect: true}, nil
+func (s *service) CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
-// GetCloudConfig returns the SystemA Host and Port to the caller (currently just used by
-// the agents).
-func (s *service) GetCloudConfig(ctx context.Context, _ *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
-	if s.cloudConfig == nil {
-		return nil, status.Error(codes.Unavailable, "access to Ambassador Cloud is not configured")
-	}
-	return proto.Clone(s.cloudConfig).(*rpc.AmbassadorCloudConfig), nil
+func (s *service) GetCloudConfig(context.Context, *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // GetTelepresenceAPI returns information about the TelepresenceAPI server.
@@ -231,12 +147,9 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	sessionID := s.state.AddClient(client, s.clock.Now())
-	s.MaybeAddToken(ctx, client.GetApiKey())
-
 	installId := client.GetInstallId()
 	return &rpc.SessionInfo{
-		SessionId: sessionID,
+		SessionId: s.state.AddClient(client, s.clock.Now()),
 		ClusterId: s.clusterInfo.ID(),
 		InstallId: &installId,
 	}, nil
@@ -270,8 +183,6 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	// ctx = WithSessionInfo(ctx, req.GetSession())
 	// dlog.Debug(ctx, "Remain called")
-	s.MaybeAddToken(ctx, req.GetApiKey())
-
 	if ok := s.state.MarkSession(req, s.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", req.GetSession().GetSessionId())
 	}
@@ -558,39 +469,6 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	if interceptInfo != nil {
 		tracing.RecordInterceptInfo(span, interceptInfo)
 	}
-	if s.cloudConfig == nil {
-		return interceptInfo, nil
-	}
-	err = s.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-		if interceptInfo.ApiKey == "" {
-			return nil
-		}
-		sysa, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-		if !ok {
-			return nil
-		}
-		if sa, err := sysa.Get(ctx); err != nil {
-			dlog.Errorln(ctx, "systema: acquire connection:", err)
-			return err
-		} else {
-			dlog.Debugf(ctx, "systema: remove intercept: %q", interceptInfo.Id)
-			_, err := sa.RemoveIntercept(ctx, &systema.InterceptRemoval{
-				InterceptId: interceptInfo.Id,
-			})
-			if err != nil {
-				return err
-			}
-
-			// Release the connection we got to delete the intercept
-			if err := sysa.Done(ctx); err != nil {
-				dlog.Errorln(ctx, "systema: release management connection:", err)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
 	return interceptInfo, nil
 }
 
@@ -612,177 +490,8 @@ func (s *service) MakeInterceptID(_ context.Context, sessionID string, name stri
 	}
 }
 
-const systemaCallTimeout = 3 * time.Second
-
-func (s *service) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
-	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
-	interceptID, err := s.MakeInterceptID(ctx, req.GetSession().GetSessionId(), req.GetName())
-	if err != nil {
-		return nil, err
-	}
-
-	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
-
-	switch action := req.PreviewDomainAction.(type) {
-	case *rpc.UpdateInterceptRequest_AddPreviewDomain:
-		// Check if this is already done.
-		// Connect to SystemA.
-		// Have SystemA create the preview domain.
-		// Apply that to the intercept.
-		// Oh no, something went wrong.  Clean up.
-		intercept, err := s.addInterceptDomain(ctx, interceptID, action)
-		if err != nil {
-			return nil, err
-		}
-		return intercept, nil
-	case *rpc.UpdateInterceptRequest_RemovePreviewDomain:
-		// Check if this is already done.
-		// Remove the domain
-		intercept, err := s.removeInterceptDomain(ctx, interceptID)
-		if err != nil {
-			return nil, err
-		}
-		return intercept, nil
-	default:
-		panic(fmt.Errorf("unimplemented UpdateInterceptRequest action: %T", action))
-	}
-}
-
-func (s *service) removeInterceptDomain(ctx context.Context, interceptID string) (*rpc.InterceptInfo, error) {
-	var domain string
-	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-	if !ok {
-		return nil, status.Errorf(codes.FailedPrecondition, "access to Ambassador Cloud is not configured")
-	}
-
-	intercept := s.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
-		if intercept.PreviewDomain == "" {
-			return
-		}
-
-		domain = intercept.PreviewDomain
-		intercept.PreviewDomain = ""
-	})
-	if domain != "" {
-		if sa, err := systemaPool.Get(ctx); err != nil {
-			dlog.Errorln(ctx, "systema: acquire connection:", err)
-		} else {
-			tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
-			defer cancel()
-			_, err := sa.RemoveDomain(tc, &systema.RemoveDomainRequest{
-				Domain: domain,
-			})
-			if err != nil {
-				dlog.Errorln(ctx, "systema: remove domain:", err)
-			}
-			if err := systemaPool.Done(ctx); err != nil {
-				dlog.Errorln(ctx, "systema: release connection:", err)
-			}
-		}
-	}
-	if intercept == nil {
-		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", interceptID)
-	}
-	return intercept, nil
-}
-
-func (s *service) addInterceptDomain(ctx context.Context, interceptID string, action *rpc.UpdateInterceptRequest_AddPreviewDomain) (*rpc.InterceptInfo, error) {
-	var domain string
-	var sa systema.SystemACRUDClient
-	systemaPool, ok := a8rcloud.GetSystemAPool[managerutil.SystemaCRUDClient](ctx, a8rcloud.TrafficManagerConnName)
-	if !ok {
-		return nil, status.Errorf(codes.FailedPrecondition, "access to Ambassador Cloud is not configured")
-	}
-
-	var err error
-	intercept := s.state.UpdateIntercept(interceptID, func(intercept *rpc.InterceptInfo) {
-		if intercept.PreviewDomain != "" {
-			return
-		}
-
-		if sa == nil {
-			sa, err = systemaPool.Get(ctx)
-			if err != nil {
-				err = fmt.Errorf("systema: acquire connection: %w", err)
-				return
-			}
-		}
-
-		if domain == "" {
-			tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
-			defer cancel()
-			var resp *systema.CreateDomainResponse
-			resp, err = sa.CreateDomain(tc, &systema.CreateDomainRequest{
-				InterceptId:       intercept.Id,
-				DisplayBanner:     action.AddPreviewDomain.DisplayBanner,
-				InterceptSpec:     intercept.Spec,
-				Host:              action.AddPreviewDomain.Ingress.L5Host,
-				PullRequestUrl:    action.AddPreviewDomain.PullRequestUrl,
-				AddRequestHeaders: action.AddPreviewDomain.AddRequestHeaders,
-			})
-			if err != nil {
-				err = status.Errorf(status.Code(err), fmt.Sprintf("systema: create domain: %v", err))
-				return
-			}
-			domain = resp.Domain
-		}
-
-		intercept.PreviewDomain = domain
-		intercept.PreviewSpec = action.AddPreviewDomain
-	})
-	if err != nil || intercept == nil || domain == "" || intercept.PreviewDomain != domain {
-		if sa != nil {
-			if domain != "" {
-				tc, cancel := context.WithTimeout(ctx, systemaCallTimeout)
-				defer cancel()
-				_, err := sa.RemoveDomain(tc, &systema.RemoveDomainRequest{
-					Domain: domain,
-				})
-				if err != nil {
-					dlog.Errorln(ctx, "systema: remove domain:", err)
-				}
-			}
-			if err := systemaPool.Done(ctx); err != nil {
-				dlog.Errorln(ctx, "systema: release connection:", err)
-			}
-			sa = nil
-		}
-	} else if intercept != nil && domain != "" && intercept.PreviewDomain == domain {
-		// Everything was created successfully, prep cleanup
-		// Note the finalizers will be run in reverse order to how they're added.
-		err = s.state.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-			// We never dereferenced the systema pool since the reverse connection it initializes must be kept around while the intercept is live.
-			if sa != nil {
-				if err := systemaPool.Done(ctx); err != nil {
-					return fmt.Errorf("systema: release reverse connection: %w", err)
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		err = s.state.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-			// Check again for a preview domain in case it was removed separately
-			if interceptInfo.PreviewDomain != "" {
-				dlog.Debugf(ctx, "systema: removing domain: %q", interceptInfo.PreviewDomain)
-				_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
-					Domain: interceptInfo.PreviewDomain,
-				})
-				if err != nil {
-					return fmt.Errorf("systema: remove domain for intercept %q: %w", interceptID, err)
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-	if intercept == nil {
-		err = status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", interceptID)
-	}
-	return intercept, err
+func (s *service) UpdateIntercept(context.Context, *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // RemoveIntercept lets a client remove an intercept.
@@ -1093,13 +802,4 @@ const agentSessionTTL = 15 * time.Second
 func (s *service) expire(ctx context.Context) {
 	now := s.clock.Now()
 	s.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
-}
-
-// MaybeAddToken maybe adds apikey to the cluster so that the ambassador agent can login.
-func (s *service) MaybeAddToken(ctx context.Context, apikey string) {
-	if apikey != "" && s.tokenService != nil {
-		if err := s.tokenService.MaybeAddToken(ctx, apikey); err != nil {
-			dlog.Errorf(ctx, "error creating cloud token: %s", err)
-		}
-	}
 }

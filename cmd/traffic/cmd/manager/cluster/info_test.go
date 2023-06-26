@@ -2,8 +2,6 @@ package cluster
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +12,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/license"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
@@ -72,44 +69,5 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 		info := NewInfo(ctx)
 		require.NotNil(t, info)
 		require.Equal(t, info.ID(), testUID)
-	})
-
-	t.Run("fail no license", func(t *testing.T) {
-		ctx := context.Background()
-
-		cs := fake.NewSimpleClientset(&v1.Pod{})
-
-		ctx = k8sapi.WithK8sInterface(ctx, cs)
-		ctx = managerutil.WithEnv(ctx, &env)
-
-		info := NewInfo(ctx)
-		require.NotNil(t, info)
-		require.Equal(t, info.ID(), IDZero)
-	})
-
-	t.Run("bad license jwt", func(t *testing.T) {
-		ctx := context.Background()
-
-		cs := fake.NewSimpleClientset(&v1.Pod{})
-
-		ctx = k8sapi.WithK8sInterface(ctx, cs)
-		ctx = managerutil.WithEnv(ctx, &env)
-
-		tmpRootDir, err := os.MkdirTemp("", "")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		defer func() { _ = os.RemoveAll(tmpRootDir) }()
-		err = os.WriteFile(filepath.Join(tmpRootDir, "license"), []byte("INVALID"), os.ModePerm)
-		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tmpRootDir, "hostDomain"), []byte("auth.datawire.io"), os.ModePerm)
-		require.NoError(t, err)
-
-		ctx = license.WithBundle(ctx, tmpRootDir)
-
-		info := NewInfo(ctx)
-		require.NotNil(t, info)
-		require.Equal(t, info.ID(), IDZero)
 	})
 }
