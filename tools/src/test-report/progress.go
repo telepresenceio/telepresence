@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -31,25 +30,13 @@ const (
 type progressBar struct {
 	sync.RWMutex
 	*mpb.Progress
-	bar            *mpb.Bar
-	ReportCh       chan *Line
-	failureOutputs map[TestID]string
+	bar      *mpb.Bar
+	ReportCh chan *Line
 
 	// These are lock-protected
 	currentTest     string
 	resultsCounters map[string]int
-}
-
-func (p *progressBar) PrintFailures() bool {
-	if len(p.failureOutputs) == 0 {
-		return false
-	}
-	separator := strings.Repeat("=", 200)
-	fmt.Fprintf(os.Stderr, "\n\nFailed tests:\n")
-	for testID, output := range p.failureOutputs {
-		fmt.Fprintf(os.Stderr, "\n%s.%s\n%s\n%s\n", testID.Package, testID.Test, output, separator)
-	}
-	return true
+	askingForPw     bool
 }
 
 func (p *progressBar) End() {
@@ -57,6 +44,7 @@ func (p *progressBar) End() {
 }
 
 func (p *progressBar) monitorProgress(ctx context.Context) {
+	var pwTimer *time.Timer
 	for {
 		select {
 		case line := <-p.ReportCh:
@@ -66,14 +54,22 @@ func (p *progressBar) monitorProgress(ctx context.Context) {
 				p.currentTest = line.Test
 				p.Unlock()
 			case OUTPUT:
-				if _, ok := p.failureOutputs[line.TestID]; !ok {
-					p.failureOutputs[line.TestID] = ""
+				if strings.Contains(line.Output, "Asking for admin credentials") {
+					pwTimer = time.AfterFunc(500*time.Millisecond, func() {
+						p.Lock()
+						p.askingForPw = true
+						p.Unlock()
+					})
+				} else if strings.Contains(line.Output, "Admin credentials acquired") {
+					if pwTimer != nil {
+						pwTimer.Stop()
+						pwTimer = nil
+					}
+					p.Lock()
+					p.askingForPw = false
+					p.Unlock()
 				}
-				p.failureOutputs[line.TestID] += line.Output
-			case PASS, SKIP:
-				delete(p.failureOutputs, line.TestID)
-				fallthrough
-			case FAIL:
+			case FAIL, PASS, SKIP:
 				p.Lock()
 				if _, ok := p.resultsCounters[line.Action]; !ok {
 					p.resultsCounters[line.Action] = 0
@@ -107,6 +103,16 @@ func (p *progressBar) renderResults(_ decor.Statistics) string {
 	)
 }
 
+func (p *progressBar) renderPasswordPrompt(_ decor.Statistics) string {
+	// decor.OnPredicate doesn't work for this somehow, so we do it manually
+	p.RLock()
+	defer p.RUnlock()
+	if p.askingForPw {
+		return color.HiRedString(" Please type in your password and hit enter! ")
+	}
+	return ""
+}
+
 func newProgressBar(ctx context.Context, isCi bool) *progressBar {
 	opts := []mpb.ContainerOption{}
 	if isCi {
@@ -118,12 +124,12 @@ func newProgressBar(ctx context.Context, isCi bool) *progressBar {
 		Progress:        progress,
 		ReportCh:        make(chan *Line),
 		resultsCounters: make(map[string]int),
-		failureOutputs:  make(map[TestID]string),
 	}
 	p.bar = progress.AddSpinner(-1,
 		mpb.AppendDecorators(
 			decor.CurrentNoUnit(" %d "),
 			decor.Any(p.renderResults),
+			decor.Any(p.renderPasswordPrompt),
 			decor.OnComplete(decor.Elapsed(decor.ET_STYLE_GO), "done!"),
 			decor.Any(p.renderCurrentTest),
 		),

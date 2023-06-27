@@ -11,6 +11,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
+const logsFileName = "tests.log"
+
 type TestID struct {
 	Package string `json:"Package,omitempty"`
 	Test    string `json:"Test,omitempty"`
@@ -36,6 +38,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to create reporter: %s\n", err)
 		os.Exit(1)
 	}
+	logger, err := NewLogger(ctx, logsFileName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create logger: %s\n", err)
+		os.Exit(1)
+	}
 	if metriton.IsDisabledByUser() {
 		fmt.Fprint(progressBar, "Reporting is disabled by user\n")
 	}
@@ -46,6 +53,7 @@ func main() {
 		scanner := bufio.NewScanner(os.Stdin)
 		defer func() {
 			reporter.CloseAndWait()
+			logger.CloseAndWait()
 			// This ends the progress bar and hence the program
 			progressBar.End()
 			cancel()
@@ -62,10 +70,11 @@ func main() {
 			}
 			reporter.Report(line)
 			progressBar.ReportCh <- line
+			logger.Report(line)
 		}
 	}()
 	progressBar.Wait()
-	if progressBar.PrintFailures() {
+	if logger.ReportFailures() {
 		os.Exit(1)
 	}
 }
