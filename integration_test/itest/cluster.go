@@ -58,6 +58,7 @@ type Cluster interface {
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
+	Initialize(context.Context) context.Context
 	InstallTrafficManager(ctx context.Context, values map[string]string) error
 	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error
 	IsCI() bool
@@ -70,6 +71,8 @@ type Cluster interface {
 	GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string
 	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
 	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) error
+	UserdPProf() uint16
+	RootdPProf() uint16
 }
 
 // The cluster is created once and then reused by all tests. It ensures that:
@@ -93,8 +96,24 @@ type cluster struct {
 	rootdPProf       uint16
 }
 
+//nolint:gochecknoglobals // extension point
+var ExtendClusterFunc = func(c Cluster) Cluster {
+	return c
+}
+
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
+	ec := ExtendClusterFunc(&s)
+	ctx = withGlobalHarness(ctx, ec)
+	ctx = ec.Initialize(ctx)
+	defer s.tearDown(ctx)
+	t := getT(ctx)
+	if !t.Failed() {
+		f(s.withBasicConfig(ctx, t))
+	}
+}
+
+func (s *cluster) Initialize(ctx context.Context) context.Context {
 	s.suffix, s.isCI = dos.LookupEnv(ctx, "GITHUB_SHA")
 	if s.isCI {
 		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
@@ -143,7 +162,6 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		require.NoError(t, err)
 		s.rootdPProf = uint16(port)
 	}
-	ctx = withGlobalHarness(ctx, &s)
 	if s.prePushed {
 		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
 	}
@@ -165,10 +183,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 
 	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
-	defer s.tearDown(ctx)
-	if !t.Failed() {
-		f(s.withBasicConfig(ctx, t))
-	}
+	return ctx
 }
 
 func (s *cluster) tearDown(ctx context.Context) {
@@ -292,7 +307,7 @@ func PodCreateTimeout(c context.Context) time.Duration {
 }
 
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
-	config := client.GetDefaultConfig()
+	config := client.GetDefaultConfigFunc()
 	config.LogLevels().UserDaemon = logrus.DebugLevel
 	config.LogLevels().RootDaemon = logrus.DebugLevel
 
@@ -403,6 +418,14 @@ func (s *cluster) CompatVersion() string {
 	return s.compatVersion
 }
 
+func (s *cluster) UserdPProf() uint16 {
+	return s.userdPProf
+}
+
+func (s *cluster) RootdPProf() uint16 {
+	return s.rootdPProf
+}
+
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
 	var pods string
 	for i := 0; ; i++ {
@@ -497,12 +520,6 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
 		)
 	}
-	if sysA := GetSystemA(ctx); sysA != nil {
-		settings = append(settings,
-			"--set", fmt.Sprintf("systemaHost=%s", sysA.SystemaHost),
-			"--set", fmt.Sprintf("systemaPort=%d", sysA.SystemaPort),
-		)
-	}
 	if !release {
 		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.Registry()))
 		if agentImage != nil {
@@ -587,8 +604,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 	nsl := nss.UniqueList()
 	vx := struct {
-		SystemaHost string  `json:"systemaHost"`
-		SystemaPort int     `json:"systemaPort"`
 		LogLevel    string  `json:"logLevel"`
 		Image       *Image  `json:"image,omitempty"`
 		Agent       *xAgent `json:"agent,omitempty"`
@@ -615,10 +630,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 				"allowConflictingSubnets": {"10.0.0.0/8"},
 			},
 		},
-	}
-	if sysA := GetSystemA(ctx); sysA != nil {
-		vx.SystemaHost = sysA.SystemaHost
-		vx.SystemaPort = sysA.SystemaPort
 	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {
@@ -768,18 +779,18 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		if user := GetUser(ctx); user != "default" {
 			args = append(args, "--as", "system:serviceaccount:"+user)
 		}
-		if gh.userdPProf > 0 {
-			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.userdPProf)))
+		if gh.UserdPProf() > 0 {
+			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.UserdPProf())))
 		}
-		if gh.rootdPProf > 0 {
-			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.rootdPProf)))
+		if gh.RootdPProf() > 0 {
+			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.RootdPProf())))
 		}
 		args = append(args, rest...)
 	}
 	if UseDocker(ctx) {
 		args = append([]string{"--docker"}, args...)
 	}
-	cmd := Command(ctx, gh.executable, args...)
+	cmd := Command(ctx, gh.Executable(), args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	return cmd
