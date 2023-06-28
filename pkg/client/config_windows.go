@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"gopkg.in/yaml.v3"
+	"github.com/sirupsen/logrus"
 
-	"github.com/datawire/dlib/dlog"
+	"gopkg.in/yaml.v3"
 )
 
 type OSSpecificConfig struct {
@@ -73,15 +73,11 @@ func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
 			case GSCAuto, GSCRegistry, GSCPowershell:
 				n.GlobalDNSSearchConfigStrategy = GSCStrategy(v.Value)
 			default:
-				if parseContext != nil {
-					dlog.Warn(parseContext, WithLoc(fmt.Sprintf("invalid globalDNSSearchConfigStrategy %q. Valid values are %q, %q or %q",
-						v.Value, GSCAuto, GSCRegistry, GSCPowershell), ms[i+1]))
-				}
+				logrus.Warn(WithLoc(fmt.Sprintf("invalid globalDNSSearchConfigStrategy %q. Valid values are %q, %q or %q",
+					v.Value, GSCAuto, GSCRegistry, GSCPowershell), ms[i+1]))
 			}
 		default:
-			if parseContext != nil {
-				dlog.Warn(parseContext, WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-			}
+			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
 	}
 	if n.GlobalDNSSearchConfigStrategy == "" {
