@@ -45,6 +45,10 @@ items:
         body: >-
           Several gauges were added to the Prometheus client to make it easier to monitor
           what the Traffic manager spends resources on.
+      - type: feature
+        title: Agent Pull Policy
+        body: >-
+          Add option to set traffic agent pull policy in helm chart.
       - type: bugfix
         title: Resource leak in the Traffic manager.
         body: >-

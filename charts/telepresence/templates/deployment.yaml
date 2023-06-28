@@ -155,6 +155,8 @@ spec:
           - name: AGENT_IMAGE_PULL_SECRETS
             value: '{{ toJson . }}'
           {{- end }}
+          - name: AGENT_IMAGE_PULL_POLICY
+            value: {{ .agent.image.pullPolicy }}
           {{- with .agent.envoy }}
           {{- if .logLevel }}
           - name: AGENT_ENVOY_LOG_LEVEL

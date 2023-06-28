@@ -213,6 +213,7 @@ agent:
     name:
     tag:
     pullSecrets: []
+    pullPolicy: IfNotPresent
   envoy:
     logLevel: warning
     serverPort: 18000
