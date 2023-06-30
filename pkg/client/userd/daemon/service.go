@@ -120,6 +120,8 @@ func (s *service) As(ptr any) {
 	switch ptr := ptr.(type) {
 	case **service:
 		*ptr = s
+	case *rpc.ConnectorServer:
+		*ptr = s
 	default:
 		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
 	}
