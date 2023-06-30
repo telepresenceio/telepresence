@@ -52,7 +52,7 @@ type Env struct {
 
 	AgentRegistry             string                      `env:"AGENT_REGISTRY,           parser=nonempty-string"`
 	AgentImage                string                      `env:"AGENT_IMAGE,              parser=string,         default="`
-	AgentImagePullPolicy      string                      `env:"AGENT_IMAGE_PULL_POLICY,  parser=string,		 default="`
+	AgentImagePullPolicy      string                      `env:"AGENT_IMAGE_PULL_POLICY,  parser=string,         default="`
 	AgentImagePullSecrets     []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`
 	AgentInjectPolicy         agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
 	AgentAppProtocolStrategy  k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
