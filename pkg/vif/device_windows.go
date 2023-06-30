@@ -71,7 +71,7 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
 	}
 	td.interfaceIndex = int32(iface.InterfaceIndex)
-	td.strategy = client.GetConfig(ctx).Network.GlobalDNSSearchConfigStrategy
+	td.strategy = client.GetConfig(ctx).OSSpecific().Network.GlobalDNSSearchConfigStrategy
 
 	return td, nil
 }

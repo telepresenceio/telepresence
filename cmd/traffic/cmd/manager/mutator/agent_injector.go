@@ -101,7 +101,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		attribute.String("tel2."+agentconfig.InjectAnnotation, ia),
 	)
 
-	var config *agentconfig.Sidecar
+	var scx agentconfig.SidecarExt
 	switch ia {
 	case "false", "disabled":
 		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, agentconfig.InjectAnnotation)
@@ -121,7 +121,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		}
 
 		workloadCache := make(map[string]k8sapi.Workload, 0)
-		config, err = a.findConfigMapValue(ctx, workloadCache, pod, nil)
+		scx, err = a.findConfigMapValue(ctx, workloadCache, pod, nil)
 
 		if err != nil {
 			if isDelete {
@@ -131,13 +131,13 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		}
 
 		switch {
-		case config == nil && isDelete:
+		case scx == nil && isDelete:
 			return nil, nil
-		case config == nil && ia != "enabled":
+		case scx == nil && ia != "enabled":
 			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or through %q annotation; skipping`,
 				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
-		case config != nil && config.Manual:
+		case scx != nil && scx.AgentConfig().Manual:
 			if !isDelete {
 				dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			}
@@ -149,7 +149,8 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 			if k8sErrors.IsNotFound(err) {
 				err = nil
 				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
-				if isDelete && config != nil {
+				if isDelete && scx != nil {
+					config := scx.AgentConfig()
 					err = a.agentConfigs.Delete(ctx, config.WorkloadName, config.Namespace)
 				}
 			}
@@ -160,16 +161,16 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if isDelete {
 			return nil, nil
 		}
-		var gc *agentmap.GeneratorConfig
-		if gc, err = env.GeneratorConfig(img); err != nil {
+		var gc agentmap.GeneratorConfig
+		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		if config, err = agentmap.Generate(ctx, wl, gc); err != nil {
+		if scx, err = gc.Generate(ctx, wl); err != nil {
 			return nil, err
 		}
 
-		config.RecordInSpan(span)
-		if err = a.agentConfigs.Store(ctx, config, true); err != nil {
+		scx.RecordInSpan(span)
+		if err = a.agentConfigs.Store(ctx, scx, true); err != nil {
 			return nil, err
 		}
 	default:
@@ -180,6 +181,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
 
 	var patches patchOps
+	config := scx.AgentConfig()
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
@@ -577,7 +579,7 @@ func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patch
 	return patches
 }
 
-func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache map[string]k8sapi.Workload, pod *core.Pod, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache map[string]k8sapi.Workload, pod *core.Pod, wl k8sapi.Workload) (agentconfig.SidecarExt, error) {
 	if a.agentConfigs == nil {
 		return nil, nil
 	}
@@ -589,13 +591,15 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache ma
 	}
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			ag := agentconfig.Sidecar{}
-			ok, err := a.agentConfigs.GetInto(or.Name, pod.GetNamespace(), &ag)
+			scx, err := a.agentConfigs.Get(or.Name, pod.GetNamespace())
 			if err != nil {
 				return nil, err
 			}
-			if ok && (ag.WorkloadKind == "" || ag.WorkloadKind == or.Kind) {
-				return &ag, nil
+			if scx != nil {
+				ag := scx.AgentConfig()
+				if ag.WorkloadKind == "" || ag.WorkloadKind == or.Kind {
+					return scx, nil
+				}
 			}
 			wl, err = tracing.GetWorkloadFromCache(ctx, workloadCache, or.Name, pod.GetNamespace(), or.Kind)
 			if err != nil {

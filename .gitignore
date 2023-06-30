@@ -29,7 +29,6 @@ build-output
 telepresence
 traffic
 tst-manager
-tst-systema
 !/cmd/*/
 
 # The Chart directory

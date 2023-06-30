@@ -32,7 +32,7 @@ func (s *Session) streamCreator() tunnel.StreamCreator {
 		if err != nil {
 			return nil, err
 		}
-		tc := client.GetConfig(c).Timeouts
+		tc := client.GetConfig(c).Timeouts()
 		return tunnel.NewClientStream(c, ct, id, s.session.SessionId, tc.Get(client.TimeoutRoundtripLatency), tc.Get(client.TimeoutEndpointDial))
 	}
 }

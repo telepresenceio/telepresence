@@ -3,10 +3,8 @@ package agentmap
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"go.opentelemetry.io/otel"
-	"google.golang.org/protobuf/types/known/durationpb"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -22,24 +20,26 @@ const (
 	ManagerAppName        = "traffic-manager"
 )
 
-type GeneratorConfig struct {
-	ManagerPort          uint16
-	AgentPort            uint16
-	APIPort              uint16
-	TracingPort          uint16
-	QualifiedAgentImage  string
-	ManagerNamespace     string
-	LogLevel             string
-	InitResources        *core.ResourceRequirements
-	Resources            *core.ResourceRequirements
-	PullSecrets          []core.LocalObjectReference
-	EnvoyLogLevel        string
-	EnvoyServerPort      uint16
-	EnvoyAdminPort       uint16
-	EnvoyHttpIdleTimeout time.Duration
+type GeneratorConfig interface {
+	Generate(ctx context.Context, wl k8sapi.Workload) (sc agentconfig.SidecarExt, err error)
 }
 
-func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc *agentconfig.Sidecar, err error) {
+var GeneratorConfigFunc func(qualifiedAgentImage string) (GeneratorConfig, error) //nolint:gochecknoglobals // extension point
+
+type BasicGeneratorConfig struct {
+	ManagerPort         uint16
+	AgentPort           uint16
+	APIPort             uint16
+	TracingPort         uint16
+	QualifiedAgentImage string
+	ManagerNamespace    string
+	LogLevel            string
+	InitResources       *core.ResourceRequirements
+	Resources           *core.ResourceRequirements
+	PullSecrets         []core.LocalObjectReference
+}
+
+func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workload) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "agentmap.Generate")
 	defer tracing.EndAndRecord(span, err)
 
@@ -88,32 +88,21 @@ func Generate(ctx context.Context, wl k8sapi.Workload, cfg *GeneratorConfig) (sc
 		return nil, fmt.Errorf("found no service with a port that matches a container in pod %s.%s", pod.Name, pod.Namespace)
 	}
 
-	var hto *durationpb.Duration
-	if cfg.EnvoyHttpIdleTimeout != 0 {
-		hto = &durationpb.Duration{
-			Seconds: int64(cfg.EnvoyHttpIdleTimeout / time.Second),
-			Nanos:   int32(cfg.EnvoyHttpIdleTimeout % time.Second),
-		}
-	}
 	ag := &agentconfig.Sidecar{
-		AgentImage:           cfg.QualifiedAgentImage,
-		AgentName:            wl.GetName(),
-		LogLevel:             cfg.LogLevel,
-		Namespace:            wl.GetNamespace(),
-		WorkloadName:         wl.GetName(),
-		WorkloadKind:         wl.GetKind(),
-		ManagerHost:          ManagerAppName + "." + cfg.ManagerNamespace,
-		ManagerPort:          cfg.ManagerPort,
-		APIPort:              cfg.APIPort,
-		TracingPort:          cfg.TracingPort,
-		EnvoyLogLevel:        cfg.EnvoyLogLevel,
-		EnvoyServerPort:      cfg.EnvoyServerPort,
-		EnvoyAdminPort:       cfg.EnvoyAdminPort,
-		EnvoyHttpIdleTimeout: hto,
-		Containers:           ccs,
-		InitResources:        cfg.InitResources,
-		Resources:            cfg.Resources,
-		PullSecrets:          cfg.PullSecrets,
+		AgentImage:    cfg.QualifiedAgentImage,
+		AgentName:     wl.GetName(),
+		LogLevel:      cfg.LogLevel,
+		Namespace:     wl.GetNamespace(),
+		WorkloadName:  wl.GetName(),
+		WorkloadKind:  wl.GetKind(),
+		ManagerHost:   ManagerAppName + "." + cfg.ManagerNamespace,
+		ManagerPort:   cfg.ManagerPort,
+		APIPort:       cfg.APIPort,
+		TracingPort:   cfg.TracingPort,
+		Containers:    ccs,
+		InitResources: cfg.InitResources,
+		Resources:     cfg.Resources,
+		PullSecrets:   cfg.PullSecrets,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil

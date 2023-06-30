@@ -10,7 +10,6 @@ require (
 
 require (
 	github.com/blang/semver v3.5.1+incompatible // indirect
-	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f // indirect
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b // indirect
 	github.com/datawire/k8sapi v0.1.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

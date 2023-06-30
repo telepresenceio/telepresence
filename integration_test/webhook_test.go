@@ -48,8 +48,8 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	// Use a config with agentImage to validate that it's the
 	// latter that is used in the traffic-manager
-	ctx := itest.WithConfig(s.Context(), func(cfg *client.Config) {
-		cfg.Images.PrivateAgentImage = "imageFromConfig:0.0.1"
+	ctx := itest.WithConfig(s.Context(), func(cfg client.Config) {
+		cfg.Images().PrivateAgentImage = "imageFromConfig:0.0.1"
 	})
 
 	require := s.Require()

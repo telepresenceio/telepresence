@@ -2,13 +2,14 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -27,41 +28,89 @@ import (
 
 const ConfigFile = "config.yml"
 
-// Config contains all configuration values for the telepresence CLI.
-type Config struct {
-	OSSpecificConfig `yaml:",inline"`
-	Timeouts         Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
-	LogLevels        LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
-	Images           Images          `json:"images,omitempty" yaml:"images,omitempty"`
-	Cloud            Cloud           `json:"cloud,omitempty" yaml:"cloud,omitempty"`
-	Grpc             Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
-	TelepresenceAPI  TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
-	Intercept        Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
-	Cluster          Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+type Config interface {
+	fmt.Stringer
+	OSSpecific() *OSSpecificConfig
+	Base() *BaseConfig
+	Timeouts() *Timeouts
+	LogLevels() *LogLevels
+	Images() *Images
+	Grpc() *Grpc
+	TelepresenceAPI() *TelepresenceAPI
+	Intercept() *Intercept
+	Cluster() *Cluster
+	Merge(Config)
 }
 
-func ParseConfigYAML(data []byte) (*Config, error) {
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+// BaseConfig contains all configuration values for the telepresence CLI.
+type BaseConfig struct {
+	OSSpecificConfig `yaml:",inline"`
+	TimeoutsV        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
+	LogLevelsV       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
+	ImagesV          Images          `json:"images,omitempty" yaml:"images,omitempty"`
+	GrpcV            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
+	TelepresenceAPIV TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
+	InterceptV       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
+	ClusterV         Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+}
+
+func (c *BaseConfig) OSSpecific() *OSSpecificConfig {
+	return &c.OSSpecificConfig
+}
+
+func (c *BaseConfig) Base() *BaseConfig {
+	return c
+}
+
+func (c *BaseConfig) Timeouts() *Timeouts {
+	return &c.TimeoutsV
+}
+
+func (c *BaseConfig) LogLevels() *LogLevels {
+	return &c.LogLevelsV
+}
+
+func (c *BaseConfig) Images() *Images {
+	return &c.ImagesV
+}
+
+func (c *BaseConfig) Grpc() *Grpc {
+	return &c.GrpcV
+}
+
+func (c *BaseConfig) TelepresenceAPI() *TelepresenceAPI {
+	return &c.TelepresenceAPIV
+}
+
+func (c *BaseConfig) Intercept() *Intercept {
+	return &c.InterceptV
+}
+
+func (c *BaseConfig) Cluster() *Cluster {
+	return &c.ClusterV
+}
+
+func ParseConfigYAML(data []byte) (Config, error) {
+	cfg := GetDefaultConfig()
+	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+	return cfg, nil
 }
 
 // Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
-func (c *Config) Merge(o *Config) {
-	c.OSSpecificConfig.Merge(&o.OSSpecificConfig)
-	c.Timeouts.merge(&o.Timeouts)
-	c.LogLevels.merge(&o.LogLevels)
-	c.Images.merge(&o.Images)
-	c.Cloud.merge(&o.Cloud)
-	c.Grpc.merge(&o.Grpc)
-	c.TelepresenceAPI.merge(&o.TelepresenceAPI)
-	c.Intercept.merge(&o.Intercept)
-	c.Cluster.merge(&o.Cluster)
+func (c *BaseConfig) Merge(lc Config) {
+	c.OSSpecificConfig.Merge(lc.OSSpecific())
+	c.TimeoutsV.merge(lc.Timeouts())
+	c.LogLevelsV.merge(lc.LogLevels())
+	c.ImagesV.merge(lc.Images())
+	c.GrpcV.merge(lc.Grpc())
+	c.TelepresenceAPIV.merge(lc.TelepresenceAPI())
+	c.InterceptV.merge(lc.Intercept())
+	c.ClusterV.merge(lc.Cluster())
 }
 
-func (c *Config) String() string {
+func (c *BaseConfig) String() string {
 	y, _ := yaml.Marshal(c)
 	return string(y)
 }
@@ -110,10 +159,10 @@ func Watch(c context.Context, onReload func(context.Context) error) error {
 	}
 }
 
-func stringKey(n *yaml.Node) (string, error) {
+func StringKey(n *yaml.Node) (string, error) {
 	var s string
 	if err := n.Decode(&s); err != nil {
-		return "", errors.New(withLoc("key must be a string", n))
+		return "", errors.New(WithLoc("key must be a string", n))
 	}
 	return s, nil
 }
@@ -307,12 +356,12 @@ func CheckTimeout(ctx context.Context, err error) error {
 // UnmarshalYAML caters for the unfortunate fact that time.Duration doesn't do YAML or JSON at all.
 func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("timeouts must be an object", node))
+		return errors.New(WithLoc("timeouts must be an object", node))
 	}
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
+		kv, err := StringKey(ms[i])
 		if err != nil {
 			return err
 		}
@@ -345,16 +394,14 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		case "ftpShutdown":
 			dp = &t.PrivateFtpShutdown
 		default:
-			if parseContext != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-			}
+			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 			continue
 		}
 
 		v := ms[i+1]
 		var vv any
 		if err = v.Decode(&vv); err != nil {
-			return errors.New(withLoc("unable to parse value", v))
+			return errors.New(WithLoc("unable to parse value", v))
 		}
 		switch vv := vv.(type) {
 		case int:
@@ -363,7 +410,7 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 			*dp = time.Duration(vv * float64(time.Second))
 		case string:
 			if *dp, err = time.ParseDuration(vv); err != nil {
-				return errors.New(withLoc(fmt.Sprintf("%q is not a valid duration", vv), v))
+				return errors.New(WithLoc(fmt.Sprintf("%q is not a valid duration", vv), v))
 			}
 		}
 	}
@@ -518,20 +565,20 @@ func (ll LogLevels) IsZero() bool {
 // UnmarshalYAML parses the logrus log-levels.
 func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("timeouts must be an object", node))
+		return errors.New(WithLoc("timeouts must be an object", node))
 	}
 
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
+		kv, err := StringKey(ms[i])
 		if err != nil {
 			return err
 		}
 		v := ms[i+1]
 		level, err := logrus.ParseLevel(v.Value)
 		if err != nil {
-			return errors.New(withLoc("invalid log-level", v))
+			return errors.New(WithLoc("invalid log-level", v))
 		}
 		switch kv {
 		case "userDaemon":
@@ -539,9 +586,7 @@ func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
 		case "rootDaemon":
 			ll.RootDaemon = level
 		default:
-			if parseContext != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-			}
+			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
 	}
 	return nil
@@ -562,16 +607,24 @@ type Images struct {
 	PrivateWebhookRegistry string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
 }
 
+const (
+	defaultImagesRegistry = "docker.io/datawire"
+)
+
+var defaultImages = Images{ //nolint:gochecknoglobals // constant
+	PrivateRegistry: defaultImagesRegistry,
+}
+
 // UnmarshalYAML parses the images YAML.
 func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("images must be an object", node))
+		return errors.New(WithLoc("images must be an object", node))
 	}
 
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
+		kv, err := StringKey(ms[i])
 		if err != nil {
 			return err
 		}
@@ -584,12 +637,10 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 		case "webhookRegistry":
 			img.PrivateWebhookRegistry = v.Value
 		case "webhookAgentImage":
-			dlog.Warn(parseContext, withLoc(fmt.Sprintf(`deprecated key %q, please use "agentImage" instead`, kv), ms[i]))
+			logrus.Warn(WithLoc(fmt.Sprintf(`deprecated key %q, please use "agentImage" instead`, kv), ms[i]))
 			img.PrivateAgentImage = v.Value
 		default:
-			if parseContext != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-			}
+			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
 	}
 	return nil
@@ -599,7 +650,7 @@ func (img *Images) merge(o *Images) {
 	if o.PrivateAgentImage != "" {
 		img.PrivateAgentImage = o.PrivateAgentImage
 	}
-	if o.PrivateRegistry != "" {
+	if o.PrivateRegistry != defaultImagesRegistry {
 		img.PrivateRegistry = o.PrivateRegistry
 	}
 	if o.PrivateWebhookRegistry != "" {
@@ -608,10 +659,13 @@ func (img *Images) merge(o *Images) {
 }
 
 func (img *Images) Registry(c context.Context) string {
-	if img.PrivateRegistry != "" {
-		return img.PrivateRegistry
+	if img.PrivateRegistry == defaultImagesRegistry {
+		env := GetEnv(c)
+		if env.Registry != "" {
+			return env.Registry
+		}
 	}
-	return GetEnv(c).Registry
+	return img.PrivateRegistry
 }
 
 func (img *Images) WebhookRegistry(c context.Context) string {
@@ -628,128 +682,57 @@ func (img *Images) AgentImage(c context.Context) string {
 	return GetEnv(c).AgentImage
 }
 
-type Cloud struct {
-	SkipLogin       bool          `json:"skipLogin,omitempty" yaml:"skipLogin,omitempty"`
-	RefreshMessages time.Duration `json:"refreshMessages,omitempty" yaml:"refreshMessages,omitempty"`
-	SystemaHost     string        `json:"systemaHost,omitempty" yaml:"systemaHost,omitempty"`
-	SystemaPort     string        `json:"systemaPort,omitempty" yaml:"systemaPort,omitempty"`
-}
-
-// UnmarshalYAML parses the images YAML.
-func (c *Cloud) UnmarshalYAML(node *yaml.Node) (err error) {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("cloud must be an object", node))
-	}
-
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		v := ms[i+1]
-		switch kv {
-		case "skipLogin":
-			val, err := strconv.ParseBool(v.Value)
-			if err != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("bool expected for key %q", kv), ms[i]))
-			} else {
-				c.SkipLogin = val
-			}
-		case "refreshMessages":
-			duration, err := time.ParseDuration(v.Value)
-			if err != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("duration expected for key %q", kv), ms[i]))
-			} else {
-				c.RefreshMessages = duration
-			}
-		case "systemaHost":
-			c.SystemaHost = v.Value
-		case "systemaPort":
-			c.SystemaPort = v.Value
-		default:
-			if parseContext != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-			}
-		}
-	}
-	return nil
-}
-
-const (
-	defaultCloudSystemAHost     = "app.getambassador.io"
-	defaultCloudSystemAPort     = "443"
-	defaultCloudRefreshMessages = 24 * 7 * time.Hour
-)
-
-var defaultCloud = Cloud{ //nolint:gochecknoglobals // constant
-	SkipLogin:       false,
-	RefreshMessages: defaultCloudRefreshMessages,
-	SystemaHost:     defaultCloudSystemAHost,
-	SystemaPort:     defaultCloudSystemAPort,
-}
-
 // IsZero controls whether this element will be included in marshalled output.
-func (c Cloud) IsZero() bool {
-	return c == defaultCloud
+func (img Images) IsZero() bool {
+	return img == defaultImages
 }
 
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct.
-func (c Cloud) MarshalYAML() (any, error) {
-	cm := make(map[string]any)
-	if c.RefreshMessages != 0 && c.RefreshMessages != defaultCloudRefreshMessages {
-		cm["refreshMessages"] = c.RefreshMessages.String()
+func (img Images) MarshalYAML() (any, error) {
+	m := make(map[string]string)
+	if img.PrivateRegistry != defaultImagesRegistry {
+		m["registry"] = img.PrivateRegistry
 	}
-	if c.SkipLogin {
-		cm["skipLogin"] = true
+	if img.PrivateAgentImage != "" {
+		m["agentImage"] = img.PrivateAgentImage
 	}
-	if c.SystemaHost != defaultCloudSystemAHost {
-		cm["systemaHost"] = c.SystemaHost
+	if img.PrivateWebhookRegistry != "" {
+		m["webhookRegistry"] = img.PrivateWebhookRegistry
 	}
-	if c.SystemaPort != defaultCloudSystemAPort {
-		cm["systemaPort"] = c.SystemaPort
-	}
-	return cm, nil
-}
-
-func (c *Cloud) merge(o *Cloud) {
-	if o.SkipLogin {
-		c.SkipLogin = o.SkipLogin
-	}
-	if o.RefreshMessages != defaultCloudRefreshMessages {
-		c.RefreshMessages = o.RefreshMessages
-	}
-	if o.SystemaHost != defaultCloudSystemAHost {
-		c.SystemaHost = o.SystemaHost
-	}
-	if o.SystemaPort != defaultCloudSystemAPort {
-		c.SystemaPort = o.SystemaPort
-	}
+	return m, nil
 }
 
 type Grpc struct {
 	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
 	// Overrides the gRPC default of 4MB.
-	MaxReceiveSize resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
+	MaxReceiveSizeV resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
+}
+
+func (g *Grpc) MaxReceiveSize() int64 {
+	if !g.MaxReceiveSizeV.IsZero() {
+		if mz, ok := g.MaxReceiveSizeV.AsInt64(); ok {
+			return mz
+		}
+	}
+	return 0
 }
 
 func (g *Grpc) merge(o *Grpc) {
-	if !o.MaxReceiveSize.IsZero() {
-		g.MaxReceiveSize = o.MaxReceiveSize
+	if !o.MaxReceiveSizeV.IsZero() {
+		g.MaxReceiveSizeV = o.MaxReceiveSizeV
 	}
 }
 
 // UnmarshalYAML parses the images YAML.
 func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("grpc must be an object", node))
+		return errors.New(WithLoc("grpc must be an object", node))
 	}
 
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
+		kv, err := StringKey(ms[i])
 		if err != nil {
 			return err
 		}
@@ -758,26 +741,30 @@ func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
 		case "maxReceiveSize":
 			val, err := resource.ParseQuantity(v.Value)
 			if err != nil {
-				dlog.Warningf(parseContext, "unable to parse quantity %q: %v", v.Value, withLoc(err.Error(), ms[i]))
+				logrus.Warnf("unable to parse quantity %q: %v", v.Value, WithLoc(err.Error(), ms[i]))
 			} else {
-				g.MaxReceiveSize = val
+				g.MaxReceiveSizeV = val
 			}
 		default:
-			if parseContext != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-			}
+			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
 	}
 	return nil
 }
 
+// IsZero controls whether this element will be included in marshalled output.
+func (g Grpc) IsZero() bool {
+	return g.MaxReceiveSizeV.IsZero()
+}
+
 // MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct.
 func (g Grpc) MarshalYAML() (any, error) {
-	cm := make(map[string]any)
-	if !g.MaxReceiveSize.IsZero() {
-		cm["maxReceiveSize"] = g.MaxReceiveSize.String()
+	if !g.MaxReceiveSizeV.IsZero() {
+		return map[string]any{
+			"maxReceiveSize": g.MaxReceiveSizeV.String(),
+		}, nil
 	}
-	return cm, nil
+	return nil, nil
 }
 
 type TelepresenceAPI struct {
@@ -843,6 +830,10 @@ type Cluster struct {
 // Hence we don't default to "ambassador" but to empty, so that it can check that no default has been given.
 const defaultDefaultManagerNamespace = ""
 
+var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
+	DefaultManagerNamespace: defaultDefaultManagerNamespace,
+}
+
 func (cc *Cluster) merge(o *Cluster) {
 	if o.DefaultManagerNamespace != defaultDefaultManagerNamespace {
 		cc.DefaultManagerNamespace = o.DefaultManagerNamespace
@@ -869,15 +860,14 @@ func (cc Cluster) MarshalYAML() (any, error) {
 	return cm, nil
 }
 
-var parseContext context.Context //nolint:gochecknoglobals // cannot be propagated in any other way
+var (
+	parsedFile string     //nolint:gochecknoglobals // protected by parseLock
+	parseLock  sync.Mutex //nolint:gochecknoglobals // protects parsedFile
+)
 
-type parsedFile struct{}
-
-func withLoc(s string, n *yaml.Node) string {
-	if parseContext != nil {
-		if fileName, ok := parseContext.Value(parsedFile{}).(string); ok {
-			return fmt.Sprintf("file %s, line %d: %s", fileName, n.Line, s)
-		}
+func WithLoc(s string, n *yaml.Node) string {
+	if parsedFile != "" {
+		return fmt.Sprintf("file %s, line %d: %s", parsedFile, n.Line, s)
 	}
 	return fmt.Sprintf("line %d: %s", n.Line, s)
 }
@@ -885,21 +875,22 @@ func withLoc(s string, n *yaml.Node) string {
 type configKey struct{}
 
 // WithConfig returns a context with the given Config.
-func WithConfig(ctx context.Context, config *Config) context.Context {
-	return context.WithValue(ctx, configKey{}, (*unsafe.Pointer)(unsafe.Pointer(&config)))
+func WithConfig(ctx context.Context, config Config) context.Context {
+	pv := &config
+	return context.WithValue(ctx, configKey{}, (*unsafe.Pointer)(unsafe.Pointer(&pv)))
 }
 
-func GetConfig(ctx context.Context) *Config {
+func GetConfig(ctx context.Context) Config {
 	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
-		return (*Config)(atomic.LoadPointer(configPtr))
+		return *(*Config)(atomic.LoadPointer(configPtr))
 	}
-	return nil
+	panic("no Config has been set")
 }
 
 // ReplaceConfig replaces the config last stored using WithConfig with the given Config.
-func ReplaceConfig(ctx context.Context, config *Config) {
+func ReplaceConfig(ctx context.Context, config Config) {
 	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
-		atomic.StorePointer(configPtr, unsafe.Pointer(config))
+		atomic.StorePointer(configPtr, unsafe.Pointer(&config))
 	}
 }
 
@@ -908,49 +899,39 @@ func GetConfigFile(c context.Context) string {
 	return filepath.Join(filelocation.AppUserConfigDir(c), ConfigFile)
 }
 
+//nolint:gochecknoglobals // extension point
+var GetDefaultConfigFunc = func() Config {
+	dflt := GetDefaultBaseConfig()
+	return &dflt
+}
+
+//nolint:gochecknoglobals // extension point
+var ValidateConfigFunc = func(context.Context, Config) error {
+	return nil
+}
+
 // GetDefaultConfig returns the default configuration settings.
 func GetDefaultConfig() Config {
-	return Config{
+	return GetDefaultConfigFunc()
+}
+
+// GetDefaultConfig returns the default configuration settings.
+func GetDefaultBaseConfig() BaseConfig {
+	return BaseConfig{
 		OSSpecificConfig: GetDefaultOSSpecificConfig(),
-		Timeouts: Timeouts{
-			PrivateAgentInstall:          defaultTimeoutsAgentInstall,
-			PrivateApply:                 defaultTimeoutsApply,
-			PrivateClusterConnect:        defaultTimeoutsClusterConnect,
-			PrivateConnectivityCheck:     defaultTimeoutsConnectivityCheck,
-			PrivateEndpointDial:          defaultTimeoutsEndpointDial,
-			PrivateHelm:                  defaultTimeoutsHelm,
-			PrivateIntercept:             defaultTimeoutsIntercept,
-			PrivateProxyDial:             defaultTimeoutsProxyDial,
-			PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
-			PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
-			PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
-			PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
-			PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
-		},
-		LogLevels: LogLevels{
-			UserDaemon: defaultLogLevelsUserDaemon,
-			RootDaemon: defaultLogLevelsRootDaemon,
-		},
-		Cloud: Cloud{
-			SkipLogin:       false,
-			RefreshMessages: defaultCloudRefreshMessages,
-			SystemaHost:     defaultCloudSystemAHost,
-			SystemaPort:     defaultCloudSystemAPort,
-		},
-		Grpc:            Grpc{},
-		TelepresenceAPI: TelepresenceAPI{},
-		Intercept: Intercept{
-			DefaultPort: defaultInterceptDefaultPort,
-		},
-		Cluster: Cluster{
-			DefaultManagerNamespace: defaultDefaultManagerNamespace,
-		},
+		TimeoutsV:        defaultTimeouts,
+		LogLevelsV:       defaultLogLevels,
+		ImagesV:          defaultImages,
+		GrpcV:            Grpc{},
+		TelepresenceAPIV: TelepresenceAPI{},
+		InterceptV:       defaultIntercept,
+		ClusterV:         defaultCluster,
 	}
 }
 
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
 // or filelocation.AppSystemConfigDirs.
-func LoadConfig(c context.Context) (cfg *Config, err error) {
+func LoadConfig(c context.Context) (cfg Config, err error) {
 	defer func() {
 		if err != nil {
 			err = errcat.Config.New(err)
@@ -958,9 +939,10 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 	}()
 
 	dirs := filelocation.AppSystemConfigDirs(c)
-	dflt := GetDefaultConfig()
-	cfg = &dflt
+	cfg = GetDefaultConfigFunc()
 	readMerge := func(dir string) error {
+		parseLock.Lock()
+		defer parseLock.Unlock()
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
 		}
@@ -972,15 +954,15 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 			}
 			return err
 		}
-		parseContext = context.WithValue(c, parsedFile{}, fileName)
+		parsedFile = fileName
 		defer func() {
-			parseContext = nil
+			parsedFile = ""
 		}()
-		fileConfig := GetDefaultConfig() // by value copy
-		if err = yaml.Unmarshal(bs, &fileConfig); err != nil {
+		fileConfig, err := ParseConfigYAML(bs)
+		if err != nil {
 			return err
 		}
-		cfg.Merge(&fileConfig)
+		cfg.Merge(fileConfig)
 		return nil
 	}
 
@@ -993,12 +975,9 @@ func LoadConfig(c context.Context) (cfg *Config, err error) {
 	if err = readMerge(appDir); err != nil {
 		return nil, err
 	}
-
-	// Sanity check
-	if os.Getenv("SYSTEMA_ENV") == "staging" && cfg.Cloud.SystemaHost != "staging-app.datawire.io" {
-		return nil, errors.New("cloud.SystemaHost must be set to staging-app.datawire.io when using SYSTEMA_ENV set to 'staging'")
+	if err = ValidateConfigFunc(c, cfg); err != nil {
+		return nil, err
 	}
-
 	return cfg, nil
 }
 
@@ -1039,9 +1018,20 @@ type DNSSnake struct {
 }
 
 type SessionConfig struct {
-	ClientFile       string `json:"clientFile,omitempty" yaml:"clientFile,omitempty"`
-	*Config          `json:"clientConfig" yaml:",inline"`
+	Config           `json:"clientConfig" yaml:"clientConfig"`
+	ClientFile       string  `json:"clientFile,omitempty" yaml:"clientFile,omitempty"`
 	DNS              DNS     `json:"dns,omitempty" yaml:"dns,omitempty"`
 	Routing          Routing `json:"routing,omitempty" yaml:"routing,omitempty"`
 	ManagerNamespace string  `json:"managerNamespace,omitempty" yaml:"managerNamespace,omitempty"`
+}
+
+func (sc *SessionConfig) UnmarshalJSON(data []byte) error {
+	type tmpType SessionConfig
+	var tmpJSON tmpType
+	tmpJSON.Config = GetDefaultConfig()
+	if err := json.Unmarshal(data, &tmpJSON); err != nil {
+		return err
+	}
+	*sc = SessionConfig(tmpJSON)
+	return nil
 }

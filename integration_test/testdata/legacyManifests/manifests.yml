@@ -186,9 +186,6 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
-        - mountPath: /home/telepresence/
-          name: license
-          readOnly: true
         - mountPath: /var/run/secrets/tls
           name: tls
           readOnly: true
@@ -200,11 +197,6 @@ spec:
       serviceAccountName: traffic-manager
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: license
-        secret:
-          defaultMode: 420
-          optional: true
-          secretName: systema-license
       - name: tls
         secret:
           defaultMode: 420

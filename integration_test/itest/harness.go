@@ -28,14 +28,14 @@ type upAndDown struct {
 }
 
 type harness struct {
-	*cluster
+	Cluster
 	ctx        context.Context
 	upAndDowns []upAndDown
 	wasSetup   bool
 }
 
 func NewContextHarness(ctx context.Context) Harness {
-	return &harness{cluster: GetGlobalHarness(ctx), ctx: ctx}
+	return &harness{Cluster: GetGlobalHarness(ctx), ctx: ctx}
 }
 
 func (h *harness) PushHarness(ctx context.Context, setup func(ctx context.Context) bool, tearDown func(ctx context.Context)) {

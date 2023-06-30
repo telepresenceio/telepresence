@@ -268,7 +268,7 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 		k.KubeconfigExtension.Manager.Namespace = GetEnv(c).ManagerNamespace
 	}
 	if k.KubeconfigExtension.Manager.Namespace == "" {
-		k.KubeconfigExtension.Manager.Namespace = GetConfig(c).Cluster.DefaultManagerNamespace
+		k.KubeconfigExtension.Manager.Namespace = GetConfig(c).Cluster().DefaultManagerNamespace
 	}
 	return k, nil
 }
@@ -301,7 +301,7 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 
 	managerNamespace := GetEnv(c).ManagerNamespace
 	if managerNamespace == "" {
-		managerNamespace = GetConfig(c).Cluster.DefaultManagerNamespace
+		managerNamespace = GetConfig(c).Cluster().DefaultManagerNamespace
 	}
 
 	return &Kubeconfig{

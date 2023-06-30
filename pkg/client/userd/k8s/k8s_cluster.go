@@ -136,7 +136,7 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 	}
 
 	cfg := client.GetConfig(c)
-	timedC, cancel := cfg.Timeouts.TimeoutContext(c, client.TimeoutClusterConnect)
+	timedC, cancel := cfg.Timeouts().TimeoutContext(c, client.TimeoutClusterConnect)
 	defer cancel()
 	if err = ret.check(timedC); err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 		namespaces = nil
 	}
 	if len(namespaces) == 0 {
-		namespaces = cfg.Cluster.MappedNamespaces
+		namespaces = cfg.Cluster().MappedNamespaces
 	}
 	if len(namespaces) == 0 {
 		if ret.CanWatchNamespaces(c) {

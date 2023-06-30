@@ -175,8 +175,7 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
 func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
 	// First check. Establish connection
-	clientConfig := client.GetConfig(c)
-	tos := &clientConfig.Timeouts
+	tos := client.GetConfig(c).Timeouts()
 	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 
@@ -236,7 +235,7 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 	if err != nil {
 		dlog.Warnf(c, "Failed to get remote config from traffic manager: %v", err)
 	} else {
-		err := yaml.Unmarshal(cliCfg.ConfigYaml, &cfg)
+		err := yaml.Unmarshal(cliCfg.ConfigYaml, cfg)
 		if err != nil {
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}
@@ -612,7 +611,7 @@ func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.Cluste
 			"Connectivity check for services set to pass.")
 		return true
 	}
-	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
+	ct := client.GetConfig(ctx).Timeouts().Get(client.TimeoutConnectivityCheck)
 	if ct == 0 {
 		dlog.Info(ctx, "Connectivity check for services disabled")
 		return true
@@ -660,7 +659,7 @@ func (s *Session) checkPodConnectivity(ctx context.Context, info *manager.Cluste
 	if info.ManagerPodIp == nil {
 		return true
 	}
-	ct := client.GetConfig(ctx).Timeouts.Get(client.TimeoutConnectivityCheck)
+	ct := client.GetConfig(ctx).Timeouts().Get(client.TimeoutConnectivityCheck)
 	if ct == 0 {
 		dlog.Info(ctx, "Connectivity check for pods disabled")
 		return true
@@ -728,7 +727,7 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 	// the first ClusterInfo is received from the traffic-manager. A timeout
 	// is needed so that we don't wait forever on a traffic-manager that has
 	// been terminated for some reason.
-	wc, cancel := client.GetConfig(c).Timeouts.TimeoutContext(c, client.TimeoutTrafficManagerConnect)
+	wc, cancel := client.GetConfig(c).Timeouts().TimeoutContext(c, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 	select {
 	case <-wc.Done():
@@ -812,7 +811,7 @@ func (s *Session) applyConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return client.MergeAndReplace(ctx, &s.config, cfg, true)
+	return client.MergeAndReplace(ctx, s.config, cfg, true)
 }
 
 func (s *Session) Done() chan struct{} {

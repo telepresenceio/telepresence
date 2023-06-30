@@ -202,12 +202,12 @@ func getEnv(ctx context.Context) map[string]string {
 
 type globalHarnessContextKey struct{}
 
-func withGlobalHarness(ctx context.Context, h *cluster) context.Context {
+func withGlobalHarness(ctx context.Context, h Cluster) context.Context {
 	return context.WithValue(ctx, globalHarnessContextKey{}, h)
 }
 
-func GetGlobalHarness(ctx context.Context) *cluster {
-	if h, ok := ctx.Value(globalHarnessContextKey{}).(*cluster); ok {
+func GetGlobalHarness(ctx context.Context) Cluster {
+	if h, ok := ctx.Value(globalHarnessContextKey{}).(Cluster); ok {
 		return h
 	}
 	panic("No globalHarness in context")

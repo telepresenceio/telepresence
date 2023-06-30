@@ -37,11 +37,11 @@ import (
 )
 
 type State interface {
-	As(ptr any)
 	Cmd() *cobra.Command
 	CreateRequest(context.Context) (*connector.CreateInterceptRequest, error)
 	Name() string
 	Reporter() *scout.Reporter
+	Run(context.Context) error
 	RunAndLeave() bool
 }
 
@@ -56,26 +56,26 @@ type state struct {
 	dockerPort    uint16
 	status        *connector.ConnectInfo
 	info          *Info // Info from the created intercept
+
+	// Possibly extended version of the state. Use when calling interface methods.
+	self State
 }
 
 func NewState(
 	cmd *cobra.Command,
 	args *Command,
 ) State {
-	return &state{
+	s := &state{
 		Command: args,
 		cmd:     cmd,
 		scout:   scout.NewReporter(cmd.Context(), "cli"),
 	}
+	s.self = s
+	return s
 }
 
-func (s *state) As(ptr any) {
-	switch ptr := ptr.(type) {
-	case **state:
-		*ptr = s
-	default:
-		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
-	}
+func (s *state) SetSelf(self State) {
+	s.self = self
 }
 
 func (s *state) Cmd() *cobra.Command {
@@ -182,19 +182,17 @@ func (s *state) RunAndLeave() bool {
 	return len(s.Cmdline) > 0 || s.DockerRun
 }
 
-func Run(ctx context.Context, sif State) error {
-	reporter := sif.Reporter()
+func (s *state) Run(ctx context.Context) error {
+	reporter := s.Reporter()
 	reporter.Start(ctx)
 	defer reporter.Close()
 
-	if !sif.RunAndLeave() {
+	if !s.RunAndLeave() {
 		// start and retain the intercept
-		return client.WithEnsuredState(ctx, sif, create, nil, nil)
+		return client.WithEnsuredState(ctx, s.create, nil, nil)
 	}
 
 	// start intercept, run command, then leave the intercept
-	var s *state
-	sif.As(&s)
 	if s.DockerRun {
 		var err error
 		if ctx, err = docker.EnableClient(ctx); err != nil {
@@ -204,12 +202,10 @@ func Run(ctx context.Context, sif State) error {
 			return err
 		}
 	}
-	return client.WithEnsuredState(ctx, sif, create, runCommand, leave)
+	return client.WithEnsuredState(ctx, s.create, s.runCommand, s.leave)
 }
 
-func create(sif State, ctx context.Context) (acquired bool, err error) {
-	var s *state
-	sif.As(&s)
+func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	ud := daemon.GetUserClient(ctx)
 	s.status, err = ud.Status(ctx, &empty.Empty{})
 	if err != nil {
@@ -222,7 +218,7 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	s.scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
 	s.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
 
-	ir, err := sif.CreateRequest(ctx)
+	ir, err := s.self.CreateRequest(ctx)
 	if err != nil {
 		s.scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
 		return false, errcat.NoDaemonLogs.New(err)
@@ -325,8 +321,8 @@ func create(sif State, ctx context.Context) (acquired bool, err error) {
 	return true, nil
 }
 
-func leave(sif State, ctx context.Context) error {
-	r, err := daemon.GetUserClient(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(sif.Name())})
+func (s *state) leave(ctx context.Context) error {
+	r, err := daemon.GetUserClient(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(s.Name())})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
@@ -334,11 +330,8 @@ func leave(sif State, ctx context.Context) error {
 	return Result(r, err)
 }
 
-func runCommand(sif State, ctx context.Context) error {
+func (s *state) runCommand(ctx context.Context) error {
 	// start the interceptor process
-	var s *state
-	sif.As(&s)
-
 	ctx = dos.WithStdio(ctx, s.cmd)
 	ud := daemon.GetUserClient(ctx)
 	if !s.DockerRun {

@@ -27,7 +27,6 @@ type WatchWorkloadsStream interface {
 }
 
 type InterceptInfo interface {
-	APIKey() string
 	InterceptResult() *rpc.InterceptResult
 	PreparedIntercept() *manager.PreparedIntercept
 	PortIdentifier() (agentconfig.PortIdentifier, error)
@@ -45,13 +44,12 @@ type Session interface {
 	restapi.AgentState
 	KubeConfig
 
-	// As will cast this instance to what the given ptr points to, and assign
-	// that to the pointer. It will panic if type is not implemented.
-	As(ptr any)
-
+	AddIntercept(context.Context, *rpc.CreateInterceptRequest) *rpc.InterceptResult
+	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
 	InterceptProlog(context.Context, *manager.CreateInterceptRequest) *rpc.InterceptResult
 	InterceptEpilog(context.Context, *rpc.CreateInterceptRequest, *rpc.InterceptResult) *rpc.InterceptResult
 	RemoveIntercept(context.Context, string) error
+	NewCreateInterceptRequest(*manager.InterceptSpec) *manager.CreateInterceptRequest
 
 	AddInterceptor(string, *rpc.Interceptor) error
 	RemoveInterceptor(string) error
@@ -65,6 +63,7 @@ type Session interface {
 	ManagerConn() *grpc.ClientConn
 	ManagerName() string
 	ManagerVersion() semver.Version
+	NewRemainRequest() *manager.RemainRequest
 
 	Status(context.Context) *rpc.ConnectInfo
 	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
@@ -90,7 +89,9 @@ type Session interface {
 
 	ApplyConfig(context.Context) error
 	GetConfig(context.Context) (*client.SessionConfig, error)
+	RunSession(c context.Context) error
 	StartServices(g *dgroup.Group)
+	Remain(ctx context.Context) error
 	Epilog(ctx context.Context)
 	Done() <-chan struct{}
 }
@@ -108,20 +109,4 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 		return f
 	}
 	panic("No User daemon Session creator has been registered")
-}
-
-// RunSession (1) starts up with ensuring that the manager is installed and running,
-// but then for most of its life
-//   - (2) calls manager.ArriveAsClient and then periodically calls manager.Remain
-//   - run the intercepts (manager.WatchIntercepts) and then
-//   - (3) listen on the appropriate local ports and forward them to the intercepted
-//     Services, and
-//   - (4) mount the appropriate remote volumes.
-func RunSession(c context.Context, s Session) error {
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	defer func() {
-		s.Epilog(c)
-	}()
-	s.StartServices(g)
-	return g.Wait()
 }

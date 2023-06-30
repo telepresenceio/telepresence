@@ -20,7 +20,7 @@ func (ic *intercept) shouldMount() bool {
 // It assumes that the user has called shouldMount and is sure that something will be started.
 func (ic *intercept) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGroup) {
 	var fuseftp rpc.FuseFTPClient
-	useFtp := client.GetConfig(ctx).Intercept.UseFtp
+	useFtp := client.GetConfig(ctx).Intercept().UseFtp
 	var port int32
 	mountCtx := ctx
 	if useFtp {

@@ -19,16 +19,52 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-// State is the total state of the Traffic Manager.  A zero State is invalid; you must call
+type State interface {
+	AddAgent(*rpc.AgentInfo, time.Time) string
+	AddClient(*rpc.ClientInfo, time.Time) string
+	AddIntercept(string, string, *rpc.ClientInfo, *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error)
+	AddInterceptFinalizer(string, InterceptFinalizer) error
+	AgentsLookupDNS(context.Context, string, *rpc.DNSRequest) (dnsproxy.RRs, int, error)
+	CountAgents() int
+	CountClients() int
+	CountIntercepts() int
+	CountSessions() int
+	CountTunnels() int
+	ExpireSessions(context.Context, time.Time, time.Time)
+	GetAgent(string) *rpc.AgentInfo
+	GetAllClients() map[string]*rpc.ClientInfo
+	GetClient(string) *rpc.ClientInfo
+	GetIntercept(string) (*rpc.InterceptInfo, bool)
+	MarkSession(*rpc.RemainRequest, time.Time) bool
+	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
+	PostLookupDNSResponse(*rpc.DNSAgentResponse)
+	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
+	RemoveIntercept(string) bool
+	RemoveSession(context.Context, string)
+	SessionDone(string) (<-chan struct{}, error)
+	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
+	Tunnel(context.Context, tunnel.Stream) error
+	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
+	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo
+	ValidateAgentImage(string, bool) error
+	WaitForTempLogLevel(rpc.Manager_WatchLogLevelServer) error
+	WatchAgents(context.Context, func(sessionID string, agent *rpc.AgentInfo) bool) <-chan watchable.Snapshot[*rpc.AgentInfo]
+	WatchDial(sessionID string) <-chan *rpc.DialRequest
+	WatchIntercepts(context.Context, func(sessionID string, intercept *rpc.InterceptInfo) bool) <-chan watchable.Snapshot[*rpc.InterceptInfo]
+	WatchLookupDNS(string) <-chan *rpc.DNSRequest
+}
+
+// state is the total state of the Traffic Manager.  A zero state is invalid; you must call
 // NewState.
-type State struct {
+type state struct {
 	ctx context.Context
 
 	mu sync.RWMutex
@@ -57,11 +93,16 @@ type State struct {
 	llSubs          *loglevelSubscribers
 	cfgMapLocks     map[string]*sync.Mutex
 	tunnelCounter   int32
+
+	// Possibly extended version of the state. Use when calling interface methods.
+	self State
 }
 
-func NewState(ctx context.Context) *State {
+var NewStateFunc = NewState //nolint:gochecknoglobals // extension point
+
+func NewState(ctx context.Context) State {
 	loglevel := os.Getenv("LOG_LEVEL")
-	return &State{
+	s := &state{
 		ctx:             ctx,
 		sessions:        make(map[string]SessionState),
 		agentsByName:    make(map[string]map[string]*rpc.AgentInfo),
@@ -70,15 +111,19 @@ func NewState(ctx context.Context) *State {
 		timedLogLevel:   log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:          newLoglevelSubscribers(),
 	}
+	s.self = s
+	return s
 }
 
-// Internal ////////////////////////////////////////////////////////////////////////////////////////
+func (s *state) SetSelf(self State) {
+	s.self = self
+}
 
 // unlockedCheckAgentsForIntercept (1) assumes that s.mu is already locked, and (2) checks the
 // status of all agents that would be relevant to the given intercept spec, and returns whether the
 // state of those agents would require transitioning to an error state.  If everything looks good,
 // it returns the zero error code (InterceptDispositionType_UNSPECIFIED).
-func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (errCode rpc.InterceptDispositionType, errMsg string) {
+func (s *state) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (errCode rpc.InterceptDispositionType, errMsg string) {
 	// Don't overwrite an existing error state
 	switch intercept.Disposition {
 	// non-error states ////////////////////////////////////////////////////
@@ -142,19 +187,13 @@ func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 
 // MarkSession marks a session as being present at the indicated time.  Returns true if everything goes OK,
 // returns false if the given session ID does not exist.
-func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
+func (s *state) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sessionID := req.Session.SessionId
 
 	if sess, ok := s.sessions[sessionID]; ok {
 		sess.SetLastMarked(now)
-		if req.ApiKey != "" {
-			if client, ok := s.clients.Load(sessionID); ok {
-				client.ApiKey = req.ApiKey
-				s.clients.Store(sessionID, client)
-			}
-		}
 		return true
 	}
 
@@ -162,7 +201,7 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 }
 
 // RemoveSession removes a session from the set of present session IDs.
-func (s *State) RemoveSession(ctx context.Context, sessionID string) {
+func (s *state) RemoveSession(ctx context.Context, sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	dlog.Debugf(ctx, "Session %s removed. Explicit removal", sessionID)
@@ -170,7 +209,7 @@ func (s *State) RemoveSession(ctx context.Context, sessionID string) {
 	s.unlockedRemoveSession(sessionID)
 }
 
-func (s *State) gcSessionIntercepts(sessionID string) {
+func (s *state) gcSessionIntercepts(sessionID string) {
 	agent, isAgent := s.agents.Load(sessionID)
 
 	// GC any intercepts that relied on this session; prune any intercepts that
@@ -197,7 +236,7 @@ func (s *State) gcSessionIntercepts(sessionID string) {
 	}
 }
 
-func (s *State) unlockedRemoveSession(sessionID string) {
+func (s *state) unlockedRemoveSession(sessionID string) {
 	if sess, ok := s.sessions[sessionID]; ok {
 		// kill the session
 		defer sess.Cancel()
@@ -224,7 +263,7 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 
 // ExpireSessions prunes any sessions that haven't had a MarkSession heartbeat since
 // respective given 'moment'.
-func (s *State) ExpireSessions(ctx context.Context, clientMoment, agentMoment time.Time) {
+func (s *state) ExpireSessions(ctx context.Context, clientMoment, agentMoment time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -245,7 +284,7 @@ func (s *State) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 
 // SessionDone returns a channel that is closed when the session with the given ID terminates.  If
 // there is no such currently-live session, then an already-closed channel is returned.
-func (s *State) SessionDone(id string) (<-chan struct{}, error) {
+func (s *state) SessionDone(id string) (<-chan struct{}, error) {
 	s.mu.RLock()
 	sess, ok := s.sessions[id]
 	s.mu.RUnlock()
@@ -258,7 +297,7 @@ func (s *State) SessionDone(id string) (<-chan struct{}, error) {
 
 // Sessions: Clients ///////////////////////////////////////////////////////////////////////////////
 
-func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) string {
+func (s *state) AddClient(client *rpc.ClientInfo, now time.Time) string {
 	// Use non-sequential things (i.e., UUIDs, not just a counter) as the session ID, because
 	// the session ID also exists in external systems (the client, SystemA), so it's confusing
 	// (to both humans and computers) if the manager restarts and those existing session IDs
@@ -268,7 +307,7 @@ func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) string {
 }
 
 // addClient is like AddClient, but takes a sessionID, for testing purposes.
-func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Time) string {
+func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -279,52 +318,41 @@ func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	return sessionID
 }
 
-func (s *State) GetClient(sessionID string) *rpc.ClientInfo {
+func (s *state) GetClient(sessionID string) *rpc.ClientInfo {
 	ret, _ := s.clients.Load(sessionID)
 	return ret
 }
 
-func (s *State) GetAllClients() map[string]*rpc.ClientInfo {
+func (s *state) GetAllClients() map[string]*rpc.ClientInfo {
 	return s.clients.LoadAll()
 }
 
-func (s *State) CountAgents() int {
+func (s *state) CountAgents() int {
 	return s.agents.CountAll()
 }
 
-func (s *State) CountClients() int {
+func (s *state) CountClients() int {
 	return s.clients.CountAll()
 }
 
-func (s *State) CountIntercepts() int {
+func (s *state) CountIntercepts() int {
 	return s.intercepts.CountAll()
 }
 
-func (s *State) CountSessions() int {
+func (s *state) CountSessions() int {
 	s.mu.RLock()
 	count := len(s.sessions)
 	s.mu.RUnlock()
 	return count
 }
 
-func (s *State) CountTunnels() int {
+func (s *state) CountTunnels() int {
 	return int(atomic.LoadInt32(&s.tunnelCounter))
-}
-
-func (s *State) WatchClients(
-	ctx context.Context,
-	filter func(sessionID string, client *rpc.ClientInfo) bool,
-) <-chan watchable.Snapshot[*rpc.ClientInfo] {
-	if filter == nil {
-		return s.clients.Subscribe(ctx)
-	} else {
-		return s.clients.SubscribeSubset(ctx, filter)
-	}
 }
 
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////
 
-func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
+func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -356,16 +384,16 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	return sessionID
 }
 
-func (s *State) GetAgent(sessionID string) *rpc.AgentInfo {
+func (s *state) GetAgent(sessionID string) *rpc.AgentInfo {
 	ret, _ := s.agents.Load(sessionID)
 	return ret
 }
 
-func (s *State) GetAllAgents() map[string]*rpc.AgentInfo {
+func (s *state) getAllAgents() map[string]*rpc.AgentInfo {
 	return s.agents.LoadAll()
 }
 
-func (s *State) GetAgentsByName(name, namespace string) map[string]*rpc.AgentInfo {
+func (s *state) getAgentsByName(name, namespace string) map[string]*rpc.AgentInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -379,7 +407,7 @@ func (s *State) GetAgentsByName(name, namespace string) map[string]*rpc.AgentInf
 	return ret
 }
 
-func (s *State) WatchAgents(
+func (s *state) WatchAgents(
 	ctx context.Context,
 	filter func(sessionID string, agent *rpc.AgentInfo) bool,
 ) <-chan watchable.Snapshot[*rpc.AgentInfo] {
@@ -392,7 +420,7 @@ func (s *State) WatchAgents(
 
 // Intercepts //////////////////////////////////////////////////////////////////////////////////////
 
-func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.ClientInfo, spec *rpc.InterceptSpec) (*rpc.InterceptInfo, error) {
+func (s *state) AddIntercept(sessionID, clusterID string, client *rpc.ClientInfo, cir *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -401,20 +429,16 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 		return nil, status.Errorf(codes.NotFound, "session %q not found", sessionID)
 	}
 
+	spec := cir.InterceptSpec
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
-	installId := client.GetInstallId()
-	cept := &rpc.InterceptInfo{
-		Spec:        spec,
-		Disposition: rpc.InterceptDispositionType_WAITING,
-		Message:     "Waiting for Agent approval",
-		Id:          interceptID,
-		ClientSession: &rpc.SessionInfo{
-			SessionId: sessionID,
-			ClusterId: clusterID,
-			InstallId: &installId,
-		},
-		ApiKey: apiKey,
+	installID := client.GetInstallId()
+	clientSession := rpc.SessionInfo{
+		SessionId: sessionID,
+		ClusterId: clusterID,
+		InstallId: &installID,
 	}
+
+	cept := s.self.NewInterceptInfo(interceptID, &clientSession, cir)
 
 	// Wrap each potential-state-change in a
 	//
@@ -438,20 +462,30 @@ func (s *State) AddIntercept(sessionID, clusterID, apiKey string, client *rpc.Cl
 	return cept, nil
 }
 
-func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
+func (s *state) NewInterceptInfo(interceptID string, session *rpc.SessionInfo, ciReq *rpc.CreateInterceptRequest) *rpc.InterceptInfo {
+	return &rpc.InterceptInfo{
+		Spec:          ciReq.InterceptSpec,
+		Disposition:   rpc.InterceptDispositionType_WAITING,
+		Message:       "Waiting for Agent approval",
+		Id:            interceptID,
+		ClientSession: session,
+	}
+}
+
+func (s *state) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	state, ok := s.interceptStates[interceptID]
+	is, ok := s.interceptStates[interceptID]
 	if !ok {
 		return status.Errorf(codes.NotFound, "no such intercept %s", interceptID)
 	}
-	state.addFinalizer(finalizer)
+	is.addFinalizer(finalizer)
 	return nil
 }
 
 // getAgentsInterceptedByClient returns the session IDs for each agent that are currently
 // intercepted by the client with the given client session ID.
-func (s *State) getAgentsInterceptedByClient(clientSessionID string) []string {
+func (s *state) getAgentsInterceptedByClient(clientSessionID string) []string {
 	intercepts := s.intercepts.LoadAllMatching(func(_ string, ii *rpc.InterceptInfo) bool {
 		return ii.ClientSession.SessionId == clientSessionID
 	})
@@ -486,7 +520,7 @@ func (s *State) getAgentsInterceptedByClient(clientSessionID string) []string {
 // This does not lock; but instead uses CAS and may therefore call the mutator function multiple
 // times.  So: it is safe to perform blocking operations in your mutator function, but you must take
 // care that it is safe to call your mutator function multiple times.
-func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInfo)) *rpc.InterceptInfo {
+func (s *state) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInfo)) *rpc.InterceptInfo {
 	for {
 		cur, ok := s.intercepts.Load(interceptID)
 		if !ok || cur == nil {
@@ -505,13 +539,34 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 	}
 }
 
-func (s *State) RemoveIntercept(interceptID string) bool {
+// UpdateClient applies a given mutator function to the stored client with sessionID;
+// storing and returning the result.  If the given client does not exist, then the mutator
+// function is not run, and nil is returned.
+func (s *state) UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo {
+	for {
+		cur, ok := s.clients.Load(sessionID)
+		if !ok || cur == nil {
+			// Doesn't exist (possibly was deleted while this loop was running).
+			return nil
+		}
+
+		newInfo := proto.Clone(cur).(*rpc.ClientInfo)
+		apply(newInfo)
+
+		swapped := s.clients.CompareAndSwap(sessionID, cur, newInfo)
+		if swapped {
+			return newInfo
+		}
+	}
+}
+
+func (s *state) RemoveIntercept(interceptID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.unlockedRemoveIntercept(interceptID)
 }
 
-func (s *State) unlockedRemoveIntercept(interceptID string) bool {
+func (s *state) unlockedRemoveIntercept(interceptID string) bool {
 	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
 	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
 		delete(s.interceptStates, interceptID)
@@ -521,11 +576,11 @@ func (s *State) unlockedRemoveIntercept(interceptID string) bool {
 	return didDelete
 }
 
-func (s *State) GetIntercept(interceptID string) (*rpc.InterceptInfo, bool) {
+func (s *state) GetIntercept(interceptID string) (*rpc.InterceptInfo, bool) {
 	return s.intercepts.Load(interceptID)
 }
 
-func (s *State) WatchIntercepts(
+func (s *state) WatchIntercepts(
 	ctx context.Context,
 	filter func(sessionID string, intercept *rpc.InterceptInfo) bool,
 ) <-chan watchable.Snapshot[*rpc.InterceptInfo] {
@@ -536,7 +591,7 @@ func (s *State) WatchIntercepts(
 	}
 }
 
-func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
+func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	ctx, span := otel.Tracer("").Start(ctx, "state.Tunnel")
 	defer span.End()
 	stream.ID().SpanRecord(span)
@@ -603,7 +658,7 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	return nil
 }
 
-func (s *State) getRandomAgentSession(clientSessionID string, podIP net.IP) SessionState {
+func (s *state) getRandomAgentSession(clientSessionID string, podIP net.IP) SessionState {
 	var agentKey string
 	_ = s.agents.LoadAllMatching(func(key string, ai *rpc.AgentInfo) bool {
 		if podIP.Equal(iputil.Parse(ai.PodIp)) {
@@ -626,7 +681,7 @@ func (s *State) getRandomAgentSession(clientSessionID string, podIP net.IP) Sess
 	return agent
 }
 
-func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
+func (s *state) WatchDial(sessionID string) <-chan *rpc.DialRequest {
 	s.mu.RLock()
 	ss, ok := s.sessions[sessionID]
 	s.mu.RUnlock()
@@ -639,7 +694,7 @@ func (s *State) WatchDial(sessionID string) <-chan *rpc.DialRequest {
 // SetTempLogLevel sets the temporary log-level for the traffic-manager and all agents and,
 // if a duration is given, it also starts a timer that will reset the log-level once it
 // fires.
-func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLevelRequest) {
+func (s *state) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLevelRequest) {
 	duration := time.Duration(0)
 	if gd := logLevelRequest.Duration; gd != nil {
 		duration = gd.AsDuration()
@@ -651,7 +706,7 @@ func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLev
 // InitialTempLogLevel returns the temporary log-level if it exists, along with the remaining
 // duration for it, which might be zero, in which case the log-level is valid until a new
 // level is requested.
-func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
+func (s *state) InitialTempLogLevel() *rpc.LogLevelRequest {
 	level, duration := s.timedLogLevel.Get()
 	if level == "" {
 		return nil
@@ -664,6 +719,6 @@ func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
 
 // WaitForTempLogLevel waits for a new temporary log-level request. It returns the values
 // of the last request that was made.
-func (s *State) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
+func (s *state) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
 	return s.llSubs.subscriberLoop(stream.Context(), stream)
 }

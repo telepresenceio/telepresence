@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -47,7 +46,7 @@ import (
 //
 // It's expected that the client that makes the call will update any unqualified service port identifiers
 // with the ones in the returned PreparedIntercept.
-func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (pi *managerrpc.PreparedIntercept, err error) {
+func (s *state) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInterceptRequest) (pi *managerrpc.PreparedIntercept, err error) {
 	ctx, cancel := context.WithTimeout(ctx, managerutil.GetEnv(ctx).AgentArrivalTimeout)
 	defer cancel()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
@@ -74,10 +73,11 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return interceptError(err)
 	}
 
-	ac, err := s.getOrCreateAgentConfig(ctx, wl, spec.Mechanism != "tcp")
+	sce, err := s.getOrCreateAgentConfig(ctx, wl, spec.Mechanism != "tcp")
 	if err != nil {
 		return interceptError(err)
 	}
+	ac := sce.AgentConfig()
 	_, ic, err := findIntercept(ac, spec)
 	if err != nil {
 		return interceptError(err)
@@ -96,7 +96,17 @@ func (s *State) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	}, nil
 }
 
-func (s *State) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc *agentconfig.Sidecar, err error) {
+func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error) {
+	if agentImage == "" {
+		err = errcat.User.Newf(
+			"intercepts are disabled because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
+	} else if extended {
+		err = errcat.User.New("traffic-manager does not support intercepts that require an extended traffic-agent")
+	}
+	return err
+}
+
+func (s *state) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
@@ -154,13 +164,13 @@ func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespac
 	return cm, err
 }
 
-func (s *State) loadAgentConfig(
+func (s *state) loadAgentConfig(
 	ctx context.Context,
 	cmAPI typed.ConfigMapInterface,
 	cm *core.ConfigMap,
 	wl k8sapi.Workload,
 	extended bool,
-) (sc *agentconfig.Sidecar, err error) {
+) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
@@ -176,57 +186,49 @@ func (s *State) loadAgentConfig(
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
 
-	var agentImage string
-	if extended {
-		agentImage, err = managerutil.GetExtendedAgentImage(ctx)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		agentImage = managerutil.GetAgentImage(ctx)
-	}
-	if agentImage == "" {
-		return nil, errcat.User.Newf(
-			"intercepts are disabled because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
+	agentImage := managerutil.GetAgentImage(ctx)
+	if err = s.self.ValidateAgentImage(agentImage, extended); err != nil {
+		return nil, err
 	}
 	span.SetAttributes(
 		attribute.String("tel2.agent-image", agentImage),
 	)
 
-	var ac *agentconfig.Sidecar
-
-	update := func() (err error) {
+	update := func(sce agentconfig.SidecarExt) (err error) {
 		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig.update", trace.WithAttributes(
 			attribute.String("tel2.workload-name", wl.GetName()),
 			attribute.String("tel2.cm-name", agentconfig.ConfigMap),
 			attribute.String("tel2.cm-namespace", wl.GetNamespace()),
 		))
 		defer tracing.EndAndRecord(span, err)
-		js, err := yaml.Marshal(ac)
+		yml, err := sce.Marshal()
 		if err != nil {
 			return err
 		}
-		cm.Data[wl.GetName()] = string(js)
+		cm.Data[wl.GetName()] = string(yml)
 		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
 			return fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
 		}
 		return err
 	}
 
+	var sce agentconfig.SidecarExt
 	if y, ok := cm.Data[wl.GetName()]; ok {
-		if ac, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
+		if sce, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, err
 		}
+		ac := sce.AgentConfig()
 		if ac.Create {
 			// This may happen if someone else is doing the initial intercept at the exact (well, more or less) same time
-			if ac, err = waitForConfigMapUpdate(ctx, cmAPI, wl.GetName(), wl.GetNamespace()); err != nil {
+			if sce, err = waitForConfigMapUpdate(ctx, cmAPI, wl.GetName(), wl.GetNamespace()); err != nil {
 				return nil, err
 			}
+			ac = sce.AgentConfig()
 		}
 		// If the agentImage has changed, and the extended image is requested, then update
 		if ac.AgentImage != agentImage && extended {
 			ac.AgentImage = agentImage
-			if err = update(); err != nil {
+			if err = update(sce); err != nil {
 				return nil, err
 			}
 		}
@@ -234,18 +236,18 @@ func (s *State) loadAgentConfig(
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
-		var gc *agentmap.GeneratorConfig
-		if gc, err = managerutil.GetEnv(ctx).GeneratorConfig(agentImage); err != nil {
+		var gc agentmap.GeneratorConfig
+		if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
 			return nil, err
 		}
-		if ac, err = agentmap.Generate(ctx, wl, gc); err != nil {
+		if sce, err = gc.Generate(ctx, wl); err != nil {
 			return nil, err
 		}
-		if err = update(); err != nil {
+		if err = update(sce); err != nil {
 			return nil, err
 		}
 	}
-	return ac, nil
+	return sce, nil
 }
 
 func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
@@ -292,7 +294,7 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 
 // Wait for the cluster's mutating webhook injector to do its magic. It will update the
 // configMap once it's done.
-func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface, agentName, namespace string) (*agentconfig.Sidecar, error) {
+func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface, agentName, namespace string) (agentconfig.SidecarExt, error) {
 	wi, err := cmAPI.Watch(ctx, meta.SingleObject(meta.ObjectMeta{
 		Name:      agentconfig.ConfigMap,
 		Namespace: namespace,
@@ -321,12 +323,12 @@ func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface,
 			}
 			if m, ok := ev.Object.(*core.ConfigMap); ok {
 				if y, ok := m.Data[agentName]; ok {
-					conf, err := unmarshalConfigMapEntry(y, agentName, namespace)
+					scx, err := unmarshalConfigMapEntry(y, agentName, namespace)
 					if err != nil {
 						return nil, err
 					}
-					if !conf.Create {
-						return conf, nil
+					if !scx.AgentConfig().Create {
+						return scx, nil
 					}
 				}
 			}
@@ -375,7 +377,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 	return ec, nil
 }
 
-func (s *State) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
+func (s *state) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
 	snapshotCh := s.WatchAgents(ctx, nil)
 
 	// fes collects events from the failedCreatedCh and is included in the error message in case
@@ -472,12 +474,12 @@ func writeEventList(bf *strings.Builder, es []*events.Event) {
 	}
 }
 
-func unmarshalConfigMapEntry(y string, name, namespace string) (*agentconfig.Sidecar, error) {
-	conf := agentconfig.Sidecar{}
-	if err := yaml.Unmarshal([]byte(y), &conf); err != nil {
+func unmarshalConfigMapEntry(y string, name, namespace string) (agentconfig.SidecarExt, error) {
+	scx, err := agentconfig.UnmarshalYAML([]byte(y))
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse entry for %s in ConfigMap %s.%s: %w", name, agentconfig.ConfigMap, namespace, err)
 	}
-	return &conf, nil
+	return scx, nil
 }
 
 // findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port.

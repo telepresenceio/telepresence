@@ -42,7 +42,7 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 				Ip:   podIP,
 				Port: int32(port),
 			},
-			ReadTimeout: durationpb.New(cfg.Timeouts.Get(client.TimeoutFtpReadWrite)),
+			ReadTimeout: durationpb.New(cfg.Timeouts().Get(client.TimeoutFtpReadWrite)),
 			Directory:   rmp,
 		})
 		if err != nil {
@@ -55,7 +55,7 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 		go func() {
 			defer m.iceptWG.Done()
 			<-ctx.Done()
-			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), cfg.Timeouts.Get(client.TimeoutFtpShutdown))
+			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), cfg.Timeouts().Get(client.TimeoutFtpShutdown))
 			defer cancel()
 			dlog.Debugf(ctx, "Unmounting FTP file system for intercept %q (address %s) at %q", id, addr, clientMountPoint)
 			if _, err = m.client.Unmount(ctx, m.id); err != nil {

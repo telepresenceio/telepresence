@@ -153,17 +153,17 @@ func (s *largeFilesSuite) TearDownSuite() {
 }
 
 func (s *largeFilesSuite) Test_LargeFileIntercepts_fuseftp() {
-	ctx := itest.WithConfig(s.Context(), func(cfg *client.Config) {
-		cfg.Timeouts.PrivateFtpReadWrite = 2 * time.Minute
-		cfg.Timeouts.PrivateFtpShutdown = 3 * time.Minute
-		cfg.Intercept.UseFtp = true
+	ctx := itest.WithConfig(s.Context(), func(cfg client.Config) {
+		cfg.Timeouts().PrivateFtpReadWrite = 2 * time.Minute
+		cfg.Timeouts().PrivateFtpShutdown = 3 * time.Minute
+		cfg.Intercept().UseFtp = true
 	})
 	s.largeFileIntercepts(ctx)
 }
 
 func (s *largeFilesSuite) Test_LargeFileIntercepts_sshfs() {
-	ctx := itest.WithConfig(s.Context(), func(cfg *client.Config) {
-		cfg.Intercept.UseFtp = false
+	ctx := itest.WithConfig(s.Context(), func(cfg client.Config) {
+		cfg.Intercept().UseFtp = false
 	})
 	s.largeFileIntercepts(ctx)
 }

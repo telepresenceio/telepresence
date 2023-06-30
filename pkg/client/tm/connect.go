@@ -40,8 +40,7 @@ func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.Dia
 		}
 	}()
 
-	clientConfig := client.GetConfig(ctx)
-	tos := &clientConfig.Timeouts
+	tos := client.GetConfig(ctx).Timeouts()
 	mClient := manager.NewManagerClient(conn)
 
 	// At this point, we are connected to the traffic-manager. We use the shorter API timeout

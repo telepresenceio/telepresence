@@ -379,18 +379,18 @@ func (c *kpfConn) Close() error {
 	return nil
 }
 
-// LocalAddr implements unbufferedConn.
+// LocalAddr implements UnbufferedConn.
 func (c *kpfConn) LocalAddr() net.Addr {
-	return addr{
-		net:  "kubectl-port-forward",
-		addr: "client",
+	return Addr{
+		Net:  "kubectl-port-forward",
+		Addr: "client",
 	}
 }
 
-// RemoteAddr implements unbufferedConn.
+// RemoteAddr implements UnbufferedConn.
 func (c *kpfConn) RemoteAddr() net.Addr {
-	return addr{
-		net:  "kubectl-port-forward",
-		addr: c.remoteAddr,
+	return Addr{
+		Net:  "kubectl-port-forward",
+		Addr: c.remoteAddr,
 	}
 }
