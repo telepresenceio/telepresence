@@ -34,6 +34,7 @@ const (
 	Connector_CanIntercept_FullMethodName            = "/telepresence.connector.Connector/CanIntercept"
 	Connector_CreateIntercept_FullMethodName         = "/telepresence.connector.Connector/CreateIntercept"
 	Connector_RemoveIntercept_FullMethodName         = "/telepresence.connector.Connector/RemoveIntercept"
+	Connector_UpdateIntercept_FullMethodName         = "/telepresence.connector.Connector/UpdateIntercept"
 	Connector_Helm_FullMethodName                    = "/telepresence.connector.Connector/Helm"
 	Connector_Uninstall_FullMethodName               = "/telepresence.connector.Connector/Uninstall"
 	Connector_List_FullMethodName                    = "/telepresence.connector.Connector/List"
@@ -85,6 +86,7 @@ type ConnectorClient interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
+	UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
 	Helm(ctx context.Context, in *HelmRequest, opts ...grpc.CallOption) (*common.Result, error)
 	// Uninstalls traffic-agents from the cluster.
@@ -224,6 +226,15 @@ func (c *connectorClient) CreateIntercept(ctx context.Context, in *CreateInterce
 func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error) {
 	out := new(InterceptResult)
 	err := c.cc.Invoke(ctx, Connector_RemoveIntercept_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error) {
+	out := new(manager.InterceptInfo)
+	err := c.cc.Invoke(ctx, Connector_UpdateIntercept_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -422,6 +433,7 @@ type ConnectorServer interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
+	UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error)
 	// Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
 	Helm(context.Context, *HelmRequest) (*common.Result, error)
 	// Uninstalls traffic-agents from the cluster.
@@ -497,6 +509,9 @@ func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInte
 }
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
+}
+func (UnimplementedConnectorServer) UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
 func (UnimplementedConnectorServer) Helm(context.Context, *HelmRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Helm not implemented")
@@ -750,6 +765,24 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*manager.RemoveInterceptRequest2))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_UpdateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.UpdateInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).UpdateIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_UpdateIntercept_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).UpdateIntercept(ctx, req.(*manager.UpdateInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1077,6 +1110,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveIntercept",
 			Handler:    _Connector_RemoveIntercept_Handler,
+		},
+		{
+			MethodName: "UpdateIntercept",
+			Handler:    _Connector_UpdateIntercept_Handler,
 		},
 		{
 			MethodName: "Helm",

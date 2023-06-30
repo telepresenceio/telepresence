@@ -54,6 +54,8 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
+  rpc UpdateIntercept(telepresence.manager.UpdateInterceptRequest) returns (telepresence.manager.InterceptInfo);
+
   // Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
   rpc Helm(HelmRequest) returns (telepresence.common.Result);
 

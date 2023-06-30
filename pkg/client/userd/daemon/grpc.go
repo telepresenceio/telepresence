@@ -317,6 +317,14 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return result, err
 }
 
+func (s *service) UpdateIntercept(c context.Context, rr *manager.UpdateInterceptRequest) (result *manager.InterceptInfo, err error) {
+	err = s.WithSession(c, "UpdateIntercept", func(c context.Context, session userd.Session) error {
+		result, err = session.ManagerClient().UpdateIntercept(c, rr)
+		return err
+	})
+	return
+}
+
 func (s *service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
 	return &empty.Empty{}, s.WithSession(ctx, "AddInterceptor", func(_ context.Context, session userd.Session) error {
 		return session.AddInterceptor(interceptor.InterceptId, interceptor)
