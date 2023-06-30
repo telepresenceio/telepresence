@@ -94,6 +94,7 @@ type cluster struct {
 	logCapturingPods sync.Map
 	userdPProf       uint16
 	rootdPProf       uint16
+	self             Cluster
 }
 
 //nolint:gochecknoglobals // extension point
@@ -103,6 +104,7 @@ var ExtendClusterFunc = func(c Cluster) Cluster {
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
+	s.self = &s
 	ec := ExtendClusterFunc(&s)
 	ctx = withGlobalHarness(ctx, ec)
 	ctx = ec.Initialize(ctx)
@@ -111,6 +113,10 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	if !t.Failed() {
 		f(s.withBasicConfig(ctx, t))
 	}
+}
+
+func (s *cluster) SetSelf(self Cluster) {
+	s.self = self
 }
 
 func (s *cluster) Initialize(ctx context.Context) context.Context {
@@ -491,7 +497,7 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.TelepresenceVersion()[1:]); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.self.TelepresenceVersion()[1:]); err != nil {
 		_ = fh.Close()
 		return "", err
 	}
@@ -518,13 +524,10 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 		settings = append(settings,
 			"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
 			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
-		)
+			"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
 	}
 	if !release {
-		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.Registry()))
-		if agentImage != nil {
-			settings = append(settings, "--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
-		}
+		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.self.Registry()))
 	}
 
 	for k, v := range values {
@@ -534,7 +537,7 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 }
 
 func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string) error {
-	chartFilename, err := s.PackageHelmChart(ctx)
+	chartFilename, err := s.self.PackageHelmChart(ctx)
 	if err != nil {
 		return err
 	}
@@ -556,7 +559,7 @@ func (s *cluster) InstallTrafficManagerVersion(ctx context.Context, version stri
 }
 
 func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]string) error {
-	settings := s.GetValuesForHelm(ctx, values, release)
+	settings := s.self.GetValuesForHelm(ctx, values, release)
 
 	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	nss := GetNamespaces(ctx)
@@ -568,7 +571,7 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 	if err == nil {
 		err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager")
 		if err == nil {
-			s.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+			s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
 		}
 	}
 	return err
@@ -654,7 +657,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager"); err != nil {
 		return err
 	}
-	s.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+	s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
 	return nil
 }
 
@@ -1000,7 +1003,7 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 
 // PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
 // that an intercept is active for the given svc and svcPort that will redirect to that local server.
-func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
+func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers ...string) {
 	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
 	require.Eventually(getT(ctx), func() bool {
 		// condition
@@ -1015,7 +1018,16 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 		}
 
 		hc := http.Client{Timeout: 2 * time.Second}
-		resp, err := hc.Get(fmt.Sprintf("http://%s", net.JoinHostPort(ips[0].String(), svcPort)))
+		rq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s", net.JoinHostPort(ips[0].String(), svcPort)), nil)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		for _, h := range headers {
+			kv := strings.SplitN(h, "=", 2)
+			rq.Header[kv[0]] = []string{kv[1]}
+		}
+		resp, err := hc.Do(rq)
 		if err != nil {
 			dlog.Info(ctx, err)
 			return false
