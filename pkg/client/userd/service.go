@@ -29,16 +29,16 @@ type Service interface {
 	// a ManagerServer proxy
 	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 
-	// GetAPIKey returns the current API key
-	GetAPIKey(context.Context) (string, error)
-
 	// FuseFTPMgr returns the manager responsible for creating a client that can connect to the FuseFTP service.
 	FuseFTPMgr() remotefs.FuseFTPManager
 
 	RootSessionInProcess() bool
+	WithSession(context.Context, string, func(context.Context, Session) error) error
+
+	ManageSessions(c context.Context) error
 }
 
-type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, *client.Config, *grpc.Server) (Service, error)
+type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, client.Config, *grpc.Server) (Service, error)
 
 type newServiceKey struct{}
 

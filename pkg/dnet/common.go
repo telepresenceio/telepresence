@@ -22,17 +22,17 @@ type Conn interface {
 	Wait() error
 }
 
-type addr struct {
-	net  string
-	addr string
+type Addr struct {
+	Net  string
+	Addr string
 }
 
-func (a addr) Network() string { return a.net }
-func (a addr) String() string  { return a.addr }
+func (a Addr) Network() string { return a.Net }
+func (a Addr) String() string  { return a.Addr }
 
-// unbufferedConn represents a reliable fully-synchronous stream with *no* internal buffering.  But
+// UnbufferedConn represents a reliable fully-synchronous stream with *no* internal buffering.  But
 // really, what it is is "everything that isn't generic enough to be in bufferedConn".
-type unbufferedConn interface {
+type UnbufferedConn interface {
 	// Receive some data over the connection.
 	Recv() ([]byte, error)
 
@@ -70,7 +70,7 @@ type unbufferedConn interface {
 type bufferedConn struct {
 	// configuration
 
-	conn unbufferedConn
+	conn UnbufferedConn
 
 	// state
 
@@ -91,7 +91,7 @@ type bufferedConn struct {
 	writeDeadline atomicDeadline
 }
 
-func wrapUnbufferedConn(inner unbufferedConn) Conn {
+func WrapUnbufferedConn(inner UnbufferedConn) Conn {
 	c := &bufferedConn{
 		conn: inner,
 

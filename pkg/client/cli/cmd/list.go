@@ -95,11 +95,9 @@ func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 
 	cfg := client.GetConfig(ctx)
 	maxRecSize := int64(1024 * 1024 * 20) // Default to 20 Mb here. List can be quit long.
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			if mz > maxRecSize {
-				maxRecSize = mz
-			}
+	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
+		if mz > maxRecSize {
+			maxRecSize = mz
 		}
 	}
 

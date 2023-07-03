@@ -25,34 +25,41 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 var (
-	DisplayName                                                            = "OSS Traffic Manager" //nolint:gochecknoglobals // extension point
-	NewServiceFunc func(context.Context) (Service, context.Context, error) = NewService            //nolint:gochecknoglobals // extension point
+	DisplayName                 = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
+	NewServiceFunc              = NewService                          //nolint:gochecknoglobals // extension point
+	WithAgentImageRetrieverFunc = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
 )
 
 // Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
-	dlog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
-
 	ctx, err := managerutil.LoadEnv(ctx, os.LookupEnv)
 	if err != nil {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
+	env := managerutil.GetEnv(ctx)
+	agentmap.GeneratorConfigFunc = env.GeneratorConfig
+	return MainWithEnv(ctx)
+}
+
+func MainWithEnv(ctx context.Context) error {
+	dlog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
 
 	env := managerutil.GetEnv(ctx)
 	var tracer *tracing.TraceServer
 
 	if env.TracingGrpcPort != 0 {
+		var err error
 		tracer, err = tracing.NewTraceServer(ctx, "traffic-manager",
-			attribute.String("tel2.agent-image", env.AgentRegistry+"/"+env.AgentImage),
+			attribute.String("tel2.agent-image", env.QualifiedAgentImage()),
 			attribute.String("tel2.managed-namespaces", strings.Join(env.ManagedNamespaces, ",")),
-			attribute.String("tel2.systema-endpoint", fmt.Sprintf("%s:%d", env.SystemAHost, env.SystemAPort)),
 			attribute.String("k8s.namespace", env.ManagerNamespace),
 			attribute.String("k8s.pod-ip", env.PodIP.String()),
 		)
@@ -77,7 +84,7 @@ func Main(ctx context.Context, _ ...string) error {
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
-	ctx, imgRetErr := managerutil.WithAgentImageRetriever(ctx, mutator.RegenerateAgentMaps)
+	ctx, imgRetErr := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
@@ -110,7 +117,7 @@ func Main(ctx context.Context, _ ...string) error {
 }
 
 // ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.
-func (m *service) servePrometheus(ctx context.Context) error {
+func (s *service) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	if env.PrometheusPort == 0 {
 		dlog.Info(ctx, "Prometheus metrics server not started")
@@ -122,18 +129,18 @@ func (m *service) servePrometheus(ctx context.Context) error {
 			Help: h,
 		}, func() float64 { return float64(f()) })
 	}
-	newGaugeFunc("agent_count", "Number of connected traffic agents", m.state.CountAgents)
-	newGaugeFunc("client_count", "Number of connected clients", m.state.CountClients)
-	newGaugeFunc("intercept_count", "Number of active intercepts", m.state.CountIntercepts)
-	newGaugeFunc("session_count", "Number of sessions", m.state.CountSessions)
-	newGaugeFunc("tunnel_count", "Number of tunnels", m.state.CountTunnels)
+	newGaugeFunc("agent_count", "Number of connected traffic agents", s.state.CountAgents)
+	newGaugeFunc("client_count", "Number of connected clients", s.state.CountClients)
+	newGaugeFunc("intercept_count", "Number of active intercepts", s.state.CountIntercepts)
+	newGaugeFunc("session_count", "Number of sessions", s.state.CountSessions)
+	newGaugeFunc("tunnel_count", "Number of tunnels", s.state.CountTunnels)
 
 	newGaugeFunc("active_http_request_count", "Number of currently served http requests", func() int {
-		return int(atomic.LoadInt32(&m.activeHttpRequests))
+		return int(atomic.LoadInt32(&s.activeHttpRequests))
 	})
 
 	newGaugeFunc("active_grpc_request_count", "Number of currently served gRPC requests", func() int {
-		return int(atomic.LoadInt32(&m.activeGrpcRequests))
+		return int(atomic.LoadInt32(&s.activeGrpcRequests))
 	})
 
 	sc := &dhttp.ServerConfig{
@@ -144,7 +151,7 @@ func (m *service) servePrometheus(ctx context.Context) error {
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", env.ServerHost, env.PrometheusPort))
 }
 
-func (m *service) serveHTTP(ctx context.Context) error {
+func (s *service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
 	port := env.ServerPort
@@ -160,29 +167,30 @@ func (m *service) serveHTTP(ctx context.Context) error {
 	httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
 	}))
+
 	sc := &dhttp.ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-				atomic.AddInt32(&m.activeGrpcRequests, 1)
+				atomic.AddInt32(&s.activeGrpcRequests, 1)
 				grpcHandler.ServeHTTP(w, r)
-				atomic.AddInt32(&m.activeGrpcRequests, -1)
+				atomic.AddInt32(&s.activeGrpcRequests, -1)
 			} else {
-				atomic.AddInt32(&m.activeHttpRequests, 1)
+				atomic.AddInt32(&s.activeHttpRequests, 1)
 				httpHandler.ServeHTTP(w, r)
-				atomic.AddInt32(&m.activeHttpRequests, -1)
+				atomic.AddInt32(&s.activeHttpRequests, -1)
 			}
 		}),
 	}
-	m.RegisterServers(grpcHandler)
+	s.self.RegisterServers(grpcHandler)
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
 }
 
-func (m *service) RegisterServers(grpcHandler *grpc.Server) {
-	rpc.RegisterManagerServer(grpcHandler, m)
+func (s *service) RegisterServers(grpcHandler *grpc.Server) {
+	rpc.RegisterManagerServer(grpcHandler, s)
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 }
 
-func (m *service) runSessionGCLoop(ctx context.Context) error {
+func (s *service) runSessionGCLoop(ctx context.Context) error {
 	// Loop calling Expire
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -190,7 +198,7 @@ func (m *service) runSessionGCLoop(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			m.expire(ctx)
+			s.expire(ctx)
 		case <-ctx.Done():
 			return nil
 		}

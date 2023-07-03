@@ -99,9 +99,9 @@ func (c *config) refreshFile(ctx context.Context, data map[string]string) {
 			if err != nil {
 				dlog.Errorf(ctx, "failed to unmarshal YAML from %s", clientConfigFileName)
 			}
-			if len(cfg.Cluster.MappedNamespaces) == 0 {
+			if len(cfg.Cluster().MappedNamespaces) == 0 {
 				dlog.Debugf(ctx, "Augment mapped namespaces with %d managed namespaces", len(env.ManagedNamespaces))
-				cfg.Cluster.MappedNamespaces = env.ManagedNamespaces
+				cfg.Cluster().MappedNamespaces = env.ManagedNamespaces
 				yml = cfg.String()
 				c.clientYAML = []byte(yml)
 			}

@@ -70,17 +70,6 @@ service Connector {
   // Watch all workloads in the mapped namespaces
   rpc WatchWorkloads(WatchWorkloadsRequest) returns (stream WorkloadInfoSnapshot);
 
-  rpc Login(LoginRequest) returns (LoginResult);
-
-  // Returns an error with code=NotFound if not currently logged in.
-  rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty);
-
-  rpc GetCloudUserInfo(UserInfoRequest) returns (UserInfo);
-
-  rpc GetCloudAPIKey(KeyRequest) returns (KeyData);
-
-  rpc GetCloudLicense(LicenseRequest) returns (LicenseData);
-
   // SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
   rpc SetLogLevel(LogLevelRequest) returns (google.protobuf.Empty);
 
@@ -341,61 +330,6 @@ message InterceptResult {
 
   // The kind of workload in this intercept
   string workload_kind = 6;
-}
-
-message LoginRequest {
-  string api_key = 1;
-}
-
-message LoginResult {
-  enum Code {
-    UNSPECIFIED = 0;
-    OLD_LOGIN_REUSED = 1; // success; already logged in
-    NEW_LOGIN_SUCCEEDED = 2; // success
-    // There is no failure code; a gRPC error code is returned instead.
-  }
-  Code code = 1;
-}
-
-message UserInfoRequest {
-  bool auto_login = 1;
-  bool refresh = 2;
-}
-
-message UserInfo {
-  // These field names don't quite follow the usual conventions
-  // because they need to match the JSON that Ambassador Cloud gives
-  // us, because we use the same struct for both.
-  //
-  // protolint:disable FIELD_NAMES_LOWER_SNAKE_CASE
-
-  string id = 1;
-  string name = 2;
-  string avatarUrl = 3;
-  string accountId = 4;
-  string accountName = 5;
-  string accountAvatarUrl = 6;
-  string email = 7;
-
-  // protolint:disable FIELD_NAMES_LOWER_SNAKE_CASE
-}
-
-message KeyRequest {
-  bool auto_login = 1;
-  string description = 2;
-}
-
-message KeyData {
-  string api_key = 1;
-}
-
-message LicenseRequest {
-  string id = 1;
-}
-
-message LicenseData {
-  string license = 1;
-  string host_domain = 2;
 }
 
 message LogLevelRequest {

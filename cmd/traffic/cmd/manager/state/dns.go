@@ -19,7 +19,7 @@ const RcodeNoAgents = 3841
 
 // AgentsLookupDNS will send the given request to all agents currently intercepted by the client identified with
 // the clientSessionID, it will then wait for results to arrive, collect those results, and return the result.
-func (s *State) AgentsLookupDNS(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) (dnsproxy.RRs, int, error) {
+func (s *state) AgentsLookupDNS(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) (dnsproxy.RRs, int, error) {
 	rs := s.agentsLookup(ctx, clientSessionID, request)
 	if len(rs) == 0 {
 		return nil, RcodeNoAgents, nil
@@ -43,7 +43,7 @@ func (s *State) AgentsLookupDNS(ctx context.Context, clientSessionID string, req
 
 // PostLookupDNSResponse receives lookup responses from an agent and places them in the channel
 // that corresponds to the lookup request.
-func (s *State) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
+func (s *state) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
 	request := response.GetRequest()
 	rid := requestId(request)
 	s.mu.RLock()
@@ -64,7 +64,7 @@ func (s *State) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
 	}
 }
 
-func (s *State) WatchLookupDNS(agentSessionID string) <-chan *rpc.DNSRequest {
+func (s *state) WatchLookupDNS(agentSessionID string) <-chan *rpc.DNSRequest {
 	s.mu.RLock()
 	ss, ok := s.sessions[agentSessionID]
 	s.mu.RUnlock()
@@ -74,7 +74,7 @@ func (s *State) WatchLookupDNS(agentSessionID string) <-chan *rpc.DNSRequest {
 	return ss.(*agentSessionState).dnsRequests
 }
 
-func (s *State) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) []*rpc.DNSResponse {
+func (s *state) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) []*rpc.DNSResponse {
 	aIDs := s.getAgentsInterceptedByClient(clientSessionID)
 	aCount := len(aIDs)
 	if aCount == 0 {
@@ -118,7 +118,7 @@ func (s *State) agentsLookup(ctx context.Context, clientSessionID string, reques
 	return rs
 }
 
-func (s *State) startLookup(agentSessionID, rid string, request *rpc.DNSRequest) <-chan *rpc.DNSResponse {
+func (s *state) startLookup(agentSessionID, rid string, request *rpc.DNSRequest) <-chan *rpc.DNSResponse {
 	var (
 		rch chan *rpc.DNSResponse
 		as  *agentSessionState
@@ -151,7 +151,7 @@ func (s *State) startLookup(agentSessionID, rid string, request *rpc.DNSRequest)
 	return rch
 }
 
-func (s *State) endLookup(agentSessionID, rid string) {
+func (s *state) endLookup(agentSessionID, rid string) {
 	s.mu.Lock()
 	if as, ok := s.sessions[agentSessionID].(*agentSessionState); ok {
 		if rch, ok := as.dnsResponses[rid]; ok {

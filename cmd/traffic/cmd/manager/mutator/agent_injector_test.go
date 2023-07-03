@@ -723,8 +723,9 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	for _, test := range tests {
 		test := test // pin it
 		ctx := k8sapi.WithK8sInterface(ctx, clientset)
+		agentmap.GeneratorConfigFunc = env.GeneratorConfig
 		t.Run(test.name, func(t *testing.T) {
-			gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.13.3")
+			gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
 			require.NoError(t, err)
 			actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
@@ -1654,6 +1655,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
 			ctx = managerutil.WithEnv(ctx, env)
+			agentmap.GeneratorConfigFunc = env.GeneratorConfig
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
 			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 			require.NoError(t, err)
@@ -1669,16 +1671,17 @@ func TestTrafficAgentInjector(t *testing.T) {
 					}
 				}
 				ctx = managerutil.WithEnv(ctx, &newEnv)
+				agentmap.GeneratorConfigFunc = newEnv.GeneratorConfig
 			}
 			var actualPatch patchOps
 			var actualErr error
 			cw := NewWatcher("")
 			if test.generateConfig {
-				gc, err := env.GeneratorConfig("docker.io/datawire/tel2:2.13.3")
+				gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
 				require.NoError(t, err)
-				var ac *agentconfig.Sidecar
-				if ac, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
-					actualErr = cw.Store(ctx, ac, true)
+				var scx agentconfig.SidecarExt
+				if scx, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
+					actualErr = cw.Store(ctx, scx, true)
 				}
 			}
 			if actualErr == nil {
@@ -1718,7 +1721,7 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admissi
 	}
 }
 
-func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc *agentmap.GeneratorConfig) (*agentconfig.Sidecar, error) {
+func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentmap.GeneratorConfig) (agentconfig.SidecarExt, error) {
 	workloadCache := make(map[string]k8sapi.Workload, 0)
 	wl, err := agentmap.FindOwnerWorkload(ctx, workloadCache, k8sapi.Pod(pod))
 	if err != nil {
@@ -1741,5 +1744,5 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc *agentm
 	default:
 		t.Fatalf("bad workload type %T", wi)
 	}
-	return agentmap.Generate(ctx, wl, gc)
+	return gc.Generate(ctx, wl)
 }

@@ -28,7 +28,7 @@ func (s *session) GetConfig(ctx context.Context) (*client.SessionConfig, error) 
 	}
 	return &client.SessionConfig{
 		ClientFile: filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile),
-		Config:     s.GetSessionConfig(),
+		Config:     s.getSessionConfig(),
 		DNS: client.DNS{
 			LocalIP:         dns.LocalIp,
 			RemoteIP:        dns.RemoteIp,

@@ -31,8 +31,8 @@ func (s *dockerDaemonSuite) SetupSuite() {
 		return
 	}
 	s.Suite.SetupSuite()
-	ctx := itest.WithConfig(s.HarnessContext(), func(cfg *client.Config) {
-		cfg.Intercept.UseFtp = false
+	ctx := itest.WithConfig(s.HarnessContext(), func(cfg client.Config) {
+		cfg.Intercept().UseFtp = false
 	})
 	s.ctx = itest.WithUseDocker(ctx, true)
 }

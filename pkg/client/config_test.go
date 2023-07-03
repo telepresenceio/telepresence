@@ -74,23 +74,23 @@ intercept:
 	c = WithConfig(c, cfg)
 
 	cfg = GetConfig(c)
-	to := &cfg.Timeouts
+	to := cfg.Timeouts()
 	assert.Equal(t, 2*time.Minute+10*time.Second, to.PrivateAgentInstall) // from sys1
 	assert.Equal(t, 33*time.Second, to.PrivateApply)                      // from sys2
 	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)             // from user
 	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)                  // from user
 	assert.Equal(t, time.Duration(0), to.PrivateConnectivityCheck)        // from sys2
 
-	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels.UserDaemon) // from sys2
-	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels.RootDaemon) // from user
+	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels().UserDaemon) // from sys2
+	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels().RootDaemon) // from user
 
-	assert.Equal(t, "testregistry.io", cfg.Images.PrivateRegistry)                             // from user
-	assert.Equal(t, "ambassador-telepresence-agent-image:0.0.2", cfg.Images.PrivateAgentImage) // from user
-	assert.Equal(t, 1234, cfg.TelepresenceAPI.Port)                                            // from user
-	assert.Equal(t, k8sapi.PortName, cfg.Intercept.AppProtocolStrategy)                        // from user
-	assert.Equal(t, 9080, cfg.Intercept.DefaultPort)                                           // from user
-	assert.True(t, cfg.Intercept.UseFtp)                                                       // from user
-	assert.Equal(t, cfg.Cluster.DefaultManagerNamespace, "hello")                              // from sys1
+	assert.Equal(t, "testregistry.io", cfg.Images().PrivateRegistry)                             // from user
+	assert.Equal(t, "ambassador-telepresence-agent-image:0.0.2", cfg.Images().PrivateAgentImage) // from user
+	assert.Equal(t, 1234, cfg.TelepresenceAPI().Port)                                            // from user
+	assert.Equal(t, k8sapi.PortName, cfg.Intercept().AppProtocolStrategy)                        // from user
+	assert.Equal(t, 9080, cfg.Intercept().DefaultPort)                                           // from user
+	assert.True(t, cfg.Intercept().UseFtp)                                                       // from user
+	assert.Equal(t, cfg.Cluster().DefaultManagerNamespace, "hello")                              // from sys1
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {
@@ -99,15 +99,14 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	require.NoError(t, err)
 	ctx = WithEnv(ctx, env)
 	cfg := GetDefaultConfig()
-	cfg.Images.PrivateAgentImage = "something:else"
-	cfg.Timeouts.PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
-	cfg.Cloud.RefreshMessages += 10 * time.Minute
-	cfg.LogLevels.UserDaemon = logrus.TraceLevel
-	cfg.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("20Mi")
-	cfg.TelepresenceAPI.Port = 4567
-	cfg.Intercept.AppProtocolStrategy = k8sapi.PortName
-	cfg.Intercept.DefaultPort = 9080
-	cfg.Cluster.DefaultManagerNamespace = "hello-there"
+	cfg.Images().PrivateAgentImage = "something:else"
+	cfg.Timeouts().PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
+	cfg.LogLevels().UserDaemon = logrus.TraceLevel
+	cfg.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("20Mi")
+	cfg.TelepresenceAPI().Port = 4567
+	cfg.Intercept().AppProtocolStrategy = k8sapi.PortName
+	cfg.Intercept().DefaultPort = 9080
+	cfg.Cluster().DefaultManagerNamespace = "hello-there"
 	cfgBytes, err := yaml.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -119,7 +118,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	// Load from file and compare
 	cfg2, err := LoadConfig(ctx)
 	require.NoError(t, err)
-	require.Equal(t, &cfg, cfg2)
+	require.Equal(t, cfg, cfg2)
 }
 
 func Test_ConfigMarshalYAMLDefaults(t *testing.T) {

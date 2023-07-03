@@ -24,7 +24,7 @@ var loggerForTest *logrus.Logger //nolint:gochecknoglobals // used by unit tests
 
 // InitContext sets up standard Telepresence logging for a background process.
 func InitContext(ctx context.Context, name string, strategy RotationStrategy, captureStd bool) (context.Context, error) {
-	logger := logrus.New()
+	logger := logrus.StandardLogger()
 	loggerForTest = logger
 
 	// Start with InfoLevel so that the config is read using that level
@@ -67,7 +67,7 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
 
 	// Read the config and set the configured level.
-	logLevels := client.GetConfig(ctx).LogLevels
+	logLevels := client.GetConfig(ctx).LogLevels()
 	level := logLevels.UserDaemon
 	if name == "daemon" {
 		level = logLevels.RootDaemon

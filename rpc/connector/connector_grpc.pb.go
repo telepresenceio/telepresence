@@ -39,11 +39,6 @@ const (
 	Connector_Uninstall_FullMethodName               = "/telepresence.connector.Connector/Uninstall"
 	Connector_List_FullMethodName                    = "/telepresence.connector.Connector/List"
 	Connector_WatchWorkloads_FullMethodName          = "/telepresence.connector.Connector/WatchWorkloads"
-	Connector_Login_FullMethodName                   = "/telepresence.connector.Connector/Login"
-	Connector_Logout_FullMethodName                  = "/telepresence.connector.Connector/Logout"
-	Connector_GetCloudUserInfo_FullMethodName        = "/telepresence.connector.Connector/GetCloudUserInfo"
-	Connector_GetCloudAPIKey_FullMethodName          = "/telepresence.connector.Connector/GetCloudAPIKey"
-	Connector_GetCloudLicense_FullMethodName         = "/telepresence.connector.Connector/GetCloudLicense"
 	Connector_SetLogLevel_FullMethodName             = "/telepresence.connector.Connector/SetLogLevel"
 	Connector_Quit_FullMethodName                    = "/telepresence.connector.Connector/Quit"
 	Connector_GatherLogs_FullMethodName              = "/telepresence.connector.Connector/GatherLogs"
@@ -102,12 +97,6 @@ type ConnectorClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(ctx context.Context, in *WatchWorkloadsRequest, opts ...grpc.CallOption) (Connector_WatchWorkloadsClient, error)
-	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error)
-	// Returns an error with code=NotFound if not currently logged in.
-	Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error)
-	GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error)
-	GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error)
 	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
 	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
@@ -311,51 +300,6 @@ func (x *connectorWatchWorkloadsClient) Recv() (*WorkloadInfoSnapshot, error) {
 	return m, nil
 }
 
-func (c *connectorClient) Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResult, error) {
-	out := new(LoginResult)
-	err := c.cc.Invoke(ctx, Connector_Login_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) Logout(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, Connector_Logout_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) GetCloudUserInfo(ctx context.Context, in *UserInfoRequest, opts ...grpc.CallOption) (*UserInfo, error) {
-	out := new(UserInfo)
-	err := c.cc.Invoke(ctx, Connector_GetCloudUserInfo_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) GetCloudAPIKey(ctx context.Context, in *KeyRequest, opts ...grpc.CallOption) (*KeyData, error) {
-	out := new(KeyData)
-	err := c.cc.Invoke(ctx, Connector_GetCloudAPIKey_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) GetCloudLicense(ctx context.Context, in *LicenseRequest, opts ...grpc.CallOption) (*LicenseData, error) {
-	out := new(LicenseData)
-	err := c.cc.Invoke(ctx, Connector_GetCloudLicense_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *connectorClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Connector_SetLogLevel_FullMethodName, in, out, opts...)
@@ -500,12 +444,6 @@ type ConnectorServer interface {
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Watch all workloads in the mapped namespaces
 	WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error
-	Login(context.Context, *LoginRequest) (*LoginResult, error)
-	// Returns an error with code=NotFound if not currently logged in.
-	Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
-	GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error)
-	GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error)
-	GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error)
 	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
 	SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
@@ -586,21 +524,6 @@ func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*Worklo
 }
 func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, Connector_WatchWorkloadsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
-}
-func (UnimplementedConnectorServer) Login(context.Context, *LoginRequest) (*LoginResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Login not implemented")
-}
-func (UnimplementedConnectorServer) Logout(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
-}
-func (UnimplementedConnectorServer) GetCloudUserInfo(context.Context, *UserInfoRequest) (*UserInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudUserInfo not implemented")
-}
-func (UnimplementedConnectorServer) GetCloudAPIKey(context.Context, *KeyRequest) (*KeyData, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAPIKey not implemented")
-}
-func (UnimplementedConnectorServer) GetCloudLicense(context.Context, *LicenseRequest) (*LicenseData, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudLicense not implemented")
 }
 func (UnimplementedConnectorServer) SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetLogLevel not implemented")
@@ -939,96 +862,6 @@ func (x *connectorWatchWorkloadsServer) Send(m *WorkloadInfoSnapshot) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Connector_Login_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LoginRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).Login(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_Login_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Login(ctx, req.(*LoginRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).Logout(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_Logout_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Logout(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_GetCloudUserInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UserInfoRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).GetCloudUserInfo(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_GetCloudUserInfo_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudUserInfo(ctx, req.(*UserInfoRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_GetCloudAPIKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(KeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).GetCloudAPIKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_GetCloudAPIKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudAPIKey(ctx, req.(*KeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_GetCloudLicense_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LicenseRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).GetCloudLicense(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_GetCloudLicense_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudLicense(ctx, req.(*LicenseRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Connector_SetLogLevel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(LogLevelRequest)
 	if err := dec(in); err != nil {
@@ -1293,26 +1126,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "List",
 			Handler:    _Connector_List_Handler,
-		},
-		{
-			MethodName: "Login",
-			Handler:    _Connector_Login_Handler,
-		},
-		{
-			MethodName: "Logout",
-			Handler:    _Connector_Logout_Handler,
-		},
-		{
-			MethodName: "GetCloudUserInfo",
-			Handler:    _Connector_GetCloudUserInfo_Handler,
-		},
-		{
-			MethodName: "GetCloudAPIKey",
-			Handler:    _Connector_GetCloudAPIKey_Handler,
-		},
-		{
-			MethodName: "GetCloudLicense",
-			Handler:    _Connector_GetCloudLicense_Handler,
 		},
 		{
 			MethodName: "SetLogLevel",

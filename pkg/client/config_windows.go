@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"gopkg.in/yaml.v3"
+	"github.com/sirupsen/logrus"
 
-	"github.com/datawire/dlib/dlog"
+	"gopkg.in/yaml.v3"
 )
 
 type OSSpecificConfig struct {
@@ -57,12 +57,12 @@ func (n Network) IsZero() bool {
 
 func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
-		return errors.New(withLoc("network must be an object", node))
+		return errors.New(WithLoc("network must be an object", node))
 	}
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
-		kv, err := stringKey(ms[i])
+		kv, err := StringKey(ms[i])
 		if err != nil {
 			return err
 		}
@@ -73,15 +73,11 @@ func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
 			case GSCAuto, GSCRegistry, GSCPowershell:
 				n.GlobalDNSSearchConfigStrategy = GSCStrategy(v.Value)
 			default:
-				if parseContext != nil {
-					dlog.Warn(parseContext, withLoc(fmt.Sprintf("invalid globalDNSSearchConfigStrategy %q. Valid values are %q, %q or %q",
-						v.Value, GSCAuto, GSCRegistry, GSCPowershell), ms[i+1]))
-				}
+				logrus.Warn(WithLoc(fmt.Sprintf("invalid globalDNSSearchConfigStrategy %q. Valid values are %q, %q or %q",
+					v.Value, GSCAuto, GSCRegistry, GSCPowershell), ms[i+1]))
 			}
 		default:
-			if parseContext != nil {
-				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-			}
+			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
 		}
 	}
 	if n.GlobalDNSSearchConfigStrategy == "" {

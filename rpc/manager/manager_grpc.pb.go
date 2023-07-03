@@ -6,8 +6,7 @@
 
 // The "manager" package describes the server implemented by the
 // in-cluster Manager, which is spoken to by the Agent (app-sidecar),
-// the on-laptop Connector (user-daemon), the on-laptop CLI. and the
-// SystemA cloud service.
+// the on-laptop Connector (user-daemon), and the on-laptop CLI.
 
 package manager
 

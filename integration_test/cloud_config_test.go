@@ -103,8 +103,8 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace"))
 	defer s.RollbackTM(ctx)
 
-	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
-		cfg.LogLevels.RootDaemon = logrus.InfoLevel
+	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
+		cfg.LogLevels().RootDaemon = logrus.InfoLevel
 	})
 
 	var currentLine int64
@@ -152,8 +152,8 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.True(levelSet, "Root log level not reset after disconnect")
 
 	// Set it to a "real" value to see that the client-side wins
-	ctx = itest.WithConfig(ctx, func(config *client.Config) {
-		config.LogLevels.RootDaemon = logrus.DebugLevel
+	ctx = itest.WithConfig(ctx, func(config client.Config) {
+		config.LogLevels().RootDaemon = logrus.DebugLevel
 	})
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	itest.TelepresenceDisconnectOk(ctx)
@@ -167,7 +167,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
 	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
 	require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
-	require.Equal(view.LogLevels.RootDaemon, logrus.DebugLevel)
+	require.Equal(view.LogLevels().RootDaemon, logrus.DebugLevel)
 }
 
 func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
@@ -189,8 +189,8 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 
 	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace"))
 	defer s.RollbackTM(ctx)
-	ctx = itest.WithConfig(ctx, func(cfg *client.Config) {
-		cfg.LogLevels.UserDaemon = logrus.InfoLevel
+	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
+		cfg.LogLevels().UserDaemon = logrus.InfoLevel
 	})
 
 	var currentLine int64
@@ -238,8 +238,8 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	require.True(levelSet, "Connector log level not reset after disconnect")
 
 	// Set it to a "real" value to see that the client-side wins
-	ctx = itest.WithConfig(ctx, func(config *client.Config) {
-		config.LogLevels.UserDaemon = logrus.DebugLevel
+	ctx = itest.WithConfig(ctx, func(config client.Config) {
+		config.LogLevels().UserDaemon = logrus.DebugLevel
 	})
 
 	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())

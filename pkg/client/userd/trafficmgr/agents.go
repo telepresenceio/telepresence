@@ -119,10 +119,8 @@ func (s *session) watchAgentsNS(ctx context.Context) error {
 
 	var opts []grpc.CallOption
 	cfg := client.GetConfig(ctx)
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-		}
+	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
+		opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
 	}
 
 	wm := "WatchAgentsNS"
@@ -236,7 +234,7 @@ func (s *session) waitForAgent(ctx context.Context, name, namespace string) (*ma
 		}
 	}
 
-	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutAgentInstall) // installing a new agent can take some time
+	ctx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutAgentInstall) // installing a new agent can take some time
 	defer cancel()
 
 	select {

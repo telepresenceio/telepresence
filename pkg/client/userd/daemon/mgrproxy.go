@@ -70,11 +70,11 @@ type tmSender interface {
 
 func recvLoop(ctx context.Context, who string, in tmReceiver, out chan<- *manager.TunnelMessage, wg *sync.WaitGroup) {
 	defer func() {
-		dlog.Debugf(ctx, "%s Recv loop ended", who)
+		dlog.Tracef(ctx, "%s Recv loop ended", who)
 		close(out)
 		wg.Done()
 	}()
-	dlog.Debugf(ctx, "%s Recv loop started", who)
+	dlog.Tracef(ctx, "%s Recv loop started", who)
 	for {
 		payload, err := in.Recv()
 		if err != nil {
@@ -94,10 +94,10 @@ func recvLoop(ctx context.Context, who string, in tmReceiver, out chan<- *manage
 
 func sendLoop(ctx context.Context, who string, out tmSender, in <-chan *manager.TunnelMessage, wg *sync.WaitGroup) {
 	defer func() {
-		dlog.Debugf(ctx, "%s Send loop ended", who)
+		dlog.Tracef(ctx, "%s Send loop ended", who)
 		wg.Done()
 	}()
-	dlog.Debugf(ctx, "%s Send loop started", who)
+	dlog.Tracef(ctx, "%s Send loop started", who)
 	if outC, ok := out.(interface{ CloseSend() error }); ok {
 		defer func() {
 			if err := outC.CloseSend(); err != nil {

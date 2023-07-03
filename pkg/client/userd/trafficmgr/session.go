@@ -139,6 +139,9 @@ type session struct {
 
 	// done is closed when the session ends
 	done chan struct{}
+
+	// Possibly extended version of the session. Use when calling interface methods.
+	self userd.Session
 }
 
 // firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap.
@@ -202,7 +205,7 @@ func NewSession(
 			dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
 		}
 	} else {
-		if err := yaml.Unmarshal(cliCfg.ConfigYaml, &tmgr.sessionConfig); err != nil {
+		if err := yaml.Unmarshal(cliCfg.ConfigYaml, tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
 		}
 		if err := tmgr.ApplyConfig(ctx); err != nil {
@@ -257,19 +260,30 @@ func NewSession(
 	return ctx, tmgr, ret
 }
 
-func (s *session) RootDaemon() rootdRpc.DaemonClient {
-	return s.rootDaemon
+// SetSelf is for internal use by extensions.
+func (s *session) SetSelf(self userd.Session) {
+	s.self = self
 }
 
-func (s *session) As(ptr any) {
-	switch ptr := ptr.(type) {
-	case **session:
-		*ptr = s
-	case *manager.ManagerClient:
-		*ptr = s.managerClient
-	default:
-		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
-	}
+// RunSession (1) starts up with ensuring that the manager is installed and running,
+// but then for most of its life
+//   - (2) calls manager.ArriveAsClient and then periodically calls manager.Remain
+//   - run the intercepts (manager.WatchIntercepts) and then
+//   - (3) listen on the appropriate local ports and forward them to the intercepted
+//     Services, and
+//   - (4) mount the appropriate remote volumes.
+func (s *session) RunSession(c context.Context) error {
+	self := s.self
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	defer func() {
+		self.Epilog(c)
+	}()
+	self.StartServices(g)
+	return g.Wait()
+}
+
+func (s *session) RootDaemon() rootdRpc.DaemonClient {
+	return s.rootDaemon
 }
 
 func (s *session) ManagerClient() manager.ManagerClient {
@@ -288,8 +302,8 @@ func (s *session) ManagerVersion() semver.Version {
 	return s.managerVersion
 }
 
-func (s *session) GetSessionConfig() *client.Config {
-	return &s.sessionConfig
+func (s *session) getSessionConfig() client.Config {
+	return s.sessionConfig
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
@@ -300,8 +314,7 @@ func connectMgr(
 	installID string,
 	cr *rpc.ConnectRequest,
 ) (*session, error) {
-	clientConfig := client.GetConfig(ctx)
-	tos := &clientConfig.Timeouts
+	tos := client.GetConfig(ctx).Timeouts()
 
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
@@ -345,14 +358,7 @@ func connectMgr(
 	svc := userd.GetService(ctx)
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
-		apiKey, err := svc.GetAPIKey(ctx)
-		if err != nil {
-			dlog.Errorf(ctx, "failed to retrieve API key: %v", err)
-		}
-		_, err = mClient.Remain(ctx, &manager.RemainRequest{
-			Session: si,
-			ApiKey:  apiKey,
-		})
+		_, err = mClient.Remain(ctx, &manager.RemainRequest{Session: si})
 		if err == nil {
 			if ctx.Err() != nil {
 				// Call timed out, so the traffic-manager isn't responding at all
@@ -382,10 +388,8 @@ func connectMgr(
 
 	var opts []grpc.CallOption
 	cfg := client.GetConfig(ctx)
-	if !cfg.Grpc.MaxReceiveSize.IsZero() {
-		if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-		}
+	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
+		opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
 	}
 	svc.SetManagerClient(mClient, opts...)
 
@@ -408,7 +412,7 @@ func connectMgr(
 	cluster.AlsoProxy = append(cluster.AlsoProxy, extraAlsoProxy...)
 	cluster.NeverProxy = append(cluster.NeverProxy, extraNeverProxy...)
 
-	return &session{
+	sess := &session{
 		Cluster:          cluster,
 		installID:        installID,
 		userAndHost:      userAndHost,
@@ -424,7 +428,28 @@ func connectMgr(
 		isPodDaemon:      cr.IsPodDaemon,
 		sr:               sr,
 		done:             make(chan struct{}),
-	}, nil
+	}
+	sess.self = sess
+	return sess, nil
+}
+
+func (s *session) NewRemainRequest() *manager.RemainRequest {
+	return &manager.RemainRequest{Session: s.SessionInfo()}
+}
+
+func (s *session) Remain(ctx context.Context) error {
+	self := s.self
+	ctx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
+	defer cancel()
+	_, err := self.ManagerClient().Remain(ctx, self.NewRemainRequest())
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			// Session has expired. We need to cancel the owner session and reconnect
+			return ErrSessionExpired
+		}
+		dlog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
+	}
+	return nil
 }
 
 func parseCIDR(cidr []string) ([]*iputil.Subnet, error) {
@@ -453,8 +478,8 @@ func CheckTrafficManagerService(ctx context.Context, namespace string) error {
 		se := &k8serrors.StatusError{}
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {
-				msg = ("traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
-					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in.")
+				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in."
 			}
 		}
 		return errcat.User.New(msg)
@@ -528,7 +553,7 @@ func (s *session) Epilog(ctx context.Context) {
 }
 
 func (s *session) StartServices(g *dgroup.Group) {
-	g.Go("remain", s.remain)
+	g.Go("remain", s.remainLoop)
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
 	g.Go("agent-watcher", s.agentInfoWatcher)
 	g.Go("dial-request-watcher", s.dialRequestWatcher)
@@ -566,12 +591,12 @@ func (s *session) ApplyConfig(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = client.MergeAndReplace(ctx, &s.sessionConfig, cfg, false)
+	err = client.MergeAndReplace(ctx, s.sessionConfig, cfg, false)
 	if err != nil {
 		return err
 	}
 	if len(s.MappedNamespaces) == 0 {
-		mns := client.GetConfig(ctx).Cluster.MappedNamespaces
+		mns := client.GetConfig(ctx).Cluster().MappedNamespaces
 		if len(mns) > 0 {
 			s.SetMappedNamespaces(ctx, mns)
 		}
@@ -719,7 +744,7 @@ func (s *session) ensureWatchers(ctx context.Context,
 		})
 	}
 	wg.Wait()
-	wc, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutRoundtripLatency)
+	wc, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutRoundtripLatency)
 	defer cancel()
 	if needWait {
 		select {
@@ -798,7 +823,7 @@ nextIs:
 
 var ErrSessionExpired = errors.New("session expired")
 
-func (s *session) remain(c context.Context) error {
+func (s *session) remainLoop(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer func() {
 		ticker.Stop()
@@ -821,20 +846,8 @@ func (s *session) remain(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			apiKey, err := userd.GetService(c).GetAPIKey(c)
-			if err != nil {
-				dlog.Errorf(c, "failed to retrieve API key: %v", err)
-			}
-			_, err = s.managerClient.Remain(c, &manager.RemainRequest{
-				Session: s.SessionInfo(),
-				ApiKey:  apiKey,
-			})
-			if err != nil && c.Err() == nil {
-				dlog.Error(c, err)
-				if gErr, ok := status.FromError(err); ok && gErr.Code() == codes.NotFound {
-					// Session has expired. We need to cancel the owner session and reconnect
-					return ErrSessionExpired
-				}
+			if err := s.Remain(c); err != nil {
+				return err
 			}
 		}
 	}
@@ -860,7 +873,7 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 		namespaces = nil
 	}
 	if len(namespaces) == 0 {
-		namespaces = client.GetConfig(c).Cluster.MappedNamespaces
+		namespaces = client.GetConfig(c).Cluster().MappedNamespaces
 	}
 
 	if s.SetMappedNamespaces(c, namespaces) {
@@ -891,7 +904,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		},
 		ManagerNamespace: cfg.GetManagerNamespace(),
 	}
-	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster.MappedNamespaces) > 0 {
+	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster().MappedNamespaces) > 0 {
 		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
 	}
 	if s.rootDaemon != nil {
@@ -1212,7 +1225,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 	// The root daemon needs time to set up the TUN-device and DNS, which involves interacting
 	// with the cluster-side traffic-manager. We know that the traffic-manager is up and
 	// responding at this point, so it shouldn't take too long.
-	ctx, cancel := client.GetConfig(ctx).Timeouts.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
+	ctx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 	if _, err = rd.WaitForNetwork(ctx, &empty.Empty{}); err != nil {
 		if se, ok := status.FromError(err); ok {

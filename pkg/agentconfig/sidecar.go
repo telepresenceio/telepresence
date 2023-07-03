@@ -1,9 +1,10 @@
 package agentconfig
 
 import (
+	"reflect"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/protobuf/types/known/durationpb"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -146,19 +147,6 @@ type Sidecar struct {
 	// The port used by the agent's GRPC tracing server
 	TracingPort uint16 `json:"tracingPort,omitempty"`
 
-	// LogLevel used by the envoy instance
-	EnvoyLogLevel string
-
-	// The port used by the Envoy server
-	EnvoyServerPort uint16
-
-	// The port used for Envoy administration
-	EnvoyAdminPort uint16
-
-	// The idle timeout for connections. The idle timeout is defined as the period in which there are no active requests.
-	// When the idle timeout is reached the connection will be closed.
-	EnvoyHttpIdleTimeout *durationpb.Duration `json:"envoyHttpIdleTimeout,omitempty"`
-
 	// Resources for the sidecar
 	Resources *core.ResourceRequirements `json:"resources,omitempty"`
 
@@ -167,6 +155,37 @@ type Sidecar struct {
 
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`
+}
+
+func (s *Sidecar) AgentConfig() *Sidecar {
+	return s
+}
+
+// Marshal returns YAML encoding of the Sidecar.
+func (s *Sidecar) Marshal() ([]byte, error) {
+	return yaml.Marshal(s)
+}
+
+// SidecarExt must be implemented by a struct that can represent itself
+// as YAML.
+type SidecarExt interface {
+	AgentConfig() *Sidecar
+
+	Marshal() ([]byte, error)
+
+	RecordInSpan(span trace.Span)
+}
+
+// SidecarType is Sidecar by default but can be any type implementing SidecarExt.
+var SidecarType = reflect.TypeOf(Sidecar{}) //nolint:gochecknoglobals // extension point
+
+// UnmarshalYAML creates a new instance of the SidecarType from the given YAML data.
+func UnmarshalYAML(data []byte) (SidecarExt, error) {
+	into := reflect.New(SidecarType).Interface()
+	if err := yaml.Unmarshal(data, into); err != nil {
+		return nil, err
+	}
+	return into.(SidecarExt), nil
 }
 
 func (s *Sidecar) RecordInSpan(span trace.Span) {

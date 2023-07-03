@@ -10,7 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
 )
 
 func assertMessageMapSnapshotEqual[V watchable.Message](t *testing.T, expected, actual watchable.Snapshot[V], msgAndArgs ...any) bool {

@@ -58,6 +58,7 @@ type Cluster interface {
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
+	Initialize(context.Context) context.Context
 	InstallTrafficManager(ctx context.Context, values map[string]string) error
 	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error
 	IsCI() bool
@@ -70,6 +71,8 @@ type Cluster interface {
 	GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string
 	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
 	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) error
+	UserdPProf() uint16
+	RootdPProf() uint16
 }
 
 // The cluster is created once and then reused by all tests. It ensures that:
@@ -91,10 +94,32 @@ type cluster struct {
 	logCapturingPods sync.Map
 	userdPProf       uint16
 	rootdPProf       uint16
+	self             Cluster
+}
+
+//nolint:gochecknoglobals // extension point
+var ExtendClusterFunc = func(c Cluster) Cluster {
+	return c
 }
 
 func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 	s := cluster{}
+	s.self = &s
+	ec := ExtendClusterFunc(&s)
+	ctx = withGlobalHarness(ctx, ec)
+	ctx = ec.Initialize(ctx)
+	defer s.tearDown(ctx)
+	t := getT(ctx)
+	if !t.Failed() {
+		f(s.withBasicConfig(ctx, t))
+	}
+}
+
+func (s *cluster) SetSelf(self Cluster) {
+	s.self = self
+}
+
+func (s *cluster) Initialize(ctx context.Context) context.Context {
 	s.suffix, s.isCI = dos.LookupEnv(ctx, "GITHUB_SHA")
 	if s.isCI {
 		// Use 7 characters of SHA to avoid busting k8s 60 character name limit
@@ -143,7 +168,6 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 		require.NoError(t, err)
 		s.rootdPProf = uint16(port)
 	}
-	ctx = withGlobalHarness(ctx, &s)
 	if s.prePushed {
 		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
 	}
@@ -165,10 +189,7 @@ func WithCluster(ctx context.Context, f func(ctx context.Context)) {
 
 	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
-	defer s.tearDown(ctx)
-	if !t.Failed() {
-		f(s.withBasicConfig(ctx, t))
-	}
+	return ctx
 }
 
 func (s *cluster) tearDown(ctx context.Context) {
@@ -292,11 +313,11 @@ func PodCreateTimeout(c context.Context) time.Duration {
 }
 
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
-	config := client.GetDefaultConfig()
-	config.LogLevels.UserDaemon = logrus.DebugLevel
-	config.LogLevels.RootDaemon = logrus.DebugLevel
+	config := client.GetDefaultConfigFunc()
+	config.LogLevels().UserDaemon = logrus.DebugLevel
+	config.LogLevels().RootDaemon = logrus.DebugLevel
 
-	to := &config.Timeouts
+	to := config.Timeouts()
 	to.PrivateAgentInstall = PodCreateTimeout(c)
 	to.PrivateApply = PodCreateTimeout(c)
 	to.PrivateClusterConnect = 60 * time.Second
@@ -308,17 +329,15 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerAPI = 120 * time.Second
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
-	config.Images.PrivateRegistry = s.Registry()
+	config.Images().PrivateRegistry = s.Registry()
 	if agentImage := GetAgentImage(c); agentImage != nil {
-		config.Images.PrivateWebhookRegistry = agentImage.Registry
+		config.Images().PrivateWebhookRegistry = agentImage.Registry
 	} else {
-		config.Images.PrivateWebhookRegistry = s.Registry()
+		config.Images().PrivateWebhookRegistry = s.Registry()
 	}
 
-	config.Grpc.MaxReceiveSize, _ = resource.ParseQuantity("10Mi")
-	config.Cloud.SystemaHost = "127.0.0.1"
-
-	config.Intercept.UseFtp = true
+	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
+	config.Intercept().UseFtp = true
 
 	configYaml, err := yaml.Marshal(&config)
 	require.NoError(t, err)
@@ -326,7 +345,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 	configDir := t.TempDir()
 	c = filelocation.WithAppUserConfigDir(c, configDir)
-	c, err = client.SetConfig(c, configDir, configYamlStr)
+	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c
 }
@@ -405,6 +424,14 @@ func (s *cluster) CompatVersion() string {
 	return s.compatVersion
 }
 
+func (s *cluster) UserdPProf() uint16 {
+	return s.userdPProf
+}
+
+func (s *cluster) RootdPProf() uint16 {
+	return s.rootdPProf
+}
+
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
 	var pods string
 	for i := 0; ; i++ {
@@ -470,7 +497,7 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.TelepresenceVersion()[1:]); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.self.TelepresenceVersion()[1:]); err != nil {
 		_ = fh.Close()
 		return "", err
 	}
@@ -497,19 +524,10 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 		settings = append(settings,
 			"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
 			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
-		)
-	}
-	if sysA := GetSystemA(ctx); sysA != nil {
-		settings = append(settings,
-			"--set", fmt.Sprintf("systemaHost=%s", sysA.SystemaHost),
-			"--set", fmt.Sprintf("systemaPort=%d", sysA.SystemaPort),
-		)
+			"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
 	}
 	if !release {
-		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.Registry()))
-		if agentImage != nil {
-			settings = append(settings, "--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
-		}
+		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.self.Registry()))
 	}
 
 	for k, v := range values {
@@ -519,7 +537,7 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 }
 
 func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]string) error {
-	chartFilename, err := s.PackageHelmChart(ctx)
+	chartFilename, err := s.self.PackageHelmChart(ctx)
 	if err != nil {
 		return err
 	}
@@ -541,7 +559,7 @@ func (s *cluster) InstallTrafficManagerVersion(ctx context.Context, version stri
 }
 
 func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]string) error {
-	settings := s.GetValuesForHelm(ctx, values, release)
+	settings := s.self.GetValuesForHelm(ctx, values, release)
 
 	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
 	nss := GetNamespaces(ctx)
@@ -553,7 +571,7 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 	if err == nil {
 		err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager")
 		if err == nil {
-			s.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+			s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
 		}
 	}
 	return err
@@ -589,8 +607,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 	nsl := nss.UniqueList()
 	vx := struct {
-		SystemaHost string  `json:"systemaHost"`
-		SystemaPort int     `json:"systemaPort"`
 		LogLevel    string  `json:"logLevel"`
 		Image       *Image  `json:"image,omitempty"`
 		Agent       *xAgent `json:"agent,omitempty"`
@@ -618,10 +634,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 			},
 		},
 	}
-	if sysA := GetSystemA(ctx); sysA != nil {
-		vx.SystemaHost = sysA.SystemaHost
-		vx.SystemaPort = sysA.SystemaPort
-	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {
 		return err
@@ -645,7 +657,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager"); err != nil {
 		return err
 	}
-	s.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+	s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
 	return nil
 }
 
@@ -770,18 +782,18 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		if user := GetUser(ctx); user != "default" {
 			args = append(args, "--as", "system:serviceaccount:"+user)
 		}
-		if gh.userdPProf > 0 {
-			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.userdPProf)))
+		if gh.UserdPProf() > 0 {
+			args = append(args, "--userd-profiling-port", strconv.Itoa(int(gh.UserdPProf())))
 		}
-		if gh.rootdPProf > 0 {
-			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.rootdPProf)))
+		if gh.RootdPProf() > 0 {
+			args = append(args, "--rootd-profiling-port", strconv.Itoa(int(gh.RootdPProf())))
 		}
 		args = append(args, rest...)
 	}
 	if UseDocker(ctx) {
 		args = append([]string{"--docker"}, args...)
 	}
-	cmd := Command(ctx, gh.executable, args...)
+	cmd := Command(ctx, gh.Executable(), args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	return cmd
@@ -991,7 +1003,7 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 
 // PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
 // that an intercept is active for the given svc and svcPort that will redirect to that local server.
-func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
+func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers ...string) {
 	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
 	require.Eventually(getT(ctx), func() bool {
 		// condition
@@ -1006,7 +1018,16 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 		}
 
 		hc := http.Client{Timeout: 2 * time.Second}
-		resp, err := hc.Get(fmt.Sprintf("http://%s", net.JoinHostPort(ips[0].String(), svcPort)))
+		rq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s", net.JoinHostPort(ips[0].String(), svcPort)), nil)
+		if err != nil {
+			dlog.Info(ctx, err)
+			return false
+		}
+		for _, h := range headers {
+			kv := strings.SplitN(h, "=", 2)
+			rq.Header[kv[0]] = []string{kv[1]}
+		}
+		resp, err := hc.Do(rq)
 		if err != nil {
 			dlog.Info(ctx, err)
 			return false
@@ -1030,19 +1051,19 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string) {
 	)
 }
 
-func WithConfig(c context.Context, modifierFunc func(config *client.Config)) context.Context {
+func WithConfig(c context.Context, modifierFunc func(config client.Config)) context.Context {
 	// Quit a running daemon. We're changing the directory where its config resides.
 	TelepresenceQuitOk(c)
 
 	t := getT(c)
-	configCopy := *client.GetConfig(c)
-	modifierFunc(&configCopy)
+	configCopy := client.GetConfig(c)
+	modifierFunc(configCopy)
 	configYaml, err := yaml.Marshal(&configCopy)
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
 	configDir := t.TempDir()
 	c = filelocation.WithAppUserConfigDir(c, configDir)
-	c, err = client.SetConfig(c, configDir, configYamlStr)
+	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c
 }

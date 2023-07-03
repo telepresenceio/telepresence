@@ -7,10 +7,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
-func MergeAndReplace(c context.Context, defaults *Config, priority *Config, root bool) error {
+func MergeAndReplace(c context.Context, defaults Config, priority Config, root bool) error {
 	if defaults == nil {
-		c := GetDefaultConfig()
-		defaults = &c
+		defaults = GetDefaultConfig()
 	}
 	defaults.Merge(priority)
 	ReplaceConfig(c, defaults)
@@ -32,9 +31,9 @@ func ReloadDaemonConfig(c context.Context, root bool) error {
 	newCfg := GetConfig(c)
 	var level string
 	if root {
-		level = newCfg.LogLevels.RootDaemon.String()
+		level = newCfg.LogLevels().RootDaemon.String()
 	} else {
-		level = newCfg.LogLevels.UserDaemon.String()
+		level = newCfg.LogLevels().UserDaemon.String()
 	}
 	log.SetLevel(c, level)
 	dlog.Info(c, "Configuration reloaded")

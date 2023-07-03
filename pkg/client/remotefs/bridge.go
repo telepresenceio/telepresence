@@ -66,7 +66,7 @@ func (m *bridgeMounter) dispatchToTunnel(ctx context.Context, conn net.Conn, pod
 		return fmt.Errorf("failed to establish tunnel: %v", err)
 	}
 
-	tos := client2.GetConfig(ctx).Timeouts
+	tos := client2.GetConfig(ctx).Timeouts()
 	ctx, cancel := context.WithCancel(ctx)
 	s, err := tunnel.NewClientStream(ctx, ms, id, m.sessionID, tos.PrivateRoundtripLatency, tos.PrivateEndpointDial)
 	if err != nil {

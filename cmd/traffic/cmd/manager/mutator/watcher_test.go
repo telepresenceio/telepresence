@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	mock_kubernetes "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator/mocks"
+	mockKubernetes "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator/mocks"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
@@ -27,9 +27,9 @@ type suiteConfigWatcher struct {
 
 	ctrl *gomock.Controller
 
-	kubeApiMock      *mock_kubernetes.MockInterface
-	coreV1ApiMock    *mock_kubernetes.MockCoreV1Interface
-	configMapApiMock *mock_kubernetes.MockConfigMapInterface
+	kubeApiMock      *mockKubernetes.MockInterface
+	coreV1ApiMock    *mockKubernetes.MockCoreV1Interface
+	configMapApiMock *mockKubernetes.MockConfigMapInterface
 
 	configWatcher *configWatcher
 }
@@ -37,9 +37,9 @@ type suiteConfigWatcher struct {
 func (s *suiteConfigWatcher) SetupTest() {
 	s.ctrl = gomock.NewController(s.T())
 
-	s.kubeApiMock = mock_kubernetes.NewMockInterface(s.ctrl)
-	s.coreV1ApiMock = mock_kubernetes.NewMockCoreV1Interface(s.ctrl)
-	s.configMapApiMock = mock_kubernetes.NewMockConfigMapInterface(s.ctrl)
+	s.kubeApiMock = mockKubernetes.NewMockInterface(s.ctrl)
+	s.coreV1ApiMock = mockKubernetes.NewMockCoreV1Interface(s.ctrl)
+	s.configMapApiMock = mockKubernetes.NewMockConfigMapInterface(s.ctrl)
 
 	s.kubeApiMock.EXPECT().CoreV1().Return(s.coreV1ApiMock).AnyTimes()
 	s.coreV1ApiMock.EXPECT().ConfigMaps(gomock.Any()).Return(s.configMapApiMock).AnyTimes()

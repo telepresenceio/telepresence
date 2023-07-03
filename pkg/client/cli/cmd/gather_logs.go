@@ -244,10 +244,8 @@ func (gl *gatherLogsCommand) gatherClusterLogs(ctx context.Context, exportDir st
 	if userD != nil {
 		var opts []grpc.CallOption
 		cfg := client.GetConfig(ctx)
-		if !cfg.Grpc.MaxReceiveSize.IsZero() {
-			if mz, ok := cfg.Grpc.MaxReceiveSize.AsInt64(); ok {
-				opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-			}
+		if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
+			opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
 		}
 		lr, err := userD.GatherLogs(ctx, rq, opts...)
 		if err != nil {

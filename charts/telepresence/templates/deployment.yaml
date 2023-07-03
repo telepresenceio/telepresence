@@ -1,9 +1,5 @@
 {{- with .Values }}
 {{- if not .rbac.only }}
-{{- /* verify that we either have access to Ambassador Cloud or have a agent.image defined */}}
-{{- if not (or (and .systemaHost .systemaPort) (and .agent.image.name .agent.image.tag) (and .agentInjector.agentImage.name .agentInjector.agentImage.tag)) }}
-{{- fail "Either systemaHost and systemaPort or agent.image.name and agent.image.tag must be defined" }}
-{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -53,10 +49,6 @@ spec:
           - name: POD_CIDRS
             value: "{{ join " " . }}"
           {{- end }}
-          - name: SYSTEMA_HOST
-            value: {{ .systemaHost }}
-          - name: SYSTEMA_PORT
-            value: {{ .systemaPort | quote }}
           - name: MUTATOR_WEBHOOK_PORT
             value: {{ .agentInjector.webhook.port | quote }}
           {{- with .tracing }}
@@ -77,8 +69,6 @@ spec:
             value: {{ .grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
-          - name: INTERCEPT_DISABLE_GLOBAL
-            value: {{ quote (default false .intercept.disableGlobal) }}
           - name: AGENT_ARRIVAL_TIMEOUT
             value: {{ quote (default "30s" .timeouts.agentArrival) }}
         {{- /*
@@ -157,24 +147,6 @@ spec:
           {{- end }}
           - name: AGENT_IMAGE_PULL_POLICY
             value: {{ .agent.image.pullPolicy }}
-          {{- with .agent.envoy }}
-          {{- if .logLevel }}
-          - name: AGENT_ENVOY_LOG_LEVEL
-            value: {{ .logLevel }}
-          {{- end }}
-          {{- if .serverPort }}
-          - name: AGENT_ENVOY_SERVER_PORT
-            value: {{ .serverPort | quote }}
-          {{- end }}
-          {{- if .adminPort }}
-          - name: AGENT_ENVOY_ADMIN_PORT
-            value: {{ .adminPort | quote }}
-          {{- end }}
-          {{- if .httpIdleTimeout }}
-          - name: AGENT_ENVOY_HTTP_IDLE_TIMEOUT
-            value: {{ .httpIdleTimeout }}
-          {{- end }}
-          {{- end }}
           {{- if .prometheus.port }}  # 0 is false
           - name: PROMETHEUS_PORT
             value: "{{ .prometheus.port }}"
@@ -238,6 +210,9 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+        {{- if and .trafficManager .trafficManager.envTemplate }}
+          {{- template "traffic-manager-env" . }}
+        {{- end }}
           ports:
           - name: api
             containerPort: {{ .apiPort }}
@@ -264,19 +239,12 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-          {{- if .licenseKey.create }}
-          - name: license
-            mountPath: /home/telepresence
-            readOnly: true
-          {{- end }}
-          {{- if .httpsProxy.rootCATLSSecret }}
-          - name: proxy-ca
-            mountPath: /var/run/secrets/proxy_tls
-            readOnly: true
-          {{- end }}
           - name: tls
             mountPath: /var/run/secrets/tls
             readOnly: true
+        {{- if and .trafficManager .trafficManager.mountsTemplate }}
+          {{- template "traffic-manager-mounts" . }}
+        {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -293,22 +261,13 @@ spec:
       priorityClassName: {{ . | quote }}
       {{- end }}
       volumes:
-      {{- if .licenseKey.create }}
-      - name: license
-        secret:
-          defaultMode: 420
-          secretName: {{ .licenseKey.secret.name }}
-      {{- end }}
-      {{- if .httpsProxy.rootCATLSSecret }}
-      - name: proxy-ca
-        secret:
-          defaultMode: 420
-          secretName: {{ .httpsProxy.rootCATLSSecret }}
-      {{- end }}
       - name: tls
         secret:
           defaultMode: 420
           secretName: {{ .agentInjector.secret.name }}
+    {{- if and .trafficManager .trafficManager.volsTemplate }}
+      {{- template "traffic-manager-vols" . }}
+    {{- end }}
       serviceAccount: traffic-manager
       serviceAccountName: traffic-manager
 {{- end }}

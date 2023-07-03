@@ -53,7 +53,7 @@ const (
 // ClientImage returns the fully qualified name of the docker image that corresponds to
 // the version of the current executable.
 func ClientImage(ctx context.Context) string {
-	registry := client.GetConfig(ctx).Images.Registry(ctx)
+	registry := client.GetConfig(ctx).Images().Registry(ctx)
 	return registry + "/" + telepresenceImage + ":" + strings.TrimPrefix(version.Version, "v")
 }
 
