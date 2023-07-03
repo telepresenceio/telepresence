@@ -710,13 +710,37 @@ func KubeConfig(ctx context.Context) string {
 	return kubeConf
 }
 
+const sensitivePrefix = "--$sensitive$--"
+
+// WrapSensitive wraps an argument sent to Command so that it doesn't get logged verbatim. This can
+// be used for commands like "telepresence login --apikey NNNN" where the NNN shouldn't be visible
+// in the logs. If NNN Is wrapped using this function, it will appear as "***" in the logs.
+func WrapSensitive(s string) string {
+	return sensitivePrefix + s
+}
+
 // Command creates and returns a dexec.Cmd  initialized with the global environment
 // from the cluster harness and any other environment that has been added using the
 // WithEnv() function.
 func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd {
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
-	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), args))
+	dbgArgs := args
+	copied := false
+	for i, a := range args {
+		if strings.HasPrefix(a, sensitivePrefix) {
+			if !copied {
+				dbgArgs = make([]string, len(args))
+				copy(dbgArgs, args)
+				args = make([]string, len(args))
+				copy(args, dbgArgs)
+				copied = true
+			}
+			dbgArgs[i] = "***"
+			args[i] = strings.TrimPrefix(a, sensitivePrefix)
+		}
+	}
+	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), dbgArgs))
 	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
 	env := GetGlobalHarness(ctx).GlobalEnv()
