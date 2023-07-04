@@ -10,31 +10,28 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 )
 
 func TestEnvconfig(t *testing.T) {
 	// Default environment, providing what's necessary for the traffic-manager
 	env := map[string]string{
-		"AGENT_APP_PROTO_STRATEGY":      k8sapi.Http2Probe.String(),
-		"AGENT_ENVOY_ADMIN_PORT":        "19000",
-		"AGENT_ENVOY_SERVER_PORT":       "18000",
-		"AGENT_ENVOY_HTTP_IDLE_TIMEOUT": "70s",
-		"AGENT_INJECT_POLICY":           agentconfig.OnDemand.String(),
-		"AGENT_INJECTOR_NAME":           "agent-injector",
-		"AGENT_PORT":                    "9900",
-		"AGENT_REGISTRY":                "docker.io/datawire",
-		"AGENT_ARRIVAL_TIMEOUT":         "45s",
-		"CLIENT_CONNECTION_TTL":         (24 * time.Hour).String(),
-		"CLIENT_DNS_EXCLUDE_SUFFIXES":   ".com .io .net .org .ru",
-		"GRPC_MAX_RECEIVE_SIZE":         "4Mi",
-		"LOG_LEVEL":                     "info",
-		"POD_IP":                        "203.0.113.18",
-		"POD_CIDR_STRATEGY":             "auto",
-		"SERVER_PORT":                   "8081",
-		"INTERCEPT_DISABLE_GLOBAL":      "false",
+		"AGENT_APP_PROTO_STRATEGY":    k8sapi.Http2Probe.String(),
+		"AGENT_INJECT_POLICY":         agentconfig.OnDemand.String(),
+		"AGENT_INJECTOR_NAME":         "agent-injector",
+		"AGENT_PORT":                  "9900",
+		"AGENT_REGISTRY":              "docker.io/datawire",
+		"AGENT_ARRIVAL_TIMEOUT":       "45s",
+		"CLIENT_CONNECTION_TTL":       (24 * time.Hour).String(),
+		"CLIENT_DNS_EXCLUDE_SUFFIXES": ".com .io .net .org .ru",
+		"GRPC_MAX_RECEIVE_SIZE":       "4Mi",
+		"LOG_LEVEL":                   "info",
+		"POD_IP":                      "203.0.113.18",
+		"POD_CIDR_STRATEGY":           "auto",
+		"SERVER_PORT":                 "8081",
 	}
 
 	defaults := managerutil.Env{
