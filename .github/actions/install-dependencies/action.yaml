@@ -24,7 +24,8 @@ runs:
       env:
         HOMEBREW_NO_INSTALL_FROM_API: ""
       run: |
-        brew untap homebrew/core homebrew/cask
+        brew untap homebrew/core || true
+        brew homebrew/cask || true
         brew update
         brew install --cask macfuse
         brew install gromgit/fuse/sshfs-mac
