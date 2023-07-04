@@ -1,6 +1,8 @@
 name: "Build and Unit test"
 on:
   pull_request:
+env:
+  HOMEBREW_NO_INSTALL_FROM_API:
 jobs:
   "macos":
     runs-on: macos-latest
@@ -17,7 +19,10 @@ jobs:
             #version: 'v1.19.3'
             #id: kubectl
       - name: "Install dependencies"
+        env:
+          HOMEBREW_NO_INSTALL_FROM_API: ""
         run: |
+          brew untap homebrew/core homebrew/cask
           brew update
           brew install --cask macfuse
       - name: Lint
