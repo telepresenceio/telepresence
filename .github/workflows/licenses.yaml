@@ -1,6 +1,6 @@
 name: "License verification"
 on:
-  pull_request:
+  pull_request_target:
   workflow_dispatch:
 jobs:
   dependency_info_linux:
