@@ -162,6 +162,7 @@ agent:
     name:
     tag:
     pullSecrets: []
+    pullPolicy: IfNotPresent
 
 ################################################################################
 ## Telepresence API Server Configuration

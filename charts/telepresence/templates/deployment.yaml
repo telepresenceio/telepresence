@@ -145,6 +145,8 @@ spec:
           - name: AGENT_IMAGE_PULL_SECRETS
             value: '{{ toJson . }}'
           {{- end }}
+          - name: AGENT_IMAGE_PULL_POLICY
+            value: {{ .agent.image.pullPolicy }}
           {{- if .prometheus.port }}  # 0 is false
           - name: PROMETHEUS_PORT
             value: "{{ .prometheus.port }}"

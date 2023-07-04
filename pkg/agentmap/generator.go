@@ -36,6 +36,7 @@ type BasicGeneratorConfig struct {
 	LogLevel            string
 	InitResources       *core.ResourceRequirements
 	Resources           *core.ResourceRequirements
+	PullPolicy          string
 	PullSecrets         []core.LocalObjectReference
 }
 
@@ -102,6 +103,7 @@ func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workloa
 		Containers:    ccs,
 		InitResources: cfg.InitResources,
 		Resources:     cfg.Resources,
+		PullPolicy:    cfg.PullPolicy,
 		PullSecrets:   cfg.PullSecrets,
 	}
 	ag.RecordInSpan(span)

@@ -136,6 +136,7 @@ func AgentContainer(
 				},
 			},
 		},
+		ImagePullPolicy: core.PullPolicy(config.PullPolicy),
 	}
 	if r := config.Resources; r != nil {
 		ac.Resources = *r
