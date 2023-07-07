@@ -84,7 +84,7 @@ type processInfo struct {
 	exe  string
 }
 
-func killProcessGroup(ctx context.Context, cmd *exec.Cmd, _ os.Signal) {
+func killProcessGroup(ctx context.Context, cmd *exec.Cmd, sig os.Signal) {
 	pes := make([]*processInfo, 0, 100)
 	err := eachProcess(func(pe *windows.ProcessEntry32) bool {
 		pes = append(pes, &processInfo{
@@ -96,16 +96,33 @@ func killProcessGroup(ctx context.Context, cmd *exec.Cmd, _ os.Signal) {
 	})
 	if err != nil {
 		dlog.Error(ctx, err)
-	} else if err = terminateProcess(ctx, cmd.Path, uint32(cmd.Process.Pid), pes); err != nil {
+	} else if err = terminateProcess(ctx, cmd.Path, uint32(cmd.Process.Pid), sig, pes); err != nil {
 		dlog.Error(ctx, err)
 	}
 }
 
 // terminateProcess will terminate the given process and all its children. The
 // children are terminated first.
-func terminateProcess(ctx context.Context, exe string, pid uint32, pes []*processInfo) error {
-	if err := terminateChildrenOf(ctx, pid, pes); err != nil {
+func terminateProcess(ctx context.Context, exe string, pid uint32, sig os.Signal, pes []*processInfo) error {
+	if err := terminateChildrenOf(ctx, pid, sig, pes); err != nil {
 		return err
+	}
+
+	if sig == os.Interrupt {
+		if err := windows.GenerateConsoleCtrlEvent(windows.CTRL_BREAK_EVENT, pid); err != nil {
+			// An ACCESS_DENIED error may indicate that the process is dead already but
+			// died just after the handle to it was opened.
+			if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+				if alive, aliveErr := processIsAlive(pid); aliveErr != nil {
+					dlog.Error(ctx, aliveErr)
+				} else if !alive {
+					return nil
+				}
+			}
+			return fmt.Errorf("%q: %w", exe, &os.SyscallError{Syscall: "GenerateConsoleCtrlEvent", Err: err})
+		}
+		dlog.Debugf(ctx, "sent ctrl-c to process %q (pid %d)", exe, pid)
+		return nil
 	}
 
 	// SYNCHRONIZE is required to wait for the process to terminate
@@ -132,16 +149,16 @@ func terminateProcess(ctx context.Context, exe string, pid uint32, pes []*proces
 				return nil
 			}
 		}
-		return fmt.Errorf("failed to terminate %q: %w", exe, err)
+		return fmt.Errorf("%q: %w", exe, &os.SyscallError{Syscall: "TerminateProcess", Err: err})
 	}
-	dlog.Infof(ctx, "terminated process %q (pid %d)", exe, pid)
+	dlog.Debugf(ctx, "terminated process %q (pid %d)", exe, pid)
 	return nil
 }
 
-func terminateChildrenOf(ctx context.Context, pid uint32, pes []*processInfo) error {
+func terminateChildrenOf(ctx context.Context, pid uint32, sig os.Signal, pes []*processInfo) error {
 	for _, pe := range pes {
 		if pe.ppid == pid {
-			if err := terminateProcess(ctx, pe.exe, pe.pid, pes); err != nil {
+			if err := terminateProcess(ctx, pe.exe, pe.pid, sig, pes); err != nil {
 				return err
 			}
 		}

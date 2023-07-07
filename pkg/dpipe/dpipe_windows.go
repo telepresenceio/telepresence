@@ -9,5 +9,5 @@ import (
 )
 
 func killProcess(ctx context.Context, cmd *exec.Cmd) {
-	proc.KillProcessGroup(ctx, cmd, os.Interrupt)
+	proc.KillProcessGroup(ctx, cmd, os.Kill)
 }
