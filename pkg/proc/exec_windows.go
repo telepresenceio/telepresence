@@ -17,6 +17,9 @@ import (
 
 var SignalsToForward = []os.Signal{os.Interrupt} //nolint:gochecknoglobals // OS-specific constant list
 
+// SIGTERM uses os.Interrupt on Windows as a best effort.
+var SIGTERM = os.Interrupt //nolint:gochecknoglobals // OS-specific constant
+
 func CommandContext(ctx context.Context, name string, args ...string) *dexec.Cmd {
 	cmd := dexec.CommandContext(ctx, name, args...)
 	createNewProcessGroup(cmd.Cmd)
