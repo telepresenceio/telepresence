@@ -15,6 +15,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
+const SIGTERM = unix.SIGTERM
+
 var CommandContext = dexec.CommandContext //nolint:gochecknoglobals // OS-specific function replacement
 
 var SignalsToForward = []os.Signal{unix.SIGINT, unix.SIGTERM} //nolint:gochecknoglobals // OS-specific constant list
