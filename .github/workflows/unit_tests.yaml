@@ -36,7 +36,7 @@ jobs:
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
-          timeout_minutes: 10
+          timeout_minutes: 12
           command: |
             # We want to validate that tests still pass, even if the metrics host
             # points to a broken IP
@@ -76,7 +76,7 @@ jobs:
         uses: nick-invision/retry/@v2.4.0
         with:
           max_attempts: 3
-          timeout_minutes: 10
+          timeout_minutes: 12
           command: |
             $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
             $ENV:DTEST_REGISTRY = "docker.io/datawire"

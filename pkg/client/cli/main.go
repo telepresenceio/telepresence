@@ -46,6 +46,11 @@ func InitContext(ctx context.Context) context.Context {
 		ctx = connect.WithCommandInitializer(ctx, connect.CommandInitializer)
 		ctx = cmd.WithSubCommands(ctx)
 	}
+	if client.IsDaemon() {
+		ctx = cmd.WithDaemonSubCommands(ctx)
+	} else {
+		ctx = cmd.WithSubCommands(ctx)
+	}
 	return ctx
 }
 
