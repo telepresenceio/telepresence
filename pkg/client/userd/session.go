@@ -3,12 +3,11 @@ package userd
 import (
 	"context"
 
+	"github.com/blang/semver"
 	"google.golang.org/grpc"
 	core "k8s.io/api/core/v1"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
-
-	"github.com/blang/semver"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"

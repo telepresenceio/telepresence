@@ -3,10 +3,7 @@ package logging
 import (
 	"fmt"
 	"os"
-
-	//nolint:depguard // We specifically need "syscall.Stat_t" rather than "unix.Stat_t" for
-	// fs.File.Sys().
-	"syscall"
+	"syscall" //nolint:depguard // We specifically need "syscall.Stat_t" rather than "unix.Stat_t" for fs.File.Sys().
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"

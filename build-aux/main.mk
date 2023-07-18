@@ -18,6 +18,8 @@
 # clever should probably be factored into a separate file.
 
 # All build artifacts that are files end up in $(BUILDDIR).
+$(VERBOSE).SILENT:
+
 BUILDDIR=build-output
 
 BINDIR=$(BUILDDIR)/bin
@@ -295,6 +297,7 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 lint-deps: build-deps ## (QA) Everything necessary to lint
 lint-deps: $(tools/golangci-lint)
 lint-deps: $(tools/protolint)
+lint-deps: $(tools/gosimports)
 ifneq ($(GOHOSTOS), windows)
 lint-deps: $(tools/shellcheck)
 endif
@@ -305,8 +308,13 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
-.PHONY: lint lint-rpc
-lint: lint-rpc ## (QA) Run the linter
+.PHONY: lint lint-rpc lint-go
+
+lint: lint-rpc lint-go
+
+lint-go: lint-deps ## (QA) Run the golangci-lint
+	$(eval badimports = $(shell find cmd integration_test pkg -name '*.go' | grep -v '/mocks/' | xargs $(tools/gosimports) --local github.com/datawire/,github.com/telepresenceio/ -l))
+	$(if $(strip $(badimports)), echo "The following files have bad import ordering (use make format to fix): " $(badimports) && false)
 	CGO_ENABLED=$(CGO_ENABLED) $(tools/golangci-lint) run --timeout 8m ./...
 
 lint-rpc: lint-deps ## (QA) Run rpc linter
@@ -316,7 +324,8 @@ ifneq ($(GOHOSTOS), windows)
 endif
 
 .PHONY: format
-format: build-deps $(tools/golangci-lint) $(tools/protolint) ## (QA) Automatically fix linter complaints
+format: lint-deps ## (QA) Automatically fix linter complaints
+	find cmd integration_test pkg -name '*.go' | grep -v '/mocks/' | xargs $(tools/gosimports) --local github.com/datawire/,github.com/telepresenceio/ -w
 	$(tools/golangci-lint) run --fix --timeout 2m ./... || true
 	$(tools/protolint) lint --fix rpc || true
 

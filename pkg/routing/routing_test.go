@@ -8,9 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func TestGetRoutingTable_defaultRoute(t *testing.T) {
