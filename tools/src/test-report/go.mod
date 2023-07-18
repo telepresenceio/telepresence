@@ -18,7 +18,6 @@ require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/datawire/dlib v1.3.1-0.20221228104658-e373c6d44961 // indirect
-	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f // indirect
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b // indirect
 	github.com/datawire/k8sapi v0.1.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -60,7 +59,7 @@ require (
 	github.com/sirupsen/logrus v1.9.2 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.14.0 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.14.1-rc.3 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
