@@ -58,10 +58,6 @@ linters-settings:
   gocognit:
     min-complexity: 60
 
-  goimports:
-    # A comma-separated list
-    local-prefixes: github.com/telepresenceio,github.com/datawire
-
   lll:
     line-length: 180
     tab-width: 2
@@ -99,7 +95,6 @@ linters:
     - gofmt
     - gofumpt
     - goheader
-    - goimports
     - gomodguard
     - goprintffuncname
     - gosimple
@@ -138,6 +133,7 @@ linters:
     - goconst
     - goerr113
     - godox
+    - goimports
     - gomnd
     - gomoddirectives
     - gosec

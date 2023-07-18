@@ -11,9 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-
-	//nolint:depguard // We really do want the socat to be minimal
-	"os/exec"
+	"os/exec" //nolint:depguard // We really do want the socat to be minimal
 	"path"
 	"regexp"
 	"strings"
