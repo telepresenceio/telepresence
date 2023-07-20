@@ -79,10 +79,17 @@ $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
 	tar -C $(@D) -zxmf $< protolint$(EXE) protoc-gen-protolint$(EXE)
 
-ifneq ($(GOHOSTOS),windows)
+# Test reporter
+# ==========
+#
+tools/test-report = $(TOOLSBINDIR)/test-report$(EXE)
+$(TOOLSBINDIR)/test-report$(EXE): $(TOOLSSRCDIR)/test-report/*.go $(TOOLSSRCDIR)/test-report/go.*
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
+
 # Shellcheck
 # ==========
 #
+ifneq ($(GOHOSTOS),windows)
 tools/shellcheck = $(TOOLSBINDIR)/shellcheck
 SHELLCHECK_VERSION=0.8.0
 SHELLCHECK_ARCH=$(shell uname -m)

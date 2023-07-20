@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"context"
 	"os"
 
 	"golang.org/x/sys/windows"
@@ -8,7 +9,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
-func rmAsRoot(file string) error {
+func rmAsRoot(ctx context.Context, file string) error {
 	cwd, _ := os.Getwd()
 	// UTF16PtrFromString can only fail if the argument contains a NUL byte. That will never happen here.
 	verbPtr, _ := windows.UTF16PtrFromString("runas")

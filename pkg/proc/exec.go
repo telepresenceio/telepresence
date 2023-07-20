@@ -115,3 +115,13 @@ func IsAdmin() bool {
 func Terminate(p *os.Process) error {
 	return terminate(p)
 }
+
+// CacheAdmin will ensure that the current process is able to invoke subprocesses with admin rights
+// without having to ask for the password again. This is needed among other things to make sure the
+// integration tests can see that a password is being asked for.
+func CacheAdmin(ctx context.Context, prompt string) error {
+	// These logs will get picked up by the test-reporter to make sure the user is asked for the password.
+	dlog.Info(ctx, "Asking for admin credentials")
+	defer dlog.Info(ctx, "Admin credentials acquired")
+	return cacheAdmin(ctx, prompt)
+}
