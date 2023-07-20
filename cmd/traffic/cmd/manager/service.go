@@ -183,9 +183,12 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	// ctx = WithSessionInfo(ctx, req.GetSession())
 	// dlog.Debug(ctx, "Remain called")
+	sessionID := req.GetSession().GetSessionId()
 	if ok := s.state.MarkSession(req, s.clock.Now()); !ok {
-		return nil, status.Errorf(codes.NotFound, "Session %q not found", req.GetSession().GetSessionId())
+		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
+
+	s.state.RefreshSessionConsumptionMetrics(sessionID)
 
 	return &empty.Empty{}, nil
 }

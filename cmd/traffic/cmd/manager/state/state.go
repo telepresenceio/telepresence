@@ -42,6 +42,9 @@ type State interface {
 	GetAgent(string) *rpc.AgentInfo
 	GetAllClients() map[string]*rpc.ClientInfo
 	GetClient(string) *rpc.ClientInfo
+	GetSession(string) SessionState
+	GetSessionConsumptionMetrics(string) *SessionConsumptionMetrics
+	GetAllSessionConsumptionMetrics() map[string]*SessionConsumptionMetrics
 	GetIntercept(string) (*rpc.InterceptInfo, bool)
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
@@ -54,6 +57,7 @@ type State interface {
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
 	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo
+	RefreshSessionConsumptionMetrics(sessionID string)
 	ValidateAgentImage(string, bool) error
 	WaitForTempLogLevel(rpc.Manager_WatchLogLevelServer) error
 	WatchAgents(context.Context, func(sessionID string, agent *rpc.AgentInfo) bool) <-chan watchable.Snapshot[*rpc.AgentInfo]
@@ -83,16 +87,17 @@ type state struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts      watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
-	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
-	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
-	sessions        map[string]SessionState              // info for all sessions, keyed by session id
-	agentsByName    map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
-	interceptStates map[string]*interceptState
-	timedLogLevel   log.TimedLevel
-	llSubs          *loglevelSubscribers
-	cfgMapLocks     map[string]*sync.Mutex
-	tunnelCounter   int32
+	intercepts                watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
+	agents                    watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
+	clients                   watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
+	sessions                  map[string]SessionState              // info for all sessions, keyed by session id
+	agentsByName              map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	interceptStates           map[string]*interceptState
+	sessionConsumptionMetrics map[string]*SessionConsumptionMetrics // TODO: For stale, use LastMark from session ?
+	timedLogLevel             log.TimedLevel
+	llSubs                    *loglevelSubscribers
+	cfgMapLocks               map[string]*sync.Mutex
+	tunnelCounter             int32
 
 	// Possibly extended version of the state. Use when calling interface methods.
 	self State
@@ -103,13 +108,14 @@ var NewStateFunc = NewState //nolint:gochecknoglobals // extension point
 func NewState(ctx context.Context) State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	s := &state{
-		ctx:             ctx,
-		sessions:        make(map[string]SessionState),
-		agentsByName:    make(map[string]map[string]*rpc.AgentInfo),
-		cfgMapLocks:     make(map[string]*sync.Mutex),
-		interceptStates: make(map[string]*interceptState),
-		timedLogLevel:   log.NewTimedLevel(loglevel, log.SetLevel),
-		llSubs:          newLoglevelSubscribers(),
+		ctx:                       ctx,
+		sessions:                  make(map[string]SessionState),
+		sessionConsumptionMetrics: make(map[string]*SessionConsumptionMetrics),
+		agentsByName:              make(map[string]map[string]*rpc.AgentInfo),
+		cfgMapLocks:               make(map[string]*sync.Mutex),
+		interceptStates:           make(map[string]*interceptState),
+		timedLogLevel:             log.NewTimedLevel(loglevel, log.SetLevel),
+		llSubs:                    newLoglevelSubscribers(),
 	}
 	s.self = s
 	return s
@@ -200,12 +206,19 @@ func (s *state) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	return false
 }
 
+func (s *state) GetSession(sessionID string) SessionState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sessions[sessionID]
+}
+
 // RemoveSession removes a session from the set of present session IDs.
 func (s *state) RemoveSession(ctx context.Context, sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	dlog.Debugf(ctx, "Session %s removed. Explicit removal", sessionID)
 
+	s.unlockedRemoveSessionConsumption(sessionID)
 	s.unlockedRemoveSession(sessionID)
 }
 
@@ -271,6 +284,7 @@ func (s *state) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 		if _, ok := sess.(*clientSessionState); ok {
 			if sess.LastMarked().Before(clientMoment) {
 				dlog.Debugf(ctx, "Client Session %s removed. It has expired", id)
+				s.unlockedRemoveSessionConsumption(id)
 				s.unlockedRemoveSession(id)
 			}
 		} else {
@@ -315,6 +329,12 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
 	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
+
+	// Only store consumption for clientSession states.
+	if _, ok := s.sessions[sessionID].(*clientSessionState); ok {
+		s.unlockedAddSessionConsumption(sessionID)
+	}
+
 	return sessionID
 }
 
