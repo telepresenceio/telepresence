@@ -9,7 +9,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
 
 const ProcessName = "connector"
@@ -20,8 +19,6 @@ type Service interface {
 	// As will cast this instance to what the given ptr points to, and assign
 	// that to the pointer. It will panic if type is not implemented.
 	As(ptr any)
-
-	Reporter() *scout.Reporter
 
 	Server() *grpc.Server
 
@@ -38,7 +35,7 @@ type Service interface {
 	ManageSessions(c context.Context) error
 }
 
-type NewServiceFunc func(context.Context, *dgroup.Group, *scout.Reporter, client.Config, *grpc.Server) (Service, error)
+type NewServiceFunc func(context.Context, *dgroup.Group, client.Config, *grpc.Server) (Service, error)
 
 type newServiceKey struct{}
 
