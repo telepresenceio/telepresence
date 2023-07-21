@@ -38,9 +38,6 @@ jobs:
           max_attempts: 3
           timeout_minutes: 12
           command: |
-            # We want to validate that tests still pass, even if the metrics host
-            # points to a broken IP
-            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             make check-unit
   "windows":
     runs-on: windows-2019
@@ -65,11 +62,6 @@ jobs:
         run: choco install make
       - name: Build
         run: make build
-      - name: Update etc\hosts
-        run: |
-          # We want to validate that tests still pass, even if the metrics host
-          # points to a broken IP
-          echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts
       - name: Lint
         run: make lint
       - name: Run tests
@@ -107,7 +99,4 @@ jobs:
           max_attempts: 3
           timeout_minutes: 10
           command: |
-            # We want to validate that tests still pass, even if the metrics host
-            # points to a broken IP
-            echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts
             make check-unit
