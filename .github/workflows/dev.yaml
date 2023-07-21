@@ -38,7 +38,7 @@ jobs:
           - macOS-arm64
         clusters:
           - distribution: Kubeception
-            version: "1.19"
+            version: "1.26"
     runs-on: ${{ matrix.runners }}
     needs: "build_image"
     steps:
@@ -55,6 +55,7 @@ jobs:
       - uses: ./.github/actions/prepare-cluster
         with:
           kubeception-token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          kubeceptionProfile: small
           gke-credentials: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           tel-image: tel2-image.tar
           cluster-distribution: ${{ matrix.clusters.distribution }}

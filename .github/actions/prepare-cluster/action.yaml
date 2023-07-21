@@ -17,7 +17,7 @@ inputs:
   cluster-version:
     description: "Kubernetes version"
     required: true
-    default: "1.19"
+    default: "1.26"
 outputs:
   kubeconfig:
     description: "The resulting kubeconfig file"

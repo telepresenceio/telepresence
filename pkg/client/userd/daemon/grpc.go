@@ -240,7 +240,7 @@ func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		} else {
 			action = "connector_can_intercept_fail"
 		}
-		s.scout.Report(c, action, entries...)
+		scout.Report(c, action, entries...)
 	}()
 	err = s.WithSession(c, "CanIntercept", func(c context.Context, session userd.Session) error {
 		span := trace.SpanFromContext(c)
@@ -265,7 +265,7 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 		} else {
 			action = "connector_create_intercept_fail"
 		}
-		s.scout.Report(c, action, entries...)
+		scout.Report(c, action, entries...)
 	}()
 	err = s.WithSession(c, "CreateIntercept", func(c context.Context, session userd.Session) error {
 		span := trace.SpanFromContext(c)
@@ -291,7 +291,7 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 		} else {
 			action = "connector_remove_intercept_fail"
 		}
-		s.scout.Report(c, action, entries...)
+		scout.Report(c, action, entries...)
 	}()
 	err = s.WithSession(c, "RemoveIntercept", func(c context.Context, session userd.Session) error {
 		result = &rpc.InterceptResult{}
@@ -472,7 +472,6 @@ func (s *service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 			return
 		}
 
-		sr := s.scout
 		cr := req.GetConnectRequest()
 		if cr == nil {
 			dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
@@ -482,9 +481,9 @@ func (s *service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 		cluster, err := k8s.ConnectCluster(ctx, cr, config)
 		if err != nil {
 			if req.Type == rpc.HelmRequest_UNINSTALL {
-				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
+				scout.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
 			} else {
-				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
+				scout.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
 			}
 			result = errcat.ToResult(err)
 			return
@@ -493,10 +492,10 @@ func (s *service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 		if req.Type == rpc.HelmRequest_UNINSTALL {
 			err := helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req)
 			if err != nil {
-				sr.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
+				scout.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
 				result = errcat.ToResult(err)
 			} else {
-				sr.Report(ctx, "helm_uninstall_success")
+				scout.Report(ctx, "helm_uninstall_success")
 			}
 		} else {
 			dlog.Debug(ctx, "ensuring that traffic-manager exists")
@@ -504,10 +503,10 @@ func (s *service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Resul
 			err := helm.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
 
 			if err != nil {
-				sr.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
+				scout.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
 				result = errcat.ToResult(err)
 			} else {
-				sr.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
+				scout.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
 			}
 		}
 	})

@@ -131,8 +131,6 @@ type session struct {
 	// and the slice is cleared when an agent snapshot arrives.
 	agentInitWaiters []chan<- struct{}
 
-	sr *scout.Reporter
-
 	isPodDaemon bool
 
 	sessionConfig client.Config
@@ -149,16 +147,15 @@ var firstAgentConfigMapVersion = semver.MustParse("2.6.0") //nolint:gochecknoglo
 
 func NewSession(
 	ctx context.Context,
-	sr *scout.Reporter,
 	cr *rpc.ConnectRequest,
 	config *client.Kubeconfig,
 ) (_ context.Context, _ userd.Session, cErr *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
-	sr.Report(ctx, "connect")
+	scout.Report(ctx, "connect")
 
 	defer func() {
 		if cErr != nil {
-			sr.Report(ctx, "connect_error", scout.Entry{
+			scout.Report(ctx, "connect_error", scout.Entry{
 				Key:   "error",
 				Value: cErr.ErrorText,
 			}, scout.Entry{
@@ -181,9 +178,9 @@ func NewSession(
 
 	// Phone home with the information about the size of the cluster
 	ctx = cluster.WithK8sInterface(ctx)
-	sr.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
+	scout.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
 	if !cr.IsPodDaemon {
-		sr.Report(ctx, "connecting_traffic_manager", scout.Entry{
+		scout.Report(ctx, "connecting_traffic_manager", scout.Entry{
 			Key:   "mapped_namespaces",
 			Value: len(cr.MappedNamespaces),
 		})
@@ -192,7 +189,7 @@ func NewSession(
 	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, sr, cluster, sr.InstallID(), cr)
+	tmgr, err := connectMgr(ctx, cluster, scout.InstallID(ctx), cr)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -242,7 +239,7 @@ func NewSession(
 
 	// Collect data on how long connection time took
 	dlog.Debug(ctx, "Finished connecting to traffic manager")
-	sr.Report(ctx, "finished_connecting_traffic_manager", scout.Entry{
+	scout.Report(ctx, "finished_connecting_traffic_manager", scout.Entry{
 		Key: "connect_duration", Value: time.Since(connectStart).Seconds(),
 	})
 
@@ -309,7 +306,6 @@ func (s *session) getSessionConfig() client.Config {
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
 func connectMgr(
 	ctx context.Context,
-	sr *scout.Reporter,
 	cluster *k8s.Cluster,
 	installID string,
 	cr *rpc.ConnectRequest,
@@ -426,7 +422,6 @@ func connectMgr(
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      cr.IsPodDaemon,
-		sr:               sr,
 		done:             make(chan struct{}),
 	}
 	sess.self = sess
@@ -576,10 +571,6 @@ func runWithRetry(ctx context.Context, f func(context.Context) error) error {
 
 func (s *session) Done() <-chan struct{} {
 	return s.done
-}
-
-func (s *session) Reporter() *scout.Reporter {
-	return s.sr
 }
 
 func (s *session) SessionInfo() *manager.SessionInfo {
@@ -1175,7 +1166,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 	svc := userd.GetService(ctx)
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
-		rootSession := rootd.NewInProcSession(ctx, svc.Reporter(), oi, s.managerClient, s.managerVersion)
+		rootSession := rootd.NewInProcSession(ctx, oi, s.managerClient, s.managerVersion)
 		if err = rootSession.Start(ctx, dgroup.NewGroup(ctx, dgroup.GroupConfig{})); err != nil {
 			return nil, err
 		}

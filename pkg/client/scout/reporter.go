@@ -29,8 +29,17 @@ type bufEntry struct {
 
 type ReportAnnotator func(map[string]any)
 
-// Reporter is a Metriton reported.
-type Reporter struct {
+// Reporter is a Metriton reporter.
+type Reporter interface {
+	Close()
+	InstallID() string
+	Report(ctx context.Context, action string, entries ...Entry)
+	Run(ctx context.Context) error
+	SetMetadatum(ctx context.Context, key string, value any)
+	Start(ctx context.Context)
+}
+
+type reporter struct {
 	index            int
 	buffer           chan bufEntry
 	done             chan struct{}
@@ -164,8 +173,8 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 // before entries are discarded.
 const bufferSize = 40
 
-func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType, reportAnnotators []ReportAnnotator) *Reporter {
-	r := &Reporter{
+func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType, reportAnnotators []ReportAnnotator) Reporter {
+	r := &reporter{
 		reporter: &metriton.Reporter{
 			Application: "telepresence2",
 			Version:     client.Version(),
@@ -202,13 +211,56 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 var DefaultReportAnnotators []ReportAnnotator //nolint:gochecknoglobals // extension point
 
 // NewReporter creates a new initialized Reporter instance that can be used to
-// send telepresence reports to Metriton.
-func NewReporter(ctx context.Context, mode string) *Reporter {
-	return NewReporterForInstallType(ctx, mode, CLI, DefaultReportAnnotators)
+// send telepresence reports to Metriton and assigns it to the current context.
+func NewReporter(ctx context.Context, mode string) context.Context {
+	return WithReporter(ctx, NewReporterForInstallType(ctx, mode, CLI, DefaultReportAnnotators))
+}
+
+func InstallID(ctx context.Context) string {
+	if r := getReporter(ctx); r != nil {
+		return r.InstallID()
+	}
+	return ""
+}
+
+func Close(ctx context.Context) {
+	if r := getReporter(ctx); r != nil {
+		r.Close()
+	}
+}
+
+// Run ensures that all reports on the send queue are sent to the endpoint.
+func Run(ctx context.Context) error {
+	if r := getReporter(ctx); r != nil {
+		return r.Run(ctx)
+	}
+	return nil
+}
+
+// Start runs the Reporter found in the current context in a goroutine.
+func Start(ctx context.Context) {
+	if r := getReporter(ctx); r != nil {
+		r.Start(ctx)
+	}
+}
+
+// Report sends a report using the Reporter found in the current context.
+func Report(ctx context.Context, action string, entries ...Entry) {
+	if r := getReporter(ctx); r != nil {
+		r.Report(ctx, action, entries...)
+	}
+}
+
+// SetMetadatum associates the given key with the given value in the metadata
+// of the Reporter found in the current context.
+func SetMetadatum(ctx context.Context, key string, value any) {
+	if r := getReporter(ctx); r != nil {
+		r.SetMetadatum(ctx, key, value)
+	}
 }
 
 // initialization broken out or constructor for the benefit of testing.
-func (r *Reporter) initialize(ctx context.Context, mode, goos, goarch string) {
+func (r *reporter) initialize(ctx context.Context, mode, goos, goarch string) {
 	r.buffer = make(chan bufEntry, bufferSize)
 	r.done = make(chan struct{})
 
@@ -231,7 +283,7 @@ func (r *Reporter) initialize(ctx context.Context, mode, goos, goarch string) {
 	r.reporter.BaseMetadata = baseMeta
 }
 
-func (r *Reporter) InstallID() string {
+func (r *reporter) InstallID() string {
 	return r.reporter.InstallID()
 }
 
@@ -239,12 +291,12 @@ const setMetadatumAction = "__set_metadatum__"
 
 // SetMetadatum associates the given key with the given value in the metadata
 // of this instance.
-func (r *Reporter) SetMetadatum(ctx context.Context, key string, value any) {
+func (r *reporter) SetMetadatum(ctx context.Context, key string, value any) {
 	r.Report(ctx, setMetadatumAction, Entry{Key: key, Value: value})
 }
 
-// Start starts the instance in a goroutine.
-func (r *Reporter) Start(ctx context.Context) {
+// Start runs the instance in a goroutine.
+func (r *reporter) Start(ctx context.Context) {
 	go func() {
 		if err := r.Run(ctx); err != nil {
 			dlog.Error(ctx, err)
@@ -252,7 +304,7 @@ func (r *Reporter) Start(ctx context.Context) {
 	}()
 }
 
-func (r *Reporter) Close() {
+func (r *reporter) Close() {
 	// Send a zeroed bufEntry here instead of closing the buffer so that
 	// any stray Reports that arrive after the context is cancelled aren't
 	// sent on a closed channel
@@ -269,7 +321,7 @@ func (r *Reporter) Close() {
 }
 
 // Run ensures that all reports on the send queue are sent to the endpoint.
-func (r *Reporter) Run(ctx context.Context) error {
+func (r *reporter) Run(ctx context.Context) error {
 	go func() {
 		// Close buffer and let it drain when ctx is done.
 		<-ctx.Done()
@@ -309,7 +361,7 @@ func (r *Reporter) Run(ctx context.Context) error {
 // call. It also includes and increments the index, which can be used to
 // determine the correct order of reported events for this installation
 // attempt (correlated by the trace_id set at the start).
-func (r *Reporter) Report(ctx context.Context, action string, entries ...Entry) {
+func (r *reporter) Report(ctx context.Context, action string, entries ...Entry) {
 	select {
 	case r.buffer <- bufEntry{action, entries}:
 	default:
@@ -317,7 +369,7 @@ func (r *Reporter) Report(ctx context.Context, action string, entries ...Entry) 
 	}
 }
 
-func (r *Reporter) doReport(ctx context.Context, be *bufEntry) {
+func (r *reporter) doReport(ctx context.Context, be *bufEntry) {
 	r.index++
 	metadata := make(map[string]any, 4+len(be.entries))
 	metadata["action"] = be.action
