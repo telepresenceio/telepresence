@@ -42,6 +42,14 @@ items:
   - version: 2.14.1
     date: "2023-07-07"
     notes:
+      - type: bugfix
+        title: Telepresence now use the OSS agent in its latest version by default.
+        body: >-
+          The traffic manager admin was forced to set it manually during the chart installation.
+        docs: https://github.com/telepresenceio/telepresence/issues/3271
+  - version: 2.14.1
+    date: "2023-07-07"
+    notes:
       - type: feature
         title: Envoy's http idle timout is now configurable.
         body: >-
