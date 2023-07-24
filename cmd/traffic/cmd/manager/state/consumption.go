@@ -43,14 +43,20 @@ func (c *state) GetAllSessionConsumptionMetrics() map[string]*SessionConsumption
 
 // RefreshSessionConsumptionMetrics refreshes the metrics associated to a specific session.
 func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
-	lastMark := s.GetSession(sessionID).LastMarked()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	session := s.sessions[sessionID]
+	if _, isClientSession := session.(*clientSessionState); !isClientSession {
+		return
+	}
+
+	lastMarked := session.LastMarked()
 	consumption := s.sessionConsumptionMetrics[sessionID]
 
 	// if last mark is more than SessionConsumptionMetricsStaleTTL old, it means the duration metric should stop being
 	// updated since the user machine is maybe in standby.
-	isStale := time.Now().After(lastMark.Add(SessionConsumptionMetricsStaleTTL))
+	isStale := time.Now().After(lastMarked.Add(SessionConsumptionMetricsStaleTTL))
 	if !isStale {
 		consumption.Duration += uint32(time.Since(consumption.LastUpdate).Seconds())
 	}

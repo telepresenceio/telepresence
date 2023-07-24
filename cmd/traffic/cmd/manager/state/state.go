@@ -218,7 +218,10 @@ func (s *state) RemoveSession(ctx context.Context, sessionID string) {
 	defer s.mu.Unlock()
 	dlog.Debugf(ctx, "Session %s removed. Explicit removal", sessionID)
 
-	s.unlockedRemoveSessionConsumption(sessionID)
+	if _, isClientSession := s.sessions[sessionID].(*clientSessionState); isClientSession {
+		s.unlockedRemoveSessionConsumption(sessionID)
+	}
+
 	s.unlockedRemoveSession(sessionID)
 }
 
