@@ -333,10 +333,7 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	}
 	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
 
-	// Only store consumption for clientSession states.
-	if _, ok := s.sessions[sessionID].(*clientSessionState); ok {
-		s.unlockedAddSessionConsumption(sessionID)
-	}
+	s.unlockedAddSessionConsumption(sessionID)
 
 	return sessionID
 }

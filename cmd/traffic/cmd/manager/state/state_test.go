@@ -2,12 +2,40 @@ package state
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
+
+type suiteState struct {
+	suite.Suite
+
+	ctx   context.Context
+	state *state
+}
+
+func (s *suiteState) SetupTest() {
+	s.ctx = dlog.NewTestContext(s.T(), false)
+	s.state = &state{
+		ctx:                       s.ctx,
+		sessions:                  make(map[string]SessionState),
+		sessionConsumptionMetrics: make(map[string]*SessionConsumptionMetrics),
+		agentsByName:              make(map[string]map[string]*rpc.AgentInfo),
+		cfgMapLocks:               make(map[string]*sync.Mutex),
+		interceptStates:           make(map[string]*interceptState),
+		timedLogLevel:             log.NewTimedLevel("debug", log.SetLevel),
+		llSubs:                    newLoglevelSubscribers(),
+	}
+}
 
 type FakeClock struct {
 	When int
@@ -19,13 +47,13 @@ func (fc *FakeClock) Now() time.Time {
 	return base.Add(offset)
 }
 
-func TestStateInternal(topT *testing.T) {
+func (s *suiteState) TestStateInternal() {
 	ctx := context.Background()
 
-	testAgents := testdata.GetTestAgents(topT)
-	testClients := testdata.GetTestClients(topT)
+	testAgents := testdata.GetTestAgents(s.T())
+	testClients := testdata.GetTestClients(s.T())
 
-	topT.Run("agents", func(t *testing.T) {
+	s.T().Run("agents", func(t *testing.T) {
 		a := assertNew(t)
 
 		helloAgent := testAgents["hello"]
@@ -73,7 +101,7 @@ func TestStateInternal(topT *testing.T) {
 		a.Len(agents, 0)
 	})
 
-	topT.Run("presence-redundant", func(t *testing.T) {
+	s.T().Run("presence-redundant", func(t *testing.T) {
 		a := assertNew(t)
 
 		clock := &FakeClock{}
@@ -127,4 +155,45 @@ func TestStateInternal(topT *testing.T) {
 		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c2}}, clock.Now()))
 		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: c3}}, clock.Now()))
 	})
+}
+
+func (s *suiteState) TestAddClient() {
+	// given
+	now := time.Now()
+
+	// when
+	s.state.AddClient(&rpc.ClientInfo{
+		Name:      "my-client",
+		InstallId: "1234",
+		Product:   "5668",
+		Version:   "2.14.2",
+		ApiKey:    "xxxx",
+	}, now)
+
+	// then
+	assert.Len(s.T(), s.state.sessions, 1)
+	assert.Len(s.T(), s.state.sessionConsumptionMetrics, 1)
+}
+
+func (s *suiteState) TestRemoveSession() {
+	// given
+	now := time.Now()
+	s.state.sessions["session-1"] = newClientSessionState(s.ctx, now)
+	s.state.sessions["session-2"] = newAgentSessionState(s.ctx, now)
+	s.state.sessionConsumptionMetrics["session-1"] = &SessionConsumptionMetrics{
+		Duration:   42,
+		LastUpdate: now.Add(-time.Minute),
+	}
+
+	// when
+	s.state.RemoveSession(s.ctx, "session-1")
+	s.state.RemoveSession(s.ctx, "session-2") // won't fail trying to delete consumption.
+
+	// then
+	assert.Len(s.T(), s.state.sessions, 0)
+	assert.Len(s.T(), s.state.sessionConsumptionMetrics, 0)
+}
+
+func TestSuiteState(testing *testing.T) {
+	suite.Run(testing, new(suiteState))
 }
