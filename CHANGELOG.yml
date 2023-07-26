@@ -35,7 +35,7 @@ items:
     date: "2023-07-26"
     notes:
       - type: bugfix
-        title: Telepresence now use the OSS agent in its latest version by default.
+        title: Telepresence now uses the OSS agent in its latest version by default.
         body: >-
           The traffic manager admin was forced to set it manually during the chart installation.
         docs: https://github.com/telepresenceio/telepresence/issues/3271
