@@ -32,7 +32,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.14.2
-    date: (TBD)
+    date: "2023-07-26"
     notes:
       - type: bugfix
         title: Telepresence now use the OSS agent in its latest version by default.
