@@ -2,8 +2,11 @@ package managerutil
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 type ImageRetriever interface {
@@ -29,7 +32,7 @@ func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context,
 	env := GetEnv(ctx)
 	var img string
 	if env.AgentImage == "" {
-		env.AgentImage = "tel2"
+		env.AgentImage = fmt.Sprintf("tel2:%s", strings.TrimPrefix(version.Version, "v"))
 	}
 	img = env.QualifiedAgentImage()
 	ctx = WithResolvedAgentImageRetriever(ctx, ImageFromEnv(img))
