@@ -62,9 +62,7 @@ func TelepresenceDaemon(ctx context.Context) *cobra.Command {
 		SilenceUsage:  true, // our FlagErrorFunc will handle it
 	}
 	cmd.SetContext(ctx)
-	cmd.AddCommand(kubeauth.Command())
-	cmd.AddCommand(userDaemon.Command())
-	cmd.AddCommand(rootd.Command())
+	AddSubCommands(cmd)
 	return cmd
 }
 
@@ -136,6 +134,10 @@ func WithSubCommands(ctx context.Context) context.Context {
 		config(), connectCmd(), currentClusterId(), gatherLogs(), gatherTraces(), genYAML(), helm(), interceptCmd(), leave(),
 		list(), loglevel(), quit(), statusCmd(), testVPN(), uninstall(), uploadTraces(), version(),
 	)
+}
+
+func WithDaemonSubCommands(ctx context.Context) context.Context {
+	return MergeSubCommands(ctx, kubeauth.Command(), userDaemon.Command(), rootd.Command())
 }
 
 type subCommandsKey struct{}

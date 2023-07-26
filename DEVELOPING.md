@@ -226,7 +226,7 @@ $ sudo id
 [sudo] password for lukeshu:
 uid=0(root) gid=0(root) groups=0(root)
 
-$ make make check-unit
+$ make check-unit
 [make] TELEPRESENCE_VERSION=v2.6.7-20-g9de10e316-1655892249
 ...
 ```
@@ -235,6 +235,18 @@ The first time you run the tests, you should use `make check`, to get
 `make` to automatically create the requisite `heml` tool
 binaries.  However, after that initial run, you can instead use
 `gotestsum` or `go test` if you prefer.
+
+### Test metric collection
+
+**When running in CI,** `make check-unit` and `make check-integration` will report the result of test
+runs to metriton, Ambassador Labs' metrics store. These reports include test name, running time, and
+result. They are reported by the tool at `tools/src/test-report`. This `test-report` tool will also
+visually modify test output; this happens even running locally, since the json output to go test
+is piped to the tool anyway:
+
+```console
+$ make check-unit
+```
 
 ## Building for Release
 

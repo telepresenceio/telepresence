@@ -60,7 +60,6 @@ type service struct {
 	timedLogLevel log.TimedLevel
 	ucn           int64
 	fuseFTPError  error
-	scout         *scout.Reporter
 
 	// The quit function that quits the server.
 	quit func()
@@ -92,10 +91,9 @@ type service struct {
 	self userd.Service
 }
 
-func NewService(ctx context.Context, _ *dgroup.Group, sr *scout.Reporter, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
+func NewService(ctx context.Context, _ *dgroup.Group, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
 	s := &service{
 		srv:             srv,
-		scout:           sr,
 		connectRequest:  make(chan *rpc.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy:    &mgrProxy{},
@@ -133,10 +131,6 @@ func (s *service) SetSelf(self userd.Service) {
 
 func (s *service) FuseFTPMgr() remotefs.FuseFTPManager {
 	return s.fuseFtpMgr
-}
-
-func (s *service) Reporter() *scout.Reporter {
-	return s.scout
 }
 
 func (s *service) RootSessionInProcess() bool {
@@ -247,7 +241,7 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 		go runAliveAndCancellation(ctx, cancel, config.Context, s.daemonAddress.Port)
 	}
 
-	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, s.scout, cr, config)
+	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 		cancel()
 		if s.rootSessionInProc {
@@ -414,6 +408,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	// Don't bother calling 'conn.Close()', it should remain open until we shut down, and just
 	// prefer to let the OS close it when we exit.
 
+	c = scout.NewReporter(c, "connector")
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
@@ -431,8 +426,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 		}
-		sr := scout.NewReporter(c, "connector")
-		si, err := userd.GetNewServiceFunc(c)(c, g, sr, cfg, grpc.NewServer(opts...))
+		si, err := userd.GetNewServiceFunc(c)(c, g, cfg, grpc.NewServer(opts...))
 		if err != nil {
 			close(siCh)
 			return err
@@ -496,7 +490,7 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
 	// metriton don't block the functional goroutines.
-	g.Go("background-metriton", s.scout.Run)
+	g.Go("background-metriton", scout.Run)
 
 	err = g.Wait()
 	if err != nil {

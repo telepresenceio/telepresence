@@ -25,10 +25,12 @@ import (
 // This service is meant for testing the cluster side Telepresence API service.
 //
 // Publish image to cluster:
-//   ko publish -B ./integration_test/testdata/apiserveraccess [--insecure-registry]
+//
+//	ko publish -B ./integration_test/testdata/apiserveraccess [--insecure-registry]
 //
 // Deploy it:
-//   kubectl apply -f ./k8s/apitest.yaml
+//
+//	kubectl apply -f ./k8s/apitest.yaml
 //
 // Run it locally using an intercept with -- so that TELEPRESENCE_INTERCEPT_ID is propagated in the env
 func main() {

@@ -8,9 +8,8 @@ import (
 	"runtime"
 	"unsafe"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
