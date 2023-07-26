@@ -22,7 +22,6 @@
 #         - href: A path from the root to a resource on the getambassador website, takes precedence over a docs link.
 #
 # For older changes, see CHANGELOG.OLD.md
-
 docTitle: Telepresence Release Notes
 docDescription: >-
   Release notes for Telepresence by Ambassador Labs, a CNCF project
