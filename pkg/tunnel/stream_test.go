@@ -140,7 +140,7 @@ func produce(ctx context.Context, s Stream, msg Message, errs chan<- error) {
 	wrCh := make(chan Message)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	WriteLoop(ctx, s, wrCh, &wg)
+	WriteLoop(ctx, s, wrCh, &wg, nil)
 	go func() {
 		for i := 0; i < 100; i++ {
 			wrCh <- msg
@@ -149,7 +149,7 @@ func produce(ctx context.Context, s Stream, msg Message, errs chan<- error) {
 		wg.Wait()
 	}()
 
-	rdCh, errCh := ReadLoop(ctx, s)
+	rdCh, errCh := ReadLoop(ctx, s, nil)
 	select {
 	case <-ctx.Done():
 		errs <- ctx.Err()
@@ -169,9 +169,9 @@ func consume(ctx context.Context, s Stream, expectedPayload []byte, errs chan<- 
 	wrCh := make(chan Message)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	WriteLoop(ctx, s, wrCh, &wg)
+	WriteLoop(ctx, s, wrCh, &wg, nil)
 	defer close(wrCh)
-	rdCh, errCh := ReadLoop(ctx, s)
+	rdCh, errCh := ReadLoop(ctx, s, nil)
 	for {
 		select {
 		case <-ctx.Done():
@@ -326,7 +326,7 @@ func TestStream_Xfer(t *testing.T) {
 				case b = <-bCh:
 				}
 			}
-			fwd := NewBidiPipe(a, b, "pipe", &counter)
+			fwd := NewBidiPipe(a, b, "pipe", &counter, nil)
 			fwd.Start(ctx)
 			select {
 			case <-ctx.Done():

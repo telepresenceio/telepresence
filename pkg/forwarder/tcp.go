@@ -188,7 +188,7 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 		cancel()
 		return fmt.Errorf("unable to send client session id. Id %s: %v", id, err)
 	}
-	d := tunnel.NewConnEndpoint(s, conn, cancel)
+	d := tunnel.NewConnEndpoint(s, conn, cancel, nil, nil)
 	d.Start(ctx)
 	<-d.Done()
 	return nil

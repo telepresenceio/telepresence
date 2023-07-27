@@ -26,14 +26,13 @@ type suiteState struct {
 func (s *suiteState) SetupTest() {
 	s.ctx = dlog.NewTestContext(s.T(), false)
 	s.state = &state{
-		ctx:                       s.ctx,
-		sessions:                  make(map[string]SessionState),
-		sessionConsumptionMetrics: make(map[string]*SessionConsumptionMetrics),
-		agentsByName:              make(map[string]map[string]*rpc.AgentInfo),
-		cfgMapLocks:               make(map[string]*sync.Mutex),
-		interceptStates:           make(map[string]*interceptState),
-		timedLogLevel:             log.NewTimedLevel("debug", log.SetLevel),
-		llSubs:                    newLoglevelSubscribers(),
+		ctx:             s.ctx,
+		sessions:        make(map[string]SessionState),
+		agentsByName:    make(map[string]map[string]*rpc.AgentInfo),
+		cfgMapLocks:     make(map[string]*sync.Mutex),
+		interceptStates: make(map[string]*interceptState),
+		timedLogLevel:   log.NewTimedLevel("debug", log.SetLevel),
+		llSubs:          newLoglevelSubscribers(),
 	}
 }
 
@@ -172,7 +171,6 @@ func (s *suiteState) TestAddClient() {
 
 	// then
 	assert.Len(s.T(), s.state.sessions, 1)
-	assert.Len(s.T(), s.state.sessionConsumptionMetrics, 1)
 }
 
 func (s *suiteState) TestRemoveSession() {
@@ -180,10 +178,6 @@ func (s *suiteState) TestRemoveSession() {
 	now := time.Now()
 	s.state.sessions["session-1"] = newClientSessionState(s.ctx, now)
 	s.state.sessions["session-2"] = newAgentSessionState(s.ctx, now)
-	s.state.sessionConsumptionMetrics["session-1"] = &SessionConsumptionMetrics{
-		Duration:   42,
-		LastUpdate: now.Add(-time.Minute),
-	}
 
 	// when
 	s.state.RemoveSession(s.ctx, "session-1")
@@ -191,7 +185,6 @@ func (s *suiteState) TestRemoveSession() {
 
 	// then
 	assert.Len(s.T(), s.state.sessions, 0)
-	assert.Len(s.T(), s.state.sessionConsumptionMetrics, 0)
 }
 
 func TestSuiteState(testing *testing.T) {

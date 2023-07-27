@@ -16,14 +16,14 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 	s.state.sessions["session-1"] = session1
 	s.state.sessions["session-2"] = &agentSessionState{}
 	s.state.sessions["session-3"] = session3
-	s.state.sessionConsumptionMetrics["session-1"] = &SessionConsumptionMetrics{
-		Duration:   42,
-		LastUpdate: now.Add(-time.Minute),
+	session1.consumptionMetrics = &SessionConsumptionMetrics{
+		ConnectDuration: 42,
+		LastUpdate:      now.Add(-time.Minute),
 	}
 	// staled metric
-	s.state.sessionConsumptionMetrics["session-3"] = &SessionConsumptionMetrics{
-		Duration:   36,
-		LastUpdate: session3.lastMarked,
+	session3.consumptionMetrics = &SessionConsumptionMetrics{
+		ConnectDuration: 36,
+		LastUpdate:      session3.lastMarked,
 	}
 
 	// when
@@ -32,7 +32,7 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 	s.state.RefreshSessionConsumptionMetrics("session-3") // should not refresh a stale metric.
 
 	// then
-	assert.Len(s.T(), s.state.GetAllSessionConsumptionMetrics(), 2)
-	assert.True(s.T(), (s.state.sessionConsumptionMetrics["session-1"].Duration) > 42)
-	assert.Equal(s.T(), 36, int(s.state.sessionConsumptionMetrics["session-3"].Duration))
+	assert.Len(s.T(), s.state.GetAllSessionConsumptionMetrics(), 3)
+	assert.True(s.T(), (s.state.sessions["session-1"].ConsumptionMetrics().ConnectDuration) > 42)
+	assert.Equal(s.T(), 36, int(s.state.sessions["session-3"].ConsumptionMetrics().ConnectDuration))
 }

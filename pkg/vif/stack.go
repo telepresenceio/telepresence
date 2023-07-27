@@ -252,6 +252,6 @@ func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, stre
 		cancel()
 		return
 	}
-	ep := tunnel.NewConnEndpoint(stream, conn, cancel)
+	ep := tunnel.NewConnEndpoint(stream, conn, cancel, nil, nil)
 	ep.Start(ctx)
 }
