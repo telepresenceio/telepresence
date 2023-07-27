@@ -73,7 +73,7 @@ func (m *bridgeMounter) dispatchToTunnel(ctx context.Context, conn net.Conn, pod
 		cancel()
 		return fmt.Errorf("failed to create stream: %v", err)
 	}
-	d := tunnel.NewConnEndpoint(s, conn, cancel)
+	d := tunnel.NewConnEndpoint(s, conn, cancel, nil, nil)
 	d.Start(ctx)
 	<-d.Done()
 	return nil

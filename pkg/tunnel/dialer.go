@@ -51,12 +51,19 @@ type dialer struct {
 	conn      net.Conn
 	connected int32
 	done      chan struct{}
+
+	ingressBytesProbe chan uint64
+	egressBytesProbe  chan uint64
 }
 
 // NewDialer creates a new handler that dispatches messages in both directions between the given gRPC stream
 // and the given connection.
-func NewDialer(stream Stream, cancel context.CancelFunc) Endpoint {
-	return NewConnEndpoint(stream, nil, cancel)
+func NewDialer(
+	stream Stream,
+	cancel context.CancelFunc,
+	ingressBytesProbe, egressBytesProbe chan uint64,
+) Endpoint {
+	return NewConnEndpoint(stream, nil, cancel, ingressBytesProbe, egressBytesProbe)
 }
 
 // NewDialerTTL creates a new handler that dispatches messages in both directions between the given gRPC stream
@@ -64,19 +71,25 @@ func NewDialer(stream Stream, cancel context.CancelFunc) Endpoint {
 //
 // The handler remains active until it's been idle for the ttl duration, at which time it will automatically close
 // and call the release function it got from the tunnel.Pool to ensure that it gets properly released.
-func NewDialerTTL(stream Stream, cancel context.CancelFunc, ttl time.Duration) Endpoint {
-	return NewConnEndpointTTL(stream, nil, cancel, ttl)
+func NewDialerTTL(stream Stream, cancel context.CancelFunc, ttl time.Duration, ingressBytesProbe, egressBytesProbe chan uint64) Endpoint {
+	return NewConnEndpointTTL(stream, nil, cancel, ttl, ingressBytesProbe, egressBytesProbe)
 }
 
-func NewConnEndpoint(stream Stream, conn net.Conn, cancel context.CancelFunc) Endpoint {
+func NewConnEndpoint(stream Stream, conn net.Conn, cancel context.CancelFunc, ingressBytesProbe, egressBytesProbe chan uint64) Endpoint {
 	ttl := tcpConnTTL
 	if stream.ID().Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
 	}
-	return NewConnEndpointTTL(stream, conn, cancel, ttl)
+	return NewConnEndpointTTL(stream, conn, cancel, ttl, ingressBytesProbe, egressBytesProbe)
 }
 
-func NewConnEndpointTTL(stream Stream, conn net.Conn, cancel context.CancelFunc, ttl time.Duration) Endpoint {
+func NewConnEndpointTTL(
+	stream Stream,
+	conn net.Conn,
+	cancel context.CancelFunc,
+	ttl time.Duration,
+	ingressBytesProbe, egressBytesProbe chan uint64,
+) Endpoint {
 	state := notConnected
 	if conn != nil {
 		state = connecting
@@ -88,6 +101,9 @@ func NewConnEndpointTTL(stream Stream, conn net.Conn, cancel context.CancelFunc,
 		conn:         conn,
 		connected:    state,
 		done:         make(chan struct{}),
+
+		ingressBytesProbe: ingressBytesProbe,
+		egressBytesProbe:  egressBytesProbe,
 	}
 }
 
@@ -189,7 +205,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 
 	wg.Add(1)
-	WriteLoop(ctx, h.stream, outgoing, wg)
+	WriteLoop(ctx, h.stream, outgoing, wg, h.egressBytesProbe)
 
 	buf := make([]byte, 0x100000)
 	dlog.Tracef(ctx, "   CONN %s conn-to-stream loop started", id)
@@ -238,7 +254,7 @@ func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
 	defer func() {
 		wg.Done()
 	}()
-	readLoop(ctx, h)
+	readLoop(ctx, h, h.ingressBytesProbe)
 }
 
 func handleControl(ctx context.Context, h streamReader, cm Message) {
@@ -260,7 +276,7 @@ func handleControl(ctx context.Context, h streamReader, cm Message) {
 	}
 }
 
-func readLoop(ctx context.Context, h streamReader) {
+func readLoop(ctx context.Context, h streamReader, trafficProbe chan uint64) {
 	var endReason string
 	endLevel := dlog.LogLevelTrace
 	id := h.getStream().ID()
@@ -269,7 +285,7 @@ func readLoop(ctx context.Context, h streamReader) {
 		dlog.Logf(ctx, endLevel, "   CONN %s stream-to-conn loop ended because %s", id, endReason)
 	}()
 
-	incoming, errCh := ReadLoop(ctx, h.getStream())
+	incoming, errCh := ReadLoop(ctx, h.getStream(), trafficProbe)
 	dlog.Tracef(ctx, "   CONN %s stream-to-conn loop started", id)
 	for {
 		select {
@@ -316,7 +332,12 @@ func readLoop(ctx context.Context, h streamReader) {
 // DialWaitLoop reads from the given dialStream. A new goroutine that creates a Tunnel to the manager and then
 // attaches a dialer Endpoint to that tunnel is spawned for each request that arrives. The method blocks until
 // the dialStream is closed.
-func DialWaitLoop(ctx context.Context, manager rpc.ManagerClient, dialStream rpc.Manager_WatchDialClient, sessionID string) error {
+func DialWaitLoop(
+	ctx context.Context,
+	manager rpc.ManagerClient,
+	dialStream rpc.Manager_WatchDialClient,
+	sessionID string,
+) error {
 	// create ctx to cleanup leftover dialRespond if waitloop dies
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -355,7 +376,7 @@ func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialReq
 		cancel()
 		return
 	}
-	d := NewDialer(s, cancel)
+	d := NewDialer(s, cancel, nil, nil)
 	d.Start(ctx)
 	<-d.Done()
 }

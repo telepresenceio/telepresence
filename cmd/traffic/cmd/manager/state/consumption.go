@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"time"
 )
 
@@ -8,37 +9,73 @@ import (
 // that they should not be updated anymore since the user doesn't really use Telepresence at the moment.
 const SessionConsumptionMetricsStaleTTL = 1 * time.Minute // TODO: Increase.
 
-type SessionConsumptionMetrics struct {
-	Duration   uint32
-	LastUpdate time.Time
-}
+func NewSessionConsumptionMetrics() *SessionConsumptionMetrics {
+	return &SessionConsumptionMetrics{
+		ConnectDuration:     0,
+		FromClientBytesChan: make(chan uint64),
+		ToClientBytesChan:   make(chan uint64),
 
-func (s *state) unlockedAddSessionConsumption(sessionID string) {
-	s.sessionConsumptionMetrics[sessionID] = &SessionConsumptionMetrics{
-		Duration:   0,
 		LastUpdate: time.Now(),
 	}
 }
 
-func (s *state) unlockedRemoveSessionConsumption(sessionID string) {
-	delete(s.sessionConsumptionMetrics, sessionID)
+type SessionConsumptionMetrics struct {
+	ConnectDuration uint32
+	LastUpdate      time.Time
+
+	// data from client to the traffic manager.
+	fromClientBytes uint64
+	// data from the traffic manager to the client.
+	toClientBytes uint64
+
+	FromClientBytesChan chan uint64
+	ToClientBytesChan   chan uint64
+}
+
+func (sc *SessionConsumptionMetrics) RunCollect(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			sc.closeChannels()
+			return
+		case b, ok := <-sc.FromClientBytesChan:
+			if !ok {
+				return
+			}
+			sc.fromClientBytes += b
+		case b, ok := <-sc.ToClientBytesChan:
+			if !ok {
+				return
+			}
+			sc.toClientBytes += b
+		}
+	}
+}
+
+func (sc *SessionConsumptionMetrics) closeChannels() {
+	close(sc.FromClientBytesChan)
+	close(sc.ToClientBytesChan)
 }
 
 func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumptionMetrics {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.sessionConsumptionMetrics[sessionID]
+	for i := range s.sessions {
+		if i == sessionID {
+			return s.sessions[i].ConsumptionMetrics()
+		}
+	}
+	return nil
 }
 
-func (c *state) GetAllSessionConsumptionMetrics() map[string]*SessionConsumptionMetrics {
-	scmCopy := make(map[string]*SessionConsumptionMetrics)
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	for sessionID, val := range c.sessionConsumptionMetrics {
-		valCopy := *val
-		scmCopy[sessionID] = &valCopy
+func (s *state) GetAllSessionConsumptionMetrics() map[string]*SessionConsumptionMetrics {
+	allSCM := make(map[string]*SessionConsumptionMetrics)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for sessionID := range s.sessions {
+		allSCM[sessionID] = s.sessions[sessionID].ConsumptionMetrics()
 	}
-	return scmCopy
+	return allSCM
 }
 
 // RefreshSessionConsumptionMetrics refreshes the metrics associated to a specific session.
@@ -52,13 +89,13 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 	}
 
 	lastMarked := session.LastMarked()
-	consumption := s.sessionConsumptionMetrics[sessionID]
+	consumption := s.sessions[sessionID].ConsumptionMetrics()
 
 	// if last mark is more than SessionConsumptionMetricsStaleTTL old, it means the duration metric should stop being
 	// updated since the user machine is maybe in standby.
 	isStale := time.Now().After(lastMarked.Add(SessionConsumptionMetricsStaleTTL))
 	if !isStale {
-		consumption.Duration += uint32(time.Since(consumption.LastUpdate).Seconds())
+		consumption.ConnectDuration += uint32(time.Since(consumption.LastUpdate).Seconds())
 	}
 
 	consumption.LastUpdate = time.Now()

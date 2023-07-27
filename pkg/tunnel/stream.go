@@ -74,7 +74,7 @@ type StreamCreator func(context.Context, ConnID) (Stream, error)
 
 // ReadLoop reads from the Stream and dispatches messages and error to the give channels. There
 // will be max one error since the error also terminates the loop.
-func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
+func ReadLoop(ctx context.Context, s Stream, b chan uint64) (<-chan Message, <-chan error) {
 	msgCh := make(chan Message, 50)
 	errCh := make(chan error, 1) // Max one message will be sent on this channel
 	dlog.Tracef(ctx, "   %s %s, ReadLoop starting", s.Tag(), s.ID())
@@ -91,6 +91,10 @@ func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
 
 		for {
 			m, err := s.Receive(ctx)
+			if m != nil && b != nil {
+				b <- uint64(len(m.Payload()))
+			}
+
 			switch {
 			case err == nil:
 				select {
@@ -122,7 +126,12 @@ func ReadLoop(ctx context.Context, s Stream) (<-chan Message, <-chan error) {
 
 // WriteLoop reads messages from the channel and writes them to the Stream. It will call CloseSend() on the
 // stream when the channel is closed.
-func WriteLoop(ctx context.Context, s Stream, msgCh <-chan Message, wg *sync.WaitGroup) {
+func WriteLoop(
+	ctx context.Context,
+	s Stream, msgCh <-chan Message,
+	wg *sync.WaitGroup,
+	b chan uint64,
+) {
 	dlog.Tracef(ctx, "   %s %s, WriteLoop starting", s.Tag(), s.ID())
 	go func() {
 		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "WriteLoop")
@@ -145,7 +154,11 @@ func WriteLoop(ctx context.Context, s Stream, msgCh <-chan Message, wg *sync.Wai
 					endReason = "input channel is closed"
 					break
 				}
+
 				err := s.Send(ctx, m)
+				if m != nil && b != nil {
+					b <- uint64(len(m.Payload()))
+				}
 				switch {
 				case err == nil:
 					continue

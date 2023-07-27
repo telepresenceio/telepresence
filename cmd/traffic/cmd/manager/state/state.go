@@ -87,17 +87,16 @@ type state struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts                watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
-	agents                    watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
-	clients                   watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
-	sessions                  map[string]SessionState              // info for all sessions, keyed by session id
-	agentsByName              map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
-	interceptStates           map[string]*interceptState
-	sessionConsumptionMetrics map[string]*SessionConsumptionMetrics // TODO: For stale, use LastMark from session ?
-	timedLogLevel             log.TimedLevel
-	llSubs                    *loglevelSubscribers
-	cfgMapLocks               map[string]*sync.Mutex
-	tunnelCounter             int32
+	intercepts      watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
+	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
+	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
+	sessions        map[string]SessionState              // info for all sessions, keyed by session id
+	agentsByName    map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	interceptStates map[string]*interceptState
+	timedLogLevel   log.TimedLevel
+	llSubs          *loglevelSubscribers
+	cfgMapLocks     map[string]*sync.Mutex
+	tunnelCounter   int32
 
 	// Possibly extended version of the state. Use when calling interface methods.
 	self State
@@ -108,14 +107,13 @@ var NewStateFunc = NewState //nolint:gochecknoglobals // extension point
 func NewState(ctx context.Context) State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	s := &state{
-		ctx:                       ctx,
-		sessions:                  make(map[string]SessionState),
-		sessionConsumptionMetrics: make(map[string]*SessionConsumptionMetrics),
-		agentsByName:              make(map[string]map[string]*rpc.AgentInfo),
-		cfgMapLocks:               make(map[string]*sync.Mutex),
-		interceptStates:           make(map[string]*interceptState),
-		timedLogLevel:             log.NewTimedLevel(loglevel, log.SetLevel),
-		llSubs:                    newLoglevelSubscribers(),
+		ctx:             ctx,
+		sessions:        make(map[string]SessionState),
+		agentsByName:    make(map[string]map[string]*rpc.AgentInfo),
+		cfgMapLocks:     make(map[string]*sync.Mutex),
+		interceptStates: make(map[string]*interceptState),
+		timedLogLevel:   log.NewTimedLevel(loglevel, log.SetLevel),
+		llSubs:          newLoglevelSubscribers(),
 	}
 	s.self = s
 	return s
@@ -218,10 +216,6 @@ func (s *state) RemoveSession(ctx context.Context, sessionID string) {
 	defer s.mu.Unlock()
 	dlog.Debugf(ctx, "Session %s removed. Explicit removal", sessionID)
 
-	if _, isClientSession := s.sessions[sessionID].(*clientSessionState); isClientSession {
-		s.unlockedRemoveSessionConsumption(sessionID)
-	}
-
 	s.unlockedRemoveSession(sessionID)
 }
 
@@ -287,7 +281,6 @@ func (s *state) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 		if _, ok := sess.(*clientSessionState); ok {
 			if sess.LastMarked().Before(clientMoment) {
 				dlog.Debugf(ctx, "Client Session %s removed. It has expired", id)
-				s.unlockedRemoveSessionConsumption(id)
 				s.unlockedRemoveSession(id)
 			}
 		} else {
@@ -331,9 +324,10 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	if oldClient, hasConflict := s.clients.LoadOrStore(sessionID, client); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
+
 	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
 
-	s.unlockedAddSessionConsumption(sessionID)
+	go s.sessions[sessionID].ConsumptionMetrics().RunCollect(s.ctx)
 
 	return sessionID
 }
@@ -376,7 +370,7 @@ func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sessionID := "agent:" + uuid.New().String()
+	sessionID := agentSessionIDPrefix + uuid.New().String()
 	if oldAgent, hasConflict := s.agents.LoadOrStore(sessionID, agent); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldAgent, agent))
 	}
@@ -624,7 +618,16 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		return status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
-	bidiPipe, err := ss.OnConnect(ctx, stream, &s.tunnelCounter)
+	var scm *SessionConsumptionMetrics
+	if clientSessionID := ss.AwaitingBidiMapOwnerSessionID(stream); clientSessionID != "" {
+		s.mu.RLock()
+		if _, ok := s.sessions[clientSessionID]; ok {
+			scm = s.sessions[clientSessionID].ConsumptionMetrics()
+		}
+		s.mu.RUnlock()
+	}
+
+	bidiPipe, err := ss.OnConnect(ctx, stream, &s.tunnelCounter, scm)
 	if err != nil {
 		return err
 	}
@@ -671,7 +674,12 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 			return err
 		}
 	} else {
-		endPoint = tunnel.NewDialer(stream, func() {})
+		s.mu.RLock()
+		// When no intercept is running, a new dialer is opened to talk with resources from the traffic manager.
+		scm = s.sessions[sessionID].ConsumptionMetrics()
+		s.mu.RUnlock()
+
+		endPoint = tunnel.NewDialer(stream, func() {}, scm.FromClientBytesChan, scm.ToClientBytesChan)
 		endPoint.Start(ctx)
 	}
 	<-endPoint.Done()
