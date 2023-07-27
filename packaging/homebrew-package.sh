@@ -9,8 +9,8 @@ fi
 
 VERSION="${1}"
 
-ARCH="amd64 arm64"
-OS="darwin linux"
+ARCH=(amd64 arm64)
+OS=(darwin linux)
 
 WORK_DIR="$(mktemp -d)"
 echo "Working in ${WORK_DIR}"
@@ -19,8 +19,8 @@ BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
 FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
 FORMULA_NAME="Telepresence"
 
-for this_os in ${OS[*]}; do
-    for this_arch in ${ARCH[*]}; do
+for this_os in "${OS[@]}"; do
+    for this_arch in "${ARCH[@]}"; do
 
         if [ "${this_arch}" == "arm64" ] && [ "${this_os}" == "linux" ]; then
             # TODO support linux arm64
@@ -32,7 +32,7 @@ for this_os in ${OS[*]}; do
         echo "Downloading ${this_os}/${this_arch}/${VERSION}/telepresence"
         mkdir -p "${WORK_DIR}/${this_os}/${this_arch}/"
         curl -fL "https://app.getambassador.io/download/tel2/${this_os}/${this_arch}/${VERSION}/telepresence" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
-        declare -x TARBALL_HASH_${this_os}_${this_arch}=$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")
+        declare -x "TARBALL_HASH_${this_os}_${this_arch}"=$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")
         tmp_var=TARBALL_HASH_${this_os}_${this_arch}
         echo "${tmp_var} == ${!tmp_var}"
     done
@@ -40,8 +40,8 @@ done
 
 export HASH_ERRORS=0
 
-for this_os in ${OS[*]}; do
-    for this_arch in ${ARCH[*]}; do
+for this_os in "${OS[@]}"; do
+    for this_arch in "${ARCH[@]}"; do
 
         if [ "${this_arch}" == "arm64" ] && [ "${this_os}" == "linux" ]; then
             # TODO support linux arm64
@@ -50,7 +50,7 @@ for this_os in ${OS[*]}; do
 
         # We don't want to update our homebrew formula if there
         # isn't a hash, so exit early if that's the case.
-        tmp_var=TARBALL_HASH_${this_os}_${this_arch}
+        tmp_var="TARBALL_HASH_${this_os}_${this_arch}"
         if [ -n "${!tmp_var}" ]; then
             echo "Telepresence binary hash: ${tmp_var} == ${!tmp_var}"
         else
@@ -76,14 +76,14 @@ cp packaging/homebrew-formula.rb "$FORMULA"
 sed -i'' -e "s/__FORMULA_NAME__/${FORMULA_NAME}/g" "$FORMULA"
 sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "$FORMULA"
 
-for this_os in ${OS[*]}; do
-    for this_arch in ${ARCH[*]}; do
+for this_os in "${OS[@]}"; do
+    for this_arch in "${ARCH[@]}"; do
 
         if [ "${this_arch}" == "arm64" ] && [ "${this_os}" == "linux" ]; then
             # TODO support linux arm64
             continue
         fi
-        tmp_var=TARBALL_HASH_${this_os}_${this_arch}
+        tmp_var="TARBALL_HASH_${this_os}_${this_arch}"
         sed -i'' -e "s/__TARBALL_HASH_${this_os^^}_${this_arch^^}__/${!tmp_var}/g" "$FORMULA"
     done
 done
