@@ -32,7 +32,7 @@ for this_os in "${OS[@]}"; do
         echo "Downloading ${this_os}/${this_arch}/${VERSION}/telepresence"
         mkdir -p "${WORK_DIR}/${this_os}/${this_arch}/"
         curl -fL "https://app.getambassador.io/download/tel2/${this_os}/${this_arch}/${VERSION}/telepresence" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
-        declare -x "TARBALL_HASH_${this_os}_${this_arch}"=$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")
+        declare -x "TARBALL_HASH_${this_os}_${this_arch}"="$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")"
         tmp_var=TARBALL_HASH_${this_os}_${this_arch}
         echo "${tmp_var} == ${!tmp_var}"
     done
