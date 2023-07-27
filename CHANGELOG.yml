@@ -30,6 +30,14 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.14.3
+    date: "2023-07-26"
+    notes:
+      - type: feature
+        title: Brew now supports MacOS (amd64/arm64) / Linux (amd64)
+        body: >-
+          The brew formula can now dynamically support MacOS (amd64/arm64) / Linux (amd64) in a single formula
+        docs: https://github.com/datawire/homebrew-blackbird/issues/19
   - version: 2.14.2
     date: "2023-07-26"
     notes:
@@ -85,7 +93,7 @@ items:
           exclude a given list of hostnames from resolution, while the mappings field can be used to resolve a hostname with
           another.
         docs: https://github.com/telepresenceio/telepresence/pull/3172
-        
+
       - type: feature
         title: Added the ability to exclude environment variables
         body: >-
