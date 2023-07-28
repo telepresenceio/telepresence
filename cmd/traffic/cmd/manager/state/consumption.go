@@ -9,7 +9,7 @@ import (
 
 // SessionConsumptionMetricsStaleTTL is the duration after which we consider the metrics to be staled, meaning
 // that they should not be updated anymore since the user doesn't really use Telepresence at the moment.
-const SessionConsumptionMetricsStaleTTL = 15 * time.Minute
+const SessionConsumptionMetricsStaleTTL = 60 * time.Minute
 
 func NewSessionConsumptionMetrics() *SessionConsumptionMetrics {
 	return &SessionConsumptionMetrics{
@@ -45,8 +45,8 @@ func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumpti
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for i := range s.sessions {
-		if i == sessionID {
-			return s.sessions[i].ConsumptionMetrics()
+		if css, ok := s.sessions[i].(*clientSessionState); i == sessionID && ok {
+			return css.ConsumptionMetrics()
 		}
 	}
 	return nil
@@ -57,7 +57,9 @@ func (s *state) GetAllSessionConsumptionMetrics() map[string]*SessionConsumption
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for sessionID := range s.sessions {
-		allSCM[sessionID] = s.sessions[sessionID].ConsumptionMetrics()
+		if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
+			allSCM[sessionID] = css.ConsumptionMetrics()
+		}
 	}
 	return allSCM
 }
@@ -73,14 +75,19 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 	}
 
 	lastMarked := session.LastMarked()
-	consumption := s.sessions[sessionID].ConsumptionMetrics()
+	var scm *SessionConsumptionMetrics
+	if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
+		scm = css.ConsumptionMetrics()
+	} else {
+		return
+	}
 
 	// If the last mark is older than the SessionConsumptionMetricsStaleTTL, it indicates that the duration
 	// metric should no longer be updated, as the user's machine may be in standby.
 	isStale := time.Now().After(lastMarked.Add(SessionConsumptionMetricsStaleTTL))
 	if !isStale {
-		consumption.ConnectDuration += uint32(time.Since(consumption.LastUpdate).Seconds())
+		scm.ConnectDuration += uint32(time.Since(scm.LastUpdate).Seconds())
 	}
 
-	consumption.LastUpdate = time.Now()
+	scm.LastUpdate = time.Now()
 }

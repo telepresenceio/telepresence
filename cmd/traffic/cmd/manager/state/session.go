@@ -20,7 +20,6 @@ const AgentSessionIDPrefix = "agent:"
 type SessionState interface {
 	Cancel()
 	AwaitingBidiMapOwnerSessionID(stream tunnel.Stream) string
-	ConsumptionMetrics() *SessionConsumptionMetrics
 	Done() <-chan struct{}
 	LastMarked() time.Time
 	SetLastMarked(lastMarked time.Time)
@@ -42,11 +41,6 @@ type sessionState struct {
 	lastMarked          time.Time
 	awaitingBidiPipeMap map[tunnel.ConnID]*awaitingBidiPipe
 	dials               chan *rpc.DialRequest
-	consumptionMetrics  *SessionConsumptionMetrics
-}
-
-func (ss *sessionState) ConsumptionMetrics() *SessionConsumptionMetrics {
-	return ss.consumptionMetrics
 }
 
 // EstablishBidiPipe registers the given stream as waiting for a matching stream to arrive in a call
@@ -168,23 +162,30 @@ func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
 func newSessionState(ctx context.Context, now time.Time) sessionState {
 	ctx, cancel := context.WithCancel(ctx)
 	return sessionState{
-		doneCh:             ctx.Done(),
-		cancel:             cancel,
-		lastMarked:         now,
-		dials:              make(chan *rpc.DialRequest),
-		consumptionMetrics: NewSessionConsumptionMetrics(),
+		doneCh:     ctx.Done(),
+		cancel:     cancel,
+		lastMarked: now,
+		dials:      make(chan *rpc.DialRequest),
 	}
 }
 
 type clientSessionState struct {
 	sessionState
 	pool *tunnel.Pool
+
+	consumptionMetrics *SessionConsumptionMetrics
+}
+
+func (css *clientSessionState) ConsumptionMetrics() *SessionConsumptionMetrics {
+	return css.consumptionMetrics
 }
 
 func newClientSessionState(ctx context.Context, ts time.Time) *clientSessionState {
 	return &clientSessionState{
 		sessionState: newSessionState(ctx, ts),
 		pool:         tunnel.NewPool(),
+
+		consumptionMetrics: NewSessionConsumptionMetrics(),
 	}
 }
 

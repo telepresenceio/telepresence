@@ -32,7 +32,10 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 	s.state.RefreshSessionConsumptionMetrics("session-3") // should not refresh a stale metric.
 
 	// then
-	assert.Len(s.T(), s.state.GetAllSessionConsumptionMetrics(), 3)
-	assert.True(s.T(), (s.state.sessions["session-1"].ConsumptionMetrics().ConnectDuration) > 42)
-	assert.Equal(s.T(), 36, int(s.state.sessions["session-3"].ConsumptionMetrics().ConnectDuration))
+	ccs1 := s.state.sessions["session-1"].(*clientSessionState)
+	ccs3 := s.state.sessions["session-3"].(*clientSessionState)
+
+	assert.Len(s.T(), s.state.GetAllSessionConsumptionMetrics(), 2)
+	assert.True(s.T(), (ccs1.ConsumptionMetrics().ConnectDuration) > 42)
+	assert.Equal(s.T(), 36, int(ccs3.ConsumptionMetrics().ConnectDuration))
 }

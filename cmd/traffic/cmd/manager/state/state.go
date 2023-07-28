@@ -267,7 +267,10 @@ func (s *state) unlockedRemoveSession(sessionID string) {
 			s.clients.Delete(sessionID)
 		}
 
-		defer sess.ConsumptionMetrics().Close()
+		if css, ok := sess.(*clientSessionState); ok {
+			defer css.ConsumptionMetrics().Close()
+		}
+
 		delete(s.sessions, sessionID)
 	}
 }
@@ -328,7 +331,9 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 
 	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
 
-	s.sessions[sessionID].ConsumptionMetrics().RunCollect(s.ctx)
+	if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
+		css.ConsumptionMetrics().RunCollect(s.ctx)
+	}
 
 	return sessionID
 }
@@ -620,20 +625,22 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	}
 
 	var scm *SessionConsumptionMetrics
-
-	_, isAgent := ss.(*agentSessionState)
-	clientSessionID := ss.AwaitingBidiMapOwnerSessionID(stream)
-	// If there is a bidipipe owner (a client) waiting for an agent, use the metrics from the first one.
-	if isAgent && clientSessionID != "" {
-		s.mu.RLock()
-		css, ok := s.sessions[clientSessionID]
-		s.mu.RUnlock()
-		if ok {
-			scm = css.ConsumptionMetrics()
+	switch sst := ss.(type) {
+	case *agentSessionState:
+		// If it's an agent, find the associated clientSessionState.
+		if clientSessionID := sst.AwaitingBidiMapOwnerSessionID(stream); clientSessionID != "" {
+			s.mu.RLock()
+			as := s.sessions[clientSessionID] // get awaiting state
+			s.mu.RUnlock()
+			if as != nil { // if found
+				if css, isClient := as.(*clientSessionState); isClient {
+					scm = css.ConsumptionMetrics()
+				}
+			}
 		}
-	} else {
-		// otherwise, by default, use the session consumption metrics.
-		scm = ss.ConsumptionMetrics()
+	case *clientSessionState:
+		scm = sst.ConsumptionMetrics()
+	default:
 	}
 
 	bidiPipe, err := ss.OnConnect(ctx, stream, &s.tunnelCounter, scm)
@@ -683,9 +690,9 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 			return err
 		}
 	} else {
-		s.mu.RLock()
-		scm = s.sessions[sessionID].ConsumptionMetrics()
-		s.mu.RUnlock()
+		if css, isClient := ss.(*clientSessionState); isClient {
+			scm = css.ConsumptionMetrics()
+		}
 		endPoint = tunnel.NewDialer(stream, func() {}, scm.FromClientBytes, scm.ToClientBytes)
 		endPoint.Start(ctx)
 	}
