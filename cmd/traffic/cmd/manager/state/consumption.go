@@ -3,6 +3,8 @@ package state
 import (
 	"context"
 	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // SessionConsumptionMetricsStaleTTL is the duration after which we consider the metrics to be staled, meaning
@@ -11,9 +13,9 @@ const SessionConsumptionMetricsStaleTTL = 15 * time.Minute
 
 func NewSessionConsumptionMetrics() *SessionConsumptionMetrics {
 	return &SessionConsumptionMetrics{
-		ConnectDuration:     0,
-		FromClientBytesChan: make(chan uint64),
-		ToClientBytesChan:   make(chan uint64),
+		ConnectDuration: 0,
+		FromClientBytes: tunnel.NewCounterProbe("FromClientBytes"),
+		ToClientBytes:   tunnel.NewCounterProbe("ToClientBytes"),
 
 		LastUpdate: time.Now(),
 	}
@@ -24,37 +26,19 @@ type SessionConsumptionMetrics struct {
 	LastUpdate      time.Time
 
 	// data from client to the traffic manager.
-	FromClientBytes uint64
+	FromClientBytes *tunnel.CounterProbe
 	// data from the traffic manager to the client.
-	ToClientBytes uint64
-
-	FromClientBytesChan chan uint64
-	ToClientBytesChan   chan uint64
+	ToClientBytes *tunnel.CounterProbe
 }
 
-func (sc *SessionConsumptionMetrics) RunCollect(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			sc.closeChannels()
-			return
-		case b, ok := <-sc.FromClientBytesChan:
-			if !ok {
-				return
-			}
-			sc.FromClientBytes += b
-		case b, ok := <-sc.ToClientBytesChan:
-			if !ok {
-				return
-			}
-			sc.ToClientBytes += b
-		}
-	}
+func (s *SessionConsumptionMetrics) RunCollect(ctx context.Context) {
+	go s.FromClientBytes.RunCollect(ctx)
+	go s.ToClientBytes.RunCollect(ctx)
 }
 
-func (sc *SessionConsumptionMetrics) closeChannels() {
-	close(sc.FromClientBytesChan)
-	close(sc.ToClientBytesChan)
+func (s *SessionConsumptionMetrics) Close() {
+	s.FromClientBytes.Close()
+	s.ToClientBytes.Close()
 }
 
 func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumptionMetrics {

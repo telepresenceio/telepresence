@@ -15,7 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-const agentSessionIDPrefix = "agent:"
+const AgentSessionIDPrefix = "agent:"
 
 type SessionState interface {
 	Cancel()
@@ -128,8 +128,8 @@ func (ss *sessionState) OnConnect(
 	name := fmt.Sprintf("%s: session %s -> %s", id, abp.stream.SessionID(), stream.SessionID())
 	tunnelProbes := &tunnel.BidiPipeProbes{}
 	if consumptionMetrics != nil {
-		tunnelProbes.BytesProbeA = consumptionMetrics.FromClientBytesChan
-		tunnelProbes.BytesProbeB = consumptionMetrics.ToClientBytesChan
+		tunnelProbes.BytesProbeA = consumptionMetrics.FromClientBytes
+		tunnelProbes.BytesProbeB = consumptionMetrics.ToClientBytes
 	}
 
 	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream, name, counter, tunnelProbes)

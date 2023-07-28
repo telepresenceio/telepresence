@@ -74,7 +74,7 @@ type StreamCreator func(context.Context, ConnID) (Stream, error)
 
 // ReadLoop reads from the Stream and dispatches messages and error to the give channels. There
 // will be max one error since the error also terminates the loop.
-func ReadLoop(ctx context.Context, s Stream, b chan uint64) (<-chan Message, <-chan error) {
+func ReadLoop(ctx context.Context, s Stream, p *CounterProbe) (<-chan Message, <-chan error) {
 	msgCh := make(chan Message, 50)
 	errCh := make(chan error, 1) // Max one message will be sent on this channel
 	dlog.Tracef(ctx, "   %s %s, ReadLoop starting", s.Tag(), s.ID())
@@ -91,8 +91,11 @@ func ReadLoop(ctx context.Context, s Stream, b chan uint64) (<-chan Message, <-c
 
 		for {
 			m, err := s.Receive(ctx)
-			if m != nil && b != nil {
-				b <- uint64(len(m.Payload()))
+			if m != nil && p != nil {
+				errInc := p.Increment(uint64(len(m.Payload())))
+				if errInc != nil {
+					dlog.Error(ctx, errInc)
+				}
 			}
 
 			switch {
@@ -130,7 +133,7 @@ func WriteLoop(
 	ctx context.Context,
 	s Stream, msgCh <-chan Message,
 	wg *sync.WaitGroup,
-	b chan uint64,
+	p *CounterProbe,
 ) {
 	dlog.Tracef(ctx, "   %s %s, WriteLoop starting", s.Tag(), s.ID())
 	go func() {
@@ -156,9 +159,13 @@ func WriteLoop(
 				}
 
 				err := s.Send(ctx, m)
-				if m != nil && b != nil {
-					b <- uint64(len(m.Payload()))
+				if m != nil && p != nil {
+					errInc := p.Increment(uint64(len(m.Payload())))
+					if errInc != nil {
+						dlog.Error(ctx, errInc)
+					}
 				}
+
 				switch {
 				case err == nil:
 					continue

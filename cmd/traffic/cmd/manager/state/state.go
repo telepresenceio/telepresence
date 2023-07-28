@@ -267,6 +267,7 @@ func (s *state) unlockedRemoveSession(sessionID string) {
 			s.clients.Delete(sessionID)
 		}
 
+		defer sess.ConsumptionMetrics().Close()
 		delete(s.sessions, sessionID)
 	}
 }
@@ -327,7 +328,7 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 
 	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
 
-	go s.sessions[sessionID].ConsumptionMetrics().RunCollect(s.ctx)
+	s.sessions[sessionID].ConsumptionMetrics().RunCollect(s.ctx)
 
 	return sessionID
 }
@@ -370,7 +371,7 @@ func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sessionID := agentSessionIDPrefix + uuid.New().String()
+	sessionID := AgentSessionIDPrefix + uuid.New().String()
 	if oldAgent, hasConflict := s.agents.LoadOrStore(sessionID, agent); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldAgent, agent))
 	}
@@ -619,12 +620,20 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	}
 
 	var scm *SessionConsumptionMetrics
-	if clientSessionID := ss.AwaitingBidiMapOwnerSessionID(stream); clientSessionID != "" {
+
+	_, isAgent := ss.(*agentSessionState)
+	clientSessionID := ss.AwaitingBidiMapOwnerSessionID(stream)
+	// If there is a bidipipe owner (a client) waiting for an agent, use the metrics from the first one.
+	if isAgent && clientSessionID != "" {
 		s.mu.RLock()
-		if _, ok := s.sessions[clientSessionID]; ok {
-			scm = s.sessions[clientSessionID].ConsumptionMetrics()
-		}
+		css, ok := s.sessions[clientSessionID]
 		s.mu.RUnlock()
+		if ok {
+			scm = css.ConsumptionMetrics()
+		}
+	} else {
+		// otherwise, by default, use the session consumption metrics.
+		scm = ss.ConsumptionMetrics()
 	}
 
 	bidiPipe, err := ss.OnConnect(ctx, stream, &s.tunnelCounter, scm)
@@ -642,7 +651,7 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	// The session is either the telepresence client or a traffic-agent.
 	//
 	// A client will want to extend the tunnel to a dialer in an intercepted traffic-agent or, if no
-	// intercept is active, to a dialer here in the traffic-agent.
+	// intercept is active, to a dialer here in the traffic-manager.
 	//
 	// A traffic-agent must always extend the tunnel to the client that it is currently intercepted
 	// by, and hence, start by sending the sessionID of that client on the tunnel.
@@ -675,11 +684,9 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		}
 	} else {
 		s.mu.RLock()
-		// When no intercept is active, a new dialer is opened to communicate with resources from the traffic manager.
 		scm = s.sessions[sessionID].ConsumptionMetrics()
 		s.mu.RUnlock()
-
-		endPoint = tunnel.NewDialer(stream, func() {}, scm.FromClientBytesChan, scm.ToClientBytesChan)
+		endPoint = tunnel.NewDialer(stream, func() {}, scm.FromClientBytes, scm.ToClientBytes)
 		endPoint.Start(ctx)
 	}
 	<-endPoint.Done()

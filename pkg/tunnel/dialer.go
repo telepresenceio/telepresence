@@ -52,8 +52,8 @@ type dialer struct {
 	connected int32
 	done      chan struct{}
 
-	ingressBytesProbe chan uint64
-	egressBytesProbe  chan uint64
+	ingressBytesProbe *CounterProbe
+	egressBytesProbe  *CounterProbe
 }
 
 // NewDialer creates a new handler that dispatches messages in both directions between the given gRPC stream
@@ -61,7 +61,7 @@ type dialer struct {
 func NewDialer(
 	stream Stream,
 	cancel context.CancelFunc,
-	ingressBytesProbe, egressBytesProbe chan uint64,
+	ingressBytesProbe, egressBytesProbe *CounterProbe,
 ) Endpoint {
 	return NewConnEndpoint(stream, nil, cancel, ingressBytesProbe, egressBytesProbe)
 }
@@ -71,11 +71,11 @@ func NewDialer(
 //
 // The handler remains active until it's been idle for the ttl duration, at which time it will automatically close
 // and call the release function it got from the tunnel.Pool to ensure that it gets properly released.
-func NewDialerTTL(stream Stream, cancel context.CancelFunc, ttl time.Duration, ingressBytesProbe, egressBytesProbe chan uint64) Endpoint {
+func NewDialerTTL(stream Stream, cancel context.CancelFunc, ttl time.Duration, ingressBytesProbe, egressBytesProbe *CounterProbe) Endpoint {
 	return NewConnEndpointTTL(stream, nil, cancel, ttl, ingressBytesProbe, egressBytesProbe)
 }
 
-func NewConnEndpoint(stream Stream, conn net.Conn, cancel context.CancelFunc, ingressBytesProbe, egressBytesProbe chan uint64) Endpoint {
+func NewConnEndpoint(stream Stream, conn net.Conn, cancel context.CancelFunc, ingressBytesProbe, egressBytesProbe *CounterProbe) Endpoint {
 	ttl := tcpConnTTL
 	if stream.ID().Protocol() == ipproto.UDP {
 		ttl = udpConnTTL
@@ -88,7 +88,7 @@ func NewConnEndpointTTL(
 	conn net.Conn,
 	cancel context.CancelFunc,
 	ttl time.Duration,
-	ingressBytesProbe, egressBytesProbe chan uint64,
+	ingressBytesProbe, egressBytesProbe *CounterProbe,
 ) Endpoint {
 	state := notConnected
 	if conn != nil {
@@ -276,7 +276,7 @@ func handleControl(ctx context.Context, h streamReader, cm Message) {
 	}
 }
 
-func readLoop(ctx context.Context, h streamReader, trafficProbe chan uint64) {
+func readLoop(ctx context.Context, h streamReader, trafficProbe *CounterProbe) {
 	var endReason string
 	endLevel := dlog.LogLevelTrace
 	id := h.getStream().ID()

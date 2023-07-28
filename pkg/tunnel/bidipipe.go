@@ -19,7 +19,7 @@ type bidiPipe struct {
 }
 
 type BidiPipeProbes struct {
-	BytesProbeA, BytesProbeB chan uint64
+	BytesProbeA, BytesProbeB *CounterProbe
 }
 
 // NewBidiPipe creates a bidirectional pipe between the two given streams.
@@ -52,9 +52,9 @@ func (p *bidiPipe) Start(ctx context.Context) {
 		wg.Add(2)
 		dlog.Debugf(ctx, "   FWD connect %s", p.name)
 		atomic.AddInt32(p.counter, 1)
-		// p.pm collects metrics only for one stream (since the same data is going through both streams)
-		go p.doPipe(ctx, p.a, p.b, &wg, nil, nil)
-		go p.doPipe(ctx, p.b, p.a, &wg, nil, nil)
+		// Only one probe per bidipipe since each one represents a direction.
+		go p.doPipe(ctx, p.a, p.b, &wg, p.probes.BytesProbeA, nil)
+		go p.doPipe(ctx, p.b, p.a, &wg, p.probes.BytesProbeB, nil)
 		wg.Wait()
 	}()
 }
@@ -66,7 +66,7 @@ func (p *bidiPipe) Done() <-chan struct{} {
 // doPipe reads from a and writes to b.
 func (p *bidiPipe) doPipe(
 	ctx context.Context, a, b Stream, wg *sync.WaitGroup,
-	readBytesProbe, writeBytesProbe chan uint64,
+	readBytesProbe, writeBytesProbe *CounterProbe,
 ) {
 	defer wg.Done()
 	wrCh := make(chan Message, 50)
