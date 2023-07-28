@@ -675,7 +675,7 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		}
 	} else {
 		s.mu.RLock()
-		// When no intercept is running, a new dialer is opened to talk with resources from the traffic manager.
+		// When no intercept is active, a new dialer is opened to communicate with resources from the traffic manager.
 		scm = s.sessions[sessionID].ConsumptionMetrics()
 		s.mu.RUnlock()
 

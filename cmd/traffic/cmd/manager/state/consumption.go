@@ -7,7 +7,7 @@ import (
 
 // SessionConsumptionMetricsStaleTTL is the duration after which we consider the metrics to be staled, meaning
 // that they should not be updated anymore since the user doesn't really use Telepresence at the moment.
-const SessionConsumptionMetricsStaleTTL = 1 * time.Minute // TODO: Increase.
+const SessionConsumptionMetricsStaleTTL = 15 * time.Minute
 
 func NewSessionConsumptionMetrics() *SessionConsumptionMetrics {
 	return &SessionConsumptionMetrics{
@@ -91,8 +91,8 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 	lastMarked := session.LastMarked()
 	consumption := s.sessions[sessionID].ConsumptionMetrics()
 
-	// if last mark is more than SessionConsumptionMetricsStaleTTL old, it means the duration metric should stop being
-	// updated since the user machine is maybe in standby.
+	// If the last mark is older than the SessionConsumptionMetricsStaleTTL, it indicates that the duration
+	// metric should no longer be updated, as the user's machine may be in standby.
 	isStale := time.Now().After(lastMarked.Add(SessionConsumptionMetricsStaleTTL))
 	if !isStale {
 		consumption.ConnectDuration += uint32(time.Since(consumption.LastUpdate).Seconds())
