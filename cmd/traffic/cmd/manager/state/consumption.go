@@ -24,9 +24,9 @@ type SessionConsumptionMetrics struct {
 	LastUpdate      time.Time
 
 	// data from client to the traffic manager.
-	fromClientBytes uint64
+	FromClientBytes uint64
 	// data from the traffic manager to the client.
-	toClientBytes uint64
+	ToClientBytes uint64
 
 	FromClientBytesChan chan uint64
 	ToClientBytesChan   chan uint64
@@ -42,12 +42,12 @@ func (sc *SessionConsumptionMetrics) RunCollect(ctx context.Context) {
 			if !ok {
 				return
 			}
-			sc.fromClientBytes += b
+			sc.FromClientBytes += b
 		case b, ok := <-sc.ToClientBytesChan:
 			if !ok {
 				return
 			}
-			sc.toClientBytes += b
+			sc.ToClientBytes += b
 		}
 	}
 }
