@@ -42,6 +42,9 @@ type State interface {
 	GetAgent(string) *rpc.AgentInfo
 	GetAllClients() map[string]*rpc.ClientInfo
 	GetClient(string) *rpc.ClientInfo
+	GetSession(string) SessionState
+	GetSessionConsumptionMetrics(string) *SessionConsumptionMetrics
+	GetAllSessionConsumptionMetrics() map[string]*SessionConsumptionMetrics
 	GetIntercept(string) (*rpc.InterceptInfo, bool)
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
@@ -54,6 +57,7 @@ type State interface {
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
 	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo
+	RefreshSessionConsumptionMetrics(sessionID string)
 	ValidateAgentImage(string, bool) error
 	WaitForTempLogLevel(rpc.Manager_WatchLogLevelServer) error
 	WatchAgents(context.Context, func(sessionID string, agent *rpc.AgentInfo) bool) <-chan watchable.Snapshot[*rpc.AgentInfo]
@@ -200,6 +204,12 @@ func (s *state) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	return false
 }
 
+func (s *state) GetSession(sessionID string) SessionState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sessions[sessionID]
+}
+
 // RemoveSession removes a session from the set of present session IDs.
 func (s *state) RemoveSession(ctx context.Context, sessionID string) {
 	s.mu.Lock()
@@ -255,6 +265,10 @@ func (s *state) unlockedRemoveSession(sessionID string) {
 			s.agents.Delete(sessionID)
 		} else {
 			s.clients.Delete(sessionID)
+		}
+
+		if css, ok := sess.(*clientSessionState); ok {
+			defer css.ConsumptionMetrics().Close()
 		}
 
 		delete(s.sessions, sessionID)
@@ -314,7 +328,13 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	if oldClient, hasConflict := s.clients.LoadOrStore(sessionID, client); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
+
 	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
+
+	if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
+		css.ConsumptionMetrics().RunCollect(s.ctx)
+	}
+
 	return sessionID
 }
 
@@ -356,7 +376,7 @@ func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sessionID := "agent:" + uuid.New().String()
+	sessionID := AgentSessionIDPrefix + uuid.New().String()
 	if oldAgent, hasConflict := s.agents.LoadOrStore(sessionID, agent); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldAgent, agent))
 	}
@@ -604,7 +624,26 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		return status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
-	bidiPipe, err := ss.OnConnect(ctx, stream, &s.tunnelCounter)
+	var scm *SessionConsumptionMetrics
+	switch sst := ss.(type) {
+	case *agentSessionState:
+		// If it's an agent, find the associated clientSessionState.
+		if clientSessionID := sst.AwaitingBidiMapOwnerSessionID(stream); clientSessionID != "" {
+			s.mu.RLock()
+			as := s.sessions[clientSessionID] // get awaiting state
+			s.mu.RUnlock()
+			if as != nil { // if found
+				if css, isClient := as.(*clientSessionState); isClient {
+					scm = css.ConsumptionMetrics()
+				}
+			}
+		}
+	case *clientSessionState:
+		scm = sst.ConsumptionMetrics()
+	default:
+	}
+
+	bidiPipe, err := ss.OnConnect(ctx, stream, &s.tunnelCounter, scm)
 	if err != nil {
 		return err
 	}
@@ -619,7 +658,7 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	// The session is either the telepresence client or a traffic-agent.
 	//
 	// A client will want to extend the tunnel to a dialer in an intercepted traffic-agent or, if no
-	// intercept is active, to a dialer here in the traffic-agent.
+	// intercept is active, to a dialer here in the traffic-manager.
 	//
 	// A traffic-agent must always extend the tunnel to the client that it is currently intercepted
 	// by, and hence, start by sending the sessionID of that client on the tunnel.
@@ -651,7 +690,10 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 			return err
 		}
 	} else {
-		endPoint = tunnel.NewDialer(stream, func() {})
+		if css, isClient := ss.(*clientSessionState); isClient {
+			scm = css.ConsumptionMetrics()
+		}
+		endPoint = tunnel.NewDialer(stream, func() {}, scm.FromClientBytes, scm.ToClientBytes)
 		endPoint.Start(ctx)
 	}
 	<-endPoint.Done()

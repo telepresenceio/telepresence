@@ -15,14 +15,17 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
+const AgentSessionIDPrefix = "agent:"
+
 type SessionState interface {
 	Cancel()
+	AwaitingBidiMapOwnerSessionID(stream tunnel.Stream) string
 	Done() <-chan struct{}
 	LastMarked() time.Time
 	SetLastMarked(lastMarked time.Time)
 	Dials() <-chan *rpc.DialRequest
 	EstablishBidiPipe(context.Context, tunnel.Stream) (tunnel.Endpoint, error)
-	OnConnect(context.Context, tunnel.Stream, *int32) (tunnel.Endpoint, error)
+	OnConnect(context.Context, tunnel.Stream, *int32, *SessionConsumptionMetrics) (tunnel.Endpoint, error)
 }
 
 type awaitingBidiPipe struct {
@@ -86,12 +89,27 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	}
 }
 
+func (ss *sessionState) AwaitingBidiMapOwnerSessionID(stream tunnel.Stream) string {
+	ss.Lock()
+	defer ss.Unlock()
+	if abp, ok := ss.awaitingBidiPipeMap[stream.ID()]; ok {
+		return abp.stream.SessionID()
+	}
+	return ""
+}
+
 // OnConnect checks if a stream is waiting for the given stream to arrive in order to create a BidiPipe.
 // If that's the case, the BidiPipe is created, started, and returned by both this method and the EstablishBidiPipe
 // method that registered the waiting stream. Otherwise, this method returns nil.
-func (ss *sessionState) OnConnect(_ context.Context, stream tunnel.Stream, counter *int32) (tunnel.Endpoint, error) {
+func (ss *sessionState) OnConnect(
+	ctx context.Context,
+	stream tunnel.Stream,
+	counter *int32,
+	consumptionMetrics *SessionConsumptionMetrics,
+) (tunnel.Endpoint, error) {
 	id := stream.ID()
 	ss.Lock()
+	// abp is a session corresponding to an end user machine
 	abp, ok := ss.awaitingBidiPipeMap[id]
 	if ok {
 		delete(ss.awaitingBidiPipeMap, id)
@@ -102,7 +120,13 @@ func (ss *sessionState) OnConnect(_ context.Context, stream tunnel.Stream, count
 		return nil, nil
 	}
 	name := fmt.Sprintf("%s: session %s -> %s", id, abp.stream.SessionID(), stream.SessionID())
-	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream, name, counter)
+	tunnelProbes := &tunnel.BidiPipeProbes{}
+	if consumptionMetrics != nil {
+		tunnelProbes.BytesProbeA = consumptionMetrics.FromClientBytes
+		tunnelProbes.BytesProbeB = consumptionMetrics.ToClientBytes
+	}
+
+	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream, name, counter, tunnelProbes)
 	bidiPipe.Start(abp.ctx)
 
 	defer close(abp.bidiPipeCh)
@@ -148,12 +172,20 @@ func newSessionState(ctx context.Context, now time.Time) sessionState {
 type clientSessionState struct {
 	sessionState
 	pool *tunnel.Pool
+
+	consumptionMetrics *SessionConsumptionMetrics
+}
+
+func (css *clientSessionState) ConsumptionMetrics() *SessionConsumptionMetrics {
+	return css.consumptionMetrics
 }
 
 func newClientSessionState(ctx context.Context, ts time.Time) *clientSessionState {
 	return &clientSessionState{
 		sessionState: newSessionState(ctx, ts),
 		pool:         tunnel.NewPool(),
+
+		consumptionMetrics: NewSessionConsumptionMetrics(),
 	}
 }
 
