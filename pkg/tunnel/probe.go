@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,7 +14,7 @@ type CounterProbe struct {
 	name    string
 	channel chan uint64
 	timeout time.Duration
-	value   uint64
+	value   atomic.Uint64
 }
 
 const (
@@ -50,7 +51,7 @@ func (p *CounterProbe) RunCollect(ctx context.Context) {
 				p.Close()
 				return
 			}
-			p.value += b
+			p.value.Add(b)
 		}
 	}
 }
@@ -69,5 +70,5 @@ func (p *CounterProbe) GetName() string {
 }
 
 func (p *CounterProbe) GetValue() uint64 {
-	return p.value
+	return p.value.Load()
 }
