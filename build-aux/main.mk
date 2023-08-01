@@ -161,7 +161,8 @@ endif
 ifeq ($(DOCKER_BUILD),1)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -tags docker -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 else
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+# -buildmode=pie addresses https://github.com/datawire/telepresence2-proprietary/issues/315
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 endif
 
 # Make local authenticator. This is for test only as it's really only intended to run from within a container
