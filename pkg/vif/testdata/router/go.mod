@@ -47,7 +47,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.14.3-0.20230728122223-d33fe35836ab // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.15.0-rc.0 // indirect
 	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect

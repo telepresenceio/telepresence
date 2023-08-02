@@ -30,8 +30,8 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.14.3
-    date: "TBD"
+  - version: 2.15.0
+    date: "2023-08-02"
     notes:
       - type: security
         title: Add ASLR to telepresence binaries
