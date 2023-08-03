@@ -48,8 +48,10 @@ endif
 
 ifeq ($(GOOS),windows)
 BEXE=.exe
+BZIP=.zip
 else
 BEXE=
+BZIP=
 endif
 
 # Generate: artifacts that get checked in to Git
@@ -114,6 +116,10 @@ PKG_VERSION = $(shell go list ./pkg/version)
 
 TELEPRESENCE=$(BINDIR)/telepresence$(BEXE)
 
+ifeq ($(GOOS),windows)
+TELEPRESENCE_INSTALLER=$(BINDIR)/telepresence$(BZIP)
+endif
+
 .PHONY: build
 build: $(TELEPRESENCE) ## (Build) Produce a `telepresence` binary for GOOS/GOARCH
 
@@ -165,15 +171,26 @@ else
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 endif
 
+ifeq ($(GOOS),windows)
+$(TELEPRESENCE_INSTALLER): $(TELEPRESENCE)
+	./packaging/windows-package.sh
+endif
+
 # Make local authenticator. This is for test only as it's really only intended to run from within a container
 .PHONY: authenticator
 authenticator:
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -o $(BINDIR)/$@ ./cmd/$@
 
 .PHONY: release-binary
+ifeq ($(GOOS),windows)
+release-binary: $(TELEPRESENCE_INSTALLER)
+	mkdir -p $(RELEASEDIR)
+	cp $(TELEPRESENCE_INSTALLER) $(RELEASEDIR)/telepresence-windows-amd64$(BZIP)
+else
 release-binary: $(TELEPRESENCE)
 	mkdir -p $(RELEASEDIR)
 	cp $(TELEPRESENCE) $(RELEASEDIR)/telepresence-$(GOOS)-$(GOARCH)$(BEXE)
+endif
 
 .PHONY: tel2-image
 tel2-image: build-deps
