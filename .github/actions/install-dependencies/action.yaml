@@ -38,7 +38,7 @@ runs:
       name: install Windows dependencies
       shell: powershell
       run: |
-        choco install make
+        choco install make zip
 
         # Download sshfs
         curl -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi

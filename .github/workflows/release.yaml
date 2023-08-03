@@ -58,7 +58,7 @@ jobs:
                - 📦 [telepresence-darwin-amd64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64)
                - 📦 [telepresence-darwin-arm64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64)
             ### Windows
-               - 📦 [telepresence-windows-amd64.exe](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.exe)
+               - 📦 [telepresence-windows-amd64.zip](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
 
             For more builds across platforms and architectures, see the `Assets` section below.
             And for more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
