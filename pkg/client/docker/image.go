@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -42,7 +43,7 @@ func PullImage(ctx context.Context, image string) error {
 
 	err = cmd.Run()
 	if err != nil {
-		fmt.Println(stderr.String())
+		fmt.Fprintln(os.Stderr, stderr.String())
 		return err
 	}
 
