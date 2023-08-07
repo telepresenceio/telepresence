@@ -3,7 +3,9 @@ package docker
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -34,5 +36,16 @@ func PullImage(ctx context.Context, image string) error {
 	// Docker run will put the pull logs in stderr, but docker pull will put them in stdout.
 	// We discard them here, so they don't spam the user. They'll get errors through stderr if it comes to it.
 	cmd.Stdout = io.Discard
-	return cmd.Run()
+
+	// Only print stderr if the return code is non-zero
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	if err != nil {
+		fmt.Fprint(os.Stderr, stderr.String())
+		return err
+	}
+
+	return nil
 }
