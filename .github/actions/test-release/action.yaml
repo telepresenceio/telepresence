@@ -19,7 +19,8 @@ runs:
           curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-darwin-arm64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
         fi
         if [ "${{ runner.os }}" = "Windows" ]; then
-          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-windows-amd64.exe -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-windows-amd64.zip -o ./telepresence.zip || { echo "Curl command failed" ; exit 1; }
+          unzip ./telepresence.zip || { echo "Unzip command failed" ; exit 1; }
         fi
         if [ "${{ runner.os }}" = "Linux" ]; then
           curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-linux-amd64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
