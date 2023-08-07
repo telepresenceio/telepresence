@@ -65,8 +65,6 @@
 - Bugfix: The traffic-manager would sometimes panic and exit after some time due to a type cast panic.
   Ticket [3149](https://github.com/telepresenceio/telepresence/issues/3149).
 
-- Bugfix: Replace deprecated info in the JSON output of the telepresence list command.
-
 ### 2.13.1 (April 20, 2023)
 
 - Change: Update ambassador-agent to version 1.13.13
