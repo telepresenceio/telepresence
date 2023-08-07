@@ -931,70 +931,6 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 	return ret
 }
 
-// Given a slice of AgentInfo, this returns another slice of agents with one
-// agent per namespace, name pair.
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
-	type workload struct {
-		name, namespace string
-	}
-	workloads := map[workload]bool{}
-	var representativeAgents []*manager.AgentInfo
-	for _, agent := range agents {
-		wk := workload{name: agent.Name, namespace: agent.Namespace}
-		if !workloads[wk] {
-			workloads[wk] = true
-			representativeAgents = append(representativeAgents, agent)
-		}
-	}
-	return representativeAgents
-}
-
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
-	result := &common.Result{}
-	agents := s.getCurrentAgents()
-
-	// Since workloads can have more than one replica, we get a slice of agents
-	// where the agent to workload mapping is 1-to-1.  This is important
-	// because in the ALL_AGENTS or default case, we could edit the same
-	// workload n times for n replicas, which could cause race conditions
-	agents = getRepresentativeAgents(c, agents)
-
-	_ = s.ClearIntercepts(c)
-	switch ur.UninstallType {
-	case rpc.UninstallRequest_UNSPECIFIED:
-		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
-	case rpc.UninstallRequest_NAMED_AGENTS:
-		var selectedAgents []*manager.AgentInfo
-		for _, di := range ur.Agents {
-			found := false
-			namespace := s.ActualNamespace(ur.Namespace)
-			if namespace != "" {
-				for _, ai := range agents {
-					if namespace == ai.Namespace && di == ai.Name {
-						found = true
-						selectedAgents = append(selectedAgents, ai)
-						break
-					}
-				}
-			}
-			if !found {
-				result = errcat.ToResult(errcat.User.Newf("unable to find a workload named %s.%s with an agent installed", di, namespace))
-			}
-		}
-		agents = selectedAgents
-		fallthrough
-	default:
-		if len(agents) > 0 {
-			if err := legacyRemoveAgents(c, agents); err != nil {
-				result = errcat.ToResult(err)
-			}
-		}
-	}
-	return result, nil
-}
-
 // Uninstall parts or all of Telepresence from the cluster if the client has sufficient credentials to do so.
 //
 // Uninstalling everything requires that the client owns the helm chart installation and has permissions to run
@@ -1002,11 +938,6 @@ func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
 func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
-	if s.managerVersion.LT(firstAgentConfigMapVersion) {
-		// fall back traffic-manager behaviour prior to 2.6
-		return s.legacyUninstall(ctx, ur)
-	}
-
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
 	loadAgentConfigMap := func(ns string) (*core.ConfigMap, error) {
 		cm, err := api.ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})

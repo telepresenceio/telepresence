@@ -25,19 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-// getCurrentAgents returns a copy of the current agent snapshot
-// Deprecated.
-func (s *session) getCurrentAgents() []*manager.AgentInfo {
-	// Copy the current snapshot
-	s.currentAgentsLock.Lock()
-	agents := make([]*manager.AgentInfo, len(s.currentAgents))
-	for i, ii := range s.currentAgents {
-		agents[i] = proto.Clone(ii).(*manager.AgentInfo)
-	}
-	s.currentAgentsLock.Unlock()
-	return agents
-}
-
 // getCurrentAgentsInNamespace returns a map of agents matching the given namespace from the current agent snapshot.
 // The map contains the first agent for each name found. Agents from replicas of the same workload are ignored.
 // Deprecated.
