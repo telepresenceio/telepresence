@@ -345,10 +345,9 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 	return
 }
 
-func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Connector_WatchWorkloadsServer) error {
-	// The watcher must not hold a lock on the session.
+func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream rpc.Connector_WatchWorkloadsServer) error {
 	var session userd.Session
-	err := s.WithSession(server.Context(), "WatchWorkloads", func(c context.Context, s userd.Session) error {
+	err := s.WithSession(stream.Context(), "WatchWorkloads", func(c context.Context, s userd.Session) error {
 		session = s
 		return nil
 	})
@@ -356,7 +355,7 @@ func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Conne
 		return nil
 	}
 
-	sCtx, sCancel := context.WithCancel(server.Context())
+	sCtx, sCancel := context.WithCancel(stream.Context())
 
 	go func() {
 		for {
@@ -371,7 +370,7 @@ func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Conne
 		}
 	}()
 
-	return session.WatchWorkloads(sCtx, wr, server)
+	return session.WatchWorkloads(stream.Context(), wr, stream)
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *common.Result, err error) {
