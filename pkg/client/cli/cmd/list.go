@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 type listCommand struct {
@@ -73,6 +74,11 @@ func list() *cobra.Command {
 	return cmd
 }
 
+type watchWorkloadStreamResponse struct {
+	workloadInfoSnapshot *connector.WorkloadInfoSnapshot
+	err                  error
+}
+
 // list requests a list current intercepts from the daemon.
 func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
@@ -111,32 +117,40 @@ func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	stream, err := userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
-	if err != nil {
-		return err
+	stream, streamErr := userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+	if streamErr != nil {
+		return streamErr
 	}
 
-	ch := make(chan *connector.WorkloadInfoSnapshot)
+	ch := make(chan *watchWorkloadStreamResponse)
 	go func() {
 		for {
-			r, err := stream.Recv()
+			snap, err := stream.Recv()
+			ch <- &watchWorkloadStreamResponse{
+				workloadInfoSnapshot: snap,
+				err:                  err,
+			}
 			if err != nil {
+				close(ch)
 				break
 			}
-			ch <- r
 		}
 	}()
 
-looper:
 	for {
 		select {
-		case r := <-ch:
-			s.printList(ctx, r.Workloads, stdout, formattedOutput)
+		case r, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if r.err != nil {
+				return errcat.NoDaemonLogs.Newf("%v", r.err)
+			}
+			s.printList(ctx, r.workloadInfoSnapshot.Workloads, stdout, formattedOutput)
 		case <-ctx.Done():
-			break looper
+			return nil
 		}
 	}
-	return nil
 }
 
 func (s *listCommand) printList(ctx context.Context, workloads []*connector.WorkloadInfo, stdout io.Writer, formattedOut bool) {
