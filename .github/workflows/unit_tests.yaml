@@ -4,7 +4,7 @@ on:
 env:
   HOMEBREW_NO_INSTALL_FROM_API:
 jobs:
-  "macos":
+  macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
@@ -39,7 +39,8 @@ jobs:
           timeout_minutes: 12
           command: |
             make check-unit
-  "windows":
+
+  windows:
     runs-on: windows-2019
     steps:
       - uses: actions/checkout@v2
@@ -73,7 +74,8 @@ jobs:
             $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
             $ENV:DTEST_REGISTRY = "docker.io/datawire"
             make check-unit
-  "linux":
+
+  linux-amd64:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -89,10 +91,34 @@ jobs:
           sudo apt-get install -y socat gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - name: Lint
         run: make lint
-      - name: "Test arm64 build"
-        run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
       - name: "Test amd64 build"
         run: make build
+      - name: Run tests
+        uses: nick-invision/retry/@v2.4.0
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            make check-unit
+
+  linux-arm64:
+    runs-on: ubuntu-arm64
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '~1.20.7'
+      - run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y socat gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make jq
+      - name: Lint
+        run: make lint
+      - name: "Test arm64 build"
+        run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
       - name: Run tests
         uses: nick-invision/retry/@v2.4.0
         with:
