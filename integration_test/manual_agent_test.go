@@ -148,10 +148,8 @@ func (s *connectedSuite) Test_ManualAgent() {
 	err = s.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName)
 	require.NoError(err)
 
-	s.Eventually(func() bool {
-		stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
-		return regexp.MustCompile(`.*` + ac.WorkloadName + `\s*:\s*ready to intercept \(traffic-agent already installed\).*`).MatchString(stdout)
-	}, 30*time.Second, 3*time.Second)
+	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
+	require.Regexp(regexp.MustCompile(`.*`+ac.WorkloadName+`\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)
 
 	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--namespace", s.AppNamespace(), "--port", "9094")
 	s.Eventually(func() bool {

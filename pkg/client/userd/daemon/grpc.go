@@ -346,31 +346,18 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 }
 
 func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream rpc.Connector_WatchWorkloadsServer) error {
+	var sessionCtx context.Context
 	var session userd.Session
+
 	err := s.WithSession(stream.Context(), "WatchWorkloads", func(c context.Context, s userd.Session) error {
-		session = s
+		session, sessionCtx = s, c
 		return nil
 	})
 	if err != nil {
 		return nil
 	}
 
-	sCtx, sCancel := context.WithCancel(stream.Context())
-
-	go func() {
-		for {
-			select {
-			case <-sCtx.Done():
-				return
-			// If session expires, cancel the watcher too.
-			case <-s.sessionContext.Done():
-				sCancel()
-				return
-			}
-		}
-	}()
-
-	return session.WatchWorkloads(stream.Context(), wr, stream)
+	return session.WatchWorkloads(sessionCtx, wr, stream)
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *common.Result, err error) {
