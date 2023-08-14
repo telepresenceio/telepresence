@@ -41,6 +41,12 @@ items:
         title: Added client builds for arm64 architecture.
         body: >-
           Updated the release workflow files in github actions to including building and publishing the client binaries for arm64 architecture.
+      - type: bugfix
+        title: KUBECONFIG env var can now be used with the docker mode.
+        body: >-
+          If provided, the KUBECONFIG environment variable was passed to the kubeauth-foreground service as a parameter. 
+          However, since it didn't exist, the CLI was throwing an error when using <code>telepresence connect --docker</code>.
+        docs: https://github.com/telepresenceio/telepresence/pull/3300
   - version: 2.14.2
     date: "2023-07-26"
     notes:

@@ -165,6 +165,8 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	return newKubeconfig(c, flagMap, managerNamespaceOverride, configFlags)
 }
 
+var EnvVarOnlyKubeFlags = []string{"KUBECONFIG", "GOOGLE_APPLICATION_CREDENTIALS"} //nolint:gochecknoglobals // constant
+
 func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
 	if cr.IsPodDaemon {
 		return NewInClusterConfig(c, cr.KubeFlags)
@@ -190,14 +192,15 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 		// If user unsets the env, we need to do that too
 		return os.Unsetenv(key)
 	}
-	if err := transferEnvFlag("GOOGLE_APPLICATION_CREDENTIALS"); err != nil {
-		return nil, err
+
+	for _, kubeconfigEnv := range EnvVarOnlyKubeFlags {
+		// Using a flag like --kubeconfig to send the info isn't sufficient because that flag doesn't allow for multiple
+		// path entries like the KUBECONFIG does.
+		if err := transferEnvFlag(kubeconfigEnv); err != nil {
+			return nil, err
+		}
 	}
-	// Using the --kubeconfig flag to send the info isn't sufficient because that flag doesn't allow for multiple
-	// path entries like the KUBECONFIG does.
-	if err := transferEnvFlag("KUBECONFIG"); err != nil {
-		return nil, err
-	}
+
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
 		return nil, err
