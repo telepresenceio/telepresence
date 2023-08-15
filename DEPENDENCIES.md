@@ -3,7 +3,7 @@ following Free and Open Source software:
 
     Name                                                                         Version                               License(s)
     ----                                                                         -------                               ----------
-    the Go language standard library ("std")                                     v1.20                                 3-clause BSD license
+    the Go language standard library ("std")                                     v1.21                                 3-clause BSD license
     github.com/AdaLogics/go-fuzz-headers                                         v0.0.0-20230106234847-43070de90fa1    Apache License 2.0
     github.com/Azure/go-ansiterm                                                 v0.0.0-20230124172434-306776ec8161    MIT license
     github.com/BurntSushi/toml                                                   v1.2.1                                MIT license
@@ -22,7 +22,7 @@ following Free and Open Source software:
     github.com/containerd/containerd                                             v1.7.1                                Apache License 2.0
     github.com/coreos/go-iptables                                                v0.6.0                                Apache License 2.0
     github.com/cyphar/filepath-securejoin                                        v0.2.3                                3-clause BSD license
-    github.com/datawire/dlib                                                     v1.3.1-0.20221228104658-e373c6d44961  Apache License 2.0
+    github.com/datawire/dlib                                                     v1.3.1                                Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f    Apache License 2.0
     github.com/datawire/envconfig                                                v0.0.0-20221012222025-09524dc7d59b    Apache License 2.0
     github.com/datawire/go-ftpserver                                             v0.1.3                                Apache License 2.0

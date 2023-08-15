@@ -3,7 +3,7 @@ module github.com/telepresenceio/telepresence/v2/pkg/dnet/testdata/mockserver
 go 1.19
 
 require (
-	github.com/datawire/dlib v1.3.0
+	github.com/datawire/dlib v1.3.1
 	k8s.io/apimachinery v0.27.1
 	k8s.io/kubernetes v1.27.1
 )
