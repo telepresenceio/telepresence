@@ -16,7 +16,7 @@ runs:
       run: |
         sudo rm -f /etc/apt/sources.list.d/google-chrome.list
         sudo apt-get update
-        sudo apt-get install -y sshfs socat libfuse-dev
+        sudo apt-get install -y sshfs socat libfuse-dev make jq
         sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
     - if: runner.os == 'macOS'
       name: install macOS dependencies
@@ -38,7 +38,7 @@ runs:
       name: install Windows dependencies
       shell: powershell
       run: |
-        choco install make
+        choco install make zip
 
         # Download sshfs
         curl -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
