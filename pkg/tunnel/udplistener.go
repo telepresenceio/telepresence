@@ -119,7 +119,7 @@ func (p *udpStream) Stop(ctx context.Context) {
 
 func (p *udpStream) Start(ctx context.Context) {
 	p.TimedHandler.Start(ctx)
-	go readLoop(ctx, p)
+	go readLoop(ctx, p, nil)
 }
 
 type UdpReadResult struct {

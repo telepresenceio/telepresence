@@ -39,7 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-type NewServiceFunc func(*scout.Reporter, client.Config) *Service
+type NewServiceFunc func(client.Config) *Service
 
 type newServiceKey struct{}
 
@@ -90,13 +90,10 @@ type Service struct {
 	sessionQuitting int32 // atomic boolean. True if non-zero.
 	session         *Session
 	timedLogLevel   log.TimedLevel
-
-	scout *scout.Reporter
 }
 
-func NewService(sr *scout.Reporter, cfg client.Config) *Service {
+func NewService(cfg client.Config) *Service {
 	return &Service{
-		scout:          sr,
 		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon.String(), log.SetLevel),
 		connectCh:      make(chan *rpc.OutboundInfo),
 		connectReplyCh: make(chan sessionReply),
@@ -337,7 +334,7 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	session, err := GetNewSessionFunc(ctx)(ctx, s.scout, oi)
+	session, err := GetNewSessionFunc(ctx)(ctx, oi)
 	if ctx.Err() != nil || err != nil {
 		cancel()
 		reply.err = err
@@ -480,7 +477,8 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 	dlog.Debug(c, "Listener opened")
 
-	d := GetNewServiceFunc(c)(scout.NewReporter(c, "daemon"), cfg)
+	c = scout.NewReporter(c, ProcessName)
+	d := GetNewServiceFunc(c)(cfg)
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
 		return err
 	}
@@ -496,7 +494,7 @@ func run(cmd *cobra.Command, args []string) error {
 	g.Go("config-reload", d.configReload)
 	g.Go("session", d.manageSessions)
 	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener, tracer) })
-	g.Go("metriton", d.scout.Run)
+	g.Go("metriton", scout.Run)
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)

@@ -14,7 +14,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 )
 
 // userdToManagerShortcut overcomes one minor problem, namely that even though a connector.ManagerProxyClient implements a subset
@@ -109,11 +108,10 @@ func (rd *InProcSession) WaitForNetwork(ctx context.Context, in *empty.Empty, op
 // when the user daemon runs in a docker container with NET_ADMIN capabilities.
 func NewInProcSession(
 	ctx context.Context,
-	scout *scout.Reporter,
 	mi *rpc.OutboundInfo,
 	mc manager.ManagerClient,
 	ver semver.Version,
 ) *InProcSession {
 	ctx, cancel := context.WithCancel(ctx)
-	return &InProcSession{Session: newSession(ctx, scout, mi, &userdToManagerShortcut{mc}, ver), cancel: cancel}
+	return &InProcSession{Session: newSession(ctx, mi, &userdToManagerShortcut{mc}, ver), cancel: cancel}
 }

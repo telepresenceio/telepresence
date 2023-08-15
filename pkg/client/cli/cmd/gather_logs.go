@@ -93,9 +93,9 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	ctx := cmd.Context()
-	scout := scout.NewReporter(ctx, "cli")
+	ctx = scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
-	defer scout.Close()
+	defer scout.Close(ctx)
 
 	// If the user did not provide an outputFile, we'll use their current working directory
 	if gl.outputFile == "" {

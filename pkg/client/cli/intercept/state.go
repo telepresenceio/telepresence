@@ -40,7 +40,6 @@ type State interface {
 	Cmd() *cobra.Command
 	CreateRequest(context.Context) (*connector.CreateInterceptRequest, error)
 	Name() string
-	Reporter() *scout.Reporter
 	Run(context.Context) error
 	RunAndLeave() bool
 }
@@ -48,7 +47,6 @@ type State interface {
 type state struct {
 	*Command
 	cmd           *cobra.Command
-	scout         *scout.Reporter
 	env           map[string]string
 	mountDisabled bool
 	mountPoint    string // if non-empty, this the final mount point of a successful mount
@@ -68,7 +66,6 @@ func NewState(
 	s := &state{
 		Command: args,
 		cmd:     cmd,
-		scout:   scout.NewReporter(cmd.Context(), "cli"),
 	}
 	s.self = s
 	return s
@@ -174,18 +171,14 @@ func (s *state) Name() string {
 	return s.Command.Name
 }
 
-func (s *state) Reporter() *scout.Reporter {
-	return s.scout
-}
-
 func (s *state) RunAndLeave() bool {
 	return len(s.Cmdline) > 0 || s.DockerRun
 }
 
 func (s *state) Run(ctx context.Context) error {
-	reporter := s.Reporter()
-	reporter.Start(ctx)
-	defer reporter.Close()
+	ctx = scout.NewReporter(ctx, "cli")
+	scout.Start(ctx)
+	defer scout.Close(ctx)
 
 	if !s.RunAndLeave() {
 		// start and retain the intercept
@@ -213,14 +206,14 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	}
 
 	// Add whatever metadata we already have to scout
-	s.scout.SetMetadatum(ctx, "service_name", s.AgentName)
-	s.scout.SetMetadatum(ctx, "cluster_id", s.status.ClusterId)
-	s.scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
-	s.scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
+	scout.SetMetadatum(ctx, "service_name", s.AgentName)
+	scout.SetMetadatum(ctx, "cluster_id", s.status.ClusterId)
+	scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
+	scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
 
 	ir, err := s.self.CreateRequest(ctx)
 	if err != nil {
-		s.scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
+		scout.Report(ctx, "intercept_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
 		return false, errcat.NoDaemonLogs.New(err)
 	}
 
@@ -236,9 +229,9 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 
 	defer func() {
 		if err != nil {
-			s.scout.Report(ctx, "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
+			scout.Report(ctx, "intercept_fail", scout.Entry{Key: "error", Value: err.Error()})
 		} else {
-			s.scout.Report(ctx, "intercept_success")
+			scout.Report(ctx, "intercept_success")
 		}
 	}()
 
@@ -269,15 +262,15 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	var intercept *manager.InterceptInfo
 
 	// Add metadata to scout from InterceptResult
-	s.scout.SetMetadatum(ctx, "service_uid", r.GetServiceUid())
-	s.scout.SetMetadatum(ctx, "workload_kind", r.GetWorkloadKind())
+	scout.SetMetadatum(ctx, "service_uid", r.GetServiceUid())
+	scout.SetMetadatum(ctx, "workload_kind", r.GetWorkloadKind())
 	// Since a user can create an intercept without specifying a namespace
 	// (thus using the default in their kubeconfig), we should be getting
 	// the namespace from the InterceptResult because that adds the namespace
 	// if it wasn't given on the cli by the user
-	s.scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
+	scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
 	intercept = r.InterceptInfo
-	s.scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
+	scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
 
 	s.env = intercept.Environment
 	if s.env == nil {

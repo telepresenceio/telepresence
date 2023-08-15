@@ -6,10 +6,8 @@ package dpipe
 import (
 	"context"
 	"os"
+	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
 	"time"
-
-	//nolint:depguard // We want no logging and no soft-context signal handling
-	"os/exec"
 
 	"golang.org/x/sys/unix"
 )
