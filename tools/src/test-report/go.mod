@@ -59,7 +59,7 @@ require (
 	github.com/sirupsen/logrus v1.9.2 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.15.0-rc.3 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.15.0-rc.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
