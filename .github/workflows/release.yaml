@@ -14,6 +14,7 @@ jobs:
       matrix:
         runners:
           - ubuntu-latest
+          - ubuntu-arm64
           - macos-latest
           - macOS-arm64
           - windows-2019
@@ -27,7 +28,8 @@ jobs:
       - name: set version
         shell: bash
         run: echo "TELEPRESENCE_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
-      - run: make release-binary
+      - name: generate binaries
+        run: make release-binary
       - name: Upload binaries
         uses: actions/upload-artifact@v3
         with:
@@ -39,39 +41,15 @@ jobs:
         run: |
           docker login -u="${{ secrets.DOCKERHUB_USERNAME }}" -p="${{ secrets.DOCKERHUB_PASSWORD }}"
           make push-tel2-image
-  release:
-    runs-on: ubuntu-latest
-    needs: build-release
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v3
-      - name: Create release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "binaries/*"
-          token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            ## Official Release Artifacts
-            ### Linux
-               - 📦 [telepresence-linux-amd64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-linux-amd64)
-            ### OSX Darwin
-               - 📦 [telepresence-darwin-amd64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64)
-               - 📦 [telepresence-darwin-arm64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64)
-            ### Windows
-               - 📦 [telepresence-windows-amd64.zip](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
-
-            For more builds across platforms and architectures, see the `Assets` section below.
-            And for more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
-
-            ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
 
   test-release:
-    needs: release
+    needs: build-release
     strategy:
       fail-fast: false
       matrix:
         runners:
           - ubuntu-latest
+          - ubuntu-arm64
           - macos-latest
           - macOS-arm64
           - windows-2019
@@ -82,3 +60,42 @@ jobs:
         uses: ./.github/actions/test-release
         with:
           release_version: ${{ github.ref_name }}
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: test-release
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+      - name: Determine if version is RC or GA
+        id: semver_check
+        run: |
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+$ ]]; then
+          echo "MAKE_LATEST=false" >> $GITHUB_ENV
+          echo "PRERELEASE=true" >> $GITHUB_ENV
+          else
+          echo "MAKE_LATEST=true" >> $GITHUB_ENV
+          echo "PRERELEASE=false" >> $GITHUB_ENV
+          fi
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "binaries/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: ${{ env.PRERELEASE }}
+          makeLatest: ${{ env.MAKE_LATEST }}
+          body: |
+            ## Official Release Artifacts
+            ### Linux
+               - 📦 [telepresence-linux-amd64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-linux-amd64)
+               - 📦 [telepresence-linux-arm64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-linux-arm64)
+            ### OSX Darwin
+               - 📦 [telepresence-darwin-amd64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64)
+               - 📦 [telepresence-darwin-arm64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64)
+            ### Windows
+               - 📦 [telepresence-windows-amd64.zip](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
+
+            For more builds across platforms and architectures, see the `Assets` section below.
+            And for more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
+
+            ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
