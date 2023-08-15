@@ -3,7 +3,7 @@ module local
 go 1.20
 
 require (
-	github.com/datawire/dlib v1.3.1-0.20221228104658-e373c6d44961
+	github.com/datawire/dlib v1.3.1
 	github.com/sirupsen/logrus v1.9.2
 	github.com/telepresenceio/telepresence/v2 v2.13.3
 )
