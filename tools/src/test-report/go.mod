@@ -17,7 +17,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
-	github.com/datawire/dlib v1.3.1-0.20221228104658-e373c6d44961 // indirect
+	github.com/datawire/dlib v1.3.1 // indirect
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b // indirect
 	github.com/datawire/k8sapi v0.1.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
