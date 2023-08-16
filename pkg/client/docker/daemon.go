@@ -39,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -202,8 +203,12 @@ func appendKubeFlags(kubeFlags map[string]string, args []string) ([]string, erro
 			if v != "false" {
 				args = append(args, "--"+k)
 			}
+			continue
 		default:
-			args = append(args, "--"+k, v)
+			// Kubeconfig flags which are not env vars should not be propagated to the authenticator.
+			if !slice.Contains(client.EnvVarOnlyKubeFlags, k) {
+				args = append(args, "--"+k, v)
+			}
 		}
 	}
 	return args, nil
