@@ -159,7 +159,7 @@ spec:
           - name: POD_IP
             valueFrom:
               fieldRef:
-                apiVersion : v1
+                apiVersion: v1
                 fieldPath: status.podIP
           {{- if .managerRbac.namespaced }}
           {{- with .managerRbac.namespaces }}
