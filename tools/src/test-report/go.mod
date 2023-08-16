@@ -1,6 +1,6 @@
 module local
 
-go 1.20
+go 1.21
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./../../../rpc
 
