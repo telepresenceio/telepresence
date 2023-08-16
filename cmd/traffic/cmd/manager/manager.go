@@ -9,9 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
@@ -113,41 +110,6 @@ func MainWithEnv(ctx context.Context) error {
 
 	// Wait for exit
 	return g.Wait()
-}
-
-// ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.
-func (s *service) servePrometheus(ctx context.Context) error {
-	env := managerutil.GetEnv(ctx)
-	if env.PrometheusPort == 0 {
-		dlog.Info(ctx, "Prometheus metrics server not started")
-		return nil
-	}
-	newGaugeFunc := func(n, h string, f func() int) {
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Name: n,
-			Help: h,
-		}, func() float64 { return float64(f()) })
-	}
-	newGaugeFunc("agent_count", "Number of connected traffic agents", s.state.CountAgents)
-	newGaugeFunc("client_count", "Number of connected clients", s.state.CountClients)
-	newGaugeFunc("intercept_count", "Number of active intercepts", s.state.CountIntercepts)
-	newGaugeFunc("session_count", "Number of sessions", s.state.CountSessions)
-	newGaugeFunc("tunnel_count", "Number of tunnels", s.state.CountTunnels)
-
-	newGaugeFunc("active_http_request_count", "Number of currently served http requests", func() int {
-		return int(atomic.LoadInt32(&s.activeHttpRequests))
-	})
-
-	newGaugeFunc("active_grpc_request_count", "Number of currently served gRPC requests", func() int {
-		return int(atomic.LoadInt32(&s.activeGrpcRequests))
-	})
-
-	sc := &dhttp.ServerConfig{
-		Handler: promhttp.Handler(),
-	}
-	dlog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
-	defer dlog.Info(ctx, "Prometheus metrics server stopped")
-	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", env.ServerHost, env.PrometheusPort))
 }
 
 func (s *service) serveHTTP(ctx context.Context) error {
