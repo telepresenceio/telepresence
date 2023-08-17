@@ -678,7 +678,9 @@ func (s *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsReques
 	snapshotAvailable := s.wlWatcher.subscribe(sCtx)
 	for {
 		select {
-		case <-c.Done():
+		case <-c.Done(): // if context is done (usually the session's context).
+			return nil
+		case <-stream.Context().Done(): // if stream context is done.
 			return nil
 		case <-snapshotAvailable:
 			snapshot, err := s.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)

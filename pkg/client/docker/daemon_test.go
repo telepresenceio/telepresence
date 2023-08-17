@@ -1,6 +1,11 @@
 package docker
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestSafeContainerName(t *testing.T) {
 	tests := []struct {
@@ -48,4 +53,25 @@ func TestSafeContainerName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAppendKubeFlagsAuthenticatorService(t *testing.T) {
+	// when
+	args, err := appendKubeFlags(map[string]string{
+		"kubeconfig":               "/some/path/to/kubeconfig",
+		"KUBECONFIG":               "/some/path/to/kubeconfig:/some/other/path/to/kubeconfig",
+		"insecure-skip-tls-verify": "true",
+		"as-group":                 "1000,1001",
+		"user":                     "john",
+	}, []string{"kubeauth-foreground"})
+
+	// then
+	assert.NoError(t, err)
+	assert.Len(t, args, 10)
+	argsStr := strings.Join(args, " ")
+	assert.Contains(t, argsStr, "kubeauth-foreground")
+	assert.Contains(t, argsStr, "--insecure-skip-tls-verify")
+	assert.Contains(t, argsStr, "--as-group 1000 --as-group 1001")
+	assert.Contains(t, argsStr, "--kubeconfig /some/path/to/kubeconfig")
+	assert.Contains(t, argsStr, "--user john")
 }
