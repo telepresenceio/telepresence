@@ -345,10 +345,19 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 	return
 }
 
-func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, server rpc.Connector_WatchWorkloadsServer) error {
-	return s.WithSession(server.Context(), "WatchWorkloads", func(c context.Context, session userd.Session) error {
-		return session.WatchWorkloads(c, wr, server)
+func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream rpc.Connector_WatchWorkloadsServer) error {
+	var sessionCtx context.Context
+	var session userd.Session
+
+	err := s.WithSession(stream.Context(), "WatchWorkloads", func(c context.Context, s userd.Session) error {
+		session, sessionCtx = s, c
+		return nil
 	})
+	if err != nil {
+		return nil
+	}
+
+	return session.WatchWorkloads(sessionCtx, wr, stream)
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *common.Result, err error) {

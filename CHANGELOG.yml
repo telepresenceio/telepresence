@@ -31,16 +31,25 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.15.0
-    date: "2023-08-02"
+    date: "TBD"
     notes:
-      - type: security
-        title: Add ASLR to telepresence binaries
-        body: >-
-          ASLR hardens binary sercurity against fixed memory attacks.
       - type: feature
         title: Added client builds for arm64 architecture.
         body: >-
           Updated the release workflow files in github actions to including building and publishing the client binaries for arm64 architecture.
+        docs: https://github.com/telepresenceio/telepresence/issues/3259
+      - type: bugfix
+        title: KUBECONFIG env var can now be used with the docker mode.
+        body: >-
+          If provided, the KUBECONFIG environment variable was passed to the kubeauth-foreground service as a parameter. 
+          However, since it didn't exist, the CLI was throwing an error when using <code>telepresence connect --docker</code>.
+        docs: https://github.com/telepresenceio/telepresence/pull/3300
+      - type: bugfix
+        title: Fix deadlock while watching workloads
+        body: >-
+          The <code>telepresence list --output json-stream</code> wasn't releasing the session's lock after being 
+          stopped, including with a <code>telepresence quit</code>. The user could be blocked as a result.
+        docs: https://github.com/telepresenceio/telepresence/pull/3298
   - version: 2.14.2
     date: "2023-07-26"
     notes:
