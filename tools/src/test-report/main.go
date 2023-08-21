@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/datawire/metriton-go-client/metriton"
-	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 const logsFileName = "tests.log"
@@ -27,7 +26,7 @@ type Line struct {
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	_, isCi := dos.LookupEnv(ctx, "GITHUB_SHA")
+	_, isCi := os.LookupEnv("GITHUB_SHA")
 	progressBar := newProgressBar(ctx, isCi)
 	reporter, err := NewReporter(ctx, progressBar, func(err error) {
 		fmt.Fprintf(progressBar, "Failed to report: %s\n", err)
