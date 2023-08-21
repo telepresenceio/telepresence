@@ -1,13 +1,11 @@
 package trafficmgr
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
-	"sync"
 	"time"
 
 	apps "k8s.io/api/apps/v1"
@@ -20,83 +18,13 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 const annTelepresenceActions = install.DomainPrefix + "actions"
-
-// legacyRemoveAgents will remove the agent from all deployments listed in the given agents slice. Unless agentsOnly is true,
-// it will also remove the traffic-manager service and deployment.
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func legacyRemoveAgents(c context.Context, agents []*manager.AgentInfo) error {
-	// Removes the manager and all agents from the cluster
-	var errs []error
-	var errsLock sync.Mutex
-	addError := func(e error) {
-		errsLock.Lock()
-		errs = append(errs, e)
-		errsLock.Unlock()
-	}
-
-	// Remove the agent from all deployments
-	webhookAgentChannel := make(chan k8sapi.Object, len(agents))
-	wg := sync.WaitGroup{}
-	wg.Add(len(agents))
-	for _, ai := range agents {
-		ai := ai // pin it
-		go func() {
-			defer wg.Done()
-			agent, err := tracing.GetWorkload(c, ai.Name, ai.Namespace, "")
-			if err != nil {
-				if !errors2.IsNotFound(err) {
-					addError(err)
-				}
-				return
-			}
-
-			// Assume that the agent was added using the mutating webhook when no actions
-			// annotation can be found in the workload.
-			ann := agent.GetAnnotations()
-			if ann == nil {
-				webhookAgentChannel <- agent
-				return
-			}
-			if _, ok := ann[annTelepresenceActions]; !ok {
-				webhookAgentChannel <- agent
-				return
-			}
-			if err = undoObjectModsAndUpdate(c, agent); err != nil {
-				addError(err)
-				return
-			}
-			if err = waitForApply(c, ai.Name, ai.Namespace, agent); err != nil {
-				addError(err)
-			}
-		}()
-	}
-	// wait for all agents to be removed
-	wg.Wait()
-	close(webhookAgentChannel)
-
-	switch len(errs) {
-	case 0:
-	case 1:
-		return errs[0]
-	default:
-		bld := bytes.NewBufferString("multiple errors:")
-		for _, err := range errs {
-			bld.WriteString("\n  ")
-			bld.WriteString(err.Error())
-		}
-		return errors.New(bld.String())
-	}
-	return nil
-}
 
 // recreates "kubectl rollout restart <obj>" for obj
 // Deprecated: not used with traffic-manager versions >= 2.6.0.
@@ -465,84 +393,6 @@ func getAnnotation(obj k8sapi.Object, data completeAction) (bool, error) {
 			annV, ourV)
 	}
 	return true, nil
-}
-
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func undoObjectModsAndUpdate(c context.Context, obj k8sapi.Object) error {
-	referencedService, err := undoObjectMods(c, obj)
-	if err != nil {
-		return err
-	}
-	svc, err := k8sapi.GetService(c, referencedService, obj.GetNamespace())
-	if err != nil && !errors2.IsNotFound(err) {
-		return err
-	}
-	if svc != nil {
-		if err = undoServiceModsAndUpdate(c, svc); err != nil {
-			return err
-		}
-	}
-	return obj.Update(c)
-}
-
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func undoObjectMods(c context.Context, obj k8sapi.Object) (string, error) {
-	var actions workloadActions
-	ok, err := getAnnotation(obj, &actions)
-	if !ok {
-		return "", err
-	}
-	if !ok {
-		return "", k8sapi.ObjErrorf(obj, "agent is not installed")
-	}
-
-	if err = actions.Undo(obj); err != nil {
-		if install.IsAlreadyUndone(err) {
-			dlog.Warnf(c, "Already uninstalled: %v", err)
-		} else {
-			return "", err
-		}
-	}
-	mObj := obj.(meta.ObjectMetaAccessor).GetObjectMeta()
-	annotations := mObj.GetAnnotations()
-	delete(annotations, annTelepresenceActions)
-	if len(annotations) == 0 {
-		mObj.SetAnnotations(nil)
-	}
-	explainUndo(c, &actions, obj)
-	return actions.ReferencedService, nil
-}
-
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func undoServiceModsAndUpdate(c context.Context, svc k8sapi.Object) (err error) {
-	if err = undoServiceMods(c, svc); err == nil {
-		err = svc.Update(c)
-	}
-	return err
-}
-
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func undoServiceMods(c context.Context, svc k8sapi.Object) error {
-	var actions svcActions
-	ok, err := getAnnotation(svc, &actions)
-	if !ok {
-		return err
-	}
-	if err = actions.Undo(svc); err != nil {
-		if install.IsAlreadyUndone(err) {
-			dlog.Warnf(c, "Already uninstalled: %v", err)
-		} else {
-			return err
-		}
-	}
-	anns := svc.GetAnnotations()
-	delete(anns, annTelepresenceActions)
-	if len(anns) == 0 {
-		anns = nil
-	}
-	svc.SetAnnotations(anns)
-	explainUndo(c, &actions, svc)
-	return nil
 }
 
 // addAgentToWorkload takes a given workload object and a service and
