@@ -263,8 +263,8 @@ prepare-release: generate wix
 
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 
-	git tag -s --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
-	git tag -s --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
+	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
+	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
 
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload

@@ -31,7 +31,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.15.0
-    date: "TBD"
+    date: "2023-08-22"
     notes:
       - type: security
         title: Add ASLR to telepresence binaries
