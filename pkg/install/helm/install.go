@@ -149,8 +149,7 @@ func upgradeExisting(
 			return fmt.Errorf("failed to get values for %s: %w", releaseName, err)
 		}
 		if len(oldValues) > 0 {
-			dlog.Debug(ctx, "Merging old values")
-			values = chartutil.CoalesceTables(oldValues, values)
+			values = chartutil.CoalesceTables(values, oldValues)
 		}
 		req.ReuseValues = false
 	}
