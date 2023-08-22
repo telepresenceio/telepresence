@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -10,6 +11,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -26,6 +28,11 @@ type listCommand struct {
 	debug             bool
 	namespace         string
 	watch             bool
+}
+
+type workloadJSONOutput struct {
+	*connector.WorkloadInfo
+	Sidecar *agentconfig.Sidecar `json:"sidecar,omitempty"`
 }
 
 func list() *cobra.Command {
@@ -167,7 +174,7 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 		if iis := workload.InterceptInfos; len(iis) > 0 {
 			return intercept.DescribeIntercepts(ctx, iis, "", s.debug)
 		}
-		ai := workload.AgentInfo
+		ai := workload.Sidecar
 		if ai != nil {
 			return "ready to intercept (traffic-agent already installed)"
 		}
@@ -179,7 +186,20 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 	}
 
 	if formattedOut {
-		output.Object(ctx, workloads, false)
+		o := make([]*workloadJSONOutput, len(workloads))
+		for i, v := range workloads {
+			l := workloadJSONOutput{WorkloadInfo: v}
+
+			if v.Sidecar != nil {
+				var sidecar agentconfig.Sidecar
+				_ = json.Unmarshal(v.Sidecar.Json, &sidecar)
+				l.Sidecar = &sidecar
+			}
+
+			o[i] = &l
+		}
+
+		output.Object(ctx, o, false)
 	} else {
 		includeNs := false
 		ns := s.namespace

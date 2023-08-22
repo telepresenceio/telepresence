@@ -2,6 +2,7 @@ package trafficmgr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -600,7 +601,7 @@ func (s *session) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
 	iMap map[string][]*manager.InterceptInfo,
-	aMap map[string]*manager.AgentInfo,
+	sMap map[string]*rpc.WorkloadInfo_Sidecar,
 	filter rpc.ListRequest_Filter,
 ) []*rpc.WorkloadInfo {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
@@ -610,35 +611,40 @@ func (s *session) getInfosForWorkloads(
 			return
 		}
 		for _, workload := range wls {
-			if _, ok := wiMap[workload.GetUID()]; ok {
+			serviceUID := string(svc.UID)
+
+			if wlInfo, ok := wiMap[workload.GetUID()]; ok {
+				if _, ok := wlInfo.Services[serviceUID]; !ok {
+					wlInfo.Services[serviceUID] = &rpc.WorkloadInfo_ServiceReference{
+						Name:      svc.Name,
+						Namespace: svc.Namespace,
+						Ports:     getServicePorts(svc),
+					}
+				}
 				continue
 			}
+
 			name := workload.GetName()
 			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
-			ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
-			for _, p := range svc.Spec.Ports {
-				ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
-					Name: p.Name,
-					Port: p.Port,
-				})
-			}
+
 			wlInfo := &rpc.WorkloadInfo{
 				Name:                 name,
 				Namespace:            workload.GetNamespace(),
 				WorkloadResourceType: workload.GetKind(),
 				Uid:                  string(workload.GetUID()),
-				Service: &rpc.WorkloadInfo_ServiceReference{
-					Name:      svc.Name,
-					Namespace: svc.Namespace,
-					Uid:       string(svc.UID),
-					Ports:     ports,
+				Services: map[string]*rpc.WorkloadInfo_ServiceReference{
+					string(svc.UID): {
+						Name:      svc.Name,
+						Namespace: svc.Namespace,
+						Ports:     getServicePorts(svc),
+					},
 				},
 			}
 			var ok bool
 			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
 				continue
 			}
-			if wlInfo.AgentInfo, ok = aMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			if wlInfo.Sidecar, ok = sMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
 				continue
 			}
 			wiMap[workload.GetUID()] = wlInfo
@@ -652,6 +658,17 @@ func (s *session) getInfosForWorkloads(
 	}
 	sort.Slice(wiz, func(i, j int) bool { return wiz[i].Name < wiz[j].Name })
 	return wiz
+}
+
+func getServicePorts(svc *core.Service) []*rpc.WorkloadInfo_ServiceReference_Port {
+	ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
+	for _, p := range svc.Spec.Ports {
+		ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
+			Name: p.Name,
+			Port: p.Port,
+		})
+	}
+	return ports
 }
 
 func (s *session) waitForSync(ctx context.Context) {
@@ -792,13 +809,19 @@ nextIs:
 			}
 		}
 	}
-	aMap := make(map[string]*manager.AgentInfo)
+
+	sMap := make(map[string]*rpc.WorkloadInfo_Sidecar)
 	for _, ns := range nss {
-		for k, v := range s.getCurrentAgentsInNamespace(ns) {
-			aMap[k] = v
+		for k, v := range s.getCurrentSidecarsInNamespace(ctx, ns) {
+			data, err := json.Marshal(v)
+			if err != nil {
+				continue
+			}
+			sMap[k] = &rpc.WorkloadInfo_Sidecar{Json: data}
 		}
 	}
-	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
+
+	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, sMap, filter)
 
 	if includeLocalIntercepts {
 		s.currentInterceptsLock.Lock()
@@ -910,70 +933,6 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 	return ret
 }
 
-// Given a slice of AgentInfo, this returns another slice of agents with one
-// agent per namespace, name pair.
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
-	type workload struct {
-		name, namespace string
-	}
-	workloads := map[workload]bool{}
-	var representativeAgents []*manager.AgentInfo
-	for _, agent := range agents {
-		wk := workload{name: agent.Name, namespace: agent.Namespace}
-		if !workloads[wk] {
-			workloads[wk] = true
-			representativeAgents = append(representativeAgents, agent)
-		}
-	}
-	return representativeAgents
-}
-
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
-	result := &common.Result{}
-	agents := s.getCurrentAgents()
-
-	// Since workloads can have more than one replica, we get a slice of agents
-	// where the agent to workload mapping is 1-to-1.  This is important
-	// because in the ALL_AGENTS or default case, we could edit the same
-	// workload n times for n replicas, which could cause race conditions
-	agents = getRepresentativeAgents(c, agents)
-
-	_ = s.ClearIntercepts(c)
-	switch ur.UninstallType {
-	case rpc.UninstallRequest_UNSPECIFIED:
-		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
-	case rpc.UninstallRequest_NAMED_AGENTS:
-		var selectedAgents []*manager.AgentInfo
-		for _, di := range ur.Agents {
-			found := false
-			namespace := s.ActualNamespace(ur.Namespace)
-			if namespace != "" {
-				for _, ai := range agents {
-					if namespace == ai.Namespace && di == ai.Name {
-						found = true
-						selectedAgents = append(selectedAgents, ai)
-						break
-					}
-				}
-			}
-			if !found {
-				result = errcat.ToResult(errcat.User.Newf("unable to find a workload named %s.%s with an agent installed", di, namespace))
-			}
-		}
-		agents = selectedAgents
-		fallthrough
-	default:
-		if len(agents) > 0 {
-			if err := legacyRemoveAgents(c, agents); err != nil {
-				result = errcat.ToResult(err)
-			}
-		}
-	}
-	return result, nil
-}
-
 // Uninstall parts or all of Telepresence from the cluster if the client has sufficient credentials to do so.
 //
 // Uninstalling everything requires that the client owns the helm chart installation and has permissions to run
@@ -981,11 +940,6 @@ func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
 func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
-	if s.managerVersion.LT(firstAgentConfigMapVersion) {
-		// fall back traffic-manager behaviour prior to 2.6
-		return s.legacyUninstall(ctx, ur)
-	}
-
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
 	loadAgentConfigMap := func(ns string) (*core.ConfigMap, error) {
 		cm, err := api.ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
