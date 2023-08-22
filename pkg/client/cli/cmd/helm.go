@@ -10,6 +10,7 @@ import (
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -74,7 +75,6 @@ func helmInstall() *cobra.Command {
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
 	ha.Request = daemon.InitRequest(cmd)
-	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
@@ -101,7 +101,6 @@ func helmUpgrade() *cobra.Command {
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
 	ha.Request = daemon.InitRequest(cmd)
-	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
@@ -145,7 +144,6 @@ func helmUninstall() *cobra.Command {
 	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "prevent hooks from running during uninstallation")
 	ha.addCRDsFlags(flags)
 	ha.Request = daemon.InitRequest(cmd)
-	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
 	return cmd
 }
 
@@ -162,6 +160,10 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	ha.Request.CommitFlags(cmd)
+	if ns, ok := ha.Request.KubeFlags["namespace"]; ok {
+		dlog.Debugf(cmd.Context(), "using manager namespace %q", ns)
+		ha.Request.ManagerNamespace = ns
+	}
 
 	if err = connect.InitCommand(cmd); err != nil {
 		return err

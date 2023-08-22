@@ -36,8 +36,8 @@ func (s *interceptEnvSuite) Test_ExcludeVariables() {
 	defer os.RemoveAll("echo.env") //nolint:errcheck // dont need to catch the err
 
 	// when
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
-	itest.TelepresenceOk(ctx, "intercept", "echo-easy", "--namespace", s.AppNamespace(), "--env-file", "echo.env")
+	itest.TelepresenceOk(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(ctx, "intercept", "echo-easy", "--env-file", "echo.env")
 
 	// then
 	file, err := os.ReadFile("echo.env")

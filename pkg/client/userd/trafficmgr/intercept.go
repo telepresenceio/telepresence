@@ -487,7 +487,7 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	s.waitForSync(c)
 	spec := ir.Spec
 	self := s.self
-	spec.Namespace = self.ActualNamespace(spec.Namespace)
+	spec.Namespace = self.ActualNamespace("")
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
 		return nil, InterceptError(common.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent))

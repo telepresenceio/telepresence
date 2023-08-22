@@ -173,10 +173,6 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 	}
 	flagMap := cr.KubeFlags
 
-	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
-	// respect to this option.
-	delete(flagMap, "namespace")
-
 	// The GOOGLE_APPLICATION_CREDENTIALS and KUBECONFIG entries are copies of the environment variables
 	// sent to us from the CLI to give this long-running daemon a chance to update them. Here we set/unset
 	// our them in our environment accordingly and remove them from the flagMap
@@ -219,6 +215,11 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 		return nil, errcat.Config.New("kubeconfig has no context definition")
 	}
 
+	namespace, _, err := configLoader.Namespace()
+	if err != nil {
+		return nil, err
+	}
+
 	ctxName := flagMap["context"]
 	if ctxName == "" {
 		ctxName = config.CurrentContext
@@ -239,10 +240,7 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 		return nil, err
 	}
 
-	namespace := ctx.Namespace
-	if namespace == "" {
-		namespace = "default"
-	}
+	dlog.Debugf(c, "using namespace %q", namespace)
 
 	k := &Kubeconfig{
 		Context:     ctxName,

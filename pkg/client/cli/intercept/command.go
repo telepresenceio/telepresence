@@ -100,6 +100,9 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 
 	flags.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,
 		`Do not mount remote directories. Instead, expose this port on localhost to an external mounter`)
+
+	flags.Lookup("namespace").Deprecated = "use telepresence connect --namespace"
+	flags.Lookup("local-only").Deprecated = "use telepresence connect --namespace"
 }
 
 func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
@@ -134,9 +137,6 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 	// Actually intercepting something
 	if a.AgentName == "" {
 		a.AgentName = a.Name
-		if a.Namespace != "" {
-			a.Name += "-" + a.Namespace
-		}
 	}
 	if a.Port == "" {
 		a.Port = strconv.Itoa(client.GetConfig(cmd.Context()).Intercept().DefaultPort)
@@ -161,22 +161,6 @@ func (a *Command) Run(cmd *cobra.Command, positional []string) error {
 		return err
 	}
 	return NewState(cmd, a).Run(cmd.Context())
-}
-
-func (a *Command) AutocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if err := connect.InitCommand(cmd); err != nil {
-		return nil, cobra.ShellCompDirectiveError
-	}
-	ctx := cmd.Context()
-	ud := daemon.GetUserClient(ctx)
-	rs, err := ud.GetNamespaces(ctx, &connector.GetNamespacesRequest{
-		ForClientAccess: true,
-		Prefix:          toComplete,
-	})
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveError
-	}
-	return rs.Namespaces, cobra.ShellCompDirectiveNoFileComp
 }
 
 func (a *Command) ValidateDockerArgs() error {
