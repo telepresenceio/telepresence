@@ -642,12 +642,12 @@ func (s *session) getInfosForWorkloads(
 }
 
 func getServicePorts(svc *core.Service) []*rpc.WorkloadInfo_ServiceReference_Port {
-	ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
-	for _, p := range svc.Spec.Ports {
-		ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
+	ports := make([]*rpc.WorkloadInfo_ServiceReference_Port, len(svc.Spec.Ports))
+	for i, p := range svc.Spec.Ports {
+		ports[i] = &rpc.WorkloadInfo_ServiceReference_Port{
 			Name: p.Name,
 			Port: p.Port,
-		})
+		}
 	}
 	return ports
 }
@@ -1012,7 +1012,7 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
 	// the cluster, since an open tunnel to the traffic-manager (via the API server) is itself required
 	// to communicate with the cluster.
-	neverProxy := []*manager.IPNet{}
+	neverProxy := make([]*manager.IPNet, 0, 1+len(s.NeverProxy))
 	serverURL, err := url.Parse(s.Server)
 	if err != nil {
 		// This really shouldn't happen as we are connected to the server
