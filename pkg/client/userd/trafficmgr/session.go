@@ -366,6 +366,7 @@ func connectMgr(
 		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
 		si, err = mClient.ArriveAsClient(ctx, &manager.ClientInfo{
 			Name:      userAndHost,
+			Namespace: cluster.Namespace,
 			InstallId: installID,
 			Product:   "telepresence",
 			Version:   client.Version(),
