@@ -274,7 +274,7 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	return k, nil
 }
 
-// This represents an inClusterConfig.
+// NewInClusterConfig represents an inClusterConfig.
 func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
@@ -295,9 +295,9 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		return nil, err
 	}
 
-	namespace, ok, err := configLoader.Namespace()
-	if err != nil || !ok {
-		namespace = "default"
+	namespace, _, err := configLoader.Namespace()
+	if err != nil {
+		return nil, err
 	}
 
 	managerNamespace := GetEnv(c).ManagerNamespace

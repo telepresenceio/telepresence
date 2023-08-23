@@ -101,8 +101,8 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 	flags.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,
 		`Do not mount remote directories. Instead, expose this port on localhost to an external mounter`)
 
-	flags.Lookup("namespace").Deprecated = "use telepresence connect --namespace"
-	flags.Lookup("local-only").Deprecated = "use telepresence connect --namespace"
+	flags.Lookup("namespace").Deprecated = "use telepresence connect to set the namespace"
+	flags.Lookup("local-only").Deprecated = "use telepresence connect to set the namespace"
 }
 
 func (a *Command) Validate(cmd *cobra.Command, positional []string) error {

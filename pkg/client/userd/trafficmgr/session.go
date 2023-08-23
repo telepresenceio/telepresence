@@ -93,7 +93,7 @@ type session struct {
 	wlWatcher *workloadsAndServicesWatcher
 
 	// currentInterceptsLock ensures that all accesses to currentIntercepts, currentMatchers,
-	// currentAPIServers, interceptWaiters, localIntercepts, interceptedNamespace, and ingressInfo are synchronized
+	// currentAPIServers, interceptWaiters, and ingressInfo are synchronized
 	//
 	currentInterceptsLock sync.Mutex
 
@@ -112,12 +112,6 @@ type session struct {
 	// is filled in prior to the intercept being created. Entries are short lived. They
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
-
-	// Names of local intercepts
-	localIntercepts map[string]struct{}
-
-	// Name of currently intercepted namespace
-	interceptedNamespace string
 
 	ingressInfo []*manager.IngressInfo
 
@@ -419,7 +413,6 @@ func connectMgr(
 		managerName:      managerName,
 		managerVersion:   managerVersion,
 		sessionInfo:      si,
-		localIntercepts:  make(map[string]struct{}),
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      cr.IsPodDaemon,
@@ -501,18 +494,6 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 	}
 }
 
-func (s *session) setInterceptedNamespace(c context.Context, ns string) {
-	s.currentInterceptsLock.Lock()
-	diff := s.interceptedNamespace != ns
-	if diff {
-		s.interceptedNamespace = ns
-	}
-	s.currentInterceptsLock.Unlock()
-	if diff {
-		s.updateDaemonNamespaces(c)
-	}
-}
-
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
 func (s *session) updateDaemonNamespaces(c context.Context) {
@@ -521,11 +502,9 @@ func (s *session) updateDaemonNamespaces(c context.Context) {
 		return
 	}
 	var namespaces []string
-	s.currentInterceptsLock.Lock()
-	if s.interceptedNamespace != "" {
-		namespaces = []string{s.interceptedNamespace}
+	if s.Namespace != "" {
+		namespaces = []string{s.Namespace}
 	}
-	s.currentInterceptsLock.Unlock()
 	// Avoid being locked for the remainder of this function.
 
 	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
@@ -698,7 +677,7 @@ func (s *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsReques
 		case <-c.Done():
 			return nil
 		case <-snapshotAvailable:
-			snapshot, err := s.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
+			snapshot, err := s.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE)
 			if err != nil {
 				return status.Errorf(codes.Unavailable, "failed to create WorkloadInfoSnapshot: %v", err)
 			}
@@ -714,10 +693,9 @@ func (s *session) WorkloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
-	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
 	s.waitForSync(ctx)
-	return s.workloadInfoSnapshot(ctx, namespaces, filter, includeLocalIntercepts)
+	return s.workloadInfoSnapshot(ctx, namespaces, filter)
 }
 
 func (s *session) ensureWatchers(ctx context.Context,
@@ -766,7 +744,6 @@ func (s *session) workloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
-	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
 	is := s.getCurrentIntercepts()
 	s.ensureWatchers(ctx, namespaces)
@@ -774,11 +751,9 @@ func (s *session) workloadInfoSnapshot(
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {
 		// Special case, we don't care about namespaces in general. Instead, we use the intercepted namespaces
-		s.currentInterceptsLock.Lock()
-		if s.interceptedNamespace != "" {
-			nss = []string{s.interceptedNamespace}
+		if s.Namespace != "" {
+			nss = []string{s.Namespace}
 		}
-		s.currentInterceptsLock.Unlock()
 		if len(nss) == 0 {
 			// No active intercepts
 			return &rpc.WorkloadInfoSnapshot{}, nil
@@ -820,18 +795,6 @@ nextIs:
 	}
 
 	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, sMap, filter)
-
-	if includeLocalIntercepts {
-		s.currentInterceptsLock.Lock()
-		for localIntercept := range s.localIntercepts {
-			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
-				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: s.interceptedNamespace},
-				Disposition:       manager.InterceptDispositionType_ACTIVE,
-				MechanismArgsDesc: "as local-only",
-			}}})
-		}
-		s.currentInterceptsLock.Unlock()
-	}
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 

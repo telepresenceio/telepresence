@@ -273,10 +273,6 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podIntercepts, intercepts []*manager.InterceptInfo) {
 	s.setCurrentIntercepts(ctx, intercepts)
 	podIcepts.initSnapshot()
-	s.currentInterceptsLock.Lock()
-	active := len(s.localIntercepts)
-	ins := s.interceptedNamespace
-	s.currentInterceptsLock.Unlock()
 
 	for _, ii := range intercepts {
 		if ii.Disposition == manager.InterceptDispositionType_WAITING {
@@ -293,12 +289,9 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 
 		var err error
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
-			active++
 			ns := ii.Spec.Namespace
-			if ins == "" {
-				ins = ns
-			} else if ins != ns {
-				err = errcat.User.Newf("active intercepts in both namespace %s and %s", ns, ins)
+			if s.Namespace != ns {
+				err = errcat.User.Newf("active intercepts in both namespace %s and %s", ns, s.Namespace)
 			}
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
@@ -327,10 +320,6 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 		}
 		podIcepts.start(ic)
 	}
-	if active == 0 {
-		ins = ""
-	}
-	s.setInterceptedNamespace(ctx, ins)
 	podIcepts.cancelUnwanted(ctx)
 }
 
@@ -454,9 +443,6 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 	s.currentInterceptsLock.Lock()
 	defer s.currentInterceptsLock.Unlock()
 	spec := ir.Spec
-	if s.interceptedNamespace != "" && s.interceptedNamespace != spec.Namespace {
-		return InterceptError(common.InterceptError_NAMESPACE_AMBIGUITY, errcat.User.Newf("%s,%s", s.interceptedNamespace, spec.Namespace))
-	}
 	for _, iCept := range s.currentIntercepts {
 		switch {
 		case iCept.Spec.Name == spec.Name:
@@ -486,17 +472,13 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, *rpc.InterceptResult) {
 	s.waitForSync(c)
 	spec := ir.Spec
-	self := s.self
-	spec.Namespace = self.ActualNamespace("")
 	if spec.Namespace == "" {
-		// namespace is not currently mapped
-		return nil, InterceptError(common.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(ir.Spec.Agent))
+		spec.Namespace = s.Namespace
+	} else if s.Namespace != spec.Namespace {
+		return nil, InterceptError(common.InterceptError_NAMESPACE_AMBIGUITY, errcat.User.Newf("%s,%s", s.Namespace, spec.Namespace))
 	}
 
-	if _, inUse := s.localIntercepts[spec.Name]; inUse {
-		return nil, InterceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.Newf(spec.Name))
-	}
-
+	self := s.self
 	if er := s.ensureNoInterceptConflict(ir); er != nil {
 		return nil, er
 	}
@@ -592,7 +574,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 	spec := ir.Spec
 	if iInfo == nil {
-		return s.addLocalOnlyIntercept(c, spec)
+		return &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 	}
 
 	spec.Client = s.userAndHost
@@ -747,12 +729,6 @@ func waitForDNS(c context.Context, host string) bool {
 // RemoveIntercept removes one intercept by name.
 func (s *session) RemoveIntercept(c context.Context, name string) error {
 	dlog.Debugf(c, "Removing intercept %s", name)
-
-	if _, ok := s.localIntercepts[name]; ok {
-		s.RemoveLocalOnlyIntercept(c, name)
-		return nil
-	}
-
 	ii := s.getInterceptByName(name)
 	if ii == nil {
 		dlog.Debugf(c, "Intercept %s was already removed", name)
@@ -826,12 +802,6 @@ func (s *session) RemoveInterceptor(id string) error {
 
 // GetInterceptSpec returns the InterceptSpec for the given name, or nil if no such spec exists.
 func (s *session) GetInterceptSpec(name string) *manager.InterceptSpec {
-	if _, ok := s.localIntercepts[name]; ok {
-		s.currentInterceptsLock.Lock()
-		ns := s.interceptedNamespace
-		s.currentInterceptsLock.Unlock()
-		return &manager.InterceptSpec{Name: name, Namespace: ns, WorkloadKind: "local"}
-	}
 	if ic := s.getInterceptByName(name); ic != nil {
 		return ic.Spec
 	}
@@ -840,9 +810,6 @@ func (s *session) GetInterceptSpec(name string) *manager.InterceptSpec {
 
 // GetInterceptInfo returns the InterceptInfo for the given name, or nil if no such info exists.
 func (s *session) GetInterceptInfo(name string) *manager.InterceptInfo {
-	if _, ok := s.localIntercepts[name]; ok {
-		return &manager.InterceptInfo{Spec: s.GetInterceptSpec(name)}
-	}
 	if ic := s.getInterceptByName(name); ic != nil {
 		ii := ic.InterceptInfo
 		if ic.containerName != "" {
@@ -888,10 +855,6 @@ func (s *session) ClearIntercepts(c context.Context) error {
 		if err != nil && grpcStatus.Code(err) != grpcCodes.NotFound {
 			return err
 		}
-	}
-	for ic := range s.localIntercepts {
-		dlog.Debugf(c, "Clearing local-only intercept %s", ic)
-		s.RemoveLocalOnlyIntercept(c, ic)
 	}
 	return nil
 }
@@ -994,40 +957,4 @@ func (s *session) InterceptInfo(ctx context.Context, callerID, path string, _ ui
 		dlog.Debugf(ctx, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 	}
 	return r, nil
-}
-
-func (s *session) addLocalOnlyIntercept(c context.Context, spec *manager.InterceptSpec) *rpc.InterceptResult {
-	s.currentInterceptsLock.Lock()
-	update := false
-	s.localIntercepts[spec.Name] = struct{}{}
-	if s.interceptedNamespace == "" {
-		s.interceptedNamespace = spec.Namespace
-		update = true
-	}
-	s.currentInterceptsLock.Unlock()
-	if update {
-		s.updateDaemonNamespaces(c)
-	}
-	return &rpc.InterceptResult{
-		InterceptInfo: &manager.InterceptInfo{
-			Spec:              spec,
-			Disposition:       manager.InterceptDispositionType_ACTIVE,
-			MechanismArgsDesc: "as local-only",
-			ClientSession:     s.sessionInfo,
-		},
-	}
-}
-
-func (s *session) RemoveLocalOnlyIntercept(c context.Context, name string) {
-	dlog.Debugf(c, "removing local-only intercept %s", name)
-
-	// Ensure that namespace is removed from localInterceptedNamespaces if this was the last local intercept
-	// for the given namespace.
-	s.currentInterceptsLock.Lock()
-	delete(s.localIntercepts, name)
-	if len(s.localIntercepts) == 0 && len(s.currentIntercepts) == 0 {
-		s.interceptedNamespace = ""
-	}
-	s.currentInterceptsLock.Unlock()
-	s.updateDaemonNamespaces(c)
 }
