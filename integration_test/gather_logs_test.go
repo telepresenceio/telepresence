@@ -102,8 +102,8 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	require := s.Require()
 	defer func() {
 		ctx := s.Context()
-		itest.TelepresenceQuitOk(ctx)
-		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		itest.TelepresenceDisconnectOk(ctx)
+		stdout := s.TelepresenceConnect(ctx)
 		require.Contains(stdout, "Connected to context")
 	}()
 
@@ -128,31 +128,32 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	itest.ApplyEchoService(ctx, svc, otherOne, 8083)
 	itest.ApplyEchoService(ctx, svc, otherTwo, 8084)
 
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(ctx, "connect", "--namespace", otherOne, "--manager-namespace", s.ManagerNamespace())
 
-	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherOne, "--mount", "false", svc)
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc)
 	s.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherOne, "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
 	)
 	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherOne)
-	itest.TelepresenceOk(ctx, "leave", svc+"-"+otherOne)
+	itest.TelepresenceDisconnectOk(ctx)
 
-	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherTwo, "--mount", "false", svc)
+	itest.TelepresenceOk(ctx, "connect", "--namespace", otherTwo, "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc)
 	s.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherTwo, "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
 	)
 	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherTwo)
-	itest.TelepresenceOk(ctx, "leave", svc+"-"+otherTwo)
+	itest.TelepresenceOk(ctx, "leave", svc)
 
 	bothNsRx := fmt.Sprintf("(?:%s|%s)", otherOne, otherTwo)
 	outputDir := s.T().TempDir()
@@ -164,7 +165,7 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 
 	// Connect using mapped-namespaces
 	itest.TelepresenceDisconnectOk(ctx)
-	stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", otherOne)
+	stdout := itest.TelepresenceOk(ctx, "connect", "--namespace", otherOne, "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", otherOne)
 	require.Contains(stdout, "Connected to context")
 
 	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), svc)

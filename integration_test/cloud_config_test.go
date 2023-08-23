@@ -48,7 +48,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 
 	s.Eventually(func() bool {
 		defer itest.TelepresenceDisconnectOk(ctx)
-		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err = itest.Telepresence(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 		if err != nil {
 			return false
 		}
@@ -109,7 +109,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 
 	var currentLine int64
 	s.Eventually(func() bool {
-		_, _, err = itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		_, _, err = itest.Telepresence(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 		if err != nil {
 			return false
 		}
@@ -155,7 +155,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	ctx = itest.WithConfig(ctx, func(config client.Config) {
 		config.LogLevels().RootDaemon = logrus.DebugLevel
 	})
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
 	itest.TelepresenceDisconnectOk(ctx)
 	levelSet = false
 	for scn.Scan() && !levelSet {
@@ -164,7 +164,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require.False(levelSet, "Root log level not respected when set in config file")
 
 	var view client.SessionConfig
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
 	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
 	require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
 	require.Equal(view.LogLevels().RootDaemon, logrus.DebugLevel)
@@ -242,7 +242,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 		config.LogLevels().UserDaemon = logrus.DebugLevel
 	})
 
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
 	itest.TelepresenceDisconnectOk(ctx)
 
 	levelSet = false

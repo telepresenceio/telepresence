@@ -26,7 +26,7 @@ func WithConnected(np NamespacePair, f func(ctx context.Context, ch NamespacePai
 func (ch *connected) setup(ctx context.Context) bool {
 	t := getT(ctx)
 	// Connect using telepresence-test-developer user
-	stdout, _, err := Telepresence(ctx, "connect", "--manager-namespace", ch.ManagerNamespace())
+	stdout, _, err := Telepresence(ctx, "connect", "--namespace", ch.AppNamespace(), "--manager-namespace", ch.ManagerNamespace())
 	assert.NoError(t, err)
 	assert.Contains(t, stdout, "Connected to context")
 	if t.Failed() {

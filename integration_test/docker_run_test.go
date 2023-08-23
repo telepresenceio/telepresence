@@ -33,13 +33,13 @@ func (s *singleServiceSuite) Test_DockerRun() {
 
 	runDockerRun := func(ctx context.Context, wch chan<- struct{}) {
 		defer close(wch)
-		_, _, _ = itest.Telepresence(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc,
+		_, _, _ = itest.Telepresence(ctx, "intercept", "--mount", "false", svc,
 			"--docker-run", "--port", "9070:8080", "--", "--rm", "-v", abs+":/usr/src/app", tag)
 	}
 
 	assertInterceptResponse := func(ctx context.Context) {
 		s.Eventually(func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		}, 30*time.Second, 3*time.Second)
 
@@ -64,7 +64,7 @@ func (s *singleServiceSuite) Test_DockerRun() {
 
 	assertNotIntercepted := func(ctx context.Context) {
 		s.Eventually(func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && !strings.Contains(stdout, svc+": intercepted")
 		}, 10*time.Second, 2*time.Second)
 	}
@@ -86,7 +86,7 @@ func (s *singleServiceSuite) Test_DockerRun() {
 		wch := make(chan struct{})
 		go runDockerRun(ctx, wch)
 		assertInterceptResponse(ctx)
-		itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
+		itest.TelepresenceOk(ctx, "leave", svc)
 		select {
 		case <-wch:
 		case <-time.After(30 * time.Second):
@@ -107,7 +107,7 @@ func (s *singleServiceSuite) Test_DockerRun() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		s.TelepresenceConnect(ctx)
 		assertNotIntercepted(ctx)
 	})
 
@@ -123,7 +123,7 @@ func (s *singleServiceSuite) Test_DockerRun() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		s.TelepresenceConnect(ctx)
 		assertNotIntercepted(ctx)
 	})
 }
@@ -138,7 +138,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
 	require := s.Require()
-	stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	stdout := s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 
 	match := regexp.MustCompile(`Connected to context ?(.+) \(`).FindStringSubmatch(stdout)
@@ -156,13 +156,13 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 
 	runDockerRun := func(ctx context.Context, wch chan<- struct{}) {
 		defer close(wch)
-		_, _, _ = itest.Telepresence(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc,
+		_, _, _ = itest.Telepresence(ctx, "intercept", "--mount", "false", svc,
 			"--docker-run", "--", "--rm", "-v", abs+":/usr/src/app", tag)
 	}
 
 	assertInterceptResponse := func(ctx context.Context) {
 		s.Eventually(func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		}, 30*time.Second, 3*time.Second)
 
@@ -188,7 +188,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 
 	assertNotIntercepted := func(ctx context.Context) {
 		s.Eventually(func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && !strings.Contains(stdout, svc+": intercepted")
 		}, 10*time.Second, 2*time.Second)
 	}
@@ -210,7 +210,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		wch := make(chan struct{})
 		go runDockerRun(ctx, wch)
 		assertInterceptResponse(ctx)
-		itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
+		itest.TelepresenceOk(ctx, "leave", svc)
 		select {
 		case <-wch:
 		case <-time.After(30 * time.Second):
@@ -231,7 +231,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		s.TelepresenceConnect(ctx)
 		assertNotIntercepted(ctx)
 	})
 
@@ -247,7 +247,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		s.TelepresenceConnect(ctx)
 		assertNotIntercepted(ctx)
 	})
 }

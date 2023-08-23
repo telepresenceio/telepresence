@@ -16,7 +16,7 @@ import (
 func (s *installSuite) limitedRangeTest() {
 	const svc = "echo"
 	ctx := itest.WithUser(s.Context(), s.ManagerNamespace()+":"+itest.TestUser)
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
 	itest.TelepresenceOk(ctx, "loglevel", "debug")
 
 	require := s.Require()
@@ -26,7 +26,7 @@ func (s *installSuite) limitedRangeTest() {
 		s.Eventually(func() bool { return len(itest.RunningPods(ctx, svc, s.AppNamespace())) == 0 }, 2*time.Minute, 6*time.Second)
 	}()
 
-	_, _, err := itest.Telepresence(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc)
+	_, _, err := itest.Telepresence(ctx, "intercept", "--mount", "false", svc)
 	if err != nil {
 		if out, err := itest.KubectlOut(ctx, s.AppNamespace(), "get", "pod", "-o", "yaml", "-l", "app="+svc); err == nil {
 			dlog.Info(ctx, out)
@@ -35,17 +35,17 @@ func (s *installSuite) limitedRangeTest() {
 	require.NoError(err)
 	s.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
 	)
-	itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
+	itest.TelepresenceOk(ctx, "leave", svc)
 
 	// Ensure that LimitRange is injected into traffic-agent
 	out, err := itest.KubectlOut(ctx, s.AppNamespace(), "get", "pods", "-l", "app="+svc, "-o",
-		`jsonpath={.items.*.spec.containers[?(@.name=='traffic-agent')].resources}{","}`)
+		`jsonpath={range .items.*.spec.containers[?(@.name=='traffic-agent')]}{.resources}{","}{end}`)
 	require.NoError(err)
 	dlog.Infof(ctx, "resources = %s", out)
 	var rrs []v1.ResourceRequirements

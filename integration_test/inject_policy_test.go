@@ -49,7 +49,7 @@ func (s *installSuite) injectPolicyTest(ctx context.Context, policy agentconfig.
 	defer s.UninstallTrafficManager(ctx, namespace)
 
 	ctx = itest.WithUser(ctx, namespace+":"+itest.TestUser)
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", namespace)
+	itest.TelepresenceOk(ctx, "connect", "--namespace", namespace, "--manager-namespace", namespace)
 	defer itest.TelepresenceOk(ctx, "quit", "-s")
 
 	itest.TelepresenceOk(ctx, "loglevel", "debug")
@@ -77,7 +77,7 @@ func (s *installSuite) injectPolicyTest(ctx context.Context, policy agentconfig.
 	// An intercept on the pol-disabled must always fail
 	wg.Add(1)
 	go func() {
-		_, _, err := itest.Telepresence(ctx, "intercept", "--namespace", namespace, "--mount", "false", "pol-disabled", "--", "true")
+		_, _, err := itest.Telepresence(ctx, "intercept", "--mount", "false", "pol-disabled", "--", "true")
 		s.Error(err)
 		s.assertInjected(ctx, "pol-disabled", namespace, false, &wg)
 	}()
@@ -85,7 +85,7 @@ func (s *installSuite) injectPolicyTest(ctx context.Context, policy agentconfig.
 	// for OnDemand, an intercept on the pol-none must succeed inject the agent
 	if policy == agentconfig.OnDemand {
 		wg.Add(1)
-		_, _, err := itest.Telepresence(ctx, "intercept", "--namespace", namespace, "--mount", "false", "pol-none", "--", "true")
+		_, _, err := itest.Telepresence(ctx, "intercept", "--mount", "false", "pol-none", "--", "true")
 		s.NoError(err)
 		s.assertInjected(ctx, "pol-none", namespace, true, &wg)
 	}

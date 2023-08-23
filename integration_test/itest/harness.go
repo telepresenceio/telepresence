@@ -2,10 +2,13 @@ package itest
 
 import (
 	"context"
+	"regexp"
 	"runtime/debug"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 type Harness interface {
@@ -51,6 +54,17 @@ func (h *harness) HarnessContext() context.Context {
 }
 
 func (h *harness) RunSuite(s TestingSuite) {
+	ctx := h.HarnessContext()
+	suiteRx := dos.Getenv(ctx, "TEST_SUITE")
+	if suiteRx != "" {
+		r, err := regexp.Compile(suiteRx)
+		if err != nil {
+			getT(ctx).Fatal(err)
+		}
+		if !r.MatchString(s.SuiteName()) {
+			return
+		}
+	}
 	h.HarnessT().Run(s.SuiteName(), func(t *testing.T) { suite.Run(t, s) })
 }
 
