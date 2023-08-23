@@ -141,7 +141,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	stdout := s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 
-	match := regexp.MustCompile(`Connected to context ?(.+) \(`).FindStringSubmatch(stdout)
+	match := regexp.MustCompile(`Connected to context ?(.+),`).FindStringSubmatch(stdout)
 	require.Len(match, 2)
 
 	daemonName := docker.SafeContainerName("tp-" + match[1])

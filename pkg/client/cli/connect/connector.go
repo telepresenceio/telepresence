@@ -269,7 +269,7 @@ func connectSession(ctx context.Context, userD *daemon.UserClient, request *daem
 	var msg string
 	switch ci.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
-		fmt.Fprintf(output.Info(ctx), "Connected to context %s (%s)\n", ci.ClusterContext, ci.ClusterServer)
+		fmt.Fprintf(output.Info(ctx), "Connected to context %s, namepace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
 		return &daemon.Session{
 			UserClient: *userD,
 			Info:       ci,

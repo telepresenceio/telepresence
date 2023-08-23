@@ -169,7 +169,7 @@ func NewSession(
 		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
-	dlog.Infof(ctx, "Connected to context %s (%s)", cluster.Context, cluster.Server)
+	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
 
 	// Phone home with the information about the size of the cluster
 	ctx = cluster.WithK8sInterface(ctx)
@@ -245,6 +245,7 @@ func NewSession(
 		ClusterServer:    cluster.Kubeconfig.Server,
 		ClusterId:        cluster.GetClusterId(ctx),
 		SessionInfo:      tmgr.SessionInfo(),
+		Namespace:        cluster.Namespace,
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
 		DaemonStatus:     daemonStatus,
@@ -872,6 +873,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterServer:  cfg.Server,
 		ClusterId:      s.GetClusterId(c),
 		SessionInfo:    s.SessionInfo(),
+		Namespace:      s.Namespace,
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
