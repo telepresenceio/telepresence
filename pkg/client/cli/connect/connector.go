@@ -208,24 +208,26 @@ func ensureDaemonVersion(ctx context.Context) error {
 	return versionCheck(ctx, client.GetExe(), daemon.GetUserClient(ctx))
 }
 
-func ensureSession(ctx context.Context, required bool) (context.Context, error) {
+func ensureSession(cmd *cobra.Command, required bool) error {
+	ctx := cmd.Context()
 	if daemon.GetSession(ctx) != nil {
-		return ctx, nil
+		return nil
 	}
-	s, err := connectSession(ctx, daemon.GetUserClient(ctx), daemon.GetRequest(ctx), required)
+	s, err := connectSession(cmd, daemon.GetUserClient(ctx), daemon.GetRequest(ctx), required)
 	if err != nil {
-		return ctx, err
+		return err
 	}
 	if s == nil {
-		return ctx, nil
+		return nil
 	}
 	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
 		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
 	}
-	return daemon.WithSession(ctx, s), nil
+	cmd.SetContext(daemon.WithSession(ctx, s))
+	return nil
 }
 
-func connectSession(ctx context.Context, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
+func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote {
@@ -233,6 +235,7 @@ func connectSession(ctx context.Context, userD *daemon.UserClient, request *daem
 		delete(request.KubeFlags, "KUBECONFIG")
 	}
 	cat := errcat.Unknown
+	ctx := cmd.Context()
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
 		if ci, err = userD.Status(ctx, &empty.Empty{}); err != nil {
@@ -251,6 +254,12 @@ func connectSession(ctx context.Context, userD *daemon.UserClient, request *daem
 			}
 		case connector.ConnectInfo_DISCONNECTED:
 			// proceed with connect
+			if required && daemon.GetRequest(ctx).Implicit {
+				_, _ = fmt.Fprintf(output.Info(ctx),
+					`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
+						"connect to take place. The implicit connect behavior is deprecated and will be removed in a future release.\n",
+					cmd.UseLine())
+			}
 		default:
 			if ci.ErrorCategory != 0 {
 				cat = errcat.Category(ci.ErrorCategory)

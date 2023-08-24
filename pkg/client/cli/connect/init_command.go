@@ -44,6 +44,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 			}
 			return err
 		}
+		cmd.SetContext(ctx)
 
 		// RootDaemon == Optional means that the RootDaemon must be started if
 		// the UserClient was started
@@ -63,10 +64,9 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 	}
 
 	if v := as[ann.Session]; v == ann.Optional || v == ann.Required {
-		if ctx, err = ensureSession(ctx, v == ann.Required); err != nil {
+		if err = ensureSession(cmd, v == ann.Required); err != nil {
 			return err
 		}
 	}
-	cmd.SetContext(ctx)
 	return nil
 }
