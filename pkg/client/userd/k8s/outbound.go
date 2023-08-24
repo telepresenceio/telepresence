@@ -17,12 +17,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
-// nsWatcher runs a Kubernetes Watcher that provide information about the cluster's namespaces'.
-//
-// A filtered list of namespaces is used for creating a DNS search path which is propagated to
-// the DNS-resolver in the root daemon each time an update arrives.
-//
-// The first update will close the firstSnapshotArrived channel.
+// StartNamespaceWatcher runs a Kubernetes Watcher that provide information about the cluster's namespaces'.
+// The function waits for the first snapshot to arrive before returning.
 func (kc *Cluster) StartNamespaceWatcher(ctx context.Context) {
 	kc.namespaceWatcherSnapshot = make(map[string]struct{})
 	nsSynced := make(chan struct{})
