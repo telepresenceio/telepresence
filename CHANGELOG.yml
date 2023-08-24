@@ -58,16 +58,18 @@ items:
         title: Change json output of telepresence list command
         body: >-
           Replace deprecated info in the JSON output of the telepresence list command.
-  - version: 2.14.2
-    date: "2023-07-26"
+  - version: 2.14.4
+    date: "2023-08-21"
     notes:
       - type: bugfix
-        title: Telepresence now use the OSS agent in its latest version by default.
+        title: Nil pointer exception when upgrading the traffic-manager.
         body: >-
-          The traffic manager admin was forced to set it manually during the chart installation.
-        docs: https://github.com/telepresenceio/telepresence/issues/3271
-  - version: 2.14.1
-    date: "2023-07-07"
+          Upgrading the traffic-manager using <code>telepresence helm upgrade</code> would sometimes
+          result in a helm error message <q>executing "telepresence/templates/intercept-env-configmap.yaml"
+          at <.Values.intercept.environment.excluded>: nil pointer evaluating interface {}.excluded"</q>
+        docs: https://github.com/telepresenceio/telepresence/issues/3313
+  - version: 2.14.2
+    date: "2023-07-26"
     notes:
       - type: bugfix
         title: Telepresence now use the OSS agent in its latest version by default.
