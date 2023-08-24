@@ -307,7 +307,7 @@ func TestInstallID(t *testing.T) {
 			}
 
 			// Then do...
-			scout := NewReporter(ctx, "go-test")
+			scout := NewReporterForInstallType(ctx, "go-test", CLI, DefaultReportAnnotators).(*reporter)
 			scout.reporter.Endpoint = metriton.BetaEndpoint
 			actualID := scout.reporter.InstallID()
 			actualErr, _ := scout.reporter.BaseMetadata["install_id_error"].(string)
@@ -488,7 +488,7 @@ func TestReport(t *testing.T) {
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, v)
 			}
-			scout := &Reporter{
+			scout := &reporter{
 				buffer: make(chan bufEntry, 40),
 				reporter: &metriton.Reporter{
 					Application: mockApplication,

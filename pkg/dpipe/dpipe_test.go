@@ -5,9 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-
-	//nolint:depguard // This short script has no logging and no Contexts.
-	"os/exec"
+	"os/exec" //nolint:depguard // This short script has no logging and no Contexts.
 	"runtime"
 	"testing"
 	"time"

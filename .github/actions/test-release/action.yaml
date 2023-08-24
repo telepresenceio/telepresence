@@ -1,0 +1,50 @@
+name: Test OSS Release binaries
+description: Test OSS Release binaries
+inputs:
+  release_version:
+    description: "The current release of Telepresence in the form of v2.x.x"
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: check version binaries
+      env:
+        DOWNLOAD_URL: "https://app.getambassador.io/download/tel2oss/releases/download"
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "macOS" ] && [ "${{ runner.arch }}" = "X64" ]; then
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-darwin-amd64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+        fi
+        if [ "${{ runner.os }}" = "macOS" ] && [ "${{ runner.arch }}" = "ARM64" ]; then
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-darwin-arm64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+        fi
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-windows-amd64.zip -o ./telepresence.zip || { echo "Curl command failed" ; exit 1; }
+          unzip ./telepresence.zip || { echo "Unzip command failed" ; exit 1; }
+        fi
+        if [ "${{ runner.os }}" = "Linux" ]; then
+          if [ "${{ runner.arch }}" ==  "ARM64" ]; then
+            curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-linux-arm64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          else
+            curl -fL ${{ env.DOWNLOAD_URL }}/${{ inputs.release_version }}/telepresence-linux-amd64 -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          fi
+        fi
+        chmod +x ./telepresence
+
+        output=$(./telepresence version)
+
+        if [ $? -eq 0 ]; then
+            echo "Telepresence command executed successfully"
+        else
+            echo "Telepresence command failed"
+            exit 1
+        fi
+
+        echo "$output" | grep -q "Client\s*:\s*${{ inputs.release_version }}"
+
+        if [ $? -eq 0 ]; then
+            echo "Version match!"
+        else
+            echo "Version does not match!"
+            exit 1
+        fi

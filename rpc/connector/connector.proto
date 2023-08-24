@@ -286,8 +286,11 @@ message WorkloadInfo {
   // Reason why workload cannot be intercepted, or empty if it can.
   string not_interceptable_reason = 2;
 
-  // AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
-  telepresence.manager.AgentInfo agent_info = 3;
+  message Sidecar {
+    bytes json = 1;
+  }
+  // Sidecar
+  Sidecar sidecar = 10;
 
   // InterceptInfos reported from the traffic manager in case the workload is currently intercepted
   repeated telepresence.manager.InterceptInfo intercept_infos = 9;
@@ -298,7 +301,6 @@ message WorkloadInfo {
   message ServiceReference {
     string name = 1;
     string namespace = 2;
-    string uid = 3;
     message Port {
       string name = 1;
       int32 port = 2;
@@ -306,7 +308,7 @@ message WorkloadInfo {
     repeated Port ports = 4;
   }
 
-  optional ServiceReference service = 7;
+  map<string, ServiceReference> services = 11;
 
   string uid = 8;
 

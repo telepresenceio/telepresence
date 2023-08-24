@@ -142,8 +142,8 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		}
 		wt = &si
 	}
-	reporter := scout.NewReporter(ctx, "cli")
-	us.InstallID = reporter.InstallID()
+	ctx = scout.NewReporter(ctx, "cli")
+	us.InstallID = scout.InstallID(ctx)
 	us.Running = true
 	version, err := userD.Version(ctx, &empty.Empty{})
 	if err != nil {

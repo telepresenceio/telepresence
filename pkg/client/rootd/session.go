@@ -69,8 +69,6 @@ import (
 //
 // A zero Session is invalid; you must use newSession.
 type Session struct {
-	scout *scout.Reporter
-
 	tunVif *vif.TunnelingDevice
 
 	// clientConn is the connection that uses the connector's socket
@@ -157,7 +155,7 @@ type Session struct {
 	done chan struct{}
 }
 
-type NewSessionFunc func(context.Context, *scout.Reporter, *rpc.OutboundInfo) (*Session, error)
+type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (*Session, error)
 
 type newSessionKey struct{}
 
@@ -217,19 +215,19 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 }
 
 // NewSession returns a new properly initialized session object.
-func NewSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo) (*Session, error) {
+func NewSession(c context.Context, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
 
 	conn, mc, ver, err := connectToUserDaemon(c)
 	if mc == nil || err != nil {
 		return nil, err
 	}
-	s := newSession(c, scout, mi, mc, ver)
+	s := newSession(c, mi, mc, ver)
 	s.clientConn = conn
 	return s, nil
 }
 
-func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
+func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
 	cfg := client.GetDefaultConfig()
 	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
 	if err != nil {
@@ -244,7 +242,6 @@ func newSession(c context.Context, scout *scout.Reporter, mi *rpc.OutboundInfo, 
 	as := iputil.ConvertSubnets(mi.AlsoProxySubnets)
 	ns := iputil.ConvertSubnets(mi.NeverProxySubnets)
 	s := &Session{
-		scout:             scout,
 		handlers:          tunnel.NewPool(),
 		rndSource:         rand.NewSource(time.Now().UnixNano()),
 		session:           mi.Session,
@@ -371,7 +368,7 @@ func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 
 	// Fire and forget to send metrics out.
 	go func() {
-		s.scout.Report(ctx, "update_routes",
+		scout.Report(ctx, "update_routes",
 			scout.Entry{Key: "cluster_subnets", Value: len(s.clusterSubnets)},
 			scout.Entry{Key: "also_proxy_subnets", Value: len(s.alsoProxySubnets)},
 			scout.Entry{Key: "never_proxy_subnets", Value: len(s.neverProxySubnets)},
@@ -772,7 +769,7 @@ func (s *Session) stop(c context.Context) {
 	}
 	dlog.Debug(c, "Bringing down TUN-device")
 
-	s.scout.Report(c, "incluster_dns_queries",
+	scout.Report(c, "incluster_dns_queries",
 		scout.Entry{Key: "total", Value: s.dnsLookups},
 		scout.Entry{Key: "failures", Value: s.dnsFailures})
 
