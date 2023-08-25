@@ -140,13 +140,13 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) context.Context
 	}
 	cr.kubeConfig.Context = nil // --context is global
 
-	// Handle deprecated namespace flag
-	dlog.Debug(ctx, "Checking namespace flag")
-	if nsFlag := cmd.Flag("namespace"); nsFlag != nil && nsFlag.Changed {
-		ns := nsFlag.Value.String()
-		*cr.kubeConfig.Namespace = ns
-		cr.KubeFlags["namespace"] = ns
-		dlog.Debugf(ctx, "Namespace was set to %q", ns)
+	// Handle deprecated namespace flag, but allow it in the list command.
+	if cmd.Use != "list" {
+		if nsFlag := cmd.Flag("namespace"); nsFlag != nil && nsFlag.Changed {
+			ns := nsFlag.Value.String()
+			*cr.kubeConfig.Namespace = ns
+			cr.KubeFlags["namespace"] = ns
+		}
 	}
 	cr.setGlobalConnectFlags(cmd)
 	cr.addKubeconfigEnv()
