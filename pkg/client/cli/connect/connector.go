@@ -280,7 +280,7 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 	var msg string
 	switch ci.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
-		fmt.Fprintf(output.Info(ctx), "Connected to context %s, namepace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
+		fmt.Fprintf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
 		return &daemon.Session{
 			UserClient: *userD,
 			Info:       ci,
