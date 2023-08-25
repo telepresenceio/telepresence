@@ -139,6 +139,15 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) context.Context
 		kubeConfig: genericclioptions.NewConfigFlags(false),
 	}
 	cr.kubeConfig.Context = nil // --context is global
+
+	// Handle deprecated namespace flag
+	dlog.Debug(ctx, "Checking namespace flag")
+	if nsFlag := cmd.Flag("namespace"); nsFlag != nil && nsFlag.Changed {
+		ns := nsFlag.Value.String()
+		*cr.kubeConfig.Namespace = ns
+		cr.KubeFlags["namespace"] = ns
+		dlog.Debugf(ctx, "Namespace was set to %q", ns)
+	}
 	cr.setGlobalConnectFlags(cmd)
 	cr.addKubeconfigEnv()
 	return context.WithValue(ctx, requestKey{}, &cr)

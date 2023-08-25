@@ -18,7 +18,6 @@ import (
 type Command struct {
 	Name           string // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
 	AgentName      string // --workload || Command[0] // only valid if !localOnly
-	Namespace      string // --namespace
 	Port           string // --port // only valid if !localOnly
 	ServiceName    string // --service // only valid if !localOnly
 	Address        string // --address // only valid if !localOnly
@@ -91,7 +90,7 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&a.DockerMount, "docker-mount", "", ``+
 		`The volume mount point in docker. Defaults to same as "--mount"`)
 
-	flags.StringVarP(&a.Namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+	flags.StringP("namespace", "n", "", "If present, the namespace scope for this CLI request")
 
 	flags.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
 

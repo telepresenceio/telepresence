@@ -245,6 +245,8 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 		case connector.ConnectInfo_ALREADY_CONNECTED:
 			if cc, ok := request.KubeFlags["context"]; ok && cc != ci.ClusterContext {
 				ci.Error = connector.ConnectInfo_MUST_RESTART
+			} else if ns, ok := request.KubeFlags["namespace"]; ok && ns != ci.Namespace {
+				ci.Error = connector.ConnectInfo_MUST_RESTART
 			} else {
 				return &daemon.Session{
 					UserClient: *userD,
