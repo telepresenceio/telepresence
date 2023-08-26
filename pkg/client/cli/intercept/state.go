@@ -106,7 +106,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 	// Parse port into spec based on how it's formatted
 	var err error
-	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Remote)
+	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Remote())
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		}
 	}()
 
-	if ud.Remote && ir.LocalMountPort == 0 {
+	if ud.Remote() && ir.LocalMountPort == 0 {
 		// No use having the remote container actually mount, so let's have it create a bridge
 		// to the remote sftp server instead.
 		lma, err := dnet.FreePortsTCP(1)
@@ -358,22 +358,20 @@ func (s *state) runCommand(ctx context.Context) error {
 	}
 
 	var dr *dockerRun
-	var daemonName string
 	procCtx := ctx
-	if ud.Remote {
-		daemonName = docker.SafeContainerName("tp-" + s.status.ClusterContext)
+	if ud.Remote() {
 		if daemonPort := ud.DaemonPort(); daemonPort > 0 {
 			// Ensure that the intercept handler is stopped properly if the daemon quits
 			var cancel context.CancelFunc
 			procCtx, cancel = context.WithCancel(procCtx)
 			go func() {
-				if err := docker.CancelWhenRmFromCache(procCtx, cancel, daemon.InfoFile(s.status.ClusterContext, daemonPort)); err != nil {
+				if err := docker.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID.DaemonInfoFileName(daemonPort)); err != nil {
 					dlog.Error(ctx)
 				}
 			}()
 		}
 	}
-	dr = s.startInDocker(ctx, daemonName, envFile, s.Cmdline)
+	dr = s.startInDocker(ctx, ud.DaemonID, envFile, s.Cmdline)
 	if dr.err == nil {
 		dr.err = s.addInterceptorToDaemon(ctx, dr.cmd, dr.name)
 	}

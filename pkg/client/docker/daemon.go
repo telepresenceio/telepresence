@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -42,11 +43,10 @@ import (
 )
 
 const (
-	telepresenceImage   = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
-	dockerTpCache       = "/root/.cache/telepresence"
-	dockerTpConfig      = "/root/.config/telepresence"
-	dockerTpLog         = "/root/.cache/telepresence/logs"
-	containerNamePrefix = "tp-"
+	telepresenceImage = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
+	dockerTpCache     = "/root/.cache/telepresence"
+	dockerTpConfig    = "/root/.config/telepresence"
+	dockerTpLog       = "/root/.cache/telepresence/logs"
 )
 
 // ClientImage returns the fully qualified name of the docker image that corresponds to
@@ -57,7 +57,7 @@ func ClientImage(ctx context.Context) string {
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
-func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, error) {
+func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, *net.TCPAddr, error) {
 	as, err := dnet.FreePortsTCP(1)
 	if err != nil {
 		return nil, nil, err
@@ -65,7 +65,7 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	addr := as[0]
 	port := addr.Port
 	opts := []string{
-		"--name", SafeContainerName(containerNamePrefix + name),
+		"--name", daemonID.ContainerName(),
 		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
 		"--device", "/dev/net/tun:/dev/net/tun",
@@ -86,32 +86,11 @@ func DaemonOptions(ctx context.Context, name string) ([]string, *net.TCPAddr, er
 	return opts, addr, nil
 }
 
-// SafeContainerName returns a string that can safely be used as an argument
-// to docker run --name. Only characters [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed.
-// Others are replaced by an underscore, or if it's the very first character,
-// by the character 'a'.
-func SafeContainerName(name string) string {
-	n := strings.Builder{}
-	for i, c := range name {
-		switch {
-		case (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
-			n.WriteByte(byte(c))
-		case i > 0 && (c == '_' || c == '.' || c == '-'):
-			n.WriteByte(byte(c))
-		case i > 0:
-			n.WriteByte('_')
-		default:
-			n.WriteByte('a')
-		}
-	}
-	return n.String()
-}
-
 // DaemonArgs returns the arguments to pass to a docker run when starting a container daemon.
-func DaemonArgs(name string, port int) []string {
+func DaemonArgs(daemonID *daemon.Identifier, port int) []string {
 	return []string{
 		"connector-foreground",
-		"--name", SafeContainerName("docker-" + name),
+		"--name", "docker-" + daemonID.String(),
 		"--address", fmt.Sprintf(":%d", port),
 		"--embed-network",
 	}
@@ -119,25 +98,37 @@ func DaemonArgs(name string, port int) []string {
 
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
-func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err error) {
-	port, err := daemon.PortForName(ctx, name)
-	if err != nil {
-		return nil, err
+func DiscoverDaemon(ctx context.Context, match *regexp.Regexp) (conn *grpc.ClientConn, identifier *daemon.Identifier, err error) {
+	cr := daemon.GetRequest(ctx)
+	if match == nil && !cr.Implicit {
+		identifier, err = daemon.IdentifierFromFlags(cr.KubeFlags)
+		if err != nil {
+			return nil, nil, err
+		}
+		match = regexp.MustCompile(regexp.QuoteMeta(identifier.String()))
 	}
+	info, err := daemon.LoadMatchingInfo(ctx, match)
+	if err != nil {
+		return nil, nil, err
+	}
+	daemonID := daemon.NewIdentifier(info.KubeContext, info.Namespace)
 	var addr string
 	if proc.RunningInContainer() {
 		// Containers use the daemon container DNS name
-		addr = fmt.Sprintf("%s:%d", name, port)
+		addr = fmt.Sprintf("%s:%d", daemonID.ContainerName(), info.DaemonPort)
 	} else {
 		// The host relies on that the daemon has exposed a port to localhost
-		addr = fmt.Sprintf(":%d", port)
+		addr = fmt.Sprintf(":%d", info.DaemonPort)
 	}
-	return connectDaemon(ctx, addr)
+	if conn, err = connectDaemon(ctx, daemonID, addr); err != nil {
+		return nil, nil, err
+	}
+	return conn, daemonID, nil
 }
 
 // connectDaemon connects to a daemon at the given address.
-func connectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
-	if err = enableK8SAuthenticator(ctx); err != nil {
+func connectDaemon(ctx context.Context, daemonID *daemon.Identifier, address string) (conn *grpc.ClientConn, err error) {
+	if err = enableK8SAuthenticator(ctx, daemonID); err != nil {
 		return nil, err
 	}
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
@@ -271,7 +262,7 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 	return startAuthenticatorService(ctx, portFile, kubeFlags, configFiles)
 }
 
-func enableK8SAuthenticator(ctx context.Context) error {
+func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) error {
 	cr := daemon.GetRequest(ctx)
 	if kkf, ok := cr.KubeFlags["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
 		// Been there, done that
@@ -283,6 +274,11 @@ func enableK8SAuthenticator(ctx context.Context) error {
 		return err
 	}
 	loader := configFlags.ToRawKubeConfigLoader()
+	ns, _, err := loader.Namespace()
+	if err != nil {
+		return err
+	}
+
 	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
 	dlog.Debugf(ctx, "config = %v", configFiles)
 	config, err := loader.RawConfig()
@@ -297,7 +293,7 @@ func enableK8SAuthenticator(ctx context.Context) error {
 	if err = api.MinifyConfig(&config); err != nil {
 		return err
 	}
-	dlog.Debugf(ctx, "context = %v", config.CurrentContext)
+	dlog.Debugf(ctx, "context = %q, namespace %q", config.CurrentContext, ns)
 
 	// Minify guarantees that the CurrentContext is set, but not that it has a cluster
 	cc := config.Contexts[config.CurrentContext]
@@ -330,7 +326,7 @@ func enableK8SAuthenticator(ctx context.Context) error {
 	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
 		return err
 	}
-	err = handleLocalK8s(ctx, cc.Cluster, config.Clusters[cc.Cluster])
+	err = handleLocalK8s(ctx, daemonID, cc.Cluster, config.Clusters[cc.Cluster])
 	if err != nil {
 		dlog.Errorf(ctx, "unable to handle local K8s: %v", err)
 	}
@@ -347,7 +343,7 @@ func enableK8SAuthenticator(ctx context.Context) error {
 // handleLocalK8s checks if the cluster is using a well known provider (currently minikube or kind)
 // and ensures that the service is modified to access the docker internal address instead of an
 // address available on the host.
-func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) error {
+func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, clusterName string, cl *api.Cluster) error {
 	isKind := strings.HasPrefix(clusterName, "kind-")
 	isMinikube := false
 	if !isKind {
@@ -397,7 +393,7 @@ func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) er
 		cl.Server = server.String()
 	}
 	if network != "" {
-		dcName := SafeContainerName(containerNamePrefix + clusterName)
+		dcName := daemonID.ContainerName()
 		if err = cli.NetworkConnect(ctx, network, dcName, nil); err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				dlog.Debugf(ctx, "failed to connect network %s to container %s: %v", network, dcName, err)
@@ -410,7 +406,7 @@ func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) er
 // LaunchDaemon ensures that the image returned by ClientImage exists by calling PullImage. It then uses the
 // options DaemonOptions and DaemonArgs to start the image, and finally connectDaemon to connect to it. A
 // successful start yields a cache.Info entry in the cache.
-func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err error) {
+func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (conn *grpc.ClientConn, err error) {
 	if proc.RunningInContainer() {
 		return nil, errors.New("unable to start a docker container from within a container")
 	}
@@ -422,11 +418,11 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	if err = EnsureNetwork(ctx, "telepresence"); err != nil {
 		return nil, err
 	}
-	opts, addr, err := DaemonOptions(ctx, name)
+	opts, addr, err := DaemonOptions(ctx, daemonID)
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	args := DaemonArgs(name, addr.Port)
+	args := DaemonArgs(daemonID, addr.Port)
 
 	allArgs := make([]string, 0, len(opts)+len(args)+4)
 	allArgs = append(allArgs,
@@ -438,19 +434,23 @@ func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err 
 	allArgs = append(allArgs, image)
 	allArgs = append(allArgs, args...)
 	for i := 1; ; i++ {
-		_, err = tryLaunch(ctx, addr.Port, name, allArgs)
+		_, err = tryLaunch(ctx, daemonID, addr.Port, allArgs)
 		if err != nil {
 			if i < 6 && strings.Contains(err.Error(), "already in use by container") {
 				// This may happen if the daemon has died (and hence, we never discovered it), but
 				// the container still hasn't died. Let's sleep for a short while and retry.
 				dtime.SleepWithContext(ctx, time.Duration(i)*200*time.Millisecond)
+				dlog.Debugf(ctx, "retry after: %v", err)
 				continue
 			}
 			return nil, errcat.NoDaemonLogs.New(err)
 		}
 		break
 	}
-	return connectDaemon(ctx, addr.String())
+	if conn, err = connectDaemon(ctx, daemonID, addr.String()); err != nil {
+		return nil, err
+	}
+	return conn, nil
 }
 
 // containerPort returns the port that the container uses internally to expose the given
@@ -531,7 +531,7 @@ func detectKind(cns []types.ContainerJSON, hostAddrPort netip.AddrPort) (string,
 	return "", ""
 }
 
-func tryLaunch(ctx context.Context, port int, name string, args []string) (string, error) {
+func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port int, args []string) (string, error) {
 	stdErr := bytes.Buffer{}
 	stdOut := bytes.Buffer{}
 	dlog.Debug(ctx, shellquote.ShellString("docker", args))
@@ -552,8 +552,9 @@ func tryLaunch(ctx context.Context, port int, name string, args []string) (strin
 			Options:     map[string]string{"cid": cid},
 			InDocker:    true,
 			DaemonPort:  port,
-			KubeContext: name,
-		}, daemon.InfoFile(name, port))
+			KubeContext: daemonID.KubeContext,
+			Namespace:   daemonID.Namespace,
+		}, daemonID.DaemonInfoFileName(port))
 }
 
 // CancelWhenRmFromCache watches for the file to be removed from the cache, then calls cancel.

@@ -238,7 +238,7 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	ctx = userd.WithService(ctx, s.self)
 
 	if s.daemonAddress != nil {
-		go runAliveAndCancellation(ctx, cancel, config.Context, s.daemonAddress.Port)
+		go runAliveAndCancellation(ctx, cancel, config.Context, config.Namespace, s.daemonAddress.Port)
 	}
 
 	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config)
@@ -294,14 +294,15 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	return rsp
 }
 
-func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, name string, port int) {
-	daemonInfoFile := daemon.InfoFile(name, port)
+func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, contextName, namespace string, port int) {
+	daemonID := daemon.NewIdentifier(contextName, namespace)
+	daemonInfoFile := daemonID.DaemonInfoFileName(port)
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
-	g.Go(fmt.Sprintf("info-kicker-%s-%d", name, port), func(ctx context.Context) error {
+	g.Go(fmt.Sprintf("info-kicker-%s-%d", daemonID, port), func(ctx context.Context) error {
 		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
 		return daemon.KeepInfoAlive(ctx, daemonInfoFile)
 	})
-	g.Go(fmt.Sprintf("info-watcher-%s-%d", name, port), func(ctx context.Context) error {
+	g.Go(fmt.Sprintf("info-watcher-%s-%d", daemonID, port), func(ctx context.Context) error {
 		// Cancel the session if the daemon info file is removed.
 		return daemon.WatchInfos(ctx, func(ctx context.Context) error {
 			ok, err := daemon.InfoExists(ctx, daemonInfoFile)

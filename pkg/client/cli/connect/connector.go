@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -95,38 +96,40 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 		if cr.Docker {
 			return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
 		}
-		return ctx, newUserDaemon(conn, false), nil
+		return ctx, newUserDaemon(conn, nil), nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return ctx, nil, errcat.NoDaemonLogs.New(err)
 	}
 
 	// Check if a running daemon can be discovered.
-	name, err := contextName(ctx)
-	if err != nil {
-		return ctx, nil, err
-	}
 	ctx, err = docker.EnableClient(ctx)
 	if err != nil && cr.Docker {
 		return ctx, nil, errcat.NoDaemonLogs.New(err)
 	}
 
+	var daemonID *daemon.Identifier
 	if err == nil {
-		conn, err = docker.DiscoverDaemon(ctx, name)
+		conn, daemonID, err = docker.DiscoverDaemon(ctx, cr.Use)
 		if err == nil {
-			return ctx, newUserDaemon(conn, true), nil
+			return ctx, newUserDaemon(conn, daemonID), nil
+		}
+		var infoMatchErr daemon.InfoMatchError
+		if errors.As(err, &infoMatchErr) {
+			return ctx, nil, err
 		}
 		if !errors.Is(err, os.ErrNotExist) {
-			return ctx, nil, errcat.NoDaemonLogs.New(err)
+			dlog.Debug(ctx, err.Error())
 		}
 	}
+	daemonID, err = daemon.IdentifierFromFlags(cr.KubeFlags)
 	if cr.Docker {
 		if required {
-			conn, err = docker.LaunchDaemon(ctx, name)
+			conn, err = docker.LaunchDaemon(ctx, daemonID)
 			if err != nil {
 				return ctx, nil, errcat.NoDaemonLogs.New(err)
 			}
-			return ctx, newUserDaemon(conn, true), nil
+			return ctx, newUserDaemon(conn, daemonID), nil
 		}
 		return ctx, nil, ErrNoUserDaemon
 	}
@@ -153,26 +156,14 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if err != nil {
 		return ctx, nil, err
 	}
-	return ctx, newUserDaemon(conn, false), nil
+	return ctx, newUserDaemon(conn, nil), nil
 }
 
-func contextName(ctx context.Context) (string, error) {
-	var flags map[string]string
-	if cr := daemon.GetRequest(ctx); cr != nil {
-		flags = cr.KubeFlags
-	}
-	name, _, err := client.CurrentContext(flags)
-	if err != nil {
-		return "", err
-	}
-	return name, nil
-}
-
-func newUserDaemon(conn *grpc.ClientConn, remote bool) *daemon.UserClient {
+func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.UserClient {
 	return &daemon.UserClient{
 		ConnectorClient: connector.NewConnectorClient(conn),
 		Conn:            conn,
-		Remote:          remote,
+		DaemonID:        daemonID,
 	}
 }
 
@@ -192,7 +183,7 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 		if err != nil {
 			return ctx, err
 		}
-		ud = newUserDaemon(conn, true)
+		ud = newUserDaemon(conn, daemon.NewIdentifier("", ""))
 	} else {
 		var err error
 		ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)
@@ -230,7 +221,7 @@ func ensureSession(cmd *cobra.Command, required bool) error {
 func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
-	if userD.Remote {
+	if userD.Remote() {
 		// We never pass on KUBECONFIG to a remote daemon.
 		delete(request.KubeFlags, "KUBECONFIG")
 	}

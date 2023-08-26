@@ -12,8 +12,12 @@ import (
 
 type UserClient struct {
 	connector.ConnectorClient
-	Conn   *grpc.ClientConn
-	Remote bool
+	Conn     *grpc.ClientConn
+	DaemonID *Identifier
+}
+
+func (c *UserClient) Remote() bool {
+	return c.DaemonID != nil
 }
 
 type Session struct {
@@ -49,7 +53,7 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 }
 
 func (ud *UserClient) DaemonPort() int {
-	if ud.Remote {
+	if ud.Remote() {
 		addr := ud.Conn.Target()
 		if lc := strings.LastIndexByte(addr, ':'); lc >= 0 {
 			if port, err := strconv.Atoi(addr[lc+1:]); err == nil {

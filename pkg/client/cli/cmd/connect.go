@@ -19,7 +19,9 @@ func connectCmd() *cobra.Command {
 			ann.Session: ann.Required,
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			request.CommitFlags(cmd)
+			if err := request.CommitFlags(cmd); err != nil {
+				return err
+			}
 			return connect.RunConnect(cmd, args)
 		},
 	}

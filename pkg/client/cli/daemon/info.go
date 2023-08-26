@@ -7,11 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -19,7 +20,29 @@ type Info struct {
 	Options     map[string]string `json:"options,omitempty"`
 	InDocker    bool              `json:"in_docker,omitempty"`
 	KubeContext string            `json:"kube_context,omitempty"`
+	Namespace   string            `json:"namespace,omitempty"`
 	DaemonPort  int               `json:"daemon_port,omitempty"`
+}
+
+// SafeContainerName returns a string that can safely be used as an argument
+// to docker run --name. Only characters [a-zA-Z0-9][a-zA-Z0-9_.-] are allowed.
+// Others are replaced by an underscore, or if it's the very first character,
+// by the character 'a'.
+func SafeContainerName(name string) string {
+	n := strings.Builder{}
+	for i, c := range name {
+		switch {
+		case (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'):
+			n.WriteByte(byte(c))
+		case i > 0 && (c == '_' || c == '.' || c == '-'):
+			n.WriteByte(byte(c))
+		case i > 0:
+			n.WriteByte('_')
+		default:
+			n.WriteByte('a')
+		}
+	}
+	return n.String()
 }
 
 const (
@@ -57,13 +80,13 @@ func LoadInfos(ctx context.Context) ([]*Info, error) {
 		return nil, err
 	}
 
-	infos := make([]*Info, len(files))
+	DaemonInfos := make([]*Info, len(files))
 	for i, file := range files {
-		if err = cache.LoadFromUserCache(ctx, &infos[i], filepath.Join(daemonsDirName, file.Name())); err != nil {
+		if err = cache.LoadFromUserCache(ctx, &DaemonInfos[i], filepath.Join(daemonsDirName, file.Name())); err != nil {
 			return nil, err
 		}
 	}
-	return infos, nil
+	return DaemonInfos, nil
 }
 
 func infoFiles(ctx context.Context) ([]fs.DirEntry, error) {
@@ -94,29 +117,40 @@ func infoFiles(ctx context.Context) ([]fs.DirEntry, error) {
 	return active, err
 }
 
-var (
-	diNameRx   = regexp.MustCompile(`^(.+?)-(\d+)\.json$`)
-	pathNameRx = regexp.MustCompile(`[^a-zA-Z0-9-_\.]`)
-)
+type InfoMatchError string
 
-func PortForName(ctx context.Context, context string) (int, error) {
-	context = pathNameRx.ReplaceAllString(context, "-")
-	files, err := infoFiles(ctx)
-	if err != nil {
-		return 0, err
-	}
-	for _, file := range files {
-		if m := diNameRx.FindStringSubmatch(file.Name()); m != nil && m[1] == context {
-			port, _ := strconv.Atoi(m[2])
-			return port, nil
-		}
-	}
-	return 0, os.ErrNotExist
+func (i InfoMatchError) Error() string {
+	return string(i)
 }
 
-func InfoFile(name string, port int) string {
-	fileName := fmt.Sprintf("%s-%d.json", name, port)
-	return pathNameRx.ReplaceAllString(fileName, "-")
+func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) {
+	files, err := infoFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var found string
+	for _, file := range files {
+		name := file.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		// Files are in the format <daemonID>-<port>.json so stripping at last dash
+		// will give us the <daemonID>
+		if lastDash := strings.LastIndexByte(name, '-'); lastDash > 0 && (match == nil || match.MatchString(name[:lastDash])) {
+			if found != "" {
+				if match == nil {
+					return nil, errcat.User.New(InfoMatchError("multiple daemons are running, please select one using the --use <match> flag"))
+				}
+				return nil, errcat.User.New(
+					InfoMatchError(fmt.Sprintf("the expression %q does not uniquely identify a running daemon", match.String())))
+			}
+			found = name
+		}
+	}
+	if found == "" {
+		return nil, os.ErrNotExist
+	}
+	return LoadInfo(ctx, found)
 }
 
 // KeepInfoAlive updates the access and modification times of the given Info

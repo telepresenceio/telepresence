@@ -11,7 +11,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 )
 
 func (s *singleServiceSuite) Test_DockerRun() {
@@ -141,10 +141,11 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	stdout := s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 
-	match := regexp.MustCompile(`Connected to context ?(.+),`).FindStringSubmatch(stdout)
-	require.Len(match, 2)
+	match := regexp.MustCompile(`Connected to context ?(.+),\s*namespace (\S+)\s+\(`).FindStringSubmatch(stdout)
+	require.Len(match, 3)
 
-	daemonName := docker.SafeContainerName("tp-" + match[1])
+	daemonID := daemon.NewIdentifier(match[1], match[2])
+	daemonName := daemonID.ContainerName()
 	tag := "telepresence/echo-test"
 	testDir := "testdata/echo-server"
 
@@ -174,7 +175,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 				out, err := itest.Output(ctx,
 					"docker", "run", "--network", "container:"+daemonName, "--rm", "curlimages/curl", "--silent", "--max-time", "1", svc)
 				if err != nil {
-					dlog.Error(ctx, err)
+					dlog.Errorf(ctx, "%s:%v", out, err)
 					return false
 				}
 				dlog.Info(ctx, out)

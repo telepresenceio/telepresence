@@ -35,7 +35,9 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 	}
 	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
 		if cr := daemon.GetRequest(ctx); cr == nil {
-			ctx = daemon.WithDefaultRequest(ctx, cmd)
+			if ctx, err = daemon.WithDefaultRequest(ctx, cmd); err != nil {
+				return err
+			}
 		}
 		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
 			if v == ann.Optional && (err == ErrNoUserDaemon || errcat.GetCategory(err) == errcat.Config) {
