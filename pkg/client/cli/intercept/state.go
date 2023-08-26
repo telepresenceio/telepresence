@@ -24,7 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -368,7 +367,7 @@ func (s *state) runCommand(ctx context.Context) error {
 			var cancel context.CancelFunc
 			procCtx, cancel = context.WithCancel(procCtx)
 			go func() {
-				if err := docker.CancelWhenRmFromCache(procCtx, cancel, cache.DaemonInfoFile(s.status.ClusterContext, daemonPort)); err != nil {
+				if err := docker.CancelWhenRmFromCache(procCtx, cancel, daemon.InfoFile(s.status.ClusterContext, daemonPort)); err != nil {
 					dlog.Error(ctx)
 				}
 			}()

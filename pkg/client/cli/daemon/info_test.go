@@ -1,10 +1,10 @@
-package cache_test
+package daemon_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 )
 
 func TestDaemonInfoFileName(t *testing.T) {
@@ -17,9 +17,9 @@ func TestDaemonInfoFileName(t *testing.T) {
 		{name: "gke_datawireio_us-central1-b_kube-staging-apps-1", port: 80}:      "gke_datawireio_us-central1-b_kube-staging-apps-1-80.json",
 	}
 	for test, expected := range tests {
-		result := cache.DaemonInfoFile(test.name, test.port)
+		result := daemon.InfoFile(test.name, test.port)
 		if result != expected {
-			t.Fatalf("DaemonInfoFile gave bad output; expected %s got %s", expected, result)
+			t.Fatalf("InfoFile gave bad output; expected %s got %s", expected, result)
 		}
 	}
 }
@@ -35,10 +35,10 @@ func TestDaemonInfoFilePort(t *testing.T) {
 	}
 	ctx := context.Background()
 	for test, expected := range tests {
-		if err := cache.SaveDaemonInfo(ctx, &cache.DaemonInfo{}, cache.DaemonInfoFile(test.name, test.port)); err != nil {
+		if err := daemon.SaveInfo(ctx, &daemon.Info{}, daemon.InfoFile(test.name, test.port)); err != nil {
 			t.Fatal(err)
 		}
-		port, err := cache.DaemonPortForName(ctx, test.name)
+		port, err := daemon.PortForName(ctx, test.name)
 		if err != nil {
 			t.Fatal(err)
 		}

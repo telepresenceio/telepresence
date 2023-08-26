@@ -23,7 +23,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -295,16 +295,16 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 }
 
 func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, name string, port int) {
-	daemonInfoFile := cache.DaemonInfoFile(name, port)
+	daemonInfoFile := daemon.InfoFile(name, port)
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	g.Go(fmt.Sprintf("info-kicker-%s-%d", name, port), func(ctx context.Context) error {
 		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
-		return cache.KeepDaemonInfoAlive(ctx, daemonInfoFile)
+		return daemon.KeepInfoAlive(ctx, daemonInfoFile)
 	})
 	g.Go(fmt.Sprintf("info-watcher-%s-%d", name, port), func(ctx context.Context) error {
 		// Cancel the session if the daemon info file is removed.
-		return cache.WatchDaemonInfos(ctx, func(ctx context.Context) error {
-			ok, err := cache.DaemonInfoExists(ctx, daemonInfoFile)
+		return daemon.WatchInfos(ctx, func(ctx context.Context) error {
+			ok, err := daemon.InfoExists(ctx, daemonInfoFile)
 			if err == nil && !ok {
 				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
 				cancel()

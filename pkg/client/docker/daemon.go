@@ -31,7 +31,6 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -121,7 +120,7 @@ func DaemonArgs(name string, port int) []string {
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
 func DiscoverDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err error) {
-	port, err := cache.DaemonPortForName(ctx, name)
+	port, err := daemon.PortForName(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +409,7 @@ func handleLocalK8s(ctx context.Context, clusterName string, cl *api.Cluster) er
 
 // LaunchDaemon ensures that the image returned by ClientImage exists by calling PullImage. It then uses the
 // options DaemonOptions and DaemonArgs to start the image, and finally connectDaemon to connect to it. A
-// successful start yields a cache.DaemonInfo entry in the cache.
+// successful start yields a cache.Info entry in the cache.
 func LaunchDaemon(ctx context.Context, name string) (conn *grpc.ClientConn, err error) {
 	if proc.RunningInContainer() {
 		return nil, errors.New("unable to start a docker container from within a container")
@@ -548,19 +547,19 @@ func tryLaunch(ctx context.Context, port int, name string, args []string) (strin
 		return "", fmt.Errorf("launch of daemon container failed: %s", errStr)
 	}
 	cid := strings.TrimSpace(stdOut.String())
-	return cid, cache.SaveDaemonInfo(ctx,
-		&cache.DaemonInfo{
+	return cid, daemon.SaveInfo(ctx,
+		&daemon.Info{
 			Options:     map[string]string{"cid": cid},
 			InDocker:    true,
 			DaemonPort:  port,
 			KubeContext: name,
-		}, cache.DaemonInfoFile(name, port))
+		}, daemon.InfoFile(name, port))
 }
 
 // CancelWhenRmFromCache watches for the file to be removed from the cache, then calls cancel.
 func CancelWhenRmFromCache(ctx context.Context, cancel context.CancelFunc, filename string) error {
-	return cache.WatchDaemonInfos(ctx, func(ctx context.Context) error {
-		exists, err := cache.DaemonInfoExists(ctx, filename)
+	return daemon.WatchInfos(ctx, func(ctx context.Context) error {
+		exists, err := daemon.InfoExists(ctx, filename)
 		if err != nil {
 			return err
 		}
