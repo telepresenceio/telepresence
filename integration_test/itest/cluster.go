@@ -800,7 +800,7 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	})
 
 	gh := GetGlobalHarness(ctx)
-	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
+	if len(args) > 0 && (args[0] == "connect") {
 		rest := args[1:]
 		args = append(make([]string, 0, len(args)+3), args[0])
 		if user := GetUser(ctx); user != "default" {

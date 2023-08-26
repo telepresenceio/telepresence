@@ -45,10 +45,10 @@ func (s *interceptLocalhostSuite) SetupSuite() {
 
 func (s *interceptLocalhostSuite) TearDownSuite() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
 	s.cancelLocal()
 	s.Eventually(func() bool {
-		stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout := itest.TelepresenceOk(ctx, "list", "--intercepts")
 		return !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 }
@@ -77,7 +77,7 @@ func (s *interceptLocalhostSuite) TestIntercept_WithCustomLocalhost() {
 	s.Require().Error(doRequest(ctx, "127.0.0.1", strconv.Itoa(s.port)))
 
 	// Run the intercept
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--port", strconv.Itoa(s.port), "--address", s.defaultRoute.LocalIP.String())
+	stdout := itest.TelepresenceOk(ctx, "intercept", s.ServiceName(), "--port", strconv.Itoa(s.port), "--address", s.defaultRoute.LocalIP.String())
 	s.Require().Contains(stdout, "Using Deployment "+s.ServiceName())
 	itest.PingInterceptedEchoServer(ctx, s.ServiceName(), "80")
 }

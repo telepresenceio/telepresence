@@ -21,7 +21,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	assert := s.Assert()
 	require := s.Require()
 	ctx := s.Context()
-	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: %s-%s\s+State\s*: ([^\n]+)\n`, s.ServiceName(), s.AppNamespace()))
+	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: %s\s+State\s*: ([^\n]+)\n`, s.ServiceName()))
 
 	// Scale down to zero pods
 	require.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "0"))
@@ -32,7 +32,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Verify that intercept remains but that no agent is found. User require here
 	// to avoid a hanging os.Stat call unless this succeeds.
 	assert.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list")
+		stdout, _, err := itest.Telepresence(ctx, "list")
 		if err != nil {
 			return false
 		}
@@ -54,7 +54,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 
 	// Verify that intercept becomes active
 	assert.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list")
+		stdout, _, err := itest.Telepresence(ctx, "list")
 		if err != nil {
 			return false
 		}
@@ -122,9 +122,9 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", s.ServiceName()), "traffic-agent", s.AppNamespace())
 
 	// Verify that intercept is still active
-	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `-` + s.AppNamespace() + `\s+State\s*: ([^\n]+)\n`))
+	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `\s+State\s*: ([^\n]+)\n`))
 	assert.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "--namespace", s.AppNamespace(), "list", "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		if err != nil {
 			return false
 		}

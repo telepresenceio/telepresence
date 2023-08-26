@@ -18,6 +18,7 @@ type NamespacePair interface {
 	ApplyApp(ctx context.Context, name, workload string)
 	ApplyEchoService(ctx context.Context, name string, port int)
 	AppNamespace() string
+	TelepresenceConnect(ctx context.Context, args ...string) string
 	DeleteSvcAndWorkload(ctx context.Context, workload, name string)
 	Kubectl(ctx context.Context, args ...string) error
 	KubectlOk(ctx context.Context, args ...string) string
@@ -76,6 +77,14 @@ func GetNamespaces(ctx context.Context) *Namespaces {
 type nsPair struct {
 	Harness
 	Namespaces
+}
+
+// TelepresenceConnect connects using the AppNamespace and ManagerNamespace.
+func (s *nsPair) TelepresenceConnect(ctx context.Context, args ...string) string {
+	return TelepresenceOk(ctx,
+		append(
+			[]string{"connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace()},
+			args...)...)
 }
 
 func WithNamespacePair(ctx context.Context, suffix string, f func(NamespacePair)) {

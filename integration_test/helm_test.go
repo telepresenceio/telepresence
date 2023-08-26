@@ -42,18 +42,23 @@ func (s *helmSuite) TearDownSuite() {
 
 func (s *helmSuite) Test_HelmCanInterceptInManagedNamespace() {
 	ctx := s.Context()
-	defer itest.TelepresenceOk(ctx, "leave", s.ServiceName()+"-"+s.AppNamespace())
+	defer itest.TelepresenceOk(ctx, "leave", s.ServiceName())
 
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", s.ServiceName(), "--port", "9090")
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", s.ServiceName(), "--port", "9090")
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	s.Contains(stdout, s.ServiceName()+": intercepted")
 }
 
 func (s *helmSuite) Test_HelmCannotInterceptInUnmanagedNamespace() {
 	ctx := s.Context()
-	_, stderr, err := itest.Telepresence(itest.WithUser(ctx, "default"), "intercept",
-		"--namespace", s.appSpace2, "--mount", "false", s.ServiceName(), "--port", "9090")
+	itest.TelepresenceDisconnectOk(ctx)
+	itest.TelepresenceOk(ctx, "connect", "--namespace", s.appSpace2, "--manager-namespace", s.ManagerNamespace())
+	defer func() {
+		itest.TelepresenceDisconnectOk(ctx)
+		s.TelepresenceConnect(ctx)
+	}()
+	_, stderr, err := itest.Telepresence(itest.WithUser(ctx, "default"), "intercept", "--mount", "false", s.ServiceName(), "--port", "9090")
 	s.Error(err)
 	s.True(
 		strings.Contains(stderr, `No interceptable deployment, replicaset, or statefulset matching echo found`) ||
@@ -67,7 +72,7 @@ func (s *helmSuite) Test_HelmWebhookInjectsInManagedNamespace() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
 
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
 		return err == nil && strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
 	},
 		20*time.Second, // waitFor
@@ -94,7 +99,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 	defer func() {
 		ctx := s.Context()
 		itest.TelepresenceDisconnectOk(ctx)
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		s.TelepresenceConnect(ctx)
 	}()
 
 	s.Run("Installs Successfully", func() {
@@ -109,7 +114,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 
 	s.Run("Can be connected to", func() {
 		ctx := itest.WithUser(s.Context(), s.mgrSpace2+":"+itest.TestUser)
-		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.mgrSpace2)
+		stdout := itest.TelepresenceOk(ctx, "connect", "--namespace", s.appSpace2, "--manager-namespace", s.mgrSpace2)
 		s.Contains(stdout, "Connected to context")
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--connect-timeout", "1", fmt.Sprintf("%s.%s", svc, s.appSpace2)) == nil
@@ -118,8 +123,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 
 	s.Run("Can intercept", func() {
 		ctx := s.Context()
-		defer itest.TelepresenceOk(ctx, "leave", svc+"-"+s.appSpace2)
-		stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.appSpace2, "--mount", "false", svc, "--port", "9090")
+		stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc, "--port", "9090")
 		s.Contains(stdout, "Using Deployment "+svc)
 		stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.appSpace2, "--intercepts")
 		s.Contains(stdout, svc+": intercepted")
@@ -135,7 +139,7 @@ func (s *helmSuite) Test_CollidingInstalls() {
 	defer func() {
 		ctx := s.Context()
 		itest.TelepresenceDisconnectOk(ctx)
-		itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		s.TelepresenceConnect(ctx)
 	}()
 	ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
 		Namespace:         s.AppNamespace(),

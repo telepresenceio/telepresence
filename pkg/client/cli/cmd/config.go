@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -24,20 +25,17 @@ func config() *cobra.Command {
 }
 
 func configView() *cobra.Command {
-	var request *daemon.Request
-
 	cmd := &cobra.Command{
 		Use:               "view",
 		Args:              cobra.NoArgs,
 		PersistentPreRunE: output.DefaultYAML,
 		Short:             "View current Telepresence configuration",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			request.CommitFlags(cmd)
-			return runConfigView(cmd, args)
+		RunE:              runConfigView,
+		Annotations: map[string]string{
+			ann.Session: ann.Optional,
 		},
 	}
 	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
-	request = daemon.InitRequest(cmd)
 	return cmd
 }
 
@@ -47,12 +45,27 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 	if clientOnly {
 		// Unable to establish a session, so try to convey the local config instead. It
 		// may be helpful in diagnosing the problem.
-		ctx := cmd.Context()
-		cfg.Config = client.GetConfig(cmd.Context())
-		cfg.ClientFile = filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile)
+		if err := connect.InitCommand(cmd); err != nil {
+			return err
+		}
 
-		rq := daemon.GetRequest(ctx)
-		kc, err := client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+		ctx := cmd.Context()
+		uc := daemon.GetUserClient(ctx)
+		cfg.Config = client.GetConfig(ctx)
+		cfg.ClientFile = filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile)
+		var kc *client.Kubeconfig
+		var err error
+		if uc != nil && !cmd.Flag("context").Changed {
+			// Get the context that we're currently connected to.
+			var ci *connector.ConnectInfo
+			ci, err = uc.Status(ctx, &empty.Empty{})
+			if err == nil {
+				kc, err = client.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
+			}
+		} else {
+			rq := daemon.GetRequest(daemon.WithDefaultRequest(ctx, cmd))
+			kc, err = client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+		}
 		if err != nil {
 			return err
 		}
