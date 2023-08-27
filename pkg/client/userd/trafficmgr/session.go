@@ -41,6 +41,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -87,6 +88,9 @@ type session struct {
 
 	// version reported by the manager
 	managerVersion semver.Version
+
+	// The identifier for this daemon
+	daemonID *daemon.Identifier
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
@@ -341,8 +345,8 @@ func connectMgr(
 
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
 
-	clusterHost := cluster.Kubeconfig.RestConfig.Host
-	si, err := LoadSessionInfoFromUserCache(ctx, clusterHost)
+	daemonID := daemon.NewIdentifier(cluster.Context, cluster.Namespace)
+	si, err := LoadSessionInfoFromUserCache(ctx, daemonID)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +378,7 @@ func connectMgr(
 		if err != nil {
 			return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
 		}
-		if err = SaveSessionInfoToUserCache(ctx, clusterHost, si); err != nil {
+		if err = SaveSessionInfoToUserCache(ctx, daemonID, si); err != nil {
 			return nil, err
 		}
 	}
@@ -408,6 +412,7 @@ func connectMgr(
 	sess := &session{
 		Cluster:          cluster,
 		installID:        installID,
+		daemonID:         daemonID,
 		userAndHost:      userAndHost,
 		managerClient:    mClient,
 		managerConn:      conn,
@@ -815,7 +820,7 @@ func (s *session) remainLoop(c context.Context) error {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded so the traffic-manager has dropped the session. We should too
-			if err = DeleteSessionInfoFromUserCache(c); err != nil {
+			if err = DeleteSessionInfoFromUserCache(c, s.daemonID); err != nil {
 				dlog.Errorf(c, "failed to delete session from user cache: %v", err)
 			}
 		}
