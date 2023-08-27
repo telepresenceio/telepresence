@@ -92,10 +92,7 @@ func ReadLoop(ctx context.Context, s Stream, p *CounterProbe) (<-chan Message, <
 		for {
 			m, err := s.Receive(ctx)
 			if m != nil && p != nil {
-				errInc := p.Increment(uint64(len(m.Payload())))
-				if errInc != nil {
-					dlog.Error(ctx, errInc)
-				}
+				p.Increment(uint64(len(m.Payload())))
 			}
 
 			switch {
@@ -160,10 +157,7 @@ func WriteLoop(
 
 				err := s.Send(ctx, m)
 				if m != nil && p != nil {
-					errInc := p.Increment(uint64(len(m.Payload())))
-					if errInc != nil {
-						dlog.Error(ctx, errInc)
-					}
+					p.Increment(uint64(len(m.Payload())))
 				}
 
 				switch {
