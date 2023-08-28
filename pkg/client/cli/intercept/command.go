@@ -1,6 +1,7 @@
 package intercept
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -100,11 +102,13 @@ func (a *Command) AddFlags(flags *pflag.FlagSet) {
 	flags.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,
 		`Do not mount remote directories. Instead, expose this port on localhost to an external mounter`)
 
-	flags.Lookup("namespace").Deprecated = "use telepresence connect to set the namespace"
 	flags.Lookup("local-only").Deprecated = "use telepresence connect to set the namespace"
 }
 
 func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
+	if nsFlag := cmd.Flag("namespace"); nsFlag != nil && nsFlag.Changed {
+		fmt.Fprintln(output.Out(cmd.Context()), "Flag --namespace has been deprecated, use telepresence connect to set the namespace")
+	}
 	if len(positional) > 1 && cmd.Flags().ArgsLenAtDash() != 1 {
 		return errcat.User.New("commands to be run with intercept must come after options")
 	}
