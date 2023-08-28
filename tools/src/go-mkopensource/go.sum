@@ -15,8 +15,8 @@ github.com/bwesterb/go-ristretto v1.2.3/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7N
 github.com/cloudflare/circl v1.3.3 h1:fE/Qz0QdIGqeWfnwq0RE0R7MI51s0M2E4Ga9kq5AEMs=
 github.com/cloudflare/circl v1.3.3/go.mod h1:5XYMA4rFBvNIrhs50XuiBJ15vF2pZn4nnUKZrLbUZFA=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/datawire/go-mkopensource v0.0.12-0.20230815093120-56397119debf h1:P296wPKNh7QlLKnd6GIEa3o8R9JpHG70fHnZhDhS8oo=
-github.com/datawire/go-mkopensource v0.0.12-0.20230815093120-56397119debf/go.mod h1:0h2OSxylsqdGGc/RFQ2cp9eX6vBRbUekj+I3mxv86Ho=
+github.com/datawire/go-mkopensource v0.0.12-0.20230821212923-d1d8451579a1 h1:NwMbfNkG3D5oVLTmylRrxlGlP0ND6pgwJX6LEWMR+YA=
+github.com/datawire/go-mkopensource v0.0.12-0.20230821212923-d1d8451579a1/go.mod h1:0h2OSxylsqdGGc/RFQ2cp9eX6vBRbUekj+I3mxv86Ho=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
