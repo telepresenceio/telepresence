@@ -165,6 +165,19 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	return newKubeconfig(c, flagMap, managerNamespaceOverride, configFlags)
 }
 
+func TransferEnvFlag(c context.Context, flagMap map[string]string, key string) error {
+	if env, ok := flagMap[key]; ok {
+		delete(flagMap, key)
+		if err := os.Setenv(key, env); err != nil {
+			return err
+		}
+		dlog.Debugf(c, "Using %s %s", key, env)
+		return nil
+	}
+	// If user unsets the env, we need to do that too
+	return os.Unsetenv(key)
+}
+
 func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
 	if cr.IsPodDaemon {
 		return NewInClusterConfig(c, cr.KubeFlags)
@@ -178,24 +191,12 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 	// The GOOGLE_APPLICATION_CREDENTIALS and KUBECONFIG entries are copies of the environment variables
 	// sent to us from the CLI to give this long-running daemon a chance to update them. Here we set/unset
 	// our them in our environment accordingly and remove them from the flagMap
-	transferEnvFlag := func(key string) error {
-		if env, ok := flagMap[key]; ok {
-			delete(flagMap, key)
-			if err := os.Setenv(key, env); err != nil {
-				return err
-			}
-			dlog.Debugf(c, "Using %s %s", key, env)
-			return nil
-		}
-		// If user unsets the env, we need to do that too
-		return os.Unsetenv(key)
-	}
-	if err := transferEnvFlag("GOOGLE_APPLICATION_CREDENTIALS"); err != nil {
+	if err := TransferEnvFlag(c, flagMap, "GOOGLE_APPLICATION_CREDENTIALS"); err != nil {
 		return nil, err
 	}
 	// Using the --kubeconfig flag to send the info isn't sufficient because that flag doesn't allow for multiple
 	// path entries like the KUBECONFIG does.
-	if err := transferEnvFlag("KUBECONFIG"); err != nil {
+	if err := TransferEnvFlag(c, flagMap, "KUBECONFIG"); err != nil {
 		return nil, err
 	}
 	configFlags, err := ConfigFlags(flagMap)
