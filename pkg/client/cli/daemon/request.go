@@ -10,7 +10,6 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
@@ -98,9 +97,8 @@ func (cr *Request) addKubeconfigEnv() {
 			cr.KubeFlags[key] = cfg
 		}
 	}
-	for _, kubeconfigEnv := range client.EnvVarOnlyKubeFlags {
-		addEnv(kubeconfigEnv)
-	}
+	addEnv("KUBECONFIG")
+	addEnv("GOOGLE_APPLICATION_CREDENTIALS")
 }
 
 // setContext deals with the global --context flag and assigns it to KubeFlags because it's
