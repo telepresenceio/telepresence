@@ -2,7 +2,7 @@ module local
 
 go 1.21
 
-require github.com/datawire/go-mkopensource v0.0.12-0.20230815093120-56397119debf
+require github.com/datawire/go-mkopensource v0.0.12-0.20230821212923-d1d8451579a1
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
