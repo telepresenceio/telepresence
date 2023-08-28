@@ -1,7 +1,6 @@
 package state
 
 import (
-	"context"
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -29,16 +28,6 @@ type SessionConsumptionMetrics struct {
 	FromClientBytes *tunnel.CounterProbe
 	// data from the traffic manager to the client.
 	ToClientBytes *tunnel.CounterProbe
-}
-
-func (s *SessionConsumptionMetrics) RunCollect(ctx context.Context) {
-	go s.FromClientBytes.RunCollect(ctx)
-	go s.ToClientBytes.RunCollect(ctx)
-}
-
-func (s *SessionConsumptionMetrics) Close() {
-	s.FromClientBytes.Close()
-	s.ToClientBytes.Close()
 }
 
 func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumptionMetrics {
