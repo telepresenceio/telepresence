@@ -17,7 +17,11 @@ func TestDaemonInfoFileName(t *testing.T) {
 		{name: "gke_datawireio_us-central1-b_kube-staging-apps-1", namespace: "ns1", result: "gke_datawireio_us-central1-b_kube-staging-apps-1-ns1.json"},
 	}
 	for _, test := range tests {
-		result := daemon.NewIdentifier(test.name, test.namespace).InfoFileName()
+		di, err := daemon.NewIdentifier("", test.name, test.namespace)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := di.InfoFileName()
 		if result != test.result {
 			t.Fatalf("DaemonInfoFile gave bad output; expected %s got %s", test.result, result)
 		}

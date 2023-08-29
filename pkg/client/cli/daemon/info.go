@@ -19,6 +19,7 @@ import (
 type Info struct {
 	Options     map[string]string `json:"options,omitempty"`
 	InDocker    bool              `json:"in_docker,omitempty"`
+	Name        string            `json:"name,omitempty"`
 	KubeContext string            `json:"kube_context,omitempty"`
 	Namespace   string            `json:"namespace,omitempty"`
 	DaemonPort  int               `json:"daemon_port,omitempty"`

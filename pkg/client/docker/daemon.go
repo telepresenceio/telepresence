@@ -101,7 +101,7 @@ func DaemonArgs(daemonID *daemon.Identifier, port int) []string {
 func DiscoverDaemon(ctx context.Context, match *regexp.Regexp) (conn *grpc.ClientConn, identifier *daemon.Identifier, err error) {
 	cr := daemon.GetRequest(ctx)
 	if match == nil && !cr.Implicit {
-		identifier, err = daemon.IdentifierFromFlags(cr.KubeFlags)
+		identifier, err = daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -111,7 +111,10 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp) (conn *grpc.Clien
 	if err != nil {
 		return nil, nil, err
 	}
-	daemonID := daemon.NewIdentifier(info.KubeContext, info.Namespace)
+	daemonID, err := daemon.NewIdentifier(info.Name, info.KubeContext, info.Namespace)
+	if err != nil {
+		return nil, nil, err
+	}
 	var addr string
 	if proc.RunningInContainer() {
 		// Containers use the daemon container DNS name
@@ -555,6 +558,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port int, args 
 			Options:     map[string]string{"cid": cid},
 			InDocker:    true,
 			DaemonPort:  port,
+			Name:        daemonID.Name,
 			KubeContext: daemonID.KubeContext,
 			Namespace:   daemonID.Namespace,
 		}, daemonID.InfoFileName())

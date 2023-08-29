@@ -238,7 +238,15 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	ctx = userd.WithService(ctx, s.self)
 
 	if s.daemonAddress != nil {
-		daemonID := daemon.NewIdentifier(config.Context, config.Namespace)
+		daemonID, err := daemon.NewIdentifier(cr.Name, config.Context, config.Namespace)
+		if err != nil {
+			cancel()
+			return &rpc.ConnectInfo{
+				Error:         rpc.ConnectInfo_CLUSTER_FAILED,
+				ErrorText:     err.Error(),
+				ErrorCategory: int32(errcat.GetCategory(err)),
+			}
+		}
 		go runAliveAndCancellation(ctx, cancel, daemonID)
 	}
 

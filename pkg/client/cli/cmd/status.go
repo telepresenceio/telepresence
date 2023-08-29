@@ -51,6 +51,7 @@ type userDaemonStatus struct {
 	Error             string                   `json:"error,omitempty" yaml:"error,omitempty"`
 	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
 	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
+	ConnectionName    string                   `json:"connection_name,omitempty" yaml:"connection_name,omitempty"`
 	Namespace         string                   `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	ManagerNamespace  string                   `json:"manager_namespace,omitempty" yaml:"manager_namespace,omitempty"`
 	MappedNamespaces  []string                 `json:"mapped_namespaces,omitempty" yaml:"mapped_namespaces,omitempty"`
@@ -177,6 +178,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 				Client: icept.Spec.Client,
 			})
 		}
+		us.ConnectionName = status.ConnectionName
 		us.Namespace = status.Namespace
 		us.ManagerNamespace = status.ManagerNamespace
 		us.MappedNamespaces = status.MappedNamespaces
@@ -346,6 +348,7 @@ func (cs *userDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
 	}
 	kvf.Add("Kubernetes server", cs.KubernetesServer)
 	kvf.Add("Kubernetes context", cs.KubernetesContext)
+	kvf.Add("ConnectionName", cs.ConnectionName)
 	kvf.Add("Namespace", cs.Namespace)
 	kvf.Add("Manager namespace", cs.ManagerNamespace)
 	if len(cs.MappedNamespaces) > 0 {

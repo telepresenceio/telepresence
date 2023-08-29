@@ -123,7 +123,10 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	}
 
 	if cr.Docker {
-		daemonID, err = daemon.IdentifierFromFlags(cr.KubeFlags)
+		daemonID, err = daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags)
+		if err != nil {
+			return ctx, nil, errcat.NoDaemonLogs.New(err)
+		}
 		conn, err = docker.LaunchDaemon(ctx, daemonID)
 		if err != nil {
 			return ctx, nil, errcat.NoDaemonLogs.New(err)
@@ -176,7 +179,7 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 		if err != nil {
 			return ctx, err
 		}
-		ud = newUserDaemon(conn, daemon.NewIdentifier("", ""))
+		ud = newUserDaemon(conn, nil)
 	} else {
 		var err error
 		ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)

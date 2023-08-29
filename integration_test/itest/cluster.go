@@ -824,8 +824,8 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 }
 
 // TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output.
-func TelepresenceDisconnectOk(ctx context.Context) {
-	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, "quit"))
+func TelepresenceDisconnectOk(ctx context.Context, args ...string) {
+	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, append([]string{"quit"}, args...)...))
 }
 
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.

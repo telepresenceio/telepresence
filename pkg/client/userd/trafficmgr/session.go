@@ -249,6 +249,7 @@ func NewSession(
 		ClusterServer:    cluster.Kubeconfig.Server,
 		ClusterId:        cluster.GetClusterId(ctx),
 		SessionInfo:      tmgr.SessionInfo(),
+		ConnectionName:   tmgr.daemonID.Name,
 		Namespace:        cluster.Namespace,
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
@@ -345,7 +346,10 @@ func connectMgr(
 
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
 
-	daemonID := daemon.NewIdentifier(cluster.Context, cluster.Namespace)
+	daemonID, err := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace)
+	if err != nil {
+		return nil, err
+	}
 	si, err := LoadSessionInfoFromUserCache(ctx, daemonID)
 	if err != nil {
 		return nil, err
@@ -881,6 +885,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterServer:  cfg.Server,
 		ClusterId:      s.GetClusterId(c),
 		SessionInfo:    s.SessionInfo(),
+		ConnectionName: s.daemonID.Name,
 		Namespace:      s.Namespace,
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 		Version: &common.VersionInfo{

@@ -1,20 +1,34 @@
 package daemon
 
 import (
+	"errors"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type Identifier struct {
+	Name        string
 	KubeContext string
 	Namespace   string
 }
 
-func NewIdentifier(contextName, namespace string) *Identifier {
-	return &Identifier{KubeContext: contextName, Namespace: namespace}
+func NewIdentifier(name, contextName, namespace string) (*Identifier, error) {
+	if namespace == "" {
+		return nil, errors.New("daemon identifier must have a namespace")
+	}
+	if name == "" {
+		if contextName == "" {
+			// Must be an in-cluster config
+			name = "in-cluster-" + namespace
+		} else {
+			name = contextName + "-" + namespace
+		}
+	}
+	return &Identifier{KubeContext: contextName, Namespace: namespace, Name: SafeContainerName(name)}, nil
 }
 
 func (id *Identifier) String() string {
-	return SafeContainerName(id.KubeContext + "-" + id.Namespace)
+	return id.Name
 }
 
 func (id *Identifier) InfoFileName() string {
@@ -27,7 +41,7 @@ func (id *Identifier) ContainerName() string {
 
 // IdentifierFromFlags returns a unique name created from the name of the current context
 // and the active namespace denoted by the given flagMap.
-func IdentifierFromFlags(flagMap map[string]string) (*Identifier, error) {
+func IdentifierFromFlags(name string, flagMap map[string]string) (*Identifier, error) {
 	cld, err := client.ConfigLoader(flagMap)
 	if err != nil {
 		return nil, err
@@ -45,5 +59,5 @@ func IdentifierFromFlags(flagMap map[string]string) (*Identifier, error) {
 	if cc == "" {
 		cc = config.CurrentContext
 	}
-	return NewIdentifier(cc, ns), nil
+	return NewIdentifier(name, cc, ns)
 }

@@ -154,7 +154,7 @@ message Interceptor {
 message ConnectRequest {
   map<string, string> kube_flags = 1;
   repeated string mapped_namespaces = 2;
-  reserved 3;
+  string name = 3;
   bool is_pod_daemon = 4;
   repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
@@ -194,6 +194,9 @@ message ConnectInfo {
   string cluster_server = 3;
   string cluster_context = 4;
   common.VersionInfo version = 5;
+
+  // The name of the connection
+  string connection_name = 16;
 
   // the namespace that the connector is connected to.
   string namespace = 6;

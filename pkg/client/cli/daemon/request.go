@@ -24,11 +24,16 @@ import (
 
 type Request struct {
 	connector.ConnectRequest
+
+	// If set, then use a containerized daemon for the connection.
 	Docker bool
-	Use    *regexp.Regexp
+
+	// Match expression to use when finding an existing connection by name
+	Use *regexp.Regexp
 
 	// Request is created on-demand, not by InitRequest
-	Implicit                bool
+	Implicit bool
+
 	kubeConfig              *genericclioptions.ConfigFlags
 	kubeFlagSet             *pflag.FlagSet
 	UserDaemonProfilingPort uint16
@@ -44,6 +49,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
+	nwFlags.StringVar(&cr.Name, "name", "", "Optional name to use for the connection")
 	nwFlags.StringSliceVar(&cr.MappedNamespaces,
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
