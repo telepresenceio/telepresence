@@ -6,8 +6,6 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
@@ -63,6 +62,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 			`Comma separated list of CIDR to never proxy`)
 	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
 		`Overrides any other manager namespace set in config`)
+	nwFlags.Bool(global.FlagDocker, false, "Start, or connect to, daemon in a docker container")
 	flags.AddFlagSet(nwFlags)
 
 	dbgFlags := pflag.NewFlagSet("Debug and Profiling flags", 0)
@@ -75,7 +75,6 @@ func InitRequest(cmd *cobra.Command) *Request {
 	flags.AddFlagSet(dbgFlags)
 
 	cr.kubeConfig = genericclioptions.NewConfigFlags(false)
-	cr.kubeConfig.Context = nil // --context is global
 	cr.KubeFlags = make(map[string]string)
 	cr.kubeFlagSet = pflag.NewFlagSet("Kubernetes flags", 0)
 	cr.kubeConfig.AddFlags(cr.kubeFlagSet)

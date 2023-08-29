@@ -814,9 +814,6 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		}
 		args = append(args, rest...)
 	}
-	if UseDocker(ctx) {
-		args = append([]string{"--docker"}, args...)
-	}
 	cmd := Command(ctx, gh.Executable(), args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

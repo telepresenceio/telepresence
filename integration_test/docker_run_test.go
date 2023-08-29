@@ -138,7 +138,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
 	require := s.Require()
-	stdout := s.TelepresenceConnect(ctx)
+	stdout := s.TelepresenceConnect(ctx, "--docker")
 	defer itest.TelepresenceQuitOk(ctx)
 
 	match := regexp.MustCompile(`Connected to context ?(.+),\s*namespace (\S+)\s+\(`).FindStringSubmatch(stdout)
@@ -233,7 +233,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		s.TelepresenceConnect(ctx)
+		s.TelepresenceConnect(ctx, "--docker")
 		assertNotIntercepted(ctx)
 	})
 
@@ -249,7 +249,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		s.TelepresenceConnect(ctx)
+		s.TelepresenceConnect(ctx, "--docker")
 		assertNotIntercepted(ctx)
 	})
 }
