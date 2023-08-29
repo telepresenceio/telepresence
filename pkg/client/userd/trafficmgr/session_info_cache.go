@@ -2,15 +2,17 @@ package trafficmgr
 
 import (
 	"context"
-	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 )
 
-const sessionInfoFile = "session-%s.json"
+func sessionInfoFile(daemonID *daemon.Identifier) string {
+	return filepath.Join("sessions", daemonID.InfoFileName())
+}
 
 type SavedSession struct {
 	KubeContext string               `json:"kubeContext"`
@@ -25,14 +27,14 @@ func SaveSessionInfoToUserCache(ctx context.Context, daemonID *daemon.Identifier
 		KubeContext: daemonID.KubeContext,
 		Namespace:   daemonID.Namespace,
 		Session:     session,
-	}, fmt.Sprintf(sessionInfoFile, daemonID.String()))
+	}, sessionInfoFile(daemonID))
 }
 
 // LoadSessionInfoFromUserCache gets the SessionInfo from cache or returns an error if something goes
 // wrong while loading or unmarshalling.
 func LoadSessionInfoFromUserCache(ctx context.Context, daemonID *daemon.Identifier) (*manager.SessionInfo, error) {
 	var ss *SavedSession
-	err := cache.LoadFromUserCache(ctx, &ss, fmt.Sprintf(sessionInfoFile, daemonID.String()))
+	err := cache.LoadFromUserCache(ctx, &ss, sessionInfoFile(daemonID))
 	if err == nil && ss.KubeContext == daemonID.KubeContext && ss.Namespace == daemonID.Namespace {
 		return ss.Session, nil
 	}
@@ -45,5 +47,5 @@ func LoadSessionInfoFromUserCache(ctx context.Context, daemonID *daemon.Identifi
 // DeleteSessionInfoFromUserCache removes SessionInfo cache if existing or returns an error. An attempt
 // to remove a non-existing cache is a no-op and the function returns nil.
 func DeleteSessionInfoFromUserCache(ctx context.Context, daemonID *daemon.Identifier) error {
-	return cache.DeleteFromUserCache(ctx, fmt.Sprintf(sessionInfoFile, daemonID.String()))
+	return cache.DeleteFromUserCache(ctx, sessionInfoFile(daemonID))
 }
