@@ -1,8 +1,6 @@
 package daemon
 
 import (
-	"fmt"
-
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
@@ -19,8 +17,8 @@ func (id *Identifier) String() string {
 	return SafeContainerName(id.KubeContext + "-" + id.Namespace)
 }
 
-func (id *Identifier) DaemonInfoFileName(port int) string {
-	return fmt.Sprintf("%s-%d.json", id.String(), port)
+func (id *Identifier) InfoFileName() string {
+	return id.String() + ".json"
 }
 
 func (id *Identifier) ContainerName() string {

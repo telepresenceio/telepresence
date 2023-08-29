@@ -134,9 +134,8 @@ func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) 
 		if !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		// Files are in the format <daemonID>-<port>.json so stripping at last dash
-		// will give us the <daemonID>
-		if lastDash := strings.LastIndexByte(name, '-'); lastDash > 0 && (match == nil || match.MatchString(name[:lastDash])) {
+		// If a match is given, then strip ".json" and apply it.
+		if match == nil || match.MatchString(name[:len(name)-5]) {
 			if found != "" {
 				if match == nil {
 					return nil, errcat.User.New(InfoMatchError("multiple daemons are running, please select one using the --use <match> flag"))

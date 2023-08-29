@@ -360,16 +360,14 @@ func (s *state) runCommand(ctx context.Context) error {
 	var dr *dockerRun
 	procCtx := ctx
 	if ud.Remote() {
-		if daemonPort := ud.DaemonPort(); daemonPort > 0 {
-			// Ensure that the intercept handler is stopped properly if the daemon quits
-			var cancel context.CancelFunc
-			procCtx, cancel = context.WithCancel(procCtx)
-			go func() {
-				if err := docker.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID.DaemonInfoFileName(daemonPort)); err != nil {
-					dlog.Error(ctx)
-				}
-			}()
-		}
+		// Ensure that the intercept handler is stopped properly if the daemon quits
+		var cancel context.CancelFunc
+		procCtx, cancel = context.WithCancel(procCtx)
+		go func() {
+			if err := docker.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID.InfoFileName()); err != nil {
+				dlog.Error(ctx)
+			}
+		}()
 	}
 	dr = s.startInDocker(ctx, ud.DaemonID, envFile, s.Cmdline)
 	if dr.err == nil {

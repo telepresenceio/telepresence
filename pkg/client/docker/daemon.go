@@ -554,7 +554,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port int, args 
 			DaemonPort:  port,
 			KubeContext: daemonID.KubeContext,
 			Namespace:   daemonID.Namespace,
-		}, daemonID.DaemonInfoFileName(port))
+		}, daemonID.InfoFileName())
 }
 
 // CancelWhenRmFromCache watches for the file to be removed from the cache, then calls cancel.
