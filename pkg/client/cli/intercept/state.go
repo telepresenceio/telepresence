@@ -185,11 +185,7 @@ func (s *state) Run(ctx context.Context) error {
 
 	// start intercept, run command, then leave the intercept
 	if s.DockerRun {
-		var err error
-		if ctx, err = docker.EnableClient(ctx); err != nil {
-			return errcat.NoDaemonLogs.New(err)
-		}
-		if err = s.prepareDockerRun(ctx); err != nil {
+		if err := s.prepareDockerRun(docker.EnableClient(ctx)); err != nil {
 			return err
 		}
 	}

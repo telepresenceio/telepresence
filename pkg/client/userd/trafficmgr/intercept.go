@@ -746,11 +746,7 @@ func (s *session) removeIntercept(c context.Context, ic *intercept) error {
 	// single container.
 	if !(proc.RunningInContainer() && userd.GetService(c).RootSessionInProcess()) {
 		if ic.containerName != "" {
-			c, err := docker.EnableClient(c)
-			if err == nil {
-				err = docker.StopContainer(c, ic.containerName)
-			}
-			if err != nil {
+			if err := docker.StopContainer(docker.EnableClient(c), ic.containerName); err != nil {
 				dlog.Error(c, err)
 			}
 		} else if ic.pid != 0 {

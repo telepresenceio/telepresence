@@ -91,6 +91,8 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
+
+	// Try dialing the host daemon using the well known socket.
 	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err == nil {
 		if cr.Docker {
@@ -103,39 +105,30 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	}
 
 	// Check if a running daemon can be discovered.
-	ctx, err = docker.EnableClient(ctx)
-	if err != nil && cr.Docker {
-		return ctx, nil, errcat.NoDaemonLogs.New(err)
-	}
-
-	var daemonID *daemon.Identifier
+	ctx = docker.EnableClient(ctx)
+	conn, daemonID, err := docker.DiscoverDaemon(ctx, cr.Use)
 	if err == nil {
-		conn, daemonID, err = docker.DiscoverDaemon(ctx, cr.Use)
-		if err == nil {
-			return ctx, newUserDaemon(conn, daemonID), nil
-		}
-		var infoMatchErr daemon.InfoMatchError
-		if errors.As(err, &infoMatchErr) {
-			return ctx, nil, err
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			dlog.Debug(ctx, err.Error())
-		}
+		return ctx, newUserDaemon(conn, daemonID), nil
 	}
-	daemonID, err = daemon.IdentifierFromFlags(cr.KubeFlags)
-	if cr.Docker {
-		if required {
-			conn, err = docker.LaunchDaemon(ctx, daemonID)
-			if err != nil {
-				return ctx, nil, errcat.NoDaemonLogs.New(err)
-			}
-			return ctx, newUserDaemon(conn, daemonID), nil
-		}
-		return ctx, nil, ErrNoUserDaemon
+	var infoMatchErr daemon.InfoMatchError
+	if errors.As(err, &infoMatchErr) {
+		return ctx, nil, err
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		dlog.Debug(ctx, err.Error())
 	}
 
 	if !required {
 		return ctx, nil, ErrNoUserDaemon
+	}
+
+	if cr.Docker {
+		daemonID, err = daemon.IdentifierFromFlags(cr.KubeFlags)
+		conn, err = docker.LaunchDaemon(ctx, daemonID)
+		if err != nil {
+			return ctx, nil, errcat.NoDaemonLogs.New(err)
+		}
+		return ctx, newUserDaemon(conn, daemonID), nil
 	}
 
 	fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")

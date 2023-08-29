@@ -137,7 +137,7 @@ func (dr *dockerRun) wait(ctx context.Context) error {
 		killTimer.Reset(2 * time.Second)
 		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
-		if err := docker.StopContainer(ctx, dr.name); err != nil {
+		if err := docker.StopContainer(docker.EnableClient(ctx), dr.name); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}()

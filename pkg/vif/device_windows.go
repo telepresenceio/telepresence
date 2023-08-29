@@ -277,7 +277,7 @@ func (t *nativeDevice) setGlobalSearchList(ctx context.Context, gss []string) er
 	var err error
 	if t.strategy == client.GSCAuto || t.strategy == client.GSCPowershell {
 		cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
-		if _, err = proc.CaptureErr(ctx, cmd); err != nil {
+		if _, err = proc.CaptureErr(cmd); err != nil {
 			if t.strategy != client.GSCAuto {
 				dlog.Error(ctx, "setting DNS using Powershell failed")
 				return err
@@ -292,7 +292,7 @@ func (t *nativeDevice) setGlobalSearchList(ctx context.Context, gss []string) er
 	}
 	if err == nil {
 		cmd := proc.CommandContext(ctx, "ipconfig.exe", "/flushdns")
-		if _, flushErr := proc.CaptureErr(ctx, cmd); flushErr != nil {
+		if _, flushErr := proc.CaptureErr(cmd); flushErr != nil {
 			dlog.Errorf(ctx, "flushing DNS cache failed: %v", flushErr)
 		}
 	}

@@ -379,7 +379,10 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, clusterNam
 
 	// Let's check if we have a container with port bindings for the
 	// given addrPort that is a known k8sapi provider
-	cli := GetClient(ctx)
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return err
+	}
 	cjs := runningContainers(ctx, cli)
 
 	var hostPort, network string
