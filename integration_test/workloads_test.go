@@ -16,33 +16,34 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 
 	require.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace())
+			stdout, _, err := itest.Telepresence(ctx, "list")
 			return err == nil && strings.Contains(stdout, svc)
 		},
 		6*time.Second, // waitFor
 		2*time.Second, // polling interval
 	)
 
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", "--port", port, svc)
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--port", port, svc)
 	require.Contains(stdout, "Using "+tp+" "+svc)
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, svc+": intercepted")
 	require.NotContains(stdout, "Volume Mount Point")
 	s.CapturePodLogs(ctx, "service="+svc, "traffic-agent", s.AppNamespace())
-	itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+	itest.TelepresenceOk(ctx, "leave", svc)
+	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.NotContains(stdout, svc+": intercepted")
 
-	itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceDisconnectOk(ctx)
 
 	dfltCtx := itest.WithUser(ctx, "default")
-	itest.TelepresenceOk(dfltCtx, "uninstall", "--namespace", s.AppNamespace(), "--agent", svc)
-	itest.TelepresenceQuitOk(dfltCtx)
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(dfltCtx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(dfltCtx, "uninstall", "--agent", svc)
+	itest.TelepresenceDisconnectOk(dfltCtx)
+	s.TelepresenceConnect(ctx)
 
 	require.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
 			return err == nil && !strings.Contains(stdout, svc)
 		},
 		180*time.Second, // waitFor

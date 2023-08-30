@@ -108,17 +108,17 @@ func (s *multipleServicesSuite) Test_ListOnlyMapped() {
 	defer func() {
 		ctx := s.Context()
 		itest.TelepresenceDisconnectOk(ctx)
-		itest.TelepresenceOk(s.Context(), "connect", "--manager-namespace", s.ManagerNamespace())
+		itest.TelepresenceOk(s.Context(), "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 	}()
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", "default")
+	s.TelepresenceConnect(ctx, "--mapped-namespaces", "default")
 
-	stdout := itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
+	stdout := itest.TelepresenceOk(ctx, "list")
 	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 
-	stdout = itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", "all")
+	stdout = s.TelepresenceConnect(ctx, "--mapped-namespaces", "all")
 	require.Empty(stdout)
 
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
+	stdout = itest.TelepresenceOk(ctx, "list")
 	require.NotContains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
 }
 

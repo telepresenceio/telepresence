@@ -30,7 +30,7 @@ func (s *notConnectedSuite) TearDownTest() {
 
 func (s *notConnectedSuite) Test_ConnectWithCommand() {
 	ctx := s.Context()
-	stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--", s.Executable(), "status")
+	stdout := s.TelepresenceConnect(ctx, "--", s.Executable(), "status")
 	s.Contains(stdout, "Connected to context")
 	s.Contains(stdout, "Kubernetes context:")
 }
@@ -51,7 +51,7 @@ func (s *notConnectedSuite) Test_NonExistentContext() {
 	ctx := s.Context()
 	_, stderr, err := itest.Telepresence(ctx, "connect", "--context", "not-likely-to-exist")
 	s.Error(err)
-	s.Contains(stderr, `"not-likely-to-exist" does not exist`)
+	s.Contains(stderr, "context was not found")
 }
 
 func (s *notConnectedSuite) Test_ConnectingToOtherNamespace() {
@@ -79,7 +79,7 @@ func (s *notConnectedSuite) Test_ConnectingToOtherNamespace() {
 			cfg.Cluster().DefaultManagerNamespace = "daffy-duck"
 		})
 		ctx = itest.WithUser(ctx, mgrSpace2+":"+itest.TestUser)
-		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace="+mgrSpace2)
+		stdout := itest.TelepresenceOk(ctx, "connect", "--namespace", appSpace2, "--manager-namespace="+mgrSpace2)
 		s.Contains(stdout, "Connected to context")
 		stdout = itest.TelepresenceOk(ctx, "status")
 		s.Regexp(`Manager namespace\s+: `+mgrSpace2, stdout)

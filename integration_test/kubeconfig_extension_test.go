@@ -59,7 +59,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		return map[string]any{"also-proxy": apiServers}
 	})
 
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	expectedLen := len(ips)
 	s.Eventually(func() bool {
@@ -101,7 +101,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		require.NoError(err)
 		return map[string]any{"never-proxy": []string{ip + "/32"}}
 	})
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
 	neverProxiedCount := len(ips) + 1
@@ -157,7 +157,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 					"also-proxy":  t.alsoProxy,
 				}
 			})
-			itest.TelepresenceOk(ctx, "connect", "--context", "extra", "--manager-namespace", s.ManagerNamespace())
+			s.TelepresenceConnect(ctx, "--context", "extra")
 			defer itest.TelepresenceQuitOk(ctx)
 			s.Eventually(func() bool {
 				newRoute, err := routing.GetRoute(ctx, testIP)
@@ -191,11 +191,12 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	require := s.Require()
 	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
 
-	// Check that config view -c includes the includeSuffixes
-	stdout := itest.TelepresenceOk(ctx, "config", "--context", "extra", "view", "--client-only")
-	require.Contains(stdout, "    includeSuffixes:\n        - .org")
+	s.TelepresenceConnect(ctx, "--context", "extra")
+	defer itest.TelepresenceDisconnectOk(ctx)
 
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	// Check that config view -c includes the includeSuffixes
+	stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only")
+	require.Contains(stdout, "    includeSuffixes:\n        - .org")
 
 	retryCount := 0
 	s.Eventually(func() bool {

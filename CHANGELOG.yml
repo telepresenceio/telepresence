@@ -30,6 +30,19 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.16.0
+    date: (TBD)
+    notes:
+      - type: change
+        title: Lock connection to namespace
+        body: >-
+          The behavior changed so that a connected Telepresence client is bound to a namespace. The namespace can then
+          not be changed unless the client disconnects and reconnects.
+      - type: change
+        title: Implicit connect warning
+        body: >-
+          A deprecation warning will be printed if a command other than <code>telepresence connect</code> causes an
+          implicit connect to happen. Implicit connects will be removed in a future release.
   - version: 2.15.0
     date: "2023-08-29"
     notes:

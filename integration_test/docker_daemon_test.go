@@ -47,7 +47,7 @@ func (s *dockerDaemonSuite) Context() context.Context {
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
 
 	jsOut := itest.TelepresenceOk(ctx, "status", "--output", "json")
 
@@ -75,6 +75,6 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonConflict() {
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
-	itest.TelepresenceOk(itest.WithUseDocker(ctx, false), "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
+	itest.TelepresenceOk(itest.WithUseDocker(ctx, false), "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 }

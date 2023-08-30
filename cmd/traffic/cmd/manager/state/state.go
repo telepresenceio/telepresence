@@ -495,14 +495,14 @@ func (s *state) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 
 // getAgentsInterceptedByClient returns the session IDs for each agent that are currently
 // intercepted by the client with the given client session ID.
-func (s *state) getAgentsInterceptedByClient(clientSessionID string) []string {
+func (s *state) getAgentsInterceptedByClient(clientSessionID string) map[string]*rpc.AgentInfo {
 	intercepts := s.intercepts.LoadAllMatching(func(_ string, ii *rpc.InterceptInfo) bool {
 		return ii.ClientSession.SessionId == clientSessionID
 	})
 	if len(intercepts) == 0 {
 		return nil
 	}
-	agents := s.agents.LoadAllMatching(func(_ string, ai *rpc.AgentInfo) bool {
+	return s.agents.LoadAllMatching(func(_ string, ai *rpc.AgentInfo) bool {
 		for _, ii := range intercepts {
 			if ai.Name == ii.Spec.Agent && ai.Namespace == ii.Spec.Namespace {
 				return true
@@ -510,17 +510,13 @@ func (s *state) getAgentsInterceptedByClient(clientSessionID string) []string {
 		}
 		return false
 	})
-	if len(agents) == 0 {
-		return nil
-	}
+}
 
-	agentIDs := make([]string, len(agents)) // At least one agent per intercept
-	i := 0
-	for id := range agents {
-		agentIDs[i] = id
-		i++
-	}
-	return agentIDs
+// getAgentsInNamespace returns the session IDs the agents in the given namespace.
+func (s *state) getAgentsInNamespace(namespace string) map[string]*rpc.AgentInfo {
+	return s.agents.LoadAllMatching(func(_ string, ii *rpc.AgentInfo) bool {
+		return ii.Namespace == namespace
+	})
 }
 
 // UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
@@ -648,7 +644,7 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	// The session is either the telepresence client or a traffic-agent.
 	//
 	// A client will want to extend the tunnel to a dialer in an intercepted traffic-agent or, if no
-	// intercept is active, to a dialer here in the traffic-manager.
+	// intercept is active, to a dialer in that namespace.
 	//
 	// A traffic-agent must always extend the tunnel to the client that it is currently intercepted
 	// by, and hence, start by sending the sessionID of that client on the tunnel.
@@ -670,7 +666,10 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		s.mu.RUnlock()
 	} else {
 		span.SetAttributes(attribute.String("session-type", "userd"))
-		peerSession = s.getRandomAgentSession(sessionID, stream.ID().Destination())
+		peerSession, err = s.getAgentForDial(sessionID, stream.ID().Destination())
+		if err != nil {
+			return err
+		}
 	}
 
 	var endPoint tunnel.Endpoint
@@ -690,27 +689,54 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	return nil
 }
 
-func (s *state) getRandomAgentSession(clientSessionID string, podIP net.IP) SessionState {
-	var agentKey string
-	_ = s.agents.LoadAllMatching(func(key string, ai *rpc.AgentInfo) bool {
-		if podIP.Equal(iputil.Parse(ai.PodIp)) {
-			agentKey = key
-			return true
-		}
-		return false
+func (s *state) getAgentForDial(clientSessionID string, podIP net.IP) (SessionState, error) {
+	agentKey, err := s.getAgentIdForDial(clientSessionID, podIP)
+	if err != nil || agentKey == "" {
+		return nil, err
+	}
+	s.mu.RLock()
+	agent := s.sessions[agentKey]
+	s.mu.RUnlock()
+	return agent, nil
+}
+
+func (s *state) getAgentIdForDial(clientSessionID string, podIP net.IP) (string, error) {
+	// An agent with a podIO matching the given podIP has precedence
+	agents := s.agents.LoadAllMatching(func(key string, ai *rpc.AgentInfo) bool {
+		return podIP.Equal(iputil.Parse(ai.PodIp))
 	})
-	if agentKey == "" {
-		if agentIDs := s.getAgentsInterceptedByClient(clientSessionID); len(agentIDs) > 0 {
-			agentKey = agentIDs[0]
-		}
+	for agentID := range agents {
+		dlog.Debugf(s.ctx, "selecting agent for dial based on podIP %s", podIP)
+		return agentID, nil
 	}
-	var agent SessionState
-	if agentKey != "" {
-		s.mu.RLock()
-		agent = s.sessions[agentKey]
-		s.mu.RUnlock()
+
+	client, ok := s.clients.Load(clientSessionID)
+	if !ok {
+		return "", status.Errorf(codes.NotFound, "session %q not found", clientSessionID)
 	}
-	return agent
+	env := managerutil.GetEnv(s.ctx)
+	if env.ManagerNamespace == client.Namespace {
+		// Traffic manager will do just fine
+		dlog.Debugf(s.ctx, "selecting traffic-manager for dial, because it's in namespace %q", client.Namespace)
+		return "", nil
+	}
+
+	// Any agent that is currently intercepted by the client has precedence.
+	for agentID := range s.getAgentsInterceptedByClient(clientSessionID) {
+		dlog.Debugf(s.ctx, "selecting intercepted agent %q for dial", agentID)
+		return agentID, nil
+	}
+
+	// Any agent from the same namespace will do.
+	for agentID := range s.getAgentsInNamespace(client.Namespace) {
+		dlog.Debugf(s.ctx, "selecting agent %q for dial based on namespace %q", agentID, client.Namespace)
+		return agentID, nil
+	}
+
+	// Best effort is to use the traffic-manager.
+	// TODO: Add a pod that can dial from the correct namespace
+	dlog.Debugf(s.ctx, "selecting traffic-manager for dial, even though it's not in namespace %q", client.Namespace)
+	return "", nil
 }
 
 func (s *state) WatchDial(sessionID string) <-chan *rpc.DialRequest {

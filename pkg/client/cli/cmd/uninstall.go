@@ -17,7 +17,6 @@ type uninstallCommand struct {
 	agent      bool
 	allAgents  bool
 	everything bool
-	namespace  string
 }
 
 func uninstall() *cobra.Command {
@@ -36,7 +35,6 @@ func uninstall() *cobra.Command {
 
 	flags.BoolVarP(&ui.agent, "agent", "d", false, "uninstall intercept agent on specific deployments")
 	flags.BoolVarP(&ui.allAgents, "all-agents", "a", false, "uninstall intercept agent on all deployments")
-	flags.StringVarP(&ui.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
 	// Hidden from help but will yield a deprecation warning if used
 	flags.BoolVarP(&ui.everything, "everything", "e", false, "uninstall agents and the traffic manager")
@@ -75,7 +73,6 @@ func (u *uninstallCommand) run(cmd *cobra.Command, args []string) error {
 	}
 	ur := &connector.UninstallRequest{
 		UninstallType: 0,
-		Namespace:     u.namespace,
 	}
 	switch {
 	case u.agent:
