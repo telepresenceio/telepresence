@@ -22,6 +22,7 @@ import (
 
 type WatchWorkloadsStream interface {
 	Send(*rpc.WorkloadInfoSnapshot) error
+	Context() context.Context
 }
 
 type InterceptInfo interface {

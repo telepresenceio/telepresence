@@ -266,11 +266,6 @@ func (s *state) unlockedRemoveSession(sessionID string) {
 		} else {
 			s.clients.Delete(sessionID)
 		}
-
-		if css, ok := sess.(*clientSessionState); ok {
-			defer css.ConsumptionMetrics().Close()
-		}
-
 		delete(s.sessions, sessionID)
 	}
 }
@@ -330,11 +325,6 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 	}
 
 	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
-
-	if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
-		css.ConsumptionMetrics().RunCollect(s.ctx)
-	}
-
 	return sessionID
 }
 
