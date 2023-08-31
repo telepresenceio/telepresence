@@ -158,7 +158,7 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) (context.Contex
 	cr.kubeConfig.Context = nil // --context is global
 
 	// Handle deprecated namespace flag, but allow it in the list command.
-	if cmd.Use != "list" {
+	if cmd.Name() != "list" {
 		if nsFlag := cmd.Flag("namespace"); nsFlag != nil && nsFlag.Changed {
 			ns := nsFlag.Value.String()
 			*cr.kubeConfig.Namespace = ns
