@@ -208,3 +208,10 @@ func (s *Sidecar) RecordInSpan(span trace.Span) {
 		attribute.String("tel2.agent-sidecar", string(bytes)),
 	)
 }
+
+func (uc *UserConfig) Equals(other *UserConfig) bool {
+	if uc == nil || other == nil {
+		return uc == other
+	}
+	return uc.ReplaceContainers == other.ReplaceContainers
+}

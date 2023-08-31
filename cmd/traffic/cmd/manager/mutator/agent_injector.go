@@ -186,6 +186,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 
 	var patches patchOps
 	config := scx.AgentConfig()
+	patches = deleteAppContainer(ctx, pod, config, patches)
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
@@ -228,6 +229,27 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 		}
 	}
 	return false
+}
+
+func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+	if config.UserConfig == nil || !config.UserConfig.ReplaceContainers {
+		dlog.Debugf(ctx, "Skipping deletion of container")
+		return patches
+	}
+podContainers:
+	for i, pc := range pod.Spec.Containers {
+		for _, cc := range config.Containers {
+			if cc.Name == pc.Name {
+				patches = append(patches, patchOperation{
+					Op:   "remove",
+					Path: fmt.Sprintf("/spec/containers/%d", i),
+				})
+				dlog.Debugf(ctx, "Deleted container %s", pc.Name)
+				continue podContainers
+			}
+		}
+	}
+	return patches
 }
 
 func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {

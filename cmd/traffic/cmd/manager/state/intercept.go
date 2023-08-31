@@ -216,9 +216,13 @@ func (s *state) loadAgentConfig(
 		}
 		return err
 	}
+	uc := &agentconfig.UserConfig{
+		ReplaceContainers: spec.Replace,
+	}
 
 	var sce agentconfig.SidecarExt
 	if y, ok := cm.Data[wl.GetName()]; ok {
+		span.AddEvent("workload-config-found")
 		if sce, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, err
 		}
@@ -232,12 +236,20 @@ func (s *state) loadAgentConfig(
 		}
 		// If the agentImage has changed, and the extended image is requested, then update
 		if ac.AgentImage != agentImage && extended {
+			span.AddEvent("agent-image-changed")
 			ac.AgentImage = agentImage
+			if err = update(sce); err != nil {
+				return nil, err
+			}
+		} else if !uc.Equals(ac.UserConfig) {
+			span.AddEvent("user-config-changed")
+			ac.UserConfig = uc
 			if err = update(sce); err != nil {
 				return nil, err
 			}
 		}
 	} else {
+		span.AddEvent("workload-config-not-found")
 		if cm.Data == nil {
 			cm.Data = make(map[string]string)
 		}
@@ -245,9 +257,7 @@ func (s *state) loadAgentConfig(
 		if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
 			return nil, err
 		}
-		if sce, err = gc.Generate(ctx, wl, &agentconfig.UserConfig{
-			ReplaceContainers: spec.Replace,
-		}); err != nil {
+		if sce, err = gc.Generate(ctx, wl, uc); err != nil {
 			return nil, err
 		}
 		if err = update(sce); err != nil {

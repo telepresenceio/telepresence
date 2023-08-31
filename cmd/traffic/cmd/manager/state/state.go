@@ -25,13 +25,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type State interface {
 	AddAgent(*rpc.AgentInfo, time.Time) string
 	AddClient(*rpc.ClientInfo, time.Time) string
-	AddIntercept(string, string, *rpc.ClientInfo, *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error)
+	AddIntercept(context.Context, string, string, *rpc.ClientInfo, *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error)
 	AddInterceptFinalizer(string, InterceptFinalizer) error
 	AgentsLookupDNS(context.Context, string, *rpc.DNSRequest) (dnsproxy.RRs, int, error)
 	CountAgents() int
@@ -467,9 +468,11 @@ func (s *state) WatchAgents(
 
 // Intercepts //////////////////////////////////////////////////////////////////////////////////////
 
-func (s *state) AddIntercept(sessionID, clusterID string, client *rpc.ClientInfo, cir *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
+func (s *state) AddIntercept(ctx context.Context, sessionID, clusterID string, client *rpc.ClientInfo, cir *rpc.CreateInterceptRequest) (ret *rpc.InterceptInfo, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	_, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.AddIntercept")
+	defer tracing.EndAndRecord(span, err)
 
 	sess, ok := s.sessions[sessionID].(*clientSessionState)
 	if sess == nil || !ok {

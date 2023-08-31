@@ -467,13 +467,27 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	interceptInfo, err := s.state.AddIntercept(sessionID, s.clusterInfo.ID(), client, ciReq)
+	interceptInfo, err := s.state.AddIntercept(ctx, sessionID, s.clusterInfo.ID(), client, ciReq)
 	if err != nil {
 		return nil, err
 	}
 	if interceptInfo != nil {
 		tracing.RecordInterceptInfo(span, interceptInfo)
 	}
+
+	if ciReq.InterceptSpec.Replace {
+		err := s.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, info *rpc.InterceptInfo) error {
+			dlog.Debugf(ctx, "Restoring app container for %s", info.Id)
+			ciReq.InterceptSpec.Replace = false
+			_, err := s.PrepareIntercept(ctx, ciReq)
+			return err
+		})
+		if err != nil {
+			// The intercept's been created but we can't finalize it...
+			dlog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptInfo.Id, err)
+		}
+	}
+
 	return interceptInfo, nil
 }
 
