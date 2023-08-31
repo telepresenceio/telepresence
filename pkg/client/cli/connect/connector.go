@@ -135,8 +135,11 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	}
 
 	fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")
-	if _, err = ensureAppUserConfigDir(ctx); err != nil {
-		return ctx, nil, errcat.NoDaemonLogs.New(err)
+	if err = ensureAppUserCacheDirs(ctx); err != nil {
+		return ctx, nil, err
+	}
+	if err = ensureAppUserConfigDir(ctx); err != nil {
+		return ctx, nil, err
 	}
 	args := []string{connectorDaemon, "connector-foreground"}
 	if cr.UserDaemonProfilingPort > 0 {

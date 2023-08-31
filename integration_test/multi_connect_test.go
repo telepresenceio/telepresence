@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	goRuntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,9 @@ func init() {
 }
 
 func (s *multiConnectSuite) SetupSuite() {
+	if s.IsCI() && goRuntime.GOOS != "linux" {
+		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
+	}
 	s.Suite.SetupSuite()
 	// This will give us another namespace pair with a traffic-manager installed.
 	ctx := s.Context()
