@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
@@ -123,7 +122,7 @@ func Command() *cobra.Command {
 	return cmd
 }
 
-func (s *Service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+func (s *Service) Version(_ context.Context, _ *emptypb.Empty) (*common.VersionInfo, error) {
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
@@ -131,7 +130,7 @@ func (s *Service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	}, nil
 }
 
-func (s *Service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
+func (s *Service) Status(_ context.Context, _ *emptypb.Empty) (*rpc.DaemonStatus, error) {
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
 	r := &rpc.DaemonStatus{
@@ -147,28 +146,28 @@ func (s *Service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 	return r, nil
 }
 
-func (s *Service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Quit(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Quit")
 	if !s.sessionLock.TryRLock() {
 		// A running session is blocking with a write-lock. Give it some time to quit, then kill it
 		time.Sleep(2 * time.Second)
 		if !s.sessionLock.TryRLock() {
 			s.quit()
-			return &empty.Empty{}, nil
+			return &emptypb.Empty{}, nil
 		}
 	}
 	defer s.sessionLock.RUnlock()
 	s.cancelSessionReadLocked()
 	s.quit()
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (s *Service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
+func (s *Service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*emptypb.Empty, error) {
 	err := s.WithSession(func(ctx context.Context, session *Session) error {
 		session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
 		return nil
 	})
-	return &empty.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
 func (s *Service) SetDNSExcludes(ctx context.Context, req *rpc.SetDNSExcludesRequest) (*emptypb.Empty, error) {
@@ -211,20 +210,20 @@ func (s *Service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.Dae
 	}
 }
 
-func (s *Service) Disconnect(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+func (s *Service) Disconnect(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
 	dlog.Debug(ctx, "Received gRPC Disconnect")
 	s.cancelSession()
-	return &empty.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (s *Service) WaitForNetwork(ctx context.Context, e *empty.Empty) (*empty.Empty, error) {
+func (s *Service) WaitForNetwork(ctx context.Context, e *emptypb.Empty) (*emptypb.Empty, error) {
 	err := s.WithSession(func(ctx context.Context, session *Session) error {
 		if err, ok := <-session.networkReady(ctx); ok {
 			return status.Error(codes.Unavailable, err.Error())
 		}
 		return nil
 	})
-	return &empty.Empty{}, err
+	return &emptypb.Empty{}, err
 }
 
 func (s *Service) cancelSessionReadLocked() {
@@ -260,7 +259,7 @@ func (s *Service) WithSession(f func(context.Context, *Session) error) error {
 	return f(s.sessionContext, s.session)
 }
 
-func (s *Service) GetNetworkConfig(ctx context.Context, e *empty.Empty) (nc *rpc.NetworkConfig, err error) {
+func (s *Service) GetNetworkConfig(ctx context.Context, e *emptypb.Empty) (nc *rpc.NetworkConfig, err error) {
 	err = s.WithSession(func(ctx context.Context, session *Session) error {
 		nc = session.getNetworkConfig()
 		return nil
@@ -268,12 +267,12 @@ func (s *Service) GetNetworkConfig(ctx context.Context, e *empty.Empty) (nc *rpc
 	return
 }
 
-func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*empty.Empty, error) {
+func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*emptypb.Empty, error) {
 	duration := time.Duration(0)
 	if request.Duration != nil {
 		duration = request.Duration.AsDuration()
 	}
-	return &empty.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, ProcessName)
+	return &emptypb.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, ProcessName)
 }
 
 func (s *Service) configReload(c context.Context) error {

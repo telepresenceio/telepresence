@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -238,7 +237,7 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 	ctx := cmd.Context()
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
-		if ci, err = userD.Status(ctx, &empty.Empty{}); err != nil {
+		if ci, err = userD.Status(ctx, &emptypb.Empty{}); err != nil {
 			return nil, err
 		}
 		switch ci.Error {
