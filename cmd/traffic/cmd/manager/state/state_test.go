@@ -25,7 +25,7 @@ type suiteState struct {
 func (s *suiteState) SetupTest() {
 	s.ctx = dlog.NewTestContext(s.T(), false)
 	s.state = &state{
-		ctx:             s.ctx,
+		backgroundCtx:   s.ctx,
 		sessions:        make(map[string]SessionState),
 		agentsByName:    make(map[string]map[string]*manager.AgentInfo),
 		cfgMapLocks:     make(map[string]*sync.Mutex),

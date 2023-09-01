@@ -680,7 +680,7 @@ func (s *service) AgentLookupHostResponse(ctx context.Context, response *rpc.Loo
 	if err != nil {
 		return nil, err
 	}
-	s.state.PostLookupDNSResponse(&rpc.DNSAgentResponse{
+	s.state.PostLookupDNSResponse(ctx, &rpc.DNSAgentResponse{
 		Session: response.Session,
 		Request: &rpc.DNSRequest{
 			Session: request.Session,
@@ -748,7 +748,7 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.
 func (s *service) AgentLookupDNSResponse(ctx context.Context, response *rpc.DNSAgentResponse) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, response.GetSession())
 	dlog.Debugf(ctx, "AgentLookupDNSResponse called %s", response.Request.Name)
-	s.state.PostLookupDNSResponse(response)
+	s.state.PostLookupDNSResponse(ctx, response)
 	return &empty.Empty{}, nil
 }
 

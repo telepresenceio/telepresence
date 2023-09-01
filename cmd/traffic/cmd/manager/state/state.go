@@ -48,7 +48,7 @@ type State interface {
 	GetIntercept(string) (*rpc.InterceptInfo, bool)
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
-	PostLookupDNSResponse(*rpc.DNSAgentResponse)
+	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(string) bool
 	RemoveSession(context.Context, string)
@@ -69,7 +69,9 @@ type State interface {
 // state is the total state of the Traffic Manager.  A zero state is invalid; you must call
 // NewState.
 type state struct {
-	ctx context.Context
+	// backgroundCtx is the context passed into the state by its owner. It's used for things that
+	// need to exceed the context of a request into the state object, e.g. session contexts.
+	backgroundCtx context.Context
 
 	mu sync.RWMutex
 	// Things protected by 'mu': While the watchable.WhateverMaps have their own locking to
@@ -107,7 +109,7 @@ var NewStateFunc = NewState //nolint:gochecknoglobals // extension point
 func NewState(ctx context.Context) State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	s := &state{
-		ctx:             ctx,
+		backgroundCtx:   ctx,
 		sessions:        make(map[string]SessionState),
 		agentsByName:    make(map[string]map[string]*rpc.AgentInfo),
 		cfgMapLocks:     make(map[string]*sync.Mutex),
@@ -324,7 +326,7 @@ func (s *state) addClient(sessionID string, client *rpc.ClientInfo, now time.Tim
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
 	}
 
-	s.sessions[sessionID] = newClientSessionState(s.ctx, now)
+	s.sessions[sessionID] = newClientSessionState(s.backgroundCtx, now)
 	return sessionID
 }
 
@@ -375,7 +377,7 @@ func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
 	}
 	s.agentsByName[agent.Name][sessionID] = agent
-	s.sessions[sessionID] = newAgentSessionState(s.ctx, now)
+	s.sessions[sessionID] = newAgentSessionState(s.backgroundCtx, now)
 
 	for interceptID, intercept := range s.intercepts.LoadAll() {
 		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
@@ -576,7 +578,7 @@ func (s *state) unlockedRemoveIntercept(interceptID string) bool {
 	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
 	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
 		delete(s.interceptStates, interceptID)
-		state.terminate(s.ctx, intercept)
+		state.terminate(s.backgroundCtx, intercept)
 	}
 
 	return didDelete
@@ -666,7 +668,7 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 		s.mu.RUnlock()
 	} else {
 		span.SetAttributes(attribute.String("session-type", "userd"))
-		peerSession, err = s.getAgentForDial(sessionID, stream.ID().Destination())
+		peerSession, err = s.getAgentForDial(ctx, sessionID, stream.ID().Destination())
 		if err != nil {
 			return err
 		}
@@ -689,8 +691,8 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	return nil
 }
 
-func (s *state) getAgentForDial(clientSessionID string, podIP net.IP) (SessionState, error) {
-	agentKey, err := s.getAgentIdForDial(clientSessionID, podIP)
+func (s *state) getAgentForDial(ctx context.Context, clientSessionID string, podIP net.IP) (SessionState, error) {
+	agentKey, err := s.getAgentIdForDial(ctx, clientSessionID, podIP)
 	if err != nil || agentKey == "" {
 		return nil, err
 	}
@@ -700,13 +702,13 @@ func (s *state) getAgentForDial(clientSessionID string, podIP net.IP) (SessionSt
 	return agent, nil
 }
 
-func (s *state) getAgentIdForDial(clientSessionID string, podIP net.IP) (string, error) {
+func (s *state) getAgentIdForDial(ctx context.Context, clientSessionID string, podIP net.IP) (string, error) {
 	// An agent with a podIO matching the given podIP has precedence
 	agents := s.agents.LoadAllMatching(func(key string, ai *rpc.AgentInfo) bool {
 		return podIP.Equal(iputil.Parse(ai.PodIp))
 	})
 	for agentID := range agents {
-		dlog.Debugf(s.ctx, "selecting agent for dial based on podIP %s", podIP)
+		dlog.Debugf(ctx, "selecting agent for dial based on podIP %s", podIP)
 		return agentID, nil
 	}
 
@@ -714,28 +716,28 @@ func (s *state) getAgentIdForDial(clientSessionID string, podIP net.IP) (string,
 	if !ok {
 		return "", status.Errorf(codes.NotFound, "session %q not found", clientSessionID)
 	}
-	env := managerutil.GetEnv(s.ctx)
+	env := managerutil.GetEnv(ctx)
 	if env.ManagerNamespace == client.Namespace {
 		// Traffic manager will do just fine
-		dlog.Debugf(s.ctx, "selecting traffic-manager for dial, because it's in namespace %q", client.Namespace)
+		dlog.Debugf(ctx, "selecting traffic-manager for dial, because it's in namespace %q", client.Namespace)
 		return "", nil
 	}
 
 	// Any agent that is currently intercepted by the client has precedence.
 	for agentID := range s.getAgentsInterceptedByClient(clientSessionID) {
-		dlog.Debugf(s.ctx, "selecting intercepted agent %q for dial", agentID)
+		dlog.Debugf(ctx, "selecting intercepted agent %q for dial", agentID)
 		return agentID, nil
 	}
 
 	// Any agent from the same namespace will do.
 	for agentID := range s.getAgentsInNamespace(client.Namespace) {
-		dlog.Debugf(s.ctx, "selecting agent %q for dial based on namespace %q", agentID, client.Namespace)
+		dlog.Debugf(ctx, "selecting agent %q for dial based on namespace %q", agentID, client.Namespace)
 		return agentID, nil
 	}
 
 	// Best effort is to use the traffic-manager.
 	// TODO: Add a pod that can dial from the correct namespace
-	dlog.Debugf(s.ctx, "selecting traffic-manager for dial, even though it's not in namespace %q", client.Namespace)
+	dlog.Debugf(ctx, "selecting traffic-manager for dial, even though it's not in namespace %q", client.Namespace)
 	return "", nil
 }
 
