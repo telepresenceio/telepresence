@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 
@@ -159,56 +160,74 @@ func GetKubeStartingConfig(cmd *cobra.Command) (*api.Config, error) {
 	return pathOpts.GetStartingConfig()
 }
 
-func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func (cr *Request) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
 	cr.CommitFlags(cmd)
-	var ctName string
-	if cp := cr.kubeConfig.Context; cp != nil {
-		ctName = *cp
-	}
-	ctx := cmd.Context()
-	dlog.Debugf(ctx, "namespace completion: context %q, %q", ctName, toComplete)
 	rs, err := cr.kubeConfig.ToRESTConfig()
 	if err != nil {
-		dlog.Errorf(ctx, "ToRESTConfig: %v", err)
-		return nil, cobra.ShellCompDirectiveError
+		return nil, fmt.Errorf("ToRESTConfig: %w", err)
 	}
 	cs, err := kubernetes.NewForConfig(rs)
 	if err != nil {
-		dlog.Errorf(ctx, "NewForConfig: %v", err)
-		return nil, cobra.ShellCompDirectiveError
+		return nil, fmt.Errorf("NewForConfig: %w", err)
 	}
-	nsl, err := cs.CoreV1().Namespaces().List(ctx, v1.ListOptions{})
+	nsl, err := cs.CoreV1().Namespaces().List(cmd.Context(), v1.ListOptions{})
 	if err != nil {
-		dlog.Errorf(ctx, "Namespaces.List: %v", err)
-		return nil, cobra.ShellCompDirectiveError
+		return nil, fmt.Errorf("Namespaces.List: %w", err)
 	}
 	itms := nsl.Items
 	nss := make([]string, len(itms))
 	for i, itm := range itms {
 		nss[i] = itm.Name
 	}
-	return nss, cobra.ShellCompDirectiveNoFileComp
+	return nss, nil
 }
 
-func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	cr.CommitFlags(cmd)
+func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+	nss, err := cr.GetAllNamespaces(cmd)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return nil, cobra.ShellCompDirectiveError
+	}
+
 	var ctName string
 	if cp := cr.kubeConfig.Context; cp != nil {
 		ctName = *cp
 	}
-	ctx := cmd.Context()
 	dlog.Debugf(ctx, "namespace completion: context %q, %q", ctName, toComplete)
-	cfg, err := GetKubeStartingConfig(cmd)
+
+	return nss, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+	config, err := cr.GetConfig(cmd)
 	if err != nil {
-		dlog.Errorf(ctx, "GetKubeStartingConfig: %v", err)
+		dlog.Error(ctx, err)
 		return nil, cobra.ShellCompDirectiveError
 	}
-	cxl := cfg.Clusters
-	nss := make([]string, len(cxl))
+
+	var ctName string
+	if cp := cr.kubeConfig.Context; cp != nil {
+		ctName = *cp
+	}
+	dlog.Debugf(ctx, "namespace completion: context %q, %q", ctName, toComplete)
+
+	cxl := config.Clusters
+	cs := make([]string, len(cxl))
 	i := 0
 	for n := range cxl {
-		nss[i] = n
+		cs[i] = n
 		i++
 	}
-	return nss, cobra.ShellCompDirectiveNoFileComp
+	return cs, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (cr *Request) GetConfig(cmd *cobra.Command) (*api.Config, error) {
+	cr.CommitFlags(cmd)
+	cfg, err := GetKubeStartingConfig(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("GetKubeStartingConfig: %w", err)
+	}
+	return cfg, nil
 }
