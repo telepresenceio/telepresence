@@ -135,7 +135,7 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 func WithSubCommands(ctx context.Context) context.Context {
 	return MergeSubCommands(ctx,
 		config(), connectCmd(), currentClusterId(), gatherLogs(), gatherTraces(), genYAML(), helm(), interceptCmd(), leave(),
-		list(), loglevel(), quit(), statusCmd(), testVPN(), uninstall(), uploadTraces(), version(),
+		list(), loglevel(), quit(), statusCmd(), testVPN(), uninstall(), uploadTraces(), version(), listNamespaces(), listContexts(),
 	)
 }
 
