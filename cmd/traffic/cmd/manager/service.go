@@ -198,7 +198,9 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 	dlog.Debug(ctx, "Depart called")
 
-	s.state.RemoveSession(ctx, session.GetSessionId())
+	if err := s.state.RemoveSession(ctx, session.GetSessionId()); err != nil {
+		return nil, err
+	}
 
 	return &empty.Empty{}, nil
 }
@@ -509,7 +511,9 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
-	if !s.state.RemoveIntercept(sessionID + ":" + name) {
+	if removed, err := s.state.RemoveIntercept(ctx, sessionID+":"+name); err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to finalize intercept %q: %v", name, err)
+	} else if !removed {
 		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
 	}
 
