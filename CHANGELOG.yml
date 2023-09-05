@@ -37,6 +37,10 @@ items:
         title: Rebuild with go 1.21.1
         body: >-
           Rebuild Telepresence with go 1.21.1 to address CVEs.
+      - type: security
+        title: Set security context for traffic agent
+        body: >-
+          Openshift users reported that the traffic agent injection was failing due to a missing security context.
   - version: 2.15.0
     date: "2023-08-29"
     notes:
