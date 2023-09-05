@@ -37,7 +37,20 @@ items:
         title: Lock connection to namespace
         body: >-
           The behavior changed so that a connected Telepresence client is bound to a namespace. The namespace can then
-          not be changed unless the client disconnects and reconnects.
+          not be changed unless the client disconnects and reconnects. A connection is also given a name. The default
+          name is composed from <code>&lt;kube context name&gt;-&lt;namespace&gt;</code> but can be given explicitly
+          when connecting using <code>--name</code>. The connection can optionally be identified using the option
+          <code>--use &lt;name match&gt;</code> (only needed when docker is used and more than one connection is active).
+      - type: change
+        title: Deprecation of global --context and --docker flags.
+        body: >-
+          The global flags <code>--context</code> and <code>--docker</code> will now be considered deprecated unless used
+          with commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
+      - type: change
+        title: Deprecation of the --namespace flag for the intercept command.
+        body: >-
+          The <code>--namespace</code> flag is now deprecated for <code>telepresence intercept</code> command. The flag can instead
+          be used with all commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
       - type: feature
         title: Add `telepresence list-namespaces` and `telepresence list-contexts` commands
         body: >-

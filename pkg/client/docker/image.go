@@ -27,7 +27,11 @@ func BuildImage(ctx context.Context, context string, buildArgs []string) (string
 // PullImage checks if the given image exists locally by doing docker image inspect. A docker pull is
 // performed if no local image is found. Stdout is silenced during those operations.
 func PullImage(ctx context.Context, image string) error {
-	_, _, err := GetClient(ctx).ImageInspectWithRaw(ctx, image)
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = cli.ImageInspectWithRaw(ctx, image)
 	if err == nil {
 		// Image exists in the local cache, so don't bother pulling it.
 		return nil

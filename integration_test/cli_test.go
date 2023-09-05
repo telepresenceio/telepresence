@@ -150,6 +150,8 @@ type statusResponseUserDaemon struct {
 	Running           bool   `json:"running,omitempty"`
 	KubernetesContext string `json:"kubernetes_context,omitempty"`
 	InstallID         string `json:"install_id,omitempty"`
+	ConnectionName    string `json:"connection_name,omitempty"`
+	Namespace         string `json:"namespace,omitempty"`
 	ManagerNamespace  string `json:"manager_namespace,omitempty"`
 }
 

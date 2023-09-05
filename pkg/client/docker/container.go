@@ -7,5 +7,9 @@ import (
 )
 
 func StopContainer(ctx context.Context, nameOrID string) error {
-	return GetClient(ctx).ContainerStop(ctx, nameOrID, container.StopOptions{})
+	cli, err := GetClient(ctx)
+	if err == nil {
+		err = cli.ContainerStop(ctx, nameOrID, container.StopOptions{})
+	}
+	return err
 }

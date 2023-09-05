@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -136,7 +137,7 @@ func (dr *dockerRun) wait(ctx context.Context) error {
 		killTimer.Reset(2 * time.Second)
 		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
-		if err := docker.StopContainer(ctx, dr.name); err != nil {
+		if err := docker.StopContainer(docker.EnableClient(ctx), dr.name); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}()
@@ -154,7 +155,7 @@ func (dr *dockerRun) wait(ctx context.Context) error {
 	return err
 }
 
-func (s *state) startInDocker(ctx context.Context, daemonName, envFile string, args []string) *dockerRun {
+func (s *state) startInDocker(ctx context.Context, daemonID *daemon.Identifier, envFile string, args []string) *dockerRun {
 	ourArgs := []string{
 		"run",
 		"--env-file", envFile,
@@ -169,7 +170,7 @@ func (s *state) startInDocker(ctx context.Context, daemonName, envFile string, a
 		ourArgs = append(ourArgs, "--name", dr.name)
 	}
 
-	if daemonName == "" {
+	if daemonID == nil {
 		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
 		if s.dockerPort != 0 {
 			ourArgs = append(ourArgs, "-p", fmt.Sprintf("%d:%d", s.localPort, s.dockerPort))
@@ -184,6 +185,7 @@ func (s *state) startInDocker(ctx context.Context, daemonName, envFile string, a
 			ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", s.mountPoint, dockerMount))
 		}
 	} else {
+		daemonName := daemonID.ContainerName()
 		ourArgs = append(ourArgs, "--network", "container:"+daemonName)
 
 		// "--rm" is mandatory when using --docker-run against a docker daemon, because without it, the volumes

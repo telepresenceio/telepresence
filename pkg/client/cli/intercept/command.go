@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -42,69 +42,73 @@ type Command struct {
 	DetailedOutput bool
 }
 
-func (a *Command) AddFlags(flags *pflag.FlagSet) {
-	flags.StringVarP(&a.AgentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
-	flags.StringVarP(&a.Port, "port", "p", "", ``+
+func (a *Command) AddFlags(cmd *cobra.Command) {
+	flagSet := cmd.Flags()
+	flagSet.StringVarP(&a.AgentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
+	flagSet.StringVarP(&a.Port, "port", "p", "", ``+
 		`Local port to forward to. If intercepting a service with multiple ports, `+
 		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
 		`With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or `+
 		`<local port>:<container port>:<svcPortIdentifier>.`,
 	)
 
-	flags.StringVar(&a.Address, "address", "127.0.0.1", ``+
+	flagSet.StringVar(&a.Address, "address", "127.0.0.1", ``+
 		`Local address to forward to, Only accepts IP address as a value. `+
 		`e.g. '--address 10.0.0.2'`,
 	)
 
-	flags.StringVar(&a.ServiceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
+	flagSet.StringVar(&a.ServiceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
 
-	flags.BoolVarP(&a.LocalOnly, "local-only", "l", false, ``+
+	flagSet.BoolVarP(&a.LocalOnly, "local-only", "l", false, ``+
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
 
-	flags.StringVarP(&a.EnvFile, "env-file", "e", "", ``+
+	flagSet.StringVarP(&a.EnvFile, "env-file", "e", "", ``+
 		`Also emit the remote environment to an env file in Docker Compose format. `+
 		`See https://docs.docker.com/compose/env-file/ for more information on the limitations of this format.`)
 
-	flags.StringVarP(&a.EnvJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
+	flagSet.StringVarP(&a.EnvJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
 
-	flags.StringVar(&a.Mount, "mount", "true", ``+
+	flagSet.StringVar(&a.Mount, "mount", "true", ``+
 		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
 		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
 
-	flags.StringSliceVar(&a.ToPod, "to-pod", []string{}, ``+
+	flagSet.StringSliceVar(&a.ToPod, "to-pod", []string{}, ``+
 		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
 		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
 		`Use <port>/UDP for UDP ports`)
 
-	flags.BoolVar(&a.DockerRun, "docker-run", false, ``+
+	flagSet.BoolVar(&a.DockerRun, "docker-run", false, ``+
 		`Run a Docker container with intercepted environment, volume mount, by passing arguments after -- to 'docker run', `+
 		`e.g. '--docker-run -- -it --rm ubuntu:20.04 /bin/bash'`)
 
-	flags.StringVar(&a.DockerBuild, "docker-build", "", ``+
+	flagSet.StringVar(&a.DockerBuild, "docker-build", "", ``+
 		`Build a Docker container from the given docker-context (path or URL), and run it with intercepted environment and volume mounts, `+
 		`by passing arguments after -- to 'docker run', e.g. '--docker-build /path/to/docker/context -- -it IMAGE /bin/bash'`)
 
-	flags.StringArrayVar(&a.DockerBuildOptions, "docker-build-opt", nil,
+	flagSet.StringArrayVar(&a.DockerBuildOptions, "docker-build-opt", nil,
 		`Option to docker-build in the form key=value, e.g. --docker-build-opt tag=mytag. Can be repeated`)
 
-	flags.StringVar(&a.DockerMount, "docker-mount", "", ``+
+	flagSet.StringVar(&a.DockerMount, "docker-mount", "", ``+
 		`The volume mount point in docker. Defaults to same as "--mount"`)
 
-	flags.StringP("namespace", "n", "", "If present, the namespace scope for this CLI request")
+	flagSet.StringP("namespace", "n", "", "If present, the namespace scope for this CLI request")
 
-	flags.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
+	flagSet.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
 
-	flags.BoolVar(&a.DetailedOutput, "detailed-output", false,
+	flagSet.BoolVar(&a.DetailedOutput, "detailed-output", false,
 		`Provide very detailed info about the intercept when used together with --output=json or --output=yaml'`)
 
-	flags.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,
+	flagSet.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,
 		`Do not mount remote directories. Instead, expose this port on localhost to an external mounter`)
 
-	flags.Lookup("namespace").Deprecated = "use telepresence connect to set the namespace"
-	flags.Lookup("local-only").Deprecated = "use telepresence connect to set the namespace"
+	// Hide these flags. They are still functional but deprecated. Using them will yield a deprecation message.
+	flagSet.Lookup("local-only").Hidden = true
+	flagSet.Lookup("namespace").Hidden = true
 }
 
 func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
+	flags.DeprecationIfChanged(cmd, "local-only", "use telepresence connect to set the namespace")
+	flags.DeprecationIfChanged(cmd, "namespace", "use telepresence connect to set the namespace")
 	if len(positional) > 1 && cmd.Flags().ArgsLenAtDash() != 1 {
 		return errcat.User.New("commands to be run with intercept must come after options")
 	}

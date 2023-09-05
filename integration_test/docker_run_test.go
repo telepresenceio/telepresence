@@ -11,7 +11,7 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 )
 
 func (s *singleServiceSuite) Test_DockerRun() {
@@ -138,17 +138,19 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
 	require := s.Require()
-	stdout := s.TelepresenceConnect(ctx)
+	stdout := s.TelepresenceConnect(ctx, "--docker")
 	defer itest.TelepresenceQuitOk(ctx)
 
-	match := regexp.MustCompile(`Connected to context ?(.+),`).FindStringSubmatch(stdout)
-	require.Len(match, 2)
+	match := regexp.MustCompile(`Connected to context ?(.+),\s*namespace (\S+)\s+\(`).FindStringSubmatch(stdout)
+	require.Len(match, 3)
 
-	daemonName := docker.SafeContainerName("tp-" + match[1])
+	daemonID, err := daemon.NewIdentifier("", match[1], match[2])
+	require.NoError(err)
+	daemonName := daemonID.ContainerName()
 	tag := "telepresence/echo-test"
 	testDir := "testdata/echo-server"
 
-	_, err := itest.Output(ctx, "docker", "build", "-t", tag, testDir)
+	_, err = itest.Output(ctx, "docker", "build", "-t", tag, testDir)
 	require.NoError(err)
 
 	abs, err := filepath.Abs(testDir)
@@ -174,7 +176,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 				out, err := itest.Output(ctx,
 					"docker", "run", "--network", "container:"+daemonName, "--rm", "curlimages/curl", "--silent", "--max-time", "1", svc)
 				if err != nil {
-					dlog.Error(ctx, err)
+					dlog.Errorf(ctx, "%s:%v", out, err)
 					return false
 				}
 				dlog.Info(ctx, out)
@@ -231,7 +233,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		s.TelepresenceConnect(ctx)
+		s.TelepresenceConnect(ctx, "--docker")
 		assertNotIntercepted(ctx)
 	})
 
@@ -247,7 +249,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		case <-time.After(30 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
-		s.TelepresenceConnect(ctx)
+		s.TelepresenceConnect(ctx, "--docker")
 		assertNotIntercepted(ctx)
 	})
 }
