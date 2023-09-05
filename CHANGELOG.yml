@@ -51,10 +51,6 @@ items:
         body: >-
           The <code>--namespace</code> flag is now deprecated for <code>telepresence intercept</code> command. The flag can instead
           be used with all commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
-      - type: change
-        body: >-
-          The behavior changed so that a connected Telepresence client is bound to a namespace. The namespace can then
-          not be changed unless the client disconnects and reconnects.
       - type: feature
         title: Add `telepresence list-namespaces` and `telepresence list-contexts` commands
         body: >-
