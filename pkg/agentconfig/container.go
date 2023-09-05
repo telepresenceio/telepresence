@@ -141,7 +141,7 @@ func AgentContainer(
 	if r := config.Resources; r != nil {
 		ac.Resources = *r
 	}
-	// use the primary container's constraints to ensure psp compliance for the agent
+	// use the primary container's sc to ensure psp compliance for the agent
 	if sc := pod.Spec.Containers[0].SecurityContext; sc != nil {
 		ac.SecurityContext = sc
 	}
