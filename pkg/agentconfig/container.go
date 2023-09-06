@@ -141,9 +141,24 @@ func AgentContainer(
 	if r := config.Resources; r != nil {
 		ac.Resources = *r
 	}
-	// use the primary container's sc to ensure psp compliance for the agent
-	if sc := pod.Spec.Containers[0].SecurityContext; sc != nil {
-		ac.SecurityContext = sc
+
+	// Assign the security context of the first container (with both intercepts
+	// and a set security context) to the traffic agent.
+outerLoop:
+	for _, cc := range config.Containers {
+		if cc.Intercepts == nil {
+			continue
+		}
+
+		for _, app := range pod.Spec.Containers {
+			if app.Name == cc.Name {
+				if app.SecurityContext != nil {
+					ac.SecurityContext = app.SecurityContext
+					break outerLoop
+				}
+				break
+			}
+		}
 	}
 
 	// Replace all occurrences of "$(ENV" with "$(PFX_ENV"
