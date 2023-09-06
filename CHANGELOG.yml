@@ -31,7 +31,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.15.1
-    date: "TBD"
+    date: "2023-09-06"
     notes:
       - type: security
         title: Rebuild with go 1.21.1
