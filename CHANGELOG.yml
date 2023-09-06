@@ -61,7 +61,7 @@ items:
           A deprecation warning will be printed if a command other than <code>telepresence connect</code> causes an
           implicit connect to happen. Implicit connects will be removed in a future release.
   - version: 2.15.1
-    date: "TBD"
+    date: "2023-09-06"
     notes:
       - type: security
         title: Rebuild with go 1.21.1
