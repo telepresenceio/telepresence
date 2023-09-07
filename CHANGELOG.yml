@@ -65,6 +65,13 @@ items:
         body: >-
           A deprecation warning will be printed if a command other than <code>telepresence connect</code> causes an
           implicit connect to happen. Implicit connects will be removed in a future release.
+  - version: 2.15.2
+    date: (TBD)
+    notes:
+      - type: security
+        title: Set security context for traffic agent
+        body: >-
+          Openshift users reported that the traffic agent injection was failing due to a missing security context.
   - version: 2.15.0
     date: "2023-08-29"
     notes:

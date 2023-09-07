@@ -142,6 +142,25 @@ func AgentContainer(
 		ac.Resources = *r
 	}
 
+	// Assign the security context of the first container (with both intercepts
+	// and a set security context) to the traffic agent.
+outerLoop:
+	for _, cc := range config.Containers {
+		if cc.Intercepts == nil {
+			continue
+		}
+
+		for _, app := range pod.Spec.Containers {
+			if app.Name == cc.Name {
+				if app.SecurityContext != nil {
+					ac.SecurityContext = app.SecurityContext
+					break outerLoop
+				}
+				break
+			}
+		}
+	}
+
 	// Replace all occurrences of "$(ENV" with "$(PFX_ENV"
 	aj, err := json.Marshal(&ac)
 	if err != nil {
