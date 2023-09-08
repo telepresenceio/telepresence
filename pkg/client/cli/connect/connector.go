@@ -221,42 +221,57 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote() {
-		// We never pass on KUBECONFIG to a remote daemon.
-		delete(request.KubeFlags, "KUBECONFIG")
+		// We instruct the remote daemon to modify its KUBECONFIG.
+		delete(request.Environment, "KUBECONFIG")
+		delete(request.Environment, "-KUBECONFIG")
 	}
 	cat := errcat.Unknown
 	ctx := cmd.Context()
+
+	session := func(ci *connector.ConnectInfo, started bool) *daemon.Session {
+		// Update the request from the connect info.
+		request.KubeFlags = ci.KubeFlags
+		request.ManagerNamespace = ci.ManagerNamespace
+		request.Name = ci.ConnectionName
+		return &daemon.Session{
+			UserClient: *userD,
+			Info:       ci,
+			Started:    started,
+		}
+	}
+
+	connectResult := func(ci *connector.ConnectInfo) (*daemon.Session, error) {
+		var msg string
+		switch ci.Error {
+		case connector.ConnectInfo_UNSPECIFIED:
+			fmt.Fprintf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
+			return session(ci, true), nil
+		case connector.ConnectInfo_ALREADY_CONNECTED:
+			return session(ci, false), nil
+		case connector.ConnectInfo_MUST_RESTART:
+			msg = "Cluster configuration changed, please quit telepresence and reconnect"
+		default:
+			msg = ci.ErrorText
+			if ci.ErrorCategory != 0 {
+				cat = errcat.Category(ci.ErrorCategory)
+			}
+		}
+		return nil, cat.Newf("connector.Connect: %s", msg)
+	}
+
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
 		if ci, err = userD.Status(ctx, &empty.Empty{}); err != nil {
 			return nil, err
 		}
-		switch ci.Error {
-		case connector.ConnectInfo_ALREADY_CONNECTED:
-			if cc, ok := request.KubeFlags["context"]; ok && cc != ci.ClusterContext {
-				ci.Error = connector.ConnectInfo_MUST_RESTART
-			} else if ns, ok := request.KubeFlags["namespace"]; ok && ns != ci.Namespace {
-				ci.Error = connector.ConnectInfo_MUST_RESTART
-			} else {
-				return &daemon.Session{
-					UserClient: *userD,
-					Info:       ci,
-					Started:    true,
-				}, nil
-			}
-		case connector.ConnectInfo_DISCONNECTED:
-			// proceed with connect
-			if required && daemon.GetRequest(ctx).Implicit {
-				_, _ = fmt.Fprintf(output.Info(ctx),
-					`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
-						"connect to take place. The implicit connect behavior is deprecated and will be removed in a future release.\n",
-					cmd.UseLine())
-			}
-		default:
-			if ci.ErrorCategory != 0 {
-				cat = errcat.Category(ci.ErrorCategory)
-			}
-			return nil, cat.Newf("connector.Status: %s", ci.Error)
+		if ci.Error != connector.ConnectInfo_DISCONNECTED {
+			return connectResult(ci)
+		}
+		if required {
+			_, _ = fmt.Fprintf(output.Info(ctx),
+				`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
+					"connect to take place. The implicit connect behavior is deprecated and will be removed in a future release.\n",
+				cmd.UseLine())
 		}
 	}
 
@@ -266,29 +281,5 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err
 	}
-
-	var msg string
-	switch ci.Error {
-	case connector.ConnectInfo_UNSPECIFIED:
-		fmt.Fprintf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
-		return &daemon.Session{
-			UserClient: *userD,
-			Info:       ci,
-			Started:    true,
-		}, nil
-	case connector.ConnectInfo_ALREADY_CONNECTED:
-		return &daemon.Session{
-			UserClient: *userD,
-			Info:       ci,
-			Started:    false,
-		}, nil
-	case connector.ConnectInfo_MUST_RESTART:
-		msg = "Cluster configuration changed, please quit telepresence and reconnect"
-	default:
-		msg = ci.ErrorText
-		if ci.ErrorCategory != 0 {
-			cat = errcat.Category(ci.ErrorCategory)
-		}
-	}
-	return nil, cat.Newf("connector.Connect: %s", msg)
+	return connectResult(ci)
 }
