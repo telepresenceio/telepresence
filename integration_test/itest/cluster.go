@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -1077,13 +1078,15 @@ func WithConfig(c context.Context, modifierFunc func(config client.Config)) cont
 	TelepresenceQuitOk(c)
 
 	t := getT(c)
-	configCopy := client.GetConfig(c)
-	modifierFunc(configCopy)
+	cfgVal := reflect.ValueOf(client.GetConfig(c)).Elem()
+	cfgCopyVal := reflect.New(cfgVal.Type())
+	cfgCopyVal.Elem().Set(cfgVal) // By value copy
+	configCopy := cfgCopyVal.Interface()
+	modifierFunc(configCopy.(client.Config))
 	configYaml, err := yaml.Marshal(&configCopy)
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
 	configDir := t.TempDir()
-	c = filelocation.WithAppUserConfigDir(c, configDir)
 	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c
