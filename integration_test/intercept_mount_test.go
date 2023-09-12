@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	goRuntime "runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -70,7 +69,7 @@ func (s *interceptMountSuite) TearDownSuite() {
 		return err == nil && !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
-	if goRuntime.GOOS != "windows" {
+	if runtime.GOOS != "windows" {
 		// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
 		go func() {
 			time.Sleep(2 * time.Second)

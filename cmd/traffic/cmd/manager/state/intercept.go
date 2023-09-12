@@ -73,7 +73,7 @@ func (s *state) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 		return interceptError(err)
 	}
 
-	sce, err := s.getOrCreateAgentConfig(ctx, wl, spec.Mechanism != "tcp")
+	sce, err := s.getOrCreateAgentConfig(ctx, wl, spec)
 	if err != nil {
 		return interceptError(err)
 	}
@@ -96,6 +96,10 @@ func (s *state) PrepareIntercept(ctx context.Context, cr *managerrpc.CreateInter
 	}, nil
 }
 
+func (s *state) isExtended(spec *managerrpc.InterceptSpec) bool {
+	return spec.Mechanism != "tcp"
+}
+
 func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error) {
 	if agentImage == "" {
 		err = errcat.User.Newf(
@@ -106,7 +110,7 @@ func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error)
 	return err
 }
 
-func (s *state) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, extended bool) (sc agentconfig.SidecarExt, err error) {
+func (s *state) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, spec *managerrpc.InterceptSpec) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
@@ -127,7 +131,7 @@ func (s *state) getOrCreateAgentConfig(ctx context.Context, wl k8sapi.Workload, 
 	if err != nil {
 		return nil, err
 	}
-	return s.loadAgentConfig(ctx, cmAPI, cm, wl, extended)
+	return s.loadAgentConfig(ctx, cmAPI, cm, wl, spec)
 }
 
 func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (cm *core.ConfigMap, err error) {
@@ -169,11 +173,12 @@ func (s *state) loadAgentConfig(
 	cmAPI typed.ConfigMapInterface,
 	cm *core.ConfigMap,
 	wl k8sapi.Workload,
-	extended bool,
+	spec *managerrpc.InterceptSpec,
 ) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
+	extended := s.isExtended(spec)
 	enabled, err := checkInterceptAnnotations(wl)
 	if err != nil {
 		return nil, err
@@ -240,7 +245,9 @@ func (s *state) loadAgentConfig(
 		if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
 			return nil, err
 		}
-		if sce, err = gc.Generate(ctx, wl); err != nil {
+		if sce, err = gc.Generate(ctx, wl, &agentconfig.UserConfig{
+			ReplaceContainers: spec.Replace,
+		}); err != nil {
 			return nil, err
 		}
 		if err = update(sce); err != nil {

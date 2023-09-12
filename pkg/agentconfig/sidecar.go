@@ -103,6 +103,11 @@ type Container struct {
 	Mounts []string
 }
 
+type UserConfig struct {
+	// ReplaceContainers is true if the agent should replace the intercepted containers
+	ReplaceContainers bool `json:"replaceContainers,omitempty"`
+}
+
 // The Sidecar configures the traffic-agent sidecar.
 type Sidecar struct {
 	// If Create is true, then this Config has not yet been filled in.
@@ -152,6 +157,9 @@ type Sidecar struct {
 
 	// InitResources is the resource requirements for the initContainer sidecar
 	InitResources *core.ResourceRequirements `json:"initResources,omitempty"`
+
+	// User-supplied configuration for the intercept.
+	UserConfig *UserConfig `json:"userConfig,omitempty"`
 
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`

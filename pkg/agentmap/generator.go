@@ -21,7 +21,7 @@ const (
 )
 
 type GeneratorConfig interface {
-	Generate(ctx context.Context, wl k8sapi.Workload) (sc agentconfig.SidecarExt, err error)
+	Generate(ctx context.Context, wl k8sapi.Workload, userCfg *agentconfig.UserConfig) (sc agentconfig.SidecarExt, err error)
 }
 
 var GeneratorConfigFunc func(qualifiedAgentImage string) (GeneratorConfig, error) //nolint:gochecknoglobals // extension point
@@ -40,7 +40,7 @@ type BasicGeneratorConfig struct {
 	PullSecrets         []core.LocalObjectReference
 }
 
-func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workload) (sc agentconfig.SidecarExt, err error) {
+func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workload, userCfg *agentconfig.UserConfig) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "agentmap.Generate")
 	defer tracing.EndAndRecord(span, err)
 
@@ -105,6 +105,7 @@ func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workloa
 		Resources:     cfg.Resources,
 		PullPolicy:    cfg.PullPolicy,
 		PullSecrets:   cfg.PullSecrets,
+		UserConfig:    userCfg,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil

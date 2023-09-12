@@ -165,7 +165,11 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		if scx, err = gc.Generate(ctx, wl); err != nil {
+		var uc *agentconfig.UserConfig
+		if scx != nil && scx.AgentConfig() != nil {
+			uc = scx.AgentConfig().UserConfig
+		}
+		if scx, err = gc.Generate(ctx, wl, uc); err != nil {
 			return nil, err
 		}
 

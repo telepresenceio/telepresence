@@ -189,7 +189,7 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorCo
 				changed = true
 				continue
 			}
-			ncx, err := gc.Generate(ctx, wl)
+			ncx, err := gc.Generate(ctx, wl, acx.AgentConfig().UserConfig)
 			if err != nil {
 				return err
 			}
@@ -290,7 +290,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 			dlog.Error(ctx, err)
 			return
 		}
-		if acx, err := gc.Generate(ctx, wl); err != nil {
+		if acx, err := gc.Generate(ctx, wl, ac.UserConfig); err != nil {
 			dlog.Error(ctx, err)
 		} else if err = c.Store(ctx, acx, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
@@ -750,7 +750,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 			continue
 		}
 		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-		acn, err := cfg.Generate(ctx, wl)
+		acn, err := cfg.Generate(ctx, wl, ac.UserConfig)
 		if err != nil {
 			dlog.Error(ctx, err)
 			continue
@@ -888,7 +888,7 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 		return
 	}
 	for _, wl := range affectedWorkloads {
-		scx, err := gc.Generate(ctx, wl)
+		scx, err := gc.Generate(ctx, wl, nil)
 		if err == nil {
 			err = c.Store(ctx, scx, false)
 		}
