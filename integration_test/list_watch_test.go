@@ -16,7 +16,7 @@ func (s *connectedSuite) Test_ListWatch() {
 		cancelctx, cancel := context.WithCancel(ctx)
 		ch := make(chan string)
 		go func() {
-			stdout, _, _ := itest.Telepresence(cancelctx, "list", "--namespace", s.AppNamespace(), "--output", "json-stream")
+			stdout, _, _ := itest.Telepresence(cancelctx, "list", "--output", "json-stream")
 			ch <- stdout
 		}()
 		time.Sleep(time.Second)

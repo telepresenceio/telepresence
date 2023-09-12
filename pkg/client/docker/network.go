@@ -15,7 +15,10 @@ import (
 
 // EnsureNetwork checks if a network with the given name exists, and creates it if that is not the case.
 func EnsureNetwork(ctx context.Context, name string) error {
-	cli := GetClient(ctx)
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return err
+	}
 	resource, err := cli.NetworkInspect(ctx, name, types.NetworkInspectOptions{})
 	if err != nil {
 		if !dockerClient.IsErrNotFound(err) {

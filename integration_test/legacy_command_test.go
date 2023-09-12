@@ -14,7 +14,7 @@ func (s *singleServiceSuite) Test_LegacySwapDeploymentDoesIntercept() {
 	// We don't need to defer leaving the intercept because the
 	// intercept is automatically left once the command is finished
 	_, stderr, err := itest.Telepresence(ctx, "--swap-deployment", s.ServiceName(), "--expose", "9090",
-		"--namespace", s.AppNamespace(), "--mount", "false", "--run", "sleep", "1")
+		"--mount", "false", "--run", "sleep", "1")
 	require.NoError(err)
 	require.Contains(stderr, "Legacy Telepresence command used")
 	require.Contains(stderr, "Using Deployment "+s.ServiceName())
@@ -26,7 +26,7 @@ func (s *singleServiceSuite) Test_LegacySwapDeploymentDoesIntercept() {
 
 	// Verify that the intercept no longer exists
 	s.Eventually(func() bool {
-		stdout, stderr, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, stderr, err := itest.Telepresence(ctx, "list", "--intercepts")
 		if err != nil || stderr != "" {
 			return false
 		}

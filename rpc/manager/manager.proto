@@ -15,6 +15,7 @@ option go_package = "github.com/telepresenceio/telepresence/rpc/v2/manager";
 // Manager.
 message ClientInfo {
   string name = 1;  // user@hostname
+  string namespace = 6; // namespace that the client is connected to
   string install_id = 2;
   string product = 3;  // "telepresence"
   string version = 4;

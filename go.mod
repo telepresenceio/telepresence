@@ -25,6 +25,7 @@ require (
 	github.com/moby/term v0.5.0
 	github.com/pkg/sftp v1.13.5
 	github.com/prometheus/client_golang v1.15.1
+	github.com/rogpeppe/go-internal v1.10.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sirupsen/logrus v1.9.2
 	github.com/spf13/afero v1.9.5

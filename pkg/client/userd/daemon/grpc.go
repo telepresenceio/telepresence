@@ -339,7 +339,7 @@ func (s *service) RemoveInterceptor(ctx context.Context, interceptor *rpc.Interc
 
 func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
 	err = s.WithSession(c, "List", func(c context.Context, session userd.Session) error {
-		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter, true)
+		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter)
 		return err
 	})
 	return

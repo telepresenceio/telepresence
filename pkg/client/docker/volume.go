@@ -20,7 +20,10 @@ const TelemountPlugin = "datawire/telemount:" + runtime.GOARCH
 // EnsureVolumePlugin checks if the datawire/telemount plugin is installed and installs it if that is
 // not the case. The plugin is also enabled.
 func EnsureVolumePlugin(ctx context.Context) error {
-	cli := GetClient(ctx)
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return err
+	}
 	pi, _, err := cli.PluginInspectWithRaw(ctx, TelemountPlugin)
 	if err != nil {
 		if !client.IsErrNotFound(err) {
@@ -36,7 +39,7 @@ func EnsureVolumePlugin(ctx context.Context) error {
 
 func installVolumePlugin(ctx context.Context) error {
 	cmd := proc.CommandContext(ctx, "docker", "plugin", "install", "--grant-all-permissions", TelemountPlugin, "DEBUG=true")
-	_, err := proc.CaptureErr(ctx, cmd)
+	_, err := proc.CaptureErr(cmd)
 	if err != nil {
 		err = fmt.Errorf("docker plugin install %s: %w", TelemountPlugin, err)
 	}
@@ -67,7 +70,11 @@ func StopVolumeMounts(ctx context.Context, vols []string) {
 }
 
 func startVolumeMount(ctx context.Context, host string, port int32, volumeName, container, dir string) error {
-	_, err := GetClient(ctx).VolumeCreate(ctx, volume.CreateOptions{
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = cli.VolumeCreate(ctx, volume.CreateOptions{
 		Driver: TelemountPlugin,
 		DriverOpts: map[string]string{
 			"host":      host,
@@ -84,7 +91,11 @@ func startVolumeMount(ctx context.Context, host string, port int32, volumeName, 
 }
 
 func stopVolumeMount(ctx context.Context, volume string) error {
-	err := GetClient(ctx).VolumeRemove(ctx, volume, false)
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return err
+	}
+	err = cli.VolumeRemove(ctx, volume, false)
 	if err != nil {
 		err = fmt.Errorf("docker volume rm %s: %w", volume, err)
 	}
@@ -93,7 +104,11 @@ func stopVolumeMount(ctx context.Context, volume string) error {
 
 // ContainerIP returns the IP assigned to the container with the given name on the telepresence network.
 func ContainerIP(ctx context.Context, name string) (string, error) {
-	ci, err := GetClient(ctx).ContainerInspect(ctx, name)
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	ci, err := cli.ContainerInspect(ctx, name)
 	if err != nil {
 		return "", fmt.Errorf("docker container inspect %s: %w", "userd", err)
 	}

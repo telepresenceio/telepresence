@@ -97,7 +97,7 @@ func (s *largeFilesSuite) SetupSuite() {
 }
 
 func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
 
 	wg := sync.WaitGroup{}
 	wg.Add(s.ServiceCount())
@@ -106,7 +106,6 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 			defer wg.Done()
 			svc := fmt.Sprintf("%s-%d", s.Name(), i)
 			stdout := itest.TelepresenceOk(ctx, "intercept",
-				"--namespace", s.AppNamespace(),
 				"--detailed-output",
 				"--output", "json",
 				"--port", strconv.Itoa(8080+i),
@@ -115,7 +114,7 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 			var info intercept.Info
 			require := s.Require()
 			require.NoError(json.Unmarshal([]byte(stdout), &info))
-			require.Equal(fmt.Sprintf("%s-%s", svc, s.AppNamespace()), info.Name, ioutil.WriterToString(info.WriteTo))
+			require.Equal(svc, info.Name, ioutil.WriterToString(info.WriteTo))
 			require.NotNil(info.Mount)
 			s.mountPoint[i] = info.Mount.LocalDir
 		}(i)
@@ -126,7 +125,7 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 
 func (s *largeFilesSuite) leaveIntercepts(ctx context.Context) {
 	for i := 0; i < s.ServiceCount(); i++ {
-		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%d-%s", s.Name(), i, s.AppNamespace()))
+		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%d", s.Name(), i))
 	}
 }
 

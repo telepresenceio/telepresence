@@ -54,8 +54,8 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 	})
 
 	// when
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
-	itest.TelepresenceOk(ctx, "intercept", serviceName, "--namespace", s.AppNamespace(), "--port", strconv.Itoa(port))
+	s.TelepresenceConnect(ctx, "--context", "extra")
+	itest.TelepresenceOk(ctx, "intercept", serviceName, "--port", strconv.Itoa(port))
 
 	// then
 	for _, excluded := range excludes {
@@ -104,7 +104,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 	})
 
 	// when
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	// then
 	for _, mapping := range mappings {

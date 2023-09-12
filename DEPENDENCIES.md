@@ -111,6 +111,7 @@ following Free and Open Source software:
     github.com/prometheus/common                                                 v0.43.0                               Apache License 2.0
     github.com/prometheus/procfs                                                 v0.9.0                                Apache License 2.0
     github.com/rivo/uniseg                                                       v0.4.4                                MIT license
+    github.com/rogpeppe/go-internal                                              v1.10.0                               3-clause BSD license
     github.com/rubenv/sql-migrate                                                v1.4.0                                MIT license
     github.com/russross/blackfriday/v2                                           v2.1.0                                2-clause BSD license
     github.com/sabhiram/go-gitignore                                             v0.0.0-20210923224102-525f6e181f06    MIT license

@@ -33,8 +33,8 @@ func (s *connectedSuite) Test_MultipleUnnamedServicePorts() {
 		svc := dep + "-" + svcPort
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
 		defer cancel()
-		itest.TelepresenceOk(ctx, "intercept", "-n", s.AppNamespace(), "--mount", "false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
-		defer itest.TelepresenceOk(ctx, "leave", dep+"-"+s.AppNamespace())
+		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
+		defer itest.TelepresenceOk(ctx, "leave", dep)
 		itest.PingInterceptedEchoServer(ctx, svc, svcPort)
 	}
 	s.Run("port 80", func() {
@@ -52,7 +52,7 @@ func (s *connectedSuite) Test_MultipleUnnamedServicePorts() {
 
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
 		defer cancel()
-		_, _, err := itest.Telepresence(ctx, "intercept", "-n", s.AppNamespace(), "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
+		_, _, err := itest.Telepresence(ctx, "intercept", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
 		require.Error(err)
 	})
 }
@@ -77,8 +77,8 @@ func (s *connectedSuite) Test_NoContainerPort() {
 
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
 		defer cancel()
-		itest.TelepresenceOk(ctx, "intercept", "-n", s.AppNamespace(), "--mount", "false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
-		defer itest.TelepresenceOk(ctx, "leave", dep+"-"+s.AppNamespace())
+		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
+		defer itest.TelepresenceOk(ctx, "leave", dep)
 		itest.PingInterceptedEchoServer(ctx, svc, svcPort)
 	}
 	s.Run("port 80", func() {
@@ -106,8 +106,8 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 		ctx := s.Context()
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, "echo-tcp")
 		defer cancel()
-		itest.TelepresenceOk(ctx, "intercept", "-n", s.AppNamespace(), "--mount", "false", "--service", "echo-tcp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
-		defer itest.TelepresenceOk(ctx, "leave", dep+"-"+s.AppNamespace())
+		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--service", "echo-tcp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
+		defer itest.TelepresenceOk(ctx, "leave", dep)
 		itest.PingInterceptedEchoServer(ctx, "echo-tcp", svcPort)
 	})
 
@@ -151,9 +151,9 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 
 		itest.TelepresenceOk(ctx, "loglevel", "trace")
 		defer itest.TelepresenceOk(ctx, "loglevel", "debug")
-		itest.TelepresenceOk(ctx, "intercept", "-n", s.AppNamespace(), "--mount", "false", "--service", "echo-udp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
+		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--service", "echo-udp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
 		s.CapturePodLogs(ctx, "app="+dep, "traffic-agent", s.AppNamespace())
-		defer itest.TelepresenceOk(ctx, "leave", dep+"-"+s.AppNamespace())
+		defer itest.TelepresenceOk(ctx, "leave", dep)
 
 		pingPong := func(conn net.Conn, msg string) {
 			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))

@@ -70,7 +70,7 @@ type Session interface {
 	Uninstall(context.Context, *rpc.UninstallRequest) (*common.Result, error)
 
 	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
-	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter, bool) (*rpc.WorkloadInfoSnapshot, error)
+	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
 
 	GetCurrentNamespaces(forClientAccess bool) []string
 	ActualNamespace(string) string

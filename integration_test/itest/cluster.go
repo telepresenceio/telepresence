@@ -800,7 +800,7 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	})
 
 	gh := GetGlobalHarness(ctx)
-	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
+	if len(args) > 0 && (args[0] == "connect") {
 		rest := args[1:]
 		args = append(make([]string, 0, len(args)+3), args[0])
 		if user := GetUser(ctx); user != "default" {
@@ -814,9 +814,6 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		}
 		args = append(args, rest...)
 	}
-	if UseDocker(ctx) {
-		args = append([]string{"--docker"}, args...)
-	}
 	cmd := Command(ctx, gh.Executable(), args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -824,8 +821,8 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 }
 
 // TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output.
-func TelepresenceDisconnectOk(ctx context.Context) {
-	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, "quit"))
+func TelepresenceDisconnectOk(ctx context.Context, args ...string) {
+	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, append([]string{"quit"}, args...)...))
 }
 
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.

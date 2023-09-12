@@ -2,6 +2,7 @@ package dos
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -28,6 +29,10 @@ type File interface {
 	Truncate(size int64) error
 	WriteString(s string) (ret int, err error)
 	ReadDir(count int) ([]fs.DirEntry, error)
+}
+
+type OwnedFile interface {
+	Chown(uid, gid int) error
 }
 
 // FileSystem is an interface that implements functions in the os package.
@@ -205,9 +210,15 @@ func (fs *osFs) chown(err error, name string) error {
 	return err
 }
 
-func (fs *osFs) chownFile(f *os.File) (File, error) {
+func (fs *osFs) chownFile(f File) (File, error) {
 	if fs.mustChown() {
-		if err := f.Chown(fs.tpUID, fs.tpGID); err != nil {
+		var err error
+		if of, ok := f.(OwnedFile); ok {
+			err = of.Chown(fs.tpUID, fs.tpGID)
+		} else {
+			err = fmt.Errorf("chown is not supported by %T", f)
+		}
+		if err != nil {
 			_ = f.Close()
 			_ = fs.Remove(f.Name())
 			return nil, err
@@ -224,8 +235,8 @@ func WithFS(ctx context.Context, fs FileSystem) context.Context {
 }
 
 func getFS(ctx context.Context) FileSystem {
-	if fs, ok := ctx.Value(fsKey{}).(FileSystem); ok {
-		return fs
+	if f, ok := ctx.Value(fsKey{}).(FileSystem); ok {
+		return f
 	}
 	if env := client.GetEnv(ctx); env != nil {
 		return &osFs{

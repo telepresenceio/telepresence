@@ -8,7 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
@@ -84,6 +86,7 @@ func AddSubCommands(cmd *cobra.Command) {
 	addCompletion(cmd)
 	cmd.InitDefaultHelpCmd()
 	addUsageTemplate(cmd)
+	_ = cmd.RegisterFlagCompletionFunc("context", autocompleteContext)
 }
 
 // RunSubcommands is for use as a cobra.interceptCmd.RunE for commands that don't do anything themselves
@@ -132,7 +135,7 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 func WithSubCommands(ctx context.Context) context.Context {
 	return MergeSubCommands(ctx,
 		config(), connectCmd(), currentClusterId(), gatherLogs(), gatherTraces(), genYAML(), helm(), interceptCmd(), leave(),
-		list(), loglevel(), quit(), statusCmd(), testVPN(), uninstall(), uploadTraces(), version(),
+		list(), loglevel(), quit(), statusCmd(), testVPN(), uninstall(), uploadTraces(), version(), listNamespaces(), listContexts(),
 	)
 }
 
@@ -180,4 +183,22 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 		}
 		return nil
 	}
+}
+
+func autocompleteContext(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+	dlog.Debugf(ctx, "context completion: %q", toComplete)
+	cfg, err := daemon.GetKubeStartingConfig(cmd)
+	if err != nil {
+		dlog.Errorf(ctx, "GetKubeStartingConfig: %v", err)
+		return nil, cobra.ShellCompDirectiveError
+	}
+	cxl := cfg.Contexts
+	nss := make([]string, len(cxl))
+	i := 0
+	for n := range cxl {
+		nss[i] = n
+		i++
+	}
+	return nss, cobra.ShellCompDirectiveNoFileComp
 }

@@ -7,6 +7,8 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -35,7 +37,11 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 	}
 	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
 		if cr := daemon.GetRequest(ctx); cr == nil {
-			ctx = daemon.WithDefaultRequest(ctx, cmd)
+			if ctx, err = daemon.WithDefaultRequest(ctx, cmd); err != nil {
+				return err
+			}
+			flags.DeprecationIfChanged(cmd, global.FlagDocker, "use telepresence connect to initiate the connection")
+			flags.DeprecationIfChanged(cmd, global.FlagContext, "use telepresence connect to initiate the connection")
 		}
 		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
 			if v == ann.Optional && (err == ErrNoUserDaemon || errcat.GetCategory(err) == errcat.Config) {
@@ -44,6 +50,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 			}
 			return err
 		}
+		cmd.SetContext(ctx)
 
 		// RootDaemon == Optional means that the RootDaemon must be started if
 		// the UserClient was started
@@ -63,10 +70,9 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 	}
 
 	if v := as[ann.Session]; v == ann.Optional || v == ann.Required {
-		if ctx, err = ensureSession(ctx, v == ann.Required); err != nil {
+		if err = ensureSession(cmd, v == ann.Required); err != nil {
 			return err
 		}
 	}
-	cmd.SetContext(ctx)
 	return nil
 }
