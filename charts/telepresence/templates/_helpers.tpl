@@ -92,6 +92,9 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
   resources: ["configmaps"]
   resourceNames: ["telepresence-agents"]
   verbs: ["get", "watch", "list"]
+{{- if and .Values.clientRbac .Values.clientRbac.ruleExtras }}
+{{ template "clientRbac-ruleExtras" . }}
+{{- end }}
 {{- end }}
 
 {{/*

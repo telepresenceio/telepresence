@@ -31,10 +31,9 @@ func (s *dockerDaemonSuite) SetupSuite() {
 		return
 	}
 	s.Suite.SetupSuite()
-	ctx := itest.WithConfig(s.HarnessContext(), func(cfg client.Config) {
+	s.ctx = itest.WithConfig(s.HarnessContext(), func(cfg client.Config) {
 		cfg.Intercept().UseFtp = false
 	})
-	s.ctx = itest.WithUseDocker(ctx, true)
 }
 
 func (s *dockerDaemonSuite) TearDownTest() {
@@ -47,7 +46,7 @@ func (s *dockerDaemonSuite) Context() context.Context {
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 	ctx := s.Context()
-	s.TelepresenceConnect(ctx)
+	s.TelepresenceConnect(ctx, "--docker")
 
 	jsOut := itest.TelepresenceOk(ctx, "status", "--output", "json")
 
@@ -65,16 +64,14 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonConflict() {
 	ctx := s.Context()
-	defer itest.TelepresenceQuitOk(itest.WithUseDocker(ctx, false))
-	itest.TelepresenceOk(itest.WithUseDocker(ctx, false), "connect", "--manager-namespace", s.ManagerNamespace())
-
-	_, stdErr, err := itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
+	_, stdErr, err := itest.Telepresence(ctx, "connect", "--docker", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 	s.Error(err)
 	s.Contains(stdErr, "option --docker cannot be used as long as a daemon is running on the host")
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {
 	ctx := s.Context()
+	s.TelepresenceConnect(ctx, "--docker")
 	s.TelepresenceConnect(ctx)
-	itest.TelepresenceOk(itest.WithUseDocker(ctx, false), "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 }

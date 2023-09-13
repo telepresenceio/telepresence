@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"os"
+	"regexp"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -16,15 +17,22 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
 type Request struct {
 	connector.ConnectRequest
+
+	// If set, then use a containerized daemon for the connection.
 	Docker bool
 
+	// Match expression to use when finding an existing connection by name
+	Use *regexp.Regexp
+
 	// Request is created on-demand, not by InitRequest
-	Implicit                bool
+	Implicit bool
+
 	kubeConfig              *genericclioptions.ConfigFlags
 	kubeFlagSet             *pflag.FlagSet
 	UserDaemonProfilingPort uint16
@@ -40,6 +48,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
+	nwFlags.StringVar(&cr.Name, "name", "", "Optional name to use for the connection")
 	nwFlags.StringSliceVar(&cr.MappedNamespaces,
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
@@ -53,6 +62,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 			`Comma separated list of CIDR to never proxy`)
 	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
 		`Overrides any other manager namespace set in config`)
+	nwFlags.Bool(global.FlagDocker, false, "Start, or connect to, daemon in a docker container")
 	flags.AddFlagSet(nwFlags)
 
 	dbgFlags := pflag.NewFlagSet("Debug and Profiling flags", 0)
@@ -65,7 +75,6 @@ func InitRequest(cmd *cobra.Command) *Request {
 	flags.AddFlagSet(dbgFlags)
 
 	cr.kubeConfig = genericclioptions.NewConfigFlags(false)
-	cr.kubeConfig.Context = nil // --context is global
 	cr.KubeFlags = make(map[string]string)
 	cr.kubeFlagSet = pflag.NewFlagSet("Kubernetes flags", 0)
 	cr.kubeConfig.AddFlags(cr.kubeFlagSet)
@@ -77,7 +86,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 
 type requestKey struct{}
 
-func (cr *Request) CommitFlags(cmd *cobra.Command) {
+func (cr *Request) CommitFlags(cmd *cobra.Command) error {
 	cr.kubeFlagSet.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
 			var v string
@@ -90,8 +99,11 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) {
 		}
 	})
 	cr.addKubeconfigEnv()
-	cr.setGlobalConnectFlags(cmd)
+	if err := cr.setGlobalConnectFlags(cmd); err != nil {
+		return err
+	}
 	cmd.SetContext(context.WithValue(cmd.Context(), requestKey{}, cr))
+	return nil
 }
 
 func (cr *Request) addKubeconfigEnv() {
@@ -110,7 +122,7 @@ func (cr *Request) addKubeconfigEnv() {
 
 // setContext deals with the global --context flag and assigns it to KubeFlags because it's
 // deliberately excluded from the original flags (to avoid conflict with the global flag).
-func (cr *Request) setGlobalConnectFlags(cmd *cobra.Command) {
+func (cr *Request) setGlobalConnectFlags(cmd *cobra.Command) error {
 	if contextFlag := cmd.Flag(global.FlagContext); contextFlag != nil && contextFlag.Changed {
 		cn := contextFlag.Value.String()
 		cr.KubeFlags[global.FlagContext] = cn
@@ -119,6 +131,13 @@ func (cr *Request) setGlobalConnectFlags(cmd *cobra.Command) {
 	if dockerFlag := cmd.Flag(global.FlagDocker); dockerFlag != nil && dockerFlag.Changed {
 		cr.Docker, _ = strconv.ParseBool(dockerFlag.Value.String())
 	}
+	if useFlag := cmd.Flag(global.FlagUse); useFlag != nil && useFlag.Changed {
+		var err error
+		if cr.Use, err = regexp.Compile(useFlag.Value.String()); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func GetRequest(ctx context.Context) *Request {
@@ -128,7 +147,7 @@ func GetRequest(ctx context.Context) *Request {
 	return nil
 }
 
-func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) context.Context {
+func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) (context.Context, error) {
 	cr := Request{
 		ConnectRequest: connector.ConnectRequest{
 			KubeFlags: make(map[string]string),
@@ -139,16 +158,18 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) context.Context
 	cr.kubeConfig.Context = nil // --context is global
 
 	// Handle deprecated namespace flag, but allow it in the list command.
-	if cmd.Use != "list" {
+	if cmd.Name() != "list" {
 		if nsFlag := cmd.Flag("namespace"); nsFlag != nil && nsFlag.Changed {
 			ns := nsFlag.Value.String()
 			*cr.kubeConfig.Namespace = ns
 			cr.KubeFlags["namespace"] = ns
 		}
 	}
-	cr.setGlobalConnectFlags(cmd)
+	if err := cr.setGlobalConnectFlags(cmd); err != nil {
+		return ctx, err
+	}
 	cr.addKubeconfigEnv()
-	return context.WithValue(ctx, requestKey{}, &cr)
+	return context.WithValue(ctx, requestKey{}, &cr), nil
 }
 
 func GetKubeStartingConfig(cmd *cobra.Command) (*api.Config, error) {
@@ -159,56 +180,78 @@ func GetKubeStartingConfig(cmd *cobra.Command) (*api.Config, error) {
 	return pathOpts.GetStartingConfig()
 }
 
-func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	cr.CommitFlags(cmd)
-	var ctName string
-	if cp := cr.kubeConfig.Context; cp != nil {
-		ctName = *cp
+func (cr *Request) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
+	if err := cr.CommitFlags(cmd); err != nil {
+		return nil, err
 	}
-	ctx := cmd.Context()
-	dlog.Debugf(ctx, "namespace completion: context %q, %q", ctName, toComplete)
 	rs, err := cr.kubeConfig.ToRESTConfig()
 	if err != nil {
-		dlog.Errorf(ctx, "ToRESTConfig: %v", err)
-		return nil, cobra.ShellCompDirectiveError
+		return nil, errcat.NoDaemonLogs.Newf("ToRESTConfig: %v", err)
 	}
 	cs, err := kubernetes.NewForConfig(rs)
 	if err != nil {
-		dlog.Errorf(ctx, "NewForConfig: %v", err)
-		return nil, cobra.ShellCompDirectiveError
+		return nil, errcat.NoDaemonLogs.Newf("NewForConfig: %v", err)
 	}
-	nsl, err := cs.CoreV1().Namespaces().List(ctx, v1.ListOptions{})
+	nsl, err := cs.CoreV1().Namespaces().List(cmd.Context(), v1.ListOptions{})
 	if err != nil {
-		dlog.Errorf(ctx, "Namespaces.List: %v", err)
-		return nil, cobra.ShellCompDirectiveError
+		return nil, errcat.NoDaemonLogs.Newf("Namespaces.List: %v", err)
 	}
 	itms := nsl.Items
 	nss := make([]string, len(itms))
 	for i, itm := range itms {
 		nss[i] = itm.Name
 	}
-	return nss, cobra.ShellCompDirectiveNoFileComp
+	return nss, nil
 }
 
-func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	cr.CommitFlags(cmd)
+func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+	nss, err := cr.GetAllNamespaces(cmd)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return nil, cobra.ShellCompDirectiveError
+	}
+
 	var ctName string
 	if cp := cr.kubeConfig.Context; cp != nil {
 		ctName = *cp
 	}
-	ctx := cmd.Context()
 	dlog.Debugf(ctx, "namespace completion: context %q, %q", ctName, toComplete)
-	cfg, err := GetKubeStartingConfig(cmd)
+
+	return nss, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+	config, err := cr.GetConfig(cmd)
 	if err != nil {
-		dlog.Errorf(ctx, "GetKubeStartingConfig: %v", err)
+		dlog.Error(ctx, err)
 		return nil, cobra.ShellCompDirectiveError
 	}
-	cxl := cfg.Clusters
-	nss := make([]string, len(cxl))
+
+	var ctName string
+	if cp := cr.kubeConfig.Context; cp != nil {
+		ctName = *cp
+	}
+	dlog.Debugf(ctx, "namespace completion: context %q, %q", ctName, toComplete)
+
+	cxl := config.Clusters
+	cs := make([]string, len(cxl))
 	i := 0
 	for n := range cxl {
-		nss[i] = n
+		cs[i] = n
 		i++
 	}
-	return nss, cobra.ShellCompDirectiveNoFileComp
+	return cs, cobra.ShellCompDirectiveNoFileComp
+}
+
+func (cr *Request) GetConfig(cmd *cobra.Command) (*api.Config, error) {
+	if err := cr.CommitFlags(cmd); err != nil {
+		return nil, err
+	}
+	cfg, err := GetKubeStartingConfig(cmd)
+	if err != nil {
+		return nil, errcat.NoDaemonLogs.Newf("GetKubeStartingConfig: %v", err)
+	}
+	return cfg, nil
 }

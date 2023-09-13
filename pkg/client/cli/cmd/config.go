@@ -63,8 +63,10 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 				kc, err = client.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
 			}
 		} else {
-			rq := daemon.GetRequest(daemon.WithDefaultRequest(ctx, cmd))
-			kc, err = client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+			if ctx, err = daemon.WithDefaultRequest(ctx, cmd); err == nil {
+				rq := daemon.GetRequest(ctx)
+				kc, err = client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+			}
 		}
 		if err != nil {
 			return err

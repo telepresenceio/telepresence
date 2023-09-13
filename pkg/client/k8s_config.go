@@ -15,6 +15,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dlog"
@@ -137,24 +138,38 @@ func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, err
 	return configFlags, nil
 }
 
-// CurrentContext returns the name of the current Kubernetes context, and the context itself.
-func CurrentContext(flagMap map[string]string) (string, *api.Context, error) {
+// ConfigLoader returns the name of the current Kubernetes context, and the context itself.
+func ConfigLoader(flagMap map[string]string) (clientcmd.ClientConfig, error) {
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	config, err := configFlags.ToRawKubeConfigLoader().RawConfig()
+	return configFlags.ToRawKubeConfigLoader(), nil
+}
+
+// CurrentContext returns the name of the current Kubernetes context, the active namespace, and the context itself.
+func CurrentContext(flagMap map[string]string) (string, string, *api.Context, error) {
+	cld, err := ConfigLoader(flagMap)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
+	}
+	ns, _, err := cld.Namespace()
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	config, err := cld.RawConfig()
+	if err != nil {
+		return "", "", nil, err
 	}
 	if len(config.Contexts) == 0 {
-		return "", nil, errcat.Config.New("kubeconfig has no context definition")
+		return "", "", nil, errcat.Config.New("kubeconfig has no context definition")
 	}
 	cc := flagMap["context"]
 	if cc == "" {
 		cc = config.CurrentContext
 	}
-	return cc, config.Contexts[cc], nil
+	return cc, ns, config.Contexts[cc], nil
 }
 
 func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {

@@ -159,7 +159,9 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 	if ha.AllValues, err = ha.MergeValues(getter.All(cli.New())); err != nil {
 		return err
 	}
-	ha.Request.CommitFlags(cmd)
+	if err := ha.Request.CommitFlags(cmd); err != nil {
+		return err
+	}
 	if ns, ok := ha.Request.KubeFlags["namespace"]; ok {
 		dlog.Debugf(cmd.Context(), "using manager namespace %q", ns)
 		ha.Request.ManagerNamespace = ns

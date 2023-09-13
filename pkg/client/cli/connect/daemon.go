@@ -43,21 +43,17 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) error {
 		_ = fh.Close()
 	}
 
-	configDir, err := ensureAppUserConfigDir(ctx)
-	if err != nil {
-		return err
-	}
 	args := []string{client.GetExe(), "daemon-foreground"}
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
 	}
-	args = append(args, logDir, configDir)
+	args = append(args, logDir, filelocation.AppUserConfigDir(ctx))
 	return proc.StartInBackgroundAsRoot(ctx, args...)
 }
 
 // ensureRootDaemonRunning ensures that the daemon is running.
 func ensureRootDaemonRunning(ctx context.Context) error {
-	if ud := daemon.GetUserClient(ctx); ud != nil && ud.Remote {
+	if ud := daemon.GetUserClient(ctx); ud != nil && ud.Remote() {
 		// Never start root daemon when running remote
 		return nil
 	}
@@ -107,10 +103,31 @@ func Disconnect(ctx context.Context, quitDaemons bool) error {
 	return err
 }
 
-func ensureAppUserConfigDir(ctx context.Context) (string, error) {
-	configDir := filelocation.AppUserConfigDir(ctx)
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		return "", errcat.NoDaemonLogs.Newf("unable to ensure that config directory %q exists: %w", configDir, err)
+func mkdir(dirType, path string) error {
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return errcat.NoDaemonLogs.Newf("unable to ensure that %s directory %q exists: %w", dirType, path, err)
 	}
-	return configDir, nil
+	return nil
+}
+
+func ensureAppUserCacheDirs(ctx context.Context) error {
+	cacheDir := filelocation.AppUserCacheDir(ctx)
+	if err := mkdir("cache", filepath.Join(cacheDir, "daemons")); err != nil {
+		return err
+	}
+	if err := mkdir("cache", filepath.Join(cacheDir, "kube")); err != nil {
+		return err
+	}
+	if err := mkdir("cache", filepath.Join(cacheDir, "sessions")); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureAppUserConfigDir(ctx context.Context) error {
+	configDir := filelocation.AppUserConfigDir(ctx)
+	if err := mkdir("config", filepath.Join(configDir, "sessions")); err != nil {
+		return err
+	}
+	return nil
 }
