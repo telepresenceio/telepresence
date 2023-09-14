@@ -13,7 +13,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v2
         with:
-          go-version: '~1.21.0'
+          go-version: '~1.21.1'
             #- uses: azure/setup-kubectl@v1
             #with:
             #version: 'v1.19.3'
@@ -49,7 +49,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v2
         with:
-          go-version: '~1.21.0'
+          go-version: '~1.21.1'
       - name: "Download winfsp"
         shell: bash
         run: |
@@ -84,7 +84,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v2
         with:
-          go-version: '~1.21.0'
+          go-version: '~1.21.1'
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
@@ -110,7 +110,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v2
         with:
-          go-version: '~1.21.0'
+          go-version: '~1.21.1'
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
