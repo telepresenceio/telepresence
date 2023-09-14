@@ -180,36 +180,18 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	return newKubeconfig(c, flagMap, managerNamespaceOverride, configFlags)
 }
 
-func TransferEnvFlag(c context.Context, flagMap map[string]string, key string) error {
-	if env, ok := flagMap[key]; ok {
-		delete(flagMap, key)
-		if err := os.Setenv(key, env); err != nil {
-			return err
-		}
-		dlog.Debugf(c, "Using %s %s", key, env)
-		return nil
-	}
-	// If user unsets the env, we need to do that too
-	return os.Unsetenv(key)
-}
-
 func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
 	if cr.IsPodDaemon {
 		return NewInClusterConfig(c, cr.KubeFlags)
 	}
+	for k, v := range cr.Environment {
+		if k[0] == '-' {
+			_ = os.Unsetenv(k[1:])
+		} else {
+			_ = os.Setenv(k, v)
+		}
+	}
 	flagMap := cr.KubeFlags
-
-	// The GOOGLE_APPLICATION_CREDENTIALS and KUBECONFIG entries are copies of the environment variables
-	// sent to us from the CLI to give this long-running daemon a chance to update them. Here we set/unset
-	// our them in our environment accordingly and remove them from the flagMap
-	if err := TransferEnvFlag(c, flagMap, "GOOGLE_APPLICATION_CREDENTIALS"); err != nil {
-		return nil, err
-	}
-	// Using the --kubeconfig flag to send the info isn't sufficient because that flag doesn't allow for multiple
-	// path entries like the KUBECONFIG does.
-	if err := TransferEnvFlag(c, flagMap, "KUBECONFIG"); err != nil {
-		return nil, err
-	}
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
 		return nil, err
@@ -289,10 +271,6 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 
 // NewInClusterConfig represents an inClusterConfig.
 func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconfig, error) {
-	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
-	// respect to this option.
-	delete(flagMap, "namespace")
-
 	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
