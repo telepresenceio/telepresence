@@ -159,6 +159,7 @@ message ConnectRequest {
   repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   string manager_namespace = 7;
+  map<string, string> environment = 8;
 }
 
 message ConnectInfo {
@@ -197,6 +198,9 @@ message ConnectInfo {
 
   // The name of the connection
   string connection_name = 16;
+
+  // The kubernetes flags used when the connection was established
+  map<string, string> kube_flags = 17;
 
   // the namespace that the connector is connected to.
   string namespace = 6;
