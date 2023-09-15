@@ -24,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 // DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
@@ -103,12 +104,13 @@ type KubeconfigExtension struct {
 
 type Kubeconfig struct {
 	KubeconfigExtension
-	Namespace   string // default cluster namespace.
-	Context     string
-	Server      string
-	FlagMap     map[string]string
-	ConfigFlags *genericclioptions.ConfigFlags
-	RestConfig  *rest.Config
+	Namespace        string // default cluster namespace.
+	Context          string
+	Server           string
+	OriginalFlagMap  map[string]string
+	EffectiveFlagMap map[string]string
+	ConfigFlags      *genericclioptions.ConfigFlags
+	RestConfig       *rest.Config
 }
 
 const configExtension = "telepresence.io"
@@ -177,12 +179,23 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	if err != nil {
 		return nil, err
 	}
-	return newKubeconfig(c, flagMap, managerNamespaceOverride, configFlags)
+	return newKubeconfig(c, flagMap, flagMap, managerNamespaceOverride, configFlags)
 }
 
 func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
 	if cr.IsPodDaemon {
 		return NewInClusterConfig(c, cr.KubeFlags)
+	}
+	flagMap := cr.KubeFlags
+	if proc.RunningInContainer() {
+		// Don't trust the host's KUBECONFIG env.
+		delete(cr.Environment, "KUBECONFIG")
+
+		// Add potential overrides for kube flags.
+		if len(cr.ContainerKubeFlagOverrides) > 0 {
+			flagMap = maps.Copy(flagMap)
+			maps.Merge(flagMap, cr.ContainerKubeFlagOverrides)
+		}
 	}
 	for k, v := range cr.Environment {
 		if k[0] == '-' {
@@ -191,15 +204,20 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 			_ = os.Setenv(k, v)
 		}
 	}
-	flagMap := cr.KubeFlags
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
 		return nil, err
 	}
-	return newKubeconfig(c, flagMap, cr.ManagerNamespace, configFlags)
+	return newKubeconfig(c, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags)
 }
 
-func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string, configFlags *genericclioptions.ConfigFlags) (*Kubeconfig, error) {
+func newKubeconfig(
+	ctx context.Context,
+	originalFlags,
+	effectiveFlags map[string]string,
+	managerNamespaceOverride string,
+	configFlags *genericclioptions.ConfigFlags,
+) (*Kubeconfig, error) {
 	configLoader := configFlags.ToRawKubeConfigLoader()
 	config, err := configLoader.RawConfig()
 	if err != nil {
@@ -215,19 +233,19 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 		return nil, err
 	}
 
-	ctxName := flagMap["context"]
+	ctxName := effectiveFlags["context"]
 	if ctxName == "" {
 		ctxName = config.CurrentContext
 	}
 
-	ctx, ok := config.Contexts[ctxName]
+	kubeCtx, ok := config.Contexts[ctxName]
 	if !ok {
 		return nil, errcat.Config.Newf("context %q does not exist in the kubeconfig", ctxName)
 	}
 
-	cluster, ok := config.Clusters[ctx.Cluster]
+	cluster, ok := config.Clusters[kubeCtx.Cluster]
 	if !ok {
-		return nil, errcat.Config.Newf("the cluster %q declared in context %q does exists in the kubeconfig", ctx.Cluster, ctxName)
+		return nil, errcat.Config.Newf("the cluster %q declared in context %q does exists in the kubeconfig", kubeCtx.Cluster, ctxName)
 	}
 
 	restConfig, err := configLoader.ClientConfig()
@@ -235,15 +253,16 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 		return nil, err
 	}
 
-	dlog.Debugf(c, "using namespace %q", namespace)
+	dlog.Debugf(ctx, "using namespace %q", namespace)
 
 	k := &Kubeconfig{
-		Context:     ctxName,
-		Server:      cluster.Server,
-		Namespace:   namespace,
-		FlagMap:     flagMap,
-		ConfigFlags: configFlags,
-		RestConfig:  restConfig,
+		Context:          ctxName,
+		Server:           cluster.Server,
+		Namespace:        namespace,
+		EffectiveFlagMap: effectiveFlags,
+		OriginalFlagMap:  originalFlags,
+		ConfigFlags:      configFlags,
+		RestConfig:       restConfig,
 	}
 
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
@@ -261,10 +280,10 @@ func newKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	}
 
 	if k.KubeconfigExtension.Manager.Namespace == "" {
-		k.KubeconfigExtension.Manager.Namespace = GetEnv(c).ManagerNamespace
+		k.KubeconfigExtension.Manager.Namespace = GetEnv(ctx).ManagerNamespace
 	}
 	if k.KubeconfigExtension.Manager.Namespace == "" {
-		k.KubeconfigExtension.Manager.Namespace = GetConfig(c).Cluster().DefaultManagerNamespace
+		k.KubeconfigExtension.Manager.Namespace = GetConfig(ctx).Cluster().DefaultManagerNamespace
 	}
 	return k, nil
 }
@@ -297,11 +316,12 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 	}
 
 	return &Kubeconfig{
-		Namespace:   namespace,
-		Server:      restConfig.Host,
-		FlagMap:     flagMap,
-		ConfigFlags: configFlags,
-		RestConfig:  restConfig,
+		Namespace:        namespace,
+		Server:           restConfig.Host,
+		EffectiveFlagMap: flagMap,
+		OriginalFlagMap:  flagMap,
+		ConfigFlags:      configFlags,
+		RestConfig:       restConfig,
 		// it may be empty, but we should avoid nil deref
 		KubeconfigExtension: KubeconfigExtension{
 			Manager: &ManagerConfig{
@@ -317,7 +337,7 @@ func (kf *Kubeconfig) ContextServiceAndFlagsEqual(okf *Kubeconfig) bool {
 	return kf != nil && okf != nil &&
 		kf.Context == okf.Context &&
 		kf.Server == okf.Server &&
-		maps.Equal(kf.FlagMap, okf.FlagMap)
+		maps.Equal(kf.EffectiveFlagMap, okf.EffectiveFlagMap)
 }
 
 func (kf *Kubeconfig) GetContext() string {

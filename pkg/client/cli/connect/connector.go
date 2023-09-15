@@ -59,8 +59,8 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 		}
 		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
 	}
-	if _, err = ud.Quit(ctx, &emptypb.Empty{}); err == nil || status.Code(err) == codes.Unavailable {
-		err = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
+	if _, err = ud.Quit(ctx, &emptypb.Empty{}); !ud.Remote() && (err == nil || status.Code(err) == codes.Unavailable) {
+		_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 	}
 	if err != nil && status.Code(err) == codes.Unavailable {
 		if quitDaemons {
@@ -275,6 +275,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 	if !required {
 		return nil, nil
 	}
+
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err
 	}

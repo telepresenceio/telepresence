@@ -258,11 +258,10 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if cr.Implicit {
 		return nil
 	}
-	if kkf, ok := cr.KubeFlags["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
+	if kkf, ok := cr.ContainerKubeFlagOverrides["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
 		// Been there, done that
 		return nil
 	}
-	dlog.Debugf(ctx, "kubeflags = %v", cr.KubeFlags)
 	configFlags, err := client.ConfigFlags(cr.KubeFlags)
 	if err != nil {
 		return err
@@ -274,7 +273,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	}
 
 	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
-	dlog.Debugf(ctx, "config = %v", configFiles)
+	dlog.Debugf(ctx, "host kubeconfig = %v", configFiles)
 	config, err := loader.RawConfig()
 	if err != nil {
 		return err
@@ -330,7 +329,10 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	}
 
 	// Concatenate using "/". This will be used in linux
-	cr.KubeFlags["kubeconfig"] = fmt.Sprintf("%s/%s/%s", dockerTpCache, kubeConfigs, kubeConfigFile)
+	if cr.ContainerKubeFlagOverrides == nil {
+		cr.ContainerKubeFlagOverrides = make(map[string]string)
+	}
+	cr.ContainerKubeFlagOverrides["kubeconfig"] = fmt.Sprintf("%s/%s/%s", dockerTpCache, kubeConfigs, kubeConfigFile)
 	return nil
 }
 
