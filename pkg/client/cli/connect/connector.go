@@ -166,7 +166,7 @@ func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.U
 	}
 }
 
-func ensureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
+func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
 	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
@@ -198,26 +198,24 @@ func ensureDaemonVersion(ctx context.Context) error {
 	return versionCheck(ctx, client.GetExe(), daemon.GetUserClient(ctx))
 }
 
-func ensureSession(cmd *cobra.Command, required bool) error {
-	ctx := cmd.Context()
+func EnsureSession(ctx context.Context, useLine string, required bool) (context.Context, error) {
 	if daemon.GetSession(ctx) != nil {
-		return nil
+		return ctx, nil
 	}
-	s, err := connectSession(cmd, daemon.GetUserClient(ctx), daemon.GetRequest(ctx), required)
+	s, err := connectSession(ctx, useLine, daemon.GetUserClient(ctx), daemon.GetRequest(ctx), required)
 	if err != nil {
-		return err
+		return ctx, err
 	}
 	if s == nil {
-		return nil
+		return ctx, nil
 	}
 	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
 		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
 	}
-	cmd.SetContext(daemon.WithSession(ctx, s))
-	return nil
+	return daemon.WithSession(ctx, s), nil
 }
 
-func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
+func connectSession(ctx context.Context, useLine string, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote() {
@@ -226,7 +224,6 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 		delete(request.Environment, "-KUBECONFIG")
 	}
 	cat := errcat.Unknown
-	ctx := cmd.Context()
 
 	session := func(ci *connector.ConnectInfo, started bool) *daemon.Session {
 		// Update the request from the connect info.
@@ -271,7 +268,7 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 			_, _ = fmt.Fprintf(output.Info(ctx),
 				`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
 					"connect to take place. The implicit connect behavior is deprecated and will be removed in a future release.\n",
-				cmd.UseLine())
+				useLine)
 		}
 	}
 

@@ -43,7 +43,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 			flags.DeprecationIfChanged(cmd, global.FlagDocker, "use telepresence connect to initiate the connection")
 			flags.DeprecationIfChanged(cmd, global.FlagContext, "use telepresence connect to initiate the connection")
 		}
-		if ctx, err = ensureUserDaemon(ctx, v == ann.Required); err != nil {
+		if ctx, err = EnsureUserDaemon(ctx, v == ann.Required); err != nil {
 			if v == ann.Optional && (err == ErrNoUserDaemon || errcat.GetCategory(err) == errcat.Config) {
 				// This is OK, but further initialization is not possible
 				err = nil
@@ -70,9 +70,11 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 	}
 
 	if v := as[ann.Session]; v == ann.Optional || v == ann.Required {
-		if err = ensureSession(cmd, v == ann.Required); err != nil {
+		ctx, err = EnsureSession(ctx, cmd.UseLine(), v == ann.Required)
+		if err != nil {
 			return err
 		}
+		cmd.SetContext(ctx)
 	}
 	return nil
 }
