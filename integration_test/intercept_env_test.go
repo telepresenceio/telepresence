@@ -2,6 +2,7 @@ package integration
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
@@ -16,35 +17,33 @@ func (s *interceptEnvSuite) SuiteName() string {
 }
 
 func init() {
-	itest.AddTrafficManagerSuite("", func(h itest.NamespacePair) itest.TestingSuite {
+	itest.AddNamespacePairSuite("", func(h itest.NamespacePair) itest.TestingSuite {
 		return &interceptEnvSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
 	})
-}
-
-func (s *interceptEnvSuite) TearDownTest() {
-	itest.TelepresenceQuitOk(s.Context())
 }
 
 func (s *interceptEnvSuite) Test_ExcludeVariables() {
 	// given
 	ctx := s.Context()
-	err := s.TelepresenceHelmInstall(ctx, true, "--set", "intercept.environment.excluded={DATABASE_HOST,DATABASE_PASSWORD}")
-	s.Assert().NoError(err)
-	s.ApplyApp(ctx, "echo_with_env", "deploy/echo-easy")
+	err := s.TelepresenceHelmInstall(ctx, false, "--set", "intercept.environment.excluded={DATABASE_HOST,DATABASE_PASSWORD}")
+	s.Require().NoError(err)
+	defer s.UninstallTrafficManager(ctx, s.ManagerNamespace())
 
+	s.ApplyApp(ctx, "echo_with_env", "deploy/echo-easy")
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-easy")
-	defer os.RemoveAll("echo.env") //nolint:errcheck // dont need to catch the err
+
+	helloEnv := filepath.Join(s.T().TempDir(), "echo.env")
 
 	// when
 	s.TelepresenceConnect(ctx)
-	itest.TelepresenceOk(ctx, "intercept", "echo-easy", "--env-file", "echo.env")
+	itest.TelepresenceOk(ctx, "intercept", "echo-easy", "--env-file", helloEnv)
 
 	// then
-	file, err := os.ReadFile("echo.env")
-	s.Assert().NoError(err)
+	file, err := os.ReadFile(helloEnv)
+	s.Require().NoError(err)
 
-	s.Assert().NotContains(string(file), "DATABASE_HOST")
-	s.Assert().NotContains(string(file), "DATABASE_PASSWORD")
-	s.Assert().Contains(string(file), "TEST=DATA")
-	s.Assert().Contains(string(file), "INTERCEPT=ENV")
+	s.NotContains(string(file), "DATABASE_HOST")
+	s.NotContains(string(file), "DATABASE_PASSWORD")
+	s.Contains(string(file), "TEST=DATA")
+	s.Contains(string(file), "INTERCEPT=ENV")
 }
