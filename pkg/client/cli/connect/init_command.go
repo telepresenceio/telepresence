@@ -51,14 +51,6 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 			return err
 		}
 		cmd.SetContext(ctx)
-
-		// RootDaemon == Optional means that the RootDaemon must be started if
-		// the UserClient was started
-		if _, ok := as[ann.RootDaemon]; ok {
-			if err = ensureRootDaemonRunning(ctx); err != nil {
-				return err
-			}
-		}
 	} else {
 		// The rest requires a user daemon
 		return nil

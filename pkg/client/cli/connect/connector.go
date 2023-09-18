@@ -167,6 +167,14 @@ func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.U
 }
 
 func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
+	var err error
+	defer func() {
+		// The RootDaemon must be started if the UserClient was started
+		if err == nil {
+			err = ensureRootDaemonRunning(ctx)
+		}
+	}()
+
 	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
@@ -174,21 +182,20 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
 		// NOTE: The UserDaemonAddress does not imply that the daemon runs in Docker
-		conn, err := grpc.DialContext(ctx, addr,
+		var conn *grpc.ClientConn
+		conn, err = grpc.DialContext(ctx, addr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.FailOnNonTempDialError(true))
-		if err != nil {
-			return ctx, err
+		if err == nil {
+			ud = newUserDaemon(conn, nil)
 		}
-		ud = newUserDaemon(conn, nil)
 	} else {
-		var err error
 		ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)
-		if err != nil {
-			return ctx, err
-		}
+	}
+	if err != nil {
+		return ctx, err
 	}
 	return daemon.WithUserClient(ctx, ud), nil
 }
