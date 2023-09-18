@@ -111,9 +111,13 @@ func (cr *Request) addKubeconfigEnv() {
 	// and since those files can be specified, both as a --kubeconfig flag and in the KUBECONFIG setting, and since the flag won't
 	// accept multiple path entries, we need to pass the environment setting to the connector daemon so that it can set it every
 	// time it receives a new config.
+	cr.Environment = make(map[string]string, 2)
 	addEnv := func(key string) {
-		if cfg, ok := os.LookupEnv(key); ok {
-			cr.KubeFlags[key] = cfg
+		if v, ok := os.LookupEnv(key); ok {
+			cr.Environment[key] = v
+		} else {
+			// A dash prefix in the key means "unset".
+			cr.Environment["-"+key] = ""
 		}
 	}
 	addEnv("KUBECONFIG")

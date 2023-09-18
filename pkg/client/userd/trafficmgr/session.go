@@ -51,7 +51,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
@@ -250,6 +249,7 @@ func NewSession(
 		ClusterId:        cluster.GetClusterId(ctx),
 		SessionInfo:      tmgr.SessionInfo(),
 		ConnectionName:   tmgr.daemonID.Name,
+		KubeFlags:        tmgr.FlagMap,
 		Namespace:        cluster.Namespace,
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
@@ -849,12 +849,28 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
-	if !cr.IsPodDaemon && !s.Kubeconfig.ContextServiceAndFlagsEqual(config) {
-		return &rpc.ConnectInfo{
-			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterContext: s.Kubeconfig.Context,
-			ClusterServer:  s.Kubeconfig.Server,
-			ClusterId:      s.GetClusterId(c),
+	if !cr.IsPodDaemon {
+		envEQ := true
+		for k, v := range cr.Environment {
+			if k[0] == '-' {
+				if _, ok := os.LookupEnv(k[:1]); ok {
+					envEQ = false
+					break
+				}
+			} else {
+				if ov, ok := os.LookupEnv(k); !ok || ov != v {
+					envEQ = false
+					break
+				}
+			}
+		}
+		if !(envEQ && s.Kubeconfig.ContextServiceAndFlagsEqual(config)) {
+			return &rpc.ConnectInfo{
+				Error:          rpc.ConnectInfo_MUST_RESTART,
+				ClusterContext: s.Kubeconfig.Context,
+				ClusterServer:  s.Kubeconfig.Server,
+				ClusterId:      s.GetClusterId(c),
+			}
 		}
 	}
 
@@ -886,6 +902,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterId:      s.GetClusterId(c),
 		SessionInfo:    s.SessionInfo(),
 		ConnectionName: s.daemonID.Name,
+		KubeFlags:      s.FlagMap,
 		Namespace:      s.Namespace,
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 		Version: &common.VersionInfo{
@@ -1017,7 +1034,6 @@ func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*com
 	return errcat.ToResult(nil), nil
 }
 
-// getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster.
 func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
@@ -1054,17 +1070,11 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 	for _, np := range s.NeverProxy {
 		neverProxy = append(neverProxy, iputil.IPNetToRPC((*net.IPNet)(np)))
 	}
-	kubeFlags := s.FlagMap
-	if kc, ok := os.LookupEnv("KUBECONFIG"); ok {
-		kubeFlags = maps.Copy(s.FlagMap)
-		kubeFlags["KUBECONFIG"] = kc
-	}
 	info := &rootdRpc.OutboundInfo{
 		Session:           s.sessionInfo,
 		NeverProxySubnets: neverProxy,
 		HomeDir:           homedir.HomeDir(),
 		ManagerNamespace:  s.GetManagerNamespace(),
-		KubeFlags:         kubeFlags,
 	}
 
 	if s.DNS != nil {

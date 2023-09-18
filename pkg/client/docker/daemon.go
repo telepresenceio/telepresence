@@ -206,18 +206,6 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	// remove any stale port file
 	_ = os.Remove(portFile)
 
-	// The GOOGLE_APPLICATION_CREDENTIALS and KUBECONFIG entries are copies of the environment variables
-	// sent to us from the CLI to give this long-running daemon a chance to update them. Here we set/unset
-	// our them in our environment accordingly and remove them from the flagMap
-	if err := client.TransferEnvFlag(ctx, kubeFlags, "GOOGLE_APPLICATION_CREDENTIALS"); err != nil {
-		return 0, err
-	}
-	// Using the --kubeconfig flag to send the info isn't sufficient because that flag doesn't allow for multiple
-	// path entries like the KUBECONFIG does.
-	if err := client.TransferEnvFlag(ctx, kubeFlags, "KUBECONFIG"); err != nil {
-		return 0, err
-	}
-
 	args := make([]string, 0, 4+len(kubeFlags)*2)
 	args = append(args, client.GetExe(), kubeauth.CommandName, "--portfile", portFile)
 	var err error
@@ -267,6 +255,9 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 
 func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) error {
 	cr := daemon.GetRequest(ctx)
+	if cr.Implicit {
+		return nil
+	}
 	if kkf, ok := cr.KubeFlags["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
 		// Been there, done that
 		return nil
