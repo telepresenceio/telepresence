@@ -152,7 +152,12 @@ message Interceptor {
 
 // ConnectRequest contains the information needed to connect ot a cluster.
 message ConnectRequest {
+  // The kubernetes flags from the telepresence connect command
   map<string, string> kube_flags = 1;
+
+  // The kubernetes flags used by a containerized daemon
+  map<string, string> container_kube_flag_overrides = 9;
+
   repeated string mapped_namespaces = 2;
   string name = 3;
   bool is_pod_daemon = 4;
@@ -199,7 +204,7 @@ message ConnectInfo {
   // The name of the connection
   string connection_name = 16;
 
-  // The kubernetes flags used when the connection was established
+  // The kubernetes flags from the telepresence connect command when the connection was established
   map<string, string> kube_flags = 17;
 
   // the namespace that the connector is connected to.

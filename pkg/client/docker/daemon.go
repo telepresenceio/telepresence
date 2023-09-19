@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
@@ -258,11 +259,10 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if cr.Implicit {
 		return nil
 	}
-	if kkf, ok := cr.KubeFlags["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
+	if kkf, ok := cr.ContainerKubeFlagOverrides["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
 		// Been there, done that
 		return nil
 	}
-	dlog.Debugf(ctx, "kubeflags = %v", cr.KubeFlags)
 	configFlags, err := client.ConfigFlags(cr.KubeFlags)
 	if err != nil {
 		return err
@@ -274,7 +274,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	}
 
 	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
-	dlog.Debugf(ctx, "config = %v", configFiles)
+	dlog.Debugf(ctx, "host kubeconfig = %v", configFiles)
 	config, err := loader.RawConfig()
 	if err != nil {
 		return err
@@ -330,7 +330,10 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	}
 
 	// Concatenate using "/". This will be used in linux
-	cr.KubeFlags["kubeconfig"] = fmt.Sprintf("%s/%s/%s", dockerTpCache, kubeConfigs, kubeConfigFile)
+	if cr.ContainerKubeFlagOverrides == nil {
+		cr.ContainerKubeFlagOverrides = make(map[string]string)
+	}
+	cr.ContainerKubeFlagOverrides["kubeconfig"] = fmt.Sprintf("%s/%s/%s", dockerTpCache, kubeConfigs, kubeConfigFile)
 	return nil
 }
 
@@ -430,17 +433,27 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (conn *grpc.
 	allArgs = append(allArgs, opts...)
 	allArgs = append(allArgs, image)
 	allArgs = append(allArgs, args...)
+	stopAttempted := false
 	for i := 1; ; i++ {
 		_, err = tryLaunch(ctx, daemonID, addr.Port, allArgs)
 		if err != nil {
-			if i < 6 && strings.Contains(err.Error(), "already in use by container") {
-				// This may happen if the daemon has died (and hence, we never discovered it), but
-				// the container still hasn't died. Let's sleep for a short while and retry.
+			if !strings.Contains(err.Error(), "already in use by container") {
+				return nil, errcat.NoDaemonLogs.New(err)
+			}
+			// This may happen if the daemon has died (and hence, we never discovered it), but
+			// the container still hasn't died. Let's sleep for a short while and retry.
+			if i < 6 {
 				dtime.SleepWithContext(ctx, time.Duration(i)*200*time.Millisecond)
-				dlog.Debugf(ctx, "retry after: %v", err)
 				continue
 			}
-			return nil, errcat.NoDaemonLogs.New(err)
+			if stopAttempted {
+				return nil, err
+			}
+			// Container is still alive. Try and stop it.
+			stopContainer(ctx, daemonID)
+			stopAttempted = true
+			i = 1
+			continue
 		}
 		break
 	}
@@ -526,6 +539,14 @@ func detectKind(cns []types.ContainerJSON, hostAddrPort netip.AddrPort) (string,
 		}
 	}
 	return "", ""
+}
+
+func stopContainer(ctx context.Context, daemonID *daemon.Identifier) {
+	args := []string{"stop", daemonID.ContainerName()}
+	dlog.Debug(ctx, shellquote.ShellString("docker", args))
+	if _, err := proc.CaptureErr(dexec.CommandContext(ctx, "docker", args...)); err != nil {
+		dlog.Warn(ctx, err)
+	}
 }
 
 func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port int, args []string) (string, error) {

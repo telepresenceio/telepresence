@@ -7,9 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall" //nolint:depguard // "unix" don't work on windows
-
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // File represents a file in the filesystem. The os.File struct implements this interface.
@@ -238,13 +237,14 @@ func getFS(ctx context.Context) FileSystem {
 	if f, ok := ctx.Value(fsKey{}).(FileSystem); ok {
 		return f
 	}
-	if env := client.GetEnv(ctx); env != nil {
-		return &osFs{
-			tpUID: env.TelepresenceUID,
-			tpGID: env.TelepresenceGID,
-		}
+	of := osFs{}
+	if env, ok := LookupEnv(ctx, "TELEPRESENCE_UID"); ok {
+		of.tpUID, _ = strconv.Atoi(env)
 	}
-	return &osFs{}
+	if env, ok := LookupEnv(ctx, "TELEPRESENCE_GID"); ok {
+		of.tpGID, _ = strconv.Atoi(env)
+	}
+	return &of
 }
 
 // Abs is like filepath.Abs but delegates to the context's FS.
