@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"k8s.io/client-go/tools/clientcmd/api"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -27,7 +26,7 @@ func TestExecCredentialsYesLocalEnv(t *testing.T) {
 	config := &clientcmdapi.ExecConfig{
 		Command: "sh",
 		Args:    []string{"-c", "echo $GLOBAL_ENV/$LOCAL_ENV"},
-		Env:     []api.ExecEnvVar{{Name: "LOCAL_ENV", Value: "local-val"}},
+		Env:     []clientcmdapi.ExecEnvVar{{Name: "LOCAL_ENV", Value: "local-val"}},
 	}
 	result, err := execCredentialBinary{}.Resolve(context.Background(), config)
 	assert.NoError(t, err)

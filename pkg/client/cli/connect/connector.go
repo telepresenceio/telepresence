@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -265,7 +264,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
-		if ci, err = userD.Status(ctx, &empty.Empty{}); err != nil {
+		if ci, err = userD.Status(ctx, &emptypb.Empty{}); err != nil {
 			return nil, err
 		}
 		if ci.Error != connector.ConnectInfo_DISCONNECTED {
