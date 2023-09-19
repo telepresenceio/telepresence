@@ -16,7 +16,6 @@ import (
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -142,7 +141,7 @@ func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error 
 func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server net.IP, searchList []string) (err error) {
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
 	parentCtx := ctx
-	ctx, cancel := context.WithCancel(dcontext.WithoutCancel(ctx))
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancel()
 
 	go func() {

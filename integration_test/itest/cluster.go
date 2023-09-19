@@ -30,7 +30,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 	sigsYaml "sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -454,7 +453,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 
 	// Let command die when the pod that it logs die
-	ctx = dcontext.WithoutCancel(ctx)
+	ctx = context.WithoutCancel(ctx)
 
 	present := struct{}{}
 

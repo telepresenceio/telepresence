@@ -6,6 +6,15 @@ import (
 	"strings"
 )
 
+// Print is like Fprint but panics on error.
+func Print(out io.Writer, txt string) int {
+	n, err := fmt.Fprint(out, txt)
+	if err != nil {
+		panic(err)
+	}
+	return n
+}
+
 // Println is like Fprintln but panics on error.
 func Println(out io.Writer, txt string) int {
 	n, err := fmt.Fprintln(out, txt)

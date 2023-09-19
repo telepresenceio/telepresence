@@ -153,6 +153,22 @@ func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) 
 	return LoadInfo(ctx, found)
 }
 
+// CancelWhenRmFromCache watches for the file to be removed from the cache, then calls cancel.
+func CancelWhenRmFromCache(ctx context.Context, cancel context.CancelFunc, filename string) error {
+	return WatchInfos(ctx, func(ctx context.Context) error {
+		exists, err := InfoExists(ctx, filename)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			// spec removed from cache, shut down gracefully
+			dlog.Infof(ctx, "daemon file %s removed from cache, shutting down gracefully", filename)
+			cancel()
+		}
+		return nil
+	}, filename)
+}
+
 // KeepInfoAlive updates the access and modification times of the given Info
 // periodically so that it never gets older than keepAliveInterval. This means that
 // any file with a modification time older than the current time minus two keepAliveIntervals

@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -97,41 +96,8 @@ func DaemonArgs(daemonID *daemon.Identifier, port int) []string {
 	}
 }
 
-// DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
-// to that daemon is returned if such an entry is found.
-func DiscoverDaemon(ctx context.Context, match *regexp.Regexp) (conn *grpc.ClientConn, identifier *daemon.Identifier, err error) {
-	cr := daemon.GetRequest(ctx)
-	if match == nil && !cr.Implicit {
-		identifier, err = daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags)
-		if err != nil {
-			return nil, nil, err
-		}
-		match = regexp.MustCompile(regexp.QuoteMeta(identifier.String()))
-	}
-	info, err := daemon.LoadMatchingInfo(ctx, match)
-	if err != nil {
-		return nil, nil, err
-	}
-	daemonID, err := daemon.NewIdentifier(info.Name, info.KubeContext, info.Namespace)
-	if err != nil {
-		return nil, nil, err
-	}
-	var addr string
-	if proc.RunningInContainer() {
-		// Containers use the daemon container DNS name
-		addr = fmt.Sprintf("%s:%d", daemonID.ContainerName(), info.DaemonPort)
-	} else {
-		// The host relies on that the daemon has exposed a port to localhost
-		addr = fmt.Sprintf(":%d", info.DaemonPort)
-	}
-	if conn, err = connectDaemon(ctx, daemonID, addr); err != nil {
-		return nil, nil, err
-	}
-	return conn, daemonID, nil
-}
-
-// connectDaemon connects to a daemon at the given address.
-func connectDaemon(ctx context.Context, daemonID *daemon.Identifier, address string) (conn *grpc.ClientConn, err error) {
+// ConnectDaemon connects to a containerized daemon at the given address.
+func ConnectDaemon(ctx context.Context, daemonID *daemon.Identifier, address string) (conn *grpc.ClientConn, err error) {
 	if err = enableK8SAuthenticator(ctx, daemonID); err != nil {
 		return nil, err
 	}
@@ -457,7 +423,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (conn *grpc.
 		}
 		break
 	}
-	if conn, err = connectDaemon(ctx, daemonID, addr.String()); err != nil {
+	if conn, err = ConnectDaemon(ctx, daemonID, addr.String()); err != nil {
 		return nil, err
 	}
 	return conn, nil
@@ -574,20 +540,4 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port int, args 
 			KubeContext: daemonID.KubeContext,
 			Namespace:   daemonID.Namespace,
 		}, daemonID.InfoFileName())
-}
-
-// CancelWhenRmFromCache watches for the file to be removed from the cache, then calls cancel.
-func CancelWhenRmFromCache(ctx context.Context, cancel context.CancelFunc, filename string) error {
-	return daemon.WatchInfos(ctx, func(ctx context.Context) error {
-		exists, err := daemon.InfoExists(ctx, filename)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			// spec removed from cache, shut down gracefully
-			dlog.Infof(ctx, "daemon file %s removed from cache, shutting down gracefully", filename)
-			cancel()
-		}
-		return nil
-	}, filename)
 }

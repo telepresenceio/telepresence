@@ -45,7 +45,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	remote := false
 	userD := daemon.GetUserClient(ctx)
 	if userD != nil {
-		remote = userD.Remote()
+		remote = userD.Remote
 	}
 
 	if !remote {
