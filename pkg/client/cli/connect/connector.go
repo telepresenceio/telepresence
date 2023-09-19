@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -28,47 +29,77 @@ import (
 )
 
 var (
-	ErrNoUserDaemon     = errors.New("telepresence user daemon is not running")
-	ErrNoRootDaemon     = errors.New("telepresence root daemon is not running")
-	ErrNoTrafficManager = errors.New("telepresence traffic manager is not connected")
+	ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
+	ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
 )
 
-func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
+//nolint:gochecknoglobals // extension point
+var QuitDaemonFuncs = []func(context.Context){
+	quitConnector,
+}
+
+func quitConnector(ctx context.Context) {
 	stdout := output.Out(ctx)
 	ioutil.Print(stdout, "Telepresence Daemons ")
 	ud := daemon.GetUserClient(ctx)
 	if ud == nil {
 		ioutil.Println(stdout, "have already quit")
-		return ErrNoUserDaemon
+		quitRootDaemon(ctx) // Can't have a root daemon unless there's a user daemon.
+		return
 	}
-	defer func() {
-		if err == nil {
-			ioutil.Println(stdout, "done")
-		}
-	}()
 
-	if quitDaemons {
-		ioutil.Print(stdout, "quitting...")
-	} else {
-		ioutil.Print(stdout, "disconnecting...")
-		if _, err = ud.Disconnect(ctx, &emptypb.Empty{}); status.Code(err) != codes.Unimplemented {
-			// nil or not unimplemented
-			return err
-		}
-		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
-	}
-	if _, err = ud.Quit(ctx, &emptypb.Empty{}); !ud.Remote && (err == nil || status.Code(err) == codes.Unavailable) {
+	ioutil.Print(stdout, "quitting...")
+	_, err := ud.Quit(ctx, &emptypb.Empty{})
+	if !ud.Remote && (err == nil || status.Code(err) == codes.Unavailable) {
 		_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 	}
-	if err != nil && status.Code(err) == codes.Unavailable {
-		if quitDaemons {
-			ioutil.Println(stdout, "have already quit")
+
+	if !ud.Remote {
+		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
+		// the fact that the user daemon might have been killed ungracefully.
+		if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
+			quitRootDaemon(ctx)
+		}
+	}
+
+	switch {
+	case err == nil:
+		ioutil.Println(stdout, "done")
+	case status.Code(err) == codes.Unavailable:
+		ioutil.Println(stdout, "have already quit")
+	default:
+		ioutil.Println(output.Err(ctx), err.Error())
+	}
+}
+
+// Quit shuts down all daemons.
+func Quit(ctx context.Context) {
+	for _, quitFunc := range QuitDaemonFuncs {
+		quitFunc(ctx)
+	}
+}
+
+// Disconnect disconnects from a session in the user daemon.
+func Disconnect(ctx context.Context) {
+	stdout := output.Out(ctx)
+	ioutil.Print(stdout, "Telepresence Daemons ")
+	ud := daemon.GetUserClient(ctx)
+	if ud == nil {
+		ioutil.Println(stdout, "have already quit")
+		quitRootDaemon(ctx) // Can't have a root daemon unless there's a user daemon.
+		return
+	}
+
+	ioutil.Print(stdout, "disconnecting...")
+	if _, err := ud.Disconnect(ctx, &emptypb.Empty{}); err != nil {
+		if status.Code(err) != codes.Unavailable {
+			ioutil.Println(output.Err(ctx), err.Error())
 		} else {
 			ioutil.Println(stdout, "are already disconnected")
 		}
-		err = nil
+	} else {
+		ioutil.Println(stdout, "done")
 	}
-	return err
 }
 
 func RunConnect(cmd *cobra.Command, args []string) error {
@@ -80,9 +111,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 	}
 	ctx := cmd.Context()
 	if daemon.GetSession(ctx).Started {
-		defer func() {
-			_ = Disconnect(ctx, false)
-		}()
+		defer Disconnect(ctx)
 	}
 	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 }
@@ -90,18 +119,29 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
 func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (context.Context, *daemon.UserClient, error) {
+	dlog.Debugf(ctx, "DiscoverDaemon(%q, %q", match, daemonID)
 	cr := daemon.GetRequest(ctx)
 	if match == nil && !cr.Implicit {
 		match = regexp.MustCompile(regexp.QuoteMeta(daemonID.String()))
 	}
 	info, err := daemon.LoadMatchingInfo(ctx, match)
 	if err != nil {
+		if os.IsNotExist(err) {
+			// Try dialing the host daemon using the well known socket.
+			dlog.Debug(ctx, "trying host daemon socket")
+			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx)); sockErr == nil {
+				dlog.Debug(ctx, "host daemon socket success")
+				return ctx, newUserDaemon(conn, daemonID, false), nil
+			}
+		}
 		return ctx, nil, err
 	}
+
 	daemonID, err = daemon.NewIdentifier(info.Name, info.KubeContext, info.Namespace)
 	if err != nil {
 		return ctx, nil, err
 	}
+
 	var conn *grpc.ClientConn
 	if info.InDocker {
 		var addr string

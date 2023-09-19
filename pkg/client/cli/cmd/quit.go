@@ -1,17 +1,13 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/types/known/emptypb"
 
-	daemon2 "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func quit() *cobra.Command {
@@ -29,26 +25,23 @@ func quit() *cobra.Command {
 				return err
 			}
 			if quitUserDaemon {
-				fmt.Fprintln(os.Stderr, "--user-daemon (-u) is deprecated, please use --stop-daemons (-s)")
+				ioutil.Println(os.Stderr, "--user-daemon (-u) is deprecated, please use --stop-daemons (-s)")
 				quitDaemons = true
 			}
 			if quitRootDaemon {
-				fmt.Fprintln(os.Stderr, "--root-daemon (-r) is deprecated, please use --stop-daemons (-s)")
+				ioutil.Println(os.Stderr, "--root-daemon (-r) is deprecated, please use --stop-daemons (-s)")
 				quitDaemons = true
 			}
-			ctx := cmd.Context()
-			if quitDaemons && daemon.GetUserClient(ctx) == nil {
-				// User daemon isn't running. If the root daemon is running, we must
-				// kill it from here.
-				if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
-					_, _ = daemon2.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{})
-				}
+			if quitDaemons {
+				connect.Quit(cmd.Context())
+			} else {
+				connect.Disconnect(cmd.Context())
 			}
-			return connect.Disconnect(cmd.Context(), quitDaemons)
+			return nil
 		},
 	}
 	flags := cmd.Flags()
-	flags.BoolVarP(&quitDaemons, "stop-daemons", "s", false, "stop the traffic-manager and network daemons")
+	flags.BoolVarP(&quitDaemons, "stop-daemons", "s", false, "stop all local telepresence daemons")
 	flags.BoolVarP(&quitRootDaemon, "root-daemon", "r", false, "stop daemons")
 	flags.BoolVarP(&quitUserDaemon, "user-daemon", "u", false, "stop daemons")
 
