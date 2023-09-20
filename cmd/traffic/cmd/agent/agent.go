@@ -175,7 +175,20 @@ func sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 			if err != nil {
 				return err
 			}
-			fwd := forwarder.NewInterceptor(lisAddr, "127.0.0.1", cp)
+			// Redirect non-intercepted traffic to the pod, so that injected sidecars that hijack the ports for
+			// incoming connections will continue to work.
+			targetHost := config.PodIP()
+
+			// Using the podIP is problematic with our current init-container, because it will hijack the
+			// port for incoming traffic and hence cause an infinite loop.
+			// TODO: Fix the init-container so that it doesn't hijack traffic that originates from the pod, and remove this.
+			for _, ic := range ics {
+				if ic.TargetPortNumeric {
+					targetHost = "127.0.0.1"
+				}
+			}
+
+			fwd := forwarder.NewInterceptor(lisAddr, targetHost, cp)
 			dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s", iputil.JoinHostPort(cn.Name, cp)), func(ctx context.Context) error {
 				return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 			})
