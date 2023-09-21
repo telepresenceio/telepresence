@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -23,6 +24,11 @@ type Info struct {
 	KubeContext string            `json:"kube_context,omitempty"`
 	Namespace   string            `json:"namespace,omitempty"`
 	DaemonPort  int               `json:"daemon_port,omitempty"`
+}
+
+func (info *Info) DaemonID() *Identifier {
+	id, _ := NewIdentifier(info.Name, info.KubeContext, info.Namespace)
+	return id
 }
 
 // SafeContainerName returns a string that can safely be used as an argument
@@ -73,6 +79,29 @@ func InfoExists(ctx context.Context, file string) (bool, error) {
 
 func WatchInfos(ctx context.Context, onChange func(context.Context) error, files ...string) error {
 	return cache.WatchUserCache(ctx, daemonsDirName, onChange, files...)
+}
+
+func WaitUntilAllVanishes(ctx context.Context, ttw time.Duration) error {
+	giveUp := time.Now().Add(ttw)
+	for giveUp.After(time.Now()) {
+		files, err := infoFiles(ctx)
+		if err != nil || len(files) == 0 {
+			return err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return errors.New("timeout while waiting for daemon files to vanish")
+}
+
+func DeleteAllInfos(ctx context.Context) error {
+	files, err := infoFiles(ctx)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		_ = cache.DeleteFromUserCache(ctx, filepath.Join(daemonsDirName, file.Name()))
+	}
+	return nil
 }
 
 func LoadInfos(ctx context.Context) ([]*Info, error) {

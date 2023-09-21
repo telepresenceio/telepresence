@@ -35,48 +35,74 @@ var (
 
 //nolint:gochecknoglobals // extension point
 var QuitDaemonFuncs = []func(context.Context){
-	quitConnector,
+	quitHostConnector, quitDockerDaemons,
 }
 
-func quitConnector(ctx context.Context) {
-	stdout := output.Out(ctx)
-	ioutil.Print(stdout, "Telepresence Daemons ")
-	ud := daemon.GetUserClient(ctx)
-	if ud == nil {
-		ioutil.Println(stdout, "have already quit")
-		quitRootDaemon(ctx) // Can't have a root daemon unless there's a user daemon.
-		return
-	}
-
-	ioutil.Print(stdout, "quitting...")
-	_, err := ud.Quit(ctx, &emptypb.Empty{})
-	if !ud.Remote && (err == nil || status.Code(err) == codes.Unavailable) {
+func quitHostConnector(ctx context.Context) {
+	if conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx)); err == nil {
+		if _, err = connector.NewConnectorClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
+			dlog.Errorf(ctx, "error when quitting user daemon: %v", err)
+		}
 		_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 	}
+	// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
+	// the fact that the user daemon might have been killed ungracefully.
+	if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
+		quitRootDaemon(ctx)
+	}
+}
 
-	if !ud.Remote {
-		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
-		// the fact that the user daemon might have been killed ungracefully.
-		if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
-			quitRootDaemon(ctx)
+func quitDockerDaemons(ctx context.Context) {
+	infos, err := daemon.LoadInfos(ctx)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
+	for _, info := range infos {
+		conn, err := DialDaemon(ctx, info)
+		if err != nil {
+			dlog.Error(ctx, err)
+			continue
 		}
+		_, _ = connector.NewConnectorClient(conn).Quit(ctx, &emptypb.Empty{})
+		_ = conn.Close()
 	}
+	if err = daemon.WaitUntilAllVanishes(ctx, 5*time.Second); err != nil {
+		dlog.Error(ctx, err)
+		_ = daemon.DeleteAllInfos(ctx)
+	}
+}
 
-	switch {
-	case err == nil:
-		ioutil.Println(stdout, "done")
-	case status.Code(err) == codes.Unavailable:
-		ioutil.Println(stdout, "have already quit")
-	default:
-		ioutil.Println(output.Err(ctx), err.Error())
+// DialDaemon dials the daemon appointed by the given info.
+func DialDaemon(ctx context.Context, info *daemon.Info) (*grpc.ClientConn, error) {
+	var err error
+	var conn *grpc.ClientConn
+	if info.InDocker {
+		var addr string
+		daemonID := info.DaemonID()
+		if proc.RunningInContainer() {
+			// Containers use the daemon container DNS name
+			addr = fmt.Sprintf("%s:%d", daemonID.ContainerName(), info.DaemonPort)
+		} else {
+			// The host relies on that the daemon has exposed a port to localhost
+			addr = fmt.Sprintf(":%d", info.DaemonPort)
+		}
+		conn, err = docker.ConnectDaemon(ctx, addr)
+	} else {
+		// Try dialing the host daemon using the well known socket.
+		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	}
+	return conn, err
 }
 
 // Quit shuts down all daemons.
 func Quit(ctx context.Context) {
+	stdout := output.Out(ctx)
+	ioutil.Print(stdout, "Telepresence Daemons quitting...")
 	for _, quitFunc := range QuitDaemonFuncs {
 		quitFunc(ctx)
 	}
+	ioutil.Println(stdout, "done")
 }
 
 // Disconnect disconnects from a session in the user daemon.
@@ -118,8 +144,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
-func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (context.Context, *daemon.UserClient, error) {
-	dlog.Debugf(ctx, "DiscoverDaemon(%q, %q)", match, daemonID)
+func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (*daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
 	if match == nil && !cr.Implicit {
 		match = regexp.MustCompile(regexp.QuoteMeta(daemonID.String()))
@@ -128,40 +153,17 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Try dialing the host daemon using the well known socket.
-			dlog.Debug(ctx, "trying host daemon socket")
 			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx)); sockErr == nil {
-				dlog.Debug(ctx, "host daemon socket success")
-				return ctx, newUserDaemon(conn, daemonID, false), nil
+				return newUserDaemon(conn, daemonID, false), nil
 			}
 		}
-		return ctx, nil, err
+		return nil, err
 	}
-
-	daemonID, err = daemon.NewIdentifier(info.Name, info.KubeContext, info.Namespace)
+	conn, err := DialDaemon(ctx, info)
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
-
-	var conn *grpc.ClientConn
-	if info.InDocker {
-		var addr string
-		if proc.RunningInContainer() {
-			// Containers use the daemon container DNS name
-			addr = fmt.Sprintf("%s:%d", daemonID.ContainerName(), info.DaemonPort)
-		} else {
-			// The host relies on that the daemon has exposed a port to localhost
-			addr = fmt.Sprintf(":%d", info.DaemonPort)
-		}
-		ctx = docker.EnableClient(ctx)
-		conn, err = docker.ConnectDaemon(ctx, daemonID, addr)
-	} else {
-		// Try dialing the host daemon using the well known socket.
-		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
-	}
-	if err != nil {
-		return ctx, nil, err
-	}
-	return ctx, newUserDaemon(conn, daemonID, info.InDocker), nil
+	return newUserDaemon(conn, daemonID, info.InDocker), nil
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
@@ -172,10 +174,13 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	}
 
 	// Try dialing the host daemon using the well known socket.
-	ctx, ud, err := DiscoverDaemon(ctx, cr.Use, daemonID)
+	ud, err := DiscoverDaemon(ctx, cr.Use, daemonID)
 	if err == nil {
-		if cr.Docker && !ud.Remote {
-			return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
+		if cr.Docker {
+			if !ud.Remote {
+				return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
+			}
+			ctx = docker.EnableClient(ctx)
 		}
 		return ctx, ud, nil
 	}
@@ -230,7 +235,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	var err error
 	var ud *daemon.UserClient
 	defer func() {
-		if err == nil && !ud.Remote {
+		if err == nil && required && !ud.Remote {
 			// The RootDaemon must be started if the UserDaemon was started
 			err = ensureRootDaemonRunning(ctx)
 		}
@@ -295,20 +300,6 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		switch ci.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
 			ioutil.Printf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
-			if !userD.Remote {
-				dlog.Debug(ctx, "saving connect info")
-				daemonID := userD.DaemonID
-				err = daemon.SaveInfo(ctx,
-					&daemon.Info{
-						InDocker:    false,
-						Name:        daemonID.Name,
-						KubeContext: daemonID.KubeContext,
-						Namespace:   daemonID.Namespace,
-					}, daemonID.InfoFileName())
-				if err != nil {
-					return nil, errcat.NoDaemonLogs.New(err)
-				}
-			}
 			return session(ci, true), nil
 		case connector.ConnectInfo_ALREADY_CONNECTED:
 			return session(ci, false), nil
@@ -343,7 +334,24 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		return nil, nil
 	}
 
+	if !userD.Remote {
+		dlog.Debug(ctx, "saving connect info")
+		daemonID := userD.DaemonID
+		err = daemon.SaveInfo(ctx,
+			&daemon.Info{
+				InDocker:    false,
+				Name:        daemonID.Name,
+				KubeContext: daemonID.KubeContext,
+				Namespace:   daemonID.Namespace,
+			}, daemonID.InfoFileName())
+		if err != nil {
+			return nil, errcat.NoDaemonLogs.New(err)
+		}
+	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
+		if !userD.Remote {
+			_ = daemon.DeleteInfo(ctx, userD.DaemonID.InfoFileName())
+		}
 		return nil, err
 	}
 	return connectResult(ci)

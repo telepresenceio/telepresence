@@ -97,10 +97,7 @@ func DaemonArgs(daemonID *daemon.Identifier, port int) []string {
 }
 
 // ConnectDaemon connects to a containerized daemon at the given address.
-func ConnectDaemon(ctx context.Context, daemonID *daemon.Identifier, address string) (conn *grpc.ClientConn, err error) {
-	if err = enableK8SAuthenticator(ctx, daemonID); err != nil {
-		return nil, err
-	}
+func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, err error) {
 	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
 	for i := 1; ; i++ {
 		if ctx.Err() != nil {
@@ -423,7 +420,10 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (conn *grpc.
 		}
 		break
 	}
-	if conn, err = ConnectDaemon(ctx, daemonID, addr.String()); err != nil {
+	if err = enableK8SAuthenticator(ctx, daemonID); err != nil {
+		return nil, err
+	}
+	if conn, err = ConnectDaemon(ctx, addr.String()); err != nil {
 		return nil, err
 	}
 	return conn, nil
