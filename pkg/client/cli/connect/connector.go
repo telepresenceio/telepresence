@@ -238,9 +238,10 @@ func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier, remote bo
 
 func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
 	var err error
+	var ud *daemon.UserClient
 	defer func() {
-		// The RootDaemon must be started if the UserClient was started
-		if err == nil {
+		if err == nil && !ud.Remote {
+			// The RootDaemon must be started if the UserDaemon was started
 			err = ensureRootDaemonRunning(ctx)
 		}
 	}()
@@ -248,11 +249,11 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
-	ctx, ud, err := launchConnectorDaemon(ctx, client.GetExe(), required)
-	if err != nil {
+	if ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required); err != nil {
 		return ctx, err
 	}
-	return daemon.WithUserClient(ctx, ud), nil
+	ctx = daemon.WithUserClient(ctx, ud)
+	return ctx, nil
 }
 
 func ensureDaemonVersion(ctx context.Context) error {

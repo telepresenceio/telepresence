@@ -53,10 +53,6 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) error {
 
 // ensureRootDaemonRunning ensures that the daemon is running.
 func ensureRootDaemonRunning(ctx context.Context) error {
-	if ud := daemon.GetUserClient(ctx); ud != nil && ud.Remote {
-		// Never start root daemon when running remote
-		return nil
-	}
 	cr := daemon.GetRequest(ctx)
 	if cr != nil && cr.Docker {
 		// Never start root daemon when connecting using a docker container.
