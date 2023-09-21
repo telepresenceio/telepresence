@@ -119,7 +119,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
 func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (context.Context, *daemon.UserClient, error) {
-	dlog.Debugf(ctx, "DiscoverDaemon(%q, %q", match, daemonID)
+	dlog.Debugf(ctx, "DiscoverDaemon(%q, %q)", match, daemonID)
 	cr := daemon.GetRequest(ctx)
 	if match == nil && !cr.Implicit {
 		match = regexp.MustCompile(regexp.QuoteMeta(daemonID.String()))
@@ -209,16 +209,6 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 		if err = socket.WaitUntilAppears("connector", socket.UserDaemonPath(ctx), 10*time.Second); err != nil {
 			return ctx, nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
 		}
-		err = daemon.SaveInfo(ctx,
-			&daemon.Info{
-				InDocker:    false,
-				Name:        daemonID.Name,
-				KubeContext: daemonID.KubeContext,
-				Namespace:   daemonID.Namespace,
-			}, daemonID.InfoFileName())
-		if err != nil {
-			return ctx, nil, errcat.NoDaemonLogs.New(err)
-		}
 		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	}
 	if err != nil {
@@ -305,6 +295,20 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		switch ci.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
 			ioutil.Printf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
+			if !userD.Remote {
+				dlog.Debug(ctx, "saving connect info")
+				daemonID := userD.DaemonID
+				err = daemon.SaveInfo(ctx,
+					&daemon.Info{
+						InDocker:    false,
+						Name:        daemonID.Name,
+						KubeContext: daemonID.KubeContext,
+						Namespace:   daemonID.Namespace,
+					}, daemonID.InfoFileName())
+				if err != nil {
+					return nil, errcat.NoDaemonLogs.New(err)
+				}
+			}
 			return session(ci, true), nil
 		case connector.ConnectInfo_ALREADY_CONNECTED:
 			return session(ci, false), nil
