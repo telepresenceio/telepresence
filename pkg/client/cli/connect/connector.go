@@ -288,6 +288,11 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		request.KubeFlags = ci.KubeFlags
 		request.ManagerNamespace = ci.ManagerNamespace
 		request.Name = ci.ConnectionName
+		userD.DaemonID = &daemon.Identifier{
+			Name:        ci.ConnectionName,
+			KubeContext: ci.ClusterContext,
+			Namespace:   ci.Namespace,
+		}
 		return &daemon.Session{
 			UserClient: *userD,
 			Info:       ci,
