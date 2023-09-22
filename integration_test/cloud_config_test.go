@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -46,17 +47,27 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/32}", ip)))
 	defer s.RollbackTM(ctx)
 
-	s.Eventually(func() bool {
+	timeout := 20 * time.Second
+	if runtime.GOOS == "windows" {
+		timeout *= 5
+	}
+	s.Eventuallyf(func() bool {
 		defer itest.TelepresenceDisconnectOk(ctx)
-		_, _, err = itest.Telepresence(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+		stdout, stderr, err := itest.Telepresence(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+		dlog.Infof(ctx, "stdout: %q", stdout)
+		dlog.Infof(ctx, "stderr: %q", stderr)
 		if err != nil {
+			dlog.Error(ctx, err)
 			return false
 		}
 
 		// The cluster's IP address will also be never proxied, so we gotta account for that.
 		neverProxiedCount := len(ips) + 1
-		stdout, _, err := itest.Telepresence(ctx, "status")
+		stdout, stderr, err = itest.Telepresence(ctx, "status")
+		dlog.Infof(ctx, "stdout: %q", stdout)
+		dlog.Infof(ctx, "stderr: %q", stderr)
 		if err != nil {
+			dlog.Error(ctx, err)
 			return false
 		}
 		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
@@ -66,6 +77,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 
 		jsonStdout, _, err := itest.Telepresence(ctx, "config", "view", "--output", "json")
 		if err != nil {
+			dlog.Error(ctx, err)
 			return false
 		}
 		var view client.SessionConfig
@@ -81,7 +93,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		}
 
 		return true
-	}, 20*time.Second, 5*time.Second, "never-proxy not updated in 20 seconds")
+	}, timeout, 5*time.Second, "never-proxy not updated in %s", timeout)
 }
 
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {

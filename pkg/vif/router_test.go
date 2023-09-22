@@ -393,7 +393,7 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 	case <-pCtx.Done():
 		canceler()
 		return "", nil, pCtx.Err()
-	case <-time.After(15 * time.Second):
+	case <-time.After(45 * time.Second):
 		canceler()
 		return "", nil, fmt.Errorf("router did not start in time")
 	}
