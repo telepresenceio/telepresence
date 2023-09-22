@@ -173,7 +173,7 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		ourArgs = append(ourArgs, "--name", dr.name)
 	}
 
-	if !ud.Remote {
+	if !ud.Containerized() {
 		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
 		if s.dockerPort != 0 {
 			ourArgs = append(ourArgs, "-p", fmt.Sprintf("%d:%d", s.localPort, s.dockerPort))

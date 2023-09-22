@@ -27,7 +27,7 @@ type Info struct {
 }
 
 func (info *Info) DaemonID() *Identifier {
-	id, _ := NewIdentifier(info.Name, info.KubeContext, info.Namespace)
+	id, _ := NewIdentifier(info.Name, info.KubeContext, info.Namespace, info.InDocker)
 	return id
 }
 

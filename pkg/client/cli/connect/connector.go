@@ -144,17 +144,21 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
-func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (*daemon.UserClient, error) {
+func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, kubeContext, namespace string) (*daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
 	if match == nil && !cr.Implicit {
-		match = regexp.MustCompile(regexp.QuoteMeta(daemonID.String()))
+		match = regexp.MustCompile(regexp.QuoteMeta(kubeContext + "-" + namespace))
 	}
 	info, err := daemon.LoadMatchingInfo(ctx, match)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Try dialing the host daemon using the well known socket.
 			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx)); sockErr == nil {
-				return newUserDaemon(conn, daemonID, false), nil
+				daemonID, err := daemon.NewIdentifier("", kubeContext, namespace, false)
+				if err != nil {
+					return nil, err
+				}
+				return newUserDaemon(conn, daemonID), nil
 			}
 		}
 		return nil, err
@@ -163,24 +167,24 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 	if err != nil {
 		return nil, err
 	}
-	return newUserDaemon(conn, daemonID, info.InDocker), nil
+	return newUserDaemon(conn, info.DaemonID()), nil
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
-	daemonID, err := daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags)
+	daemonID, err := daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags, cr.Docker)
 	if err != nil {
 		return ctx, nil, err
 	}
 
 	// Try dialing the host daemon using the well known socket.
-	ud, err := DiscoverDaemon(ctx, cr.Use, daemonID)
+	ud, err := DiscoverDaemon(ctx, cr.Use, daemonID.KubeContext, daemonID.Namespace)
 	if err == nil {
-		if cr.Docker {
-			if !ud.Remote {
-				return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
-			}
+		if ud.Containerized() {
 			ctx = docker.EnableClient(ctx)
+			cr.Docker = true
+		} else if cr.Docker {
+			return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
 		}
 		return ctx, ud, nil
 	}
@@ -219,15 +223,14 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	if err != nil {
 		return ctx, nil, err
 	}
-	return ctx, newUserDaemon(conn, daemonID, cr.Docker), nil
+	return ctx, newUserDaemon(conn, daemonID), nil
 }
 
-func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier, remote bool) *daemon.UserClient {
+func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.UserClient {
 	return &daemon.UserClient{
 		ConnectorClient: connector.NewConnectorClient(conn),
 		Conn:            conn,
 		DaemonID:        daemonID,
-		Remote:          remote,
 	}
 }
 
@@ -235,7 +238,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	var err error
 	var ud *daemon.UserClient
 	defer func() {
-		if err == nil && required && !ud.Remote {
+		if err == nil && required && !ud.Containerized() {
 			// The RootDaemon must be started if the UserDaemon was started
 			err = ensureRootDaemonRunning(ctx)
 		}
@@ -276,10 +279,8 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 func connectSession(ctx context.Context, useLine string, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
-	if userD.Remote {
-		// We instruct the remote daemon to modify its KUBECONFIG.
-		delete(request.Environment, "KUBECONFIG")
-		delete(request.Environment, "-KUBECONFIG")
+	if userD.Containerized() {
+		docker.AnnotateConnectRequest(&request.ConnectRequest, userD.DaemonID.KubeContext)
 	}
 	cat := errcat.Unknown
 
@@ -289,9 +290,10 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		request.ManagerNamespace = ci.ManagerNamespace
 		request.Name = ci.ConnectionName
 		userD.DaemonID = &daemon.Identifier{
-			Name:        ci.ConnectionName,
-			KubeContext: ci.ClusterContext,
-			Namespace:   ci.Namespace,
+			Name:          ci.ConnectionName,
+			KubeContext:   ci.ClusterContext,
+			Namespace:     ci.Namespace,
+			Containerized: userD.Containerized(),
 		}
 		return &daemon.Session{
 			UserClient: *userD,
@@ -339,8 +341,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		return nil, nil
 	}
 
-	if !userD.Remote {
-		dlog.Debug(ctx, "saving connect info")
+	if !userD.Containerized() {
 		daemonID := userD.DaemonID
 		err = daemon.SaveInfo(ctx,
 			&daemon.Info{
@@ -354,7 +355,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		}
 	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
-		if !userD.Remote {
+		if !userD.Containerized() {
 			_ = daemon.DeleteInfo(ctx, userD.DaemonID.InfoFileName())
 		}
 		return nil, err

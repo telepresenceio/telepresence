@@ -30,6 +30,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -120,7 +121,10 @@ func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, 
 	}
 }
 
-const kubeAuthPortFile = kubeauth.CommandName + ".port"
+const (
+	kubeAuthPortFile = kubeauth.CommandName + ".port"
+	kubeConfigs      = "kube"
+)
 
 func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
 	pb, err := os.ReadFile(portFile)
@@ -276,9 +280,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	}
 
 	// Store the file using its context name under the <telepresence cache>/kube directory
-	const kubeConfigs = "kube"
-	kubeConfigFile := config.CurrentContext
-	kubeConfigFile = strings.ReplaceAll(kubeConfigFile, "/", "-")
+	kubeConfigFile := strings.ReplaceAll(config.CurrentContext, "/", "-")
 	kubeConfigDir := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeConfigs)
 	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
 		return err
@@ -291,13 +293,21 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if err = clientcmd.WriteToFile(config, filepath.Join(kubeConfigDir, kubeConfigFile)); err != nil {
 		return err
 	}
+	AnnotateConnectRequest(&cr.ConnectRequest, config.CurrentContext)
+	return nil
+}
 
+func AnnotateConnectRequest(cr *connector.ConnectRequest, kubeContext string) {
+	kubeConfigFile := strings.ReplaceAll(kubeContext, "/", "-")
 	// Concatenate using "/". This will be used in linux
 	if cr.ContainerKubeFlagOverrides == nil {
 		cr.ContainerKubeFlagOverrides = make(map[string]string)
 	}
 	cr.ContainerKubeFlagOverrides["kubeconfig"] = fmt.Sprintf("%s/%s/%s", dockerTpCache, kubeConfigs, kubeConfigFile)
-	return nil
+
+	// We never instruct the remote containerized daemon to modify its KUBECONFIG environment.
+	delete(cr.Environment, "KUBECONFIG")
+	delete(cr.Environment, "-KUBECONFIG")
 }
 
 // handleLocalK8s checks if the cluster is using a well known provider (currently minikube or kind)

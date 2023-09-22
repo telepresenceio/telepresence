@@ -153,7 +153,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	match := regexp.MustCompile(`Connected to context ?(.+),\s*namespace (\S+)\s+\(`).FindStringSubmatch(stdout)
 	require.Len(match, 3)
 
-	daemonID, err := daemon.NewIdentifier("", match[1], match[2])
+	daemonID, err := daemon.NewIdentifier("", match[1], match[2], true)
 	require.NoError(err)
 	daemonName := daemonID.ContainerName()
 	tag := "telepresence/echo-test"

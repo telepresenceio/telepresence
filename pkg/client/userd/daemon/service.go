@@ -34,6 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -237,7 +238,7 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = userd.WithService(ctx, s.self)
 
-	daemonID, err := daemon.NewIdentifier(cr.Name, config.Context, config.Namespace)
+	daemonID, err := daemon.NewIdentifier(cr.Name, config.Context, config.Namespace, proc.RunningInContainer())
 	if err != nil {
 		cancel()
 		return &rpc.ConnectInfo{

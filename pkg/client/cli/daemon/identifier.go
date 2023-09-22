@@ -7,12 +7,13 @@ import (
 )
 
 type Identifier struct {
-	Name        string
-	KubeContext string
-	Namespace   string
+	Name          string
+	KubeContext   string
+	Namespace     string
+	Containerized bool
 }
 
-func NewIdentifier(name, contextName, namespace string) (*Identifier, error) {
+func NewIdentifier(name, contextName, namespace string, containerized bool) (*Identifier, error) {
 	if namespace == "" {
 		return nil, errors.New("daemon identifier must have a namespace")
 	}
@@ -23,8 +24,16 @@ func NewIdentifier(name, contextName, namespace string) (*Identifier, error) {
 		} else {
 			name = contextName + "-" + namespace
 		}
+		if containerized {
+			name += "-cn"
+		}
 	}
-	return &Identifier{KubeContext: contextName, Namespace: namespace, Name: SafeContainerName(name)}, nil
+	return &Identifier{
+		KubeContext:   contextName,
+		Namespace:     namespace,
+		Name:          SafeContainerName(name),
+		Containerized: containerized,
+	}, nil
 }
 
 func (id *Identifier) String() string {
@@ -41,7 +50,7 @@ func (id *Identifier) ContainerName() string {
 
 // IdentifierFromFlags returns a unique name created from the name of the current context
 // and the active namespace denoted by the given flagMap.
-func IdentifierFromFlags(name string, flagMap map[string]string) (*Identifier, error) {
+func IdentifierFromFlags(name string, flagMap map[string]string, containerized bool) (*Identifier, error) {
 	cld, err := client.ConfigLoader(flagMap)
 	if err != nil {
 		return nil, err
@@ -59,5 +68,5 @@ func IdentifierFromFlags(name string, flagMap map[string]string) (*Identifier, e
 	if cc == "" {
 		cc = config.CurrentContext
 	}
-	return NewIdentifier(name, cc, ns)
+	return NewIdentifier(name, cc, ns, containerized)
 }

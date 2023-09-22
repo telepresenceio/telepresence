@@ -131,7 +131,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		}, nil
 	}
 	var wt ioutil.WriterTos
-	if userD.Remote {
+	if userD.Containerized() {
 		sie := StatusInfoEmbedded{
 			RootDaemon: &rs,
 			UserDaemon: &us,
@@ -153,7 +153,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	}
 	us.Name = version.Name
 	if us.Name == "" {
-		if userD.Remote {
+		if userD.Containerized() {
 			us.Name = "Daemon"
 		} else {
 			us.Name = "User Daemon"
