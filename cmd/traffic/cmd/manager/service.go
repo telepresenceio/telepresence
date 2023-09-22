@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -445,7 +446,11 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
 
-	return s.state.PrepareIntercept(ctx, request)
+	replacePolicy := agentconfig.ReplacePolicyNever
+	if request.InterceptSpec.Replace {
+		replacePolicy = agentconfig.ReplacePolicyInactive
+	}
+	return s.state.PrepareIntercept(ctx, request, replacePolicy)
 }
 
 // CreateIntercept lets a client create an intercept.
@@ -467,6 +472,13 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
+	if ciReq.InterceptSpec.Replace {
+		_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyActive)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	interceptInfo, err := s.state.AddIntercept(ctx, sessionID, s.clusterInfo.ID(), client, ciReq)
 	if err != nil {
 		return nil, err
@@ -479,7 +491,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		err := s.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, info *rpc.InterceptInfo) error {
 			dlog.Debugf(ctx, "Restoring app container for %s", info.Id)
 			ciReq.InterceptSpec.Replace = false
-			_, err := s.PrepareIntercept(ctx, ciReq)
+			_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyInactive)
 			return err
 		})
 		if err != nil {

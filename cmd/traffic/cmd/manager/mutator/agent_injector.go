@@ -165,11 +165,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		var uc *agentconfig.UserConfig
-		if scx != nil && scx.AgentConfig() != nil {
-			uc = scx.AgentConfig().UserConfig
-		}
-		if scx, err = gc.Generate(ctx, wl, uc); err != nil {
+		if scx, err = gc.Generate(ctx, wl, 0, scx); err != nil {
 			return nil, err
 		}
 
@@ -232,14 +228,10 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 }
 
 func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
-	if config.UserConfig == nil || !config.UserConfig.ReplaceContainers {
-		dlog.Debugf(ctx, "Skipping deletion of container")
-		return patches
-	}
 podContainers:
 	for i, pc := range pod.Spec.Containers {
 		for _, cc := range config.Containers {
-			if cc.Name == pc.Name {
+			if cc.Name == pc.Name && cc.Replace == agentconfig.ReplacePolicyActive {
 				patches = append(patches, patchOperation{
 					Op:   "remove",
 					Path: fmt.Sprintf("/spec/containers/%d", i),

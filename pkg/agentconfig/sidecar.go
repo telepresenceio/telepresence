@@ -49,6 +49,17 @@ const (
 	OriginatingTLSSecretAnnotation = DomainPrefix + "inject-originating-tls-secret"
 )
 
+type ReplacePolicy int
+
+const (
+	// --replace is false.
+	ReplacePolicyNever ReplacePolicy = iota
+	// --replace is true, the intercept is active.
+	ReplacePolicyActive
+	// -replace is true, the intercept is inactive.
+	ReplacePolicyInactive
+)
+
 // Intercept describes the mapping between a service port and an intercepted container port.
 type Intercept struct {
 	// The name of the intercepted container port
@@ -101,11 +112,9 @@ type Container struct {
 
 	// Mounts are the actual mount points that are mounted by this container
 	Mounts []string
-}
 
-type UserConfig struct {
-	// ReplaceContainers is true if the agent should replace the intercepted containers
-	ReplaceContainers bool `json:"replaceContainers,omitempty"`
+	// Replace is whether the agent should replace the intercepted container
+	Replace ReplacePolicy `json:"replace,omitempty"`
 }
 
 // The Sidecar configures the traffic-agent sidecar.
@@ -158,9 +167,6 @@ type Sidecar struct {
 	// InitResources is the resource requirements for the initContainer sidecar
 	InitResources *core.ResourceRequirements `json:"initResources,omitempty"`
 
-	// User-supplied configuration for the intercept.
-	UserConfig *UserConfig `json:"userConfig,omitempty"`
-
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`
 }
@@ -207,11 +213,4 @@ func (s *Sidecar) RecordInSpan(span trace.Span) {
 	span.SetAttributes(
 		attribute.String("tel2.agent-sidecar", string(bytes)),
 	)
-}
-
-func (uc *UserConfig) Equals(other *UserConfig) bool {
-	if uc == nil || other == nil {
-		return uc == other
-	}
-	return uc.ReplaceContainers == other.ReplaceContainers
 }

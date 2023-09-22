@@ -21,7 +21,15 @@ const (
 )
 
 type GeneratorConfig interface {
-	Generate(ctx context.Context, wl k8sapi.Workload, userCfg *agentconfig.UserConfig) (sc agentconfig.SidecarExt, err error)
+	// Generate generates a configuration for the given workload. If replaceContainers is given it will be used to configure
+	// container replacement EXCEPT if existingConfig is not nil, in which replaceContainers will be
+	// ignored and the value from existingConfig used. 0 can be conventionally passed in as replaceContainers in this case.
+	Generate(
+		ctx context.Context,
+		wl k8sapi.Workload,
+		replaceContainers agentconfig.ReplacePolicy,
+		existingConfig agentconfig.SidecarExt,
+	) (sc agentconfig.SidecarExt, err error)
 }
 
 var GeneratorConfigFunc func(qualifiedAgentImage string) (GeneratorConfig, error) //nolint:gochecknoglobals // extension point
@@ -40,7 +48,12 @@ type BasicGeneratorConfig struct {
 	PullSecrets         []core.LocalObjectReference
 }
 
-func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workload, userCfg *agentconfig.UserConfig) (sc agentconfig.SidecarExt, err error) {
+func (cfg *BasicGeneratorConfig) Generate(
+	ctx context.Context,
+	wl k8sapi.Workload,
+	replaceContainers agentconfig.ReplacePolicy,
+	existingConfig agentconfig.SidecarExt,
+) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "agentmap.Generate")
 	defer tracing.EndAndRecord(span, err)
 
@@ -81,7 +94,7 @@ func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workloa
 
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
-		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, portNumber, ccs); err != nil {
+		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, portNumber, ccs, replaceContainers, existingConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -105,13 +118,19 @@ func (cfg *BasicGeneratorConfig) Generate(ctx context.Context, wl k8sapi.Workloa
 		Resources:     cfg.Resources,
 		PullPolicy:    cfg.PullPolicy,
 		PullSecrets:   cfg.PullSecrets,
-		UserConfig:    userCfg,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil
 }
 
-func appendAgentContainerConfigs(svc *core.Service, pod *core.PodTemplateSpec, portNumber func(int32) uint16, ccs []*agentconfig.Container) ([]*agentconfig.Container, error) {
+func appendAgentContainerConfigs(
+	svc *core.Service,
+	pod *core.PodTemplateSpec,
+	portNumber func(int32) uint16,
+	ccs []*agentconfig.Container,
+	replaceContainers agentconfig.ReplacePolicy,
+	existingConfig agentconfig.SidecarExt,
+) ([]*agentconfig.Container, error) {
 	portNameOrNumber := pod.Annotations[ServicePortAnnotation]
 	ports, err := install.FilterServicePorts(svc, portNameOrNumber)
 	if err != nil {
@@ -151,6 +170,16 @@ nextSvcPort:
 			ContainerPort:     uint16(appPort.ContainerPort),
 		}
 
+		// Validate that we're not being asked to clobber an existing configuration
+		if existingConfig != nil {
+			for _, cc := range existingConfig.AgentConfig().Containers {
+				if cc.Name == cn.Name {
+					replaceContainers = cc.Replace
+					break
+				}
+			}
+		}
+
 		// The container might already have intercepts declared
 		for _, cc := range ccs {
 			if cc.Name == cn.Name {
@@ -171,6 +200,7 @@ nextSvcPort:
 			MountPoint: agentconfig.MountPrefixApp + "/" + cn.Name,
 			Mounts:     mounts,
 			Intercepts: []*agentconfig.Intercept{ic},
+			Replace:    replaceContainers,
 		})
 	}
 	return ccs, nil
