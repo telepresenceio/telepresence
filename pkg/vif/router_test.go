@@ -318,7 +318,6 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 
 	cmd.Stdout = outWrite
 	cmd.Stdin = inRead
-	cmd.Stdout = outWrite
 	err = cmd.Start()
 	if err != nil {
 		pCancel()

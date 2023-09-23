@@ -177,7 +177,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 					return true
 				}
 				return newRoute.Interface.Name != originalRoute.Interface.Name
-			}, 5*time.Second, 200*time.Millisecond)
+			}, 30*time.Second, 200*time.Millisecond)
 		})
 	}
 }

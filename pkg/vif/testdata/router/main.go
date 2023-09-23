@@ -26,22 +26,33 @@ func main() {
 	vif.InitLogger(bCtx)
 
 	ctx, cancel := context.WithCancel(client.WithConfig(bCtx, cfg))
-	defer cancel()
-	dev, err := vif.NewTunnelingDevice(ctx, func(context.Context, tunnel.ConnID) (tunnel.Stream, error) {
+
+	var err error
+	defer func() {
+		cancel()
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}()
+
+	var dev *vif.TunnelingDevice
+	dev, err = vif.NewTunnelingDevice(ctx, func(context.Context, tunnel.ConnID) (tunnel.Stream, error) {
 		return nil, errors.New("stream routing not enabled; refusing to forward")
 	})
 	if err != nil {
-		panic(err)
+		return
 	}
+
 	defer func() {
-		if err := dev.Close(bCtx); err != nil {
-			panic(err)
-		}
+		_ = dev.Close(bCtx)
 	}()
+
 	go func() {
 		err := dev.Run(ctx)
 		if err != nil {
-			panic(err)
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 	}()
 	yesRoutes := []*net.IPNet{}
@@ -49,42 +60,44 @@ func main() {
 	whitelist := []*net.IPNet{}
 	for _, cidr := range os.Args[1:] {
 		var ipnet *net.IPNet
-		var err error
 		if strings.HasPrefix(cidr, "!") {
-			_, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "!"))
-			fmt.Printf("Blacklisting route: %s\n", ipnet)
-			noRoutes = append(noRoutes, ipnet)
+			if _, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "!")); err == nil {
+				fmt.Printf("Blacklisting route: %s\n", ipnet)
+				noRoutes = append(noRoutes, ipnet)
+			}
 		} else if strings.HasPrefix(cidr, "+") {
-			_, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "+"))
-			fmt.Printf("Whitelisting route: %s\n", ipnet)
-			whitelist = append(whitelist, ipnet)
+			if _, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "+")); err == nil {
+				fmt.Printf("Whitelisting route: %s\n", ipnet)
+				whitelist = append(whitelist, ipnet)
+			}
 		} else {
-			_, ipnet, err = net.ParseCIDR(cidr)
-			fmt.Printf("Adding route: %s\n", ipnet)
-			yesRoutes = append(yesRoutes, ipnet)
+			if _, ipnet, err = net.ParseCIDR(cidr); err == nil {
+				fmt.Printf("Adding route: %s\n", ipnet)
+				yesRoutes = append(yesRoutes, ipnet)
+			}
 		}
 		if err != nil {
-			panic(err)
+			return
 		}
 	}
 	dev.Router.UpdateWhitelist(whitelist)
 	err = dev.Router.UpdateRoutes(ctx, yesRoutes, noRoutes)
 	if err != nil {
-		panic(err)
+		return
 	}
 	go func() {
-		for {
-			scanner := bufio.NewScanner(os.Stdin)
-			for scanner.Scan() {
-				line := scanner.Text()
-				if strings.TrimSpace(line) == "" {
-					cancel()
-					return
-				}
+		defer cancel()
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.TrimSpace(line) == "" {
+				return
 			}
-			if err := scanner.Err(); err != nil {
-				panic(err)
-			}
+		}
+		err := scanner.Err()
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 	}()
 	defer fmt.Println("Okay bye!")

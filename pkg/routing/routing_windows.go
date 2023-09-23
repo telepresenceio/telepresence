@@ -1,11 +1,14 @@
 package routing
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"net"
-	"strconv"
+	"regexp"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
@@ -18,6 +21,54 @@ import (
 
 type table struct{}
 
+func rowAsRoute(ctx context.Context, row *winipcfg.MibIPforwardRow2, localIP net.IP) (*Route, error) {
+	dst := row.DestinationPrefix.Prefix()
+	if !dst.IsValid() {
+		return nil, nil
+	}
+	gw := row.NextHop.Addr()
+	if !gw.IsValid() {
+		return nil, nil
+	}
+	ifaceIdx := int(row.InterfaceIndex)
+	iface, err := net.InterfaceByIndex(ifaceIdx)
+	if err != nil {
+		dlog.Warnf(ctx, "unable to get interface at index %d for destination %s: %v", ifaceIdx, dst, err)
+		return nil, nil
+	}
+	if len(localIP) == 0 {
+		localIP, err = interfaceLocalIP(iface, dst.Addr().Is4())
+		if err != nil {
+			return nil, err
+		}
+	} else if ip4 := localIP.To4(); ip4 != nil {
+		localIP = ip4
+	}
+	if localIP == nil {
+		return nil, nil
+	}
+	ip := dst.Addr().AsSlice()
+	var mask net.IPMask
+	if dst.Bits() > 0 {
+		if dst.Addr().Is4() {
+			mask = net.CIDRMask(dst.Bits(), 32)
+		} else {
+			mask = net.CIDRMask(dst.Bits(), 128)
+		}
+	}
+	routedNet := &net.IPNet{
+		IP:   ip,
+		Mask: mask,
+	}
+	return &Route{
+		LocalIP:   localIP,
+		Gateway:   gw.AsSlice(),
+		RoutedNet: routedNet,
+		Interface: iface,
+		Default:   subnet.IsZeroMask(routedNet),
+	}, nil
+}
+
 func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
 	if err != nil {
@@ -25,101 +76,65 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	}
 	routes := []*Route{}
 	for _, row := range table {
-		dst := row.DestinationPrefix.Prefix()
-		if !dst.IsValid() {
-			continue
-		}
-		gw := row.NextHop.Addr()
-		if !gw.IsValid() {
-			continue
-		}
-		ifaceIdx := int(row.InterfaceIndex)
-		iface, err := net.InterfaceByIndex(ifaceIdx)
-		if err != nil {
-			dlog.Warnf(ctx, "unable to get interface at index %d for destination %s: %v", ifaceIdx, dst, err)
-			continue
-		}
-		localIP, err := interfaceLocalIP(iface, dst.Addr().Is4())
+		r, err := rowAsRoute(ctx, &row, nil)
 		if err != nil {
 			return nil, err
 		}
-		if localIP == nil {
-			continue
+		if r != nil {
+			routes = append(routes, r)
 		}
-		gwc := gw.AsSlice()
-		ip := dst.Addr().AsSlice()
-		var mask net.IPMask
-		if dst.Bits() > 0 {
-			if dst.Addr().Is4() {
-				mask = net.CIDRMask(dst.Bits(), 32)
-			} else {
-				mask = net.CIDRMask(dst.Bits(), 128)
-			}
-		}
-		routedNet := &net.IPNet{
-			IP:   ip,
-			Mask: mask,
-		}
-		routes = append(routes, &Route{
-			LocalIP:   localIP,
-			Gateway:   gwc,
-			RoutedNet: routedNet,
-			Interface: iface,
-			Default:   subnet.IsZeroMask(routedNet),
-		})
 	}
 	return routes, nil
 }
 
-func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
-	ip := routedNet.IP
-	pshScript := fmt.Sprintf(`
-$job = Find-NetRoute -RemoteIPAddress "%s" -AsJob | Wait-Job -Timeout 30
-if ($job.State -ne 'Completed') {
-    $errorMessage = $job.ChildJobs[0].JobStateInfo.Reason
-    if ($errorMessage -ne $null) {
-        $errorMessage = $errorMessage.Message
-    } else {
-        $errorMessage = "Unknown error occurred; timed out getting route after 30s."
-    }
-    throw "Error getting route: $errorMessage"
+func getRouteForIP(ctx context.Context, localIP net.IP) (*Route, error) {
+	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get routing table: %w", err)
+	}
+	for _, row := range table {
+		ifaceIdx := int(row.InterfaceIndex)
+		if iface, err := net.InterfaceByIndex(ifaceIdx); err == nil && iface.Flags&net.FlagUp == net.FlagUp {
+			if addrs, err := iface.Addrs(); err == nil {
+				for _, addr := range addrs {
+					if ip, _, err := net.ParseCIDR(addr.String()); err == nil && ip.Equal(localIP) {
+						if r, err := rowAsRoute(ctx, &row, ip); err == nil && r != nil {
+							return r, nil
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil, fmt.Errorf("unable to get interface index for IP %s", localIP.String())
 }
-$obj = $job | Receive-Job
-$obj.IPAddress
-$obj.NextHop
-$obj.InterfaceIndex[0]
-`, ip)
-	cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", pshScript)
+
+func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	ip := routedNet.IP
+	cmd := proc.CommandContext(ctx, "pathping", "-n", "-h", "1", "-p", "100", "-w", "100", "-q", "1", ip.String())
 	cmd.DisableLogging = true
 	stderr := &strings.Builder{}
 	cmd.Stderr = stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("unable to run 'Find-Netroute -RemoteIPAddress %s': %s (%w)", ip, stderr, err)
+		return nil, fmt.Errorf("unable to run 'pathping %s': %s (%w)", ip, stderr, err)
 	}
-	lines := strings.Split(string(out), "\n")
-	localIP := iputil.Parse(strings.TrimSpace(lines[0]))
+	var localIP net.IP
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+	ipLine := regexp.MustCompile(`^\s+0\s+(\S+)\s*$`)
+	for scanner.Scan() {
+		if match := ipLine.FindStringSubmatch(scanner.Text()); match != nil {
+			if localIP = iputil.Parse(match[1]); localIP != nil {
+				break
+			}
+		}
+	}
 	if localIP == nil {
-		return nil, fmt.Errorf("unable to parse IP from %s", lines[0])
+		return nil, fmt.Errorf("unable to parse local IP from %q", string(out))
 	}
-	gatewayIP := iputil.Parse(strings.TrimSpace(lines[1]))
-	if gatewayIP == nil {
-		return nil, fmt.Errorf("unable to parse gateway IP from %s", lines[1])
-	}
-	interfaceIndex, err := strconv.Atoi(strings.TrimSpace(lines[2]))
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse interface index from %s: %w", lines[2], err)
-	}
-	iface, err := net.InterfaceByIndex(interfaceIndex)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get interface for index %d: %w", interfaceIndex, err)
-	}
-	return &Route{
-		LocalIP:   localIP,
-		Gateway:   gatewayIP,
-		Interface: iface,
-		RoutedNet: routedNet,
-	}, nil
+	return getRouteForIP(ctx, localIP)
 }
 
 func maskToIP(mask net.IPMask) (ip net.IP) {
@@ -177,8 +192,4 @@ func (t *table) Remove(ctx context.Context, r *Route) error {
 
 func (t *table) Close(ctx context.Context) error {
 	return nil
-}
-
-func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
-	return false, nil
 }
