@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -12,7 +13,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func SaveToUserCache(ctx context.Context, object any, file string) error {
+type Permissions fs.FileMode
+
+const (
+	Public  Permissions = 0o644
+	Private Permissions = 0o600
+)
+
+func SaveToUserCache(ctx context.Context, object any, file string, perm Permissions) error {
 	ctx = dos.WithLockedFs(ctx)
 	jsonContent, err := json.Marshal(object)
 	if err != nil {
@@ -23,10 +31,14 @@ func SaveToUserCache(ctx context.Context, object any, file string) error {
 	fullFilePath := filepath.Join(filelocation.AppUserCacheDir(ctx), file)
 	// get dir of joined path
 	dir := filepath.Dir(fullFilePath)
-	if err := dos.MkdirAll(ctx, dir, 0o700); err != nil {
+	var dirPerm fs.FileMode = 0o700
+	if perm == Public {
+		dirPerm = 0o755
+	}
+	if err := dos.MkdirAll(ctx, dir, dirPerm); err != nil {
 		return err
 	}
-	return dos.WriteFile(ctx, fullFilePath, jsonContent, 0o600)
+	return dos.WriteFile(ctx, fullFilePath, jsonContent, (fs.FileMode(perm)))
 }
 
 func LoadFromUserCache(ctx context.Context, dest any, file string) error {

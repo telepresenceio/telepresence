@@ -15,7 +15,7 @@ func SaveIngressesToUserCache(ctx context.Context, ingresses map[string]*manager
 	if len(ingresses) == 0 {
 		return DeleteIngressesFromUserCache(ctx)
 	}
-	return SaveToUserCache(ctx, ingresses, ingressesFile)
+	return SaveToUserCache(ctx, ingresses, ingressesFile, Public)
 }
 
 // LoadIngressesFromUserCache gets the ingresses from cache. An empty map is returned if the
