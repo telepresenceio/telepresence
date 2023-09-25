@@ -34,6 +34,13 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Stop lingering daemon container
+        body: >-
+          When using <code>telepresence connect --docker</code>, a lingering container could be present, causing errors
+          like &quot;The container name NN is already in use by container XX ...&quot;. When this happens, the connect
+          logic will now give the container some time to stop and then call <code>docker stop NN</code> to stop it
+          before retrying to start it.
+      - type: bugfix
         title: Add file locking to the Telepresence cache
         body: >-
           Files in the Telepresence cache are accesses by multiple processes. The processes will now use advisory

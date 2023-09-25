@@ -11,7 +11,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -28,7 +27,7 @@ func (s *suiteState) SetupTest() {
 	s.state = &state{
 		ctx:             s.ctx,
 		sessions:        make(map[string]SessionState),
-		agentsByName:    make(map[string]map[string]*rpc.AgentInfo),
+		agentsByName:    make(map[string]map[string]*manager.AgentInfo),
 		cfgMapLocks:     make(map[string]*sync.Mutex),
 		interceptStates: make(map[string]*interceptState),
 		timedLogLevel:   log.NewTimedLevel("debug", log.SetLevel),
@@ -161,7 +160,7 @@ func (s *suiteState) TestAddClient() {
 	now := time.Now()
 
 	// when
-	s.state.AddClient(&rpc.ClientInfo{
+	s.state.AddClient(&manager.ClientInfo{
 		Name:      "my-client",
 		InstallId: "1234",
 		Product:   "5668",

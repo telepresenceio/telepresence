@@ -152,13 +152,8 @@ func GetRequest(ctx context.Context) *Request {
 }
 
 func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) (context.Context, error) {
-	cr := Request{
-		ConnectRequest: connector.ConnectRequest{
-			KubeFlags: make(map[string]string),
-		},
-		Implicit:   true,
-		kubeConfig: genericclioptions.NewConfigFlags(false),
-	}
+	cr := NewDefaultRequest()
+	cr.Implicit = true
 	cr.kubeConfig.Context = nil // --context is global
 
 	// Handle deprecated namespace flag, but allow it in the list command.
@@ -172,8 +167,22 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) (context.Contex
 	if err := cr.setGlobalConnectFlags(cmd); err != nil {
 		return ctx, err
 	}
+	return WithRequest(ctx, cr), nil
+}
+
+func WithRequest(ctx context.Context, cr *Request) context.Context {
+	return context.WithValue(ctx, requestKey{}, cr)
+}
+
+func NewDefaultRequest() *Request {
+	cr := Request{
+		ConnectRequest: connector.ConnectRequest{
+			KubeFlags: make(map[string]string),
+		},
+		kubeConfig: genericclioptions.NewConfigFlags(false),
+	}
 	cr.addKubeconfigEnv()
-	return context.WithValue(ctx, requestKey{}, &cr), nil
+	return &cr
 }
 
 func GetKubeStartingConfig(cmd *cobra.Command) (*api.Config, error) {

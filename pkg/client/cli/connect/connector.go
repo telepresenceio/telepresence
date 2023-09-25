@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -59,8 +58,8 @@ func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
 		}
 		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
 	}
-	if _, err = ud.Quit(ctx, &emptypb.Empty{}); err == nil || status.Code(err) == codes.Unavailable {
-		err = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
+	if _, err = ud.Quit(ctx, &emptypb.Empty{}); !ud.Remote() && (err == nil || status.Code(err) == codes.Unavailable) {
+		_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 	}
 	if err != nil && status.Code(err) == codes.Unavailable {
 		if quitDaemons {
@@ -166,7 +165,15 @@ func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.U
 	}
 }
 
-func ensureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
+func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
+	var err error
+	defer func() {
+		// The RootDaemon must be started if the UserClient was started
+		if err == nil {
+			err = ensureRootDaemonRunning(ctx)
+		}
+	}()
+
 	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
@@ -174,21 +181,20 @@ func ensureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
 		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
 		// NOTE: The UserDaemonAddress does not imply that the daemon runs in Docker
-		conn, err := grpc.DialContext(ctx, addr,
+		var conn *grpc.ClientConn
+		conn, err = grpc.DialContext(ctx, addr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.FailOnNonTempDialError(true))
-		if err != nil {
-			return ctx, err
+		if err == nil {
+			ud = newUserDaemon(conn, nil)
 		}
-		ud = newUserDaemon(conn, nil)
 	} else {
-		var err error
 		ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)
-		if err != nil {
-			return ctx, err
-		}
+	}
+	if err != nil {
+		return ctx, err
 	}
 	return daemon.WithUserClient(ctx, ud), nil
 }
@@ -198,26 +204,24 @@ func ensureDaemonVersion(ctx context.Context) error {
 	return versionCheck(ctx, client.GetExe(), daemon.GetUserClient(ctx))
 }
 
-func ensureSession(cmd *cobra.Command, required bool) error {
-	ctx := cmd.Context()
+func EnsureSession(ctx context.Context, useLine string, required bool) (context.Context, error) {
 	if daemon.GetSession(ctx) != nil {
-		return nil
+		return ctx, nil
 	}
-	s, err := connectSession(cmd, daemon.GetUserClient(ctx), daemon.GetRequest(ctx), required)
+	s, err := connectSession(ctx, useLine, daemon.GetUserClient(ctx), daemon.GetRequest(ctx), required)
 	if err != nil {
-		return err
+		return ctx, err
 	}
 	if s == nil {
-		return nil
+		return ctx, nil
 	}
 	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
 		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
 	}
-	cmd.SetContext(daemon.WithSession(ctx, s))
-	return nil
+	return daemon.WithSession(ctx, s), nil
 }
 
-func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
+func connectSession(ctx context.Context, useLine string, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Remote() {
@@ -226,7 +230,6 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 		delete(request.Environment, "-KUBECONFIG")
 	}
 	cat := errcat.Unknown
-	ctx := cmd.Context()
 
 	session := func(ci *connector.ConnectInfo, started bool) *daemon.Session {
 		// Update the request from the connect info.
@@ -261,7 +264,7 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
-		if ci, err = userD.Status(ctx, &empty.Empty{}); err != nil {
+		if ci, err = userD.Status(ctx, &emptypb.Empty{}); err != nil {
 			return nil, err
 		}
 		if ci.Error != connector.ConnectInfo_DISCONNECTED {
@@ -271,13 +274,14 @@ func connectSession(cmd *cobra.Command, userD *daemon.UserClient, request *daemo
 			_, _ = fmt.Fprintf(output.Info(ctx),
 				`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
 					"connect to take place. The implicit connect behavior is deprecated and will be removed in a future release.\n",
-				cmd.UseLine())
+				useLine)
 		}
 	}
 
 	if !required {
 		return nil, nil
 	}
+
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		return nil, err
 	}

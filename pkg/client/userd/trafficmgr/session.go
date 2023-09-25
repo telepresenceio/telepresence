@@ -249,7 +249,7 @@ func NewSession(
 		ClusterId:        cluster.GetClusterId(ctx),
 		SessionInfo:      tmgr.SessionInfo(),
 		ConnectionName:   tmgr.daemonID.Name,
-		KubeFlags:        tmgr.FlagMap,
+		KubeFlags:        tmgr.OriginalFlagMap,
 		Namespace:        cluster.Namespace,
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
@@ -902,7 +902,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterId:      s.GetClusterId(c),
 		SessionInfo:    s.SessionInfo(),
 		ConnectionName: s.daemonID.Name,
-		KubeFlags:      s.FlagMap,
+		KubeFlags:      s.OriginalFlagMap,
 		Namespace:      s.Namespace,
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 		Version: &common.VersionInfo{
