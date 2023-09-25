@@ -56,7 +56,7 @@ const (
 	ReplacePolicyNever ReplacePolicy = iota
 	// --replace is true, the intercept is active.
 	ReplacePolicyActive
-	// -replace is true, the intercept is inactive.
+	// --replace is true, the intercept is inactive.
 	ReplacePolicyInactive
 )
 
