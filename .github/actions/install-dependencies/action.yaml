@@ -23,6 +23,7 @@ runs:
       shell: bash
       env:
         HOMEBREW_NO_INSTALL_FROM_API: ""
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
       run: |
         brew untap homebrew/core || true
         brew untap homebrew/cask || true

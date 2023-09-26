@@ -7,9 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"time"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -106,7 +107,7 @@ type dockerRun struct {
 func (dr *dockerRun) wait(ctx context.Context) error {
 	if len(dr.volumes) > 0 {
 		defer func() {
-			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 			docker.StopVolumeMounts(ctx, dr.volumes)
 			cancel()
 		}()
@@ -127,40 +128,42 @@ func (dr *dockerRun) wait(ctx context.Context) error {
 	})
 	defer killTimer.Stop()
 
+	var signalled atomic.Bool
 	go func() {
 		select {
 		case <-ctx.Done():
 		case <-sigCh:
-			close(sigCh)
 		}
+		signalled.Store(true)
 		// Kill the docker run after a grace period in case it isn't stopped
 		killTimer.Reset(2 * time.Second)
-		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
 		if err := docker.StopContainer(docker.EnableClient(ctx), dr.name); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}()
 
-	// Errors caused by context or signal termination doesn't count.
 	err := dr.cmd.Wait()
-	select {
-	case <-ctx.Done():
-		err = nil
-	case <-sigCh:
-		err = nil
-	default:
-		err = errcat.NoDaemonLogs.New(err)
+	if err != nil {
+		if signalled.Load() {
+			// Errors caused by context or signal termination doesn't count.
+			err = nil
+		} else {
+			err = errcat.NoDaemonLogs.New(err)
+		}
 	}
 	return err
 }
 
-func (s *state) startInDocker(ctx context.Context, daemonID *daemon.Identifier, envFile string, args []string) *dockerRun {
+func (s *state) startInDocker(ctx context.Context, envFile string, args []string) *dockerRun {
 	ourArgs := []string{
 		"run",
 		"--env-file", envFile,
 	}
 	dr := &dockerRun{}
+	ud := daemon.GetUserClient(ctx)
+
 	dr.name, dr.err = flags.GetUnparsedValue(args, "--name")
 	if dr.err != nil {
 		return dr
@@ -170,7 +173,7 @@ func (s *state) startInDocker(ctx context.Context, daemonID *daemon.Identifier, 
 		ourArgs = append(ourArgs, "--name", dr.name)
 	}
 
-	if daemonID == nil {
+	if !ud.Containerized() {
 		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
 		if s.dockerPort != 0 {
 			ourArgs = append(ourArgs, "-p", fmt.Sprintf("%d:%d", s.localPort, s.dockerPort))
@@ -185,7 +188,7 @@ func (s *state) startInDocker(ctx context.Context, daemonID *daemon.Identifier, 
 			ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", s.mountPoint, dockerMount))
 		}
 	} else {
-		daemonName := daemonID.ContainerName()
+		daemonName := ud.DaemonID.ContainerName()
 		ourArgs = append(ourArgs, "--network", "container:"+daemonName)
 
 		// "--rm" is mandatory when using --docker-run against a docker daemon, because without it, the volumes
@@ -202,7 +205,7 @@ func (s *state) startInDocker(ctx context.Context, daemonID *daemon.Identifier, 
 			m := s.info.Mount
 			if m != nil {
 				if err := docker.EnsureVolumePlugin(ctx); err != nil {
-					fmt.Fprintf(output.Err(ctx), "Remote mount disabled: %s\n", err)
+					ioutil.Printf(output.Err(ctx), "Remote mount disabled: %s\n", err)
 				}
 				container := s.env["TELEPRESENCE_CONTAINER"]
 				dlog.Infof(ctx, "Mounting %v from container %s", m.Mounts, container)
@@ -218,6 +221,6 @@ func (s *state) startInDocker(ctx context.Context, daemonID *daemon.Identifier, 
 	}
 
 	args = append(ourArgs, args...)
-	dr.cmd, dr.err = proc.Start(dcontext.WithoutCancel(ctx), nil, "docker", args...)
+	dr.cmd, dr.err = proc.Start(context.WithoutCancel(ctx), nil, "docker", args...)
 	return dr
 }

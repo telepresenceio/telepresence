@@ -22,7 +22,7 @@ func versionCheck(ctx context.Context, daemonBinary string, userD *daemon.UserCl
 	if err != nil {
 		return fmt.Errorf("unable to retrieve version of User Daemon: %w", err)
 	}
-	if userD.Remote() {
+	if userD.Containerized() {
 		// The user-daemon is remote (in a docker container, most likely). Compare the major, minor, and patch. Only
 		// compare pre-release if it's rc.X or test.X, and don't check if the binaries match.
 		cv := version.Structured

@@ -76,6 +76,12 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 				return true
 			}
 		}
+		for _, er := range table {
+			// Route is already in the routing table.
+			if subnet.Equal(r, er.RoutedNet) {
+				return true
+			}
+		}
 		return false
 	})
 	// Slightly awkward nested loops, since they can both continue (i.e. there's probably wasted iterations) but it's okay, there's not gonna be hundreds of routes.

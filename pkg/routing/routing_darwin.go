@@ -120,7 +120,7 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	return routes, nil
 }
 
-func getRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+func getOsRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	ip := routedNet.IP
 	cmd := dexec.CommandContext(ctx, "route", "-n", "get", ip.String())
 	cmd.DisableLogging = true

@@ -96,7 +96,7 @@ func (s *multiConnectSuite) Test_MultipleConnect() {
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(err)
 	ctxName := daemon.SafeContainerName(cfg.CurrentContext)
-	s.doubleConnectCheck(ctx, ctx2, ctxName+"-"+s.AppNamespace(), ctxName+"-"+s.appSpace2, s.AppNamespace(), s.appSpace2, "")
+	s.doubleConnectCheck(ctx, ctx2, ctxName+"-"+s.AppNamespace()+"-cn", ctxName+"-"+s.appSpace2+"-cn", s.AppNamespace(), s.appSpace2, "")
 }
 
 func (s *multiConnectSuite) Test_MultipleConnect_named() {

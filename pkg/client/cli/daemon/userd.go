@@ -16,10 +16,6 @@ type UserClient struct {
 	DaemonID *Identifier
 }
 
-func (c *UserClient) Remote() bool {
-	return c.DaemonID != nil
-}
-
 type Session struct {
 	UserClient
 	Info    *connector.ConnectInfo
@@ -52,8 +48,12 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 	return context.WithValue(ctx, sessionKey{}, s)
 }
 
+func (ud *UserClient) Containerized() bool {
+	return ud.DaemonID.Containerized
+}
+
 func (ud *UserClient) DaemonPort() int {
-	if ud.Remote() {
+	if ud.DaemonID.Containerized {
 		addr := ud.Conn.Target()
 		if lc := strings.LastIndexByte(addr, ':'); lc >= 0 {
 			if port, err := strconv.Atoi(addr[lc+1:]); err == nil {

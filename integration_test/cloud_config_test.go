@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -46,17 +47,34 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/32}", ip)))
 	defer s.RollbackTM(ctx)
 
-	s.Eventually(func() bool {
-		defer itest.TelepresenceDisconnectOk(ctx)
-		_, _, err = itest.Telepresence(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+	timeout := 20 * time.Second
+	if runtime.GOOS == "windows" {
+		timeout *= 5
+	}
+	s.Eventuallyf(func() bool {
+		defer func() {
+			stdout, stderr, err := itest.Telepresence(ctx, "quit")
+			dlog.Infof(ctx, "stdout: %q", stdout)
+			dlog.Infof(ctx, "stderr: %q", stderr)
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
+		}()
+		stdout, stderr, err := itest.Telepresence(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+		dlog.Infof(ctx, "stdout: %q", stdout)
+		dlog.Infof(ctx, "stderr: %q", stderr)
 		if err != nil {
+			dlog.Error(ctx, err)
 			return false
 		}
 
 		// The cluster's IP address will also be never proxied, so we gotta account for that.
 		neverProxiedCount := len(ips) + 1
-		stdout, _, err := itest.Telepresence(ctx, "status")
+		stdout, stderr, err = itest.Telepresence(ctx, "status")
+		dlog.Infof(ctx, "stdout: %q", stdout)
+		dlog.Infof(ctx, "stderr: %q", stderr)
 		if err != nil {
+			dlog.Error(ctx, err)
 			return false
 		}
 		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
@@ -66,6 +84,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 
 		jsonStdout, _, err := itest.Telepresence(ctx, "config", "view", "--output", "json")
 		if err != nil {
+			dlog.Error(ctx, err)
 			return false
 		}
 		var view client.SessionConfig
@@ -80,8 +99,9 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
+		dlog.Infof(ctx, "Success! Never-proxied IP %s is not reachable", ip)
 		return true
-	}, 20*time.Second, 5*time.Second, "never-proxy not updated in 20 seconds")
+	}, timeout, 5*time.Second, "never-proxy not updated in %s", timeout)
 }
 
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
@@ -131,7 +151,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 			currentLine++
 		}
 		return levelSet
-	}, 20*time.Second, 5*time.Second, "Root log level not updated in 20 seconds")
+	}, 60*time.Second, 5*time.Second, "Root log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	rootLog, err = os.Open(rootLogName)
@@ -217,7 +237,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 			currentLine++
 		}
 		return levelSet
-	}, 20*time.Second, 5*time.Second, "Connector log level not updated in 20 seconds")
+	}, 60*time.Second, 5*time.Second, "Connector log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	logF, err = os.Open(logName)

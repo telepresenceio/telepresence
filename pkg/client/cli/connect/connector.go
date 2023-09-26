@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -29,47 +29,103 @@ import (
 )
 
 var (
-	ErrNoUserDaemon     = errors.New("telepresence user daemon is not running")
-	ErrNoRootDaemon     = errors.New("telepresence root daemon is not running")
-	ErrNoTrafficManager = errors.New("telepresence traffic manager is not connected")
+	ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
+	ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
 )
 
-func UserDaemonDisconnect(ctx context.Context, quitDaemons bool) (err error) {
-	stdout := output.Out(ctx)
-	fmt.Fprint(stdout, "Telepresence Daemons ")
-	ud := daemon.GetUserClient(ctx)
-	if ud == nil {
-		fmt.Fprintln(stdout, "have already quit")
-		return ErrNoUserDaemon
-	}
-	defer func() {
-		if err == nil {
-			fmt.Fprintln(stdout, "done")
-		}
-	}()
+//nolint:gochecknoglobals // extension point
+var QuitDaemonFuncs = []func(context.Context){
+	quitHostConnector, quitDockerDaemons,
+}
 
-	if quitDaemons {
-		fmt.Fprint(stdout, "quitting...")
-	} else {
-		fmt.Fprint(stdout, "disconnecting...")
-		if _, err = ud.Disconnect(ctx, &emptypb.Empty{}); status.Code(err) != codes.Unimplemented {
-			// nil or not unimplemented
-			return err
+func quitHostConnector(ctx context.Context) {
+	if conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx)); err == nil {
+		if _, err = connector.NewConnectorClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
+			dlog.Errorf(ctx, "error when quitting user daemon: %v", err)
 		}
-		// Disconnect is not implemented so daemon predates 2.4.9. Force a quit
-	}
-	if _, err = ud.Quit(ctx, &emptypb.Empty{}); !ud.Remote() && (err == nil || status.Code(err) == codes.Unavailable) {
 		_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 	}
-	if err != nil && status.Code(err) == codes.Unavailable {
-		if quitDaemons {
-			fmt.Fprintln(stdout, "have already quit")
-		} else {
-			fmt.Fprintln(stdout, "are already disconnected")
-		}
-		err = nil
+	// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
+	// the fact that the user daemon might have been killed ungracefully.
+	if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
+		quitRootDaemon(ctx)
 	}
-	return err
+}
+
+func quitDockerDaemons(ctx context.Context) {
+	infos, err := daemon.LoadInfos(ctx)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return
+	}
+	for _, info := range infos {
+		conn, err := DialDaemon(ctx, info)
+		if err != nil {
+			dlog.Error(ctx, err)
+			continue
+		}
+		_, _ = connector.NewConnectorClient(conn).Quit(ctx, &emptypb.Empty{})
+		_ = conn.Close()
+	}
+	if err = daemon.WaitUntilAllVanishes(ctx, 5*time.Second); err != nil {
+		dlog.Error(ctx, err)
+		_ = daemon.DeleteAllInfos(ctx)
+	}
+}
+
+// DialDaemon dials the daemon appointed by the given info.
+func DialDaemon(ctx context.Context, info *daemon.Info) (*grpc.ClientConn, error) {
+	var err error
+	var conn *grpc.ClientConn
+	if info.InDocker {
+		var addr string
+		daemonID := info.DaemonID()
+		if proc.RunningInContainer() {
+			// Containers use the daemon container DNS name
+			addr = fmt.Sprintf("%s:%d", daemonID.ContainerName(), info.DaemonPort)
+		} else {
+			// The host relies on that the daemon has exposed a port to localhost
+			addr = fmt.Sprintf(":%d", info.DaemonPort)
+		}
+		conn, err = docker.ConnectDaemon(ctx, addr)
+	} else {
+		// Try dialing the host daemon using the well known socket.
+		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
+	}
+	return conn, err
+}
+
+// Quit shuts down all daemons.
+func Quit(ctx context.Context) {
+	stdout := output.Out(ctx)
+	ioutil.Print(stdout, "Telepresence Daemons quitting...")
+	for _, quitFunc := range QuitDaemonFuncs {
+		quitFunc(ctx)
+	}
+	ioutil.Println(stdout, "done")
+}
+
+// Disconnect disconnects from a session in the user daemon.
+func Disconnect(ctx context.Context) {
+	stdout := output.Out(ctx)
+	ioutil.Print(stdout, "Telepresence Daemons ")
+	ud := daemon.GetUserClient(ctx)
+	if ud == nil {
+		ioutil.Println(stdout, "have already quit")
+		quitRootDaemon(ctx) // Can't have a root daemon unless there's a user daemon.
+		return
+	}
+
+	ioutil.Print(stdout, "disconnecting...")
+	if _, err := ud.Disconnect(ctx, &emptypb.Empty{}); err != nil {
+		if status.Code(err) != codes.Unavailable {
+			ioutil.Println(output.Err(ctx), err.Error())
+		} else {
+			ioutil.Println(stdout, "are already disconnected")
+		}
+	} else {
+		ioutil.Println(stdout, "done")
+	}
 }
 
 func RunConnect(cmd *cobra.Command, args []string) error {
@@ -81,80 +137,93 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 	}
 	ctx := cmd.Context()
 	if daemon.GetSession(ctx).Started {
-		defer func() {
-			_ = Disconnect(ctx, false)
-		}()
+		defer Disconnect(ctx)
 	}
 	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
 }
 
+// DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
+// to that daemon is returned if such an entry is found.
+func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, kubeContext, namespace string) (*daemon.UserClient, error) {
+	cr := daemon.GetRequest(ctx)
+	if match == nil && !cr.Implicit {
+		match = regexp.MustCompile(regexp.QuoteMeta(kubeContext + "-" + namespace))
+	}
+	info, err := daemon.LoadMatchingInfo(ctx, match)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Try dialing the host daemon using the well known socket.
+			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx)); sockErr == nil {
+				daemonID, err := daemon.NewIdentifier("", kubeContext, namespace, false)
+				if err != nil {
+					return nil, err
+				}
+				return newUserDaemon(conn, daemonID), nil
+			}
+		}
+		return nil, err
+	}
+	conn, err := DialDaemon(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	return newUserDaemon(conn, info.DaemonID()), nil
+}
+
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
+	daemonID, err := daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags, cr.Docker)
+	if err != nil {
+		return ctx, nil, err
+	}
 
 	// Try dialing the host daemon using the well known socket.
-	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx))
+	ud, err := DiscoverDaemon(ctx, cr.Use, daemonID.KubeContext, daemonID.Namespace)
 	if err == nil {
-		if cr.Docker {
+		if ud.Containerized() {
+			ctx = docker.EnableClient(ctx)
+			cr.Docker = true
+		} else if cr.Docker {
 			return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
 		}
-		return ctx, newUserDaemon(conn, nil), nil
+		return ctx, ud, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return ctx, nil, errcat.NoDaemonLogs.New(err)
 	}
-
-	// Check if a running daemon can be discovered.
-	ctx = docker.EnableClient(ctx)
-	conn, daemonID, err := docker.DiscoverDaemon(ctx, cr.Use)
-	if err == nil {
-		return ctx, newUserDaemon(conn, daemonID), nil
-	}
-	var infoMatchErr daemon.InfoMatchError
-	if errors.As(err, &infoMatchErr) {
-		return ctx, nil, err
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		dlog.Debug(ctx, err.Error())
-	}
-
 	if !required {
 		return ctx, nil, ErrNoUserDaemon
 	}
 
-	if cr.Docker {
-		daemonID, err = daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags)
-		if err != nil {
-			return ctx, nil, errcat.NoDaemonLogs.New(err)
-		}
-		conn, err = docker.LaunchDaemon(ctx, daemonID)
-		if err != nil {
-			return ctx, nil, errcat.NoDaemonLogs.New(err)
-		}
-		return ctx, newUserDaemon(conn, daemonID), nil
-	}
-
-	fmt.Fprintln(output.Info(ctx), "Launching Telepresence User Daemon")
+	ioutil.Println(output.Info(ctx), "Launching Telepresence User Daemon")
 	if err = ensureAppUserCacheDirs(ctx); err != nil {
 		return ctx, nil, err
 	}
 	if err = ensureAppUserConfigDir(ctx); err != nil {
 		return ctx, nil, err
 	}
-	args := []string{connectorDaemon, "connector-foreground"}
-	if cr.UserDaemonProfilingPort > 0 {
-		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
+
+	var conn *grpc.ClientConn
+	if cr.Docker {
+		ctx = docker.EnableClient(ctx)
+		conn, err = docker.LaunchDaemon(ctx, daemonID)
+	} else {
+		args := []string{connectorDaemon, "connector-foreground"}
+		if cr.UserDaemonProfilingPort > 0 {
+			args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
+		}
+		if err = proc.StartInBackground(false, args...); err != nil {
+			return ctx, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
+		}
+		if err = socket.WaitUntilAppears("connector", socket.UserDaemonPath(ctx), 10*time.Second); err != nil {
+			return ctx, nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
+		}
+		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	}
-	if err = proc.StartInBackground(false, args...); err != nil {
-		return ctx, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
-	}
-	if err = socket.WaitUntilAppears("connector", socket.UserDaemonPath(ctx), 10*time.Second); err != nil {
-		return ctx, nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
-	}
-	conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
 	if err != nil {
 		return ctx, nil, err
 	}
-	return ctx, newUserDaemon(conn, nil), nil
+	return ctx, newUserDaemon(conn, daemonID), nil
 }
 
 func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.UserClient {
@@ -167,9 +236,10 @@ func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.U
 
 func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
 	var err error
+	var ud *daemon.UserClient
 	defer func() {
-		// The RootDaemon must be started if the UserClient was started
-		if err == nil {
+		if err == nil && required && !ud.Containerized() {
+			// The RootDaemon must be started if the UserDaemon was started
 			err = ensureRootDaemonRunning(ctx)
 		}
 	}()
@@ -177,26 +247,11 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
-	var ud *daemon.UserClient
-	if addr := client.GetEnv(ctx).UserDaemonAddress; addr != "" {
-		// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-		// NOTE: The UserDaemonAddress does not imply that the daemon runs in Docker
-		var conn *grpc.ClientConn
-		conn, err = grpc.DialContext(ctx, addr,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithNoProxy(),
-			grpc.WithBlock(),
-			grpc.FailOnNonTempDialError(true))
-		if err == nil {
-			ud = newUserDaemon(conn, nil)
-		}
-	} else {
-		ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required)
-	}
-	if err != nil {
+	if ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required); err != nil {
 		return ctx, err
 	}
-	return daemon.WithUserClient(ctx, ud), nil
+	ctx = daemon.WithUserClient(ctx, ud)
+	return ctx, nil
 }
 
 func ensureDaemonVersion(ctx context.Context) error {
@@ -224,10 +279,8 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 func connectSession(ctx context.Context, useLine string, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
-	if userD.Remote() {
-		// We instruct the remote daemon to modify its KUBECONFIG.
-		delete(request.Environment, "KUBECONFIG")
-		delete(request.Environment, "-KUBECONFIG")
+	if userD.Containerized() {
+		docker.AnnotateConnectRequest(&request.ConnectRequest, userD.DaemonID.KubeContext)
 	}
 	cat := errcat.Unknown
 
@@ -236,6 +289,12 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		request.KubeFlags = ci.KubeFlags
 		request.ManagerNamespace = ci.ManagerNamespace
 		request.Name = ci.ConnectionName
+		userD.DaemonID = &daemon.Identifier{
+			Name:          ci.ConnectionName,
+			KubeContext:   ci.ClusterContext,
+			Namespace:     ci.Namespace,
+			Containerized: userD.Containerized(),
+		}
 		return &daemon.Session{
 			UserClient: *userD,
 			Info:       ci,
@@ -247,7 +306,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		var msg string
 		switch ci.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
-			fmt.Fprintf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
+			ioutil.Printf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
 			return session(ci, true), nil
 		case connector.ConnectInfo_ALREADY_CONNECTED:
 			return session(ci, false), nil
@@ -271,7 +330,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 			return connectResult(ci)
 		}
 		if required {
-			_, _ = fmt.Fprintf(output.Info(ctx),
+			ioutil.Printf(output.Info(ctx),
 				`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
 					"connect to take place. The implicit connect behavior is deprecated and will be removed in a future release.\n",
 				useLine)
@@ -282,7 +341,23 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		return nil, nil
 	}
 
+	if !userD.Containerized() {
+		daemonID := userD.DaemonID
+		err = daemon.SaveInfo(ctx,
+			&daemon.Info{
+				InDocker:    false,
+				Name:        daemonID.Name,
+				KubeContext: daemonID.KubeContext,
+				Namespace:   daemonID.Namespace,
+			}, daemonID.InfoFileName())
+		if err != nil {
+			return nil, errcat.NoDaemonLogs.New(err)
+		}
+	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
+		if !userD.Containerized() {
+			_ = daemon.DeleteInfo(ctx, userD.DaemonID.InfoFileName())
+		}
 		return nil, err
 	}
 	return connectResult(ci)

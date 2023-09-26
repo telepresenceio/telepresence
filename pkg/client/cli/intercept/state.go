@@ -106,7 +106,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 	// Parse port into spec based on how it's formatted
 	var err error
-	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Remote())
+	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Containerized())
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		}
 	}()
 
-	if ud.Remote() && ir.LocalMountPort == 0 {
+	if ud.Containerized() && ir.LocalMountPort == 0 {
 		// No use having the remote container actually mount, so let's have it create a bridge
 		// to the remote sftp server instead.
 		lma, err := dnet.FreePortsTCP(1)
@@ -353,19 +353,14 @@ func (s *state) runCommand(ctx context.Context) error {
 		envFile = file.Name()
 	}
 
-	var dr *dockerRun
-	procCtx := ctx
-	if ud.Remote() {
-		// Ensure that the intercept handler is stopped properly if the daemon quits
-		var cancel context.CancelFunc
-		procCtx, cancel = context.WithCancel(procCtx)
-		go func() {
-			if err := docker.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID.InfoFileName()); err != nil {
-				dlog.Error(ctx)
-			}
-		}()
-	}
-	dr = s.startInDocker(ctx, ud.DaemonID, envFile, s.Cmdline)
+	// Ensure that the intercept handler is stopped properly if the daemon quits
+	procCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		if err := daemon.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID.InfoFileName()); err != nil {
+			dlog.Error(ctx)
+		}
+	}()
+	dr := s.startInDocker(ctx, envFile, s.Cmdline)
 	if dr.err == nil {
 		dr.err = s.addInterceptorToDaemon(ctx, dr.cmd, dr.name)
 	}
@@ -386,8 +381,9 @@ func (s *state) addInterceptorToDaemon(ctx context.Context, cmd *dexec.Cmd, cont
 		if grpcStatus.Code(err) == grpcCodes.Canceled {
 			// Deactivation was caused by a disconnect
 			err = nil
+		} else {
+			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		}
-		dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		_ = cmd.Process.Kill()
 		return err
 	}
