@@ -140,6 +140,9 @@ func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error 
 
 func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server net.IP, searchList []string) (err error) {
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
+	dlog.Debugf(ctx, "SetDNS clusterDomain: %q, server: %s, searchList: %v", clusterDomain, server, searchList)
+	defer dlog.Debug(ctx, "SetDNS done")
+
 	parentCtx := ctx
 	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancel()
@@ -274,20 +277,23 @@ func getGlobalSearchList() ([]string, error) {
 
 func (t *nativeDevice) setGlobalSearchList(ctx context.Context, gss []string) error {
 	var err error
-	if t.strategy == client.GSCAuto || t.strategy == client.GSCPowershell {
-		cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
-		if _, err = proc.CaptureErr(cmd); err != nil {
-			if t.strategy != client.GSCAuto {
-				dlog.Error(ctx, "setting DNS using Powershell failed")
-				return err
-			}
-			dlog.Warnf(ctx, `setting DNS using Powershell failed. Will attempt to set the registry value %s\%s directly`, tcpParamKey, searchListKey)
-			t.strategy = client.GSCRegistry
-		}
-	}
-	if t.strategy == client.GSCRegistry {
+	if t.strategy == client.GSCAuto || t.strategy == client.GSCRegistry {
 		// Try setting the DNS directly in the registry. It's known to work in some situations where powershell fails.
 		err = t.setRegistryGlobalSearchList(ctx, gss)
+		if err != nil {
+			if t.strategy != client.GSCAuto {
+				dlog.Errorf(ctx, "setting DNS using the registry value failed: %v", err)
+				return err
+			}
+			dlog.Warnf(ctx, `setting DNS by setting the registry value %s\%s directly failed. Will attempt using powershell`, tcpParamKey, searchListKey)
+			t.strategy = client.GSCPowershell
+		}
+	}
+	if t.strategy == client.GSCPowershell {
+		cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
+		if _, err = proc.CaptureErr(cmd); err != nil {
+			dlog.Errorf(ctx, "setting DNS using Powershell failed: %v", err)
+		}
 	}
 	if err == nil {
 		cmd := proc.CommandContext(ctx, "ipconfig.exe", "/flushdns")
