@@ -79,11 +79,11 @@ func MainWithEnv(ctx context.Context) error {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
+	ctx, imgRetErr := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
 	mgr, ctx, err := NewServiceFunc(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
-	ctx, imgRetErr := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
