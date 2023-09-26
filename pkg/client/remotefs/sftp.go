@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -72,7 +71,7 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 			time.Sleep(time.Second)
 
 			// sshfs sometimes leave the mount point in a bad state. This will clean it up
-			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 			defer cancel()
 			umount := proc.CommandContext(ctx, "fusermount", "-uz", clientMountPoint)
 			umount.DisableLogging = true

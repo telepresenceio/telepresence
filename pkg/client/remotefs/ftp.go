@@ -9,7 +9,6 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -55,7 +54,7 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 		go func() {
 			defer m.iceptWG.Done()
 			<-ctx.Done()
-			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), cfg.Timeouts().Get(client.TimeoutFtpShutdown))
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Timeouts().Get(client.TimeoutFtpShutdown))
 			defer cancel()
 			dlog.Debugf(ctx, "Unmounting FTP file system for intercept %q (address %s) at %q", id, addr, clientMountPoint)
 			if _, err = m.client.Unmount(ctx, m.id); err != nil {

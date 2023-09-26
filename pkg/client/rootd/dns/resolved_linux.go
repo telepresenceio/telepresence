@@ -52,7 +52,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 		defer func() {
 			// It's very likely that the context is cancelled here. We use it
 			// anyway, stripped from cancellation, to retain logging.
-			c, cancel := context.WithTimeout(dcontext.WithoutCancel(c), time.Second)
+			c, cancel := context.WithTimeout(context.WithoutCancel(c), time.Second)
 			defer cancel()
 			dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
 			configureDNS(nil, nil) // Don't route from TUN-device

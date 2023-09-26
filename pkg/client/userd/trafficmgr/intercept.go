@@ -19,7 +19,6 @@ import (
 	core "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -663,7 +662,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 			// Make an attempt to remove the created intercept using a time limited Context. Our
 			// context is already done.
-			rc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 5*time.Second)
+			rc, cancel := context.WithTimeout(context.WithoutCancel(c), 5*time.Second)
 			defer cancel()
 			if removeErr := self.RemoveIntercept(rc, ii.Spec.Name); removeErr != nil {
 				dlog.Warnf(c, "failed to remove failed intercept %s: %v", ii.Spec.Name, removeErr)

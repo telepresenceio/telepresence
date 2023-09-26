@@ -52,6 +52,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -346,7 +347,7 @@ func connectMgr(
 
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
 
-	daemonID, err := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace)
+	daemonID, err := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace, proc.RunningInContainer())
 	if err != nil {
 		return nil, err
 	}

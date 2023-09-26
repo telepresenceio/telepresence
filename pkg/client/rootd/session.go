@@ -29,7 +29,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -442,6 +441,7 @@ func (s *Session) watchClusterInfo(ctx context.Context) error {
 					if !errors.Is(err, context.Canceled) {
 						dlog.Error(ctx, err)
 					}
+					return err
 				}
 			default:
 				if err = s.onFirstClusterInfo(ctx, mgrInfo, span); err != nil {
@@ -783,7 +783,7 @@ func (s *Session) stop(c context.Context) {
 	atomic.StoreInt32(&s.closing, 2)
 
 	if s.tunVif != nil {
-		cc, cancel := context.WithTimeout(dcontext.WithoutCancel(c), 1*time.Second)
+		cc, cancel := context.WithTimeout(context.WithoutCancel(c), 1*time.Second)
 		defer cancel()
 		if err := s.tunVif.Close(cc); err != nil {
 			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)

@@ -34,6 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -237,18 +238,16 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = userd.WithService(ctx, s.self)
 
-	if s.daemonAddress != nil {
-		daemonID, err := daemon.NewIdentifier(cr.Name, config.Context, config.Namespace)
-		if err != nil {
-			cancel()
-			return &rpc.ConnectInfo{
-				Error:         rpc.ConnectInfo_CLUSTER_FAILED,
-				ErrorText:     err.Error(),
-				ErrorCategory: int32(errcat.GetCategory(err)),
-			}
+	daemonID, err := daemon.NewIdentifier(cr.Name, config.Context, config.Namespace, proc.RunningInContainer())
+	if err != nil {
+		cancel()
+		return &rpc.ConnectInfo{
+			Error:         rpc.ConnectInfo_CLUSTER_FAILED,
+			ErrorText:     err.Error(),
+			ErrorCategory: int32(errcat.GetCategory(err)),
 		}
-		go runAliveAndCancellation(ctx, cancel, daemonID)
 	}
+	go runAliveAndCancellation(ctx, cancel, daemonID)
 
 	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {

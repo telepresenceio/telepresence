@@ -318,7 +318,6 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 
 	cmd.Stdout = outWrite
 	cmd.Stdin = inRead
-	cmd.Stdout = outWrite
 	err = cmd.Start()
 	if err != nil {
 		pCancel()
@@ -393,7 +392,7 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 	case <-pCtx.Done():
 		canceler()
 		return "", nil, pCtx.Err()
-	case <-time.After(15 * time.Second):
+	case <-time.After(45 * time.Second):
 		canceler()
 		return "", nil, fmt.Errorf("router did not start in time")
 	}

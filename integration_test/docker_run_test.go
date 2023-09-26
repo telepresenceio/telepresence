@@ -14,7 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 )
 
-func (s *singleServiceSuite) Test_DockerRun() {
+func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 	if s.IsCI() && goRuntime.GOOS != "linux" {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 	}
@@ -33,8 +33,11 @@ func (s *singleServiceSuite) Test_DockerRun() {
 
 	runDockerRun := func(ctx context.Context, wch chan<- struct{}) {
 		defer close(wch)
-		_, _, _ = itest.Telepresence(ctx, "intercept", "--mount", "false", svc,
+		_, stderr, _ := itest.Telepresence(ctx, "intercept", "--mount", "false", svc,
 			"--docker-run", "--port", "9070:8080", "--", "--rm", "-v", abs+":/usr/src/app", tag)
+		if len(stderr) > 0 {
+			dlog.Debugf(ctx, "stderr = %q", stderr)
+		}
 	}
 
 	assertInterceptResponse := func(ctx context.Context) {
@@ -77,6 +80,12 @@ func (s *singleServiceSuite) Test_DockerRun() {
 		go runDockerRun(soft, wch)
 		assertInterceptResponse(ctx)
 		softCancel()
+		select {
+		case <-wch:
+		case <-time.After(30 * time.Second):
+			itest.TelepresenceOk(ctx, "leave", svc)
+			s.Fail("interceptor did not terminate")
+		}
 		assertNotIntercepted(ctx)
 	})
 
@@ -144,7 +153,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	match := regexp.MustCompile(`Connected to context ?(.+),\s*namespace (\S+)\s+\(`).FindStringSubmatch(stdout)
 	require.Len(match, 3)
 
-	daemonID, err := daemon.NewIdentifier("", match[1], match[2])
+	daemonID, err := daemon.NewIdentifier("", match[1], match[2], true)
 	require.NoError(err)
 	daemonName := daemonID.ContainerName()
 	tag := "telepresence/echo-test"
