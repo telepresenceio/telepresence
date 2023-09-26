@@ -165,7 +165,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		if scx, err = gc.Generate(ctx, wl); err != nil {
+		if scx, err = gc.Generate(ctx, wl, 0, scx); err != nil {
 			return nil, err
 		}
 
@@ -182,6 +182,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 
 	var patches patchOps
 	config := scx.AgentConfig()
+	patches = deleteAppContainer(ctx, pod, config, patches)
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
@@ -224,6 +225,23 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 		}
 	}
 	return false
+}
+
+func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+podContainers:
+	for i, pc := range pod.Spec.Containers {
+		for _, cc := range config.Containers {
+			if cc.Name == pc.Name && cc.Replace == agentconfig.ReplacePolicyActive {
+				patches = append(patches, patchOperation{
+					Op:   "remove",
+					Path: fmt.Sprintf("/spec/containers/%d", i),
+				})
+				dlog.Debugf(ctx, "Deleted container %s", pc.Name)
+				continue podContainers
+			}
+		}
+	}
+	return patches
 }
 
 func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {

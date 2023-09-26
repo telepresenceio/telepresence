@@ -49,6 +49,17 @@ const (
 	OriginatingTLSSecretAnnotation = DomainPrefix + "inject-originating-tls-secret"
 )
 
+type ReplacePolicy int
+
+const (
+	// --replace is false.
+	ReplacePolicyNever ReplacePolicy = iota
+	// --replace is true, the intercept is active.
+	ReplacePolicyActive
+	// --replace is true, the intercept is inactive.
+	ReplacePolicyInactive
+)
+
 // Intercept describes the mapping between a service port and an intercepted container port.
 type Intercept struct {
 	// The name of the intercepted container port
@@ -101,6 +112,9 @@ type Container struct {
 
 	// Mounts are the actual mount points that are mounted by this container
 	Mounts []string
+
+	// Replace is whether the agent should replace the intercepted container
+	Replace ReplacePolicy `json:"replace,omitempty"`
 }
 
 // The Sidecar configures the traffic-agent sidecar.

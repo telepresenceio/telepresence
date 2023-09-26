@@ -136,6 +136,9 @@ message InterceptSpec {
   // Used to be mount_point and only utilized when passing the spec between
   // the user daemon and the CLI. It's now moved to InterceptInfo
   string reserved = 11;
+
+  // Whether to replace the running container.
+  bool replace = 22;
 }
 
 enum InterceptDispositionType {

@@ -44,7 +44,7 @@ func (s *state) AgentsLookupDNS(ctx context.Context, clientSessionID string, req
 
 // PostLookupDNSResponse receives lookup responses from an agent and places them in the channel
 // that corresponds to the lookup request.
-func (s *state) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
+func (s *state) PostLookupDNSResponse(ctx context.Context, response *rpc.DNSAgentResponse) {
 	request := response.GetRequest()
 	rid := requestId(request)
 	s.mu.RLock()
@@ -61,7 +61,7 @@ func (s *state) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
 	}
 	s.mu.RUnlock()
 	if !ok {
-		dlog.Debugf(s.ctx, "attempted to post lookup response failed because there was no recipient. ID=%s", rid)
+		dlog.Debugf(ctx, "attempted to post lookup response failed because there was no recipient. ID=%s", rid)
 	}
 }
 

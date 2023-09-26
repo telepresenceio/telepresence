@@ -25,7 +25,7 @@ type suiteState struct {
 func (s *suiteState) SetupTest() {
 	s.ctx = dlog.NewTestContext(s.T(), false)
 	s.state = &state{
-		ctx:             s.ctx,
+		backgroundCtx:   s.ctx,
 		sessions:        make(map[string]SessionState),
 		agentsByName:    make(map[string]map[string]*manager.AgentInfo),
 		cfgMapLocks:     make(map[string]*sync.Mutex),
@@ -143,7 +143,7 @@ func (s *suiteState) TestStateInternal() {
 		a.NotNil(s.GetClient(c2))
 		a.Nil(s.GetClient(c3))
 
-		s.RemoveSession(ctx, c2)
+		a.NoError(s.RemoveSession(ctx, c2))
 
 		a.NotNil(s.GetClient(c1))
 		a.Nil(s.GetClient(c2))
@@ -179,8 +179,8 @@ func (s *suiteState) TestRemoveSession() {
 	s.state.sessions["session-2"] = newAgentSessionState(s.ctx, now)
 
 	// when
-	s.state.RemoveSession(s.ctx, "session-1")
-	s.state.RemoveSession(s.ctx, "session-2") // won't fail trying to delete consumption.
+	s.NoError(s.state.RemoveSession(s.ctx, "session-1"))
+	s.NoError(s.state.RemoveSession(s.ctx, "session-2")) // won't fail trying to delete consumption.
 
 	// then
 	assert.Len(s.T(), s.state.sessions, 0)
