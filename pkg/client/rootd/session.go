@@ -441,6 +441,7 @@ func (s *Session) watchClusterInfo(ctx context.Context) error {
 					if !errors.Is(err, context.Canceled) {
 						dlog.Error(ctx, err)
 					}
+					return err
 				}
 			default:
 				if err = s.onFirstClusterInfo(ctx, mgrInfo, span); err != nil {
