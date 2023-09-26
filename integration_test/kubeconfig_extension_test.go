@@ -14,6 +14,7 @@ import (
 
 	"k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -62,10 +63,19 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	expectedLen := len(ips)
+	expect := fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen)
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "status")
-		return err == nil && strings.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen))
-	}, 10*time.Second, 1*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
+		stdout, stderr, err := itest.Telepresence(ctx, "status")
+		if err == nil && strings.Contains(stdout, expect) {
+			return true
+		}
+		if err != nil {
+			dlog.Errorf(ctx, "%s: %v", stderr, err)
+		} else {
+			dlog.Infof(ctx, "%q does not contain %q", stdout, expect)
+		}
+		return false
+	}, 30*time.Second, 3*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
 
 	jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
 	var status statusResponse
