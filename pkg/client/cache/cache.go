@@ -31,11 +31,7 @@ func SaveToUserCache(ctx context.Context, object any, file string, perm Permissi
 	fullFilePath := filepath.Join(filelocation.AppUserCacheDir(ctx), file)
 	// get dir of joined path
 	dir := filepath.Dir(fullFilePath)
-	var dirPerm fs.FileMode = 0o700
-	if perm == Public {
-		dirPerm = 0o755
-	}
-	if err := dos.MkdirAll(ctx, dir, dirPerm); err != nil {
+	if err := dos.MkdirAll(ctx, dir, 0o755); err != nil {
 		return err
 	}
 	return dos.WriteFile(ctx, fullFilePath, jsonContent, (fs.FileMode(perm)))

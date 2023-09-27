@@ -27,8 +27,7 @@ func SaveSessionInfoToUserCache(ctx context.Context, daemonID *daemon.Identifier
 		KubeContext: daemonID.KubeContext,
 		Namespace:   daemonID.Namespace,
 		Session:     session,
-		// Private because the kubecontext has tokens.
-	}, sessionInfoFile(daemonID), cache.Private)
+	}, sessionInfoFile(daemonID), cache.Public)
 }
 
 // LoadSessionInfoFromUserCache gets the SessionInfo from cache or returns an error if something goes
