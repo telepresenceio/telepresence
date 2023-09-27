@@ -16,5 +16,6 @@ require (
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.16.0-rc.0
 	golang.org/x/sys v0.9.0 // indirect
 )
