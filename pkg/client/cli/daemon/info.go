@@ -66,7 +66,7 @@ func LoadInfo(ctx context.Context, file string) (*Info, error) {
 }
 
 func SaveInfo(ctx context.Context, object *Info, file string) error {
-	return cache.SaveToUserCache(ctx, object, filepath.Join(daemonsDirName, file))
+	return cache.SaveToUserCache(ctx, object, filepath.Join(daemonsDirName, file), cache.Public)
 }
 
 func DeleteInfo(ctx context.Context, file string) error {

@@ -20,7 +20,7 @@ func SetAndStoreTimedLevel(ctx context.Context, tl log.TimedLevel, level string,
 	if duration > 0 {
 		cd.Expires = time.Now().Add(duration).Unix()
 	}
-	return cache.SaveToUserCache(ctx, &cd, procName+".loglevel")
+	return cache.SaveToUserCache(ctx, &cd, procName+".loglevel", cache.Public)
 }
 
 func LoadTimedLevelFromCache(ctx context.Context, tl log.TimedLevel, procName string) error {
