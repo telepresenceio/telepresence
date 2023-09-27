@@ -31,7 +31,7 @@ type StatusInfoEmbedded struct {
 	UserDaemon io.WriterTo `json:"user_daemon" yaml:"user_daemon"`
 }
 
-type rootDaemonStatus struct {
+type RootDaemonStatus struct {
 	Running              bool             `json:"running,omitempty" yaml:"running,omitempty"`
 	Name                 string           `json:"name,omitempty" yaml:"name,omitempty"`
 	Version              string           `json:"version,omitempty" yaml:"version,omitempty"`
@@ -40,7 +40,7 @@ type rootDaemonStatus struct {
 	*client.RoutingSnake `yaml:",inline"`
 }
 
-type userDaemonStatus struct {
+type UserDaemonStatus struct {
 	Running           bool                     `json:"running,omitempty" yaml:"running,omitempty"`
 	Name              string                   `json:"name,omitempty" yaml:"name,omitempty"`
 	Version           string                   `json:"version,omitempty" yaml:"version,omitempty"`
@@ -121,8 +121,8 @@ func run(cmd *cobra.Command, _ []string) error {
 var GetStatusInfo = BasicGetStatusInfo //nolint:gochecknoglobals // extension point
 
 func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
-	rs := rootDaemonStatus{}
-	us := userDaemonStatus{}
+	rs := RootDaemonStatus{}
+	us := UserDaemonStatus{}
 	userD := daemon.GetUserClient(ctx)
 	if userD == nil {
 		return &StatusInfo{
@@ -239,14 +239,14 @@ func (s *StatusInfoEmbedded) WriterTos() []io.WriterTo {
 
 func (s *StatusInfoEmbedded) WriteTo(out io.Writer) (int64, error) {
 	n := 0
-	cs := s.UserDaemon.(*userDaemonStatus)
+	cs := s.UserDaemon.(*UserDaemonStatus)
 	if cs.Running {
 		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
 		kvf := ioutil.DefaultKeyValueFormatter()
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
 		cs.print(kvf)
-		if rs, ok := s.RootDaemon.(*rootDaemonStatus); ok && rs.Running {
+		if rs, ok := s.RootDaemon.(*RootDaemonStatus); ok && rs.Running {
 			rs.printNetwork(kvf)
 		}
 		n += kvf.Println(out)
@@ -256,7 +256,7 @@ func (s *StatusInfoEmbedded) WriteTo(out io.Writer) (int64, error) {
 	return int64(n), nil
 }
 
-func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
+func (ds *RootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ds.Running {
 		n += ioutil.Printf(out, "%s: Running\n", ds.Name)
@@ -272,7 +272,7 @@ func (ds *rootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	return int64(n), nil
 }
 
-func (ds *rootDaemonStatus) printNetwork(kvf *ioutil.KeyValueFormatter) {
+func (ds *RootDaemonStatus) printNetwork(kvf *ioutil.KeyValueFormatter) {
 	kvf.Add("Version", ds.Version)
 	if ds.DNS != nil {
 		printDNS(kvf, ds.DNS)
@@ -323,7 +323,7 @@ func printRouting(kvf *ioutil.KeyValueFormatter, r *client.RoutingSnake) {
 	printSubnets("Never Proxy", r.NeverProxy)
 }
 
-func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
+func (cs *UserDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if cs.Running {
 		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
@@ -338,7 +338,7 @@ func (cs *userDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	return int64(n), nil
 }
 
-func (cs *userDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
+func (cs *UserDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
 	kvf.Add("Version", cs.Version)
 	kvf.Add("Executable", cs.Executable)
 	kvf.Add("Install ID", cs.InstallID)
