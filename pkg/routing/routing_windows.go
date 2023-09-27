@@ -13,7 +13,6 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -33,8 +32,7 @@ func rowAsRoute(ctx context.Context, row *winipcfg.MibIPforwardRow2, localIP net
 	ifaceIdx := int(row.InterfaceIndex)
 	iface, err := net.InterfaceByIndex(ifaceIdx)
 	if err != nil {
-		dlog.Warnf(ctx, "unable to get interface at index %d for destination %s: %v", ifaceIdx, dst, err)
-		return nil, nil
+		return nil, errInconsistentRT
 	}
 	if len(localIP) == 0 {
 		localIP, err = interfaceLocalIP(iface, dst.Addr().Is4())
@@ -69,7 +67,7 @@ func rowAsRoute(ctx context.Context, row *winipcfg.MibIPforwardRow2, localIP net
 	}, nil
 }
 
-func GetRoutingTable(ctx context.Context) ([]*Route, error) {
+func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get routing table: %w", err)
@@ -88,23 +86,35 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 }
 
 func getRouteForIP(ctx context.Context, localIP net.IP) (*Route, error) {
-	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get routing table: %w", err)
-	}
-	for _, row := range table {
-		ifaceIdx := int(row.InterfaceIndex)
-		if iface, err := net.InterfaceByIndex(ifaceIdx); err == nil && iface.Flags&net.FlagUp == net.FlagUp {
-			if addrs, err := iface.Addrs(); err == nil {
-				for _, addr := range addrs {
-					if ip, _, err := net.ParseCIDR(addr.String()); err == nil && ip.Equal(localIP) {
-						if r, err := rowAsRoute(ctx, &row, ip); err == nil && r != nil {
-							return r, nil
+retryInconsistent:
+	for i := 0; i < maxInconsistentRetries; i++ {
+		table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get routing table: %w", err)
+		}
+		for _, row := range table {
+			ifaceIdx := int(row.InterfaceIndex)
+			if iface, err := net.InterfaceByIndex(ifaceIdx); err == nil && iface.Flags&net.FlagUp == net.FlagUp {
+				if addrs, err := iface.Addrs(); err == nil {
+					for _, addr := range addrs {
+						if ip, _, err := net.ParseCIDR(addr.String()); err == nil && ip.Equal(localIP) {
+							r, err := rowAsRoute(ctx, &row, ip)
+							if err != nil {
+								if err == errInconsistentRT {
+									time.Sleep(inconsistentRetryDelay)
+									continue retryInconsistent
+								}
+								return nil, err
+							}
+							if r != nil {
+								return r, nil
+							}
 						}
 					}
 				}
 			}
 		}
+		break
 	}
 	return nil, fmt.Errorf("unable to get interface index for IP %s", localIP.String())
 }
