@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -46,6 +47,33 @@ func DefaultRoute(ctx context.Context) (*Route, error) {
 		}
 	}
 	return nil, errors.New("unable to find a default route")
+}
+
+type rtError string
+
+func (r rtError) Error() string {
+	return string(r)
+}
+
+const (
+	errInconsistentRT      = rtError("routing table is inconsistent")
+	maxInconsistentRetries = 3
+	inconsistentRetryDelay = 50 * time.Millisecond
+)
+
+// GetRoutingTable will return a list of Route objects created from the current routing table.
+func GetRoutingTable(ctx context.Context) ([]*Route, error) {
+	// The process of creating routes is not atomic. If an intercept is deleted shortly before this function is
+	// called, then an interface referenced from a route might no longer exist. When this happens, there will
+	// be a short delay followed by a retry.
+	for i := 0; i < maxInconsistentRetries; i++ {
+		rt, err := getConsistentRoutingTable(ctx)
+		if err != errInconsistentRT {
+			return rt, err
+		}
+		time.Sleep(inconsistentRetryDelay)
+	}
+	return nil, errInconsistentRT
 }
 
 func (r *Route) Routes(ip net.IP) bool {

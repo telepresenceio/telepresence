@@ -27,7 +27,7 @@ var (
 	maskRe          = regexp.MustCompile(maskRegex)
 )
 
-func GetRoutingTable(ctx context.Context) ([]*Route, error) {
+func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	b, err := route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,9 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 		}
 		iface, err := net.InterfaceByIndex(rm.Index)
 		if err != nil {
-			return nil, fmt.Errorf("unable to get interface at index %d: %w", rm.Index, err)
+			// This is not an atomic operation. An interface may vanish while we're iterating the RIB. When that
+			// happens, the best cause of action is to redo the whole process.
+			return nil, errInconsistentRT
 		}
 		if iface.Flags&net.FlagUp == 0 {
 			continue

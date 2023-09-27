@@ -34,6 +34,11 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Routing table race condition
+        body: ->
+          A race condition would sometimes occur when a Telepresence TUN device was deleted and another created in rapid
+          succession that caused the routing table to reference interfaces that no longer existed.
+      - type: bugfix
         title: Stop lingering daemon container
         body: >-
           When using <code>telepresence connect --docker</code>, a lingering container could be present, causing errors

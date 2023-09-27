@@ -44,7 +44,7 @@ type rtmsg struct {
 	Flags uint32
 }
 
-func GetRoutingTable(ctx context.Context) ([]*Route, error) {
+func getConsistentRoutingTable(_ context.Context) ([]*Route, error) {
 	// Most of this logic was adapted from https://github.com/google/gopacket/blob/master/routing/routing.go
 	tab, err := syscall.NetlinkRIB(syscall.RTM_GETROUTE, syscall.AF_UNSPEC)
 	if err != nil {
@@ -54,7 +54,7 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse netlink messages: %w", err)
 	}
-	routes := []*Route{}
+	var routes []*Route
 msgLoop:
 	for _, msg := range msgs {
 		switch msg.Header.Type {
@@ -62,78 +62,93 @@ msgLoop:
 			break msgLoop
 		case syscall.RTM_NEWROUTE:
 			// Based on the gopacket code, we mainly need this rtmsg to grab the size of the mask for the destination network.
-			rt := (*rtmsg)(unsafe.Pointer(&msg.Data[0]))
-			var (
-				gw       net.IP
-				dstNet   *net.IPNet
-				ifaceIdx int = -1
-				ipv4     bool
-				dfltGw   bool
-			)
-			switch rt.Family {
-			case syscall.AF_INET:
-				ipv4 = true
-			case syscall.AF_INET6:
-				ipv4 = false
-			default:
-				continue msgLoop
-			}
-			attrs, err := syscall.ParseNetlinkRouteAttr(&msg)
+			r, err := rowAsRoute((*rtmsg)(unsafe.Pointer(&msg.Data[0])), &msg)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse netlink route attributes: %w", err)
+				return nil, err
 			}
-			for _, attr := range attrs {
-				switch attr.Attr.Type {
-				case syscall.RTA_DST:
-					dstNet = &net.IPNet{
-						IP:   net.IP(attr.Value),
-						Mask: net.CIDRMask(int(rt.DstLen), len(attr.Value)*8),
-					}
-				case syscall.RTA_GATEWAY:
-					gw = net.IP(attr.Value)
-				case syscall.RTA_OIF:
-					ifaceIdx = int(*(*uint32)(unsafe.Pointer(&attr.Value[0])))
-				}
-			}
-			// Default route -- just make the dstNet 0.0.0.0
-			if gw != nil && dstNet == nil {
-				dfltGw = true
-				if ipv4 {
-					dstNet = &net.IPNet{
-						IP:   net.IP{0, 0, 0, 0},
-						Mask: net.CIDRMask(0, 32),
-					}
-				} else {
-					dstNet = &net.IPNet{
-						IP:   net.ParseIP("::"),
-						Mask: net.CIDRMask(0, 128),
-					}
-				}
-			}
-			if dstNet != nil && ifaceIdx > 0 {
-				iface, err := net.InterfaceByIndex(ifaceIdx)
-				if err != nil {
-					return nil, fmt.Errorf("unable to get interface at index %d: %w", ifaceIdx, err)
-				}
-				srcIP, err := interfaceLocalIP(iface, ipv4)
-				if err != nil {
-					return nil, err
-				}
-				if srcIP == nil {
-					continue
-				}
-				routes = append(routes, &Route{
-					LocalIP:   srcIP,
-					RoutedNet: dstNet,
-					Interface: iface,
-					// gw might be nil here, indicating a local route, i.e. directly connected without the packets having to go through a gateway.
-					Gateway: gw,
-					Default: dfltGw,
-				})
+			if r != nil {
+				routes = append(routes, r)
 			}
 		}
 	}
 	return routes, nil
+}
+
+func rowAsRoute(rt *rtmsg, msg *syscall.NetlinkMessage) (*Route, error) {
+	ipv4 := false
+	switch rt.Family {
+	case syscall.AF_INET:
+		ipv4 = true
+	case syscall.AF_INET6:
+	default:
+		return nil, nil
+	}
+	attrs, err := syscall.ParseNetlinkRouteAttr(msg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse netlink route attributes: %w", err)
+	}
+
+	var gw net.IP
+	var dstNet *net.IPNet
+	var ifaceIdx int
+	for _, attr := range attrs {
+		switch attr.Attr.Type {
+		case syscall.RTA_DST:
+			dstNet = &net.IPNet{
+				IP:   attr.Value,
+				Mask: net.CIDRMask(int(rt.DstLen), len(attr.Value)*8),
+			}
+		case syscall.RTA_GATEWAY:
+			gw = attr.Value
+		case syscall.RTA_OIF:
+			ifaceIdx = int(*(*uint32)(unsafe.Pointer(&attr.Value[0])))
+		}
+	}
+	if ifaceIdx < 1 {
+		return nil, nil
+	}
+
+	dfltGw := false
+	// Default route -- just make the dstNet 0.0.0.0
+	if gw != nil && dstNet == nil {
+		dfltGw = true
+		if ipv4 {
+			dstNet = &net.IPNet{
+				IP:   net.IP{0, 0, 0, 0},
+				Mask: net.CIDRMask(0, 32),
+			}
+		} else {
+			dstNet = &net.IPNet{
+				IP:   net.ParseIP("::"),
+				Mask: net.CIDRMask(0, 128),
+			}
+		}
+	}
+	if dstNet == nil {
+		return nil, nil
+	}
+
+	iface, err := net.InterfaceByIndex(ifaceIdx)
+	if err != nil {
+		// This is not an atomic operation. An intercept may vanish while we're creating this table. When that
+		// happens, the best cause of action is to redo the whole process.
+		return nil, errInconsistentRT
+	}
+	if iface.Flags&net.FlagUp == 0 {
+		return nil, nil
+	}
+	srcIP, err := interfaceLocalIP(iface, ipv4)
+	if err != nil || srcIP == nil {
+		return nil, err
+	}
+	return &Route{
+		LocalIP:   srcIP,
+		RoutedNet: dstNet,
+		Interface: iface,
+		// gw might be nil here, indicating a local route, i.e. directly connected without the packets having to go through a gateway.
+		Gateway: gw,
+		Default: dfltGw,
+	}, nil
 }
 
 func getOsRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
