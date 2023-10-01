@@ -14,7 +14,6 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -168,7 +167,7 @@ func undoModifications(ctx context.Context, wl k8sapi.Object) error {
 	}
 
 	if err = actions.Undo(wl); err != nil {
-		if install.IsAlreadyUndone(err) {
+		if isAlreadyUndone(err) {
 			dlog.Infof(ctx, "Already uninstalled: %v", err)
 		} else {
 			return err
@@ -201,7 +200,7 @@ func undoServiceMods(ctx context.Context, svc k8sapi.Object) error {
 		return err
 	}
 	if err = actions.Undo(svc); err != nil {
-		if install.IsAlreadyUndone(err) {
+		if isAlreadyUndone(err) {
 			dlog.Infof(ctx, "Already uninstalled: %v", err)
 		} else {
 			return err

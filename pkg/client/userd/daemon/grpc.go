@@ -28,12 +28,10 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -445,81 +443,6 @@ func (s *service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, erro
 		})
 	})
 	return ex, nil
-}
-
-func (s *service) Helm(ctx context.Context, req *rpc.HelmRequest) (*common.Result, error) {
-	result := &common.Result{}
-	s.logCall(ctx, "Helm", func(c context.Context) {
-		// Temporarily disable quit so that session cancel doesn't cancel everything
-		s.quitDisable = true
-		if s.rootSessionInProc {
-			defer s.quit()
-		}
-
-		var sessionDone <-chan struct{}
-		s.sessionLock.Lock()
-		if s.session != nil {
-			sessionDone = s.session.Done()
-		}
-		s.sessionLock.Unlock()
-
-		// Traffic manager will vanish, so we can't have an alive session.
-		s.cancelSession()
-		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
-			_, _ = rd.Disconnect(ctx, &empty.Empty{})
-			s.quitDisable = false
-			return nil
-		})
-		if sessionDone != nil {
-			<-sessionDone
-		}
-		s.quitDisable = false
-
-		config, err := client.DaemonKubeconfig(ctx, req.ConnectRequest)
-		if err != nil {
-			result = errcat.ToResult(err)
-			return
-		}
-
-		cr := req.GetConnectRequest()
-		if cr == nil {
-			dlog.Info(ctx, "Connect_request in Helm_request was nil, using defaults")
-			cr = &rpc.ConnectRequest{}
-		}
-
-		cluster, err := k8s.ConnectCluster(ctx, cr, config)
-		if err != nil {
-			if req.Type == rpc.HelmRequest_UNINSTALL {
-				scout.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
-			} else {
-				scout.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()})
-			}
-			result = errcat.ToResult(err)
-			return
-		}
-
-		if req.Type == rpc.HelmRequest_UNINSTALL {
-			err := helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, req)
-			if err != nil {
-				scout.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
-				result = errcat.ToResult(err)
-			} else {
-				scout.Report(ctx, "helm_uninstall_success")
-			}
-		} else {
-			dlog.Debug(ctx, "ensuring that traffic-manager exists")
-			c := cluster.WithK8sInterface(ctx)
-			err := helm.EnsureTrafficManager(c, cluster.ConfigFlags, cluster.GetManagerNamespace(), req)
-
-			if err != nil {
-				scout.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
-				result = errcat.ToResult(err)
-			} else {
-				scout.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: req.Type == rpc.HelmRequest_UPGRADE})
-			}
-		}
-	})
-	return result, nil
 }
 
 func (s *service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (*common.Result, error) {

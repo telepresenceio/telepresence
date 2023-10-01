@@ -25,10 +25,10 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -300,8 +300,8 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 	}
 
 	webhookEnabled := true
-	manuallyManaged := a[install.ManualInjectAnnotation] == "true"
-	ia := a[install.InjectAnnotation]
+	manuallyManaged := a[mutator.ManualInjectAnnotation] == "true"
+	ia := a[mutator.InjectAnnotation]
 	switch ia {
 	case "":
 		webhookEnabled = !manuallyManaged
@@ -311,7 +311,7 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 	default:
 		return false, errcat.User.Newf(
 			"%s is not a valid value for the %s.%s/%s annotation",
-			ia, wl.GetName(), wl.GetNamespace(), install.ManualInjectAnnotation)
+			ia, wl.GetName(), wl.GetNamespace(), mutator.ManualInjectAnnotation)
 	}
 
 	if !manuallyManaged {
@@ -329,7 +329,7 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 	if an == nil {
 		return false, errcat.User.Newf(
 			"annotation %s.%s/%s=true but pod has no traffic-agent container",
-			wl.GetName(), wl.GetNamespace(), install.ManualInjectAnnotation)
+			wl.GetName(), wl.GetNamespace(), mutator.ManualInjectAnnotation)
 	}
 	return true, nil
 }

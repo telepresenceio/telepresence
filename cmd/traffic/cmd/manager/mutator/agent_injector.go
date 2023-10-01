@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -538,7 +537,7 @@ func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, pat
 		}
 	}
 
-	hiddenPortName := install.HiddenPortName(portName, 0)
+	hiddenPortName := hiddenPortName(portName, 0)
 	hidePort := func(path string) {
 		patches = append(patches, patchOperation{
 			Op:    "replace",
@@ -637,4 +636,22 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache ma
 		}
 	}
 	return nil, nil
+}
+
+const maxPortNameLen = 15
+
+// hiddenPortName prefixes the given name with "tm-" and truncates it to 15 characters. If
+// the ordinal is greater than zero, the last two digits are reserved for the hexadecimal
+// representation of that ordinal.
+func hiddenPortName(name string, ordinal int) string {
+	// New name must be max 15 characters long
+	hiddenName := "tm-" + name
+	if len(hiddenName) > maxPortNameLen {
+		if ordinal > 0 {
+			hiddenName = hiddenName[:maxPortNameLen-2] + strconv.FormatInt(int64(ordinal), 16) // we don't expect more than 256 ports
+		} else {
+			hiddenName = hiddenName[:maxPortNameLen]
+		}
+	}
+	return hiddenName
 }
