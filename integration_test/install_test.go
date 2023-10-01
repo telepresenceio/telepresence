@@ -26,9 +26,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/install"
-	"github.com/telepresenceio/telepresence/v2/pkg/install/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
