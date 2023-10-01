@@ -32,7 +32,6 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 
 	if v, ok := as[ann.Session]; ok {
 		as[ann.UserDaemon] = v
-		as[ann.RootDaemon] = v
 		as[ann.VersionCheck] = ann.Required
 	}
 	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
