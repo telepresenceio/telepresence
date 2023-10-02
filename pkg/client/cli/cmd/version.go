@@ -27,7 +27,6 @@ func version() *cobra.Command {
 		Short: "Show version",
 		RunE:  printVersion,
 		Annotations: map[string]string{
-			ann.RootDaemon:        ann.Optional,
 			ann.UserDaemon:        ann.Optional,
 			ann.UpdateCheckFormat: ann.Tel2,
 		},

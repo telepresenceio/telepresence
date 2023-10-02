@@ -56,9 +56,6 @@ service Connector {
 
   rpc UpdateIntercept(telepresence.manager.UpdateInterceptRequest) returns (telepresence.manager.InterceptInfo);
 
-  // Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
-  rpc Helm(HelmRequest) returns (telepresence.common.Result);
-
   // Uninstalls traffic-agents from the cluster.
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (telepresence.common.Result);
@@ -222,22 +219,6 @@ message ConnectInfo {
 
   reserved 7;
   reserved 9;
-}
-
-message HelmRequest {
-  enum Type {
-    UNSPECIFIED = 0;
-    INSTALL = 1;
-    UPGRADE = 2;
-    UNINSTALL = 3;
-  }
-  ConnectRequest connect_request = 1;
-  Type type = 2;
-  bytes values_json = 3;
-  bool reuse_values = 4;
-  bool reset_values = 5;
-  bool crds = 6;
-  bool no_hooks = 7;
 }
 
 message UninstallRequest {

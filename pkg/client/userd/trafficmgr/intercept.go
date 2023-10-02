@@ -12,17 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/blang/semver"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
-	empty "google.golang.org/protobuf/types/known/emptypb"
-	core "k8s.io/api/core/v1"
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -39,7 +34,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 // intercept tracks the life-cycle of an intercept, dictated by the intercepts
@@ -397,30 +391,13 @@ func InterceptError(tp common.InterceptError, err error) *rpc.InterceptResult {
 type interceptInfo struct {
 	// Information provided by the traffic manager as response to the PrepareIntercept call
 	preparedIntercept *manager.PreparedIntercept
-
-	// Fields below are all deprecated and only used with traffic-manager < 2.6.0
-	// Deprecated
-	service *core.Service
-	// Deprecated
-	servicePort *core.ServicePort
-	// Deprecated
-	workload k8sapi.Workload
-	// Deprecated
-	container *core.Container
-	// Deprecated
-	containerPortIndex int
 }
 
 func (s *interceptInfo) InterceptResult() *rpc.InterceptResult {
-	if pi := s.preparedIntercept; pi != nil {
-		return &rpc.InterceptResult{
-			ServiceUid:   pi.ServiceUid,
-			WorkloadKind: pi.WorkloadKind,
-		}
-	}
+	pi := s.preparedIntercept
 	return &rpc.InterceptResult{
-		ServiceUid:   string(s.service.UID),
-		WorkloadKind: s.workload.GetKind(),
+		ServiceUid:   pi.ServiceUid,
+		WorkloadKind: pi.WorkloadKind,
 	}
 }
 
@@ -485,11 +462,6 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		return nil, nil
 	}
 
-	if s.managerVersion.LT(firstAgentConfigMapVersion) {
-		// fall back traffic-manager behaviour prior to 2.6
-		return s.legacyCanInterceptEpilog(c, ir)
-	}
-
 	mgrIr := &manager.CreateInterceptRequest{
 		Session:       s.SessionInfo(),
 		InterceptSpec: spec,
@@ -506,53 +478,6 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	}
 
 	iInfo := &interceptInfo{preparedIntercept: pi}
-	return iInfo, nil
-}
-
-// legacyImage ensures that the installer never modifies a workload to
-// install a version that is more recent than the traffic-manager currently
-// in use (it's legacy too, or we wouldn't end up here)
-// Deprecated.
-func (s *session) legacyImage(image string) string {
-	if image == "" {
-		return "datawire/tel2:" + s.managerVersion.String()
-	}
-	if lc := strings.LastIndexByte(image, ':'); lc > 0 {
-		lc++
-		img := image[:lc]
-		if iv, err := semver.Parse(image[lc:]); err == nil {
-			if strings.HasSuffix(img, "/tel2:") {
-				if iv.Major == 2 || iv.Minor > 5 {
-					image = img + s.managerVersion.String()
-				}
-			} else if strings.HasSuffix(img, "/ambassador-telepresence-agent:") {
-				if iv.Major == 1 || iv.Minor > 11 {
-					image = img + "1.11.11"
-				}
-			}
-		}
-	}
-	return image
-}
-
-// Deprecated.
-func (s *session) legacyCanInterceptEpilog(c context.Context, ir *rpc.CreateInterceptRequest) (*interceptInfo, *rpc.InterceptResult) {
-	ir.AgentImage = s.legacyImage(ir.AgentImage)
-	spec := ir.Spec
-	wl, err := tracing.GetWorkload(c, spec.Agent, spec.Namespace, spec.WorkloadKind)
-	if err != nil {
-		if errors2.IsNotFound(err) {
-			return nil, InterceptError(common.InterceptError_NO_ACCEPTABLE_WORKLOAD, errcat.User.Newf(spec.Name))
-		}
-		err = fmt.Errorf("failed to get workload %s.%s: %w", spec.Agent, spec.Namespace, err)
-		dlog.Error(c, err)
-		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
-	}
-
-	iInfo, err := exploreSvc(c, spec.ServicePortIdentifier, spec.ServiceName, wl)
-	if err != nil {
-		return nil, InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, err)
-	}
 	return iInfo, nil
 }
 
@@ -582,41 +507,21 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	}
 
 	mgrClient := self.ManagerClient()
-	cfg := client.GetConfig(c)
-	apiPort := uint16(cfg.TelepresenceAPI().Port)
-	if apiPort == 0 {
-		// Default to the API port declared by the traffic-manager
-		if apiInfo, err := mgrClient.GetTelepresenceAPI(c, &empty.Empty{}); err != nil {
-			// Traffic manager is probably outdated. Not fatal, but deserves to be logged
-			dlog.Warnf(c, "failed to obtain Telepresence API info from traffic manager: %v", err)
-		} else {
-			apiPort = uint16(apiInfo.Port)
-		}
-	}
 
-	var agentEnv map[string]string
 	// iInfo.preparedIntercept == nil means that we're using an older traffic-manager, incapable
 	// of using PrepareIntercept.
-	if pi := iInfo.PreparedIntercept(); pi == nil {
-		// It's OK to just call addAgent every time; if the agent is already installed then it's a
-		// no-op.
-		agentEnv, result = s.addAgent(c, iInfo.(*interceptInfo), ir.AgentImage, apiPort)
-		if result.Error != common.InterceptError_UNSPECIFIED {
-			return result
-		}
-	} else {
-		// Make spec port identifier unambiguous.
-		spec.ServiceName = pi.ServiceName
-		spec.ServicePortName = pi.ServicePortName
-		spec.ServicePort = pi.ServicePort
-		spec.Protocol = pi.Protocol
-		pi, err := iInfo.PortIdentifier()
-		if err != nil {
-			return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err)
-		}
-		spec.ServicePortIdentifier = pi.String()
-		result = iInfo.InterceptResult()
+	pi := iInfo.PreparedIntercept()
+	// Make spec port identifier unambiguous.
+	spec.ServiceName = pi.ServiceName
+	spec.ServicePortName = pi.ServicePortName
+	spec.ServicePort = pi.ServicePort
+	spec.Protocol = pi.Protocol
+	pti, err := iInfo.PortIdentifier()
+	if err != nil {
+		return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err)
 	}
+	spec.ServicePortIdentifier = pti.String()
+	result = iInfo.InterceptResult()
 
 	spec.ServiceUid = result.ServiceUid
 	spec.WorkloadKind = result.WorkloadKind
@@ -684,10 +589,6 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 			ii = ic.InterceptInfo
 			if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
 				continue
-			}
-			// Older traffic-managers pass env in the agent info
-			if agentEnv != nil {
-				ii.Environment = agentEnv
 			}
 			result.InterceptInfo = ii
 			if !waitForDNS(c, spec.ServiceName) {

@@ -16,7 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func config() *cobra.Command {
+func configCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "config",
 	}

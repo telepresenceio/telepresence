@@ -20,12 +20,15 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
-const supportedKubeAPIVersion = "1.17.0"
+const (
+	supportedKubeAPIVersion = "1.17.0"
+	agentContainerName      = "traffic-agent"
+	managerAppName          = "traffic-manager"
+)
 
 type Info interface {
 	// Watch changes of an ClusterInfo and write them on the given stream
@@ -409,7 +412,7 @@ func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*core
 			continue
 		}
 		for _, container := range pod.Spec.Containers {
-			if container.Name == install.AgentContainerName {
+			if container.Name == agentContainerName {
 				agentPods = append(agentPods, &pod)
 				break
 			}
@@ -435,7 +438,7 @@ func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*corev1.Pod, error
 	var tmPods []*corev1.Pod
 	for _, pod := range podList.Items {
 		pod := pod
-		if strings.Contains(pod.Name, install.ManagerAppName) {
+		if strings.Contains(pod.Name, managerAppName) {
 			tmPods = append(tmPods, &pod)
 		}
 	}
