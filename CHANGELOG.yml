@@ -31,7 +31,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.16.0
-    date: (TBD)
+    date: "2023-10-02"
     notes:
       - type: bugfix
         title: The helm sub-commands will no longer start the user daemon.
