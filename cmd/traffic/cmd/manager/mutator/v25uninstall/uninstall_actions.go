@@ -15,7 +15,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
 // A partialAction is a single change that can be applied to an object.  A partialAction may not be
@@ -142,7 +142,7 @@ func (m *makePortSymbolicAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 func (m *makePortSymbolicAction) Undo(ver semver.Version, svc k8sapi.Object) error {
 	p, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
-		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
+		return newAlreadyUndone(err, "symbolic port has already been removed")
 	}
 	p.TargetPort = intstr.FromInt(int(m.TargetPort))
 	return nil
@@ -166,7 +166,7 @@ func (m *addSymbolicPortAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 func (m *addSymbolicPortAction) Undo(ver semver.Version, svc k8sapi.Object) error {
 	p, err := m.makePortSymbolicAction.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
-		return install.NewAlreadyUndone(err, "symbolic port has already been removed")
+		return newAlreadyUndone(err, "symbolic port has already been removed")
 	}
 	p.TargetPort = intstr.IntOrString{}
 	return nil
@@ -237,14 +237,14 @@ func (ata *addTrafficAgentAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
 func (ata *addTrafficAgentAction) dropAgentAnnotationVolume(obj k8sapi.Object, tplSpec *core.PodTemplateSpec) error {
 	volumeIdx := -1
 	for i := range tplSpec.Spec.Volumes {
-		if tplSpec.Spec.Volumes[i].Name == install.AgentAnnotationVolumeName {
+		if tplSpec.Spec.Volumes[i].Name == agentconfig.AnnotationVolumeName {
 			volumeIdx = i
 			break
 		}
 	}
 
 	if volumeIdx < 0 {
-		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q volume", install.AgentAnnotationVolumeName), "cannot delete volume")
+		return newAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q volume", agentconfig.AnnotationVolumeName), "cannot delete volume")
 	}
 	if len(tplSpec.Spec.Volumes) == 1 {
 		tplSpec.Spec.Volumes = nil
@@ -258,13 +258,13 @@ func (ata *addTrafficAgentAction) Undo(ver semver.Version, obj k8sapi.Object) er
 	tplSpec := obj.(k8sapi.Workload).GetPodTemplate()
 	containerIdx := -1
 	for i := range tplSpec.Spec.Containers {
-		if tplSpec.Spec.Containers[i].Name == install.AgentContainerName {
+		if tplSpec.Spec.Containers[i].Name == agentconfig.ContainerName {
 			containerIdx = i
 			break
 		}
 	}
 	if containerIdx < 0 {
-		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q container", install.AgentContainerName), "cannot undo agent container")
+		return newAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q container", agentconfig.ContainerName), "cannot undo agent container")
 	}
 	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers[:containerIdx], tplSpec.Spec.Containers[containerIdx+1:]...)
 
@@ -294,7 +294,7 @@ type addInitContainerAction struct {
 var _ partialAction = (*addInitContainerAction)(nil)
 
 func (ica *addInitContainerAction) ExplainUndo(_ k8sapi.Object, out io.Writer) {
-	fmt.Fprintf(out, "remove %s initContainer with image %s", install.InitContainerName, ica.ImageName)
+	fmt.Fprintf(out, "remove %s initContainer with image %s", agentconfig.InitContainerName, ica.ImageName)
 }
 
 func (ica *addInitContainerAction) Undo(ver semver.Version, obj k8sapi.Object) error {
@@ -302,16 +302,16 @@ func (ica *addInitContainerAction) Undo(ver semver.Version, obj k8sapi.Object) e
 	containerIdx := -1
 	cns := tplSpec.Spec.InitContainers
 	if cns == nil {
-		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+		return newAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", agentconfig.InitContainerName), "cannot undo initContainer")
 	}
 	for i := range cns {
-		if tplSpec.Spec.Containers[i].Name == install.InitContainerName {
+		if tplSpec.Spec.Containers[i].Name == agentconfig.InitContainerName {
 			containerIdx = i
 			break
 		}
 	}
 	if containerIdx < 0 {
-		return install.NewAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", install.InitContainerName), "cannot undo initContainer")
+		return newAlreadyUndone(k8sapi.ObjErrorf(obj, "does not contain a %q initContainer", agentconfig.InitContainerName), "cannot undo initContainer")
 	}
 	tplSpec.Spec.InitContainers = append(tplSpec.Spec.InitContainers[:containerIdx], tplSpec.Spec.InitContainers[containerIdx+1:]...)
 	return nil

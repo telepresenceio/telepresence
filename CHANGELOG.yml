@@ -34,6 +34,11 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: The helm sub-commands will no longer start the user daemon.
+        body: ->
+          The <code>telepresence helm install/upgrade/uninstall</code> commands will no longer start the telepresence
+          user daemon because there's no need to connect to the traffic-manager in order for them to execute.
+      - type: bugfix
         title: Routing table race condition
         body: ->
           A race condition would sometimes occur when a Telepresence TUN device was deleted and another created in rapid
@@ -68,10 +73,16 @@ items:
         body: >-
           The <code>--namespace</code> flag is now deprecated for <code>telepresence intercept</code> command. The flag can instead
           be used with all commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
+      - type: change
+        title: Legacy code predating version 2.6.0 was removed.
+        body: ->
+          The telepresence code-base still contained a lot of code that would modify workloads instead of relying on
+          the mutating webhook installer when a traffic-manager version predating version 2.6.0 was discovered. This
+          code has now been removed.
       - type: feature
         title: Add `telepresence list-namespaces` and `telepresence list-contexts` commands
         body: >-
-          These commands can be used to check accessable namespaces and for automation.
+          These commands can be used to check accessible namespaces and for automation.
       - type: change
         title: Implicit connect warning
         body: >-

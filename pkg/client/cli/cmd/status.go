@@ -72,7 +72,6 @@ func statusCmd() *cobra.Command {
 		RunE:              run,
 		PersistentPreRunE: fixFlag,
 		Annotations: map[string]string{
-			ann.RootDaemon: ann.Optional,
 			ann.UserDaemon: ann.Optional,
 		},
 	}

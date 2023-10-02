@@ -119,17 +119,6 @@ type session struct {
 
 	ingressInfo []*manager.IngressInfo
 
-	// currentAgents is the latest snapshot returned by the agent watcher
-	currentAgents     []*manager.AgentInfo
-	currentAgentsLock sync.Mutex
-
-	// agentWaiters contains chan *manager.AgentInfo keyed by agent <name>.<namespace>
-	agentWaiters sync.Map
-
-	// agentInitWaiters  is protected by the currentAgentsLock. The contained channels are closed
-	// and the slice is cleared when an agent snapshot arrives.
-	agentInitWaiters []chan<- struct{}
-
 	isPodDaemon bool
 
 	sessionConfig client.Config
@@ -140,9 +129,6 @@ type session struct {
 	// Possibly extended version of the session. Use when calling interface methods.
 	self userd.Session
 }
-
-// firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap.
-var firstAgentConfigMapVersion = semver.MustParse("2.6.0") //nolint:gochecknoglobals // constant
 
 func NewSession(
 	ctx context.Context,
@@ -542,7 +528,6 @@ func (s *session) Epilog(ctx context.Context) {
 func (s *session) StartServices(g *dgroup.Group) {
 	g.Go("remain", s.remainLoop)
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
-	g.Go("agent-watcher", s.agentInfoWatcher)
 	g.Go("dial-request-watcher", s.dialRequestWatcher)
 }
 
@@ -667,15 +652,6 @@ func (s *session) waitForSync(ctx context.Context) {
 	s.wlWatcher.waitForSync(ctx)
 }
 
-func (s *session) getActiveNamespaces(ctx context.Context) []string {
-	s.waitForSync(ctx)
-	return s.wlWatcher.getActiveNamespaces()
-}
-
-func (s *session) addActiveNamespaceListener(l func()) {
-	s.wlWatcher.addActiveNamespaceListener(l)
-}
-
 func (s *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
 	s.waitForSync(c)
 	s.ensureWatchers(c, wr.Namespaces)
@@ -716,13 +692,6 @@ func (s *session) ensureWatchers(ctx context.Context,
 	namespaces []string,
 ) {
 	dlog.Debugf(ctx, "Ensure watchers %v", namespaces)
-	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
-	waitCh := make(chan struct{}, 1)
-	s.currentAgentsLock.Lock()
-	s.agentInitWaiters = append(s.agentInitWaiters, waitCh)
-	s.currentAgentsLock.Unlock()
-	needWait := false
-
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
 	for _, ns := range namespaces {
@@ -735,7 +704,6 @@ func (s *session) ensureWatchers(ctx context.Context,
 		s.wlWatcher.ensureStarted(ctx, ns, func(started bool) {
 			if started {
 				dlog.Debugf(ctx, "watchers for %s started", ns)
-				needWait = true
 			}
 			if wgp != nil {
 				wgp.Done()
@@ -744,14 +712,6 @@ func (s *session) ensureWatchers(ctx context.Context,
 		})
 	}
 	wg.Wait()
-	wc, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutRoundtripLatency)
-	defer cancel()
-	if needWait {
-		select {
-		case <-wc.Done():
-		case <-waitCh:
-		}
-	}
 }
 
 func (s *session) workloadInfoSnapshot(

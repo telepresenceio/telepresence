@@ -26,7 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -77,7 +76,7 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	}
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
-		install.DomainPrefix,
+		DomainPrefix,
 		time.Now().Format(time.RFC3339),
 	)
 	span.AddEvent("tel2.do-rollout")

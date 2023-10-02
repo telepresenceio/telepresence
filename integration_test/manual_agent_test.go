@@ -11,9 +11,9 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 func (s *connectedSuite) Test_ManualAgent() {
@@ -96,7 +96,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 	podSpec["containers"] = append(cons, container)
 	podSpec["initContainers"] = []map[string]any{initContainer}
 	podSpec["volumes"] = volumes
-	podTemplate["metadata"].(map[string]any)["annotations"] = map[string]string{install.ManualInjectAnnotation: "true"}
+	podTemplate["metadata"].(map[string]any)["annotations"] = map[string]string{mutator.ManualInjectAnnotation: "true"}
 
 	// Add the configmap entry by first retrieving the current config map
 	var cfgMap *core.ConfigMap
