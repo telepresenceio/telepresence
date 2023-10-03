@@ -31,7 +31,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.16.1
-    date: "TBD"
+    date: "2023-10-03"
     notes:
       - type: bugfix
         title:
