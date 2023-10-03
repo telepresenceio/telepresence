@@ -43,10 +43,12 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
-	DomainPrefix                   = "telepresence.getambassador.io/"
-	InjectAnnotation               = DomainPrefix + "inject-" + ContainerName
-	TerminatingTLSSecretAnnotation = DomainPrefix + "inject-terminating-tls-secret"
-	OriginatingTLSSecretAnnotation = DomainPrefix + "inject-originating-tls-secret"
+	DomainPrefix                         = "telepresence.getambassador.io/"
+	InjectAnnotation                     = DomainPrefix + "inject-" + ContainerName
+	TerminatingTLSSecretAnnotation       = DomainPrefix + "inject-terminating-tls-secret"
+	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
+	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
+	LegacyOriginatingTLSSecretAnnotation = "getambassador.io/inject-originating-tls-secret"
 )
 
 type ReplacePolicy int
