@@ -134,21 +134,21 @@ func NewSession(
 	ctx context.Context,
 	cr *rpc.ConnectRequest,
 	config *client.Kubeconfig,
-) (_ context.Context, _ userd.Session, cErr *connector.ConnectInfo) {
+) (_ context.Context, _ userd.Session, ret *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 	scout.Report(ctx, "connect")
 
 	defer func() {
-		if cErr != nil {
+		if ret != nil && ret.Error != connector.ConnectInfo_UNSPECIFIED {
 			scout.Report(ctx, "connect_error", scout.Entry{
 				Key:   "error",
-				Value: cErr.ErrorText,
+				Value: ret.ErrorText,
 			}, scout.Entry{
 				Key:   "error_type",
-				Value: cErr.Error.String(),
+				Value: ret.Error.String(),
 			}, scout.Entry{
 				Key:   "error_category",
-				Value: cErr.ErrorCategory,
+				Value: ret.ErrorCategory,
 			})
 		}
 	}()
@@ -229,7 +229,7 @@ func NewSession(
 	})
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
-	ret := &rpc.ConnectInfo{
+	ret = &rpc.ConnectInfo{
 		Error:            rpc.ConnectInfo_UNSPECIFIED,
 		ClusterContext:   cluster.Kubeconfig.Context,
 		ClusterServer:    cluster.Kubeconfig.Server,
