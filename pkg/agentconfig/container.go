@@ -103,6 +103,18 @@ func AgentContainer(
 			MountPath: TempMountPoint,
 		},
 	)
+	if _, ok := pod.ObjectMeta.Annotations[LegacyTerminatingTLSSecretAnnotation]; ok {
+		mounts = append(mounts, core.VolumeMount{
+			Name:      TerminatingTLSVolumeName,
+			MountPath: TerminatingTLSMountPoint,
+		})
+	}
+	if _, ok := pod.ObjectMeta.Annotations[LegacyOriginatingTLSSecretAnnotation]; ok {
+		mounts = append(mounts, core.VolumeMount{
+			Name:      OriginatingTLSVolumeName,
+			MountPath: OriginatingTLSMountPoint,
+		})
+	}
 	if _, ok := pod.ObjectMeta.Annotations[TerminatingTLSSecretAnnotation]; ok {
 		mounts = append(mounts, core.VolumeMount{
 			Name:      TerminatingTLSVolumeName,
