@@ -30,17 +30,28 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.16.1
+    date: "TBD"
+    notes:
+      - type: bugfix
+        title:
+        body: >-
+          Users of Telepresence < 2.9.0 that make use of the pod template
+          TLS annotations were unable to upgrade because the annotation names
+          have changed (now prefixed by "telepresence."). This fix restores
+          support for the old names (while retaining the new ones).
+
   - version: 2.16.0
     date: "2023-10-02"
     notes:
       - type: bugfix
         title: The helm sub-commands will no longer start the user daemon.
-        body: ->
+        body: >-
           The <code>telepresence helm install/upgrade/uninstall</code> commands will no longer start the telepresence
           user daemon because there's no need to connect to the traffic-manager in order for them to execute.
       - type: bugfix
         title: Routing table race condition
-        body: ->
+        body: >-
           A race condition would sometimes occur when a Telepresence TUN device was deleted and another created in rapid
           succession that caused the routing table to reference interfaces that no longer existed.
       - type: bugfix
@@ -75,7 +86,7 @@ items:
           be used with all commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
       - type: change
         title: Legacy code predating version 2.6.0 was removed.
-        body: ->
+        body: >-
           The telepresence code-base still contained a lot of code that would modify workloads instead of relying on
           the mutating webhook installer when a traffic-manager version predating version 2.6.0 was discovered. This
           code has now been removed.
