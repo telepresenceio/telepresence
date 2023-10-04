@@ -33,8 +33,15 @@ items:
   - version: 2.16.1
     date: "2023-10-03"
     notes:
+      - type: feature
+        title: Prevent agent-injector webhook from selecting from kube-xxx namespaces.
+        body: >-
+          The <code>kube-system</code> and <code>kube-node-lease</code> namespaces should not be affected by a
+          global agent-injector webhook by default. A default <code>namespaceSelector</code> was therefore added
+          to the Helm Chart <code>agentInjector.webhook</code> that contains a <code>NotIn</code> preventing those
+          namespaces from being selected.
       - type: bugfix
-        title:
+        title: Backward compatibility for pod template TLS annotations.
         body: >-
           Users of Telepresence < 2.9.0 that make use of the pod template
           TLS annotations were unable to upgrade because the annotation names
