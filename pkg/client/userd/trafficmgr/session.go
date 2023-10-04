@@ -134,22 +134,38 @@ func NewSession(
 	ctx context.Context,
 	cr *rpc.ConnectRequest,
 	config *client.Kubeconfig,
-) (_ context.Context, _ userd.Session, cErr *connector.ConnectInfo) {
+) (_ context.Context, _ userd.Session, info *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
-	scout.Report(ctx, "connect")
 
+	connectStart := time.Now()
 	defer func() {
-		if cErr != nil {
-			scout.Report(ctx, "connect_error", scout.Entry{
-				Key:   "error",
-				Value: cErr.ErrorText,
-			}, scout.Entry{
-				Key:   "error_type",
-				Value: cErr.Error.String(),
-			}, scout.Entry{
-				Key:   "error_category",
-				Value: cErr.ErrorCategory,
-			})
+		if info.Error == connector.ConnectInfo_UNSPECIFIED {
+			scout.Report(ctx, "connect",
+				scout.Entry{
+					Key:   "time_to_connect",
+					Value: time.Since(connectStart).Seconds(),
+				}, scout.Entry{
+					Key:   "mapped_namespaces",
+					Value: len(cr.MappedNamespaces),
+				})
+		} else {
+			scout.Report(ctx, "connect_error",
+				scout.Entry{
+					Key:   "error",
+					Value: info.ErrorText,
+				}, scout.Entry{
+					Key:   "error_type",
+					Value: info.Error.String(),
+				}, scout.Entry{
+					Key:   "error_category",
+					Value: info.ErrorCategory,
+				}, scout.Entry{
+					Key:   "time_to_fail",
+					Value: time.Since(connectStart).Seconds(),
+				}, scout.Entry{
+					Key:   "mapped_namespaces",
+					Value: len(cr.MappedNamespaces),
+				})
 		}
 	}()
 
@@ -161,17 +177,8 @@ func NewSession(
 	}
 	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
 
-	// Phone home with the information about the size of the cluster
 	ctx = cluster.WithK8sInterface(ctx)
 	scout.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
-	if !cr.IsPodDaemon {
-		scout.Report(ctx, "connecting_traffic_manager", scout.Entry{
-			Key:   "mapped_namespaces",
-			Value: len(cr.MappedNamespaces),
-		})
-	}
-
-	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
 	tmgr, err := connectMgr(ctx, cluster, scout.InstallID(ctx), cr)
@@ -224,12 +231,9 @@ func NewSession(
 
 	// Collect data on how long connection time took
 	dlog.Debug(ctx, "Finished connecting to traffic manager")
-	scout.Report(ctx, "finished_connecting_traffic_manager", scout.Entry{
-		Key: "connect_duration", Value: time.Since(connectStart).Seconds(),
-	})
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
-	ret := &rpc.ConnectInfo{
+	info = &rpc.ConnectInfo{
 		Error:            rpc.ConnectInfo_UNSPECIFIED,
 		ClusterContext:   cluster.Kubeconfig.Context,
 		ClusterServer:    cluster.Kubeconfig.Server,
@@ -242,7 +246,7 @@ func NewSession(
 		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
 		DaemonStatus:     daemonStatus,
 	}
-	return ctx, tmgr, ret
+	return ctx, tmgr, info
 }
 
 // SetSelf is for internal use by extensions.

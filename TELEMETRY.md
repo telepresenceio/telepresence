@@ -6,18 +6,16 @@ These metrics help us understand usage and improve the product; they include inf
 The following metrics are collected:
 
 | Metric Name                           | Description                                                                                                                                          |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------------------------------- |------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `intercept_fail`                      | An attempt to create an intercept has failed. Includes an `error` trait detailing the error.                                                         |
 | `intercept_validation_fail`           | There has been an attempt to creat an invalid intercept. Includes an `error` trait detailing the error.                                              |
 | `intercept_success`                   | An attempt to create an intercept has succeeded.                                                                                                     |
 | `preview_domain_create_success`       | An attempt to add a preview URL to an intercept has succeeded.                                                                                       |
 | `preview_domain_create_fail`          | An attempt to add a preview URL to an intercept has failed. Includes an `error` trait.                                                               |
-| `Used legacy syntax`                  | A [legacy command](https://www.telepresence.io/docs/latest/install/migrate-from-legacy/#using-legacy-telepresence-commands) has been used            |
+| `Used legacy syntax`                  | A [legacy command](https://www.telepresence.io/docs/latest/install/migrate-from-legacy/#using-legacy-telepresence-commands) has been used.           |
 | `incluster_dns_queries`               | Number of queries made by Telepresence to resolve a name to a cluster service (e.g. `kubernetes.default`). Inclues a `total` and a `failures` trait. |
-| `connect`                             | Telepresence has attempted to connect to the cluster.                                                                                                |
-| `connect_error`                       | Telepresence has failed to connect to the cluster. Includes `error`, `error_type`, and `error_category` fields detailing the failure.                |
-| `connecting_traffic_manager`          | Telepresence has attempted to connect to the Traffic Manager.                                                                                        |
-| `finished_connecting_traffic_manager` | Telepresence has succeeded at connecting to the Traffic Manager.                                                                                     |
+| `connect`                             | Telepresence has attempted to connect to the cluster. Includes `time_to_connect`, and `mapped_namespaces`.                                           |
+| `connect_error`                       | Telepresence has failed to connect to the cluster. Includes `error`, `error_type`, `error_category`, `time_to_fail`, and `mapped_namespaces`.        |
 | `updated_routes`                      | Telepresence has updated the routes on the client machine. Includes `cluster_`, `also_proxy_`, `never_proxy_` and `allow_conflicting_subnets` traits |
 | `login_failure`                       | A `telepresence login` has failed. Includes an `error` trait detailing the error, and a `method` trait detailing the login method.                   |
 | `login_interrupted`                   | A `telepresence login` has been interrupted by the user, includes a `method` trait detailing the login method.                                       |
