@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"time"
 
@@ -162,6 +163,9 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, kubeContext, name
 			}
 		}
 		return nil, err
+	}
+	if len(cr.ExposedPorts) > 0 && !slices.Equal(info.ExposedPorts, cr.ExposedPorts) {
+		return nil, errcat.User.New("exposed ports differ. Please quit and reconnect")
 	}
 	conn, err := DialDaemon(ctx, info)
 	if err != nil {
@@ -345,10 +349,11 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		daemonID := userD.DaemonID
 		err = daemon.SaveInfo(ctx,
 			&daemon.Info{
-				InDocker:    false,
-				Name:        daemonID.Name,
-				KubeContext: daemonID.KubeContext,
-				Namespace:   daemonID.Namespace,
+				InDocker:     false,
+				Name:         daemonID.Name,
+				KubeContext:  daemonID.KubeContext,
+				Namespace:    daemonID.Namespace,
+				ExposedPorts: request.ExposedPorts,
 			}, daemonID.InfoFileName())
 		if err != nil {
 			return nil, errcat.NoDaemonLogs.New(err)

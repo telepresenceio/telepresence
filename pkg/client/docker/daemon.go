@@ -77,6 +77,10 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), dockerTpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), dockerTpLog),
 	}
+	cr := daemon.GetRequest(ctx)
+	for _, ep := range cr.ExposedPorts {
+		opts = append(opts, "-p", ep)
+	}
 	if runtime.GOOS == "linux" {
 		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
 	}
