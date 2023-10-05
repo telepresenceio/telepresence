@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -15,6 +16,24 @@ import (
 // image ID is returned.
 func BuildImage(ctx context.Context, context string, buildArgs []string) (string, error) {
 	args := append([]string{"build", "--quiet"}, buildArgs...)
+	st, err := os.Stat(context)
+	if err != nil {
+		return "", err
+	}
+	if st.Mode().IsRegular() {
+		var fn string
+		dir := filepath.Dir(context)
+		if dir == "." {
+			fn = context
+		} else {
+			fn, err = filepath.Abs(context)
+			if err != nil {
+				return "", err
+			}
+		}
+		context = dir
+		args = append(args, "--file", fn)
+	}
 	cmd := proc.StdCommand(ctx, "docker", append(args, context)...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
