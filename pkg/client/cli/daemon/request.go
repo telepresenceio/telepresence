@@ -27,6 +27,9 @@ type Request struct {
 	// If set, then use a containerized daemon for the connection.
 	Docker bool
 
+	// Ports exposed by a containerized daemon. Only valid when Docker == true
+	ExposedPorts []string
+
 	// Match expression to use when finding an existing connection by name
 	Use *regexp.Regexp
 
@@ -63,6 +66,9 @@ func InitRequest(cmd *cobra.Command) *Request {
 	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
 		`Overrides any other manager namespace set in config`)
 	nwFlags.Bool(global.FlagDocker, false, "Start, or connect to, daemon in a docker container")
+	nwFlags.StringArrayVar(&cr.ExposedPorts,
+		"expose", nil, ``+
+			`Port that a containerized daemon will expose. See docker run -p for more info. Can be repeated`)
 	flags.AddFlagSet(nwFlags)
 
 	dbgFlags := pflag.NewFlagSet("Debug and Profiling flags", 0)

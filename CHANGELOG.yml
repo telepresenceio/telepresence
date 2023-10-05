@@ -34,6 +34,18 @@ items:
     date: "2023-10-03"
     notes:
       - type: feature
+        title: Add <code>--docker-debug</code> flag to the <code>telepresence intercept</code> command.
+        body: >-
+          This flag is similar to <code>--docker-build</code> but will start the container with more relaxed security
+          using the <code>docker run</code> flags <code>--security-opt apparmor=unconfined --cap-add SYS_PTRACE</code>.
+      - type: feature
+        title: Add a <code>--export</code> option to the <code>telepresence connect</code> command.
+        body: >-
+          In some situations it is necessary to make some ports available to the
+          host from a containerized telepresence daemon. This commit adds a
+          repeatable <code>--expose &lt;docker port exposure&gt;</code> flag to the connect
+          command.
+      - type: feature
         title: Prevent agent-injector webhook from selecting from kube-xxx namespaces.
         body: >-
           The <code>kube-system</code> and <code>kube-node-lease</code> namespaces should not be affected by a

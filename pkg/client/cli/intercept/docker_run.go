@@ -22,9 +22,15 @@ import (
 )
 
 func (s *state) prepareDockerRun(ctx context.Context) error {
+	var buildContext string
+	if s.DockerBuild != "" {
+		buildContext = s.DockerBuild
+	} else if s.DockerDebug != "" {
+		buildContext = s.DockerDebug
+	}
 	imageName, idx := firstDockerArg(s.Cmdline)
 	// Ensure that the image is ready to run before we create the intercept.
-	if s.DockerBuild == "" {
+	if buildContext == "" {
 		if idx < 0 {
 			return errcat.User.New(`unable to find the image name. When using --docker-run, the syntax after "--" must be [OPTIONS] IMAGE [COMMAND] [ARG...]`)
 		}
@@ -45,7 +51,7 @@ func (s *state) prepareDockerRun(ctx context.Context) error {
 	for i, opt := range s.DockerBuildOptions {
 		opts[i] = "--" + opt
 	}
-	imageID, err := docker.BuildImage(ctx, s.DockerBuild, opts)
+	imageID, err := docker.BuildImage(ctx, buildContext, opts)
 	if err != nil {
 		return err
 	}
@@ -171,6 +177,9 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 	if dr.name == "" {
 		dr.name = fmt.Sprintf("intercept-%s-%d", s.Name(), s.localPort)
 		ourArgs = append(ourArgs, "--name", dr.name)
+	}
+	if s.DockerDebug != "" {
+		ourArgs = append(ourArgs, "--security-opt", "apparmor=unconfined", "--cap-add", "SYS_PTRACE")
 	}
 
 	if !ud.Containerized() {

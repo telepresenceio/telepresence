@@ -31,8 +31,9 @@ type Command struct {
 	ToPod    []string // --to-pod
 
 	DockerRun          bool     // --docker-run
-	DockerBuild        string   // --docker-build DIR | URL // Optional docker build context
+	DockerBuild        string   // --docker-build DIR | URL
 	DockerBuildOptions []string // --docker-build-opt key=value, // Optional flag to docker build can be repeated (but not comma separated)
+	DockerDebug        string   // --docker-debug DIR | URL
 	DockerMount        string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 	Cmdline            []string // Command[1:]
 
@@ -84,6 +85,9 @@ func (a *Command) AddFlags(cmd *cobra.Command) {
 	flagSet.StringVar(&a.DockerBuild, "docker-build", "", ``+
 		`Build a Docker container from the given docker-context (path or URL), and run it with intercepted environment and volume mounts, `+
 		`by passing arguments after -- to 'docker run', e.g. '--docker-build /path/to/docker/context -- -it IMAGE /bin/bash'`)
+
+	flagSet.StringVar(&a.DockerDebug, "docker-debug", "", ``+
+		`Like --docker-build, but allows a debugger to run inside the container with relaxed security`)
 
 	flagSet.StringArrayVar(&a.DockerBuildOptions, "docker-build-opt", nil,
 		`Option to docker-build in the form key=value, e.g. --docker-build-opt tag=mytag. Can be repeated`)
@@ -145,9 +149,20 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 		a.Port = strconv.Itoa(client.GetConfig(cmd.Context()).Intercept().DefaultPort)
 	}
 	a.MountSet = cmd.Flag("mount").Changed
-	if a.DockerBuild != "" {
-		a.DockerRun = true
+	drCount := 0
+	if a.DockerRun {
+		drCount++
 	}
+	if a.DockerBuild != "" {
+		drCount++
+	}
+	if a.DockerDebug != "" {
+		drCount++
+	}
+	if drCount > 1 {
+		return errcat.User.New("only one of --docker-run, --docker-build, or --docker-debug can be used")
+	}
+	a.DockerRun = drCount == 1
 	if a.DockerRun {
 		if err := a.ValidateDockerArgs(); err != nil {
 			return err
