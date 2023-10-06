@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
+	"go.opentelemetry.io/otel"
 )
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections.
@@ -40,6 +41,8 @@ func NewUDPListener(conn *net.UDPConn, targetAddr *net.UDPAddr, creator func(con
 }
 
 func (h *udpListener) Start(ctx context.Context) {
+	ctx, span := otel.Tracer("").Start(ctx, "udpListener.Start")
+	defer span.End()
 	h.TimedHandler.Start(ctx)
 	go func() {
 		defer close(h.done)
@@ -118,6 +121,8 @@ func (p *udpStream) Stop(ctx context.Context) {
 }
 
 func (p *udpStream) Start(ctx context.Context) {
+	ctx, span := otel.Tracer("").Start(ctx, "udpStream.Start")
+	defer span.End()
 	p.TimedHandler.Start(ctx)
 	go readLoop(ctx, p, nil)
 }

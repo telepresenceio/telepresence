@@ -661,9 +661,9 @@ func (s *state) WatchIntercepts(
 	}
 }
 
-func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
+func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) (err error) {
 	ctx, span := otel.Tracer("").Start(ctx, "state.Tunnel")
-	defer span.End()
+	defer tracing.EndAndRecord(span, err)
 	stream.ID().SpanRecord(span)
 
 	sessionID := stream.SessionID()
@@ -699,7 +699,7 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	}
 
 	if bidiPipe != nil {
-		span.SetAttributes(attribute.Bool("peer-awaited", true))
+		span.AddEvent("bidiPipe-found")
 		// A peer awaited this stream. Wait for the bidiPipe to finish
 		<-bidiPipe.Done()
 		return nil
@@ -714,7 +714,7 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	// by, and hence, start by sending the sessionID of that client on the tunnel.
 	var peerSession SessionState
 	if _, ok := ss.(*agentSessionState); ok {
-		span.SetAttributes(attribute.String("session-type", "traffic-agent"))
+		span.SetAttributes(attribute.String("tel2.session-type", "traffic-agent"))
 		// traffic-agent, so obtain the desired client session
 		m, err := stream.Receive(ctx)
 		if err != nil {
@@ -724,12 +724,12 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 			return status.Errorf(codes.FailedPrecondition, "unable to read ClientSession from agent %q", sessionID)
 		}
 		peerID := tunnel.GetSession(m)
-		span.SetAttributes(attribute.String("peer-id", peerID))
+		span.SetAttributes(attribute.String("tel2.peer-id", peerID))
 		s.mu.RLock()
 		peerSession = s.sessions[peerID]
 		s.mu.RUnlock()
 	} else {
-		span.SetAttributes(attribute.String("session-type", "userd"))
+		span.SetAttributes(attribute.String("tel2.session-type", "userd"))
 		peerSession, err = s.getAgentForDial(ctx, sessionID, stream.ID().Destination())
 		if err != nil {
 			return err
@@ -738,11 +738,13 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 
 	var endPoint tunnel.Endpoint
 	if peerSession != nil {
+		span.AddEvent("peer-session-found")
 		var err error
 		if endPoint, err = peerSession.EstablishBidiPipe(ctx, stream); err != nil {
 			return err
 		}
 	} else {
+		span.AddEvent("no-peer-session-found")
 		if css, isClient := ss.(*clientSessionState); isClient {
 			scm = css.ConsumptionMetrics()
 		}

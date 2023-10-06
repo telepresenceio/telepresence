@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -91,8 +93,11 @@ func ReadLoop(ctx context.Context, s Stream, p *CounterProbe) (<-chan Message, <
 
 		for {
 			m, err := s.Receive(ctx)
-			if m != nil && p != nil {
-				p.Increment(uint64(len(m.Payload())))
+			if m != nil {
+				if p != nil {
+					p.Increment(uint64(len(m.Payload())))
+				}
+				span.AddEvent("receive", trace.WithAttributes(attribute.Int("bytes", len(m.Payload()))))
 			}
 
 			switch {
@@ -135,7 +140,6 @@ func WriteLoop(
 	dlog.Tracef(ctx, "   %s %s, WriteLoop starting", s.Tag(), s.ID())
 	go func() {
 		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "WriteLoop")
-		defer span.End()
 		s.ID().SpanRecord(span)
 		var endReason string
 		defer func() {
@@ -143,7 +147,9 @@ func WriteLoop(
 			if err := s.CloseSend(ctx); err != nil {
 				dlog.Errorf(ctx, "!! %s %s, Send of closeSend failed: %v", s.Tag(), s.ID(), err)
 			}
+			span.SetAttributes(attribute.String("tel2.endReason", endReason))
 			wg.Done()
+			span.End()
 		}()
 		for {
 			select {
@@ -156,8 +162,11 @@ func WriteLoop(
 				}
 
 				err := s.Send(ctx, m)
-				if m != nil && p != nil {
-					p.Increment(uint64(len(m.Payload())))
+				if m != nil {
+					if p != nil {
+						p.Increment(uint64(len(m.Payload())))
+					}
+					span.AddEvent("send", trace.WithAttributes(attribute.Int("bytes", len(m.Payload()))))
 				}
 
 				switch {

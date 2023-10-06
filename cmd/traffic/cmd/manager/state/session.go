@@ -8,10 +8,12 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -46,7 +48,9 @@ type sessionState struct {
 // EstablishBidiPipe registers the given stream as waiting for a matching stream to arrive in a call
 // to Tunnel, sends a DialRequest to the owner of this sessionState, and then waits. When the call
 // arrives, a BidiPipe connecting the two streams is returned.
-func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Stream) (tunnel.Endpoint, error) {
+func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Stream) (te tunnel.Endpoint, err error) {
+	ctx, span := otel.Tracer("").Start(ctx, "EstablishBidiPipe")
+	defer tracing.EndAndRecord(span, err)
 	// Dispatch directly to agent and let the dial happen there
 	bidiPipeCh := make(chan tunnel.Endpoint)
 	id := stream.ID()
@@ -60,6 +64,8 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	}
 	ss.Unlock()
 
+	pCtx := ctx
+	ctx, span = otel.Tracer("").Start(ctx, "EstablishBidiPipe.DialRequest")
 	// Send dial request to the client/agent
 	dr := &rpc.DialRequest{
 		ConnId:           []byte(id),
@@ -72,10 +78,14 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	dr.TraceContext = carrier
 	select {
 	case <-ss.Done():
+		span.End()
 		return nil, status.Error(codes.Canceled, "session cancelled")
 	case ss.dials <- dr:
 	}
+	span.End()
 
+	ctx, span = otel.Tracer("").Start(pCtx, "EstablishBidiPipe.Wait")
+	defer span.End()
 	// Wait for the client/agent to connect. Allow extra time for the call
 	ctx, cancel := context.WithTimeout(ctx, stream.DialTimeout()+stream.RoundtripLatency())
 	defer cancel()
@@ -106,8 +116,11 @@ func (ss *sessionState) OnConnect(
 	stream tunnel.Stream,
 	counter *int32,
 	consumptionMetrics *SessionConsumptionMetrics,
-) (tunnel.Endpoint, error) {
+) (te tunnel.Endpoint, err error) {
+	ctx, span := otel.Tracer("").Start(ctx, "OnConnect")
+	defer tracing.EndAndRecord(span, err)
 	id := stream.ID()
+	id.SpanRecord(span)
 	ss.Lock()
 	// abp is a session corresponding to an end user machine
 	abp, ok := ss.awaitingBidiPipeMap[id]
@@ -125,6 +138,10 @@ func (ss *sessionState) OnConnect(
 		tunnelProbes.BytesProbeA = consumptionMetrics.FromClientBytes
 		tunnelProbes.BytesProbeB = consumptionMetrics.ToClientBytes
 	}
+
+	link := trace.LinkFromContext(ctx)
+	abp.ctx, span = otel.Tracer("").Start(abp.ctx, "OnConnect.bidiPipe.Start", trace.WithLinks(link))
+	defer span.End()
 
 	bidiPipe := tunnel.NewBidiPipe(abp.stream, stream, name, counter, tunnelProbes)
 	bidiPipe.Start(abp.ctx)
@@ -171,7 +188,6 @@ func newSessionState(ctx context.Context, now time.Time) sessionState {
 
 type clientSessionState struct {
 	sessionState
-	pool *tunnel.Pool
 
 	consumptionMetrics *SessionConsumptionMetrics
 }
@@ -183,7 +199,6 @@ func (css *clientSessionState) ConsumptionMetrics() *SessionConsumptionMetrics {
 func newClientSessionState(ctx context.Context, ts time.Time) *clientSessionState {
 	return &clientSessionState{
 		sessionState: newSessionState(ctx, ts),
-		pool:         tunnel.NewPool(),
 
 		consumptionMetrics: NewSessionConsumptionMetrics(),
 	}

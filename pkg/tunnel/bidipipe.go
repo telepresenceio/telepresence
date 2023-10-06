@@ -5,6 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/datawire/dlib/dlog"
 )
 
@@ -43,6 +45,8 @@ func NewBidiPipe(a, b Stream, name string, counter *int32, probes *BidiPipeProbe
 // closes the Done() channel when the streams are closed or the context is cancelled.
 func (p *bidiPipe) Start(ctx context.Context) {
 	go func() {
+		ctx, span := otel.Tracer("").Start(ctx, "bidiPipe.Start")
+		defer span.End()
 		defer func() {
 			close(p.done)
 			atomic.AddInt32(p.counter, -1)
@@ -68,6 +72,8 @@ func (p *bidiPipe) doPipe(
 	ctx context.Context, a, b Stream, wg *sync.WaitGroup,
 	readBytesProbe, writeBytesProbe *CounterProbe,
 ) {
+	ctx, span := otel.Tracer("").Start(ctx, "bidiPipe.doPipe")
+	defer span.End()
 	defer wg.Done()
 	wrCh := make(chan Message, 50)
 	defer close(wrCh)

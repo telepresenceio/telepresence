@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -109,12 +111,13 @@ func NewConnEndpointTTL(
 
 func (h *dialer) Start(ctx context.Context) {
 	go func() {
-		ctx, span := otel.Tracer("").Start(ctx, "dialer")
+		ctx, span := otel.Tracer("").Start(ctx, "dialer.Start")
 		defer span.End()
 		defer close(h.done)
 
 		id := h.stream.ID()
 		id.SpanRecord(span)
+		span.SetAttributes(attribute.Int("tel2.conn-state", int(h.connected)))
 
 		switch h.connected {
 		case notConnected:
@@ -175,6 +178,11 @@ func (h *dialer) Stop(ctx context.Context) {
 }
 
 func (h *dialer) startDisconnect(ctx context.Context, reason string) {
+	ctx, span := otel.Tracer("").Start(ctx, "startDisconnect")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("tel2.disconnect-reason", reason),
+	)
 	if !atomic.CompareAndSwapInt32(&h.connected, connected, notConnected) {
 		return
 	}
@@ -190,6 +198,9 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	endLevel := dlog.LogLevelTrace
 	id := h.stream.ID()
 
+	ctx, span := otel.Tracer("").Start(ctx, "connToStreamLoop")
+	id.SpanRecord(span)
+
 	outgoing := make(chan Message, 50)
 	defer func() {
 		if !h.ResetIdle() {
@@ -201,7 +212,9 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 		}
 		close(outgoing)
 		dlog.Logf(ctx, endLevel, "   CONN %s conn-to-stream loop ended because %s", id, endReason)
+		span.SetAttributes(attribute.String("tel2.disconnect-reason", endReason))
 		wg.Done()
+		span.End()
 	}()
 
 	wg.Add(1)
@@ -212,6 +225,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	for {
 		n, err := h.conn.Read(buf)
 		if n > 0 {
+			span.AddEvent("read", trace.WithAttributes(attribute.Int("tel2.bytes", n)))
 			dlog.Tracef(ctx, "<- CONN %s, len %d", id, n)
 			select {
 			case <-ctx.Done():
@@ -251,6 +265,8 @@ func (h *dialer) reply(data []byte) (int, error) {
 }
 
 func (h *dialer) streamToConnLoop(ctx context.Context, wg *sync.WaitGroup) {
+	ctx, span := otel.Tracer("").Start(ctx, "streamToConnLoop")
+	defer span.End()
 	defer func() {
 		wg.Done()
 	}()
@@ -280,7 +296,13 @@ func readLoop(ctx context.Context, h streamReader, trafficProbe *CounterProbe) {
 	var endReason string
 	endLevel := dlog.LogLevelTrace
 	id := h.getStream().ID()
+
+	ctx, span := otel.Tracer("").Start(ctx, "readLoop")
+	id.SpanRecord(span)
+
 	defer func() {
+		span.SetAttributes(attribute.String("tel2.disconnect-reason", endReason))
+		span.End()
 		h.startDisconnect(ctx, endReason)
 		dlog.Logf(ctx, endLevel, "   CONN %s stream-to-conn loop ended because %s", id, endReason)
 	}()
@@ -297,6 +319,7 @@ func readLoop(ctx context.Context, h streamReader, trafficProbe *CounterProbe) {
 			return
 		case err, ok := <-errCh:
 			if ok {
+				span.RecordError(err)
 				dlog.Error(ctx, err)
 			}
 		case dg, ok := <-incoming:
@@ -315,6 +338,7 @@ func readLoop(ctx context.Context, h streamReader, trafficProbe *CounterProbe) {
 			}
 			payload := dg.Payload()
 			pn := len(payload)
+			span.AddEvent("write", trace.WithAttributes(attribute.Int("tel2.bytes", pn)))
 			for n := 0; n < pn; {
 				wn, err := h.reply(payload[n:])
 				if err != nil {
@@ -342,25 +366,33 @@ func DialWaitLoop(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	for ctx.Err() == nil {
+		// This is the start of a dial.
+		// ctx, span := otel.Tracer("").Start(ctx, "DialWaitLoop.Recv", trace.WithNewRoot())
 		dr, err := dialStream.Recv()
 		if err != nil {
+			// span.RecordError(err)
+			// span.End()
 			if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
 				return fmt.Errorf("dial request stream recv: %w", err) // May be io.EOF
 			}
 			return nil
 		}
 		go dialRespond(ctx, manager, dr, sessionID)
+		// span.End()
 	}
 	return nil
 }
 
 func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialRequest, sessionID string) {
+	var opts []trace.SpanStartOption
 	if tc := dr.GetTraceContext(); tc != nil {
+		// link := trace.LinkFromContext(ctx)
+		// opts = append(opts, trace.WithLinks(link))
 		carrier := propagation.MapCarrier(tc)
 		propagator := otel.GetTextMapPropagator()
 		ctx = propagator.Extract(ctx, carrier)
 	}
-	ctx, span := otel.Tracer("").Start(ctx, "dialRespond")
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "dialRespond", opts...)
 	defer span.End()
 	id := ConnID(dr.ConnId)
 	id.SpanRecord(span)
