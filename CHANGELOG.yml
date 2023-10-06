@@ -33,6 +33,10 @@ items:
   - version: 2.16.1
     date: (TBD)
     notes:
+      - type: security
+        title: Built with go 1.21.2
+        body: >-
+          Built Telepresence with go 1.21.2 to address CVEs.
       - type: bugfix
         title: Match service selector against pod template labels
         body: >-
