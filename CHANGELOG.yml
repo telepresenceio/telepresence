@@ -55,11 +55,10 @@ items:
       - type: bugfix
         title: Backward compatibility for pod template TLS annotations.
         body: >-
-          Users of Telepresence < 2.9.0 that make use of the pod template
-          TLS annotations were unable to upgrade because the annotation names
-          have changed (now prefixed by "telepresence."). This fix restores
-          support for the old names (while retaining the new ones).
-
+          Users of Telepresence < 2.9.0 that make use of the pod template TLS annotations were unable to upgrade because
+          the annotation names have changed (now prefixed by "telepresence."), and the environment expansion of the
+          annotation values was dropped. This fix restores support for the old names (while retaining the new ones) and
+          the environment expansion.
   - version: 2.16.0
     date: "2023-10-02"
     notes:
