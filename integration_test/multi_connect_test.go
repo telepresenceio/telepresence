@@ -135,14 +135,11 @@ func (s *multiConnectSuite) Test_MultipleConnect_sameNamespace() {
 func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n2, ns1, ns2, svc2 string) {
 	require := s.Require()
 
-	var st statusResponse
-	out := itest.TelepresenceOk(ctx1, "--use", n1, "status", "--output", "json")
-	require.NoError(json.Unmarshal([]byte(out), &st))
+	st := itest.TelepresenceStatusOk(ctx1, "--use", n1)
 	require.Equal(st.UserDaemon.Namespace, ns1)
 	name1 := st.UserDaemon.ConnectionName
 
-	out = itest.TelepresenceOk(ctx2, "--use", n2, "status", "--output", "json")
-	require.NoError(json.Unmarshal([]byte(out), &st))
+	st = itest.TelepresenceStatusOk(ctx1, "--use", n2)
 	require.Equal(st.UserDaemon.Namespace, ns2)
 	name2 := st.UserDaemon.ConnectionName
 

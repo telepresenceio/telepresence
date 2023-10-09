@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type unqualifiedHostNameDNSSuite struct {
@@ -68,9 +68,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 		}, 10*time.Second, 1*time.Second, "should not be able to reach %s", excluded)
 	}
 
-	var status statusResponse
-	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
-	assert.NoError(s.T(), json.Unmarshal([]byte(stdout), &status), "Output can be parsed")
+	status := itest.TelepresenceStatusOk(s.Context())
 	assert.Equal(s.T(), excludes, status.RootDaemon.DNS.Excludes, "Excludes in output")
 }
 
@@ -83,23 +81,27 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", serviceName)
 
 	aliasedService := fmt.Sprintf("%s.%s", serviceName, s.AppNamespace())
-	mappings := []map[string]string{
+	dnsMappings := client.DNSMappings{
 		{
-			"aliasFor": aliasedService,
-			"name":     "my-alias",
+			Name:     "my-alias",
+			AliasFor: aliasedService,
 		},
 		{
-			"aliasFor": aliasedService,
-			"name":     fmt.Sprintf("my-alias.%s", s.AppNamespace()),
+			Name:     fmt.Sprintf("my-alias.%s", s.AppNamespace()),
+			AliasFor: aliasedService,
 		},
 		{
-			"aliasFor": aliasedService,
-			"name":     "my-alias.some-fantasist-root-domain.cluster.local",
+			Name:     "my-alias.some-fantasist-root-domain.cluster.local",
+			AliasFor: aliasedService,
 		},
 	}
+	mappings := make([]map[string]string, 3)
+	for i, dm := range dnsMappings {
+		mappings[i] = map[string]string{"name": dm.Name, "aliasFor": dm.AliasFor}
+	}
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
-		return map[string]any{"dns": map[string][]map[string]string{
-			"mappings": mappings,
+		return map[string]any{"dns": map[string]client.DNSMappings{
+			"mappings": dnsMappings,
 		}}
 	})
 
@@ -107,18 +109,16 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	// then
-	for _, mapping := range mappings {
+	for _, mapping := range dnsMappings {
 		s.Eventually(func() bool {
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", mapping["name"], port), 5000*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", mapping.Name, port), 5000*time.Millisecond)
 			if err == nil {
 				_ = conn.Close()
 			}
 			return err == nil
-		}, 10*time.Second, 1*time.Second, "can find alias %s", mapping["name"])
+		}, 10*time.Second, 1*time.Second, "can find alias %s", mapping.Name)
 	}
 
-	var status statusResponse
-	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
-	assert.NoError(s.T(), json.Unmarshal([]byte(stdout), &status), "Output can be parsed")
-	assert.Equal(s.T(), mappings, status.RootDaemon.DNS.Mappings, "Mappings in output")
+	status := itest.TelepresenceStatusOk(s.Context())
+	assert.Equal(s.T(), dnsMappings, status.RootDaemon.DNS.Mappings, "Mappings in output")
 }

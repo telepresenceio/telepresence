@@ -3,7 +3,6 @@ package integration_test
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -18,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
@@ -77,17 +77,17 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		return false
 	}, 30*time.Second, 3*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
 
-	jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
-	var status statusResponse
-	require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
-
-	require.Len(status.RootDaemon.AlsoProxySubnets, expectedLen)
+	status := itest.TelepresenceStatusOk(ctx)
+	require.Len(status.RootDaemon.AlsoProxy, expectedLen)
 	for _, ip := range ips {
 		rng := make(net.IP, len(ip))
 		copy(rng[:], ip)
 		rng[len(rng)-1] = 0
-		expectedValue := fmt.Sprintf("%s/24", rng)
-		require.Contains(status.RootDaemon.AlsoProxySubnets, expectedValue)
+		expectedValue := &iputil.Subnet{
+			IP:   rng,
+			Mask: net.CIDRMask(24, 32),
+		}
+		require.Contains(status.RootDaemon.AlsoProxy, expectedValue)
 	}
 }
 
@@ -121,13 +121,8 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {
-		jsonStdout, _, err := itest.Telepresence(ctx, "status", "--output", "json")
-		if err != nil {
-			return false
-		}
-		var status statusResponse
-		err = json.Unmarshal([]byte(jsonStdout), &status)
-		return err == nil && len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
+		status, err := itest.TelepresenceStatus(ctx)
+		return err == nil && len(status.RootDaemon.NeverProxy) == neverProxiedCount
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
 
 	s.Eventually(func() bool {
