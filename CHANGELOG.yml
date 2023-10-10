@@ -60,9 +60,9 @@ items:
           annotation values was dropped. This fix restores support for the old names (while retaining the new ones) and
           the environment expansion.
       - type: security
-        title: Built with go 1.21.2
+        title: Built with go 1.21.3
         body: >-
-          Built Telepresence with go 1.21.2 to address CVEs.
+          Built Telepresence with go 1.21.3 to address CVEs.
       - type: bugfix
         title: Match service selector against pod template labels
         body: >-
