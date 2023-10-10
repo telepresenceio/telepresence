@@ -346,7 +346,7 @@ func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *co
 			case statefulsets:
 				wl = k8sapi.StatefulSet(o.(*apps.StatefulSet))
 			}
-			if selector.Matches(labels.Set(wl.GetLabels())) {
+			if selector.Matches(labels.Set(wl.GetPodTemplate().Labels)) {
 				owl, err := nw.maybeReplaceWithOwner(c, wl)
 				if err != nil {
 					return nil, err

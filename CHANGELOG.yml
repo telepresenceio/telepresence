@@ -59,6 +59,17 @@ items:
           the annotation names have changed (now prefixed by "telepresence."), and the environment expansion of the
           annotation values was dropped. This fix restores support for the old names (while retaining the new ones) and
           the environment expansion.
+      - type: security
+        title: Built with go 1.21.2
+        body: >-
+          Built Telepresence with go 1.21.2 to address CVEs.
+      - type: bugfix
+        title: Match service selector against pod template labels
+        body: >-
+          When listing intercepts (typically by calling <code>telepresence list</code>) selectors of services are matched
+          against workloads. Previously the match was made against the labels of the workload, but now they are matched
+          against the labels pod template of the workload. Since the service would actually be matched against pods this
+          is more correct. The most common case when this makes a difference is that statefulsets now are listed when they should.
   - version: 2.16.0
     date: "2023-10-02"
     notes:
