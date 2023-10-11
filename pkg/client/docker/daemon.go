@@ -50,11 +50,13 @@ const (
 	dockerTpLog       = "/root/.cache/telepresence/logs"
 )
 
+var ClientImageName = telepresenceImage //nolint:gochecknoglobals // extension point
+
 // ClientImage returns the fully qualified name of the docker image that corresponds to
 // the version of the current executable.
 func ClientImage(ctx context.Context) string {
 	registry := client.GetConfig(ctx).Images().Registry(ctx)
-	return registry + "/" + telepresenceImage + ":" + strings.TrimPrefix(version.Version, "v")
+	return registry + "/" + ClientImageName + ":" + strings.TrimPrefix(version.Version, "v")
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
