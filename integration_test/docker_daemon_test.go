@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"context"
-	"encoding/json"
 	goRuntime "runtime"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -48,18 +47,11 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 	ctx := s.Context()
 	s.TelepresenceConnect(ctx, "--docker")
 
-	jsOut := itest.TelepresenceOk(ctx, "status", "--output", "json")
-
-	require := s.Require()
-	var statusMap map[string]any
-	require.NoError(json.Unmarshal([]byte(jsOut), &statusMap))
-	ud, ok := statusMap["user_daemon"]
-	s.True(ok)
-	udm, ok := ud.(map[string]any)
-	s.True(ok)
-	s.Equal(udm["running"], true)
-	s.Equal(udm["name"], "OSS Daemon in container")
-	s.Equal(udm["status"], "Connected")
+	status := itest.TelepresenceStatusOk(ctx)
+	ud := status.UserDaemon
+	s.True(ud.Running)
+	s.Equal(ud.Name, "OSS Daemon in container")
+	s.Equal(ud.Status, "Connected")
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonConflict() {

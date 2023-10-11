@@ -112,7 +112,7 @@ func (s *cliSuite) Test_StatusWithJSONFlag() {
 	s.NoError(err)
 	s.Empty(stderr)
 
-	var status statusResponse
+	var status itest.StatusResponse
 	s.NoError(json.Unmarshal([]byte(stdout), &status))
 	s.False(status.RootDaemon.Running)
 	s.False(status.UserDaemon.Running)
@@ -120,42 +120,11 @@ func (s *cliSuite) Test_StatusWithJSONFlag() {
 
 func (s *cliSuite) Test_StatusWithJSON() {
 	itest.TelepresenceQuitOk(s.Context())
-	stdout, stderr, err := itest.Telepresence(s.Context(), "status", "--output", "json")
+	status, err := itest.TelepresenceStatus(s.Context())
 	if err != nil {
 		s.SetGeneralError(fmt.Errorf("bailing out. If telepresence status isn't working, nothing will: %w", err))
 		s.Require().NoError(err)
 	}
-	s.NoError(err)
-	s.Empty(stderr)
-
-	var status statusResponse
-	s.NoError(json.Unmarshal([]byte(stdout), &status))
 	s.False(status.RootDaemon.Running)
 	s.False(status.UserDaemon.Running)
-}
-
-type statusResponseRootDaemon struct {
-	Running           bool                        `json:"running,omitempty"`
-	AlsoProxySubnets  []string                    `json:"also_proxy_subnets,omitempty"`
-	NeverProxySubnets []string                    `json:"never_proxy_subnets,omitempty"`
-	DNS               statusResponseRootDaemonDNS `json:"dns,omitempty"`
-}
-
-type statusResponseRootDaemonDNS struct {
-	Mappings []map[string]string `json:"mappings,omitempty"`
-	Excludes []string            `json:"excludes,omitempty"`
-}
-
-type statusResponseUserDaemon struct {
-	Running           bool   `json:"running,omitempty"`
-	KubernetesContext string `json:"kubernetes_context,omitempty"`
-	InstallID         string `json:"install_id,omitempty"`
-	ConnectionName    string `json:"connection_name,omitempty"`
-	Namespace         string `json:"namespace,omitempty"`
-	ManagerNamespace  string `json:"manager_namespace,omitempty"`
-}
-
-type statusResponse struct {
-	RootDaemon statusResponseRootDaemon `json:"root_daemon,omitempty"`
-	UserDaemon statusResponseUserDaemon `json:"user_daemon,omitempty"`
 }

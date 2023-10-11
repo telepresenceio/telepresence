@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -179,7 +177,7 @@ func (s *multipleInterceptsSuite) cleanLogDir(ctx context.Context) {
 	cleanLogDir(ctx, s.Require(), s.AppNamespace(), s.ManagerNamespace(), s.svcRegex())
 }
 
-func cleanLogDir(ctx context.Context, require *require.Assertions, nsRx, mgrNamespace, svcNameRx string) {
+func cleanLogDir(ctx context.Context, require *itest.Requirements, nsRx, mgrNamespace, svcNameRx string) {
 	logDir := filelocation.AppUserLogDir(ctx)
 	files, err := os.ReadDir(logDir)
 	require.NoError(err)
@@ -203,7 +201,7 @@ func (s *multipleInterceptsSuite) getZipData(outputFile string) (bool, int, int,
 	return getZipData(s.Require(), outputFile, s.AppNamespace(), s.ManagerNamespace(), s.svcRegex())
 }
 
-func getZipData(require *require.Assertions, outputFile, appNamespace, mgrNamespace, svcNameRx string) (bool, int, int, []string) {
+func getZipData(require *itest.Requirements, outputFile, appNamespace, mgrNamespace, svcNameRx string) (bool, int, int, []string) {
 	zipReader, err := zip.OpenReader(outputFile)
 	require.NoError(err)
 	defer func() {
@@ -250,7 +248,7 @@ func getZipData(require *require.Assertions, outputFile, appNamespace, mgrNamesp
 // readZip reads a zip file and returns the []byte string. Used in tests for
 // checking that a zipped file's contents are correct. Exported since it is
 // also used in telepresence_test.go.
-func readZip(require *require.Assertions, zippedFile *zip.File) []byte {
+func readZip(require *itest.Requirements, zippedFile *zip.File) []byte {
 	fileReader, err := zippedFile.Open()
 	require.NoError(err)
 	fileContent, err := io.ReadAll(fileReader)

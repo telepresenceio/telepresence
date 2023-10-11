@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -880,9 +881,12 @@ func Run(ctx context.Context, exe string, args ...string) error {
 // Output runs the given command and arguments and returns its combined output and an error if the command failed.
 func Output(ctx context.Context, exe string, args ...string) (string, error) {
 	getT(ctx).Helper()
-	out, err := Command(ctx, exe, args...).CombinedOutput()
+	cmd := Command(ctx, exe, args...)
+	stderr := bytes.Buffer{}
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return string(out), RunError(err, out)
+		return string(out), RunError(err, stderr.Bytes())
 	}
 	return string(out), nil
 }
