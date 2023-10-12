@@ -50,11 +50,13 @@ const (
 	dockerTpLog       = "/root/.cache/telepresence/logs"
 )
 
+var ClientImageName = telepresenceImage //nolint:gochecknoglobals // extension point
+
 // ClientImage returns the fully qualified name of the docker image that corresponds to
 // the version of the current executable.
 func ClientImage(ctx context.Context) string {
 	registry := client.GetConfig(ctx).Images().Registry(ctx)
-	return registry + "/" + telepresenceImage + ":" + strings.TrimPrefix(version.Version, "v")
+	return registry + "/" + ClientImageName + ":" + strings.TrimPrefix(version.Version, "v")
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
@@ -76,6 +78,10 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), dockerTpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), dockerTpLog),
+	}
+	cr := daemon.GetRequest(ctx)
+	for _, ep := range cr.ExposedPorts {
+		opts = append(opts, "-p", ep)
 	}
 	if runtime.GOOS == "linux" {
 		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")

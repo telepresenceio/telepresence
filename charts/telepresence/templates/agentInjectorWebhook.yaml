@@ -41,8 +41,8 @@ webhooks:
   name: agent-injector-{{ include "traffic-manager.namespace" . }}.getambassador.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
-{{- if .Values.managerRbac.namespaced }}
   namespaceSelector:
+{{- if .Values.managerRbac.namespaced }}
     matchExpressions:
 {{- if and (eq (int (include "kube.version.major" .))  1) (lt (int (include "kube.version.minor" .)) 21) }}
       - key: app.kubernetes.io/name
@@ -54,6 +54,8 @@ webhooks:
 {{- range .Values.managerRbac.namespaces }}
         - {{ . }}
 {{- end }}
+{{- else }}
+{{ toYaml .Values.agentInjector.webhook.namespaceSelector | nindent 4 }}
 {{- end }}
 ---
 apiVersion: v1

@@ -43,6 +43,7 @@ type RootDaemonStatus struct {
 type UserDaemonStatus struct {
 	Running           bool                     `json:"running,omitempty" yaml:"running,omitempty"`
 	Name              string                   `json:"name,omitempty" yaml:"name,omitempty"`
+	ContainerNetwork  string                   `json:"container_network,omitempty" yaml:"container_network,omitempty"`
 	Version           string                   `json:"version,omitempty" yaml:"version,omitempty"`
 	APIVersion        int32                    `json:"api_version,omitempty" yaml:"api_version,omitempty"`
 	Executable        string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
@@ -161,6 +162,9 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 	us.Version = version.Version
 	us.APIVersion = version.ApiVersion
 	us.Executable = version.Executable
+	if userD.Containerized() {
+		us.ContainerNetwork = "container:" + userD.DaemonID.ContainerName()
+	}
 
 	status, err := userD.Status(ctx, &empty.Empty{})
 	if err != nil {
@@ -347,7 +351,10 @@ func (cs *UserDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
 	}
 	kvf.Add("Kubernetes server", cs.KubernetesServer)
 	kvf.Add("Kubernetes context", cs.KubernetesContext)
-	kvf.Add("ConnectionName", cs.ConnectionName)
+	if cs.ContainerNetwork != "" {
+		kvf.Add("Container network", cs.ContainerNetwork)
+	}
+	kvf.Add("Connection name", cs.ConnectionName)
 	kvf.Add("Namespace", cs.Namespace)
 	kvf.Add("Manager namespace", cs.ManagerNamespace)
 	if len(cs.MappedNamespaces) > 0 {

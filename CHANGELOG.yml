@@ -31,12 +31,38 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.16.1
-    date: (TBD)
+    date: "2023-10-03"
     notes:
-      - type: security
-        title: Built with go 1.21.2
+      - type: feature
+        title: Add <code>--docker-debug</code> flag to the <code>telepresence intercept</code> command.
         body: >-
-          Built Telepresence with go 1.21.2 to address CVEs.
+          This flag is similar to <code>--docker-build</code> but will start the container with more relaxed security
+          using the <code>docker run</code> flags <code>--security-opt apparmor=unconfined --cap-add SYS_PTRACE</code>.
+      - type: feature
+        title: Add a <code>--export</code> option to the <code>telepresence connect</code> command.
+        body: >-
+          In some situations it is necessary to make some ports available to the
+          host from a containerized telepresence daemon. This commit adds a
+          repeatable <code>--expose &lt;docker port exposure&gt;</code> flag to the connect
+          command.
+      - type: feature
+        title: Prevent agent-injector webhook from selecting from kube-xxx namespaces.
+        body: >-
+          The <code>kube-system</code> and <code>kube-node-lease</code> namespaces should not be affected by a
+          global agent-injector webhook by default. A default <code>namespaceSelector</code> was therefore added
+          to the Helm Chart <code>agentInjector.webhook</code> that contains a <code>NotIn</code> preventing those
+          namespaces from being selected.
+      - type: bugfix
+        title: Backward compatibility for pod template TLS annotations.
+        body: >-
+          Users of Telepresence < 2.9.0 that make use of the pod template TLS annotations were unable to upgrade because
+          the annotation names have changed (now prefixed by "telepresence."), and the environment expansion of the
+          annotation values was dropped. This fix restores support for the old names (while retaining the new ones) and
+          the environment expansion.
+      - type: security
+        title: Built with go 1.21.3
+        body: >-
+          Built Telepresence with go 1.21.3 to address CVEs.
       - type: bugfix
         title: Match service selector against pod template labels
         body: >-
@@ -49,12 +75,12 @@ items:
     notes:
       - type: bugfix
         title: The helm sub-commands will no longer start the user daemon.
-        body: ->
+        body: >-
           The <code>telepresence helm install/upgrade/uninstall</code> commands will no longer start the telepresence
           user daemon because there's no need to connect to the traffic-manager in order for them to execute.
       - type: bugfix
         title: Routing table race condition
-        body: ->
+        body: >-
           A race condition would sometimes occur when a Telepresence TUN device was deleted and another created in rapid
           succession that caused the routing table to reference interfaces that no longer existed.
       - type: bugfix
@@ -89,7 +115,7 @@ items:
           be used with all commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
       - type: change
         title: Legacy code predating version 2.6.0 was removed.
-        body: ->
+        body: >-
           The telepresence code-base still contained a lot of code that would modify workloads instead of relying on
           the mutating webhook installer when a traffic-manager version predating version 2.6.0 was discovered. This
           code has now been removed.

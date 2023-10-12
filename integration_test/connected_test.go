@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 
@@ -46,9 +45,7 @@ func (s *connectedSuite) Test_Status() {
 }
 
 func (s *connectedSuite) Test_StatusWithJSON() {
-	stdout := itest.TelepresenceOk(s.Context(), "status", "--output", "json")
-	var status statusResponse
-	s.NoError(json.Unmarshal([]byte(stdout), &status))
+	status := itest.TelepresenceStatusOk(s.Context())
 	s.True(status.RootDaemon.Running)
 	s.True(status.UserDaemon.Running)
 	s.NotEmpty(status.UserDaemon.KubernetesContext)

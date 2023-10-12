@@ -44,6 +44,9 @@ func (m *bridgeMounter) Start(ctx context.Context, id, clientMountPoint, mountPo
 				dlog.Errorf(ctx, "mount listener failed: %v", err)
 				return
 			}
+			if ctx.Err() != nil {
+				return
+			}
 			go func() {
 				if err := m.dispatchToTunnel(ctx, conn, podIP, port); err != nil {
 					dlog.Error(ctx, err)
