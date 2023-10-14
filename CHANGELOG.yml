@@ -30,6 +30,16 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.16.2
+    date: "(TBD)"
+    notes:
+      - type: feature
+        title: Make the Telepresence client docker image configurable.
+        body: >-
+          The docker image used when running a Telepresence intercept in docker mode can now be configured using
+          the setting <code>images.clientImage</code> and will default first to the value of the environment <code>
+          TELEPRESENCE_CLIENT_IMAGE</code>, and then to the value preset by the telepresence binary. This
+          configuration setting is primarily intended for testing purposes.
   - version: 2.16.1
     date: "2023-10-03"
     notes:

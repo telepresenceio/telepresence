@@ -44,6 +44,7 @@ logLevels:
 images:
   registry: testregistry.io
   agentImage: ambassador-telepresence-agent-image:0.0.2
+  clientImage: ambassador-telepresence-image:0.0.2
 telepresenceAPI:
   port: 1234
 intercept:
@@ -86,6 +87,7 @@ intercept:
 
 	assert.Equal(t, "testregistry.io", cfg.Images().PrivateRegistry)                             // from user
 	assert.Equal(t, "ambassador-telepresence-agent-image:0.0.2", cfg.Images().PrivateAgentImage) // from user
+	assert.Equal(t, "ambassador-telepresence-image:0.0.2", cfg.Images().PrivateClientImage)      // from user
 	assert.Equal(t, 1234, cfg.TelepresenceAPI().Port)                                            // from user
 	assert.Equal(t, k8sapi.PortName, cfg.Intercept().AppProtocolStrategy)                        // from user
 	assert.Equal(t, 9080, cfg.Intercept().DefaultPort)                                           // from user

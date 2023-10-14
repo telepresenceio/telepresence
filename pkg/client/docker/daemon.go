@@ -55,8 +55,13 @@ var ClientImageName = telepresenceImage //nolint:gochecknoglobals // extension p
 // ClientImage returns the fully qualified name of the docker image that corresponds to
 // the version of the current executable.
 func ClientImage(ctx context.Context) string {
-	registry := client.GetConfig(ctx).Images().Registry(ctx)
-	return registry + "/" + ClientImageName + ":" + strings.TrimPrefix(version.Version, "v")
+	images := client.GetConfig(ctx).Images()
+	img := images.ClientImage(ctx)
+	if img == "" {
+		registry := images.Registry(ctx)
+		img = registry + "/" + ClientImageName + ":" + strings.TrimPrefix(version.Version, "v")
+	}
+	return img
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
