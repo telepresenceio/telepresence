@@ -194,18 +194,27 @@ release-binary: $(TELEPRESENCE)
 	cp $(TELEPRESENCE) $(RELEASEDIR)/telepresence-$(GOOS)-$(GOARCH)$(BEXE)
 endif
 
-.PHONY: tel2-image
-tel2-image: build-deps
+.PHONY: setup-build-dir
+setup-build-dir:
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
+
+.PHONY: tel2-image
+tel2-image: build-deps setup-build-dir
 	$(eval PLATFORM_ARG := $(if $(TELEPRESENCE_TEL2_IMAGE_PLATFORM), --platform=$(TELEPRESENCE_TEL2_IMAGE_PLATFORM),))
 	docker build $(PLATFORM_ARG) --target tel2 --tag tel2 --tag $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.traffic .
 
 .PHONY: client-image
-client-image: build-deps
-	mkdir -p $(BUILDDIR)
-	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
+client-image: build-deps setup-build-dir
 	docker build --target telepresence --tag telepresence --tag $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.client .
+
+.PHONY: client-image-x
+client-image-x: build-deps setup-build-dir
+	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-to type=local,dest=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.client .
+
+.PHONY: push-client-image-x
+push-client-image-x: build-deps setup-build-dir
+	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-from type=local,src=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.client --push --tag $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) .
 
 .PHONY: push-tel2-image
 push-tel2-image: tel2-image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)

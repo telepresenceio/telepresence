@@ -41,6 +41,7 @@ jobs:
         run: |
           docker login -u="${{ secrets.DOCKERHUB_USERNAME }}" -p="${{ secrets.DOCKERHUB_PASSWORD }}"
           make push-tel2-image
+          make push-client-image-x
 
   publish-release:
     runs-on: ubuntu-latest
