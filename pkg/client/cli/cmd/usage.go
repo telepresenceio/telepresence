@@ -108,7 +108,9 @@ func hasKubeFlags(cmd *cobra.Command) bool {
 
 func addUsageTemplate(cmd *cobra.Command) {
 	cobra.AddTemplateFunc("globalFlags", func(cmd *cobra.Command) *pflag.FlagSet { return global.Flags(hasKubeFlags(cmd)) })
-	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet { return localFlags(cmd, kubeFlags(), global.Flags(false)) })
+	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) *pflag.FlagSet {
+		return localFlags(cmd, kubeFlags(), global.Flags(hasKubeFlags(cmd)))
+	})
 	cobra.AddTemplateFunc("hasKubeFlags", hasKubeFlags)
 	cobra.AddTemplateFunc("kubeFlags", kubeFlags)
 	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {

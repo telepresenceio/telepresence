@@ -27,12 +27,11 @@ func StdCommand(ctx context.Context, exe string, args ...string) *dexec.Cmd {
 // If an error occurs, the stdout output is discarded and the stderr output is included in the
 // returned error unless the error itself already contains that output.
 // On success, any output on stderr is discarded and the stdout output is returned.
-func CaptureErr(ctx context.Context, cmd *dexec.Cmd) ([]byte, error) {
+func CaptureErr(cmd *dexec.Cmd) ([]byte, error) {
 	var stdOut, stdErr bytes.Buffer
 	cmd.DisableLogging = true
 	cmd.Stdout = &stdOut
 	cmd.Stderr = &stdErr
-	dlog.Debugf(ctx, shellquote.ShellArgsString(cmd.Args))
 	if err := cmd.Run(); err != nil {
 		if es := strings.TrimSpace(stdErr.String()); es != "" {
 			if !strings.Contains(err.Error(), es) {

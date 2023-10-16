@@ -290,28 +290,6 @@ func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string
 	}
 }
 
-func (w *workloadsAndServicesWatcher) getActiveNamespaces() []string {
-	w.Lock()
-	nss := make([]string, 0, len(w.nsWatchers))
-	for ns, w := range w.nsWatchers {
-		if w.svcWatcher.Active() {
-			nss = append(nss, ns)
-		}
-	}
-	w.Unlock()
-	sort.Strings(nss)
-	return nss
-}
-
-func (w *workloadsAndServicesWatcher) addActiveNamespaceListener(l func()) {
-	w.Lock()
-	w.nsListeners = append(w.nsListeners, l)
-	for _, nw := range w.nsWatchers {
-		nw.svcWatcher.AddStateListener(&k8sapi.StateListener{Cb: l})
-	}
-	w.Unlock()
-}
-
 func (w *workloadsAndServicesWatcher) findMatchingWorkloads(c context.Context, svc *core.Service) ([]k8sapi.Workload, error) {
 	w.Lock()
 	nw := w.nsWatchers[svc.Namespace]
@@ -368,7 +346,7 @@ func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *co
 			case statefulsets:
 				wl = k8sapi.StatefulSet(o.(*apps.StatefulSet))
 			}
-			if selector.Matches(labels.Set(wl.GetLabels())) {
+			if selector.Matches(labels.Set(wl.GetPodTemplate().Labels)) {
 				owl, err := nw.maybeReplaceWithOwner(c, wl)
 				if err != nil {
 					return nil, err

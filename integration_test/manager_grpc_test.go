@@ -9,6 +9,7 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -47,8 +48,9 @@ func (m *managerGRPCSuite) SetupSuite() {
 	_, err = m.client.Version(ctx, &empty.Empty{})
 	m.Require().NoError(err)
 
-	clusterHost := k8sCluster.Kubeconfig.RestConfig.Host
-	m.si, err = trafficmgr.LoadSessionInfoFromUserCache(ctx, clusterHost)
+	daemonID, err := daemon.NewIdentifier("", k8sCluster.Context, m.AppNamespace(), false)
+	m.Require().NoError(err)
+	m.si, err = trafficmgr.LoadSessionInfoFromUserCache(ctx, daemonID)
 	m.Require().NoError(err)
 }
 

@@ -11,9 +11,9 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 func (s *connectedSuite) Test_ManualAgent() {
@@ -67,7 +67,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 	var initContainer map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &initContainer))
 
-	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--namespace", s.AppNamespace(), "--config", configFile, "--input", inputFile)
+	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--config", configFile, "--input", inputFile)
 	var volumes []map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &volumes))
 
@@ -96,7 +96,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 	podSpec["containers"] = append(cons, container)
 	podSpec["initContainers"] = []map[string]any{initContainer}
 	podSpec["volumes"] = volumes
-	podTemplate["metadata"].(map[string]any)["annotations"] = map[string]string{install.ManualInjectAnnotation: "true"}
+	podTemplate["metadata"].(map[string]any)["annotations"] = map[string]string{mutator.ManualInjectAnnotation: "true"}
 
 	// Add the configmap entry by first retrieving the current config map
 	var cfgMap *core.ConfigMap
@@ -148,13 +148,13 @@ func (s *connectedSuite) Test_ManualAgent() {
 	err = s.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName)
 	require.NoError(err)
 
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace())
+	stdout = itest.TelepresenceOk(ctx, "list")
 	require.Regexp(regexp.MustCompile(`.*`+ac.WorkloadName+`\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)
 
-	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--namespace", s.AppNamespace(), "--port", "9094")
+	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--port", "9094")
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && strings.Contains(stdout, ac.WorkloadName+": intercepted")
 	}, 30*time.Second, 3*time.Second)
-	itest.TelepresenceOk(ctx, "leave", ac.WorkloadName+"-"+s.AppNamespace())
+	itest.TelepresenceOk(ctx, "leave", ac.WorkloadName)
 }

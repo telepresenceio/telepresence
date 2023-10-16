@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -10,12 +11,14 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 type listCommand struct {
@@ -25,6 +28,11 @@ type listCommand struct {
 	debug             bool
 	namespace         string
 	watch             bool
+}
+
+type workloadJSONOutput struct {
+	*connector.WorkloadInfo
+	Sidecar *agentconfig.Sidecar `json:"sidecar,omitempty"`
 }
 
 func list() *cobra.Command {
@@ -73,6 +81,11 @@ func list() *cobra.Command {
 	return cmd
 }
 
+type watchWorkloadStreamResponse struct {
+	workloadInfoSnapshot *connector.WorkloadInfoSnapshot
+	err                  error
+}
+
 // list requests a list current intercepts from the daemon.
 func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
@@ -111,32 +124,40 @@ func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	stream, err := userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
-	if err != nil {
-		return err
+	stream, streamErr := userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
+	if streamErr != nil {
+		return streamErr
 	}
 
-	ch := make(chan *connector.WorkloadInfoSnapshot)
+	ch := make(chan *watchWorkloadStreamResponse)
 	go func() {
 		for {
-			r, err := stream.Recv()
+			snap, err := stream.Recv()
+			ch <- &watchWorkloadStreamResponse{
+				workloadInfoSnapshot: snap,
+				err:                  err,
+			}
 			if err != nil {
+				close(ch)
 				break
 			}
-			ch <- r
 		}
 	}()
 
-looper:
 	for {
 		select {
-		case r := <-ch:
-			s.printList(ctx, r.Workloads, stdout, formattedOutput)
+		case r, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if r.err != nil {
+				return errcat.NoDaemonLogs.Newf("%v", r.err)
+			}
+			s.printList(ctx, r.workloadInfoSnapshot.Workloads, stdout, formattedOutput)
 		case <-ctx.Done():
-			break looper
+			return nil
 		}
 	}
-	return nil
 }
 
 func (s *listCommand) printList(ctx context.Context, workloads []*connector.WorkloadInfo, stdout io.Writer, formattedOut bool) {
@@ -153,7 +174,7 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 		if iis := workload.InterceptInfos; len(iis) > 0 {
 			return intercept.DescribeIntercepts(ctx, iis, "", s.debug)
 		}
-		ai := workload.AgentInfo
+		ai := workload.Sidecar
 		if ai != nil {
 			return "ready to intercept (traffic-agent already installed)"
 		}
@@ -165,7 +186,20 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 	}
 
 	if formattedOut {
-		output.Object(ctx, workloads, false)
+		o := make([]*workloadJSONOutput, len(workloads))
+		for i, v := range workloads {
+			l := workloadJSONOutput{WorkloadInfo: v}
+
+			if v.Sidecar != nil {
+				var sidecar agentconfig.Sidecar
+				_ = json.Unmarshal(v.Sidecar.Json, &sidecar)
+				l.Sidecar = &sidecar
+			}
+
+			o[i] = &l
+		}
+
+		output.Object(ctx, o, false)
 	} else {
 		includeNs := false
 		ns := s.namespace

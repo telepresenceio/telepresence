@@ -121,7 +121,7 @@ func handler(wr http.ResponseWriter, req *http.Request, port string) {
 
 	if tpID, ok := os.LookupEnv("TELEPRESENCE_INTERCEPT_ID"); ok {
 		fmt.Printf("Intercept id %s\n", tpID)
-		fmt.Printf("Intercepted container %s\n", os.Getenv("TELEPRESENCE_CONTAINER"))
+		fmt.Printf("Intercepted container %q\n", os.Getenv("TELEPRESENCE_CONTAINER"))
 	}
 
 	sendServerHostnameString := os.Getenv("SEND_SERVER_HOSTNAME")
@@ -210,7 +210,7 @@ func serveHTTP(wr http.ResponseWriter, req *http.Request, sendServerHostname boo
 	}
 	if tpID, ok := os.LookupEnv("TELEPRESENCE_INTERCEPT_ID"); ok {
 		fmt.Fprintf(wr, "Intercept id %s\n", tpID)
-		fmt.Fprintf(wr, "Intercepted container %s\n", os.Getenv("TELEPRESENCE_CONTAINER"))
+		fmt.Fprintf(wr, "Intercepted container %q\n", os.Getenv("TELEPRESENCE_CONTAINER"))
 	}
 	writeRequest(wr, req)
 }

@@ -11,6 +11,7 @@ import (
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 // AgentContainer will return a configured traffic-agent.
@@ -103,6 +104,18 @@ func AgentContainer(
 			MountPath: TempMountPoint,
 		},
 	)
+	if _, ok := pod.ObjectMeta.Annotations[LegacyTerminatingTLSSecretAnnotation]; ok {
+		mounts = append(mounts, core.VolumeMount{
+			Name:      TerminatingTLSVolumeName,
+			MountPath: TerminatingTLSMountPoint,
+		})
+	}
+	if _, ok := pod.ObjectMeta.Annotations[LegacyOriginatingTLSSecretAnnotation]; ok {
+		mounts = append(mounts, core.VolumeMount{
+			Name:      OriginatingTLSVolumeName,
+			MountPath: OriginatingTLSMountPoint,
+		})
+	}
 	if _, ok := pod.ObjectMeta.Annotations[TerminatingTLSSecretAnnotation]; ok {
 		mounts = append(mounts, core.VolumeMount{
 			Name:      TerminatingTLSVolumeName,
@@ -140,6 +153,25 @@ func AgentContainer(
 	}
 	if r := config.Resources; r != nil {
 		ac.Resources = *r
+	}
+
+	// Assign the security context of the first container (with both intercepts
+	// and a set security context) to the traffic agent.
+outerLoop:
+	for _, cc := range config.Containers {
+		if cc.Intercepts == nil {
+			continue
+		}
+
+		for _, app := range pod.Spec.Containers {
+			if app.Name == cc.Name {
+				if app.SecurityContext != nil {
+					ac.SecurityContext = app.SecurityContext
+					break outerLoop
+				}
+				break
+			}
+		}
 	}
 
 	// Replace all occurrences of "$(ENV" with "$(PFX_ENV"
@@ -226,22 +258,33 @@ func AgentVolumes(agentName string, pod *core.Pod) []core.Volume {
 			},
 		},
 	}
-	if secret, ok := pod.ObjectMeta.Annotations[TerminatingTLSSecretAnnotation]; ok {
-		volumes = append(volumes, core.Volume{
-			Name: TerminatingTLSVolumeName,
-			VolumeSource: core.VolumeSource{
-				Secret: &core.SecretVolumeSource{
-					SecretName: secret,
-				},
-			},
-		})
+
+	// The name of the TLS secret in the annotations might contain environment variable expansions. The expansions
+	// allowed here are "$AGENT_NAME" and "$_TEL_AGENT_NAME". The latter is for backward compatibility with older
+	// agents where this expansion happened in the traffic-agent.
+	env := dos.MapEnv{
+		"AGENT_NAME":      agentName,
+		"_TEL_AGENT_NAME": agentName,
 	}
-	if secret, ok := pod.ObjectMeta.Annotations[OriginatingTLSSecretAnnotation]; ok {
+	vCount := len(volumes)
+	volumes = appendSecretVolume(env, TerminatingTLSSecretAnnotation, TerminatingTLSVolumeName, pod, volumes)
+	volumes = appendSecretVolume(env, OriginatingTLSSecretAnnotation, OriginatingTLSVolumeName, pod, volumes)
+
+	if vCount == len(volumes) {
+		// Check for legacy names too.
+		volumes = appendSecretVolume(env, LegacyTerminatingTLSSecretAnnotation, TerminatingTLSVolumeName, pod, volumes)
+		volumes = appendSecretVolume(env, LegacyOriginatingTLSSecretAnnotation, OriginatingTLSVolumeName, pod, volumes)
+	}
+	return volumes
+}
+
+func appendSecretVolume(env dos.Env, annotation, volumeName string, pod *core.Pod, volumes []core.Volume) []core.Volume {
+	if secret, ok := pod.ObjectMeta.Annotations[annotation]; ok {
 		volumes = append(volumes, core.Volume{
-			Name: OriginatingTLSVolumeName,
+			Name: volumeName,
 			VolumeSource: core.VolumeSource{
 				Secret: &core.SecretVolumeSource{
-					SecretName: secret,
+					SecretName: env.ExpandEnv(secret),
 				},
 			},
 		})

@@ -43,10 +43,23 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
-	DomainPrefix                   = "telepresence.getambassador.io/"
-	InjectAnnotation               = DomainPrefix + "inject-" + ContainerName
-	TerminatingTLSSecretAnnotation = DomainPrefix + "inject-terminating-tls-secret"
-	OriginatingTLSSecretAnnotation = DomainPrefix + "inject-originating-tls-secret"
+	DomainPrefix                         = "telepresence.getambassador.io/"
+	InjectAnnotation                     = DomainPrefix + "inject-" + ContainerName
+	TerminatingTLSSecretAnnotation       = DomainPrefix + "inject-terminating-tls-secret"
+	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
+	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
+	LegacyOriginatingTLSSecretAnnotation = "getambassador.io/inject-originating-tls-secret"
+)
+
+type ReplacePolicy int
+
+const (
+	// --replace is false.
+	ReplacePolicyNever ReplacePolicy = iota
+	// --replace is true, the intercept is active.
+	ReplacePolicyActive
+	// --replace is true, the intercept is inactive.
+	ReplacePolicyInactive
 )
 
 // Intercept describes the mapping between a service port and an intercepted container port.
@@ -101,6 +114,9 @@ type Container struct {
 
 	// Mounts are the actual mount points that are mounted by this container
 	Mounts []string
+
+	// Replace is whether the agent should replace the intercepted container
+	Replace ReplacePolicy `json:"replace,omitempty"`
 }
 
 // The Sidecar configures the traffic-agent sidecar.

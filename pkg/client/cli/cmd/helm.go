@@ -10,15 +10,17 @@ import (
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
-func helm() *cobra.Command {
+func helmCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
@@ -28,13 +30,9 @@ func helm() *cobra.Command {
 
 type HelmCommand struct {
 	values.Options
-	AllValues   map[string]any
-	Request     *daemon.Request
-	RequestType connector.HelmRequest_Type
-	NoHooks     bool
-	ReuseValues bool
-	ResetValues bool
-	CRDs        bool
+	helm.Request
+	AllValues map[string]any
+	rq        *daemon.Request
 }
 
 var (
@@ -47,7 +45,9 @@ func helmInstall() *cobra.Command {
 	var upgrade bool
 
 	ha := &HelmCommand{
-		RequestType: connector.HelmRequest_INSTALL,
+		Request: helm.Request{
+			Type: helm.Install,
+		},
 	}
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -55,13 +55,9 @@ func helmInstall() *cobra.Command {
 		Short: "Install telepresence traffic manager",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if upgrade {
-				ha.RequestType = connector.HelmRequest_UPGRADE
+				ha.Request.Type = helm.Upgrade
 			}
 			return ha.run(cmd, args)
-		},
-		Annotations: map[string]string{
-			ann.UserDaemon:   ann.Required,
-			ann.VersionCheck: ann.Required,
 		},
 	}
 
@@ -73,24 +69,21 @@ func helmInstall() *cobra.Command {
 	uf := flags.Lookup("upgrade")
 	uf.Hidden = true
 	uf.Deprecated = `Use "telepresence helm upgrade" instead of "telepresence helm install --upgrade"`
-	ha.Request = daemon.InitRequest(cmd)
-	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
+	ha.rq = daemon.InitRequest(cmd)
 	return cmd
 }
 
 func helmUpgrade() *cobra.Command {
 	ha := &HelmCommand{
-		RequestType: connector.HelmRequest_UPGRADE,
+		Request: helm.Request{
+			Type: helm.Upgrade,
+		},
 	}
 	cmd := &cobra.Command{
 		Use:   "upgrade",
 		Args:  cobra.NoArgs,
 		Short: "Upgrade telepresence traffic manager",
 		RunE:  ha.run,
-		Annotations: map[string]string{
-			ann.UserDaemon:   ann.Required,
-			ann.VersionCheck: ann.Required,
-		},
 	}
 
 	flags := cmd.Flags()
@@ -100,8 +93,7 @@ func helmUpgrade() *cobra.Command {
 	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false, "when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
-	ha.Request = daemon.InitRequest(cmd)
-	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
+	ha.rq = daemon.InitRequest(cmd)
 	return cmd
 }
 
@@ -129,28 +121,25 @@ func (ha *HelmCommand) addCRDsFlags(flags *pflag.FlagSet) {
 
 func helmUninstall() *cobra.Command {
 	ha := &HelmCommand{
-		RequestType: connector.HelmRequest_UNINSTALL,
+		Request: helm.Request{
+			Type: helm.Uninstall,
+		},
 	}
 	cmd := &cobra.Command{
 		Use:   "uninstall",
 		Args:  cobra.NoArgs,
 		Short: "Uninstall telepresence traffic manager",
 		RunE:  ha.run,
-		Annotations: map[string]string{
-			ann.UserDaemon:   ann.Required,
-			ann.VersionCheck: ann.Required,
-		},
 	}
 	flags := cmd.Flags()
 	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "prevent hooks from running during uninstallation")
 	ha.addCRDsFlags(flags)
-	ha.Request = daemon.InitRequest(cmd)
-	flags.StringVarP(&ha.Request.ManagerNamespace, "namespace", "n", "", "namespace scope for this request")
+	ha.rq = daemon.InitRequest(cmd)
 	return cmd
 }
 
-func (ha *HelmCommand) Type() connector.HelmRequest_Type {
-	return ha.RequestType
+func (ha *HelmCommand) Type() helm.RequestType {
+	return ha.Request.Type
 }
 
 func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
@@ -161,53 +150,78 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 	if ha.AllValues, err = ha.MergeValues(getter.All(cli.New())); err != nil {
 		return err
 	}
-	ha.Request.CommitFlags(cmd)
-
-	if err = connect.InitCommand(cmd); err != nil {
+	if err = ha.rq.CommitFlags(cmd); err != nil {
 		return err
 	}
 	ctx := cmd.Context()
+	if ns, ok := ha.rq.KubeFlags["namespace"]; ok {
+		dlog.Debugf(ctx, "using manager namespace %q", ns)
+		ha.rq.ManagerNamespace = ns
+	}
+
+	ctx = scout.NewReporter(ctx, "cli")
+	defer func() {
+		if err == nil {
+			if ha.Type() == helm.Uninstall {
+				scout.Report(ctx, "helm_uninstall_success")
+			} else {
+				scout.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: ha.Type() == helm.Upgrade})
+			}
+		} else {
+			if ha.Type() == helm.Uninstall {
+				scout.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
+			} else {
+				scout.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: ha.Type() == helm.Upgrade})
+			}
+		}
+	}()
+
 	if HelmInstallPrologFunc != nil {
-		if err := HelmInstallPrologFunc(ctx, cmd.Flags(), ha); err != nil {
+		if err = HelmInstallPrologFunc(ctx, cmd.Flags(), ha); err != nil {
 			return err
 		}
 	}
 
-	valuesJSON, err := json.Marshal(ha.AllValues)
+	ha.ValuesJson, err = json.Marshal(ha.AllValues)
 	if err != nil {
 		return err
 	}
 
-	request := &connector.HelmRequest{
-		Type:           ha.RequestType,
-		ValuesJson:     valuesJSON,
-		ReuseValues:    ha.ReuseValues,
-		ResetValues:    ha.ResetValues,
-		ConnectRequest: &ha.Request.ConnectRequest,
-		Crds:           ha.CRDs,
-		NoHooks:        ha.NoHooks,
-	}
-	ud := daemon.GetUserClient(ctx)
-	resp, err := ud.Helm(ctx, request)
+	cr := &ha.rq.ConnectRequest
+	var config *client.Kubeconfig
+	config, err = client.DaemonKubeconfig(ctx, cr)
 	if err != nil {
 		return err
 	}
-	if err = errcat.FromResult(resp); err != nil {
+
+	var cluster *k8s.Cluster
+	cluster, err = k8s.ConnectCluster(ctx, cr, config)
+	if err != nil {
+		return err
+	}
+
+	if ha.Type() == helm.Uninstall {
+		err = helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, &ha.Request)
+	} else {
+		dlog.Debug(ctx, "ensuring that traffic-manager exists")
+		err = helm.EnsureTrafficManager(cluster.WithK8sInterface(ctx), cluster.ConfigFlags, cluster.GetManagerNamespace(), &ha.Request)
+	}
+	if err != nil {
 		return err
 	}
 
 	var msg string
-	switch ha.RequestType {
-	case connector.HelmRequest_INSTALL:
+	switch ha.Type() {
+	case helm.Install:
 		msg = "installed"
-	case connector.HelmRequest_UPGRADE:
+	case helm.Upgrade:
 		msg = "upgraded"
-	case connector.HelmRequest_UNINSTALL:
+	case helm.Uninstall:
 		msg = "uninstalled"
 	}
 
 	updatedResource := "Traffic Manager"
-	if ha.CRDs {
+	if ha.Crds {
 		updatedResource = "Telepresence CRDs"
 	}
 

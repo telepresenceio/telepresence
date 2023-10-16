@@ -1,7 +1,6 @@
 package state
 
 import (
-	"context"
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -29,16 +28,6 @@ type SessionConsumptionMetrics struct {
 	FromClientBytes *tunnel.CounterProbe
 	// data from the traffic manager to the client.
 	ToClientBytes *tunnel.CounterProbe
-}
-
-func (s *SessionConsumptionMetrics) RunCollect(ctx context.Context) {
-	go s.FromClientBytes.RunCollect(ctx)
-	go s.ToClientBytes.RunCollect(ctx)
-}
-
-func (s *SessionConsumptionMetrics) Close() {
-	s.FromClientBytes.Close()
-	s.ToClientBytes.Close()
 }
 
 func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumptionMetrics {
@@ -74,7 +63,6 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 		return
 	}
 
-	lastMarked := session.LastMarked()
 	var scm *SessionConsumptionMetrics
 	if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
 		scm = css.ConsumptionMetrics()
@@ -82,10 +70,9 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 		return
 	}
 
-	// If the last mark is older than the SessionConsumptionMetricsStaleTTL, it indicates that the duration
-	// metric should no longer be updated, as the user's machine may be in standby.
-	isStale := time.Now().After(lastMarked.Add(SessionConsumptionMetricsStaleTTL))
-	if !isStale {
+	// If last update is more than SessionConsumptionMetricsStaleTTL old, probably that the reporting was interrupted.
+	wasInterrupted := time.Now().After(scm.LastUpdate.Add(SessionConsumptionMetricsStaleTTL))
+	if !wasInterrupted { // If it wasn't stale, we want to count duration since last metric update.
 		scm.ConnectDuration += uint32(time.Since(scm.LastUpdate).Seconds())
 	}
 

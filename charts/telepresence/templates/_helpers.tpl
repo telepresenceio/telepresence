@@ -88,6 +88,13 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets"]
   verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["telepresence-agents"]
+  verbs: ["get", "watch", "list"]
+{{- if and .Values.clientRbac .Values.clientRbac.ruleExtras }}
+{{ template "clientRbac-ruleExtras" . }}
+{{- end }}
 {{- end }}
 
 {{/*

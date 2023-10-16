@@ -26,7 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -77,7 +76,7 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
 	}
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
-		install.DomainPrefix,
+		DomainPrefix,
 		time.Now().Format(time.RFC3339),
 	)
 	span.AddEvent("tel2.do-rollout")
@@ -189,7 +188,7 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorCo
 				changed = true
 				continue
 			}
-			ncx, err := gc.Generate(ctx, wl)
+			ncx, err := gc.Generate(ctx, wl, 0, acx)
 			if err != nil {
 				return err
 			}
@@ -290,7 +289,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 			dlog.Error(ctx, err)
 			return
 		}
-		if acx, err := gc.Generate(ctx, wl); err != nil {
+		if acx, err := gc.Generate(ctx, wl, 0, ac); err != nil {
 			dlog.Error(ctx, err)
 		} else if err = c.Store(ctx, acx, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
@@ -750,7 +749,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 			continue
 		}
 		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-		acn, err := cfg.Generate(ctx, wl)
+		acn, err := cfg.Generate(ctx, wl, 0, ac)
 		if err != nil {
 			dlog.Error(ctx, err)
 			continue
@@ -888,7 +887,7 @@ func (c *configWatcher) UninstallV25(ctx context.Context) {
 		return
 	}
 	for _, wl := range affectedWorkloads {
-		scx, err := gc.Generate(ctx, wl)
+		scx, err := gc.Generate(ctx, wl, agentconfig.ReplacePolicyNever, nil)
 		if err == nil {
 			err = c.Store(ctx, scx, false)
 		}

@@ -26,7 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 )
 
 const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -80,7 +79,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		return meta.ObjectMeta{
 			Name:            podName(name),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{install.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{InjectAnnotation: "enabled"},
 			Labels:          map[string]string{labelKey: name},
 			OwnerReferences: podOwner(name),
 		}
@@ -160,7 +159,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("named-and-numeric"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{install.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": "named-port", "app": "numeric-port"},
 			OwnerReferences: podOwner("named-and-numeric"),
 		},
@@ -219,7 +218,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("multi-port"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{install.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": "multi-port"},
 			OwnerReferences: podOwner("multi-port"),
 		},
@@ -259,7 +258,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("multi-container"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{install.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": "multi-port"},
 			OwnerReferences: podOwner("multi-container"),
 		},
@@ -779,7 +778,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 		return meta.ObjectMeta{
 			Name:            podName(name),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{install.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": name},
 			OwnerReferences: podOwner(name),
 		}
@@ -928,7 +927,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			"Skip Precondition: No name/namespace",
 			&core.Pod{
 				ObjectMeta: meta.ObjectMeta{Annotations: map[string]string{
-					install.InjectAnnotation: "enabled",
+					InjectAnnotation: "enabled",
 				}},
 			},
 			false,
@@ -1130,8 +1129,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 					Namespace: "some-ns",
 					Labels:    map[string]string{"service": "named-port"},
 					Annotations: map[string]string{
-						install.InjectAnnotation:      "enabled",
-						install.ServiceNameAnnotation: "khruangbin",
+						InjectAnnotation:      "enabled",
+						ServiceNameAnnotation: "khruangbin",
 					},
 					OwnerReferences: podOwner("named-port"),
 				},
@@ -1162,8 +1161,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 					Namespace: "some-ns",
 					Labels:    map[string]string{"service": "named-port"},
 					Annotations: map[string]string{
-						install.InjectAnnotation:      "enabled",
-						install.ServiceNameAnnotation: "named-port",
+						InjectAnnotation:      "enabled",
+						ServiceNameAnnotation: "named-port",
 					},
 					OwnerReferences: podOwner("named-port"),
 				},
@@ -1456,7 +1455,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 							Ports: []core.ContainerPort{{ContainerPort: 8888}},
 						},
 						{
-							Name:            install.AgentContainerName,
+							Name:            agentconfig.ContainerName,
 							Image:           "docker.io/datawire/tel2:2.13.3",
 							ImagePullPolicy: "IfNotPresent",
 							Args:            []string{"agent"},
@@ -1514,7 +1513,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 						},
 					},
 					Volumes: []core.Volume{{
-						Name: install.AgentAnnotationVolumeName,
+						Name: agentconfig.AnnotationVolumeName,
 					}},
 				},
 			},
@@ -1744,5 +1743,5 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentma
 	default:
 		t.Fatalf("bad workload type %T", wi)
 	}
-	return gc.Generate(ctx, wl)
+	return gc.Generate(ctx, wl, 0, nil)
 }

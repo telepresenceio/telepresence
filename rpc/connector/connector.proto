@@ -56,9 +56,6 @@ service Connector {
 
   rpc UpdateIntercept(telepresence.manager.UpdateInterceptRequest) returns (telepresence.manager.InterceptInfo);
 
-  // Installs, Upgrades, or Uninstalls the traffic-manager in the cluster.
-  rpc Helm(HelmRequest) returns (telepresence.common.Result);
-
   // Uninstalls traffic-agents from the cluster.
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (telepresence.common.Result);
@@ -152,13 +149,19 @@ message Interceptor {
 
 // ConnectRequest contains the information needed to connect ot a cluster.
 message ConnectRequest {
+  // The kubernetes flags from the telepresence connect command
   map<string, string> kube_flags = 1;
+
+  // The kubernetes flags used by a containerized daemon
+  map<string, string> container_kube_flag_overrides = 9;
+
   repeated string mapped_namespaces = 2;
-  reserved 3;
+  string name = 3;
   bool is_pod_daemon = 4;
   repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   string manager_namespace = 7;
+  map<string, string> environment = 8;
 }
 
 message ConnectInfo {
@@ -195,6 +198,15 @@ message ConnectInfo {
   string cluster_context = 4;
   common.VersionInfo version = 5;
 
+  // The name of the connection
+  string connection_name = 16;
+
+  // The kubernetes flags from the telepresence connect command when the connection was established
+  map<string, string> kube_flags = 17;
+
+  // the namespace that the connector is connected to.
+  string namespace = 6;
+
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
 
   telepresence.manager.SessionInfo session_info = 10;
@@ -205,25 +217,8 @@ message ConnectInfo {
 
   repeated string mapped_namespaces = 15;
 
-  reserved 6;
   reserved 7;
   reserved 9;
-}
-
-message HelmRequest {
-  enum Type {
-    UNSPECIFIED = 0;
-    INSTALL = 1;
-    UPGRADE = 2;
-    UNINSTALL = 3;
-  }
-  ConnectRequest connect_request = 1;
-  Type type = 2;
-  bytes values_json = 3;
-  bool reuse_values = 4;
-  bool reset_values = 5;
-  bool crds = 6;
-  bool no_hooks = 7;
 }
 
 message UninstallRequest {
@@ -286,8 +281,11 @@ message WorkloadInfo {
   // Reason why workload cannot be intercepted, or empty if it can.
   string not_interceptable_reason = 2;
 
-  // AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
-  telepresence.manager.AgentInfo agent_info = 3;
+  message Sidecar {
+    bytes json = 1;
+  }
+  // Sidecar
+  Sidecar sidecar = 10;
 
   // InterceptInfos reported from the traffic manager in case the workload is currently intercepted
   repeated telepresence.manager.InterceptInfo intercept_infos = 9;
@@ -298,7 +296,6 @@ message WorkloadInfo {
   message ServiceReference {
     string name = 1;
     string namespace = 2;
-    string uid = 3;
     message Port {
       string name = 1;
       int32 port = 2;
@@ -306,7 +303,7 @@ message WorkloadInfo {
     repeated Port ports = 4;
   }
 
-  optional ServiceReference service = 7;
+  map<string, ServiceReference> services = 11;
 
   string uid = 8;
 

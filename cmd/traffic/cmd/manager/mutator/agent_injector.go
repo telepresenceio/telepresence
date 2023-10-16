@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -165,7 +164,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		if scx, err = gc.Generate(ctx, wl); err != nil {
+		if scx, err = gc.Generate(ctx, wl, 0, scx); err != nil {
 			return nil, err
 		}
 
@@ -182,6 +181,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 
 	var patches patchOps
 	config := scx.AgentConfig()
+	patches = deleteAppContainer(ctx, pod, config, patches)
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
@@ -224,6 +224,23 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 		}
 	}
 	return false
+}
+
+func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+podContainers:
+	for i, pc := range pod.Spec.Containers {
+		for _, cc := range config.Containers {
+			if cc.Name == pc.Name && cc.Replace == agentconfig.ReplacePolicyActive {
+				patches = append(patches, patchOperation{
+					Op:   "remove",
+					Path: fmt.Sprintf("/spec/containers/%d", i),
+				})
+				dlog.Debugf(ctx, "Deleted container %s", pc.Name)
+				continue podContainers
+			}
+		}
+	}
+	return patches
 }
 
 func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
@@ -520,7 +537,7 @@ func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, pat
 		}
 	}
 
-	hiddenPortName := install.HiddenPortName(portName, 0)
+	hiddenPortName := hiddenPortName(portName, 0)
 	hidePort := func(path string) {
 		patches = append(patches, patchOperation{
 			Op:    "replace",
@@ -619,4 +636,22 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache ma
 		}
 	}
 	return nil, nil
+}
+
+const maxPortNameLen = 15
+
+// hiddenPortName prefixes the given name with "tm-" and truncates it to 15 characters. If
+// the ordinal is greater than zero, the last two digits are reserved for the hexadecimal
+// representation of that ordinal.
+func hiddenPortName(name string, ordinal int) string {
+	// New name must be max 15 characters long
+	hiddenName := "tm-" + name
+	if len(hiddenName) > maxPortNameLen {
+		if ordinal > 0 {
+			hiddenName = hiddenName[:maxPortNameLen-2] + strconv.FormatInt(int64(ordinal), 16) // we don't expect more than 256 ports
+		} else {
+			hiddenName = hiddenName[:maxPortNameLen]
+		}
+	}
+	return hiddenName
 }

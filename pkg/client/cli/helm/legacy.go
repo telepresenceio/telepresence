@@ -11,12 +11,17 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/install"
+)
+
+const (
+	AgentInjectorName     = "agent-injector"
+	ManagerAppName        = "traffic-manager"
+	MutatorWebhookTLSName = "mutator-webhook-tls"
 )
 
 func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func() error {
 	selector := map[string]string{
-		"app":          install.ManagerAppName,
+		"app":          ManagerAppName,
 		"telepresence": "manager",
 	}
 	getOpts := meta.GetOptions{}
@@ -25,7 +30,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 	return []func() error{
 		func() error {
 			kif := ki.CoreV1().ServiceAccounts(namespace)
-			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			o, err := kif.Get(ctx, ManagerAppName, getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "ServiceAccount", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -35,7 +40,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.RbacV1().ClusterRoles()
-			o, err := kif.Get(ctx, fmt.Sprintf("%s-%s", install.ManagerAppName, namespace), getOpts)
+			o, err := kif.Get(ctx, fmt.Sprintf("%s-%s", ManagerAppName, namespace), getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "ClusterRole", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -45,7 +50,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.RbacV1().ClusterRoleBindings()
-			o, err := kif.Get(ctx, fmt.Sprintf("%s-%s", install.ManagerAppName, namespace), getOpts)
+			o, err := kif.Get(ctx, fmt.Sprintf("%s-%s", ManagerAppName, namespace), getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "ClusterRoleBinding", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -55,7 +60,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.RbacV1().Roles(namespace)
-			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			o, err := kif.Get(ctx, ManagerAppName, getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "Role", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -65,7 +70,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.RbacV1().RoleBindings(namespace)
-			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			o, err := kif.Get(ctx, ManagerAppName, getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "RoleBinding", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -75,7 +80,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.CoreV1().Secrets(namespace)
-			o, err := kif.Get(ctx, install.MutatorWebhookTLSName, getOpts)
+			o, err := kif.Get(ctx, MutatorWebhookTLSName, getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "Secret", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -85,7 +90,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.CoreV1().Services(namespace)
-			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			o, err := kif.Get(ctx, ManagerAppName, getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "Service", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -95,7 +100,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.CoreV1().Services(namespace)
-			o, err := kif.Get(ctx, install.AgentInjectorName, getOpts)
+			o, err := kif.Get(ctx, AgentInjectorName, getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "Service", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -105,7 +110,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.AdmissionregistrationV1().MutatingWebhookConfigurations()
-			o, err := kif.Get(ctx, fmt.Sprintf("%s-webhook-%s", install.AgentInjectorName, namespace), getOpts)
+			o, err := kif.Get(ctx, fmt.Sprintf("%s-webhook-%s", AgentInjectorName, namespace), getOpts)
 			if err == nil {
 				if err = amendObject(&o.ObjectMeta, "MutatingWebhookConfiguration", releaseName, namespace); err == nil {
 					_, err = kif.Update(ctx, o, updOpts)
@@ -115,7 +120,7 @@ func getLegacyFuncs(ctx context.Context, releaseName, namespace string) []func()
 		},
 		func() error {
 			kif := ki.AppsV1().Deployments(namespace)
-			o, err := kif.Get(ctx, install.ManagerAppName, getOpts)
+			o, err := kif.Get(ctx, ManagerAppName, getOpts)
 			if err == nil {
 				o.ObjectMeta.Labels = selector
 				if err = amendObject(&o.ObjectMeta, "Deployment", releaseName, namespace); err == nil {

@@ -24,15 +24,15 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 	s.ApplyApp(ctx, "echo-headless", "statefulset/echo-headless")
 	defer s.DeleteSvcAndWorkload(ctx, "statefulset", "echo-headless")
 	require := s.Require()
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", strconv.Itoa(svcPort))
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc, "--port", strconv.Itoa(svcPort))
 	require.Contains(stdout, "Using StatefulSet echo-headless")
 	s.CapturePodLogs(ctx, "service=echo-headless", "traffic-agent", s.AppNamespace())
 
-	defer itest.TelepresenceOk(ctx, "leave", "echo-headless-"+s.AppNamespace())
+	defer itest.TelepresenceOk(ctx, "leave", "echo-headless")
 
 	require.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, "echo-headless: intercepted")
 		},
 		30*time.Second, // waitFor

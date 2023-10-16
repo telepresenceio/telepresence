@@ -3,13 +3,11 @@ package integration_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	goRuntime "runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -57,21 +55,21 @@ func (s *interceptMountSuite) SetupSuite() {
 	ctx := s.Context()
 	var port int
 	port, s.cancelLocal = itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", s.mountPoint, "--port", strconv.Itoa(port))
+	stdout := itest.TelepresenceOk(ctx, "intercept", s.ServiceName(), "--mount", s.mountPoint, "--port", strconv.Itoa(port))
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
 }
 
 func (s *interceptMountSuite) TearDownSuite() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
 	s.cancelLocal()
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && !strings.Contains(stdout, s.ServiceName()+": intercepted")
 	}, 10*time.Second, time.Second)
 
-	if goRuntime.GOOS != "windows" {
+	if runtime.GOOS != "windows" {
 		// Delay the deletion of the mount point so that it is properly unmounted before it's removed.
 		go func() {
 			time.Sleep(2 * time.Second)
@@ -85,7 +83,7 @@ func (s *interceptMountSuite) Test_InterceptMount() {
 	ctx := s.Context()
 
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 10*time.Second, time.Second)
 
@@ -115,14 +113,14 @@ func (s *singleServiceSuite) Test_InterceptMountRelative() {
 	require.NoError(err)
 	ctx = itest.WithWorkingDir(ctx, nwd)
 	stdout := itest.TelepresenceOk(ctx,
-		"intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", "rel-dir", "--port", strconv.Itoa(port))
+		"intercept", s.ServiceName(), "--mount", "rel-dir", "--port", strconv.Itoa(port))
 	defer func() {
-		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+		itest.TelepresenceOk(ctx, "leave", s.ServiceName())
 	}()
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 10*time.Second, time.Second)
 
@@ -141,19 +139,18 @@ func (s *singleServiceSuite) Test_InterceptDetailedOutput() {
 	port, cancel := itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
 	defer cancel()
 	stdout := itest.TelepresenceOk(ctx, "intercept",
-		"--namespace", s.AppNamespace(),
 		"--mount", "false",
 		"--port", strconv.Itoa(port),
 		"--detailed-output",
 		"--output", "json",
 		s.ServiceName())
 	defer func() {
-		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+		itest.TelepresenceOk(ctx, "leave", s.ServiceName())
 	}()
 	var iInfo intercept.Info
 	require := s.Require()
 	require.NoError(json.Unmarshal([]byte(stdout), &iInfo))
-	s.Equal(iInfo.Name, fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+	s.Equal(iInfo.Name, s.ServiceName())
 	s.Equal(iInfo.Disposition, "ACTIVE")
 	s.Equal(iInfo.WorkloadKind, "Deployment")
 	s.Equal(iInfo.TargetPort, int32(port))
@@ -183,13 +180,13 @@ func (s *singleServiceSuite) Test_NoInterceptorResponse() {
 	require.NoError(err)
 	ctx = itest.WithWorkingDir(ctx, nwd)
 	stdout := itest.TelepresenceOk(ctx,
-		"intercept", "--namespace", s.AppNamespace(), s.ServiceName(), "--mount", "rel-dir", "--port", "8443")
+		"intercept", s.ServiceName(), "--mount", "rel-dir", "--port", "8443")
 	defer func() {
-		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%s", s.ServiceName(), s.AppNamespace()))
+		itest.TelepresenceOk(ctx, "leave", s.ServiceName())
 	}()
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 10*time.Second, time.Second)
 

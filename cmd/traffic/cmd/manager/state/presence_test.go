@@ -68,8 +68,8 @@ func TestPresence(t *testing.T) {
 	a.True(isPresent(sc))
 	a.False(isPresent("d"))
 
-	p.RemoveSession(ctx, sa)
-	p.RemoveSession(ctx, sc)
+	a.NoError(p.RemoveSession(ctx, sa))
+	a.NoError(p.RemoveSession(ctx, sc))
 
 	// B@1
 

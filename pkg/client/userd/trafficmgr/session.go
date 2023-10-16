@@ -2,6 +2,7 @@ package trafficmgr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -40,6 +41,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -49,8 +51,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -87,12 +89,15 @@ type session struct {
 	// version reported by the manager
 	managerVersion semver.Version
 
+	// The identifier for this daemon
+	daemonID *daemon.Identifier
+
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
 	wlWatcher *workloadsAndServicesWatcher
 
 	// currentInterceptsLock ensures that all accesses to currentIntercepts, currentMatchers,
-	// currentAPIServers, interceptWaiters, localIntercepts, interceptedNamespace, and ingressInfo are synchronized
+	// currentAPIServers, interceptWaiters, and ingressInfo are synchronized
 	//
 	currentInterceptsLock sync.Mutex
 
@@ -112,24 +117,7 @@ type session struct {
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
 
-	// Names of local intercepts
-	localIntercepts map[string]struct{}
-
-	// Name of currently intercepted namespace
-	interceptedNamespace string
-
 	ingressInfo []*manager.IngressInfo
-
-	// currentAgents is the latest snapshot returned by the agent watcher
-	currentAgents     []*manager.AgentInfo
-	currentAgentsLock sync.Mutex
-
-	// agentWaiters contains chan *manager.AgentInfo keyed by agent <name>.<namespace>
-	agentWaiters sync.Map
-
-	// agentInitWaiters  is protected by the currentAgentsLock. The contained channels are closed
-	// and the slice is cleared when an agent snapshot arrives.
-	agentInitWaiters []chan<- struct{}
 
 	isPodDaemon bool
 
@@ -142,29 +130,42 @@ type session struct {
 	self userd.Session
 }
 
-// firstAgentConfigMapVersion first version of traffic-manager that uses the agent ConfigMap.
-var firstAgentConfigMapVersion = semver.MustParse("2.6.0") //nolint:gochecknoglobals // constant
-
 func NewSession(
 	ctx context.Context,
 	cr *rpc.ConnectRequest,
 	config *client.Kubeconfig,
-) (_ context.Context, _ userd.Session, cErr *connector.ConnectInfo) {
+) (_ context.Context, _ userd.Session, info *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
-	scout.Report(ctx, "connect")
 
+	connectStart := time.Now()
 	defer func() {
-		if cErr != nil {
-			scout.Report(ctx, "connect_error", scout.Entry{
-				Key:   "error",
-				Value: cErr.ErrorText,
-			}, scout.Entry{
-				Key:   "error_type",
-				Value: cErr.Error.String(),
-			}, scout.Entry{
-				Key:   "error_category",
-				Value: cErr.ErrorCategory,
-			})
+		if info.Error == connector.ConnectInfo_UNSPECIFIED {
+			scout.Report(ctx, "connect",
+				scout.Entry{
+					Key:   "time_to_connect",
+					Value: time.Since(connectStart).Seconds(),
+				}, scout.Entry{
+					Key:   "mapped_namespaces",
+					Value: len(cr.MappedNamespaces),
+				})
+		} else {
+			scout.Report(ctx, "connect_error",
+				scout.Entry{
+					Key:   "error",
+					Value: info.ErrorText,
+				}, scout.Entry{
+					Key:   "error_type",
+					Value: info.Error.String(),
+				}, scout.Entry{
+					Key:   "error_category",
+					Value: info.ErrorCategory,
+				}, scout.Entry{
+					Key:   "time_to_fail",
+					Value: time.Since(connectStart).Seconds(),
+				}, scout.Entry{
+					Key:   "mapped_namespaces",
+					Value: len(cr.MappedNamespaces),
+				})
 		}
 	}()
 
@@ -174,19 +175,10 @@ func NewSession(
 		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
-	dlog.Infof(ctx, "Connected to context %s (%s)", cluster.Context, cluster.Server)
+	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
 
-	// Phone home with the information about the size of the cluster
 	ctx = cluster.WithK8sInterface(ctx)
 	scout.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
-	if !cr.IsPodDaemon {
-		scout.Report(ctx, "connecting_traffic_manager", scout.Entry{
-			Key:   "mapped_namespaces",
-			Value: len(cr.MappedNamespaces),
-		})
-	}
-
-	connectStart := time.Now()
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
 	tmgr, err := connectMgr(ctx, cluster, scout.InstallID(ctx), cr)
@@ -239,22 +231,22 @@ func NewSession(
 
 	// Collect data on how long connection time took
 	dlog.Debug(ctx, "Finished connecting to traffic manager")
-	scout.Report(ctx, "finished_connecting_traffic_manager", scout.Entry{
-		Key: "connect_duration", Value: time.Since(connectStart).Seconds(),
-	})
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
-	ret := &rpc.ConnectInfo{
+	info = &rpc.ConnectInfo{
 		Error:            rpc.ConnectInfo_UNSPECIFIED,
 		ClusterContext:   cluster.Kubeconfig.Context,
 		ClusterServer:    cluster.Kubeconfig.Server,
 		ClusterId:        cluster.GetClusterId(ctx),
 		SessionInfo:      tmgr.SessionInfo(),
+		ConnectionName:   tmgr.daemonID.Name,
+		KubeFlags:        tmgr.OriginalFlagMap,
+		Namespace:        cluster.Namespace,
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
 		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
 		DaemonStatus:     daemonStatus,
 	}
-	return ctx, tmgr, ret
+	return ctx, tmgr, info
 }
 
 // SetSelf is for internal use by extensions.
@@ -345,8 +337,11 @@ func connectMgr(
 
 	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
 
-	clusterHost := cluster.Kubeconfig.RestConfig.Host
-	si, err := LoadSessionInfoFromUserCache(ctx, clusterHost)
+	daemonID, err := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace, proc.RunningInContainer())
+	if err != nil {
+		return nil, err
+	}
+	si, err := LoadSessionInfoFromUserCache(ctx, daemonID)
 	if err != nil {
 		return nil, err
 	}
@@ -370,6 +365,7 @@ func connectMgr(
 		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
 		si, err = mClient.ArriveAsClient(ctx, &manager.ClientInfo{
 			Name:      userAndHost,
+			Namespace: cluster.Namespace,
 			InstallId: installID,
 			Product:   "telepresence",
 			Version:   client.Version(),
@@ -377,7 +373,7 @@ func connectMgr(
 		if err != nil {
 			return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
 		}
-		if err = SaveSessionInfoToUserCache(ctx, clusterHost, si); err != nil {
+		if err = SaveSessionInfoToUserCache(ctx, daemonID, si); err != nil {
 			return nil, err
 		}
 	}
@@ -411,6 +407,7 @@ func connectMgr(
 	sess := &session{
 		Cluster:          cluster,
 		installID:        installID,
+		daemonID:         daemonID,
 		userAndHost:      userAndHost,
 		managerClient:    mClient,
 		managerConn:      conn,
@@ -418,7 +415,6 @@ func connectMgr(
 		managerName:      managerName,
 		managerVersion:   managerVersion,
 		sessionInfo:      si,
-		localIntercepts:  make(map[string]struct{}),
 		interceptWaiters: make(map[string]*awaitIntercept),
 		wlWatcher:        newWASWatcher(),
 		isPodDaemon:      cr.IsPodDaemon,
@@ -500,18 +496,6 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 	}
 }
 
-func (s *session) setInterceptedNamespace(c context.Context, ns string) {
-	s.currentInterceptsLock.Lock()
-	diff := s.interceptedNamespace != ns
-	if diff {
-		s.interceptedNamespace = ns
-	}
-	s.currentInterceptsLock.Unlock()
-	if diff {
-		s.updateDaemonNamespaces(c)
-	}
-}
-
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
 func (s *session) updateDaemonNamespaces(c context.Context) {
@@ -520,11 +504,9 @@ func (s *session) updateDaemonNamespaces(c context.Context) {
 		return
 	}
 	var namespaces []string
-	s.currentInterceptsLock.Lock()
-	if s.interceptedNamespace != "" {
-		namespaces = []string{s.interceptedNamespace}
+	if s.Namespace != "" {
+		namespaces = []string{s.Namespace}
 	}
-	s.currentInterceptsLock.Unlock()
 	// Avoid being locked for the remainder of this function.
 
 	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
@@ -550,7 +532,6 @@ func (s *session) Epilog(ctx context.Context) {
 func (s *session) StartServices(g *dgroup.Group) {
 	g.Go("remain", s.remainLoop)
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
-	g.Go("agent-watcher", s.agentInfoWatcher)
 	g.Go("dial-request-watcher", s.dialRequestWatcher)
 }
 
@@ -600,7 +581,7 @@ func (s *session) getInfosForWorkloads(
 	ctx context.Context,
 	namespaces []string,
 	iMap map[string][]*manager.InterceptInfo,
-	aMap map[string]*manager.AgentInfo,
+	sMap map[string]*rpc.WorkloadInfo_Sidecar,
 	filter rpc.ListRequest_Filter,
 ) []*rpc.WorkloadInfo {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
@@ -610,35 +591,40 @@ func (s *session) getInfosForWorkloads(
 			return
 		}
 		for _, workload := range wls {
-			if _, ok := wiMap[workload.GetUID()]; ok {
+			serviceUID := string(svc.UID)
+
+			if wlInfo, ok := wiMap[workload.GetUID()]; ok {
+				if _, ok := wlInfo.Services[serviceUID]; !ok {
+					wlInfo.Services[serviceUID] = &rpc.WorkloadInfo_ServiceReference{
+						Name:      svc.Name,
+						Namespace: svc.Namespace,
+						Ports:     getServicePorts(svc),
+					}
+				}
 				continue
 			}
+
 			name := workload.GetName()
 			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
-			ports := []*rpc.WorkloadInfo_ServiceReference_Port{}
-			for _, p := range svc.Spec.Ports {
-				ports = append(ports, &rpc.WorkloadInfo_ServiceReference_Port{
-					Name: p.Name,
-					Port: p.Port,
-				})
-			}
+
 			wlInfo := &rpc.WorkloadInfo{
 				Name:                 name,
 				Namespace:            workload.GetNamespace(),
 				WorkloadResourceType: workload.GetKind(),
 				Uid:                  string(workload.GetUID()),
-				Service: &rpc.WorkloadInfo_ServiceReference{
-					Name:      svc.Name,
-					Namespace: svc.Namespace,
-					Uid:       string(svc.UID),
-					Ports:     ports,
+				Services: map[string]*rpc.WorkloadInfo_ServiceReference{
+					string(svc.UID): {
+						Name:      svc.Name,
+						Namespace: svc.Namespace,
+						Ports:     getServicePorts(svc),
+					},
 				},
 			}
 			var ok bool
 			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
 				continue
 			}
-			if wlInfo.AgentInfo, ok = aMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			if wlInfo.Sidecar, ok = sMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
 				continue
 			}
 			wiMap[workload.GetUID()] = wlInfo
@@ -654,18 +640,20 @@ func (s *session) getInfosForWorkloads(
 	return wiz
 }
 
+func getServicePorts(svc *core.Service) []*rpc.WorkloadInfo_ServiceReference_Port {
+	ports := make([]*rpc.WorkloadInfo_ServiceReference_Port, len(svc.Spec.Ports))
+	for i, p := range svc.Spec.Ports {
+		ports[i] = &rpc.WorkloadInfo_ServiceReference_Port{
+			Name: p.Name,
+			Port: p.Port,
+		}
+	}
+	return ports
+}
+
 func (s *session) waitForSync(ctx context.Context) {
 	s.wlWatcher.setNamespacesToWatch(ctx, s.GetCurrentNamespaces(true))
 	s.wlWatcher.waitForSync(ctx)
-}
-
-func (s *session) getActiveNamespaces(ctx context.Context) []string {
-	s.waitForSync(ctx)
-	return s.wlWatcher.getActiveNamespaces()
-}
-
-func (s *session) addActiveNamespaceListener(l func()) {
-	s.wlWatcher.addActiveNamespaceListener(l)
 }
 
 func (s *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
@@ -678,10 +666,12 @@ func (s *session) WatchWorkloads(c context.Context, wr *rpc.WatchWorkloadsReques
 	snapshotAvailable := s.wlWatcher.subscribe(sCtx)
 	for {
 		select {
-		case <-c.Done():
+		case <-c.Done(): // if context is done (usually the session's context).
+			return nil
+		case <-stream.Context().Done(): // if stream context is done.
 			return nil
 		case <-snapshotAvailable:
-			snapshot, err := s.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE, false)
+			snapshot, err := s.workloadInfoSnapshot(c, wr.GetNamespaces(), rpc.ListRequest_INTERCEPTABLE)
 			if err != nil {
 				return status.Errorf(codes.Unavailable, "failed to create WorkloadInfoSnapshot: %v", err)
 			}
@@ -697,23 +687,15 @@ func (s *session) WorkloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
-	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
 	s.waitForSync(ctx)
-	return s.workloadInfoSnapshot(ctx, namespaces, filter, includeLocalIntercepts)
+	return s.workloadInfoSnapshot(ctx, namespaces, filter)
 }
 
 func (s *session) ensureWatchers(ctx context.Context,
 	namespaces []string,
 ) {
 	dlog.Debugf(ctx, "Ensure watchers %v", namespaces)
-	// If a watcher is started, we better wait for the next snapshot from WatchAgentsNS
-	waitCh := make(chan struct{}, 1)
-	s.currentAgentsLock.Lock()
-	s.agentInitWaiters = append(s.agentInitWaiters, waitCh)
-	s.currentAgentsLock.Unlock()
-	needWait := false
-
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
 	for _, ns := range namespaces {
@@ -726,7 +708,6 @@ func (s *session) ensureWatchers(ctx context.Context,
 		s.wlWatcher.ensureStarted(ctx, ns, func(started bool) {
 			if started {
 				dlog.Debugf(ctx, "watchers for %s started", ns)
-				needWait = true
 			}
 			if wgp != nil {
 				wgp.Done()
@@ -735,21 +716,12 @@ func (s *session) ensureWatchers(ctx context.Context,
 		})
 	}
 	wg.Wait()
-	wc, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutRoundtripLatency)
-	defer cancel()
-	if needWait {
-		select {
-		case <-wc.Done():
-		case <-waitCh:
-		}
-	}
 }
 
 func (s *session) workloadInfoSnapshot(
 	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
-	includeLocalIntercepts bool,
 ) (*rpc.WorkloadInfoSnapshot, error) {
 	is := s.getCurrentIntercepts()
 	s.ensureWatchers(ctx, namespaces)
@@ -757,11 +729,9 @@ func (s *session) workloadInfoSnapshot(
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {
 		// Special case, we don't care about namespaces in general. Instead, we use the intercepted namespaces
-		s.currentInterceptsLock.Lock()
-		if s.interceptedNamespace != "" {
-			nss = []string{s.interceptedNamespace}
+		if s.Namespace != "" {
+			nss = []string{s.Namespace}
 		}
-		s.currentInterceptsLock.Unlock()
 		if len(nss) == 0 {
 			// No active intercepts
 			return &rpc.WorkloadInfoSnapshot{}, nil
@@ -790,25 +760,19 @@ nextIs:
 			}
 		}
 	}
-	aMap := make(map[string]*manager.AgentInfo)
-	for _, ns := range nss {
-		for k, v := range s.getCurrentAgentsInNamespace(ns) {
-			aMap[k] = v
-		}
-	}
-	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, aMap, filter)
 
-	if includeLocalIntercepts {
-		s.currentInterceptsLock.Lock()
-		for localIntercept := range s.localIntercepts {
-			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfos: []*manager.InterceptInfo{{
-				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: s.interceptedNamespace},
-				Disposition:       manager.InterceptDispositionType_ACTIVE,
-				MechanismArgsDesc: "as local-only",
-			}}})
+	sMap := make(map[string]*rpc.WorkloadInfo_Sidecar)
+	for _, ns := range nss {
+		for k, v := range s.getCurrentSidecarsInNamespace(ctx, ns) {
+			data, err := json.Marshal(v)
+			if err != nil {
+				continue
+			}
+			sMap[k] = &rpc.WorkloadInfo_Sidecar{Json: data}
 		}
-		s.currentInterceptsLock.Unlock()
 	}
+
+	workloadInfos := s.getInfosForWorkloads(ctx, nss, iMap, sMap, filter)
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 
@@ -825,7 +789,7 @@ func (s *session) remainLoop(c context.Context) error {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded so the traffic-manager has dropped the session. We should too
-			if err = DeleteSessionInfoFromUserCache(c); err != nil {
+			if err = DeleteSessionInfoFromUserCache(c, s.daemonID); err != nil {
 				dlog.Errorf(c, "failed to delete session from user cache: %v", err)
 			}
 		}
@@ -850,12 +814,28 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 
-	if !cr.IsPodDaemon && !s.Kubeconfig.ContextServiceAndFlagsEqual(config) {
-		return &rpc.ConnectInfo{
-			Error:          rpc.ConnectInfo_MUST_RESTART,
-			ClusterContext: s.Kubeconfig.Context,
-			ClusterServer:  s.Kubeconfig.Server,
-			ClusterId:      s.GetClusterId(c),
+	if !cr.IsPodDaemon {
+		envEQ := true
+		for k, v := range cr.Environment {
+			if k[0] == '-' {
+				if _, ok := os.LookupEnv(k[:1]); ok {
+					envEQ = false
+					break
+				}
+			} else {
+				if ov, ok := os.LookupEnv(k); !ok || ov != v {
+					envEQ = false
+					break
+				}
+			}
+		}
+		if !(envEQ && s.Kubeconfig.ContextServiceAndFlagsEqual(config)) {
+			return &rpc.ConnectInfo{
+				Error:          rpc.ConnectInfo_MUST_RESTART,
+				ClusterContext: s.Kubeconfig.Context,
+				ClusterServer:  s.Kubeconfig.Server,
+				ClusterId:      s.GetClusterId(c),
+			}
 		}
 	}
 
@@ -886,6 +866,9 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterServer:  cfg.Server,
 		ClusterId:      s.GetClusterId(c),
 		SessionInfo:    s.SessionInfo(),
+		ConnectionName: s.daemonID.Name,
+		KubeFlags:      s.OriginalFlagMap,
+		Namespace:      s.Namespace,
 		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
@@ -908,70 +891,6 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 	return ret
 }
 
-// Given a slice of AgentInfo, this returns another slice of agents with one
-// agent per namespace, name pair.
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
-	type workload struct {
-		name, namespace string
-	}
-	workloads := map[workload]bool{}
-	var representativeAgents []*manager.AgentInfo
-	for _, agent := range agents {
-		wk := workload{name: agent.Name, namespace: agent.Namespace}
-		if !workloads[wk] {
-			workloads[wk] = true
-			representativeAgents = append(representativeAgents, agent)
-		}
-	}
-	return representativeAgents
-}
-
-// Deprecated: not used with traffic-manager versions >= 2.6.0.
-func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
-	result := &common.Result{}
-	agents := s.getCurrentAgents()
-
-	// Since workloads can have more than one replica, we get a slice of agents
-	// where the agent to workload mapping is 1-to-1.  This is important
-	// because in the ALL_AGENTS or default case, we could edit the same
-	// workload n times for n replicas, which could cause race conditions
-	agents = getRepresentativeAgents(c, agents)
-
-	_ = s.ClearIntercepts(c)
-	switch ur.UninstallType {
-	case rpc.UninstallRequest_UNSPECIFIED:
-		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
-	case rpc.UninstallRequest_NAMED_AGENTS:
-		var selectedAgents []*manager.AgentInfo
-		for _, di := range ur.Agents {
-			found := false
-			namespace := s.ActualNamespace(ur.Namespace)
-			if namespace != "" {
-				for _, ai := range agents {
-					if namespace == ai.Namespace && di == ai.Name {
-						found = true
-						selectedAgents = append(selectedAgents, ai)
-						break
-					}
-				}
-			}
-			if !found {
-				result = errcat.ToResult(errcat.User.Newf("unable to find a workload named %s.%s with an agent installed", di, namespace))
-			}
-		}
-		agents = selectedAgents
-		fallthrough
-	default:
-		if len(agents) > 0 {
-			if err := legacyRemoveAgents(c, agents); err != nil {
-				result = errcat.ToResult(err)
-			}
-		}
-	}
-	return result, nil
-}
-
 // Uninstall parts or all of Telepresence from the cluster if the client has sufficient credentials to do so.
 //
 // Uninstalling everything requires that the client owns the helm chart installation and has permissions to run
@@ -979,11 +898,6 @@ func (s *session) legacyUninstall(c context.Context, ur *rpc.UninstallRequest) (
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
 func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
-	if s.managerVersion.LT(firstAgentConfigMapVersion) {
-		// fall back traffic-manager behaviour prior to 2.6
-		return s.legacyUninstall(ctx, ur)
-	}
-
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
 	loadAgentConfigMap := func(ns string) (*core.ConfigMap, error) {
 		cm, err := api.ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
@@ -1085,14 +999,13 @@ func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*com
 	return errcat.ToResult(nil), nil
 }
 
-// getClusterCIDRs finds the service CIDR and the pod CIDRs of all nodes in the cluster.
 func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
 	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
 	// the cluster, since an open tunnel to the traffic-manager (via the API server) is itself required
 	// to communicate with the cluster.
-	neverProxy := []*manager.IPNet{}
+	neverProxy := make([]*manager.IPNet, 0, 1+len(s.NeverProxy))
 	serverURL, err := url.Parse(s.Server)
 	if err != nil {
 		// This really shouldn't happen as we are connected to the server
@@ -1122,17 +1035,11 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 	for _, np := range s.NeverProxy {
 		neverProxy = append(neverProxy, iputil.IPNetToRPC((*net.IPNet)(np)))
 	}
-	kubeFlags := s.FlagMap
-	if kc, ok := os.LookupEnv("KUBECONFIG"); ok {
-		kubeFlags = maps.Copy(s.FlagMap)
-		kubeFlags["KUBECONFIG"] = kc
-	}
 	info := &rootdRpc.OutboundInfo{
 		Session:           s.sessionInfo,
 		NeverProxySubnets: neverProxy,
 		HomeDir:           homedir.HomeDir(),
 		ManagerNamespace:  s.GetManagerNamespace(),
-		KubeFlags:         kubeFlags,
 	}
 
 	if s.DNS != nil {

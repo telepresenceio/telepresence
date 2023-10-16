@@ -9,6 +9,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 )
 
@@ -43,7 +44,7 @@ func (s *state) AgentsLookupDNS(ctx context.Context, clientSessionID string, req
 
 // PostLookupDNSResponse receives lookup responses from an agent and places them in the channel
 // that corresponds to the lookup request.
-func (s *state) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
+func (s *state) PostLookupDNSResponse(ctx context.Context, response *rpc.DNSAgentResponse) {
 	request := response.GetRequest()
 	rid := requestId(request)
 	s.mu.RLock()
@@ -60,7 +61,7 @@ func (s *state) PostLookupDNSResponse(response *rpc.DNSAgentResponse) {
 	}
 	s.mu.RUnlock()
 	if !ok {
-		dlog.Debugf(s.ctx, "attempted to post lookup response failed because there was no recipient. ID=%s", rid)
+		dlog.Debugf(ctx, "attempted to post lookup response failed because there was no recipient. ID=%s", rid)
 	}
 }
 
@@ -75,10 +76,23 @@ func (s *state) WatchLookupDNS(agentSessionID string) <-chan *rpc.DNSRequest {
 }
 
 func (s *state) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) []*rpc.DNSResponse {
-	aIDs := s.getAgentsInterceptedByClient(clientSessionID)
-	aCount := len(aIDs)
+	agents := s.getAgentsInterceptedByClient(clientSessionID)
+	if len(agents) == 0 {
+		if client, ok := s.clients.Load(clientSessionID); ok {
+			if client.Namespace == managerutil.GetEnv(ctx).ManagerNamespace {
+				// Let traffic-manager do the lookup
+				return nil
+			}
+			agents = s.getAgentsInNamespace(client.Namespace)
+		}
+	}
+	aCount := len(agents)
 	if aCount == 0 {
 		return nil
+	}
+	if aCount > 2 {
+		// Send the lookup to max two agents
+		aCount = 2
 	}
 
 	rsBuf := make(chan *rpc.DNSResponse, aCount)
@@ -88,7 +102,7 @@ func (s *state) agentsLookup(ctx context.Context, clientSessionID string, reques
 
 	wg := sync.WaitGroup{}
 	wg.Add(aCount)
-	for _, aID := range aIDs {
+	for aID := range agents {
 		go func(aID string) {
 			rid := requestId(request)
 			defer func() {
@@ -108,6 +122,10 @@ func (s *state) agentsLookup(ctx context.Context, clientSessionID string, reques
 				}
 			}
 		}(aID)
+		aCount--
+		if aCount == 0 {
+			break
+		}
 	}
 	wg.Wait() // wait for timeout or that all agents have responded
 	bz := len(rsBuf)

@@ -146,6 +146,13 @@ agentInjector:
     reinvocationPolicy: IfNeeded
     sideEffects: None
     timeoutSeconds: 5
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - kube-node-lease
   agentImage: {}
 
 ################################################################################
@@ -233,6 +240,8 @@ clientRbac:
   # Default: ambassador
   namespaces:
   - ambassador
+
+  ruleExtras: false
 
 rbac:
   # Configure this release to ONLY create the rbac-related objects. This allows for RBAC and the

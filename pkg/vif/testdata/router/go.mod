@@ -1,9 +1,9 @@
 module local
 
-go 1.20
+go 1.21
 
 require (
-	github.com/datawire/dlib v1.3.1-0.20221228104658-e373c6d44961
+	github.com/datawire/dlib v1.3.1
 	github.com/sirupsen/logrus v1.9.2
 	github.com/telepresenceio/telepresence/v2 v2.13.3
 )
@@ -45,9 +45,10 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.14.3-0.20230728122223-d33fe35836ab // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.16.1 // indirect
 	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect

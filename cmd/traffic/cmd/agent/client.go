@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -93,7 +92,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	defer func() {
 		// The ctx might well be cancelled at this point but is used as parent during
 		// the timed clean-up to keep logging intact.
-		ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 		defer cancel()
 
 		// Reset state by processing an empty snapshot

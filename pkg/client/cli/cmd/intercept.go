@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"log"
-
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
@@ -24,9 +22,6 @@ func interceptCmd() *cobra.Command {
 		RunE:              ic.Run,
 		ValidArgsFunction: ic.ValidArgs,
 	}
-	ic.AddFlags(cmd.Flags())
-	if err := cmd.RegisterFlagCompletionFunc("namespace", ic.AutocompleteNamespace); err != nil {
-		log.Fatal(err)
-	}
+	ic.AddFlags(cmd)
 	return cmd
 }

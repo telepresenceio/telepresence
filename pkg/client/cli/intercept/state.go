@@ -24,7 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -81,8 +80,7 @@ func (s *state) Cmd() *cobra.Command {
 
 func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	spec := &manager.InterceptSpec{
-		Name:      s.Name(),
-		Namespace: s.Namespace,
+		Name: s.Name(),
 	}
 	ir := &connector.CreateInterceptRequest{
 		Spec:         spec,
@@ -108,7 +106,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 	// Parse port into spec based on how it's formatted
 	var err error
-	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Remote)
+	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Containerized())
 	if err != nil {
 		return nil, err
 	}
@@ -187,11 +185,7 @@ func (s *state) Run(ctx context.Context) error {
 
 	// start intercept, run command, then leave the intercept
 	if s.DockerRun {
-		var err error
-		if ctx, err = docker.EnableClient(ctx); err != nil {
-			return errcat.NoDaemonLogs.New(err)
-		}
-		if err = s.prepareDockerRun(ctx); err != nil {
+		if err := s.prepareDockerRun(docker.EnableClient(ctx)); err != nil {
 			return err
 		}
 	}
@@ -235,7 +229,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		}
 	}()
 
-	if ud.Remote && ir.LocalMountPort == 0 {
+	if ud.Containerized() && ir.LocalMountPort == 0 {
 		// No use having the remote container actually mount, so let's have it create a bridge
 		// to the remote sftp server instead.
 		lma, err := dnet.FreePortsTCP(1)
@@ -359,23 +353,14 @@ func (s *state) runCommand(ctx context.Context) error {
 		envFile = file.Name()
 	}
 
-	var dr *dockerRun
-	var daemonName string
-	procCtx := ctx
-	if ud.Remote {
-		daemonName = docker.SafeContainerName("tp-" + s.status.ClusterContext)
-		if daemonPort := ud.DaemonPort(); daemonPort > 0 {
-			// Ensure that the intercept handler is stopped properly if the daemon quits
-			var cancel context.CancelFunc
-			procCtx, cancel = context.WithCancel(procCtx)
-			go func() {
-				if err := docker.CancelWhenRmFromCache(procCtx, cancel, cache.DaemonInfoFile(s.status.ClusterContext, daemonPort)); err != nil {
-					dlog.Error(ctx)
-				}
-			}()
+	// Ensure that the intercept handler is stopped properly if the daemon quits
+	procCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		if err := daemon.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID.InfoFileName()); err != nil {
+			dlog.Error(ctx)
 		}
-	}
-	dr = s.startInDocker(ctx, daemonName, envFile, s.Cmdline)
+	}()
+	dr := s.startInDocker(ctx, envFile, s.Cmdline)
 	if dr.err == nil {
 		dr.err = s.addInterceptorToDaemon(ctx, dr.cmd, dr.name)
 	}
@@ -396,8 +381,9 @@ func (s *state) addInterceptorToDaemon(ctx context.Context, cmd *dexec.Cmd, cont
 		if grpcStatus.Code(err) == grpcCodes.Canceled {
 			// Deactivation was caused by a disconnect
 			err = nil
+		} else {
+			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		}
-		dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		_ = cmd.Process.Kill()
 		return err
 	}

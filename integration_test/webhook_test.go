@@ -30,7 +30,7 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 
 	require := s.Require()
 	require.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
 		return err == nil && strings.Contains(stdout, "echo-auto-inject: ready to intercept (traffic-agent already installed)")
 	},
 		20*time.Second, // waitFor
@@ -38,10 +38,10 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 		"doesn't show up with agent installed in list output",
 	)
 
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", "echo-auto-inject", "--port", "9091")
-	defer itest.TelepresenceOk(ctx, "leave", "echo-auto-inject-"+s.AppNamespace())
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "echo-auto-inject", "--port", "9091")
+	defer itest.TelepresenceOk(ctx, "leave", "echo-auto-inject")
 	require.Contains(stdout, "Using Deployment echo-auto-inject")
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, "echo-auto-inject: intercepted")
 }
 

@@ -3,7 +3,6 @@ package integration_test
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -14,9 +13,11 @@ import (
 
 	"k8s.io/client-go/tools/clientcmd/api"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
@@ -59,25 +60,34 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		return map[string]any{"also-proxy": apiServers}
 	})
 
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	expectedLen := len(ips)
+	expect := fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen)
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "status")
-		return err == nil && strings.Contains(stdout, fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen))
-	}, 10*time.Second, 1*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
+		stdout, stderr, err := itest.Telepresence(ctx, "status")
+		if err == nil && strings.Contains(stdout, expect) {
+			return true
+		}
+		if err != nil {
+			dlog.Errorf(ctx, "%s: %v", stderr, err)
+		} else {
+			dlog.Infof(ctx, "%q does not contain %q", stdout, expect)
+		}
+		return false
+	}, 30*time.Second, 3*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
 
-	jsonStdout := itest.TelepresenceOk(ctx, "status", "--json")
-	var status statusResponse
-	require.NoError(json.Unmarshal([]byte(jsonStdout), &status))
-
-	require.Len(status.RootDaemon.AlsoProxySubnets, expectedLen)
+	status := itest.TelepresenceStatusOk(ctx)
+	require.Len(status.RootDaemon.AlsoProxy, expectedLen)
 	for _, ip := range ips {
 		rng := make(net.IP, len(ip))
 		copy(rng[:], ip)
 		rng[len(rng)-1] = 0
-		expectedValue := fmt.Sprintf("%s/24", rng)
-		require.Contains(status.RootDaemon.AlsoProxySubnets, expectedValue)
+		expectedValue := &iputil.Subnet{
+			IP:   rng,
+			Mask: net.CIDRMask(24, 32),
+		}
+		require.Contains(status.RootDaemon.AlsoProxy, expectedValue)
 	}
 }
 
@@ -101,7 +111,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		require.NoError(err)
 		return map[string]any{"never-proxy": []string{ip + "/32"}}
 	})
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	// The cluster's IP address will also be never proxied, so we gotta account for that.
 	neverProxiedCount := len(ips) + 1
@@ -111,13 +121,8 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {
-		jsonStdout, _, err := itest.Telepresence(ctx, "status", "--output", "json")
-		if err != nil {
-			return false
-		}
-		var status statusResponse
-		err = json.Unmarshal([]byte(jsonStdout), &status)
-		return err == nil && len(status.RootDaemon.NeverProxySubnets) == neverProxiedCount
+		status, err := itest.TelepresenceStatus(ctx)
+		return err == nil && len(status.RootDaemon.NeverProxy) == neverProxiedCount
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
 
 	s.Eventually(func() bool {
@@ -157,7 +162,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 					"also-proxy":  t.alsoProxy,
 				}
 			})
-			itest.TelepresenceOk(ctx, "connect", "--context", "extra", "--manager-namespace", s.ManagerNamespace())
+			s.TelepresenceConnect(ctx, "--context", "extra")
 			defer itest.TelepresenceQuitOk(ctx)
 			s.Eventually(func() bool {
 				newRoute, err := routing.GetRoute(ctx, testIP)
@@ -177,7 +182,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 					return true
 				}
 				return newRoute.Interface.Name != originalRoute.Interface.Name
-			}, 5*time.Second, 200*time.Millisecond)
+			}, 30*time.Second, 200*time.Millisecond)
 		})
 	}
 }
@@ -191,11 +196,12 @@ func (s *notConnectedSuite) Test_DNSIncludes() {
 	require := s.Require()
 	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
 
-	// Check that config view -c includes the includeSuffixes
-	stdout := itest.TelepresenceOk(ctx, "config", "--context", "extra", "view", "--client-only")
-	require.Contains(stdout, "    includeSuffixes:\n        - .org")
+	s.TelepresenceConnect(ctx, "--context", "extra")
+	defer itest.TelepresenceDisconnectOk(ctx)
 
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--context", "extra")
+	// Check that config view -c includes the includeSuffixes
+	stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only")
+	require.Contains(stdout, "    includeSuffixes:\n        - .org")
 
 	retryCount := 0
 	s.Eventually(func() bool {

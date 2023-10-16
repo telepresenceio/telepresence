@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -29,7 +31,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 	sigsYaml "sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -453,7 +454,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 
 	// Let command die when the pod that it logs die
-	ctx = dcontext.WithoutCancel(ctx)
+	ctx = context.WithoutCancel(ctx)
 
 	present := struct{}{}
 
@@ -800,7 +801,7 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 	})
 
 	gh := GetGlobalHarness(ctx)
-	if len(args) > 0 && (args[0] == "connect" || args[0] == "config") {
+	if len(args) > 0 && (args[0] == "connect") {
 		rest := args[1:]
 		args = append(make([]string, 0, len(args)+3), args[0])
 		if user := GetUser(ctx); user != "default" {
@@ -814,9 +815,6 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		}
 		args = append(args, rest...)
 	}
-	if UseDocker(ctx) {
-		args = append([]string{"--docker"}, args...)
-	}
 	cmd := Command(ctx, gh.Executable(), args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -824,8 +822,8 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 }
 
 // TelepresenceDisconnectOk tells telepresence to quit and asserts that the stdout contains the correct output.
-func TelepresenceDisconnectOk(ctx context.Context) {
-	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, "quit"))
+func TelepresenceDisconnectOk(ctx context.Context, args ...string) {
+	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, append([]string{"quit"}, args...)...))
 }
 
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.
@@ -883,9 +881,12 @@ func Run(ctx context.Context, exe string, args ...string) error {
 // Output runs the given command and arguments and returns its combined output and an error if the command failed.
 func Output(ctx context.Context, exe string, args ...string) (string, error) {
 	getT(ctx).Helper()
-	out, err := Command(ctx, exe, args...).CombinedOutput()
+	cmd := Command(ctx, exe, args...)
+	stderr := bytes.Buffer{}
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return string(out), RunError(err, out)
+		return string(out), RunError(err, stderr.Bytes())
 	}
 	return string(out), nil
 }
@@ -1080,13 +1081,15 @@ func WithConfig(c context.Context, modifierFunc func(config client.Config)) cont
 	TelepresenceQuitOk(c)
 
 	t := getT(c)
-	configCopy := client.GetConfig(c)
-	modifierFunc(configCopy)
+	cfgVal := reflect.ValueOf(client.GetConfig(c)).Elem()
+	cfgCopyVal := reflect.New(cfgVal.Type())
+	cfgCopyVal.Elem().Set(cfgVal) // By value copy
+	configCopy := cfgCopyVal.Interface()
+	modifierFunc(configCopy.(client.Config))
 	configYaml, err := yaml.Marshal(&configCopy)
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
 	configDir := t.TempDir()
-	c = filelocation.WithAppUserConfigDir(c, configDir)
 	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c

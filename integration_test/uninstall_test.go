@@ -13,7 +13,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	require := s.Require()
 	// The telepresence-test-developer will not be able to uninstall everything
 	ctx := itest.WithUser(s.Context(), "default")
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	s.TelepresenceConnect(ctx)
 
 	names := func() (string, error) {
 		return itest.KubectlOut(ctx, s.ManagerNamespace(),
@@ -33,7 +33,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", jobname)
 
 	s.Eventually(func() bool {
-		stdout, _, err = itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--agents")
+		stdout, _, err = itest.Telepresence(ctx, "list", "--agents")
 		return err == nil && strings.Contains(stdout, jobname+": ready to intercept (traffic-agent already installed)")
 	}, 30*time.Second, 3*time.Second)
 

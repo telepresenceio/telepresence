@@ -17,11 +17,11 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
 	require := s.Require()
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", "8080", "--to-pod", "8081", "--to-pod", "8082")
-	defer itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc, "--port", "8080", "--to-pod", "8081", "--to-pod", "8082")
+	defer itest.TelepresenceOk(ctx, "leave", svc)
 	require.Contains(stdout, "Using Deployment "+svc)
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && regexp.MustCompile(svc+`\s*: intercepted`).MatchString(stdout)
 	}, 10*time.Second, time.Second)
 
@@ -57,10 +57,10 @@ func (s *connectedSuite) Test_ToPodUDPPortForwarding() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
 	require := s.Require()
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), "--mount", "false", svc, "--port", "9080", "--to-pod", "8080/UDP")
-	defer itest.TelepresenceOk(ctx, "leave", svc+"-"+s.AppNamespace())
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc, "--port", "9080", "--to-pod", "8080/UDP")
+	defer itest.TelepresenceOk(ctx, "leave", svc)
 	require.Contains(stdout, "Using Deployment "+svc)
-	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, svc+": intercepted")
 	itest.TelepresenceOk(ctx, "loglevel", "trace")
 	defer itest.TelepresenceOk(ctx, "loglevel", "debug")

@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -11,13 +12,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 type NamespacePair interface {
 	Harness
 	ApplyApp(ctx context.Context, name, workload string)
 	ApplyEchoService(ctx context.Context, name string, port int)
+	ApplyTemplate(ctx context.Context, path string, values any)
+	DeleteTemplate(ctx context.Context, path string, values any)
 	AppNamespace() string
+	TelepresenceConnect(ctx context.Context, args ...string) string
 	DeleteSvcAndWorkload(ctx context.Context, workload, name string)
 	Kubectl(ctx context.Context, args ...string) error
 	KubectlOk(ctx context.Context, args ...string) string
@@ -76,6 +83,14 @@ func GetNamespaces(ctx context.Context) *Namespaces {
 type nsPair struct {
 	Harness
 	Namespaces
+}
+
+// TelepresenceConnect connects using the AppNamespace and ManagerNamespace.
+func (s *nsPair) TelepresenceConnect(ctx context.Context, args ...string) string {
+	return TelepresenceOk(ctx,
+		append(
+			[]string{"connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace()},
+			args...)...)
 }
 
 func WithNamespacePair(ctx context.Context, suffix string, f func(NamespacePair)) {
@@ -165,6 +180,28 @@ func (s *nsPair) RolloutStatusWait(ctx context.Context, workload string) error {
 func (s *nsPair) DeleteSvcAndWorkload(ctx context.Context, workload, name string) {
 	getT(ctx).Helper()
 	DeleteSvcAndWorkload(ctx, workload, name, s.AppNamespace())
+}
+
+func (s *nsPair) ApplyTemplate(ctx context.Context, path string, values any) {
+	s.doWithTemplate(ctx, "apply", path, values)
+}
+
+func (s *nsPair) DeleteTemplate(ctx context.Context, path string, values any) {
+	yml, err := ReadTemplate(ctx, path, values)
+	require.NoError(getT(ctx), err)
+	if err = s.Kubectl(dos.WithStdin(ctx, bytes.NewReader(yml)), "apply", "-f", "-"); err != nil {
+		dlog.Errorf(ctx, "unable to apply %q", string(yml))
+		getT(ctx).Fatal(err)
+	}
+}
+
+func (s *nsPair) doWithTemplate(ctx context.Context, action, path string, values any) {
+	yml, err := ReadTemplate(ctx, path, values)
+	require.NoError(getT(ctx), err)
+	if err = s.Kubectl(dos.WithStdin(ctx, bytes.NewReader(yml)), action, "-f", "-"); err != nil {
+		dlog.Errorf(ctx, "unable to %s %q", action, string(yml))
+		getT(ctx).Fatal(err)
+	}
 }
 
 // Kubectl runs kubectl with the default context and the application namespace.

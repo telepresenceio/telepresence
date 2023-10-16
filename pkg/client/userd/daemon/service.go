@@ -23,7 +23,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
@@ -34,6 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -237,9 +238,16 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = userd.WithService(ctx, s.self)
 
-	if s.daemonAddress != nil {
-		go runAliveAndCancellation(ctx, cancel, config.Context, s.daemonAddress.Port)
+	daemonID, err := daemon.NewIdentifier(cr.Name, config.Context, config.Namespace, proc.RunningInContainer())
+	if err != nil {
+		cancel()
+		return &rpc.ConnectInfo{
+			Error:         rpc.ConnectInfo_CLUSTER_FAILED,
+			ErrorText:     err.Error(),
+			ErrorCategory: int32(errcat.GetCategory(err)),
+		}
 	}
+	go runAliveAndCancellation(ctx, cancel, daemonID)
 
 	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
@@ -294,17 +302,17 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	return rsp
 }
 
-func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, name string, port int) {
-	daemonInfoFile := cache.DaemonInfoFile(name, port)
+func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, daemonID *daemon.Identifier) {
+	daemonInfoFile := daemonID.InfoFileName()
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
-	g.Go(fmt.Sprintf("info-kicker-%s-%d", name, port), func(ctx context.Context) error {
+	g.Go(fmt.Sprintf("info-kicker-%s", daemonID), func(ctx context.Context) error {
 		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
-		return cache.KeepDaemonInfoAlive(ctx, daemonInfoFile)
+		return daemon.KeepInfoAlive(ctx, daemonInfoFile)
 	})
-	g.Go(fmt.Sprintf("info-watcher-%s-%d", name, port), func(ctx context.Context) error {
+	g.Go(fmt.Sprintf("info-watcher-%s", daemonID), func(ctx context.Context) error {
 		// Cancel the session if the daemon info file is removed.
-		return cache.WatchDaemonInfos(ctx, func(ctx context.Context) error {
-			ok, err := cache.DaemonInfoExists(ctx, daemonInfoFile)
+		return daemon.WatchInfos(ctx, func(ctx context.Context) error {
+			ok, err := daemon.InfoExists(ctx, daemonInfoFile)
 			if err == nil && !ok {
 				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
 				cancel()

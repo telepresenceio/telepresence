@@ -50,7 +50,7 @@ func (s *multipleInterceptsSuite) SetupSuite() {
 		go func(i int) {
 			defer wg.Done()
 			svc := fmt.Sprintf("%s-%d", s.Name(), i)
-			stdout := itest.TelepresenceOk(ctx, "intercept", "--namespace", s.AppNamespace(), svc, "--mount", "false", "--port", strconv.Itoa(s.servicePort[i]))
+			stdout := itest.TelepresenceOk(ctx, "intercept", svc, "--mount", "false", "--port", strconv.Itoa(s.servicePort[i]))
 			s.Contains(stdout, "Using Deployment "+svc)
 			s.NoError(s.RolloutStatusWait(ctx, "deploy/"+svc))
 		}(i)
@@ -61,7 +61,7 @@ func (s *multipleInterceptsSuite) SetupSuite() {
 func (s *multipleInterceptsSuite) TearDownSuite() {
 	ctx := s.Context()
 	for i := 0; i < s.ServiceCount(); i++ {
-		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%d-%s", s.Name(), i, s.AppNamespace()))
+		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%d", s.Name(), i))
 	}
 	for _, cancel := range s.serviceCancel {
 		if cancel != nil {
@@ -73,7 +73,7 @@ func (s *multipleInterceptsSuite) TearDownSuite() {
 func (s *multipleInterceptsSuite) Test_Intercepts() {
 	ctx := s.Context()
 	s.Eventually(func() bool {
-		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.AppNamespace(), "--intercepts")
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		if err != nil {
 			return false
 		}
@@ -132,7 +132,7 @@ func (s *multipleInterceptsSuite) Test_Intercepts() {
 }
 
 func (s *multipleInterceptsSuite) Test_ReportsPortConflict() {
-	_, stderr, err := itest.Telepresence(s.Context(), "intercept", "--namespace", s.AppNamespace(), "--mount", "false", "--port", strconv.Itoa(s.servicePort[1]), "dummy-name")
+	_, stderr, err := itest.Telepresence(s.Context(), "intercept", "--mount", "false", "--port", strconv.Itoa(s.servicePort[1]), "dummy-name")
 	s.Error(err)
-	s.Contains(stderr, fmt.Sprintf("Port 127.0.0.1:%d is already in use by intercept %s-1-%s", s.servicePort[1], s.Name(), s.AppNamespace()))
+	s.Contains(stderr, fmt.Sprintf("Port 127.0.0.1:%d is already in use by intercept %s-1", s.servicePort[1], s.Name()))
 }

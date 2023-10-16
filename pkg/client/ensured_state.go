@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/datawire/dlib/dcontext"
 )
 
 type (
@@ -24,7 +22,7 @@ func WithEnsuredState(ctx context.Context, prolog Prolog, action, epilog Action)
 		defer func() {
 			// The context might have been cancelled, so we use the original context
 			// without cancellation, but with a deactivation timeout of 10 seconds.
-			ctx, cancel := context.WithTimeout(dcontext.WithoutCancel(ctx), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 			defer cancel()
 			if cerr := epilog(ctx); cerr != nil {
 				if err == nil {

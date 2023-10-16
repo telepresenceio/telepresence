@@ -23,7 +23,6 @@ func gatherTraces() *cobra.Command {
 			return runGatherTraces(cmd, &tr)
 		},
 		Annotations: map[string]string{
-			ann.RootDaemon: ann.Required,
 			ann.UserDaemon: ann.Required,
 		},
 		SilenceUsage:  true,

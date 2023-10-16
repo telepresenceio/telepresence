@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -102,8 +100,8 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	require := s.Require()
 	defer func() {
 		ctx := s.Context()
-		itest.TelepresenceQuitOk(ctx)
-		stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+		itest.TelepresenceDisconnectOk(ctx)
+		stdout := s.TelepresenceConnect(ctx)
 		require.Contains(stdout, "Connected to context")
 	}()
 
@@ -128,31 +126,32 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	itest.ApplyEchoService(ctx, svc, otherOne, 8083)
 	itest.ApplyEchoService(ctx, svc, otherTwo, 8084)
 
-	itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(ctx, "connect", "--namespace", otherOne, "--manager-namespace", s.ManagerNamespace())
 
-	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherOne, "--mount", "false", svc)
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc)
 	s.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherOne, "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
 	)
 	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherOne)
-	itest.TelepresenceOk(ctx, "leave", svc+"-"+otherOne)
+	itest.TelepresenceDisconnectOk(ctx)
 
-	itest.TelepresenceOk(ctx, "intercept", "--namespace", otherTwo, "--mount", "false", svc)
+	itest.TelepresenceOk(ctx, "connect", "--namespace", otherTwo, "--manager-namespace", s.ManagerNamespace())
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc)
 	s.Eventually(
 		func() bool {
-			stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", otherTwo, "--intercepts")
+			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		},
 		10*time.Second,
 		2*time.Second,
 	)
 	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherTwo)
-	itest.TelepresenceOk(ctx, "leave", svc+"-"+otherTwo)
+	itest.TelepresenceOk(ctx, "leave", svc)
 
 	bothNsRx := fmt.Sprintf("(?:%s|%s)", otherOne, otherTwo)
 	outputDir := s.T().TempDir()
@@ -164,7 +163,7 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 
 	// Connect using mapped-namespaces
 	itest.TelepresenceDisconnectOk(ctx)
-	stdout := itest.TelepresenceOk(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", otherOne)
+	stdout := itest.TelepresenceOk(ctx, "connect", "--namespace", otherOne, "--manager-namespace", s.ManagerNamespace(), "--mapped-namespaces", otherOne)
 	require.Contains(stdout, "Connected to context")
 
 	cleanLogDir(ctx, require, bothNsRx, s.ManagerNamespace(), svc)
@@ -178,7 +177,7 @@ func (s *multipleInterceptsSuite) cleanLogDir(ctx context.Context) {
 	cleanLogDir(ctx, s.Require(), s.AppNamespace(), s.ManagerNamespace(), s.svcRegex())
 }
 
-func cleanLogDir(ctx context.Context, require *require.Assertions, nsRx, mgrNamespace, svcNameRx string) {
+func cleanLogDir(ctx context.Context, require *itest.Requirements, nsRx, mgrNamespace, svcNameRx string) {
 	logDir := filelocation.AppUserLogDir(ctx)
 	files, err := os.ReadDir(logDir)
 	require.NoError(err)
@@ -202,7 +201,7 @@ func (s *multipleInterceptsSuite) getZipData(outputFile string) (bool, int, int,
 	return getZipData(s.Require(), outputFile, s.AppNamespace(), s.ManagerNamespace(), s.svcRegex())
 }
 
-func getZipData(require *require.Assertions, outputFile, appNamespace, mgrNamespace, svcNameRx string) (bool, int, int, []string) {
+func getZipData(require *itest.Requirements, outputFile, appNamespace, mgrNamespace, svcNameRx string) (bool, int, int, []string) {
 	zipReader, err := zip.OpenReader(outputFile)
 	require.NoError(err)
 	defer func() {
@@ -249,7 +248,7 @@ func getZipData(require *require.Assertions, outputFile, appNamespace, mgrNamesp
 // readZip reads a zip file and returns the []byte string. Used in tests for
 // checking that a zipped file's contents are correct. Exported since it is
 // also used in telepresence_test.go.
-func readZip(require *require.Assertions, zippedFile *zip.File) []byte {
+func readZip(require *itest.Requirements, zippedFile *zip.File) []byte {
 	fileReader, err := zippedFile.Open()
 	require.NoError(err)
 	fileContent, err := io.ReadAll(fileReader)

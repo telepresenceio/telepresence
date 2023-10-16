@@ -48,8 +48,10 @@ endif
 
 ifeq ($(GOOS),windows)
 BEXE=.exe
+BZIP=.zip
 else
 BEXE=
+BZIP=
 endif
 
 # Generate: artifacts that get checked in to Git
@@ -82,18 +84,20 @@ generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean
 generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+	cd ./pkg/dnet/testdata/mockserver && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/vif/testdata/router && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./tools/src/test-report && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+	cd ./integration_test/testdata/echo-server && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 
 	mkdir -p $(BUILDDIR)
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod --application-type=external \
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --ignore-dirty --output-format=txt --package=mod --application-type=external \
 		--unparsable-packages build-aux/unparsable-packages.yaml >$(BUILDDIR)/DEPENDENCIES.txt
 	sed 's/\(^.*the Go language standard library ."std".[ ]*v[1-9]\.[0-9]*\)\..../\1    /' $(BUILDDIR)/DEPENDENCIES.txt >DEPENDENCIES.md
 
 	printf "Telepresence CLI incorporates Free and Open Source software under the following licenses:\n\n" > DEPENDENCY_LICENSES.md
-	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --output-format=txt --package=mod \
+	$(tools/go-mkopensource) --gotar=$(filter %.src.tar.gz,$^) --ignore-dirty --output-format=txt --package=mod \
 		--output-type=json --application-type=external --unparsable-packages build-aux/unparsable-packages.yaml > $(BUILDDIR)/DEPENDENCIES.json
 	jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' $(BUILDDIR)/DEPENDENCIES.json > $(BUILDDIR)/LICENSES.txt
 	sed -e 's/\[\([^]]*\)]()/\1/' $(BUILDDIR)/LICENSES.txt >> DEPENDENCY_LICENSES.md
@@ -113,6 +117,10 @@ PKG_VERSION = $(shell go list ./pkg/version)
 # =================================================
 
 TELEPRESENCE=$(BINDIR)/telepresence$(BEXE)
+
+ifeq ($(GOOS),windows)
+TELEPRESENCE_INSTALLER=$(BINDIR)/telepresence$(BZIP)
+endif
 
 .PHONY: build
 build: $(TELEPRESENCE) ## (Build) Produce a `telepresence` binary for GOOS/GOARCH
@@ -161,7 +169,13 @@ endif
 ifeq ($(DOCKER_BUILD),1)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -tags docker -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 else
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+# -buildmode=pie addresses https://github.com/datawire/telepresence2-proprietary/issues/315
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+endif
+
+ifeq ($(GOOS),windows)
+$(TELEPRESENCE_INSTALLER): $(TELEPRESENCE)
+	./packaging/windows-package.sh
 endif
 
 # Make local authenticator. This is for test only as it's really only intended to run from within a container
@@ -170,9 +184,15 @@ authenticator:
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -o $(BINDIR)/$@ ./cmd/$@
 
 .PHONY: release-binary
+ifeq ($(GOOS),windows)
+release-binary: $(TELEPRESENCE_INSTALLER)
+	mkdir -p $(RELEASEDIR)
+	cp $(TELEPRESENCE_INSTALLER) $(RELEASEDIR)/telepresence-windows-amd64$(BZIP)
+else
 release-binary: $(TELEPRESENCE)
 	mkdir -p $(RELEASEDIR)
 	cp $(TELEPRESENCE) $(RELEASEDIR)/telepresence-$(GOOS)-$(GOARCH)$(BEXE)
+endif
 
 .PHONY: tel2-image
 tel2-image: build-deps

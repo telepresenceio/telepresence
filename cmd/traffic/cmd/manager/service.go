@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -198,7 +199,9 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 	dlog.Debug(ctx, "Depart called")
 
-	s.state.RemoveSession(ctx, session.GetSessionId())
+	if err := s.state.RemoveSession(ctx, session.GetSessionId()); err != nil {
+		return nil, err
+	}
 
 	return &empty.Empty{}, nil
 }
@@ -443,7 +446,11 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
 
-	return s.state.PrepareIntercept(ctx, request)
+	replacePolicy := agentconfig.ReplacePolicyNever
+	if request.InterceptSpec.Replace {
+		replacePolicy = agentconfig.ReplacePolicyInactive
+	}
+	return s.state.PrepareIntercept(ctx, request, replacePolicy)
 }
 
 // CreateIntercept lets a client create an intercept.
@@ -465,13 +472,34 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	interceptInfo, err := s.state.AddIntercept(sessionID, s.clusterInfo.ID(), client, ciReq)
+	if ciReq.InterceptSpec.Replace {
+		_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyActive)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	interceptInfo, err := s.state.AddIntercept(ctx, sessionID, s.clusterInfo.ID(), client, ciReq)
 	if err != nil {
 		return nil, err
 	}
 	if interceptInfo != nil {
 		tracing.RecordInterceptInfo(span, interceptInfo)
 	}
+
+	if ciReq.InterceptSpec.Replace {
+		err := s.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, info *rpc.InterceptInfo) error {
+			dlog.Debugf(ctx, "Restoring app container for %s", info.Id)
+			ciReq.InterceptSpec.Replace = false
+			_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyInactive)
+			return err
+		})
+		if err != nil {
+			// The intercept's been created but we can't finalize it...
+			dlog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptInfo.Id, err)
+		}
+	}
+
 	return interceptInfo, nil
 }
 
@@ -509,7 +537,9 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
-	if !s.state.RemoveIntercept(sessionID + ":" + name) {
+	if removed, err := s.state.RemoveIntercept(ctx, sessionID+":"+name); err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to finalize intercept %q: %v", name, err)
+	} else if !removed {
 		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
 	}
 
@@ -680,7 +710,7 @@ func (s *service) AgentLookupHostResponse(ctx context.Context, response *rpc.Loo
 	if err != nil {
 		return nil, err
 	}
-	s.state.PostLookupDNSResponse(&rpc.DNSAgentResponse{
+	s.state.PostLookupDNSResponse(ctx, &rpc.DNSAgentResponse{
 		Session: response.Session,
 		Request: &rpc.DNSRequest{
 			Session: request.Session,
@@ -748,7 +778,7 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.
 func (s *service) AgentLookupDNSResponse(ctx context.Context, response *rpc.DNSAgentResponse) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, response.GetSession())
 	dlog.Debugf(ctx, "AgentLookupDNSResponse called %s", response.Request.Name)
-	s.state.PostLookupDNSResponse(response)
+	s.state.PostLookupDNSResponse(ctx, response)
 	return &empty.Empty{}, nil
 }
 

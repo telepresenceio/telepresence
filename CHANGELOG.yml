@@ -30,24 +30,163 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.14.3
-    date: "2023-07-26"
+  - version: 2.16.2
+    date: "2023-10-16"
     notes:
       - type: feature
         title: Brew now supports MacOS (amd64/arm64) / Linux (amd64)
         body: >-
           The brew formula can now dynamically support MacOS (amd64/arm64) / Linux (amd64) in a single formula
         docs: https://github.com/datawire/homebrew-blackbird/issues/19
-  - version: 2.14.2
-    date: "2023-07-26"
+  - version: 2.16.1
+    date: "2023-10-03"
+    notes:
+      - type: feature
+        title: Add <code>--docker-debug</code> flag to the <code>telepresence intercept</code> command.
+        body: >-
+          This flag is similar to <code>--docker-build</code> but will start the container with more relaxed security
+          using the <code>docker run</code> flags <code>--security-opt apparmor=unconfined --cap-add SYS_PTRACE</code>.
+      - type: feature
+        title: Add a <code>--export</code> option to the <code>telepresence connect</code> command.
+        body: >-
+          In some situations it is necessary to make some ports available to the
+          host from a containerized telepresence daemon. This commit adds a
+          repeatable <code>--expose &lt;docker port exposure&gt;</code> flag to the connect
+          command.
+      - type: feature
+        title: Prevent agent-injector webhook from selecting from kube-xxx namespaces.
+        body: >-
+          The <code>kube-system</code> and <code>kube-node-lease</code> namespaces should not be affected by a
+          global agent-injector webhook by default. A default <code>namespaceSelector</code> was therefore added
+          to the Helm Chart <code>agentInjector.webhook</code> that contains a <code>NotIn</code> preventing those
+          namespaces from being selected.
+      - type: bugfix
+        title: Backward compatibility for pod template TLS annotations.
+        body: >-
+          Users of Telepresence < 2.9.0 that make use of the pod template TLS annotations were unable to upgrade because
+          the annotation names have changed (now prefixed by "telepresence."), and the environment expansion of the
+          annotation values was dropped. This fix restores support for the old names (while retaining the new ones) and
+          the environment expansion.
+      - type: security
+        title: Built with go 1.21.3
+        body: >-
+          Built Telepresence with go 1.21.3 to address CVEs.
+      - type: bugfix
+        title: Match service selector against pod template labels
+        body: >-
+          When listing intercepts (typically by calling <code>telepresence list</code>) selectors of services are matched
+          against workloads. Previously the match was made against the labels of the workload, but now they are matched
+          against the labels pod template of the workload. Since the service would actually be matched against pods this
+          is more correct. The most common case when this makes a difference is that statefulsets now are listed when they should.
+  - version: 2.16.0
+    date: "2023-10-02"
     notes:
       - type: bugfix
-        title: Telepresence now use the OSS agent in its latest version by default.
+        title: The helm sub-commands will no longer start the user daemon.
         body: >-
-          The traffic manager admin was forced to set it manually during the chart installation.
-        docs: https://github.com/telepresenceio/telepresence/issues/3271
-  - version: 2.14.1
-    date: "2023-07-07"
+          The <code>telepresence helm install/upgrade/uninstall</code> commands will no longer start the telepresence
+          user daemon because there's no need to connect to the traffic-manager in order for them to execute.
+      - type: bugfix
+        title: Routing table race condition
+        body: >-
+          A race condition would sometimes occur when a Telepresence TUN device was deleted and another created in rapid
+          succession that caused the routing table to reference interfaces that no longer existed.
+      - type: bugfix
+        title: Stop lingering daemon container
+        body: >-
+          When using <code>telepresence connect --docker</code>, a lingering container could be present, causing errors
+          like &quot;The container name NN is already in use by container XX ...&quot;. When this happens, the connect
+          logic will now give the container some time to stop and then call <code>docker stop NN</code> to stop it
+          before retrying to start it.
+      - type: bugfix
+        title: Add file locking to the Telepresence cache
+        body: >-
+          Files in the Telepresence cache are accesses by multiple processes. The processes will now use advisory
+          locks on the files to guarantee consistency.
+      - type: change
+        title: Lock connection to namespace
+        body: >-
+          The behavior changed so that a connected Telepresence client is bound to a namespace. The namespace can then
+          not be changed unless the client disconnects and reconnects. A connection is also given a name. The default
+          name is composed from <code>&lt;kube context name&gt;-&lt;namespace&gt;</code> but can be given explicitly
+          when connecting using <code>--name</code>. The connection can optionally be identified using the option
+          <code>--use &lt;name match&gt;</code> (only needed when docker is used and more than one connection is active).
+      - type: change
+        title: Deprecation of global --context and --docker flags.
+        body: >-
+          The global flags <code>--context</code> and <code>--docker</code> will now be considered deprecated unless used
+          with commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
+      - type: change
+        title: Deprecation of the --namespace flag for the intercept command.
+        body: >-
+          The <code>--namespace</code> flag is now deprecated for <code>telepresence intercept</code> command. The flag can instead
+          be used with all commands that accept the full set of Kubernetes flags (e.g. <code>telepresence connect</code>).
+      - type: change
+        title: Legacy code predating version 2.6.0 was removed.
+        body: >-
+          The telepresence code-base still contained a lot of code that would modify workloads instead of relying on
+          the mutating webhook installer when a traffic-manager version predating version 2.6.0 was discovered. This
+          code has now been removed.
+      - type: feature
+        title: Add `telepresence list-namespaces` and `telepresence list-contexts` commands
+        body: >-
+          These commands can be used to check accessible namespaces and for automation.
+      - type: change
+        title: Implicit connect warning
+        body: >-
+          A deprecation warning will be printed if a command other than <code>telepresence connect</code> causes an
+          implicit connect to happen. Implicit connects will be removed in a future release.
+  - version: 2.15.1
+    date: "2023-09-06"
+    notes:
+      - type: security
+        title: Rebuild with go 1.21.1
+        body: >-
+          Rebuild Telepresence with go 1.21.1 to address CVEs.
+      - type: security
+        title: Set security context for traffic agent
+        body: >-
+          Openshift users reported that the traffic agent injection was failing due to a missing security context.
+  - version: 2.15.0
+    date: "2023-08-29"
+    notes:
+      - type: security
+        title: Add ASLR to telepresence binaries
+        body: >-
+          ASLR hardens binary sercurity against fixed memory attacks.
+      - type: feature
+        title: Added client builds for arm64 architecture.
+        body: >-
+          Updated the release workflow files in github actions to including building and publishing the client binaries for arm64 architecture.
+        docs: https://github.com/telepresenceio/telepresence/issues/3259
+      - type: bugfix
+        title: KUBECONFIG env var can now be used with the docker mode.
+        body: >-
+          If provided, the KUBECONFIG environment variable was passed to the kubeauth-foreground service as a parameter.
+          However, since it didn't exist, the CLI was throwing an error when using <code>telepresence connect --docker</code>.
+        docs: https://github.com/telepresenceio/telepresence/pull/3300
+      - type: bugfix
+        title: Fix deadlock while watching workloads
+        body: >-
+          The <code>telepresence list --output json-stream</code> wasn't releasing the session's lock after being
+          stopped, including with a <code>telepresence quit</code>. The user could be blocked as a result.
+        docs: https://github.com/telepresenceio/telepresence/pull/3298
+      - type: bugfix
+        title: Change json output of telepresence list command
+        body: >-
+          Replace deprecated info in the JSON output of the telepresence list command.
+  - version: 2.14.4
+    date: "2023-08-21"
+    notes:
+      - type: bugfix
+        title: Nil pointer exception when upgrading the traffic-manager.
+        body: >-
+          Upgrading the traffic-manager using <code>telepresence helm upgrade</code> would sometimes
+          result in a helm error message <q>executing "telepresence/templates/intercept-env-configmap.yaml"
+          at <.Values.intercept.environment.excluded>: nil pointer evaluating interface {}.excluded"</q>
+        docs: https://github.com/telepresenceio/telepresence/issues/3313
+  - version: 2.14.2
+    date: "2023-07-26"
     notes:
       - type: bugfix
         title: Telepresence now use the OSS agent in its latest version by default.
