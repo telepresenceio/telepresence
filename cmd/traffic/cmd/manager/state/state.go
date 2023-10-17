@@ -52,7 +52,7 @@ type State interface {
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
-	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, error)
+	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, agentconfig.SidecarExt, error)
 	RemoveIntercept(context.Context, string) (bool, error)
 	RemoveSession(context.Context, string) error
 	SessionDone(string) (<-chan struct{}, error)

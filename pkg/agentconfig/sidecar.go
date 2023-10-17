@@ -49,6 +49,8 @@ const (
 	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
 	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
 	LegacyOriginatingTLSSecretAnnotation = "getambassador.io/inject-originating-tls-secret"
+	WorkloadNameLabel                    = "telepresence.io/workloadName"
+	WorkloadEnabledLabel                 = "telepresence.io/workloadEnabled"
 )
 
 type ReplacePolicy int
