@@ -40,7 +40,7 @@ jobs:
         name: Upload Docker image
         run: |
           docker login -u="${{ secrets.DOCKERHUB_USERNAME }}" -p="${{ secrets.DOCKERHUB_PASSWORD }}"
-          make push-tel2-image
+          make push-images-x
 
   publish-release:
     runs-on: ubuntu-latest

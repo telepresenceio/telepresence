@@ -140,15 +140,15 @@ following Free and Open Source software:
     go.opentelemetry.io/otel/trace                                               v1.15.1                               Apache License 2.0
     go.opentelemetry.io/proto/otlp                                               v0.19.0                               Apache License 2.0
     go.starlark.net                                                              v0.0.0-20230302034142-4b1e35fe2254    3-clause BSD license
-    golang.org/x/crypto                                                          v0.9.0                                3-clause BSD license
+    golang.org/x/crypto                                                          v0.14.0                               3-clause BSD license
     golang.org/x/exp                                                             v0.0.0-20230515195305-f3d0a9c9a5cc    3-clause BSD license
     golang.org/x/mod                                                             v0.10.0                               3-clause BSD license
-    golang.org/x/net                                                             v0.10.0                               3-clause BSD license
+    golang.org/x/net                                                             v0.17.0                               3-clause BSD license
     golang.org/x/oauth2                                                          v0.8.0                                3-clause BSD license
     golang.org/x/sync                                                            v0.2.0                                3-clause BSD license
-    golang.org/x/sys                                                             v0.8.0                                3-clause BSD license
-    golang.org/x/term                                                            v0.8.0                                3-clause BSD license
-    golang.org/x/text                                                            v0.9.0                                3-clause BSD license
+    golang.org/x/sys                                                             v0.13.0                               3-clause BSD license
+    golang.org/x/term                                                            v0.13.0                               3-clause BSD license
+    golang.org/x/text                                                            v0.13.0                               3-clause BSD license
     golang.org/x/time                                                            v0.3.0                                3-clause BSD license
     golang.org/x/tools                                                           v0.9.1                                3-clause BSD license
     golang.zx2c4.com/wintun                                                      v0.0.0-20230126152724-0fa3db229ce2    MIT license

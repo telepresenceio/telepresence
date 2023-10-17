@@ -59,6 +59,7 @@ type Cluster interface {
 	Executable() string
 	GeneralError() error
 	GlobalEnv() map[string]string
+	AgentVersion(context.Context) string
 	Initialize(context.Context) context.Context
 	InstallTrafficManager(ctx context.Context, values map[string]string) error
 	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error
@@ -120,6 +121,25 @@ func (s *cluster) SetSelf(self Cluster) {
 	s.self = self
 }
 
+func (s *cluster) imagesFromEnv(ctx context.Context) context.Context {
+	v := s.TelepresenceVersion()[1:]
+	r := s.Registry()
+	if img := ImageFromEnv(ctx, "DEV_MANAGER_IMAGE", v, r); img != nil {
+		ctx = WithImage(ctx, img)
+	}
+	if img := ImageFromEnv(ctx, "DEV_CLIENT_IMAGE", v, r); img != nil {
+		ctx = WithClientImage(ctx, img)
+	}
+	if img := ImageFromEnv(ctx, "DEV_AGENT_IMAGE", s.self.AgentVersion(ctx), r); img != nil {
+		ctx = WithAgentImage(ctx, img)
+	}
+	return ctx
+}
+
+func (s *cluster) AgentVersion(ctx context.Context) string {
+	return s.TelepresenceVersion()[1:]
+}
+
 func (s *cluster) Initialize(ctx context.Context) context.Context {
 	s.suffix, s.isCI = dos.LookupEnv(ctx, "GITHUB_SHA")
 	if s.isCI {
@@ -141,23 +161,9 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	s.compatVersion = dos.Getenv(ctx, "DEV_COMPAT_VERSION")
 
 	t := getT(ctx)
-	var agentImage Image
-	agentImage.Name = "tel2"
-	agentImage.Tag = s.testVersion[1:]
-	if agentImageQN, ok := dos.LookupEnv(ctx, "DEV_AGENT_IMAGE"); ok {
-		i := strings.LastIndexByte(agentImageQN, '/')
-		if i >= 0 {
-			agentImage.Registry = agentImageQN[:i]
-			agentImageQN = agentImageQN[i+1:]
-		}
-		i = strings.IndexByte(agentImageQN, ':')
-		require.Greater(t, i, 0)
-		agentImage.Name = agentImageQN[:i]
-		agentImage.Tag = agentImageQN[i+1:]
-	}
-
 	s.registry = dos.Getenv(ctx, "DTEST_REGISTRY")
 	require.NoError(t, s.generalError)
+	ctx = s.imagesFromEnv(ctx)
 
 	if pp := dos.Getenv(ctx, "DEV_USERD_PROFILING_PORT"); pp != "" {
 		port, err := strconv.ParseUint(pp, 10, 16)
@@ -183,10 +189,6 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	for err := range errs {
 		assert.NoError(t, err)
 	}
-	if agentImage.Registry == "" {
-		agentImage.Registry = s.registry
-	}
-	ctx = WithAgentImage(ctx, &agentImage)
 
 	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
@@ -330,11 +332,16 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerAPI = 120 * time.Second
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
-	config.Images().PrivateRegistry = s.Registry()
+	images := config.Images()
+	images.PrivateRegistry = s.Registry()
 	if agentImage := GetAgentImage(c); agentImage != nil {
-		config.Images().PrivateWebhookRegistry = agentImage.Registry
+		images.PrivateAgentImage = agentImage.FQName()
+		images.PrivateWebhookRegistry = agentImage.Registry
 	} else {
-		config.Images().PrivateWebhookRegistry = s.Registry()
+		images.PrivateWebhookRegistry = s.Registry()
+	}
+	if clientImage := GetClientImage(c); clientImage != nil {
+		images.PrivateClientImage = clientImage.FQName()
 	}
 
 	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
