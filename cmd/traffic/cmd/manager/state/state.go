@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/buraksezer/olric"
+	olricConfig "github.com/buraksezer/olric/config"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	"go.opentelemetry.io/otel"
@@ -78,6 +80,21 @@ type interceptFinalizerCall struct {
 	ctx   context.Context
 }
 
+type watchMap[T watchable.Message] interface {
+	Subscribe(ctx context.Context) <-chan watchable.Snapshot[T]
+	SubscribeSubset(ctx context.Context, filter func(key string, value T) bool) <-chan watchable.Snapshot[T]
+	Load(key string) (T, bool)
+	LoadAll() map[string]T
+	LoadAllMatching(filter func(key string, value T) bool) map[string]T
+	LoadOrStore(key string, value T) (actual T, loaded bool)
+	Store(key string, value T)
+	Delete(key string)
+	CountAll() int
+	LoadAndDelete(key string) (T, bool)
+	CompareAndSwap(key string, old, new T) bool
+	Close()
+}
+
 // state is the total state of the Traffic Manager.  A zero state is invalid; you must call
 // NewState.
 type state struct {
@@ -86,6 +103,7 @@ type state struct {
 	backgroundCtx context.Context
 
 	interceptFinalizerCh chan *interceptFinalizerCall
+	client               olric.Client
 
 	mu sync.RWMutex
 	// Things protected by 'mu': While the watchable.WhateverMaps have their own locking to
@@ -103,7 +121,7 @@ type state struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts      watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
+	intercepts      watchMap[*rpc.InterceptInfo]         // info for intercepts, keyed by intercept id
 	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
 	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
 	sessions        map[string]SessionState              // info for all sessions, keyed by session id
@@ -122,6 +140,31 @@ var NewStateFunc = NewState //nolint:gochecknoglobals // extension point
 
 func NewState(ctx context.Context) State {
 	loglevel := os.Getenv("LOG_LEVEL")
+	ready := make(chan struct{})
+	cfg := olricConfig.New("local")
+	cfg.Started = func() {
+		dlog.Infof(ctx, "Olric started")
+		close(ready)
+	}
+	db, err := olric.New(cfg)
+	if err != nil {
+		dlog.Errorf(ctx, "Failed to create Olric: %v", err)
+		panic(err)
+	}
+	go func() {
+		err := db.Start()
+		if err != nil {
+			dlog.Errorf(ctx, "Failed to start Olric: %v", err)
+			panic(err)
+		}
+	}()
+	<-ready
+	cli := db.NewEmbeddedClient()
+	imap, err := watchable.NewOlricMap[*rpc.InterceptInfo]("intercepts", cli)
+	if err != nil {
+		dlog.Errorf(ctx, "Failed to create Olric intercepts map: %v", err)
+		panic(err)
+	}
 	s := &state{
 		backgroundCtx:        ctx,
 		sessions:             make(map[string]SessionState),
@@ -131,7 +174,16 @@ func NewState(ctx context.Context) State {
 		timedLogLevel:        log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:               newLoglevelSubscribers(),
 		interceptFinalizerCh: make(chan *interceptFinalizerCall),
+		client:               cli,
+		intercepts:           imap,
 	}
+	go func() {
+		<-ctx.Done()
+		s.intercepts.Close()
+		cli.Close(context.Background())
+		db.Shutdown(context.Background())
+	}()
+
 	go s.runInterceptFinalizerQueue()
 	s.self = s
 	return s

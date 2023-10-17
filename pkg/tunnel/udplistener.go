@@ -9,8 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
 	"go.opentelemetry.io/otel"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections.

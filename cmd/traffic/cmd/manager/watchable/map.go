@@ -13,9 +13,9 @@ type Message = proto.Message
 
 // Update describes a mutation made to a Map.
 type Update[V Message] struct {
-	Key    string
-	Delete bool // Whether this is deleting the entry for .Key, or setting it to .Value.
-	Value  V
+	Key    string `json:"key,omitempty"`
+	Delete bool   `json:"delete,omitempty"` // Whether this is deleting the entry for .Key, or setting it to .Value.
+	Value  V      `json:"value,omitempty"`  // The new value for .Key, if .Delete is false.
 }
 
 // Snapshot contains a snapshot of the current state of a Map, as well as a list of

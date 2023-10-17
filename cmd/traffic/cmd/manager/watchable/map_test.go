@@ -6,12 +6,78 @@ import (
 	"testing"
 	"time"
 
+	"github.com/buraksezer/olric"
+	olricConfig "github.com/buraksezer/olric/config"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
 )
+
+type watchMap[V watchable.Message] interface {
+	Subscribe(ctx context.Context) <-chan watchable.Snapshot[V]
+	SubscribeSubset(ctx context.Context, filter func(key string, value V) bool) <-chan watchable.Snapshot[V]
+	Load(key string) (V, bool)
+	LoadAll() map[string]V
+	LoadAllMatching(filter func(key string, value V) bool) map[string]V
+	LoadOrStore(key string, value V) (actual V, loaded bool)
+	Store(key string, value V)
+	Delete(key string)
+	CountAll() int
+	LoadAndDelete(key string) (V, bool)
+	CompareAndSwap(key string, old, new V) bool
+	Close()
+}
+
+func newOlricMap[V watchable.Message](t *testing.T, empty V) (watchMap[V], context.CancelFunc, chan error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 2)
+	ready := make(chan struct{})
+	cfg := olricConfig.New("local")
+	cfg.Started = func() {
+		close(ready)
+	}
+	db, err := olric.New(cfg)
+	if err != nil {
+		t.Fatal(err)
+		return nil, nil, nil
+	}
+	go func() {
+		err := db.Start()
+		if err != nil {
+			errCh <- err
+		}
+	}()
+	<-ready
+	// Check for startup error
+	select {
+	case err := <-errCh:
+		// In case of a startup error
+		t.Fatal(err)
+		return nil, nil, nil
+	default:
+	}
+	cli := db.NewEmbeddedClient()
+	retval, err := watchable.NewOlricMap[V]("test", cli, empty)
+	if err != nil {
+		t.Fatal(err)
+		return nil, nil, nil
+	}
+	go func() {
+		<-ctx.Done()
+		retval.Close()
+		if err := cli.Close(context.Background()); err != nil {
+			errCh <- err
+		}
+		if err := db.Shutdown(context.Background()); err != nil {
+			errCh <- err
+		}
+		close(errCh)
+	}()
+	return retval, cancel, errCh
+}
 
 func assertMessageMapSnapshotEqual[V watchable.Message](t *testing.T, expected, actual watchable.Snapshot[V], msgAndArgs ...any) bool {
 	t.Helper()
@@ -62,11 +128,18 @@ func agentInfoCmp(a *manager.AgentInfo, n string) bool {
 }
 
 func TestMessageMap_Delete(t *testing.T) {
-	typedTestMessageMap_Delete[*manager.AgentInfo](t, agentInfoCtor)
+	var m watchable.Map[*manager.AgentInfo]
+	typedTestMessageMap_Delete[*manager.AgentInfo](t, agentInfoCtor, &m)
+	om, cancel, errCh := newOlricMap[*manager.AgentInfo](t, &manager.AgentInfo{})
+	defer cancel()
+	typedTestMessageMap_Delete[*manager.AgentInfo](t, agentInfoCtor, om)
+	cancel()
+	for err := range errCh {
+		t.Fatal(err)
+	}
 }
 
-func typedTestMessageMap_Delete[V watchable.Message](t *testing.T, ctor func(string) V) {
-	var m watchable.Map[V]
+func typedTestMessageMap_Delete[V watchable.Message](t *testing.T, ctor func(string) V, m watchMap[V]) {
 
 	// Check that a delete on a zero map works
 	m.Delete("a")
@@ -100,11 +173,18 @@ func typedTestMessageMap_Delete[V watchable.Message](t *testing.T, ctor func(str
 }
 
 func TestMessageMap_Load(t *testing.T) {
-	typedTestMessageMap_Load[*manager.AgentInfo](t, agentInfoCtor)
+	var m watchable.Map[*manager.AgentInfo]
+	typedTestMessageMap_Load[*manager.AgentInfo](t, agentInfoCtor, &m)
+	om, cancel, errCh := newOlricMap[*manager.AgentInfo](t, &manager.AgentInfo{})
+	defer cancel()
+	typedTestMessageMap_Load[*manager.AgentInfo](t, agentInfoCtor, om)
+	cancel()
+	for err := range errCh {
+		t.Fatal(err)
+	}
 }
 
-func typedTestMessageMap_Load[V watchable.Message](t *testing.T, ctor func(string) V) {
-	var m watchable.Map[V]
+func typedTestMessageMap_Load[V watchable.Message](t *testing.T, ctor func(string) V, m watchMap[V]) {
 
 	a := ctor("value")
 	m.Store("k", a)
@@ -136,11 +216,18 @@ func TestMessageMap_LoadAll(t *testing.T) {
 }
 
 func TestMessageMap_LoadAndDelete(t *testing.T) {
-	typedTestMessageMap_LoadAndDelete[*manager.AgentInfo](t, agentInfoCtor)
+	var m watchable.Map[*manager.AgentInfo]
+	typedTestMessageMap_LoadAndDelete[*manager.AgentInfo](t, agentInfoCtor, &m)
+	om, cancel, errCh := newOlricMap[*manager.AgentInfo](t, &manager.AgentInfo{})
+	defer cancel()
+	typedTestMessageMap_LoadAndDelete[*manager.AgentInfo](t, agentInfoCtor, om)
+	cancel()
+	for err := range errCh {
+		t.Fatal(err)
+	}
 }
 
-func typedTestMessageMap_LoadAndDelete[V watchable.Message](t *testing.T, ctor func(string) V) {
-	var m watchable.Map[V]
+func typedTestMessageMap_LoadAndDelete[V watchable.Message](t *testing.T, ctor func(string) V, m watchMap[V]) {
 
 	a := ctor("value")
 	m.Store("k", a)
@@ -162,11 +249,18 @@ func typedTestMessageMap_LoadAndDelete[V watchable.Message](t *testing.T, ctor f
 }
 
 func TestMessageMap_LoadOrStore(t *testing.T) {
-	typedTestMessageMap_LoadOrStore[*manager.AgentInfo](t, agentInfoCtor)
+	var m watchable.Map[*manager.AgentInfo]
+	typedTestMessageMap_LoadOrStore[*manager.AgentInfo](t, agentInfoCtor, &m)
+	om, cancel, errCh := newOlricMap[*manager.AgentInfo](t, &manager.AgentInfo{})
+	defer cancel()
+	typedTestMessageMap_LoadOrStore[*manager.AgentInfo](t, agentInfoCtor, om)
+	cancel()
+	for err := range errCh {
+		t.Fatal(err)
+	}
 }
 
-func typedTestMessageMap_LoadOrStore[V watchable.Message](t *testing.T, ctor func(string) V) {
-	var m watchable.Map[V]
+func typedTestMessageMap_LoadOrStore[V watchable.Message](t *testing.T, ctor func(string) V, m watchMap[V]) {
 
 	a := ctor("value")
 	m.Store("k", a)
@@ -202,13 +296,20 @@ func TestMessageMap_CompareAndSwap(t *testing.T) {
 }
 
 func TestMessageMap_Subscribe(t *testing.T) {
-	typedTestMessageMap_Subscribe[*manager.AgentInfo](t, agentInfoCtor)
+	var m watchable.Map[*manager.AgentInfo]
+	typedTestMessageMap_Subscribe[*manager.AgentInfo](t, agentInfoCtor, &m)
+	om, cancel, errCh := newOlricMap[*manager.AgentInfo](t, &manager.AgentInfo{})
+	defer cancel()
+	typedTestMessageMap_Subscribe[*manager.AgentInfo](t, agentInfoCtor, om)
+	cancel()
+	for err := range errCh {
+		t.Fatal(err)
+	}
 }
 
-func typedTestMessageMap_Subscribe[V watchable.Message](t *testing.T, ctor func(string) V) {
+func typedTestMessageMap_Subscribe[V watchable.Message](t *testing.T, ctor func(string) V, m watchMap[V]) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)
-	var m watchable.Map[V]
 
 	m.Store("a", ctor("A"))
 	m.Store("b", ctor("B"))
@@ -336,12 +437,19 @@ func typedTestMessageMap_Subscribe[V watchable.Message](t *testing.T, ctor func(
 }
 
 func TestMessageMap_SubscribeSubset(t *testing.T) {
-	typedTestMessageMap_SubscribeSubset[*manager.AgentInfo](t, agentInfoCtor, agentInfoCmp)
+	var m watchable.Map[*manager.AgentInfo]
+	typedTestMessageMap_SubscribeSubset[*manager.AgentInfo](t, agentInfoCtor, agentInfoCmp, &m)
+	om, cancel, errCh := newOlricMap[*manager.AgentInfo](t, &manager.AgentInfo{})
+	defer cancel()
+	typedTestMessageMap_SubscribeSubset[*manager.AgentInfo](t, agentInfoCtor, agentInfoCmp, om)
+	cancel()
+	for err := range errCh {
+		t.Fatal(err)
+	}
 }
 
-func typedTestMessageMap_SubscribeSubset[V watchable.Message](t *testing.T, ctor func(string) V, comp func(V, string) bool) {
+func typedTestMessageMap_SubscribeSubset[V watchable.Message](t *testing.T, ctor func(string) V, comp func(V, string) bool, m watchMap[V]) {
 	ctx := dlog.NewTestContext(t, true)
-	var m watchable.Map[V]
 
 	m.Store("a", ctor("A"))
 	m.Store("b", ctor("B"))
