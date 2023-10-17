@@ -178,11 +178,6 @@ $(TELEPRESENCE_INSTALLER): $(TELEPRESENCE)
 	./packaging/windows-package.sh
 endif
 
-# Make local authenticator. This is for test only as it's really only intended to run from within a container
-.PHONY: authenticator
-authenticator:
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -o $(BINDIR)/$@ ./cmd/$@
-
 .PHONY: release-binary
 ifeq ($(GOOS),windows)
 release-binary: $(TELEPRESENCE_INSTALLER)
