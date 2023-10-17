@@ -51,18 +51,18 @@ func (s *state) PrepareIntercept(
 	ctx context.Context,
 	cr *managerrpc.CreateInterceptRequest,
 	replacePolicy agentconfig.ReplacePolicy,
-) (pi *managerrpc.PreparedIntercept, err error) {
+) (pi *managerrpc.PreparedIntercept, sce agentconfig.SidecarExt, err error) {
 	ctx, cancel := context.WithTimeout(ctx, managerutil.GetEnv(ctx).AgentArrivalTimeout)
 	defer cancel()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
 	defer tracing.EndAndRecord(span, err)
 	span.SetAttributes(attribute.Stringer("request", cr))
 
-	interceptError := func(err error) (*managerrpc.PreparedIntercept, error) {
+	interceptError := func(err error) (*managerrpc.PreparedIntercept, agentconfig.SidecarExt, error) {
 		if _, ok := status.FromError(err); ok {
-			return nil, err
+			return nil, nil, err
 		}
-		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
+		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil, nil
 	}
 
 	spec := cr.InterceptSpec
@@ -79,7 +79,7 @@ func (s *state) PrepareIntercept(
 		return interceptError(err)
 	}
 
-	sce, err := s.getOrCreateAgentConfig(ctx, wl, spec, replacePolicy)
+	sce, err = s.getOrCreateAgentConfig(ctx, wl, spec, replacePolicy)
 	if err != nil {
 		return interceptError(err)
 	}
@@ -99,7 +99,7 @@ func (s *state) PrepareIntercept(
 		ServicePort:     int32(ic.ServicePort),
 		AgentImage:      ac.AgentImage,
 		WorkloadKind:    ac.WorkloadKind,
-	}, nil
+	}, sce, nil
 }
 
 func (s *state) isExtended(spec *managerrpc.InterceptSpec) bool {

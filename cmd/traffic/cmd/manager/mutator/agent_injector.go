@@ -182,12 +182,13 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	var patches patchOps
 	config := scx.AgentConfig()
 	patches = deleteAppContainer(ctx, pod, config, patches)
-	patches = addInitContainer(pod, config, patches)
+	// patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
 	patches = addAgentVolumes(pod, config, patches)
 	patches = hidePorts(pod, config, patches)
 	patches = addPodAnnotations(ctx, pod, patches)
+	patches = addPodLabels(ctx, pod, config, patches)
 
 	if config.APIPort != 0 {
 		tpEnv := make(map[string]string)
@@ -591,6 +592,34 @@ func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patch
 			Op:    op,
 			Path:  "/metadata/annotations",
 			Value: am,
+		})
+	}
+	return patches
+}
+
+func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarExt, patches patchOps) patchOps {
+	op := "replace"
+	changed := false
+	lm := pod.Labels
+	if lm == nil {
+		op = "add"
+		lm = make(map[string]string)
+	} else {
+		lm = maps.Copy(lm)
+	}
+	if _, ok := pod.Labels[agentconfig.WorkloadNameLabel]; !ok {
+		changed = true
+		lm[agentconfig.WorkloadNameLabel] = config.AgentConfig().WorkloadName
+	}
+	if _, ok := pod.Labels[agentconfig.WorkloadEnabledLabel]; !ok {
+		changed = true
+		lm[agentconfig.WorkloadEnabledLabel] = "true"
+	}
+	if changed {
+		patches = append(patches, patchOperation{
+			Op:    op,
+			Path:  "/metadata/labels",
+			Value: lm,
 		})
 	}
 	return patches
