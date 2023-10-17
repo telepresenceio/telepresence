@@ -34,12 +34,15 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/rpc/v2/authenticator"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
@@ -205,18 +208,35 @@ func NewSession(
 		}
 	}
 
-	rdRunning := userd.GetService(ctx).RootSessionInProcess()
-	if !rdRunning {
+	oi := tmgr.getOutboundInfo(ctx)
+	rootRunning := userd.GetService(ctx).RootSessionInProcess()
+	if !rootRunning {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rdRunning, err = socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
+		rootRunning, err = socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
 		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		}
+
+		if rootRunning && !client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
+			// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
+			// must be executed by the user, not by root.
+			konfig, err := patcher.CreateExternalKubeConfig(ctx, cluster.EffectiveFlagMap, func([]string) (string, string, error) {
+				s := userd.GetService(ctx)
+				if _, ok := s.Server().GetServiceInfo()[authenticator.Authenticator_ServiceDesc.ServiceName]; !ok {
+					authGrpc.RegisterAuthenticatorServer(s.Server(), config.ConfigFlags.ToRawKubeConfigLoader())
+				}
+				return client.GetExe(), s.ListenerAddress(ctx), nil
+			})
+			if err != nil {
+				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+			}
+			patcher.AnnotateOutboundInfo(ctx, oi, konfig.CurrentContext)
 		}
 	}
 
 	var daemonStatus *rootdRpc.DaemonStatus
-	if rdRunning {
-		tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, tmgr.getOutboundInfo(ctx))
+	if rootRunning {
+		tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi)
 		if err != nil {
 			tmgr.managerConn.Close()
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)

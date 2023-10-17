@@ -118,8 +118,10 @@ message OutboundInfo {
   // Traffic manager namespace
   string manager_namespace = 8;
 
+  // Kubernetes flags
+  map<string, string> kube_flags = 9;
+
   reserved 4;
-  reserved 9;
 }
 
 message NetworkConfig {
