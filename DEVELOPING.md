@@ -39,18 +39,23 @@
    is pre-built and available, both as a CLI client (accessible from the
    current runtime path), and also pre-pushed into a pre-existing cluster
    accessible from `DTEST_KUBECONFIG`. In other words, if this is set, no
-   no binaries will be built or pushed so the developement + test cycle
+   no binaries will be built or pushed so the development + test cycle
    can be quit rapid.
 
- - `DEV_AGENT_IMAGE` (optional) can be set to an alternative image to use
-   for the traffic agent, such as `ambassador-telepresence-agent:1.13.11-alpha.0`.
-   This will make all tests use that traffic-agent instead of the default
-   which uses the same image as the traffic-manager.
+ - `DEV_CLIENT_IMAGE` (optional) can be set to the fully qualified name of
+   an alternative image to use for the docker image used for the containerized
+   daemon when running in docker mode.
 
-- `DEV_USERD_PROFILING_PORT` and `DEV_ROOTD_PROFILING_PORT` (optional) if
-  set, will cause the `telepresence connect` calls in the integration tests
-  to start daemons where pprof is enabled (see
-  [Profiling the daemons](#profiling_the_daemons) below).
+ - `DEV_MANAGER_IMAGE` (optional) can be set to the fully qualified name of
+   an alternative image to use for the traffic manager.
+
+ - `DEV_AGENT_IMAGE` (optional) can be set to the fully qualified name of
+   an alternative image to use for the traffic agent.
+
+ - `DEV_USERD_PROFILING_PORT` and `DEV_ROOTD_PROFILING_PORT` (optional) if
+   set, will cause the `telepresence connect` calls in the integration tests
+   to start daemons where pprof is enabled (see
+   [Profiling the daemons](#profiling_the_daemons) below).
 
 The above environment can optionally be provided in a `itest.yml` file
 that is placed adjacent to the normal `config.yml` file used to configure

@@ -604,6 +604,7 @@ func (ll *LogLevels) merge(o *LogLevels) {
 type Images struct {
 	PrivateRegistry        string `json:"registry,omitempty" yaml:"registry,omitempty"`
 	PrivateAgentImage      string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
+	PrivateClientImage     string `json:"clientImage,omitempty" yaml:"clientImage,omitempty"`
 	PrivateWebhookRegistry string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
 }
 
@@ -634,6 +635,8 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 			img.PrivateRegistry = v.Value
 		case "agentImage":
 			img.PrivateAgentImage = v.Value
+		case "clientImage":
+			img.PrivateClientImage = v.Value
 		case "webhookRegistry":
 			img.PrivateWebhookRegistry = v.Value
 		case "webhookAgentImage":
@@ -649,6 +652,9 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 func (img *Images) merge(o *Images) {
 	if o.PrivateAgentImage != "" {
 		img.PrivateAgentImage = o.PrivateAgentImage
+	}
+	if o.PrivateClientImage != "" {
+		img.PrivateClientImage = o.PrivateClientImage
 	}
 	if o.PrivateRegistry != defaultImagesRegistry {
 		img.PrivateRegistry = o.PrivateRegistry
@@ -682,6 +688,13 @@ func (img *Images) AgentImage(c context.Context) string {
 	return GetEnv(c).AgentImage
 }
 
+func (img *Images) ClientImage(c context.Context) string {
+	if img.PrivateClientImage != "" {
+		return img.PrivateClientImage
+	}
+	return GetEnv(c).ClientImage
+}
+
 // IsZero controls whether this element will be included in marshalled output.
 func (img Images) IsZero() bool {
 	return img == defaultImages
@@ -695,6 +708,9 @@ func (img Images) MarshalYAML() (any, error) {
 	}
 	if img.PrivateAgentImage != "" {
 		m["agentImage"] = img.PrivateAgentImage
+	}
+	if img.PrivateClientImage != "" {
+		m["clientImage"] = img.PrivateClientImage
 	}
 	if img.PrivateWebhookRegistry != "" {
 		m["webhookRegistry"] = img.PrivateWebhookRegistry
