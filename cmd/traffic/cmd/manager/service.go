@@ -450,7 +450,8 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	if request.InterceptSpec.Replace {
 		replacePolicy = agentconfig.ReplacePolicyInactive
 	}
-	return s.state.PrepareIntercept(ctx, request, replacePolicy)
+	pi, _, err := s.state.PrepareIntercept(ctx, request, replacePolicy)
+	return pi, err
 }
 
 // CreateIntercept lets a client create an intercept.
@@ -473,7 +474,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	if ciReq.InterceptSpec.Replace {
-		_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyActive)
+		_, _, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyActive)
 		if err != nil {
 			return nil, err
 		}
@@ -491,7 +492,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		err := s.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, info *rpc.InterceptInfo) error {
 			dlog.Debugf(ctx, "Restoring app container for %s", info.Id)
 			ciReq.InterceptSpec.Replace = false
-			_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyInactive)
+			_, _, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyInactive)
 			return err
 		})
 		if err != nil {
