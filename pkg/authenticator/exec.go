@@ -24,9 +24,12 @@ func (e execCredentialBinary) Resolve(
 	cmd.Stderr = dos.Stderr(ctx)
 	cmd.DisableLogging = true
 	cmd.Env = dos.Environ(ctx)
-
-	for i := range execConfig.Env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", execConfig.Env[i].Name, execConfig.Env[i].Value))
+	if len(execConfig.Env) > 0 {
+		em := dos.FromEnvPairs(cmd.Env)
+		for _, ev := range execConfig.Env {
+			em[ev.Name] = ev.Value
+		}
+		cmd.Env = em.Environ()
 	}
 
 	if err := cmd.Run(); err != nil {

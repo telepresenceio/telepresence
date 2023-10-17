@@ -20,6 +20,9 @@ type Service interface {
 	// that to the pointer. It will panic if type is not implemented.
 	As(ptr any)
 
+	// ListenerAddress returns the address that this service is listening to.
+	ListenerAddress(ctx context.Context) string
+
 	Server() *grpc.Server
 
 	// SetManagerClient will assign the manager client that this Service will use when acting as
