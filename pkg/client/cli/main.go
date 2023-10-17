@@ -6,7 +6,10 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cmd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -55,6 +58,15 @@ func InitContext(ctx context.Context) context.Context {
 }
 
 func Main(ctx context.Context) {
+	args := os.Args
+	if len(args) == 4 && args[1] == "kubeauth" {
+		if err := authenticateContext(ctx, args[2], args[3]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if dir := os.Getenv("DEV_TELEPRESENCE_CONFIG_DIR"); dir != "" {
 		ctx = filelocation.WithAppUserConfigDir(ctx, dir)
 	}
@@ -108,4 +120,21 @@ func summarizeLogs(ctx context.Context, cmd *cobra.Command) bool {
 		}
 	}
 	return !first
+}
+
+func authenticateContext(ctx context.Context, contextName, serverAddr string) error {
+	conn, err := grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("failed to dial GRPC server: %w", err)
+	}
+	ac := rpc.NewAuthenticatorClient(conn)
+	res, err := ac.GetContextExecCredentials(ctx, &rpc.GetContextExecCredentialsRequest{ContextName: contextName})
+	if err != nil {
+		return fmt.Errorf("failed to get exec credentials: %w", err)
+	}
+	_ = conn.Close()
+	if _, err = os.Stdout.Write(res.RawCredentials); err != nil {
+		return fmt.Errorf("failed to print raw credentials: %w", err)
+	}
+	return nil
 }

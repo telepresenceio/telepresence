@@ -18,6 +18,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
@@ -284,7 +285,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Containerized() {
-		docker.AnnotateConnectRequest(&request.ConnectRequest, userD.DaemonID.KubeContext)
+		patcher.AnnotateConnectRequest(&request.ConnectRequest, docker.TpCache, userD.DaemonID.KubeContext)
 	}
 	cat := errcat.Unknown
 
