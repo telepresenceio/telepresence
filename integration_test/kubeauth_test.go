@@ -5,7 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	goRuntime "runtime"
+	"runtime"
 	"strings"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -38,6 +38,9 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 	// Ensure that the k8screds program is built and ready.
 	binDir := s.T().TempDir()
 	k8sCredsBinary := filepath.Join(binDir, "k8screds")
+	if runtime.GOOS == "windows" {
+		k8sCredsBinary += ".exe"
+	}
 	rq.NoError(itest.Run(ctx, "go", "build", "-o", k8sCredsBinary, filepath.Join("testdata", "k8screds", "main.go")))
 
 	// Create a new AuthInfo.
@@ -75,7 +78,7 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 	cfg.CurrentContext = extContext
 
 	connectWithExec := func(connectFromUserDaemon, useDocker bool) {
-		if useDocker && s.IsCI() && goRuntime.GOOS != "linux" {
+		if useDocker && s.IsCI() && runtime.GOOS != "linux" {
 			s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 		}
 
