@@ -12,8 +12,10 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 const (
@@ -142,4 +144,17 @@ func AnnotateConnectRequest(cr *connector.ConnectRequest, cacheDir, kubeContext 
 	// We never instruct the remote containerized daemon to modify its KUBECONFIG environment.
 	delete(cr.Environment, "KUBECONFIG")
 	delete(cr.Environment, "-KUBECONFIG")
+}
+
+// AnnotateOutboundInfo is used when a non-containerized user-daemon connects to the root-daemon. The KubeFlags
+// are modified to contain the path to the modified kubeconfig file.
+func AnnotateOutboundInfo(ctx context.Context, oi *daemon.OutboundInfo, kubeContext string) {
+	kubeConfigFile := strings.ReplaceAll(kubeContext, "/", "-")
+	if oi.KubeFlags == nil {
+		oi.KubeFlags = make(map[string]string)
+	} else {
+		oi.KubeFlags = maps.Copy(oi.KubeFlags)
+	}
+	// Concatenate using "/". This will be used in linux
+	oi.KubeFlags["kubeconfig"] = fmt.Sprintf("%s/%s/%s", filelocation.AppUserCacheDir(ctx), kubeConfigs, kubeConfigFile)
 }

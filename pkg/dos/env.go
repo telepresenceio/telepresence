@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sort"
+	"strings"
 )
 
 // Env is an abstraction of the environment related functions with the same name in the os package.
@@ -16,6 +17,24 @@ type Env interface {
 }
 
 type MapEnv map[string]string
+
+// FromEnvPairs converts a slice of strings int the form KEY=VALUE into
+// a map[string]string.
+func FromEnvPairs(env []string) MapEnv {
+	m := make(MapEnv, len(env))
+	m.MergeEnvPairs(env)
+	return m
+}
+
+// MergeEnvPairs merges env entries in the form of KEY=VALUE into the
+// given map, giving the env entries higher priority.
+func (e MapEnv) MergeEnvPairs(env []string) {
+	for _, ep := range env {
+		if ix := strings.IndexByte(ep, '='); ix > 0 {
+			e[ep[:ix]] = ep[ix+1:]
+		}
+	}
+}
 
 func (e MapEnv) Environ() []string {
 	ks := make([]string, len(e))

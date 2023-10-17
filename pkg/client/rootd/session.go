@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -39,6 +40,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -169,7 +172,56 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 	panic("No User daemon Session creator has been registered")
 }
 
+func createPortForwardDialer(ctx context.Context, flags map[string]string) (dnet.PortForwardDialer, error) {
+	configFlags, err := client.ConfigFlags(flags)
+	if err != nil {
+		return nil, err
+	}
+	rs, err := configFlags.ToRESTConfig()
+	if err != nil {
+		return nil, err
+	}
+	cs, err := kubernetes.NewForConfig(rs)
+	if err != nil {
+		return nil, err
+	}
+	return dnet.NewK8sPortForwardDialer(ctx, rs, cs)
+}
+
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
+func connectToManager(ctx context.Context, namespace string, kubeFlags map[string]string) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
+	if client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
+		return connectToUserDaemon(ctx)
+	}
+	var mgrVer semver.Version
+	pfDialer, err := createPortForwardDialer(ctx, kubeFlags)
+	if err != nil {
+		return nil, nil, mgrVer, err
+	}
+
+	clientConfig := client.GetConfig(ctx)
+	tos := clientConfig.Timeouts()
+
+	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	defer cancel()
+	conn, mc, ver, err := tm.ConnectToManager(ctx, namespace, pfDialer.Dial)
+	if err != nil {
+		return nil, nil, mgrVer, err
+	}
+
+	verStr := strings.TrimPrefix(ver.Version, "v")
+	dlog.Infof(ctx, "Connected to Manager %s", verStr)
+	mgrVer, err = semver.Parse(verStr)
+	if err != nil {
+		conn.Close()
+		return nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+	}
+	return conn, &userdToManagerShortcut{mc}, mgrVer, nil
+}
+
+// connectToUserDaemon is like connectToManager but the port-forward will be established from the user-daemon
+// instead. This doesn't matter when the daemon is containerized, but it will introduce an extra hop for all
+// outgoing traffic when it isn't.
 func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
 	// First check. Establish connection
 	tos := client.GetConfig(c).Timeouts()
@@ -217,7 +269,11 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 func NewSession(c context.Context, mi *rpc.OutboundInfo) (*Session, error) {
 	dlog.Info(c, "-- Starting new session")
 
-	conn, mc, ver, err := connectToUserDaemon(c)
+	conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags)
+	if mc == nil || err != nil {
+		return nil, err
+	}
+
 	if mc == nil || err != nil {
 		return nil, err
 	}

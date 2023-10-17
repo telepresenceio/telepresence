@@ -126,6 +126,13 @@ func (s *service) As(ptr any) {
 	}
 }
 
+func (s *service) ListenerAddress(ctx context.Context) string {
+	if s.daemonAddress != nil {
+		return s.daemonAddress.String()
+	}
+	return "unix:" + socket.UserDaemonPath(ctx)
+}
+
 func (s *service) SetSelf(self userd.Service) {
 	s.self = self
 }
