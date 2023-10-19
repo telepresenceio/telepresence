@@ -1,0 +1,51 @@
+name: Prepare release
+
+on:
+  push:
+    branches:
+      - 'release/[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches:
+      - 'release/v2'
+    types: [ labeled ]
+
+jobs:
+  check-commit:
+    if: (github.event_name == 'push' || (github.event_name == 'pull_request' && (github.event.label.name == 'GA' || github.event.label.name == 'RC') && startsWith(github.head_ref, 'release/2'))) && github.actor != 'd6e-automaton'
+    runs-on: ubuntu-latest
+    outputs:
+      is_prepare_release: ${{ steps.check.outputs.is_prepare_release }}
+      telepresence_version: ${{ steps.check.outputs.telepresence_version }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Check commit
+        id: check
+        uses: datawire/telepresence-internal-actions/check-commit@main
+
+  prepare-release:
+    runs-on: ubuntu-latest
+    needs: check-commit
+    steps:
+      - name: Prepare release
+        uses: datawire/telepresence-internal-actions/execute-release-commands@main
+        with:
+          gh_auto_release_token: ${{ secrets.GH_LOCAL_TOKEN }}
+          gh_auto_release_email: ${{ secrets.GH_AUTO_RELEASE_EMAIL }}
+          gh_auto_release_user: ${{ secrets.GH_AUTO_RELEASE_USER }}
+          telepresence_version: ${{ needs.check-commit.outputs.telepresence_version }}
+          repository: ${{ github.repository }}
+          pre_push_branch_commands: "make prepare-release"
+          post_push_branch_commands: "make push-tags"
+
+  slack-notification:
+    needs: [check-commit, prepare-release]
+    runs-on: ubuntu-latest
+    if: (needs.check-commit.result == 'failure' || needs.prepare-release.result == 'failure')
+    steps:
+      - name: Notify Developers about Workflow Error
+        id: slack
+        uses: datawire/telepresence-internal-actions/slack-notification-workflow-error@main
+        with:
+          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
