@@ -11,6 +11,8 @@ Maintainers are listed in alphabetical order.
 * Kévin Lambert, [knlambert](https://github.com/knlambert), <klambert@datawire.io>
 * Nick Powell, [njayp](https://github.com/njayp), <nickpowell@datawire.io>
 * Thomas Hallgren, [thallgren](https://github.com/thallgren), <thomas@datawire.io>
+* Guillaume Veschambre, [shepz](https://github.com/shepz), <gveschambre@datawire.io>
+* Sarabraj Singh, [sarabrajsingh](https://github.com/sarabrajsingh), <rsingh@datawire.io>
 
 ## Maintainers Emeriti
 
