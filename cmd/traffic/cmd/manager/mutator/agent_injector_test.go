@@ -1672,7 +1672,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ctx = managerutil.WithEnv(ctx, &newEnv)
 				agentmap.GeneratorConfigFunc = newEnv.GeneratorConfig
 			}
-			var actualPatch patchOps
+			var actualPatch PatchOps
 			var actualErr error
 			cw := NewWatcher("")
 			if test.generateConfig {
@@ -1686,7 +1686,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			if actualErr == nil {
 				request := toAdmissionRequest(podResource, test.pod)
 				a := agentInjector{agentConfigs: cw}
-				actualPatch, actualErr = a.inject(ctx, request)
+				actualPatch, actualErr = a.Inject(ctx, request)
 			}
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.pod.Name))
 			if actualPatch != nil || test.expectedPatch != "" {
