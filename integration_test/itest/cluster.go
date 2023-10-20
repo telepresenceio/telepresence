@@ -58,7 +58,7 @@ type Cluster interface {
 	CompatVersion() string
 	Executable() string
 	GeneralError() error
-	GlobalEnv() map[string]string
+	GlobalEnv() dos.MapEnv
 	AgentVersion(context.Context) string
 	Initialize(context.Context) context.Context
 	InstallTrafficManager(ctx context.Context, values map[string]string) error
@@ -358,8 +358,8 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	return c
 }
 
-func (s *cluster) GlobalEnv() map[string]string {
-	globalEnv := map[string]string{
+func (s *cluster) GlobalEnv() dos.MapEnv {
+	globalEnv := dos.MapEnv{
 		"KUBECONFIG": s.kubeConfig,
 	}
 	yes := struct{}{}
@@ -751,15 +751,16 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), dbgArgs))
 	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.DisableLogging = true
-	env := GetGlobalHarness(ctx).GlobalEnv()
-	maps.Merge(env, getEnv(ctx))
-	for k, v := range env {
-		env[k] = k + "=" + v
-	}
-	cmd.Env = maps.ToSortedSlice(env)
+	cmd.Env = EnvironMap(ctx).Environ()
 	cmd.Dir = GetWorkingDir(ctx)
 	cmd.Stdin = dos.Stdin(ctx)
 	return cmd
+}
+
+func EnvironMap(ctx context.Context) dos.MapEnv {
+	env := GetGlobalHarness(ctx).GlobalEnv()
+	maps.Merge(env, getEnv(ctx))
+	return env
 }
 
 // TelepresenceOk executes the CLI command in a new process and requires the result to be OK.
@@ -1129,6 +1130,13 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")
 	require.NoError(t, clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
 	return WithEnv(ctx, map[string]string{"KUBECONFIG": strings.Join([]string{kc, kubeconfigFileName}, string([]byte{os.PathListSeparator}))})
+}
+
+func WithKubeConfig(ctx context.Context, cfg *api.Config) context.Context {
+	t := getT(ctx)
+	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
+	return WithEnv(ctx, map[string]string{"KUBECONFIG": kubeconfigFileName})
 }
 
 // RunningPods return the names of running pods with app=<service name>. Running here means
