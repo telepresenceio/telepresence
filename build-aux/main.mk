@@ -175,7 +175,7 @@ endif
 
 ifeq ($(GOOS),windows)
 $(TELEPRESENCE_INSTALLER): $(TELEPRESENCE)
-	./packaging/windows-package.sh
+	bash ./packaging/windows-package.sh
 endif
 
 .PHONY: release-binary
