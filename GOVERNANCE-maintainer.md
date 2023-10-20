@@ -60,22 +60,29 @@ the project succeed.
 The collective team of all Maintainers is known as the Maintainer Council, which
 is the governing body for the project.
 
+### Maintainer responsibilities
+
+* Monitor email aliases.
+* Monitor Slack (delayed response is perfectly acceptable).
+* Triage GitHub issues and perform pull request reviews for other maintainers and the community.
+* Make sure that ongoing PRs are moving forward at the right pace or closing them.
+* In general continue to be willing to spend at least 20% of one's time working on Telepresence (~1 business day/week).
+
 ### Becoming a Maintainer
 
-To become a Maintainer you need to demonstrate the following:
-
-* commitment to the project:
-    * participate in discussions, contributions, code and documentation reviews
-      for one month or more,
-    * perform reviews for 5 non-trivial pull requests,
-    * contribute 5 non-trivial pull requests and have them merged,
-* ability to write quality code and/or documentation,
-* ability to collaborate with the team,
-* understanding of how the team works (policies, processes for testing and code review, etc),
-* understanding of the project's code base and coding and documentation style.
+* Express interest to the current maintainers (see [MAINTAINERS.md](MAINTAINERS.md)) that your organization is 
+interested in becoming a maintainer. Becoming a maintainer generally means that you are going to be spending 
+substantial time on Telepresence for the foreseeable future.
+* We will expect you to start contributing increasingly complicated PRs, under the guidance of the existing maintainers.
+* We may ask you to do some PRs from our backlog.
+* As you gain experience with the code base and our standards, we will ask you to do code reviews for incoming PRs. 
+All maintainers are expected to shoulder a proportional share of community reviews.
+* After a period of approximately 2-3 months of working together and making sure we see eye to eye, the existing 
+maintainers will confer and decide whether to grant maintainer status or not. 
+We make no guarantees on the length of time this will take, but 2-3 months is the goal.
 
 A new Maintainer can apply by sending a message in our [slack workspace](https://datawire-oss.slack.com/),
-in the [#telepresence-dev](https://datawire-oss.slack.com/archives/CC5D1UTTN)
+in the [#telepresence-dev channel](https://datawire-oss.slack.com/archives/CC5D1UTTN).
 
 A simple majority vote of existing Maintainers approves the application.  
 
@@ -106,7 +113,7 @@ and can be rapidly returned to Maintainer status if their availability changes.
 Time zones permitting, Maintainers are expected to participate in the public
 developer meeting. 
 
-Details can be found [here](./MEETING_SCHEDULE.md#monthly-contributors-meeting)
+Details can be found [here](./MEETING_SCHEDULE.md#monthly-contributors-meeting).
 
 Maintainers will also have closed meetings in order to discuss security reports
 or Code of Conduct violations.  Such meetings should be scheduled by any
@@ -127,7 +134,7 @@ for that purpose.
 
 [Code of Conduct](./code-of-conduct.md)
 violations by community members will be discussed and resolved
-on the [private Maintainer mailing list](TODO).  If a Maintainer is directly involved
+on the [private slack channel](https://datawire-oss.slack.com/archives/C061Q45SU4F).  If a Maintainer is directly involved
 in the report, the Maintainers will instead designate two Maintainers to work
 with the CNCF Code of Conduct Committee in resolving it.
 
@@ -144,10 +151,13 @@ holes and breaches according to the [security policy](./SECURITY.md).
 
 ## Voting
 
-While most business in Telepresence is conducted by "[lazy consensus](https://community.apache.org/committers/lazyConsensus.html)",
-periodically the Maintainers may need to vote on specific actions or changes.
+In general, we prefer that technical issues and maintainer membership are amicably worked out between the persons 
+involved. If a dispute cannot be decided independently, the maintainers can be called in to decide an issue. If the 
+maintainers themselves cannot decide an issue, the issue will be resolved by voting. 
+The voting process is a simple majority in which each maintainer receives one vote.
+
 A vote can be taken on [#telepresence-dev](https://datawire-oss.slack.com/archives/CC5D1UTTN) or
-[#telepresence-dev-private](https://datawire-oss.slack.com/archives/????) for security or conduct matters.  
+[#telepresence-dev-private](https://datawire-oss.slack.com/archives/C061Q45SU4F) for security or conduct matters.  
 
 Any Maintainer may demand a vote be taken.
 
@@ -159,3 +169,11 @@ existing maintainers.
 
 Changes to this Governance and its supporting documents may be approved by
 a 2/3 vote of the Maintainers.
+
+## Adding new projects to the Telepresence GitHub organization
+
+New projects will be added to the Telepresence organization via GitHub issue discussion in one of the existing projects 
+in the organization. Once sufficient discussion has taken place (~3-5 business days but depending on the volume 
+of conversation), the maintainers of *the project where the issue was opened* (since different projects in the 
+organization may have different maintainers) will decide whether the new project should be added. See the section 
+above on voting if the maintainers cannot easily decide.
