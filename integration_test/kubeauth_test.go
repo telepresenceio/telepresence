@@ -78,8 +78,14 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 	cfg.CurrentContext = extContext
 
 	connectWithExec := func(connectFromUserDaemon, useDocker bool) {
-		if useDocker && s.IsCI() && runtime.GOOS != "linux" {
-			s.T().Skip("CI can't run linux docker containers inside non-linux runners")
+		if useDocker && s.IsCI() {
+			if runtime.GOOS != "linux" {
+				s.T().Skip("CI can't run linux docker containers inside non-linux runners")
+			}
+			if runtime.GOARCH == "arm64" {
+				// rootless docker install doesn't permit access to host network (so no docker.host.internal)
+				s.T().Skip("CI can't run this test on arm64 because it uses a rootless docker install")
+			}
 		}
 
 		// Retrieve the current size of the connector.lgo so that we can scan the messages that appear after connect
