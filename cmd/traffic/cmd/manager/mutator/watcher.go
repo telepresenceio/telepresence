@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
+	"github.com/telepresenceio/telepresence/v2/pkg/watcher"
 )
 
 type Map interface {
@@ -572,21 +573,13 @@ func (c *configWatcher) watchConfigMap(ctx context.Context, ns string) {
 	}
 }
 
-func (c *configWatcher) watchServices(ctx context.Context, ns string) {
-	dlog.Infof(ctx, "Started watcher for Services %s", whereWeWatch(ns))
-	defer dlog.Infof(ctx, "Ended watcher for Services %s", whereWeWatch(ns))
+type svcEh struct {
+	*configWatcher
+	ctx context.Context
+}
 
-	// The Watch will perform a http GET call to the kubernetes API server, and that connection will not remain open forever
-	// so when it closes, the watch must start over. This goes on until the context is cancelled.
-	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	for ctx.Err() == nil {
-		w, err := api.Services(ns).Watch(ctx, meta.ListOptions{})
-		if err != nil {
-			dlog.Errorf(ctx, "unable to create service watcher: %v", err)
-			return
-		}
-		c.svcEventHandler(ctx, w.ResultChan())
-	}
+func (eh *svcEh) HandleEvent(eventType watch.EventType, svc *core.Service) {
+	eh.updateSvc(eh.ctx, svc, eventType == watch.Deleted)
 }
 
 func (c *configWatcher) Start(ctx context.Context) (modCh <-chan entry, delCh <-chan entry, err error) {
@@ -596,13 +589,12 @@ func (c *configWatcher) Start(ctx context.Context) (modCh <-chan entry, delCh <-
 	c.Unlock()
 	if len(c.namespaces) == 0 {
 		go c.watchConfigMap(ctx, "")
-		go c.watchServices(ctx, "")
 	} else {
 		for _, ns := range c.namespaces {
 			go c.watchConfigMap(ctx, ns)
-			go c.watchServices(ctx, ns)
 		}
 	}
+	watcher.GetServices(ctx).AddEventHandler(&svcEh{c, ctx})
 	return c.modCh, c.delCh, nil
 }
 
@@ -756,29 +748,6 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		}
 		if err = c.Store(ctx, acn, false); err != nil {
 			dlog.Error(ctx, err)
-		}
-	}
-}
-
-func (c *configWatcher) svcEventHandler(ctx context.Context, evCh <-chan watch.Event) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-evCh:
-			if !ok {
-				return // restart watcher
-			}
-			switch event.Type {
-			case watch.Deleted:
-				if svc, ok := event.Object.(*core.Service); ok {
-					c.updateSvc(ctx, svc, true)
-				}
-			case watch.Added, watch.Modified:
-				if svc, ok := event.Object.(*core.Service); ok {
-					c.updateSvc(ctx, svc, false)
-				}
-			}
 		}
 	}
 }

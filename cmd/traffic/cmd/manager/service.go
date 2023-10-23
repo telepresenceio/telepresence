@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/pfs"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
@@ -28,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
+	"github.com/telepresenceio/telepresence/v2/pkg/watcher"
 )
 
 // Clock is the mechanism used by the Manager state to get the current time.
@@ -60,6 +62,8 @@ type service struct {
 	configWatcher      config.Watcher
 	activeHttpRequests int32
 	activeGrpcRequests int32
+	svcFromIPState     watcher.State[iputil.IPKey, *pfs.Service]
+	podFromIPState     watcher.State[iputil.IPKey, *pfs.Pod]
 
 	// Possibly extended version of the service. Use when calling interface methods.
 	self Service
@@ -80,12 +84,24 @@ func NewService(ctx context.Context) (Service, context.Context, error) {
 		clock: wall{},
 		id:    uuid.New().String(),
 	}
-	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
-	ret.ctx = ctx
-	// These are context dependent so build them once the pool is up
-	ret.clusterInfo = cluster.NewInfo(ctx)
-	ret.state = state.NewStateFunc(ctx)
 	ret.self = ret
+	ret.ctx = ctx
+
+	if svcWatcher := watcher.GetServices(ctx); svcWatcher != nil {
+		svcFromIP := pfs.ServiceFromIP()
+		svcWatcher.AddEventHandler(svcFromIP)
+		ret.svcFromIPState = svcFromIP
+	}
+
+	if podWatcher := watcher.GetPods(ctx); podWatcher != nil {
+		podFromIP := pfs.PodFromIP()
+		podWatcher.AddEventHandler(podFromIP)
+		ret.podFromIPState = podFromIP
+	}
+	ret.clusterInfo = cluster.NewInfo(ctx, ret.podFromIPState)
+	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
+
+	ret.state = state.NewStateFunc(ctx)
 	return ret, ctx, nil
 }
 

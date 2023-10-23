@@ -53,7 +53,7 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 		ctx = k8sapi.WithK8sInterface(ctx, cs)
 		ctx = managerutil.WithEnv(ctx, &env)
 
-		info := NewInfo(ctx)
+		info := NewInfo(ctx, nil)
 		require.NotNil(t, info)
 		require.Equal(t, info.ID(), defaultUID)
 	})
@@ -66,7 +66,7 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 		ctx = k8sapi.WithK8sInterface(ctx, cs)
 		ctx = managerutil.WithEnv(ctx, &env)
 
-		info := NewInfo(ctx)
+		info := NewInfo(ctx, nil)
 		require.NotNil(t, info)
 		require.Equal(t, info.ID(), testUID)
 	})

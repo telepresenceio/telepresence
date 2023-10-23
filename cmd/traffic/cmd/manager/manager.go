@@ -23,12 +23,13 @@ import (
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
+	"github.com/telepresenceio/telepresence/v2/pkg/watcher"
 )
 
 var (
@@ -79,6 +80,12 @@ func MainWithEnv(ctx context.Context) error {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
+	// Create multipurpose service and pod watchers and make them accessible from context
+	svcWatcher := watcher.Services(ctx, env.ManagedNamespaces)
+	ctx = watcher.WithServices(ctx, svcWatcher)
+	podWatcher := watcher.Pods(ctx, env.ManagedNamespaces)
+	ctx = watcher.WithPods(ctx, podWatcher)
+
 	mgr, ctx, err := NewServiceFunc(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
@@ -89,6 +96,9 @@ func MainWithEnv(ctx context.Context) error {
 		EnableSignalHandling: true,
 		SoftShutdownTimeout:  5 * time.Second,
 	})
+
+	g.Go("service-watcher", svcWatcher.Watch)
+	g.Go("pod-watcher", podWatcher.Watch)
 
 	g.Go("cli-config", mgr.runConfigWatcher)
 
@@ -185,7 +195,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 }
 
 func (s *service) RegisterServers(grpcHandler *grpc.Server) {
-	rpc.RegisterManagerServer(grpcHandler, s)
+	manager.RegisterManagerServer(grpcHandler, s)
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 }
 

@@ -6,7 +6,6 @@ import (
 	"net"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/blang/semver"
@@ -14,14 +13,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/pfs"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/watcher"
 )
 
 const (
@@ -53,7 +53,8 @@ type subnetRetriever interface {
 
 type info struct {
 	rpc.ClusterInfo
-	ciSubs *clusterInfoSubscribers
+	ciSubs   *clusterInfoSubscribers
+	podState watcher.State[iputil.IPKey, *pfs.Pod]
 
 	// clusterID is the UID of the default namespace
 	clusterID string
@@ -61,11 +62,13 @@ type info struct {
 
 const IDZero = "00000000-0000-0000-0000-000000000000"
 
-func NewInfo(ctx context.Context) Info {
+func NewInfo(ctx context.Context, podState watcher.State[iputil.IPKey, *pfs.Pod]) Info {
 	env := managerutil.GetEnv(ctx)
 	managedNamespaces := env.ManagedNamespaces
 	namespaced := len(managedNamespaces) > 0
-	oi := info{}
+	oi := info{
+		podState: podState,
+	}
 	ki := k8sapi.GetK8sInterface(ctx)
 
 	// Validate that the kubernetes server version is supported
@@ -203,8 +206,8 @@ func NewInfo(ctx context.Context) Info {
 	switch {
 	case strings.EqualFold("auto", podCIDRStrategy):
 		go func() {
-			if namespaced || !oi.watchNodeSubnets(ctx, false) {
-				oi.watchPodSubnets(ctx, managedNamespaces)
+			if namespaced || oi.podState != nil || !oi.watchNodeSubnets(ctx, false) {
+				oi.watchPodSubnets(ctx)
 			}
 		}()
 	case strings.EqualFold("nodePodCIDRs", podCIDRStrategy):
@@ -214,7 +217,7 @@ func NewInfo(ctx context.Context) Info {
 			go oi.watchNodeSubnets(ctx, true)
 		}
 	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
-		go oi.watchPodSubnets(ctx, managedNamespaces)
+		go oi.watchPodSubnets(ctx)
 	case strings.EqualFold("environment", podCIDRStrategy):
 		oi.setSubnetsFromEnv(ctx)
 	default:
@@ -291,44 +294,20 @@ func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV
 	return iputil.Parse(sc.Spec.ClusterIP), p, nil
 }
 
-func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	nsc := len(namespaces)
-	if nsc == 0 {
-		// Create one of lister and one informer that have cluster wide scope
-		namespaces = []string{""}
-		nsc = 1
-	}
-	podListers := make([]PodLister, nsc)
-	podInformers := make([]cache.SharedIndexInformer, nsc)
-	wg := sync.WaitGroup{}
-	wg.Add(nsc)
-	for i, ns := range namespaces {
-		var opts []informers.SharedInformerOption
-		if ns != "" {
-			opts = []informers.SharedInformerOption{informers.WithNamespace(ns)}
-		}
-		informerFactory := informers.NewSharedInformerFactoryWithOptions(k8sapi.GetK8sInterface(ctx), 0, opts...)
-		podController := informerFactory.Core().V1().Pods()
-		podListers[i] = podController.Lister()
-		podInformers[i] = podController.Informer()
-		go func() {
-			defer wg.Done()
-			informerFactory.Start(ctx.Done())
-			informerFactory.WaitForCacheSync(ctx.Done())
-		}()
-	}
-	wg.Wait()
-
-	retriever := newPodWatcher(ctx, podListers, podInformers)
-	if !retriever.viable(ctx) {
-		dlog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
-		return
-	}
+func (oi *info) watchPodSubnets(ctx context.Context) {
+	// The time we wait from when the first change arrived until we actually do something. This
+	// so that more changes can arrive (hopefully all of them) before everything is recalculated.
 	dlog.Infof(ctx, "Deriving subnets from IPs of pods")
-	oi.watchSubnets(ctx, retriever)
+	const podCollectTime = 3 * time.Second
+	var subnetSet subnet.Set
+	oi.podState.AddChangeNotifier(func() {
+		subnets := subnet.NewSet(pfs.PodSubnets(oi.podState))
+		if !subnets.Equals(subnetSet) {
+			subnetSet = subnets
+			oi.PodSubnets = subnetSetToRPC(subnets)
+			oi.ciSubs.notify(ctx, oi.clusterInfo())
+		}
+	}, podCollectTime)
 }
 
 func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
