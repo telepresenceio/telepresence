@@ -251,7 +251,7 @@ rbac:
   # Default: false
   only: false
 
-# Values specific to the helm chart hooks for managing upgrade/deleting
+# Values specific to the helm chart hooks for managing deleting
 hooks:
   podSecurityContext:
     {}
