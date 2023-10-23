@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -641,6 +642,31 @@ func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {
 		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
 	}
 	return s.state.Tunnel(ctx, stream)
+}
+
+func (s *service) GetPortForwardPod(ctx context.Context, request *rpc.PortForwardPodRequest) (*rpc.PortForwardPod, error) {
+	dlog.Debug(ctx, "GetPortForwardPod called")
+	if s.podFromIPState == nil {
+		// This feature is not enabled
+		return nil, status.Error(codes.Unavailable, "direct port-forward feature not enabled")
+	}
+	id := tunnel.ConnID(request.ConnId)
+	ipKey := iputil.IPKey(id.Destination())
+	port := int32(id.DestinationPort())
+	var pod *pfs.Pod
+	if svc := s.svcFromIPState.Get(ipKey); svc != nil {
+		pod, port = pfs.FindPodForService(svc, port, s.podFromIPState)
+	} else {
+		pod = s.podFromIPState.Get(ipKey)
+	}
+	if pod == nil {
+		return nil, status.Error(codes.Unavailable, fmt.Sprintf("unable to do find pod for IP %s", id.Destination()))
+	}
+	return &rpc.PortForwardPod{
+		Name:      pod.Name,
+		Namespace: pod.Namespace,
+		Port:      port,
+	}, nil
 }
 
 func (s *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {

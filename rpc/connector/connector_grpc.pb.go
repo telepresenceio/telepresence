@@ -1144,12 +1144,13 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	ManagerProxy_Version_FullMethodName          = "/telepresence.connector.ManagerProxy/Version"
-	ManagerProxy_GetClientConfig_FullMethodName  = "/telepresence.connector.ManagerProxy/GetClientConfig"
-	ManagerProxy_WatchClusterInfo_FullMethodName = "/telepresence.connector.ManagerProxy/WatchClusterInfo"
-	ManagerProxy_LookupDNS_FullMethodName        = "/telepresence.connector.ManagerProxy/LookupDNS"
-	ManagerProxy_LookupHost_FullMethodName       = "/telepresence.connector.ManagerProxy/LookupHost"
-	ManagerProxy_Tunnel_FullMethodName           = "/telepresence.connector.ManagerProxy/Tunnel"
+	ManagerProxy_Version_FullMethodName           = "/telepresence.connector.ManagerProxy/Version"
+	ManagerProxy_GetClientConfig_FullMethodName   = "/telepresence.connector.ManagerProxy/GetClientConfig"
+	ManagerProxy_GetPortForwardPod_FullMethodName = "/telepresence.connector.ManagerProxy/GetPortForwardPod"
+	ManagerProxy_WatchClusterInfo_FullMethodName  = "/telepresence.connector.ManagerProxy/WatchClusterInfo"
+	ManagerProxy_LookupDNS_FullMethodName         = "/telepresence.connector.ManagerProxy/LookupDNS"
+	ManagerProxy_LookupHost_FullMethodName        = "/telepresence.connector.ManagerProxy/LookupHost"
+	ManagerProxy_Tunnel_FullMethodName            = "/telepresence.connector.ManagerProxy/Tunnel"
 )
 
 // ManagerProxyClient is the client API for ManagerProxy service.
@@ -1160,6 +1161,9 @@ type ManagerProxyClient interface {
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.VersionInfo2, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.CLIConfig, error)
+	// GetPortForwardPod returns a PortForwardPod that describes how to create a
+	// port-forward to the connection identifier in the given PortForwardPodRequest.
+	GetPortForwardPod(ctx context.Context, in *manager.PortForwardPodRequest, opts ...grpc.CallOption) (*manager.PortForwardPod, error)
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (ManagerProxy_WatchClusterInfoClient, error)
@@ -1199,6 +1203,15 @@ func (c *managerProxyClient) Version(ctx context.Context, in *emptypb.Empty, opt
 func (c *managerProxyClient) GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.CLIConfig, error) {
 	out := new(manager.CLIConfig)
 	err := c.cc.Invoke(ctx, ManagerProxy_GetClientConfig_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerProxyClient) GetPortForwardPod(ctx context.Context, in *manager.PortForwardPodRequest, opts ...grpc.CallOption) (*manager.PortForwardPod, error) {
+	out := new(manager.PortForwardPod)
+	err := c.cc.Invoke(ctx, ManagerProxy_GetPortForwardPod_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1294,6 +1307,9 @@ type ManagerProxyServer interface {
 	Version(context.Context, *emptypb.Empty) (*manager.VersionInfo2, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(context.Context, *emptypb.Empty) (*manager.CLIConfig, error)
+	// GetPortForwardPod returns a PortForwardPod that describes how to create a
+	// port-forward to the connection identifier in the given PortForwardPodRequest.
+	GetPortForwardPod(context.Context, *manager.PortForwardPodRequest) (*manager.PortForwardPod, error)
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(*manager.SessionInfo, ManagerProxy_WatchClusterInfoServer) error
@@ -1323,6 +1339,9 @@ func (UnimplementedManagerProxyServer) Version(context.Context, *emptypb.Empty) 
 }
 func (UnimplementedManagerProxyServer) GetClientConfig(context.Context, *emptypb.Empty) (*manager.CLIConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClientConfig not implemented")
+}
+func (UnimplementedManagerProxyServer) GetPortForwardPod(context.Context, *manager.PortForwardPodRequest) (*manager.PortForwardPod, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPortForwardPod not implemented")
 }
 func (UnimplementedManagerProxyServer) WatchClusterInfo(*manager.SessionInfo, ManagerProxy_WatchClusterInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
@@ -1381,6 +1400,24 @@ func _ManagerProxy_GetClientConfig_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerProxyServer).GetClientConfig(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ManagerProxy_GetPortForwardPod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.PortForwardPodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerProxyServer).GetPortForwardPod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagerProxy_GetPortForwardPod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerProxyServer).GetPortForwardPod(ctx, req.(*manager.PortForwardPodRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1482,6 +1519,10 @@ var ManagerProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetClientConfig",
 			Handler:    _ManagerProxy_GetClientConfig_Handler,
+		},
+		{
+			MethodName: "GetPortForwardPod",
+			Handler:    _ManagerProxy_GetPortForwardPod_Handler,
 		},
 		{
 			MethodName: "LookupDNS",

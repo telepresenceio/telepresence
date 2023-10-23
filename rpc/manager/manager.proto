@@ -558,6 +558,21 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+message PortForwardPodRequest {
+  bytes conn_id = 1;
+}
+
+message PortForwardPod {
+  // name of the pod
+  string name = 1;
+
+  // namespace of the pod
+  string namespace = 2;
+
+  // port to forward to
+  int32 port = 3;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -576,6 +591,10 @@ service Manager {
 
   // GetClientConfig returns the config that connected clients should use for this manager.
   rpc GetClientConfig(google.protobuf.Empty) returns (CLIConfig);
+
+  // GetPortForwardPod returns a PortForwardPod that describes how to create a
+  // port-forward to the connection identifier in the given PortForwardPodRequest.
+  rpc GetPortForwardPod(PortForwardPodRequest) returns (PortForwardPod);
 
   // GetTelepresenceAPI returns information about the TelepresenceAPI server
   rpc GetTelepresenceAPI(google.protobuf.Empty) returns (TelepresenceAPIInfo);

@@ -207,6 +207,7 @@ func NewSession(
 			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
 		}
 	}
+	ctx = dnet.WithPortForwardDialer(ctx, tmgr.pfDialer)
 
 	oi := tmgr.getOutboundInfo(ctx)
 	rootRunning := userd.GetService(ctx).RootSessionInProcess()

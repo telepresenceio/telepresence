@@ -60,6 +60,14 @@ func (p *mgrProxy) GetClientConfig(ctx context.Context, arg *emptypb.Empty) (*ma
 	return client.GetClientConfig(ctx, arg, callOptions...)
 }
 
+func (p *mgrProxy) GetPortForwardPod(ctx context.Context, arg *manager.PortForwardPodRequest) (*manager.PortForwardPod, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetPortForwardPod(ctx, arg, callOptions...)
+}
+
 type tmReceiver interface {
 	Recv() (*manager.TunnelMessage, error)
 }

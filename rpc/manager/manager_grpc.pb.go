@@ -29,6 +29,7 @@ const (
 	Manager_CanConnectAmbassadorCloud_FullMethodName = "/telepresence.manager.Manager/CanConnectAmbassadorCloud"
 	Manager_GetCloudConfig_FullMethodName            = "/telepresence.manager.Manager/GetCloudConfig"
 	Manager_GetClientConfig_FullMethodName           = "/telepresence.manager.Manager/GetClientConfig"
+	Manager_GetPortForwardPod_FullMethodName         = "/telepresence.manager.Manager/GetPortForwardPod"
 	Manager_GetTelepresenceAPI_FullMethodName        = "/telepresence.manager.Manager/GetTelepresenceAPI"
 	Manager_ArriveAsClient_FullMethodName            = "/telepresence.manager.Manager/ArriveAsClient"
 	Manager_ArriveAsAgent_FullMethodName             = "/telepresence.manager.Manager/ArriveAsAgent"
@@ -76,6 +77,9 @@ type ManagerClient interface {
 	GetCloudConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CLIConfig, error)
+	// GetPortForwardPod returns a PortForwardPod that describes how to create a
+	// port-forward to the connection identifier in the given PortForwardPodRequest.
+	GetPortForwardPod(ctx context.Context, in *PortForwardPodRequest, opts ...grpc.CallOption) (*PortForwardPod, error)
 	// GetTelepresenceAPI returns information about the TelepresenceAPI server
 	GetTelepresenceAPI(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*TelepresenceAPIInfo, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
@@ -221,6 +225,15 @@ func (c *managerClient) GetCloudConfig(ctx context.Context, in *emptypb.Empty, o
 func (c *managerClient) GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CLIConfig, error) {
 	out := new(CLIConfig)
 	err := c.cc.Invoke(ctx, Manager_GetClientConfig_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) GetPortForwardPod(ctx context.Context, in *PortForwardPodRequest, opts ...grpc.CallOption) (*PortForwardPod, error) {
+	out := new(PortForwardPod)
+	err := c.cc.Invoke(ctx, Manager_GetPortForwardPod_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -746,6 +759,9 @@ type ManagerServer interface {
 	GetCloudConfig(context.Context, *emptypb.Empty) (*AmbassadorCloudConfig, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(context.Context, *emptypb.Empty) (*CLIConfig, error)
+	// GetPortForwardPod returns a PortForwardPod that describes how to create a
+	// port-forward to the connection identifier in the given PortForwardPodRequest.
+	GetPortForwardPod(context.Context, *PortForwardPodRequest) (*PortForwardPod, error)
 	// GetTelepresenceAPI returns information about the TelepresenceAPI server
 	GetTelepresenceAPI(context.Context, *emptypb.Empty) (*TelepresenceAPIInfo, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
@@ -863,6 +879,9 @@ func (UnimplementedManagerServer) GetCloudConfig(context.Context, *emptypb.Empty
 }
 func (UnimplementedManagerServer) GetClientConfig(context.Context, *emptypb.Empty) (*CLIConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClientConfig not implemented")
+}
+func (UnimplementedManagerServer) GetPortForwardPod(context.Context, *PortForwardPodRequest) (*PortForwardPod, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPortForwardPod not implemented")
 }
 func (UnimplementedManagerServer) GetTelepresenceAPI(context.Context, *emptypb.Empty) (*TelepresenceAPIInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTelepresenceAPI not implemented")
@@ -1047,6 +1066,24 @@ func _Manager_GetClientConfig_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).GetClientConfig(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_GetPortForwardPod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PortForwardPodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetPortForwardPod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_GetPortForwardPod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetPortForwardPod(ctx, req.(*PortForwardPodRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1629,6 +1666,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetClientConfig",
 			Handler:    _Manager_GetClientConfig_Handler,
+		},
+		{
+			MethodName: "GetPortForwardPod",
+			Handler:    _Manager_GetPortForwardPod_Handler,
 		},
 		{
 			MethodName: "GetTelepresenceAPI",

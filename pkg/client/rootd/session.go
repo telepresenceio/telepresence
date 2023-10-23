@@ -157,7 +157,7 @@ type Session struct {
 	done chan struct{}
 }
 
-type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (*Session, error)
+type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (context.Context, *Session, error)
 
 type newSessionKey struct{}
 
@@ -189,24 +189,36 @@ func createPortForwardDialer(ctx context.Context, flags map[string]string) (dnet
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
-func connectToManager(ctx context.Context, namespace string, kubeFlags map[string]string) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
+func connectToManager(
+	ctx context.Context,
+	namespace string,
+	kubeFlags map[string]string,
+) (
+	context.Context,
+	*grpc.ClientConn,
+	connector.ManagerProxyClient,
+	semver.Version,
+	error,
+) {
 	if client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
-		return connectToUserDaemon(ctx)
+		conn, mp, v, err := connectToUserDaemon(ctx)
+		return ctx, conn, mp, v, err
 	}
+
 	var mgrVer semver.Version
 	pfDialer, err := createPortForwardDialer(ctx, kubeFlags)
 	if err != nil {
-		return nil, nil, mgrVer, err
+		return ctx, nil, nil, mgrVer, err
 	}
 
 	clientConfig := client.GetConfig(ctx)
 	tos := clientConfig.Timeouts()
 
-	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	timedCtx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
-	conn, mc, ver, err := tm.ConnectToManager(ctx, namespace, pfDialer.Dial)
+	conn, mc, ver, err := tm.ConnectToManager(timedCtx, namespace, pfDialer.Dial)
 	if err != nil {
-		return nil, nil, mgrVer, err
+		return ctx, nil, nil, mgrVer, err
 	}
 
 	verStr := strings.TrimPrefix(ver.Version, "v")
@@ -214,9 +226,9 @@ func connectToManager(ctx context.Context, namespace string, kubeFlags map[strin
 	mgrVer, err = semver.Parse(verStr)
 	if err != nil {
 		conn.Close()
-		return nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+		return ctx, nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
-	return conn, &userdToManagerShortcut{mc}, mgrVer, nil
+	return dnet.WithPortForwardDialer(ctx, pfDialer), conn, &userdToManagerShortcut{mc}, mgrVer, nil
 }
 
 // connectToUserDaemon is like connectToManager but the port-forward will be established from the user-daemon
@@ -266,20 +278,16 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 }
 
 // NewSession returns a new properly initialized session object.
-func NewSession(c context.Context, mi *rpc.OutboundInfo) (*Session, error) {
+func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Session, error) {
 	dlog.Info(c, "-- Starting new session")
 
-	conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags)
+	c, conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags)
 	if mc == nil || err != nil {
-		return nil, err
-	}
-
-	if mc == nil || err != nil {
-		return nil, err
+		return c, nil, err
 	}
 	s := newSession(c, mi, mc, ver)
 	s.clientConn = conn
-	return s, nil
+	return c, s, nil
 }
 
 func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
@@ -293,6 +301,7 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}
 	}
+	dlog.Debugf(c, "Creating session with id %v", mi.Session)
 
 	as := iputil.ConvertSubnets(mi.AlsoProxySubnets)
 	ns := iputil.ConvertSubnets(mi.NeverProxySubnets)
