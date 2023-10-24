@@ -13,6 +13,9 @@ import (
 )
 
 func TryPortForward(c context.Context, id ConnID, pf dnet.PortForwardDialer, mc manager.ManagerClient, sessionID string) Stream {
+	if !client.GetConfig(c).Cluster().DirectPortForward {
+		return nil
+	}
 	pfr, err := mc.GetPortForwardPod(c, &manager.PortForwardPodRequest{ConnId: []byte(id)})
 	switch status.Code(err) {
 	case codes.OK:

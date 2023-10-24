@@ -41,13 +41,21 @@ items:
           TELEPRESENCE_CLIENT_IMAGE</code>, and then to the value preset by the telepresence binary. This
           configuration setting is primarily intended for testing purposes.
       - type: feature
+        title: Use direct port-forwards for outbound traffic.
+        body: >-
+          The telepresence TUN-device is now capable of establishing direct port-forwards to the destination IP
+          and port. A TCP connect request to a <code>&lt;ip&gt;:&lt;port&gt;</code> will be sent to the traffic-manager
+          which then responds with a pod's name and namespace together with the port to forward to. A direct
+          port-forward is then established to that pod. This feature can be disabled by setting <code>
+          cluster.directPortForward</code> to <code>false</code> in <code>config.yml</code>.
+      - type: feature
         title: Improve outbound traffic performance.
         body: >-
           The root-daemon now communicates directly with the traffic-manager instead of routing all outbound traffic
           through the user-daemon. The root-daemon uses a patched kubeconfig where <code>exec</code> configurations to
           obtain credentials are dispatched to the user-daemon. This to ensure that all authentication plugins will
           execute in user-space. The old behavior of routing everything through the user-daemon can be restored by
-          setting <code>cluster.connectFromUserDaemon</code> to <code>true</code> in <code>config.yml</code>.
+          setting <code>cluster.connectFromRootDaemon</code> to <code>false</code> in <code>config.yml</code>.
       - type: change
         title: The authenticator binary was removed from the docker image.
         body: >-

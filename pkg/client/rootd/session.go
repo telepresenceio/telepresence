@@ -200,7 +200,7 @@ func connectToManager(
 	semver.Version,
 	error,
 ) {
-	if client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
+	if !client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
 		conn, mp, v, err := connectToUserDaemon(ctx)
 		return ctx, conn, mp, v, err
 	}
