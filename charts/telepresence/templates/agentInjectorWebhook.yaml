@@ -6,6 +6,10 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
+{{- if eq .Values.agentInjector.certificate.method "certmanager" }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "traffic-manager.namespace" .}}/{{ .Values.agentInjector.secret.name }}
+{{- end }}
   name: {{ .Values.agentInjector.webhook.name }}-{{ include "traffic-manager.namespace" . }}
   labels:
     {{- include "telepresence.labels" . | nindent 4 }}
@@ -15,10 +19,12 @@ webhooks:
   {{- toYaml . | nindent 2 }}
 {{- end }}
   clientConfig:
+{{- if not (eq .Values.agentInjector.certificate.method "certmanager") }}
 {{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
     caBundle: {{ or (get $secretData "ca.crt") (get $secretData "ca.pem") }}
 {{- else }}
     caBundle: {{ $genCA.Cert | b64enc }}
+{{- end }}
 {{- end }}
     service:
       name: {{ .Values.agentInjector.name }}
@@ -57,6 +63,7 @@ webhooks:
 {{- else }}
 {{ toYaml .Values.agentInjector.webhook.namespaceSelector | nindent 4 }}
 {{- end }}
+{{- if not (eq .Values.agentInjector.certificate.method "certmanager") }}
 ---
 apiVersion: v1
 kind: Secret
@@ -74,5 +81,6 @@ data:
   ca.crt: {{ $genCA.Cert | b64enc }}
   tls.crt: {{ $genCert.Cert | b64enc }}
   tls.key: {{ $genCert.Key | b64enc }}
+{{- end }}
 {{- end }}
 {{- end }}
