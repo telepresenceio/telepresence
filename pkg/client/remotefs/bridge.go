@@ -8,7 +8,8 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	client2 "github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -28,7 +29,7 @@ func NewBridgeMounter(sessionID string, managerClient manager.ManagerClient, loc
 	}
 }
 
-func (m *bridgeMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint string, podIP net.IP, port uint16) error {
+func (m *bridgeMounter) Start(ctx context.Context, _, _, _ string, podIP net.IP, port uint16) error {
 	ctx = dgroup.WithGoroutineName(ctx, iputil.JoinIpPort(podIP, port))
 	lc := &net.ListenConfig{}
 	la := fmt.Sprintf(":%d", m.localPort)
@@ -64,17 +65,25 @@ func (m *bridgeMounter) dispatchToTunnel(ctx context.Context, conn net.Conn, pod
 	}
 	dlog.Debugf(ctx, "Opening bridge between %s and %s", tcpAddr, iputil.JoinIpPort(podIP, port))
 	id := tunnel.NewConnID(ipproto.TCP, tcpAddr.IP, podIP, uint16(tcpAddr.Port), port)
-	ms, err := m.managerClient.Tunnel(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to establish tunnel: %v", err)
-	}
-
-	tos := client2.GetConfig(ctx).Timeouts()
 	ctx, cancel := context.WithCancel(ctx)
-	s, err := tunnel.NewClientStream(ctx, ms, id, m.sessionID, tos.PrivateRoundtripLatency, tos.PrivateEndpointDial)
-	if err != nil {
-		cancel()
-		return fmt.Errorf("failed to create stream: %v", err)
+
+	var s tunnel.Stream
+	if pf := dnet.GetPortForwardDialer(ctx); pf != nil {
+		s = tunnel.TryPortForward(ctx, id, pf, m.managerClient, m.sessionID)
+	}
+	if s == nil {
+		ms, err := m.managerClient.Tunnel(ctx)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("failed to establish tunnel: %v", err)
+		}
+
+		tos := client.GetConfig(ctx).Timeouts()
+		s, err = tunnel.NewClientStream(ctx, ms, id, m.sessionID, tos.PrivateRoundtripLatency, tos.PrivateEndpointDial)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("failed to create stream: %v", err)
+		}
 	}
 	d := tunnel.NewConnEndpoint(s, conn, cancel, nil, nil)
 	d.Start(ctx)
