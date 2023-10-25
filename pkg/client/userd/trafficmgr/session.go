@@ -421,8 +421,14 @@ func connectMgr(
 		return nil, fmt.Errorf("failed to parse extra never proxy: %w", err)
 	}
 
+	extraAllow, err := parseCIDR(cr.GetAllowConflictingSubnets())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse extra allow conflicting subnets: %w", err)
+	}
+
 	cluster.AlsoProxy = append(cluster.AlsoProxy, extraAlsoProxy...)
 	cluster.NeverProxy = append(cluster.NeverProxy, extraNeverProxy...)
+	cluster.AllowConflictingSubnets = append(cluster.AllowConflictingSubnets, extraAllow...)
 
 	sess := &session{
 		Cluster:          cluster,
@@ -1082,6 +1088,12 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 		info.AlsoProxySubnets = make([]*manager.IPNet, len(s.AlsoProxy))
 		for i, ap := range s.AlsoProxy {
 			info.AlsoProxySubnets[i] = iputil.IPNetToRPC((*net.IPNet)(ap))
+		}
+	}
+	if len(s.AllowConflictingSubnets) > 0 {
+		info.AllowConflictingSubnets = make([]*manager.IPNet, len(s.AllowConflictingSubnets))
+		for i, ap := range s.AllowConflictingSubnets {
+			info.AllowConflictingSubnets[i] = iputil.IPNetToRPC((*net.IPNet)(ap))
 		}
 	}
 	return info
