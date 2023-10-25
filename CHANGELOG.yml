@@ -33,11 +33,11 @@ items:
   - version: 2.16.2
     date: "(TBD)"
     notes:
-      - - type: change
-          title: The removal of upgrade-legacy helm hook.
-          body: >-
-            Removal of upgrade-legacy helm hook since its purpose was to fix deployments that were affected by telepresence versions prior to 2.6.0.
-            Since versions < 2.6.0 are no longer supported, it can be removed
+      - type: change
+        title: The removal of upgrade-legacy helm hook.
+        body: >-
+          Removal of upgrade-legacy helm hook since its purpose was to fix deployments that were affected by telepresence versions prior to 2.6.0.
+          Since versions < 2.6.0 are no longer supported, it can be removed
       - type: feature
         title: Make the Telepresence client docker image configurable.
         body: >-
