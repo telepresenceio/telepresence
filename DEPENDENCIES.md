@@ -156,7 +156,7 @@ following Free and Open Source software:
     golang.zx2c4.com/wireguard/windows                                           v0.5.3                                MIT license
     google.golang.org/appengine                                                  v1.6.7                                Apache License 2.0
     google.golang.org/genproto                                                   v0.0.0-20230410155749-daa745c078e1    Apache License 2.0
-    google.golang.org/grpc                                                       v1.55.0                               Apache License 2.0
+    google.golang.org/grpc                                                       v1.56.3                               Apache License 2.0
     google.golang.org/protobuf                                                   v1.30.0                               3-clause BSD license
     gopkg.in/inf.v0                                                              v0.9.1                                3-clause BSD license
     gopkg.in/yaml.v2                                                             v2.4.0                                Apache License 2.0, MIT license
