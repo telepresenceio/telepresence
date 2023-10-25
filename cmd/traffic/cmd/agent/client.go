@@ -44,6 +44,8 @@ func (is interceptsStringer) String() string {
 	return sb.String()
 }
 
+var NewExtendedManagerClient func(conn *grpc.ClientConn, ossManager rpc.ManagerClient) rpc.ManagerClient //nolint:gochecknoglobals // extension point
+
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -60,6 +62,9 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	defer conn.Close()
 
 	manager := rpc.NewManagerClient(conn)
+	if NewExtendedManagerClient != nil {
+		manager = NewExtendedManagerClient(conn, manager)
+	}
 
 	ver, err := manager.Version(ctx, &empty.Empty{})
 	if err != nil {
