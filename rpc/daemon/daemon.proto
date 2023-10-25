@@ -121,6 +121,8 @@ message OutboundInfo {
   // Kubernetes flags
   map<string, string> kube_flags = 9;
 
+  repeated manager.IPNet allow_conflicting_subnets = 10;
+
   reserved 4;
 }
 
