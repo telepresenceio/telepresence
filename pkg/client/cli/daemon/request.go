@@ -69,7 +69,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 	nwFlags.StringArrayVar(&cr.ExposedPorts,
 		"expose", nil, ``+
 			`Port that a containerized daemon will expose. See docker run -p for more info. Can be repeated`)
-	nwFlags.StringArrayVar(&cr.AllowConflictingSubnets,
+	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
 		"allow-conflicting-subnets", nil, ``+
 			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
 	flags.AddFlagSet(nwFlags)
