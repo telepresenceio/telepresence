@@ -226,7 +226,7 @@ func NewSession(
 					authGrpc.RegisterAuthenticatorServer(s.Server(), config.ConfigFlags.ToRawKubeConfigLoader())
 				}
 				return client.GetExe(), s.ListenerAddress(ctx), nil
-			})
+			}, nil)
 			if err != nil {
 				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 			}

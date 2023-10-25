@@ -27,14 +27,17 @@ const (
 // implements the Authenticator gRPC.
 //
 // The function will typically start the gRPC service, and the service is therefore given
-// a list of files that it must listen to in order to reliably resolve requests.
+// a list of files that it must listen to in order to reliably resolve requests. It is
+// also passed a pointer to the minified config that will be stored in a file so that it
+// has a chance to modify it.
 type AddressProvider func(configFiles []string) (string, string, error)
+type Patcher func(*clientcmdapi.Config) error
 
 // CreateExternalKubeConfig will load the current kubeconfig and minimize it so that it just contains the current
 // context. It will then check if that context contains an Exec config, and if it does, replace that config with
 // an Exec config that instead runs a process that will use a gRPC call to the address returned by the given
 // authAddressFunc.
-func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, authAddressFunc AddressProvider) (*clientcmdapi.Config, error) {
+func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, authAddressFunc AddressProvider, patcher Patcher) (*clientcmdapi.Config, error) {
 	configFlags, err := client.ConfigFlags(kubeFlags)
 	if err != nil {
 		return nil, err
@@ -81,6 +84,12 @@ func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, 
 	// Ensure that all certs are embedded instead of reachable using a path
 	if err = clientcmdapi.FlattenConfig(&config); err != nil {
 		return nil, err
+	}
+
+	if patcher != nil {
+		if err = patcher(&config); err != nil {
+			return nil, err
+		}
 	}
 
 	// Store the file using its context name under the <telepresence cache>/kube directory
