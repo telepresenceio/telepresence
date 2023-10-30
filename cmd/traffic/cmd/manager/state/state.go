@@ -54,6 +54,7 @@ type State interface {
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string) (bool, error)
+	UnlockedRemoveIntercept(ctx context.Context, interceptID string) (bool, CleanupWaiter)
 	RemoveSession(context.Context, string) error
 	SessionDone(string) (<-chan struct{}, error)
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
@@ -69,7 +70,7 @@ type State interface {
 	WatchLookupDNS(string) <-chan *rpc.DNSRequest
 }
 
-type cleanupWaiter func() error
+type CleanupWaiter func() error
 
 type interceptFinalizerCall struct {
 	state *interceptState
@@ -238,7 +239,7 @@ func (s *state) RemoveSession(ctx context.Context, sessionID string) error {
 	return wait()
 }
 
-func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) cleanupWaiter {
+func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) CleanupWaiter {
 	agent, isAgent := s.agents.Load(sessionID)
 
 	wait := func() error { return nil }
@@ -251,7 +252,7 @@ func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) clean
 		if intercept.ClientSession.SessionId == sessionID {
 			// Client went away:
 			// Delete it.
-			_, iceptWait := s.unlockedRemoveIntercept(ctx, interceptID)
+			_, iceptWait := s.self.UnlockedRemoveIntercept(ctx, interceptID)
 			newWait := func() error {
 				err := wait()
 				err = multierror.Append(err, iceptWait())
@@ -275,7 +276,7 @@ func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) clean
 	return wait
 }
 
-func (s *state) unlockedRemoveSession(ctx context.Context, sessionID string) cleanupWaiter {
+func (s *state) unlockedRemoveSession(ctx context.Context, sessionID string) CleanupWaiter {
 	wait := func() error { return nil }
 	if sess, ok := s.sessions[sessionID]; ok {
 		// kill the session
@@ -307,7 +308,7 @@ func (s *state) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	reportErr := func(id string, wait cleanupWaiter) {
+	reportErr := func(id string, wait CleanupWaiter) {
 		// We don't really have a user to report this to anyway, so just wait wherever and report there.
 		if err := wait(); err != nil {
 			dlog.Errorf(ctx, "Error cleaning up client session %s: %v", id, err)
@@ -610,12 +611,12 @@ func (s *state) UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc
 
 func (s *state) RemoveIntercept(ctx context.Context, interceptID string) (bool, error) {
 	s.mu.Lock()
-	removed, wait := s.unlockedRemoveIntercept(ctx, interceptID)
+	removed, wait := s.self.UnlockedRemoveIntercept(ctx, interceptID)
 	s.mu.Unlock()
 	return removed, wait()
 }
 
-func (s *state) unlockedRemoveIntercept(ctx context.Context, interceptID string) (bool, cleanupWaiter) {
+func (s *state) UnlockedRemoveIntercept(ctx context.Context, interceptID string) (bool, CleanupWaiter) {
 	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
 	wait := func() error { return nil }
 	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
