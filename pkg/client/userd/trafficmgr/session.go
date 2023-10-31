@@ -217,7 +217,7 @@ func NewSession(
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
 
-		if rootRunning && !client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
+		if rootRunning && client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
 			// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 			// must be executed by the user, not by root.
 			konfig, err := patcher.CreateExternalKubeConfig(ctx, cluster.EffectiveFlagMap, func([]string) (string, string, error) {

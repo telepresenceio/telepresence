@@ -190,7 +190,7 @@ func createPortForwardDialer(ctx context.Context, flags map[string]string) (dnet
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
 func connectToManager(ctx context.Context, namespace string, kubeFlags map[string]string) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
-	if client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
+	if !client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
 		return connectToUserDaemon(ctx)
 	}
 	var mgrVer semver.Version

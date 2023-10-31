@@ -840,15 +840,16 @@ func (ic Intercept) MarshalYAML() (any, error) {
 type Cluster struct {
 	DefaultManagerNamespace string   `json:"defaultManagerNamespace,omitempty" yaml:"defaultManagerNamespace,omitempty"`
 	MappedNamespaces        []string `json:"mappedNamespaces,omitempty" yaml:"mappedNamespaces,omitempty"`
-	ConnectFromUserDaemon   bool     `json:"connectFromUserDaemon,omitempty" yaml:"connectFromUserDaemon,omitempty"`
+	ConnectFromRootDaemon   bool     `json:"connectFromRootDaemon,omitempty" yaml:"connectFromRootDaemon,omitempty"`
 }
 
 // This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
-// Hence we don't default to "ambassador" but to empty, so that it can check that no default has been given.
+// Hence, we don't default to "ambassador" but to empty, so that it can check that no default has been given.
 const defaultDefaultManagerNamespace = ""
 
 var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
 	DefaultManagerNamespace: defaultDefaultManagerNamespace,
+	ConnectFromRootDaemon:   true,
 }
 
 func (cc *Cluster) merge(o *Cluster) {
@@ -858,14 +859,15 @@ func (cc *Cluster) merge(o *Cluster) {
 	if len(o.MappedNamespaces) > 0 {
 		cc.MappedNamespaces = o.MappedNamespaces
 	}
-	if o.ConnectFromUserDaemon {
-		cc.ConnectFromUserDaemon = o.ConnectFromUserDaemon
+	if !o.ConnectFromRootDaemon {
+		cc.ConnectFromRootDaemon = false
 	}
 }
 
 // IsZero controls whether this element will be included in marshalled output.
 func (cc Cluster) IsZero() bool {
-	return cc.DefaultManagerNamespace == defaultDefaultManagerNamespace && len(cc.MappedNamespaces) == 0 && !cc.ConnectFromUserDaemon
+	return cc.DefaultManagerNamespace == defaultDefaultManagerNamespace &&
+		len(cc.MappedNamespaces) == 0 && cc.ConnectFromRootDaemon
 }
 
 // MarshalYAML is not using pointer receiver here, because Cluster is not pointer in the Config struct.
@@ -877,8 +879,8 @@ func (cc Cluster) MarshalYAML() (any, error) {
 	if len(cc.MappedNamespaces) > 0 {
 		cm["mappedNamespaces"] = cc.MappedNamespaces
 	}
-	if cc.ConnectFromUserDaemon {
-		cm["connectFromUserDaemon"] = true
+	if !cc.ConnectFromRootDaemon {
+		cm["connectFromRootDaemon"] = false
 	}
 	return cm, nil
 }

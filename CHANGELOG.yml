@@ -47,7 +47,7 @@ items:
           through the user-daemon. The root-daemon uses a patched kubeconfig where <code>exec</code> configurations to
           obtain credentials are dispatched to the user-daemon. This to ensure that all authentication plugins will
           execute in user-space. The old behavior of routing everything through the user-daemon can be restored by
-          setting <code>cluster.connectFromUserDaemon</code> to <code>true</code> in <code>config.yml</code>.
+          setting <code>cluster.connectFromRootDaemon</code> to <code>false</code> in <code>config.yml</code>.
       - type: feature
         title: New networking CLI flag --allow-conflicting-subnets
         body: >-
