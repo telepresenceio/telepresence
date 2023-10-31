@@ -67,7 +67,7 @@ func (t *uni) close() error {
 	return nil
 }
 
-func (t *bidi) clientSide() GRPClientCStream {
+func (t *bidi) clientSide() GRPCClientStream {
 	return &clientSide{t}
 }
 
