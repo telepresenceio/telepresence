@@ -22,11 +22,11 @@ type State interface {
 	ManagerClient() manager.ManagerClient
 	ManagerVersion() semver.Version
 	SessionInfo() *manager.SessionInfo
+	SetFileSharingPorts(ftp uint16, sftp uint16)
 	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
-	WaitForFtpPort(ctx context.Context, ch <-chan uint16) error
-	WaitForSftpPort(ctx context.Context, ch <-chan uint16) error
+	Sidecar(ctx context.Context, info *manager.AgentInfo) error
 }
 
 // An InterceptState implements what's needed to intercept one port.
@@ -65,16 +65,25 @@ func (s *state) ManagerVersion() semver.Version {
 	return s.mgrVer
 }
 
+func (s *state) SetFileSharingPorts(ftp uint16, sftp uint16) {
+	s.ftpPort = ftp
+	s.sftpPort = sftp
+}
+
 func (s *state) SessionInfo() *manager.SessionInfo {
 	return s.sessionInfo
 }
 
 func NewState(config Config) State {
-	return &state{Config: config}
+	return &state{
+		Config: config,
+	}
 }
 
 func NewSimpleState(config Config) State {
-	return &simpleState{state: state{Config: config}}
+	return &simpleState{state: state{
+		Config: config,
+	}}
 }
 
 func (s *state) AddInterceptState(is InterceptState) {
@@ -149,22 +158,4 @@ func (s *state) FtpPort() uint16 {
 
 func (s *state) SftpPort() uint16 {
 	return s.sftpPort
-}
-
-func (s *state) WaitForFtpPort(ctx context.Context, ch <-chan uint16) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case s.ftpPort = <-ch:
-		return nil
-	}
-}
-
-func (s *state) WaitForSftpPort(ctx context.Context, ch <-chan uint16) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case s.sftpPort = <-ch:
-		return nil
-	}
 }

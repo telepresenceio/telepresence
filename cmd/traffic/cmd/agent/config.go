@@ -20,11 +20,13 @@ type Config interface {
 	Ext() agentconfig.SidecarExt
 	AgentConfig() *agentconfig.Sidecar
 	HasMounts(ctx context.Context) bool
+	PodName() string
 	PodIP() string
 }
 
 type config struct {
 	sidecarExt agentconfig.SidecarExt
+	podName    string
 	podIP      string
 }
 
@@ -47,6 +49,7 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	if sc.ManagerPort == 0 {
 		sc.ManagerPort = 8081
 	}
+	c.podName = dos.Getenv(ctx, "_TEL_AGENT_NAME")
 	c.podIP = dos.Getenv(ctx, "_TEL_AGENT_POD_IP")
 	for _, cn := range sc.Containers {
 		if err := addAppMounts(ctx, cn); err != nil {
@@ -71,6 +74,10 @@ func (c *config) Ext() agentconfig.SidecarExt {
 
 func (c *config) AgentConfig() *agentconfig.Sidecar {
 	return c.sidecarExt.AgentConfig()
+}
+
+func (c *config) PodName() string {
+	return c.podName
 }
 
 func (c *config) PodIP() string {

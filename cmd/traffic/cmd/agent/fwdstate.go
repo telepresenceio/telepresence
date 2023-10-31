@@ -83,12 +83,14 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 		}
 	}
 
-	// Update forwarding.
-	fs.forwarder.SetStreamProvider(
-		&tunnel.TrafficManagerStreamProvider{
-			Manager:        fs.ManagerClient(),
-			AgentSessionID: fs.SessionInfo().SessionId,
-		})
+	if fs.sessionInfo != nil {
+		// Update forwarding.
+		fs.forwarder.SetStreamProvider(
+			&tunnel.TrafficManagerStreamProvider{
+				Manager:        fs.ManagerClient(),
+				AgentSessionID: fs.SessionInfo().SessionId,
+			})
+	}
 	fs.forwarder.SetIntercepting(activeIntercept)
 
 	// Review waiting intercepts
