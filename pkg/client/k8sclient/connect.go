@@ -1,4 +1,4 @@
-package tm
+package k8sclient
 
 import (
 	"context"
@@ -18,39 +18,43 @@ import (
 
 func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, manager.ManagerClient, *manager.VersionInfo2, error) {
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
+	conn, err := dialClusterGRPC(ctx, grpcAddr, grpcDialer)
+	if err != nil {
+		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
+	}
+	mClient := manager.NewManagerClient(conn)
+	vi, err := getVersion(ctx, mClient)
+	if err != nil {
+		conn.Close()
+	}
+	return conn, mClient, vi, nil
+}
 
-	// First check. Establish connection
-	opts := []grpc.DialOption{
-		grpc.WithContextDialer(grpcDialer),
+type versionAPI interface {
+	Version(context.Context, *empty.Empty, ...grpc.CallOption) (*manager.VersionInfo2, error)
+}
+
+func dialClusterGRPC(ctx context.Context, address string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, error) {
+	return grpc.DialContext(ctx, address, grpc.WithContextDialer(grpcDialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
 		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	}
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()))
+}
 
-	conn, err := grpc.DialContext(ctx, grpcAddr, opts...)
-	if err != nil {
-		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
-	}
-	defer func() {
-		if err != nil {
-			conn.Close()
-		}
-	}()
-
-	tos := client.GetConfig(ctx).Timeouts()
-	mClient := manager.NewManagerClient(conn)
-
+func getVersion(ctx context.Context, gc versionAPI) (*manager.VersionInfo2, error) {
 	// At this point, we are connected to the traffic-manager. We use the shorter API timeout
+	tos := client.GetConfig(ctx).Timeouts()
 	ctx, cancelAPI := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 	defer cancelAPI()
 
-	vi, err := mClient.Version(ctx, &empty.Empty{})
+	vi, err := gc.Version(ctx, &empty.Empty{})
 	if err != nil {
-		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("manager.Version: %w", err))
+		err = client.CheckTimeout(ctx, fmt.Errorf("get version: %w", err))
+	} else {
+		dlog.Infof(ctx, "Connected to %s %s", vi.Name, vi.Version)
 	}
-	dlog.Infof(ctx, "Connected to traffic-manager %s", vi.Version)
-	return conn, mClient, vi, nil
+	return vi, err
 }

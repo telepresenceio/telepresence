@@ -45,10 +45,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -346,7 +346,7 @@ func connectMgr(
 	if err != nil {
 		return nil, err
 	}
-	conn, mClient, vi, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
+	conn, mClient, vi, err := k8sclient.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
 	if err != nil {
 		return nil, err
 	}
@@ -874,7 +874,7 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 	}
 
 	if s.SetMappedNamespaces(c, namespaces) {
-		if len(namespaces) == 0 && s.CanWatchNamespaces(c) {
+		if len(namespaces) == 0 && k8sclient.CanWatchNamespaces(c) {
 			s.StartNamespaceWatcher(c)
 		}
 		s.currentInterceptsLock.Lock()

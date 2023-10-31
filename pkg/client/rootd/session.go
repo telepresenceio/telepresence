@@ -37,10 +37,10 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -204,7 +204,7 @@ func connectToManager(ctx context.Context, namespace string, kubeFlags map[strin
 
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
-	conn, mc, ver, err := tm.ConnectToManager(ctx, namespace, pfDialer.Dial)
+	conn, mc, ver, err := k8sclient.ConnectToManager(ctx, namespace, pfDialer.Dial)
 	if err != nil {
 		return nil, nil, mgrVer, err
 	}
