@@ -212,18 +212,7 @@ func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manag
 	dlog.Infof(ctx, "Forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
 	defer dlog.Infof(ctx, "Done forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
 	d := tunnel.NewUDPListener(conn, dest, func(ctx context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
-		ms, err := f.manager.Tunnel(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("call to manager.Tunnel() failed. Id %s: %v", id, err)
-		}
-		s, err := tunnel.NewClientStream(ctx, ms, id, f.sessionInfo.SessionId, time.Duration(spec.RoundtripLatency), time.Duration(spec.DialTimeout))
-		if err != nil {
-			return nil, err
-		}
-		if err = s.Send(ctx, tunnel.SessionMessage(iCept.ClientSession.SessionId)); err != nil {
-			return nil, fmt.Errorf("unable to send client session id. Id %s: %v", id, err)
-		}
-		return s, nil
+		return f.streamProvider.CreateClientStream(ctx, iCept.ClientSession.SessionId, id, time.Duration(spec.RoundtripLatency), time.Duration(spec.DialTimeout))
 	})
 	d.Start(ctx)
 	<-d.Done()

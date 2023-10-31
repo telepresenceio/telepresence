@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type fwdState struct {
@@ -83,7 +84,11 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 	}
 
 	// Update forwarding.
-	fs.forwarder.SetManager(fs.SessionInfo(), fs.ManagerClient(), fs.ManagerVersion())
+	fs.forwarder.SetStreamProvider(
+		&tunnel.TrafficManagerStreamProvider{
+			Manager:        fs.ManagerClient(),
+			AgentSessionID: fs.SessionInfo().SessionId,
+		})
 	fs.forwarder.SetIntercepting(activeIntercept)
 
 	// Review waiting intercepts
