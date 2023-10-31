@@ -28,7 +28,9 @@ message ClientInfo {
 message AgentInfo {
   string name = 1;      // name of the Workload
   string namespace = 7; // namespace of the Workload
+  string pod_name = 8;  // Pod name (from metadata.name)
   string pod_ip = 2;    // Pod IP (from status.podIP)
+  int32 api_port = 9;   // Port number for the agent gRPC API
   string product = 3;   // distinguish open source, our closed source, someone else's thing
   string version = 4;
 
@@ -230,8 +232,11 @@ message InterceptInfo {
   InterceptDispositionType disposition = 3;
   string message = 4;
 
-  // The Pod name and sftp port to use when doing sshfs mounts.  These
-  // are set by the agent's call to ReviewIntercept.
+  // Name and port to use when establishing port-forward to the pod's
+  // gRPC API.
+  string pod_name = 19;
+  int32 api_port = 20;
+
   string pod_ip = 10;
   int32 sftp_port = 11;
   int32 ftp_port = 18;
@@ -257,7 +262,7 @@ message InterceptInfo {
   map<string, string> environment = 17;
 
   // Timestamp for last modification made by traffic-manager
-  google.protobuf.Timestamp modified_at = 19;
+  google.protobuf.Timestamp modified_at = 21;
 }
 
 message SessionInfo {
@@ -563,6 +568,18 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+message AgentPodInfo {
+  string pod_name = 1;
+  string namespace = 2;
+  bytes pod_ip = 3;
+  int32 api_port = 4;
+  bool intercepted = 5;
+}
+
+message AgentPodInfoSnapshot {
+  repeated AgentPodInfo agents = 1;
+}
+
 message TunnelMetrics {
   string client_session_id = 1;
 
@@ -616,6 +633,11 @@ service Manager {
   // (pending the request) and return them to the caller
   // Deprecated: Will return an empty response
   rpc GetLogs(GetLogsRequest) returns (LogsResponse);
+
+  // WatchAgentPods notifies a client of the set of known Agents from the client
+  // connections namespace that the client can connect to when port-forwards are
+  // allowed.
+  rpc WatchAgentPods(SessionInfo) returns (stream AgentPodInfoSnapshot);
 
   // WatchAgents notifies a client of the set of known Agents.
   //
