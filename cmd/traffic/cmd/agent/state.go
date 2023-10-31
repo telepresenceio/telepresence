@@ -5,16 +5,22 @@ import (
 	"net/http"
 
 	"github.com/blang/semver"
+	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // State reflects the current state of the agent.
 type State interface {
 	Config
+	agent.AgentServer
+	tunnel.ClientStreamProvider
 	AddInterceptState(is InterceptState)
 	AgentState() restapi.AgentState
 	InterceptStates() []InterceptState
@@ -26,7 +32,11 @@ type State interface {
 	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
-	Sidecar(ctx context.Context, info *manager.AgentInfo) error
+}
+
+type SimpleState interface {
+	State
+	NewInterceptState(forwarder forwarder.Interceptor, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState
 }
 
 // An InterceptState implements what's needed to intercept one port.
@@ -40,8 +50,10 @@ type InterceptState interface {
 // State of the Traffic Agent.
 type state struct {
 	Config
-	ftpPort  uint16
-	sftpPort uint16
+	ftpPort          uint16
+	sftpPort         uint16
+	dialWatchers     *xsync.MapOf[string, chan *manager.DialRequest]
+	awaitingForwards *xsync.MapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]]
 
 	// The sessionInfo and manager client are needed when forwarders establish their
 	// tunnel to the traffic-manager.
@@ -50,6 +62,7 @@ type state struct {
 	mgrVer      semver.Version
 
 	interceptStates []InterceptState
+	agent.UnimplementedAgentServer
 }
 
 type simpleState struct {
@@ -76,13 +89,17 @@ func (s *state) SessionInfo() *manager.SessionInfo {
 
 func NewState(config Config) State {
 	return &state{
-		Config: config,
+		Config:           config,
+		dialWatchers:     xsync.NewMapOf[string, chan *manager.DialRequest](),
+		awaitingForwards: xsync.NewMapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
 	}
 }
 
-func NewSimpleState(config Config) State {
+func NewSimpleState(config Config) SimpleState {
 	return &simpleState{state: state{
-		Config: config,
+		Config:           config,
+		dialWatchers:     xsync.NewMapOf[string, chan *manager.DialRequest](),
+		awaitingForwards: xsync.NewMapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
 	}}
 }
 

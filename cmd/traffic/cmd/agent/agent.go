@@ -12,10 +12,14 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	ftp "github.com/datawire/go-ftpserver"
+	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -26,6 +30,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
+
+var DisplayName = "OSS Traffic Agent" //nolint:gochecknoglobals // extension point
 
 // AppEnvironment returns the environment visible to this agent together with environment variables
 // explicitly declared for the app container and minus the environment variables provided by this
@@ -141,14 +147,14 @@ func Main(ctx context.Context, _ ...string) error {
 
 	// Talk to the Traffic Manager
 	g.Go("sidecar", func(ctx context.Context) error {
-		return s.Sidecar(ctx, info)
+		return sidecar(ctx, s, info)
 	})
 
 	// Wait for exit
 	return g.Wait()
 }
 
-func (s *state) Sidecar(ctx context.Context, info *rpc.AgentInfo) error {
+func sidecar(ctx context.Context, s SimpleState, info *rpc.AgentInfo) error {
 	// Manage the forwarders
 	ac := s.AgentConfig()
 	for _, cn := range ac.Containers {
@@ -174,7 +180,7 @@ func (s *state) Sidecar(ctx context.Context, info *rpc.AgentInfo) error {
 				return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 			})
 			cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
-			s.AddInterceptState(NewInterceptState(s, fwd, ics, cnMountPoint, env))
+			s.AddInterceptState(s.NewInterceptState(fwd, ics, cnMountPoint, env))
 		}
 	}
 	TalkToManagerLoop(ctx, s, info)
@@ -203,6 +209,7 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 }
 
 func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv State) (*rpc.AgentInfo, error) {
+	var grpcOpts []grpc.ServerOption
 	ac := config.AgentConfig()
 	if ac.TracingPort != 0 {
 		g.Go("tracer-grpc", func(c context.Context) error {
@@ -217,7 +224,38 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 			}()
 			return tracer.ServeGrpc(c, ac.TracingPort)
 		})
+
+		grpcOpts = []grpc.ServerOption{
+			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+		}
 	}
+
+	grpcPortCh := make(chan uint16)
+	g.Go("tunneling", func(ctx context.Context) error {
+		defer close(grpcPortCh)
+		lc := net.ListenConfig{}
+		grpcListener, err := lc.Listen(ctx, "tcp", ":")
+		if err != nil {
+			return err
+		}
+		defer func() {
+			_ = grpcListener.Close()
+		}()
+		grpcAddress := grpcListener.Addr().(*net.TCPAddr)
+		grpcPortCh <- uint16(grpcAddress.Port)
+
+		dlog.Debugf(ctx, "Listener opened on %s", grpcAddress)
+
+		grpcHandler := grpc.NewServer(grpcOpts...)
+		agent.RegisterAgentServer(grpcHandler, srv)
+		sc := &dhttp.ServerConfig{Handler: grpcHandler}
+		dlog.Info(ctx, "gRPC server started")
+		if err = sc.Serve(ctx, grpcListener); err != nil && ctx.Err() != nil {
+			err = nil // Normal shutdown
+		}
+		return err
+	})
 
 	sftpPortCh := make(chan uint16)
 	ftpPortCh := make(chan uint16)
@@ -236,6 +274,10 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		close(sftpPortCh)
 		close(ftpPortCh)
 		dlog.Info(ctx, "Not starting sftp-server because there's nothing to mount")
+	}
+	grpcPort, err := waitForPort(ctx, grpcPortCh)
+	if err != nil {
+		return nil, err
 	}
 	ftpPort, err := waitForPort(ctx, ftpPortCh)
 	if err != nil {
@@ -258,6 +300,7 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		Namespace: config.AgentConfig().Namespace,
 		PodName:   config.PodName(),
 		PodIp:     config.PodIP(),
+		ApiPort:   int32(grpcPort),
 		Product:   "telepresence",
 		Version:   version.Version,
 		Mechanisms: []*rpc.AgentInfo_Mechanism{

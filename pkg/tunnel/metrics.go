@@ -51,7 +51,3 @@ func (sp *TrafficManagerStreamProvider) CreateClientStream(
 	}
 	return s, nil
 }
-
-func (sp *TrafficManagerStreamProvider) ReportMetrics(context.Context, *manager.TunnelMetrics) {
-	// Noop, this provider's consumption is tracked by the traffic-manage
-}
