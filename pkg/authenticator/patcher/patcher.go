@@ -30,8 +30,10 @@ const (
 // a list of files that it must listen to in order to reliably resolve requests. It is
 // also passed a pointer to the minified config that will be stored in a file so that it
 // has a chance to modify it.
-type AddressProvider func(configFiles []string) (string, string, error)
-type Patcher func(*clientcmdapi.Config) error
+type (
+	AddressProvider func(configFiles []string) (string, string, error)
+	Patcher         func(*clientcmdapi.Config) error
+)
 
 // CreateExternalKubeConfig will load the current kubeconfig and minimize it so that it just contains the current
 // context. It will then check if that context contains an Exec config, and if it does, replace that config with
