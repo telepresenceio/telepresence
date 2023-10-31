@@ -5,6 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -28,4 +29,16 @@ func (m mgrProvider) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Clien
 
 func ManagerProvider(m rpc.ManagerClient) Provider {
 	return mgrProvider{m}
+}
+
+type agentProvider struct {
+	agent.AgentClient
+}
+
+func (m agentProvider) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Client, error) {
+	return m.AgentClient.Tunnel(ctx, opts...)
+}
+
+func AgentProvider(a agent.AgentClient) Provider {
+	return agentProvider{a}
 }

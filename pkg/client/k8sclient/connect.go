@@ -11,6 +11,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -32,6 +33,25 @@ func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.Dia
 
 type versionAPI interface {
 	Version(context.Context, *empty.Empty, ...grpc.CallOption) (*manager.VersionInfo2, error)
+}
+
+func ConnectToAgent(
+	ctx context.Context,
+	grpcDialer dnet.DialerFunc,
+	podName, namespace string,
+	port uint16,
+) (*grpc.ClientConn, agent.AgentClient, *manager.VersionInfo2, error) {
+	grpcAddr := fmt.Sprintf("pod/%s.%s:%d", podName, namespace, port)
+	conn, err := dialClusterGRPC(ctx, grpcAddr, grpcDialer)
+	if err != nil {
+		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("dial agent: %w", err))
+	}
+	mClient := agent.NewAgentClient(conn)
+	vi, err := getVersion(ctx, mClient)
+	if err != nil {
+		conn.Close()
+	}
+	return conn, mClient, vi, nil
 }
 
 func dialClusterGRPC(ctx context.Context, address string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, error) {
