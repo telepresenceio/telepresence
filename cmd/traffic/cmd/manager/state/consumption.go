@@ -3,6 +3,7 @@ package state
 import (
 	"time"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -53,15 +54,21 @@ func (s *state) GetAllSessionConsumptionMetrics() map[string]*SessionConsumption
 	return allSCM
 }
 
+func (s *state) AddSessionConsumptionMetrics(metrics *manager.TunnelMetrics) {
+	s.mu.RLock()
+	cs, ok := s.sessions[metrics.ClientSessionId].(*clientSessionState)
+	s.mu.RUnlock()
+	if ok {
+		cm := cs.consumptionMetrics
+		cm.FromClientBytes.Increment(metrics.IngressBytes)
+		cm.ToClientBytes.Increment(metrics.EgressBytes)
+	}
+}
+
 // RefreshSessionConsumptionMetrics refreshes the metrics associated to a specific session.
 func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	session := s.sessions[sessionID]
-	if _, isClientSession := session.(*clientSessionState); !isClientSession {
-		return
-	}
 
 	var scm *SessionConsumptionMetrics
 	if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
@@ -75,6 +82,5 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 	if !wasInterrupted { // If it wasn't stale, we want to count duration since last metric update.
 		scm.ConnectDuration += uint32(time.Since(scm.LastUpdate).Seconds())
 	}
-
 	scm.LastUpdate = time.Now()
 }

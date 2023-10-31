@@ -563,6 +563,16 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+message TunnelMetrics {
+  string client_session_id = 1;
+
+  // Number of bytes sent from the client to the traffic-agent.
+  uint64 ingress_bytes = 2;
+
+  // Number of bytes sent from traffic-agent to the client.
+  uint64 egress_bytes = 3;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -584,8 +594,6 @@ service Manager {
 
   // GetTelepresenceAPI returns information about the TelepresenceAPI server
   rpc GetTelepresenceAPI(google.protobuf.Empty) returns (TelepresenceAPIInfo);
-
-  // Presence
 
   // ArriveAsClient establishes a session between a client and the Manager.
   rpc ArriveAsClient(ClientInfo) returns (SessionInfo);
@@ -609,8 +617,6 @@ service Manager {
   // Deprecated: Will return an empty response
   rpc GetLogs(GetLogsRequest) returns (LogsResponse);
 
-  // Watches
-
   // WatchAgents notifies a client of the set of known Agents.
   //
   // A session ID is required; if no session ID is given then the call
@@ -631,8 +637,6 @@ service Manager {
   // WatchClusterInfo returns information needed when establishing
   // connectivity to the cluster.
   rpc WatchClusterInfo(SessionInfo) returns (stream ClusterInfo);
-
-  // CRUD
 
   // Request that the traffic-manager makes the preparations necessary to
   // create the given intercept.
@@ -701,6 +705,10 @@ service Manager {
   // always contain the session ID, connection ID, and timeouts used by
   // the dialer endpoints.
   rpc Tunnel(stream TunnelMessage) returns (stream TunnelMessage);
+
+  // ReportMetrics is used by a traffic-agent to report metrics for streams
+  // established when clients connect directly to traffic-agents using port-forward.
+  rpc ReportMetrics(TunnelMetrics) returns (google.protobuf.Empty);
 
   // WatchDial makes it possible for the client side to receive
   // DialRequests from the traffic-manager. Requests are sent when an

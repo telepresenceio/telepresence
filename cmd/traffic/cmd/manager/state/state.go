@@ -36,12 +36,15 @@ type State interface {
 	AddClient(*rpc.ClientInfo, time.Time) string
 	AddIntercept(context.Context, string, string, *rpc.ClientInfo, *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error)
 	AddInterceptFinalizer(string, InterceptFinalizer) error
+	AddSessionConsumptionMetrics(metrics *rpc.TunnelMetrics)
 	AgentsLookupDNS(context.Context, string, *rpc.DNSRequest) (dnsproxy.RRs, int, error)
 	CountAgents() int
 	CountClients() int
 	CountIntercepts() int
 	CountSessions() int
 	CountTunnels() int
+	CountTunnelIngress() uint64
+	CountTunnelEgress() uint64
 	ExpireSessions(context.Context, time.Time, time.Time)
 	GetAgent(string) *rpc.AgentInfo
 	GetAllClients() map[string]*rpc.ClientInfo
@@ -108,16 +111,18 @@ type state struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts      watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
-	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
-	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
-	sessions        map[string]SessionState              // info for all sessions, keyed by session id
-	agentsByName    map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
-	interceptStates map[string]*interceptState
-	timedLogLevel   log.TimedLevel
-	llSubs          *loglevelSubscribers
-	cfgMapLocks     map[string]*sync.Mutex
-	tunnelCounter   int32
+	intercepts           watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
+	agents               watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
+	clients              watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
+	sessions             map[string]SessionState              // info for all sessions, keyed by session id
+	agentsByName         map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	interceptStates      map[string]*interceptState
+	timedLogLevel        log.TimedLevel
+	llSubs               *loglevelSubscribers
+	cfgMapLocks          map[string]*sync.Mutex
+	tunnelCounter        int32
+	tunnelIngressCounter uint64
+	tunnelEgressCounter  uint64
 
 	// Possibly extended version of the state. Use when calling interface methods.
 	self State
@@ -291,18 +296,17 @@ func (s *state) unlockedRemoveSession(ctx context.Context, sessionID string) Cle
 
 		wait = s.gcSessionIntercepts(ctx, sessionID)
 
-		agent, isAgent := s.agents.Load(sessionID)
+		agent, isAgent := s.agents.LoadAndDelete(sessionID)
 		if isAgent {
-			// remove it from the agentsByName index (if nescessary)
-
+			// remove it from the agentsByName index (if necessary)
 			delete(s.agentsByName[agent.Name], sessionID)
 			if len(s.agentsByName[agent.Name]) == 0 {
 				delete(s.agentsByName, agent.Name)
 			}
-			// remove the session
-			s.agents.Delete(sessionID)
-		} else {
-			s.clients.Delete(sessionID)
+		} else if _, isClient := s.clients.LoadAndDelete(sessionID); isClient {
+			scm := sess.(*clientSessionState).consumptionMetrics
+			atomic.AddUint64(&s.tunnelIngressCounter, scm.FromClientBytes.GetValue())
+			atomic.AddUint64(&s.tunnelEgressCounter, scm.ToClientBytes.GetValue())
 		}
 		delete(s.sessions, sessionID)
 	}
@@ -406,6 +410,14 @@ func (s *state) CountSessions() int {
 
 func (s *state) CountTunnels() int {
 	return int(atomic.LoadInt32(&s.tunnelCounter))
+}
+
+func (s *state) CountTunnelIngress() uint64 {
+	return atomic.LoadUint64(&s.tunnelIngressCounter)
+}
+
+func (s *state) CountTunnelEgress() uint64 {
+	return atomic.LoadUint64(&s.tunnelEgressCounter)
 }
 
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////

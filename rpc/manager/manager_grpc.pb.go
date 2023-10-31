@@ -56,6 +56,7 @@ const (
 	Manager_WatchLookupDNS_FullMethodName            = "/telepresence.manager.Manager/WatchLookupDNS"
 	Manager_WatchLogLevel_FullMethodName             = "/telepresence.manager.Manager/WatchLogLevel"
 	Manager_Tunnel_FullMethodName                    = "/telepresence.manager.Manager/Tunnel"
+	Manager_ReportMetrics_FullMethodName             = "/telepresence.manager.Manager/ReportMetrics"
 	Manager_WatchDial_FullMethodName                 = "/telepresence.manager.Manager/WatchDial"
 )
 
@@ -163,6 +164,9 @@ type ManagerClient interface {
 	// always contain the session ID, connection ID, and timeouts used by
 	// the dialer endpoints.
 	Tunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_TunnelClient, error)
+	// ReportMetrics is used by a traffic-agent to report metrics for streams
+	// established when clients connect directly to traffic-agents using port-forward.
+	ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WatchDial makes it possible for the client side to receive
 	// DialRequests from the traffic-manager. Requests are sent when an
 	// intercepted traffic-agent creates a Tunnel that needs to be extended
@@ -697,6 +701,15 @@ func (x *managerTunnelClient) Recv() (*TunnelMessage, error) {
 	return m, nil
 }
 
+func (c *managerClient) ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Manager_ReportMetrics_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchDialClient, error) {
 	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[10], Manager_WatchDial_FullMethodName, opts...)
 	if err != nil {
@@ -833,6 +846,9 @@ type ManagerServer interface {
 	// always contain the session ID, connection ID, and timeouts used by
 	// the dialer endpoints.
 	Tunnel(Manager_TunnelServer) error
+	// ReportMetrics is used by a traffic-agent to report metrics for streams
+	// established when clients connect directly to traffic-agents using port-forward.
+	ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error)
 	// WatchDial makes it possible for the client side to receive
 	// DialRequests from the traffic-manager. Requests are sent when an
 	// intercepted traffic-agent creates a Tunnel that needs to be extended
@@ -944,6 +960,9 @@ func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, Manager_WatchLog
 }
 func (UnimplementedManagerServer) Tunnel(Manager_TunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
+}
+func (UnimplementedManagerServer) ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReportMetrics not implemented")
 }
 func (UnimplementedManagerServer) WatchDial(*SessionInfo, Manager_WatchDialServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchDial not implemented")
@@ -1582,6 +1601,24 @@ func (x *managerTunnelServer) Recv() (*TunnelMessage, error) {
 	return m, nil
 }
 
+func _Manager_ReportMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TunnelMetrics)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).ReportMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_ReportMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).ReportMetrics(ctx, req.(*TunnelMetrics))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_WatchDial_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SessionInfo)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1697,6 +1734,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AgentLookupDNSResponse",
 			Handler:    _Manager_AgentLookupDNSResponse_Handler,
+		},
+		{
+			MethodName: "ReportMetrics",
+			Handler:    _Manager_ReportMetrics_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
