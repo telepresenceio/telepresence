@@ -142,7 +142,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 	wg.Go("dialWait", func(ctx context.Context) error {
-		return tunnel.DialWaitLoop(ctx, manager, dialerStream, session.SessionId)
+		return tunnel.DialWaitLoop(ctx, tunnel.ManagerProvider(manager), dialerStream, session.SessionId)
 	})
 
 	// Deal with log-level changes
