@@ -237,7 +237,7 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 	}
 
 	var interceptInfos map[string]*rpc.InterceptInfo
-	intercepted := func(name, namespace string) bool {
+	isIntercepted := func(name, namespace string) bool {
 		for _, ii := range interceptInfos {
 			if name == ii.Spec.Agent && namespace == ii.Spec.Namespace {
 				return true
@@ -266,7 +266,7 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 					Namespace:   a.Namespace,
 					PodIp:       iputil.Parse(a.PodIp),
 					ApiPort:     a.ApiPort,
-					Intercepted: intercepted(a.Name, a.Namespace),
+					Intercepted: isIntercepted(a.Name, a.Namespace),
 				}
 				agentNames[i] = a.Name
 				i++
@@ -277,7 +277,7 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 			}
 			interceptInfos = is.State
 			for i, a := range agents {
-				a.Intercepted = intercepted(agentNames[i], a.Namespace)
+				a.Intercepted = isIntercepted(agentNames[i], a.Namespace)
 			}
 		}
 		if agents != nil {
