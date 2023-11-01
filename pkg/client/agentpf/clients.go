@@ -212,6 +212,9 @@ outer:
 					backoff = 15 * time.Second
 				}
 				continue outer
+			case codes.Unimplemented:
+				dlog.Debug(ctx, "traffic-manager does not implement WatchAgentPods")
+				return nil
 			default:
 				return err
 			}
