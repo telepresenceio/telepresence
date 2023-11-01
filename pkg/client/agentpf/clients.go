@@ -134,6 +134,7 @@ type clients struct {
 	session   *manager.SessionInfo
 	clients   *xsync.MapOf[string, *client]
 	ipWaiters *xsync.MapOf[iputil.IPKey, chan struct{}]
+	disabled  atomic.Bool
 }
 
 func NewClients(session *manager.SessionInfo) Clients {
@@ -180,13 +181,26 @@ func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient)
 			ac.cancel()
 			return true
 		})
+		s.disabled.Store(true)
 	}()
 	backoff := 100 * time.Millisecond
 
 outer:
 	for ctx.Err() == nil {
 		as, err := rmc.WatchAgentPods(ctx, s.session)
-		if err != nil {
+		switch status.Code(err) {
+		case codes.OK:
+		case codes.Unavailable:
+			dtime.SleepWithContext(ctx, backoff)
+			backoff *= 2
+			if backoff > 15*time.Second {
+				backoff = 15 * time.Second
+			}
+			continue outer
+		case codes.Unimplemented:
+			dlog.Debug(ctx, "traffic-manager does not implement WatchAgentPods")
+			return nil
+		default:
 			err = fmt.Errorf("error when calling WatchAgents: %w", err)
 			dlog.Warn(ctx, err)
 			return err
@@ -233,6 +247,9 @@ func (s *clients) notifyWaiters() {
 }
 
 func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error {
+	if s.disabled.Load() {
+		return nil
+	}
 	waitOn, _ := s.ipWaiters.LoadOrCompute(iputil.IPKey(ip), func() chan struct{} {
 		return make(chan struct{})
 	})
@@ -248,9 +265,19 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip net.I
 }
 
 func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo) error {
-	aim := make(map[string]*manager.AgentPodInfo, len(ais))
-	for _, ai := range ais {
-		aim[ai.PodName+"."+ai.Namespace] = ai
+	var aim map[string]*manager.AgentPodInfo
+	if len(ais) > 0 {
+		aim = make(map[string]*manager.AgentPodInfo, len(ais))
+		for _, ai := range ais {
+			if ai.PodName != "" {
+				aim[ai.PodName+"."+ai.Namespace] = ai
+			}
+		}
+		if len(aim) == 0 {
+			// The current traffic-manager injects old style clients that doesn't report a pod name.
+			s.disabled.Store(true)
+			return nil
+		}
 	}
 
 	// Ensure that the clients still exists. Cancel the ones that don't.
@@ -311,8 +338,11 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 	})
 
 	// Ensure that we have at least one client (if at least one agent exists)
-	if s.clients.Size() == 0 && len(ais) > 0 {
-		ai := ais[0]
+	if s.clients.Size() == 0 && len(aim) > 0 {
+		var ai *manager.AgentPodInfo
+		for _, ai = range aim {
+			break
+		}
 		k := ai.PodName + "." + ai.Namespace
 		ac, err := newAgentClient(ctx, s.session, ai)
 		if err != nil {
