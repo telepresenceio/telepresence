@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -58,6 +59,8 @@ type State interface {
 	RemoveSession(context.Context, string) error
 	SessionDone(string) (<-chan struct{}, error)
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
+	SetConnectionEstablishedFinalizer(finalizer connectionEstablishedFinalizer)
+	SetInterceptEstablishedFinalizer(finalizer interceptEstablishedFinalizer)
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
 	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo
@@ -79,6 +82,11 @@ type interceptFinalizerCall struct {
 	ctx   context.Context
 }
 
+type (
+	connectionEstablishedFinalizer func(client, installId string)
+	interceptEstablishedFinalizer  func(client, installId string, workload *string)
+)
+
 // state is the total state of the Traffic Manager.  A zero state is invalid; you must call
 // NewState.
 type state struct {
@@ -86,7 +94,9 @@ type state struct {
 	// need to exceed the context of a request into the state object, e.g. session contexts.
 	backgroundCtx context.Context
 
-	interceptFinalizerCh chan *interceptFinalizerCall
+	interceptFinalizerCh           chan *interceptFinalizerCall
+	connectionEstablishedFinalizer connectionEstablishedFinalizer
+	interceptEstablishedFinalizer  interceptEstablishedFinalizer
 
 	mu sync.RWMutex
 	// Things protected by 'mu': While the watchable.WhateverMaps have their own locking to
@@ -252,6 +262,10 @@ func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) Clean
 		if intercept.ClientSession.SessionId == sessionID {
 			// Client went away:
 			// Delete it.
+			if client := s.GetClient(sessionID); client != nil {
+				workload := strings.SplitN(interceptID, ":", 2)[1]
+				s.interceptEstablishedFinalizerCall(client.Name, client.InstallId, &workload)
+			}
 			_, iceptWait := s.self.UnlockedRemoveIntercept(ctx, interceptID)
 			newWait := func() error {
 				err := wait()
@@ -295,6 +309,9 @@ func (s *state) unlockedRemoveSession(ctx context.Context, sessionID string) Cle
 			// remove the session
 			s.agents.Delete(sessionID)
 		} else {
+			if client := s.GetClient(sessionID); client != nil {
+				s.connectionEstablishedFinalizerCall(client.Name, client.InstallId)
+			}
 			s.clients.Delete(sessionID)
 		}
 		delete(s.sessions, sessionID)
@@ -844,4 +861,24 @@ func (s *state) InitialTempLogLevel() *rpc.LogLevelRequest {
 // of the last request that was made.
 func (s *state) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
 	return s.llSubs.subscriberLoop(stream.Context(), stream)
+}
+
+func (s *state) SetConnectionEstablishedFinalizer(finalizer connectionEstablishedFinalizer) {
+	s.connectionEstablishedFinalizer = finalizer
+}
+
+func (s *state) connectionEstablishedFinalizerCall(client, installId string) {
+	if s.connectionEstablishedFinalizer != nil {
+		s.connectionEstablishedFinalizer(client, installId)
+	}
+}
+
+func (s *state) SetInterceptEstablishedFinalizer(finalizer interceptEstablishedFinalizer) {
+	s.interceptEstablishedFinalizer = finalizer
+}
+
+func (s *state) interceptEstablishedFinalizerCall(client, installId string, workload *string) {
+	if s.interceptEstablishedFinalizer != nil {
+		s.interceptEstablishedFinalizer(client, installId, workload)
+	}
 }
