@@ -96,10 +96,11 @@ type ManagerConfig struct {
 
 // KubeconfigExtension is an extension read from the selected kubeconfig Cluster.
 type KubeconfigExtension struct {
-	DNS        *DnsConfig       `json:"dns,omitempty"`
-	AlsoProxy  []*iputil.Subnet `json:"also-proxy,omitempty"`
-	NeverProxy []*iputil.Subnet `json:"never-proxy,omitempty"`
-	Manager    *ManagerConfig   `json:"manager,omitempty"`
+	DNS                     *DnsConfig       `json:"dns,omitempty"`
+	AlsoProxy               []*iputil.Subnet `json:"also-proxy,omitempty"`
+	NeverProxy              []*iputil.Subnet `json:"never-proxy,omitempty"`
+	AllowConflictingSubnets []*iputil.Subnet `json:"allow-conflicting-subnets,omitempty"`
+	Manager                 *ManagerConfig   `json:"manager,omitempty"`
 }
 
 type Kubeconfig struct {

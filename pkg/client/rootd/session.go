@@ -296,19 +296,21 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 
 	as := iputil.ConvertSubnets(mi.AlsoProxySubnets)
 	ns := iputil.ConvertSubnets(mi.NeverProxySubnets)
+	allow := iputil.ConvertSubnets(mi.AllowConflictingSubnets)
 	s := &Session{
-		handlers:          tunnel.NewPool(),
-		rndSource:         rand.NewSource(time.Now().UnixNano()),
-		session:           mi.Session,
-		managerClient:     mc,
-		managerVersion:    ver,
-		alsoProxySubnets:  as,
-		neverProxySubnets: ns,
-		proxyClusterPods:  true,
-		proxyClusterSvcs:  true,
-		vifReady:          make(chan error, 2),
-		config:            cfg,
-		done:              make(chan struct{}),
+		handlers:                tunnel.NewPool(),
+		rndSource:               rand.NewSource(time.Now().UnixNano()),
+		session:                 mi.Session,
+		managerClient:           mc,
+		managerVersion:          ver,
+		alsoProxySubnets:        as,
+		neverProxySubnets:       ns,
+		allowConflictingSubnets: allow,
+		proxyClusterPods:        true,
+		proxyClusterSvcs:        true,
+		vifReady:                make(chan error, 2),
+		config:                  cfg,
+		done:                    make(chan struct{}),
 	}
 
 	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
@@ -649,7 +651,9 @@ func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.Cl
 		s.neverProxySubnets = ns
 
 		if r.AllowConflictingSubnets != nil {
-			s.allowConflictingSubnets = iputil.ConvertSubnets(r.AllowConflictingSubnets)
+			allow := subnet.Unique(append(s.allowConflictingSubnets, iputil.ConvertSubnets(r.AllowConflictingSubnets)...))
+			dlog.Infof(ctx, "allow-conflicting subnets %v", allow)
+			s.allowConflictingSubnets = allow
 		}
 	}
 }

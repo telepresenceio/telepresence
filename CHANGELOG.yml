@@ -48,6 +48,12 @@ items:
           obtain credentials are dispatched to the user-daemon. This to ensure that all authentication plugins will
           execute in user-space. The old behavior of routing everything through the user-daemon can be restored by
           setting <code>cluster.connectFromUserDaemon</code> to <code>true</code> in <code>config.yml</code>.
+      - type: feature
+        title: New networking CLI flag --allow-conflicting-subnets
+        body: >-
+          telepresence connect (and other commands that kick off a connect) now accepts an --allow-conflicting-subnets
+          CLI flag. This is equivalent to client.routing.allowConflictingSubnets in the helm chart, but can be specified
+          at connect time. It will be appended to any configuration pushed from the traffic manager.
       - type: change
         title: The authenticator binary was removed from the docker image.
         body: >-
