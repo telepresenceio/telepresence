@@ -115,6 +115,13 @@ func MainWithEnv(ctx context.Context) error {
 	return g.Wait()
 }
 
+func newCounterFunc[T int | uint64](n, h string, f func() T) {
+	promauto.NewCounterFunc(prometheus.CounterOpts{
+		Name: n,
+		Help: h,
+	}, func() float64 { return float64(f()) })
+}
+
 func newGaugeFunc[T int | uint64](n, h string, f func() T) {
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: n,
@@ -134,8 +141,8 @@ func (s *service) servePrometheus(ctx context.Context) error {
 	newGaugeFunc("intercept_count", "Number of active intercepts", s.state.CountIntercepts)
 	newGaugeFunc("session_count", "Number of sessions", s.state.CountSessions)
 	newGaugeFunc("tunnel_count", "Number of tunnels", s.state.CountTunnels)
-	newGaugeFunc("tunnel_ingress_bytes", "Number of bytes tunneled from clients", s.state.CountTunnelIngress)
-	newGaugeFunc("tunnel_egress_bytes", "Number bytes tunneled to clients", s.state.CountTunnelEgress)
+	newCounterFunc("tunnel_ingress_bytes", "Number of bytes tunneled from clients", s.state.CountTunnelIngress)
+	newCounterFunc("tunnel_egress_bytes", "Number bytes tunneled to clients", s.state.CountTunnelEgress)
 
 	newGaugeFunc("active_http_request_count", "Number of currently served http requests", func() int {
 		return int(atomic.LoadInt32(&s.activeHttpRequests))
