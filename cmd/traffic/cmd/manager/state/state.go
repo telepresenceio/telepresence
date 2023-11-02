@@ -509,8 +509,12 @@ func (s *state) AddIntercept(ctx context.Context, sessionID, clusterID string, c
 		}
 	}
 
-	if _, hasConflict := s.intercepts.LoadOrStore(cept.Id, cept); hasConflict {
-		return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
+	if existingValue, hasConflict := s.intercepts.LoadOrStore(cept.Id, cept); hasConflict {
+		if existingValue.Disposition != rpc.InterceptDispositionType_REMOVED {
+			return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
+		} else {
+			s.intercepts.Store(cept.Id, cept)
+		}
 	}
 
 	state := newInterceptState(cept.Id)
