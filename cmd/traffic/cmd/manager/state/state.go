@@ -160,11 +160,11 @@ func (s *state) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 	switch intercept.Disposition {
 	// non-error states ////////////////////////////////////////////////////
 	case rpc.InterceptDispositionType_UNSPECIFIED:
-		// Continue through; we can trasition to an error state from here.
+		// Continue through; we can transition to an error state from here.
 	case rpc.InterceptDispositionType_ACTIVE:
-		// Continue through; we can trasition to an error state from here.
+		// Continue through; we can transition to an error state from here.
 	case rpc.InterceptDispositionType_WAITING:
-		// Continue through; we can trasition to an error state from here.
+		// Continue through; we can transition to an error state from here.
 	// error states ////////////////////////////////////////////////////////
 	case rpc.InterceptDispositionType_NO_CLIENT:
 		// Don't overwrite this error state.
@@ -181,6 +181,9 @@ func (s *state) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 	case rpc.InterceptDispositionType_BAD_ARGS:
 		// Don't overwrite this error state.
 		return intercept.Disposition, intercept.Message
+	case rpc.InterceptDispositionType_REMOVED:
+		// Don't overwrite this state.
+		return intercept.Disposition, intercept.Message
 	}
 
 	// main ////////////////////////////////////////////////////////////////
@@ -194,25 +197,21 @@ func (s *state) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 		}
 	}
 
-	if len(agentList) == 0 {
+	switch {
+	case len(agentList) == 0:
 		errCode = rpc.InterceptDispositionType_NO_AGENT
 		errMsg = fmt.Sprintf("No agent found for %q", intercept.Spec.Agent)
-		return
-	}
-
-	if !managerutil.AgentsAreCompatible(agentList) {
+	case !managerutil.AgentsAreCompatible(agentList):
 		errCode = rpc.InterceptDispositionType_NO_AGENT
 		errMsg = fmt.Sprintf("Agents for %q are not consistent", intercept.Spec.Agent)
-		return
-	}
-
-	if !agentHasMechanism(agentList[0], intercept.Spec.Mechanism) {
+	case !agentHasMechanism(agentList[0], intercept.Spec.Mechanism):
 		errCode = rpc.InterceptDispositionType_NO_MECHANISM
 		errMsg = fmt.Sprintf("Agents for %q do not have mechanism %q", intercept.Spec.Agent, intercept.Spec.Mechanism)
-		return
+	default:
+		errCode = rpc.InterceptDispositionType_UNSPECIFIED
+		errMsg = ""
 	}
-
-	return rpc.InterceptDispositionType_UNSPECIFIED, ""
+	return errCode, errMsg
 }
 
 // Sessions: common ////////////////////////////////////////////////////////////////////////////////
