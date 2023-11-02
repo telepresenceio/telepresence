@@ -48,6 +48,7 @@ type State interface {
 	ExpireSessions(context.Context, time.Time, time.Time)
 	GetAgent(string) *rpc.AgentInfo
 	GetAllClients() map[string]*rpc.ClientInfo
+	GetAllIntercepts() map[string]*rpc.InterceptInfo
 	GetClient(string) *rpc.ClientInfo
 	GetSession(string) SessionState
 	GetSessionConsumptionMetrics(string) *SessionConsumptionMetrics
@@ -387,6 +388,10 @@ func (s *state) GetClient(sessionID string) *rpc.ClientInfo {
 
 func (s *state) GetAllClients() map[string]*rpc.ClientInfo {
 	return s.clients.LoadAll()
+}
+
+func (s *state) GetAllIntercepts() map[string]*rpc.InterceptInfo {
+	return s.intercepts.LoadAll()
 }
 
 func (s *state) CountAgents() int {
