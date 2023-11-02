@@ -334,7 +334,7 @@ func readLoop(ctx context.Context, h streamReader, trafficProbe *CounterProbe) {
 // the dialStream is closed.
 func DialWaitLoop(
 	ctx context.Context,
-	manager rpc.ManagerClient,
+	tunnelProvider Provider,
 	dialStream rpc.Manager_WatchDialClient,
 	sessionID string,
 ) error {
@@ -349,12 +349,12 @@ func DialWaitLoop(
 			}
 			return nil
 		}
-		go dialRespond(ctx, manager, dr, sessionID)
+		go dialRespond(ctx, tunnelProvider, dr, sessionID)
 	}
 	return nil
 }
 
-func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialRequest, sessionID string) {
+func dialRespond(ctx context.Context, tunnelProvider Provider, dr *rpc.DialRequest, sessionID string) {
 	if tc := dr.GetTraceContext(); tc != nil {
 		carrier := propagation.MapCarrier(tc)
 		propagator := otel.GetTextMapPropagator()
@@ -364,7 +364,7 @@ func dialRespond(ctx context.Context, manager rpc.ManagerClient, dr *rpc.DialReq
 	defer span.End()
 	id := ConnID(dr.ConnId)
 	id.SpanRecord(span)
-	mt, err := manager.Tunnel(ctx)
+	mt, err := tunnelProvider.Tunnel(ctx)
 	if err != nil {
 		dlog.Errorf(ctx, "!! CONN %s, call to manager Tunnel failed: %v", id, err)
 		return

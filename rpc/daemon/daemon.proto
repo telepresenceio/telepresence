@@ -43,6 +43,9 @@ service Daemon {
 
   // WaitForNetwork waits for the network of the currently connected session to become ready.
   rpc WaitForNetwork(google.protobuf.Empty) returns (google.protobuf.Empty);
+
+  // WaitForAgentIP waits for the network of an intercepted agent to become ready.
+  rpc WaitForAgentIP(WaitForAgentIPRequest) returns (google.protobuf.Empty);
 }
 
 message DaemonStatus {
@@ -112,16 +115,19 @@ message OutboundInfo {
   // via the underlying network interface.
   repeated manager.IPNet never_proxy_subnets = 6;
 
+  repeated manager.IPNet allow_conflicting_subnets = 10;
+
   // Users home directory
   string home_dir = 7;
+
+  // Connection namespace
+  string namespace = 11;
 
   // Traffic manager namespace
   string manager_namespace = 8;
 
   // Kubernetes flags
   map<string, string> kube_flags = 9;
-
-  repeated manager.IPNet allow_conflicting_subnets = 10;
 
   reserved 4;
 }
@@ -137,4 +143,9 @@ message SetDNSExcludesRequest {
 
 message SetDNSMappingsRequest {
   repeated DNSMapping mappings = 1;
+}
+
+message WaitForAgentIPRequest {
+  bytes ip = 1;
+  google.protobuf.Duration timeout = 2;
 }

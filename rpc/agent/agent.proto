@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+// The "agent" package describes the server implemented by the
+// in-cluster Agent
+package telepresence.agent;
+
+import "google/protobuf/empty.proto";
+import "manager/manager.proto";
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/agent";
+
+service Agent {
+  rpc Tunnel(stream manager.TunnelMessage) returns (stream manager.TunnelMessage);
+
+  // Version returns the version information of the Manager.
+  rpc Version(google.protobuf.Empty) returns (manager.VersionInfo2);
+
+  // WatchDial makes it possible for the client side to receive DialRequests
+  // from the traffic-agent. Requests are sent when an intercepted agent needs
+  // a Tunnel to the Telepresence client on the workstation. The receiver of
+  // the request dials a connection and responds with the needed Tunnel.
+  rpc WatchDial(manager.SessionInfo) returns (stream manager.DialRequest);
+}

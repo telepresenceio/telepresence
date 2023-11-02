@@ -14,12 +14,14 @@ import (
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -177,7 +179,7 @@ func newPodIntercepts() *podIntercepts {
 }
 
 // start a port forward for the given intercept and remembers that it's alive.
-func (lpf *podIntercepts) start(ic *intercept) {
+func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.DaemonClient) {
 	if !ic.shouldForward() && !ic.shouldMount() {
 		return
 	}
@@ -199,6 +201,25 @@ func (lpf *podIntercepts) start(ic *intercept) {
 	// Already started?
 	if _, isLive := lpf.alivePods[fk]; isLive {
 		return
+	}
+
+	if client.GetConfig(ctx).Cluster().AgentPortForward {
+		// An agent port-forward to the pod with a designated to the PodIP is necessary in order to
+		// mount or port-forward to localhost.
+		_, err := rd.WaitForAgentIP(ctx, &daemon.WaitForAgentIPRequest{
+			Ip:      iputil.Parse(ic.PodIp),
+			Timeout: durationpb.New(5 * time.Second),
+		})
+		switch grpcStatus.Code(err) {
+		// Unavailable means that the feature disabled. This is OK, the traffic-manager will do the forwarding
+		case grpcCodes.OK, grpcCodes.Unavailable:
+		case grpcCodes.DeadlineExceeded:
+			dlog.Errorf(ctx, "timeout waiting for port-forward to traffic-agent with pod-ip %s", ic.PodIp)
+			return
+		default:
+			dlog.Errorf(ctx, "unexpected error for port-forward to traffic-agent with pod-ip %s: %v", ic.PodIp, err)
+			return
+		}
 	}
 
 	ctx, cancel := context.WithCancel(ic.ctx)
@@ -311,7 +332,7 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 			ic.FtpPort = 0
 			ic.SftpPort = 0
 		}
-		podIcepts.start(ic)
+		podIcepts.start(ctx, ic, s.rootDaemon)
 	}
 	podIcepts.cancelUnwanted(ctx)
 }

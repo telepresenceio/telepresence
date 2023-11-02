@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -13,6 +12,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
@@ -80,42 +81,10 @@ func (kc *Cluster) namespacesEventHandler(ctx context.Context, evCh <-chan watch
 	}
 }
 
-func (kc *Cluster) canI(ctx context.Context, ra *auth.ResourceAttributes) (bool, error) {
-	authHandler := kc.ki.AuthorizationV1().SelfSubjectAccessReviews()
-	review := auth.SelfSubjectAccessReview{Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
-	ar, err := authHandler.Create(ctx, &review, meta.CreateOptions{})
-	if err == nil && ar.Status.Allowed {
-		return true, nil
-	}
-	where := ""
-	if ra.Namespace != "" {
-		where = " in namespace " + ra.Namespace
-	}
-	if err != nil {
-		err = fmt.Errorf(`unable to do "can-i %s %s%s": %v`, ra.Verb, ra.Resource, where, err)
-		if ctx.Err() == nil {
-			dlog.Error(ctx, err)
-		}
-	} else {
-		dlog.Infof(ctx, `"can-i %s %s%s" is not allowed`, ra.Verb, ra.Resource, where)
-	}
-	return false, err
-}
-
-// CanWatchNamespaces answers the question if this client has the RBAC permissions necessary
-// to watch namespaces. The answer is likely false when using a namespaces scoped installation.
-func (kc *Cluster) CanWatchNamespaces(ctx context.Context) bool {
-	ok, err := kc.canI(ctx, &auth.ResourceAttributes{
-		Verb:     "watch",
-		Resource: "namespaces",
-	})
-	return err == nil && ok
-}
-
 // canGetDefaultTrafficManagerService answers the question if this client has the RBAC permissions
 // necessary to get the traffic-manager in the default namespace.
-func (kc *Cluster) canGetDefaultTrafficManagerService(ctx context.Context) bool {
-	ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+func canGetDefaultTrafficManagerService(ctx context.Context) bool {
+	ok, err := k8sclient.CanI(ctx, &auth.ResourceAttributes{
 		Verb:      "get",
 		Resource:  "services",
 		Name:      "traffic-manager",
@@ -126,8 +95,8 @@ func (kc *Cluster) canGetDefaultTrafficManagerService(ctx context.Context) bool 
 
 // canAccessNS answers the question if this client has the RBAC permissions
 // necessary to list and intercept workloads the namespace.
-func (kc *Cluster) canAccessNS(ctx context.Context, namespace string) bool {
-	authHandler := kc.ki.AuthorizationV1().SelfSubjectRulesReviews()
+func canAccessNS(ctx context.Context, namespace string) bool {
+	authHandler := k8sapi.GetK8sInterface(ctx).AuthorizationV1().SelfSubjectRulesReviews()
 	review := auth.SelfSubjectRulesReview{Spec: auth.SelfSubjectRulesReviewSpec{Namespace: namespace}}
 	rr, err := authHandler.Create(ctx, &review, meta.CreateOptions{})
 	if err != nil {
@@ -137,7 +106,7 @@ func (kc *Cluster) canAccessNS(ctx context.Context, namespace string) bool {
 		// Incomplete is most commonly encountered when an authorizer, such as an external authorizer, doesn't support rules evaluation.
 		// When this happens, we must default to using standard can-i semantics and only check deployments (checking every single
 		// resource here takes a long time, so this is a best-effort).
-		ok, err := kc.canI(ctx, &auth.ResourceAttributes{
+		ok, err := k8sclient.CanI(ctx, &auth.ResourceAttributes{
 			Namespace: namespace,
 			Verb:      "get",
 			Resource:  "deployments",
@@ -240,7 +209,7 @@ func (kc *Cluster) refreshNamespaces(c context.Context) {
 		if kc.shouldBeWatched(ns) {
 			accessOk, ok := kc.currentMappedNamespaces[ns]
 			if !ok {
-				accessOk = kc.canAccessNS(c, ns)
+				accessOk = canAccessNS(c, ns)
 			}
 			namespaces[ns] = accessOk
 		}

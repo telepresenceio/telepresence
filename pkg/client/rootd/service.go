@@ -264,7 +264,19 @@ func (s *Service) GetNetworkConfig(ctx context.Context, e *emptypb.Empty) (nc *r
 		nc = session.getNetworkConfig()
 		return nil
 	})
+	dlog.Debugf(ctx, "Returning session %v", nc.OutboundInfo.Session)
 	return
+}
+
+func (s *Service) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (*emptypb.Empty, error) {
+	err := s.WithSession(func(ctx context.Context, session *Session) error {
+		_, err := session.waitForAgentIP(ctx, request)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*emptypb.Empty, error) {
@@ -329,14 +341,19 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 	}
 	if s.session != nil {
 		reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+		dlog.Debugf(ctx, "Returning session %v from existing session", reply.status.OutboundConfig.Session)
 		return reply
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	session, err := GetNewSessionFunc(ctx)(ctx, oi)
+	ctx, session, err := GetNewSessionFunc(ctx)(ctx, oi)
 	if ctx.Err() != nil || err != nil {
 		cancel()
+		if err == nil {
+			err = ctx.Err()
+		}
 		reply.err = err
+		dlog.Errorf(ctx, "session creation failed %v", err)
 		return reply
 	}
 
@@ -351,6 +368,7 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 	}
 
 	reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+	dlog.Debugf(ctx, "Returning session from new session %v", reply.status.OutboundConfig.Session)
 
 	initErrCh := make(chan error, 1)
 

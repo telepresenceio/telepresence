@@ -120,6 +120,17 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	if !mountEnabled {
 		s.mountDisabled = true
 	} else {
+		if ud.Containerized() && ir.LocalMountPort == 0 {
+			// No use having the remote container actually mount, so let's have it create a bridge
+			// to the remote sftp server instead.
+			lma, err := dnet.FreePortsTCP(1)
+			if err != nil {
+				return nil, err
+			}
+			s.LocalMountPort = uint16(lma[0].Port)
+			mountPoint = ""
+		}
+
 		if err = s.checkMountCapability(ctx); err != nil {
 			err = fmt.Errorf("remote volume mounts are disabled: %w", err)
 			if mountPoint != "" {
@@ -132,12 +143,14 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 		if !s.mountDisabled {
 			ir.LocalMountPort = int32(s.LocalMountPort)
-			var cwd string
-			if cwd, err = os.Getwd(); err != nil {
-				return nil, err
-			}
-			if ir.MountPoint, err = PrepareMount(cwd, mountPoint); err != nil {
-				return nil, err
+			if ir.LocalMountPort == 0 {
+				var cwd string
+				if cwd, err = os.Getwd(); err != nil {
+					return nil, err
+				}
+				if ir.MountPoint, err = PrepareMount(cwd, mountPoint); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -228,16 +241,6 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 			scout.Report(ctx, "intercept_success")
 		}
 	}()
-
-	if ud.Containerized() && ir.LocalMountPort == 0 {
-		// No use having the remote container actually mount, so let's have it create a bridge
-		// to the remote sftp server instead.
-		lma, err := dnet.FreePortsTCP(1)
-		if err != nil {
-			return false, err
-		}
-		ir.LocalMountPort = int32(lma[0].Port)
-	}
 
 	// Submit the request
 	r, err := ud.CreateIntercept(ctx, ir)

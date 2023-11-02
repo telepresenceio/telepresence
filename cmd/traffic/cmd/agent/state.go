@@ -5,16 +5,22 @@ import (
 	"net/http"
 
 	"github.com/blang/semver"
+	"github.com/puzpuzpuz/xsync/v3"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // State reflects the current state of the agent.
 type State interface {
 	Config
+	agent.AgentServer
+	tunnel.ClientStreamProvider
 	AddInterceptState(is InterceptState)
 	AgentState() restapi.AgentState
 	InterceptStates() []InterceptState
@@ -22,11 +28,15 @@ type State interface {
 	ManagerClient() manager.ManagerClient
 	ManagerVersion() semver.Version
 	SessionInfo() *manager.SessionInfo
+	SetFileSharingPorts(ftp uint16, sftp uint16)
 	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
-	WaitForFtpPort(ctx context.Context, ch <-chan uint16) error
-	WaitForSftpPort(ctx context.Context, ch <-chan uint16) error
+}
+
+type SimpleState interface {
+	State
+	NewInterceptState(forwarder forwarder.Interceptor, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState
 }
 
 // An InterceptState implements what's needed to intercept one port.
@@ -40,8 +50,10 @@ type InterceptState interface {
 // State of the Traffic Agent.
 type state struct {
 	Config
-	ftpPort  uint16
-	sftpPort uint16
+	ftpPort          uint16
+	sftpPort         uint16
+	dialWatchers     *xsync.MapOf[string, chan *manager.DialRequest]
+	awaitingForwards *xsync.MapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]]
 
 	// The sessionInfo and manager client are needed when forwarders establish their
 	// tunnel to the traffic-manager.
@@ -50,6 +62,7 @@ type state struct {
 	mgrVer      semver.Version
 
 	interceptStates []InterceptState
+	agent.UnimplementedAgentServer
 }
 
 type simpleState struct {
@@ -65,16 +78,29 @@ func (s *state) ManagerVersion() semver.Version {
 	return s.mgrVer
 }
 
+func (s *state) SetFileSharingPorts(ftp uint16, sftp uint16) {
+	s.ftpPort = ftp
+	s.sftpPort = sftp
+}
+
 func (s *state) SessionInfo() *manager.SessionInfo {
 	return s.sessionInfo
 }
 
 func NewState(config Config) State {
-	return &state{Config: config}
+	return &state{
+		Config:           config,
+		dialWatchers:     xsync.NewMapOf[string, chan *manager.DialRequest](),
+		awaitingForwards: xsync.NewMapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
+	}
 }
 
-func NewSimpleState(config Config) State {
-	return &simpleState{state: state{Config: config}}
+func NewSimpleState(config Config) SimpleState {
+	return &simpleState{state: state{
+		Config:           config,
+		dialWatchers:     xsync.NewMapOf[string, chan *manager.DialRequest](),
+		awaitingForwards: xsync.NewMapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
+	}}
 }
 
 func (s *state) AddInterceptState(is InterceptState) {
@@ -149,22 +175,4 @@ func (s *state) FtpPort() uint16 {
 
 func (s *state) SftpPort() uint16 {
 	return s.sftpPort
-}
-
-func (s *state) WaitForFtpPort(ctx context.Context, ch <-chan uint16) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case s.ftpPort = <-ch:
-		return nil
-	}
-}
-
-func (s *state) WaitForSftpPort(ctx context.Context, ch <-chan uint16) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case s.sftpPort = <-ch:
-		return nil
-	}
 }
