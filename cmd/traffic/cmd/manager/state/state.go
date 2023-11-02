@@ -253,6 +253,9 @@ func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) Clean
 	//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
 	// Alternatively, if the intercept is still live but has been switched over to a different agent, send it back to WAITING state
 	for interceptID, intercept := range s.intercepts.LoadAll() {
+		if intercept.Disposition == rpc.InterceptDispositionType_REMOVED {
+			continue
+		}
 		if intercept.ClientSession.SessionId == sessionID {
 			// Client went away:
 			// Delete it.
@@ -423,6 +426,9 @@ func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.sessions[sessionID] = newAgentSessionState(s.backgroundCtx, now)
 
 	for interceptID, intercept := range s.intercepts.LoadAll() {
+		if intercept.Disposition == rpc.InterceptDispositionType_REMOVED {
+			continue
+		}
 		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
 		// because this agent made things inconsistent, or (2) be moved out of a NO_AGENT
 		// state because it just gained an agent.
