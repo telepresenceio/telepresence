@@ -34,8 +34,11 @@ type Info interface {
 	// Watch changes of an ClusterInfo and write them on the given stream
 	Watch(context.Context, rpc.Manager_WatchClusterInfoServer) error
 
-	// ID of the cluster
+	// ID of the installed ns
 	ID() string
+
+	// clusterID of the cluster
+	ClusterID() string
 
 	// GetTrafficManagerPods acquires all pods that have `traffic-manager` in
 	// their name
@@ -54,6 +57,9 @@ type subnetRetriever interface {
 type info struct {
 	rpc.ClusterInfo
 	ciSubs *clusterInfoSubscribers
+
+	// namespaceID is the UID of the manager's namespace
+	namespaceID string
 
 	// clusterID is the UID of the default namespace
 	clusterID string
@@ -90,11 +96,22 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	client := ki.CoreV1()
-	if oi.clusterID, err = GetIDFunc(ctx, client, env.ManagerNamespace); err != nil {
+	if oi.namespaceID, err = GetIDFunc(ctx, client, env.ManagerNamespace); err != nil {
+		// We use a default clusterID because we don't want to fail if
+		// the traffic-manager doesn't have the ability to get the namespace
+		oi.namespaceID = IDZero
+		dlog.Warnf(ctx, "unable to get namespace \"%s\", will use default clusterID: %s: %v",
+			env.ManagerNamespace, oi.namespaceID, err)
+	}
+
+	// backwards compat
+	// TODO delete after default ns licenses expire
+	if oi.clusterID, err = GetIDFunc(ctx, client, "default"); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = IDZero
-		dlog.Warnf(ctx, "unable to get namespace \"default\", will use default clusterID: %s: %v",
+		dlog.Warnf(ctx,
+			"unable to get namespace \"default\", will use default clusterID: %s: %v. This is only necessary for compatibility with old licesnses.",
 			oi.clusterID, err)
 	}
 
@@ -348,6 +365,10 @@ func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfo
 }
 
 func (oi *info) ID() string {
+	return oi.namespaceID
+}
+
+func (oi *info) ClusterID() string {
 	return oi.clusterID
 }
 
