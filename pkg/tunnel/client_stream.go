@@ -7,12 +7,12 @@ import (
 	"time"
 )
 
-type GRPClientCStream interface {
+type GRPCClientStream interface {
 	GRPCStream
 	CloseSend() error
 }
 
-func NewClientStream(ctx context.Context, grpcStream GRPClientCStream, id ConnID, sessionID string, callDelay, dialTimeout time.Duration) (Stream, error) {
+func NewClientStream(ctx context.Context, grpcStream GRPCClientStream, id ConnID, sessionID string, callDelay, dialTimeout time.Duration) (Stream, error) {
 	s := &clientStream{stream: newStream("CLI", grpcStream)}
 	s.id = id
 	s.roundtripLatency = callDelay
@@ -41,5 +41,5 @@ type clientStream struct {
 }
 
 func (s *clientStream) CloseSend(_ context.Context) error {
-	return s.grpcStream.(GRPClientCStream).CloseSend()
+	return s.grpcStream.(GRPCClientStream).CloseSend()
 }

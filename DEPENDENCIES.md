@@ -110,6 +110,7 @@ following Free and Open Source software:
     github.com/prometheus/client_model                                           v0.4.0                                Apache License 2.0
     github.com/prometheus/common                                                 v0.43.0                               Apache License 2.0
     github.com/prometheus/procfs                                                 v0.9.0                                Apache License 2.0
+    github.com/puzpuzpuz/xsync/v3                                                v3.0.0                                MIT license
     github.com/rivo/uniseg                                                       v0.4.4                                MIT license
     github.com/rogpeppe/go-internal                                              v1.10.0                               3-clause BSD license
     github.com/rubenv/sql-migrate                                                v1.4.0                                MIT license

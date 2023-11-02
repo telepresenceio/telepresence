@@ -172,6 +172,12 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 	}, nil
 }
 
+func (s *service) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) (*empty.Empty, error) {
+	dlog.Debug(ctx, "ReportMetrics called")
+	s.state.AddSessionConsumptionMetrics(metrics)
+	return &empty.Empty{}, nil
+}
+
 func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLIConfig, error) {
 	dlog.Debug(ctx, "GetClientConfig called")
 
@@ -206,10 +212,86 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	return &empty.Empty{}, nil
 }
 
-// WatchAgents notifies a client of the set of known Agents.
+// WatchAgentPods notifies a client of the set of known Agents.
+func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentPodsServer) error {
+	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	dlog.Debug(ctx, "WatchAgentPods called")
+	defer dlog.Debug(ctx, "WatchAgentPods ended")
+
+	clientSession := session.SessionId
+	clientInfo := s.state.GetClient(clientSession)
+	if clientInfo == nil {
+		return status.Errorf(codes.NotFound, "Client session %q not found", clientSession)
+	}
+	ns := clientInfo.Namespace
+
+	agentsCh := s.state.WatchAgents(ctx, func(_ string, info *rpc.AgentInfo) bool {
+		return info.Namespace == ns
+	})
+	interceptsCh := s.state.WatchIntercepts(ctx, func(_ string, info *rpc.InterceptInfo) bool {
+		return info.ClientSession.SessionId == clientSession
+	})
+	sessionDone, err := s.state.SessionDone(clientSession)
+	if err != nil {
+		return err
+	}
+
+	var interceptInfos map[string]*rpc.InterceptInfo
+	isIntercepted := func(name, namespace string) bool {
+		for _, ii := range interceptInfos {
+			if name == ii.Spec.Agent && namespace == ii.Spec.Namespace {
+				return true
+			}
+		}
+		return false
+	}
+	var agents []*rpc.AgentPodInfo
+	var agentNames []string
+	for {
+		select {
+		case <-sessionDone:
+			// Manager believes this session has ended.
+			return nil
+		case as, ok := <-agentsCh:
+			if !ok {
+				return nil
+			}
+			agm := as.State
+			agents = make([]*rpc.AgentPodInfo, len(agm))
+			agentNames = make([]string, len(agm))
+			i := 0
+			for _, a := range agm {
+				agents[i] = &rpc.AgentPodInfo{
+					PodName:     a.PodName,
+					Namespace:   a.Namespace,
+					PodIp:       iputil.Parse(a.PodIp),
+					ApiPort:     a.ApiPort,
+					Intercepted: isIntercepted(a.Name, a.Namespace),
+				}
+				agentNames[i] = a.Name
+				i++
+			}
+		case is, ok := <-interceptsCh:
+			if !ok {
+				return nil
+			}
+			interceptInfos = is.State
+			for i, a := range agents {
+				a.Intercepted = isIntercepted(agentNames[i], a.Namespace)
+			}
+		}
+		if agents != nil {
+			if err = stream.Send(&rpc.AgentPodInfoSnapshot{Agents: agents}); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// WatchAgents notifies a client of the set of known Agents. If the caller is a client, then the
+// only agents in the client's connected namespace are returned.
 func (s *service) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
-
 	dlog.Debug(ctx, "WatchAgents called")
 
 	snapshotCh := s.state.WatchAgents(ctx, nil)
@@ -392,6 +474,9 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 					// agent-owned state: include the intercept
 					dlog.Debugf(ctx, "Intercept %s.%s valid. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
 					return true
+				case rpc.InterceptDispositionType_REMOVED:
+					dlog.Debugf(ctx, "Intercept %s.%s valid but removed", info.Spec.Agent, info.Spec.Namespace)
+					return true
 				default:
 					// otherwise: don't return this intercept
 					dlog.Debugf(ctx, "Intercept %s.%s is not in agent-owned state. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
@@ -401,7 +486,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		} else {
 			// sessionID refers to a client session
 			filter = func(id string, info *rpc.InterceptInfo) bool {
-				return info.ClientSession.SessionId == sessionID
+				return info.ClientSession.SessionId == sessionID && info.Disposition != rpc.InterceptDispositionType_REMOVED
 			}
 		}
 	}

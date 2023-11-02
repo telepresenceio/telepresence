@@ -29,9 +29,9 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Wait until the pods have terminated. This might take a long time (several minutes).
 	require.Eventually(func() bool { return len(s.runningPods(ctx)) == 0 }, 2*time.Minute, 6*time.Second)
 
-	// Verify that intercept remains but that no agent is found. User require here
+	// Verify that intercept remains but that no agent is found. Use require here
 	// to avoid a hanging os.Stat call unless this succeeds.
-	assert.Eventually(func() bool {
+	require.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list")
 		if err != nil {
 			return false

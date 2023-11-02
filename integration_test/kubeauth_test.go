@@ -107,7 +107,7 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 		ctx = itest.WithKubeConfig(ctx, cfg)
 		if connectFromUserDaemon {
 			ctx = itest.WithConfig(ctx, func(conf client.Config) {
-				conf.Cluster().ConnectFromUserDaemon = true
+				conf.Cluster().ConnectFromRootDaemon = false
 			})
 		}
 

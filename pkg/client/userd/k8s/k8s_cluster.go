@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
@@ -152,7 +153,7 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 		namespaces = cfg.Cluster().MappedNamespaces
 	}
 	if len(namespaces) == 0 {
-		if ret.CanWatchNamespaces(c) {
+		if k8sclient.CanWatchNamespaces(c) {
 			ret.StartNamespaceWatcher(c)
 		}
 	} else {
@@ -199,13 +200,13 @@ func (kc *Cluster) determineTrafficManagerNamespace(c context.Context) (string, 
 	}
 
 	// No existing manager was found.
-	if kc.canGetDefaultTrafficManagerService(c) {
+	if canGetDefaultTrafficManagerService(c) {
 		return defaultManagerNamespace, nil
 	}
 
 	// No existing traffic-manager found. Assume that it should be installed
 	// in the default namespace if it is accessible
-	if kc.canAccessNS(c, kc.Namespace) {
+	if canAccessNS(c, kc.Namespace) {
 		return kc.Namespace, nil
 	}
 	return "", errcat.User.New("unable to determine the traffic-manager namespace")
