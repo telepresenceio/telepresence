@@ -7,6 +7,7 @@ package telepresence.manager;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/manager";
 
@@ -146,6 +147,7 @@ enum InterceptDispositionType {
 
   ACTIVE = 1;
   WAITING = 2;
+  REMOVED = 9;
 
   // Failure states
 
@@ -253,6 +255,9 @@ message InterceptInfo {
 
   // The environment of the intercepted app
   map<string, string> environment = 17;
+
+  // Timestamp for last modification made by traffic-manager
+  google.protobuf.Timestamp modified_at = 19;
 }
 
 message SessionInfo {
