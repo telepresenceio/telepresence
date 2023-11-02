@@ -392,6 +392,9 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 					// agent-owned state: include the intercept
 					dlog.Debugf(ctx, "Intercept %s.%s valid. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
 					return true
+				case rpc.InterceptDispositionType_REMOVED:
+					dlog.Debugf(ctx, "Intercept %s.%s valid but removed", info.Spec.Agent, info.Spec.Namespace)
+					return true
 				default:
 					// otherwise: don't return this intercept
 					dlog.Debugf(ctx, "Intercept %s.%s is not in agent-owned state. Disposition: %s", info.Spec.Agent, info.Spec.Namespace, info.Disposition)
@@ -401,7 +404,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		} else {
 			// sessionID refers to a client session
 			filter = func(id string, info *rpc.InterceptInfo) bool {
-				return info.ClientSession.SessionId == sessionID
+				return info.ClientSession.SessionId == sessionID && info.Disposition != rpc.InterceptDispositionType_REMOVED
 			}
 		}
 	}

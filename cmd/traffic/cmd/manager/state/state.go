@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -54,7 +55,10 @@ type State interface {
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string) (bool, error)
+	DropIntercept(string)
 	UnlockedRemoveIntercept(ctx context.Context, interceptID string) (bool, CleanupWaiter)
+	UnlockedFinalizeIntercept(ctx context.Context, intercept *rpc.InterceptInfo) CleanupWaiter
+	LoadMatchingIntercepts(filter func(string, *rpc.InterceptInfo) bool) map[string]*rpc.InterceptInfo
 	RemoveSession(context.Context, string) error
 	SessionDone(string) (<-chan struct{}, error)
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
@@ -522,6 +526,7 @@ func (s *state) NewInterceptInfo(interceptID string, session *rpc.SessionInfo, c
 		Message:       "Waiting for Agent approval",
 		Id:            interceptID,
 		ClientSession: session,
+		ModifiedAt:    timestamppb.Now(),
 	}
 }
 
@@ -579,6 +584,7 @@ func (s *state) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 
 		newInfo := proto.Clone(cur).(*rpc.InterceptInfo)
 		apply(newInfo)
+		newInfo.ModifiedAt = timestamppb.Now()
 
 		swapped := s.intercepts.CompareAndSwap(newInfo.Id, cur, newInfo)
 		if swapped {
@@ -616,13 +622,25 @@ func (s *state) RemoveIntercept(ctx context.Context, interceptID string) (bool, 
 	return removed, wait()
 }
 
+func noWait() error {
+	return nil
+}
+
 func (s *state) UnlockedRemoveIntercept(ctx context.Context, interceptID string) (bool, CleanupWaiter) {
-	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
-	wait := func() error { return nil }
-	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
-		delete(s.interceptStates, interceptID)
+	if intercept, didDelete := s.intercepts.LoadAndDelete(interceptID); didDelete {
+		return true, s.UnlockedFinalizeIntercept(ctx, intercept)
+	}
+	return false, noWait
+}
+
+// UnlockedFinalizeIntercept calls all the finalizers for the intercept and removes its state. The intercept
+// is not removed from the subscription list.
+func (s *state) UnlockedFinalizeIntercept(ctx context.Context, intercept *rpc.InterceptInfo) CleanupWaiter {
+	wait := noWait
+	if is, ok := s.interceptStates[intercept.Id]; ok {
+		delete(s.interceptStates, intercept.Id)
 		call := &interceptFinalizerCall{
-			state: state,
+			state: is,
 			info:  intercept,
 			errCh: make(chan error),
 			ctx:   ctx,
@@ -632,8 +650,17 @@ func (s *state) UnlockedRemoveIntercept(ctx context.Context, interceptID string)
 			return <-call.errCh
 		}
 	}
+	return wait
+}
 
-	return didDelete, wait
+// DropIntercept stops tracking intercept with the given ID. It's assume that has been finalized prior to
+// this call.
+func (s *state) DropIntercept(interceptID string) {
+	s.intercepts.Delete(interceptID)
+}
+
+func (s *state) LoadMatchingIntercepts(filter func(string, *rpc.InterceptInfo) bool) map[string]*rpc.InterceptInfo {
+	return s.intercepts.LoadAllMatching(filter)
 }
 
 func (s *state) runInterceptFinalizerQueue() {
