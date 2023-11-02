@@ -35,7 +35,7 @@ var (
 	DisplayName                 = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
 	NewServiceFunc              = NewService                          //nolint:gochecknoglobals // extension point
 	WithAgentImageRetrieverFunc = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
-	InterceptCounter      *prometheus.CounterVec                //nolint:gochecknoglobals // prometheus metric
+	InterceptCounter            *prometheus.CounterVec                //nolint:gochecknoglobals // prometheus metric
 	InterceptActiveStatusGauge  *prometheus.GaugeVec                  //nolint:gochecknoglobals // prometheus metric
 	ConnectCounter              *prometheus.CounterVec                //nolint:gochecknoglobals // prometheus metric
 	ConnectActiveStatusGauge    *prometheus.GaugeVec                  //nolint:gochecknoglobals // prometheus metric
@@ -138,6 +138,7 @@ func newCounterVecFunc(n, h string, labels []string) *prometheus.CounterVec {
 		Name: n,
 		Help: h,
 	}, labels)
+	prometheus.MustRegister(counterVec)
 	return counterVec
 }
 
@@ -146,10 +147,9 @@ func newGaugeVecFunc(n, h string, labels []string) *prometheus.GaugeVec {
 		Name: n,
 		Help: h,
 	}, labels)
+	prometheus.MustRegister(gaugeVec)
 	return gaugeVec
 }
-
-
 
 func IncrementCounter(metric *prometheus.CounterVec, client, installId string) {
 	if metric != nil {
