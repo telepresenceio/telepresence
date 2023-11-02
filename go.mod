@@ -33,16 +33,16 @@ require (
 	github.com/spf13/afero v1.9.5
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.4
 	github.com/telepresenceio/telepresence/rpc/v2 v2.16.1
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.41.1
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.41.1
-	go.opentelemetry.io/otel v1.15.1
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.44.0
+	go.opentelemetry.io/otel v1.18.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.15.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.15.1
 	go.opentelemetry.io/otel/sdk v1.15.1
-	go.opentelemetry.io/otel/trace v1.15.1
+	go.opentelemetry.io/otel/trace v1.18.0
 	go.opentelemetry.io/proto/otlp v0.19.0
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc
 	golang.org/x/net v0.17.0
@@ -161,7 +161,7 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.15.1 // indirect
-	go.opentelemetry.io/otel/metric v0.38.1 // indirect
+	go.opentelemetry.io/otel/metric v1.18.0 // indirect
 	go.starlark.net v0.0.0-20230302034142-4b1e35fe2254 // indirect
 	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/mod v0.10.0 // indirect
