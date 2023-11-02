@@ -47,6 +47,8 @@ type Info interface {
 	// GetTrafficAgentPods acquires all pods that have a `traffic-agent`
 	// container in their spec
 	GetTrafficAgentPods(context.Context, string) ([]*corev1.Pod, error)
+
+	Mutate(context.Context, func(*rpc.ClusterInfo))
 }
 
 type subnetRetriever interface {
@@ -57,6 +59,8 @@ type subnetRetriever interface {
 type info struct {
 	rpc.ClusterInfo
 	ciSubs *clusterInfoSubscribers
+	lock   sync.Mutex
+	self   Info
 
 	// namespaceID is the UID of the manager's namespace
 	namespaceID string
@@ -67,11 +71,14 @@ type info struct {
 
 const IDZero = "00000000-0000-0000-0000-000000000000"
 
+var NewInfoFunc = NewInfo
+
 func NewInfo(ctx context.Context) Info {
 	env := managerutil.GetEnv(ctx)
 	managedNamespaces := env.ManagedNamespaces
 	namespaced := len(managedNamespaces) > 0
 	oi := info{}
+	oi.self = &oi
 	ki := k8sapi.GetK8sInterface(ctx)
 
 	// Validate that the kubernetes server version is supported
@@ -240,6 +247,17 @@ func NewInfo(ctx context.Context) Info {
 	return &oi
 }
 
+func (oi *info) Mutate(ctx context.Context, mutator func(*rpc.ClusterInfo)) {
+	oi.lock.Lock()
+	defer oi.lock.Unlock()
+	mutator(&oi.ClusterInfo)
+	oi.notify(ctx)
+}
+
+func (oi *info) SetSelf(self Info) {
+	oi.self = self
+}
+
 func getClusterDomain(ctx context.Context, svcIp net.IP, env *managerutil.Env) string {
 	desiredMatch := env.AgentInjectorName + "." + env.ManagerNamespace + ".svc."
 	addr := svcIp.String()
@@ -390,10 +408,16 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	return ci
 }
 
+func (oi *info) notify(ctx context.Context) {
+	oi.ciSubs.notify(ctx, oi.clusterInfo())
+}
+
 func (oi *info) watchSubnets(ctx context.Context, retriever subnetRetriever) {
 	retriever.changeNotifier(ctx, func(subnets subnet.Set) {
+		oi.lock.Lock()
+		defer oi.lock.Unlock()
 		oi.PodSubnets = subnetSetToRPC(subnets)
-		oi.ciSubs.notify(ctx, oi.clusterInfo())
+		oi.notify(ctx)
 	})
 }
 

@@ -84,7 +84,7 @@ func NewService(ctx context.Context) (Service, context.Context, error) {
 	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
 	ret.ctx = ctx
 	// These are context dependent so build them once the pool is up
-	ret.clusterInfo = cluster.NewInfo(ctx)
+	ret.clusterInfo = cluster.NewInfoFunc(ctx)
 	ret.state = state.NewStateFunc(ctx)
 	ret.self = ret
 	return ret, ctx, nil
