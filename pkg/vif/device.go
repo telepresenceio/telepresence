@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"gvisor.dev/gvisor/pkg/bufferv2"
+	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/link/channel"
@@ -18,7 +18,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
-	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
+	vifBuffer "github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
 type device struct {
@@ -157,7 +157,7 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 		cancel()
 		d.wg.Done()
 	}()
-	buf := buffer.NewData(0x10000)
+	buf := vifBuffer.NewData(0x10000)
 	data := buf.Buf()
 	for ok := true; ok; {
 		n, err := d.dev.readPacket(buf)
@@ -183,7 +183,7 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 		}
 
 		pb := stack.NewPacketBuffer(stack.PacketBufferOptions{
-			Payload: bufferv2.MakeWithData(data[:n]),
+			Payload: buffer.MakeWithData(data[:n]),
 		})
 
 		d.InjectInbound(ipv, pb)
@@ -193,7 +193,7 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 
 func (d *device) dispatchToTun(ctx context.Context) {
 	defer d.wg.Done()
-	buf := buffer.NewData(0x10000)
+	buf := vifBuffer.NewData(0x10000)
 	for {
 		pb := d.ReadContext(ctx)
 		if pb.IsNil() {
