@@ -33,14 +33,16 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -76,11 +78,17 @@ type Session struct {
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
 
+	// agentClients provides the gRPC tunnel to traffic-agents in the connected namespace
+	agentClients agentpf.Clients
+
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient connector.ManagerProxyClient
 
 	// managerVersion is the version of the connected traffic-manager
 	managerVersion semver.Version
+
+	// namespace that the client is connected to
+	namespace string
 
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
@@ -157,7 +165,7 @@ type Session struct {
 	done chan struct{}
 }
 
-type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (*Session, error)
+type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (context.Context, *Session, error)
 
 type newSessionKey struct{}
 
@@ -172,41 +180,54 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 	panic("No User daemon Session creator has been registered")
 }
 
-func createPortForwardDialer(ctx context.Context, flags map[string]string) (dnet.PortForwardDialer, error) {
+func createPortForwardDialer(ctx context.Context, flags map[string]string) (dnet.PortForwardDialer, kubernetes.Interface, error) {
 	configFlags, err := client.ConfigFlags(flags)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rs, err := configFlags.ToRESTConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cs, err := kubernetes.NewForConfig(rs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return dnet.NewK8sPortForwardDialer(ctx, rs, cs)
+	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, rs, cs)
+	return pfDialer, cs, err
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
-func connectToManager(ctx context.Context, namespace string, kubeFlags map[string]string) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
-	if client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
-		return connectToUserDaemon(ctx)
+func connectToManager(
+	ctx context.Context,
+	namespace string,
+	kubeFlags map[string]string,
+) (
+	context.Context,
+	*grpc.ClientConn,
+	connector.ManagerProxyClient,
+	semver.Version,
+	error,
+) {
+	if !client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
+		conn, mp, v, err := connectToUserDaemon(ctx)
+		return ctx, conn, mp, v, err
 	}
 	var mgrVer semver.Version
-	pfDialer, err := createPortForwardDialer(ctx, kubeFlags)
+	pfDialer, cs, err := createPortForwardDialer(ctx, kubeFlags)
 	if err != nil {
-		return nil, nil, mgrVer, err
+		return ctx, nil, nil, mgrVer, err
 	}
+	ctx = k8sapi.WithK8sInterface(ctx, cs)
 
 	clientConfig := client.GetConfig(ctx)
 	tos := clientConfig.Timeouts()
 
-	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	timedCtx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
-	conn, mc, ver, err := tm.ConnectToManager(ctx, namespace, pfDialer.Dial)
+	conn, mc, ver, err := k8sclient.ConnectToManager(timedCtx, namespace, pfDialer.Dial)
 	if err != nil {
-		return nil, nil, mgrVer, err
+		return ctx, nil, nil, mgrVer, err
 	}
 
 	verStr := strings.TrimPrefix(ver.Version, "v")
@@ -214,9 +235,9 @@ func connectToManager(ctx context.Context, namespace string, kubeFlags map[strin
 	mgrVer, err = semver.Parse(verStr)
 	if err != nil {
 		conn.Close()
-		return nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+		return ctx, nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
-	return conn, &userdToManagerShortcut{mc}, mgrVer, nil
+	return dnet.WithPortForwardDialer(ctx, pfDialer), conn, &userdToManagerShortcut{mc}, mgrVer, nil
 }
 
 // connectToUserDaemon is like connectToManager but the port-forward will be established from the user-daemon
@@ -266,20 +287,16 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 }
 
 // NewSession returns a new properly initialized session object.
-func NewSession(c context.Context, mi *rpc.OutboundInfo) (*Session, error) {
+func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Session, error) {
 	dlog.Info(c, "-- Starting new session")
 
-	conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags)
+	c, conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags)
 	if mc == nil || err != nil {
-		return nil, err
-	}
-
-	if mc == nil || err != nil {
-		return nil, err
+		return c, nil, err
 	}
 	s := newSession(c, mi, mc, ver)
 	s.clientConn = conn
-	return s, nil
+	return c, s, nil
 }
 
 func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
@@ -293,6 +310,7 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}
 	}
+	dlog.Debugf(c, "Creating session with id %v", mi.Session)
 
 	as := iputil.ConvertSubnets(mi.AlsoProxySubnets)
 	ns := iputil.ConvertSubnets(mi.NeverProxySubnets)
@@ -301,6 +319,7 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 		handlers:                tunnel.NewPool(),
 		rndSource:               rand.NewSource(time.Now().UnixNano()),
 		session:                 mi.Session,
+		namespace:               mi.Namespace,
 		managerClient:           mc,
 		managerVersion:          ver,
 		alsoProxySubnets:        as,
@@ -780,6 +799,20 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		return s.watchClusterInfo(ctx)
 	})
 
+	if rmc, ok := s.managerClient.(interface{ RealManagerClient() manager.ManagerClient }); ok {
+		clusterCfg := client.GetConfig(c).Cluster()
+		if clusterCfg.AgentPortForward && clusterCfg.ConnectFromRootDaemon {
+			if k8sclient.CanPortForward(c, s.namespace) {
+				s.agentClients = agentpf.NewClients(s.session)
+				g.Go("agentPods", func(ctx context.Context) error {
+					return s.agentClients.WatchAgentPods(ctx, rmc.RealManagerClient())
+				})
+			} else {
+				dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
+			}
+		}
+	}
+
 	// At this point, we wait until the VIF is ready. It will be, shortly after
 	// the first ClusterInfo is received from the traffic-manager. A timeout
 	// is needed so that we don't wait forever on a traffic-manager that has
@@ -869,6 +902,23 @@ func (s *Session) applyConfig(ctx context.Context) error {
 		return err
 	}
 	return client.MergeAndReplace(ctx, s.config, cfg, true)
+}
+
+func (s *Session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (*empty.Empty, error) {
+	if s.agentClients == nil {
+		return nil, status.Error(codes.Unavailable, "")
+	}
+	err := s.agentClients.WaitForIP(ctx, request.Timeout.AsDuration(), request.Ip)
+	switch {
+	case err == nil:
+	case errors.Is(err, context.DeadlineExceeded):
+		err = status.Error(codes.DeadlineExceeded, "")
+	case errors.Is(err, context.Canceled):
+		err = status.Error(codes.Canceled, "")
+	default:
+		err = status.Error(codes.Internal, err.Error())
+	}
+	return &empty.Empty{}, err
 }
 
 func (s *Session) Done() chan struct{} {

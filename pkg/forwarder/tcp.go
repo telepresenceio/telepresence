@@ -155,7 +155,7 @@ func (f *tcp) forwardConn(clientConn *net.TCPConn) error {
 	return nil
 }
 
-func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
+func (f *tcp) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
 	ctx, span := otel.Tracer("").Start(ctx, "interceptConn")
 	defer span.End()
 	tracing.RecordInterceptInfo(span, iCept)
@@ -170,26 +170,32 @@ func (f *interceptor) interceptConn(ctx context.Context, conn net.Conn, iCept *m
 
 	spec := iCept.Spec
 	destIp := iputil.Parse(spec.TargetHost)
+	clientSession := iCept.ClientSession.SessionId
 	id := tunnel.NewConnID(ipproto.Parse(addr.Network()), srcIp, destIp, srcPort, uint16(spec.TargetPort))
 	id.SpanRecord(span)
-
-	ms, err := f.manager.Tunnel(ctx)
-	if err != nil {
-		return fmt.Errorf("call to manager.Tunnel() failed. Id %s: %v", id, err)
-	}
-
 	ctx, cancel := context.WithCancel(ctx)
-	s, err := tunnel.NewClientStream(ctx, ms, id, f.sessionInfo.SessionId, time.Duration(spec.RoundtripLatency), time.Duration(spec.DialTimeout))
+	f.mu.Lock()
+	sp := f.streamProvider
+	f.mu.Unlock()
+	s, err := sp.CreateClientStream(ctx, clientSession, id, time.Duration(spec.RoundtripLatency), time.Duration(spec.DialTimeout))
 	if err != nil {
 		cancel()
 		return err
 	}
-	if err = s.Send(ctx, tunnel.SessionMessage(iCept.ClientSession.SessionId)); err != nil {
-		cancel()
-		return fmt.Errorf("unable to send client session id. Id %s: %v", id, err)
-	}
-	d := tunnel.NewConnEndpoint(s, conn, cancel, nil, nil)
+
+	ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
+	egressBytes := tunnel.NewCounterProbe("ToClientBytes")
+
+	// Ingress and egress swap places here, because this endpoint reflects a connection
+	// where the stream is attached to a connection *to* the client, not *from* the client.
+	d := tunnel.NewConnEndpoint(s, conn, cancel, egressBytes, ingressBytes)
 	d.Start(ctx)
 	<-d.Done()
+
+	sp.ReportMetrics(ctx, &manager.TunnelMetrics{
+		ClientSessionId: clientSession,
+		IngressBytes:    ingressBytes.GetValue(),
+		EgressBytes:     egressBytes.GetValue(),
+	})
 	return nil
 }

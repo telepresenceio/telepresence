@@ -7,11 +7,10 @@ import (
 	"net"
 	"sync"
 
-	"github.com/blang/semver"
-
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type Interceptor interface {
@@ -20,7 +19,7 @@ type Interceptor interface {
 	InterceptInfo() *restapi.InterceptInfo
 	Serve(context.Context, chan<- net.Addr) error
 	SetIntercepting(*manager.InterceptInfo)
-	SetManager(*manager.SessionInfo, manager.ManagerClient, semver.Version)
+	SetStreamProvider(tunnel.ClientStreamProvider)
 	Target() (string, uint16)
 }
 
@@ -31,16 +30,13 @@ type interceptor struct {
 	lCancel    context.CancelFunc
 	listenAddr net.Addr
 
-	tCtx       context.Context
-	tCancel    context.CancelFunc
-	targetHost string
-	targetPort uint16
+	tCtx           context.Context
+	tCancel        context.CancelFunc
+	targetHost     string
+	targetPort     uint16
+	streamProvider tunnel.ClientStreamProvider
 
-	manager     manager.ManagerClient
-	sessionInfo *manager.SessionInfo
-
-	intercept  *manager.InterceptInfo
-	mgrVersion semver.Version
+	intercept *manager.InterceptInfo
 }
 
 func NewInterceptor(addr net.Addr, targetHost string, targetPort uint16) Interceptor {
@@ -54,12 +50,10 @@ func NewInterceptor(addr net.Addr, targetHost string, targetPort uint16) Interce
 	}
 }
 
-func (f *interceptor) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
+func (f *interceptor) SetStreamProvider(streamProvider tunnel.ClientStreamProvider) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.sessionInfo = sessionInfo
-	f.manager = manager
-	f.mgrVersion = version
+	f.streamProvider = streamProvider
+	f.mu.Unlock()
 }
 
 func (f *interceptor) Close() error {

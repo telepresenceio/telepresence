@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -36,12 +37,15 @@ type State interface {
 	AddClient(*rpc.ClientInfo, time.Time) string
 	AddIntercept(context.Context, string, string, *rpc.ClientInfo, *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error)
 	AddInterceptFinalizer(string, InterceptFinalizer) error
+	AddSessionConsumptionMetrics(metrics *rpc.TunnelMetrics)
 	AgentsLookupDNS(context.Context, string, *rpc.DNSRequest) (dnsproxy.RRs, int, error)
 	CountAgents() int
 	CountClients() int
 	CountIntercepts() int
 	CountSessions() int
 	CountTunnels() int
+	CountTunnelIngress() uint64
+	CountTunnelEgress() uint64
 	ExpireSessions(context.Context, time.Time, time.Time)
 	GetAgent(string) *rpc.AgentInfo
 	GetAllClients() map[string]*rpc.ClientInfo
@@ -55,7 +59,10 @@ type State interface {
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string) (bool, error)
+	DropIntercept(string)
 	UnlockedRemoveIntercept(ctx context.Context, interceptID string) (bool, CleanupWaiter)
+	UnlockedFinalizeIntercept(ctx context.Context, intercept *rpc.InterceptInfo) CleanupWaiter
+	LoadMatchingIntercepts(filter func(string, *rpc.InterceptInfo) bool) map[string]*rpc.InterceptInfo
 	RemoveSession(context.Context, string) error
 	SessionDone(string) (<-chan struct{}, error)
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
@@ -114,16 +121,18 @@ type state struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts      watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
-	agents          watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
-	clients         watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
-	sessions        map[string]SessionState              // info for all sessions, keyed by session id
-	agentsByName    map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
-	interceptStates map[string]*interceptState
-	timedLogLevel   log.TimedLevel
-	llSubs          *loglevelSubscribers
-	cfgMapLocks     map[string]*sync.Mutex
-	tunnelCounter   int32
+	intercepts           watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
+	agents               watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
+	clients              watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
+	sessions             map[string]SessionState              // info for all sessions, keyed by session id
+	agentsByName         map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	interceptStates      map[string]*interceptState
+	timedLogLevel        log.TimedLevel
+	llSubs               *loglevelSubscribers
+	cfgMapLocks          map[string]*sync.Mutex
+	tunnelCounter        int32
+	tunnelIngressCounter uint64
+	tunnelEgressCounter  uint64
 
 	// Possibly extended version of the state. Use when calling interface methods.
 	self State
@@ -259,6 +268,9 @@ func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) Clean
 	//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
 	// Alternatively, if the intercept is still live but has been switched over to a different agent, send it back to WAITING state
 	for interceptID, intercept := range s.intercepts.LoadAll() {
+		if intercept.Disposition == rpc.InterceptDispositionType_REMOVED {
+			continue
+		}
 		if intercept.ClientSession.SessionId == sessionID {
 			// Client went away:
 			// Delete it.
@@ -297,22 +309,22 @@ func (s *state) unlockedRemoveSession(ctx context.Context, sessionID string) Cle
 		defer sess.Cancel()
 
 		wait = s.gcSessionIntercepts(ctx, sessionID)
+		client := s.GetClient(sessionID)
 
-		agent, isAgent := s.agents.Load(sessionID)
+		agent, isAgent := s.agents.LoadAndDelete(sessionID)
 		if isAgent {
-			// remove it from the agentsByName index (if nescessary)
-
+			// remove it from the agentsByName index (if necessary)
 			delete(s.agentsByName[agent.Name], sessionID)
 			if len(s.agentsByName[agent.Name]) == 0 {
 				delete(s.agentsByName, agent.Name)
 			}
-			// remove the session
-			s.agents.Delete(sessionID)
-		} else {
-			if client := s.GetClient(sessionID); client != nil {
+		} else if _, isClient := s.clients.LoadAndDelete(sessionID); isClient {
+			scm := sess.(*clientSessionState).consumptionMetrics
+			atomic.AddUint64(&s.tunnelIngressCounter, scm.FromClientBytes.GetValue())
+			atomic.AddUint64(&s.tunnelEgressCounter, scm.ToClientBytes.GetValue())
+			if client != nil {
 				s.connectionEstablishedFinalizerCall(client.Name, client.InstallId)
 			}
-			s.clients.Delete(sessionID)
 		}
 		delete(s.sessions, sessionID)
 	}
@@ -418,6 +430,14 @@ func (s *state) CountTunnels() int {
 	return int(atomic.LoadInt32(&s.tunnelCounter))
 }
 
+func (s *state) CountTunnelIngress() uint64 {
+	return atomic.LoadUint64(&s.tunnelIngressCounter)
+}
+
+func (s *state) CountTunnelEgress() uint64 {
+	return atomic.LoadUint64(&s.tunnelEgressCounter)
+}
+
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////
 
 func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
@@ -436,6 +456,9 @@ func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.sessions[sessionID] = newAgentSessionState(s.backgroundCtx, now)
 
 	for interceptID, intercept := range s.intercepts.LoadAll() {
+		if intercept.Disposition == rpc.InterceptDispositionType_REMOVED {
+			continue
+		}
 		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
 		// because this agent made things inconsistent, or (2) be moved out of a NO_AGENT
 		// state because it just gained an agent.
@@ -522,8 +545,12 @@ func (s *state) AddIntercept(ctx context.Context, sessionID, clusterID string, c
 		}
 	}
 
-	if _, hasConflict := s.intercepts.LoadOrStore(cept.Id, cept); hasConflict {
-		return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
+	if existingValue, hasConflict := s.intercepts.LoadOrStore(cept.Id, cept); hasConflict {
+		if existingValue.Disposition != rpc.InterceptDispositionType_REMOVED {
+			return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
+		} else {
+			s.intercepts.Store(cept.Id, cept)
+		}
 	}
 
 	state := newInterceptState(cept.Id)
@@ -539,6 +566,7 @@ func (s *state) NewInterceptInfo(interceptID string, session *rpc.SessionInfo, c
 		Message:       "Waiting for Agent approval",
 		Id:            interceptID,
 		ClientSession: session,
+		ModifiedAt:    timestamppb.Now(),
 	}
 }
 
@@ -596,6 +624,7 @@ func (s *state) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 
 		newInfo := proto.Clone(cur).(*rpc.InterceptInfo)
 		apply(newInfo)
+		newInfo.ModifiedAt = timestamppb.Now()
 
 		swapped := s.intercepts.CompareAndSwap(newInfo.Id, cur, newInfo)
 		if swapped {
@@ -633,13 +662,25 @@ func (s *state) RemoveIntercept(ctx context.Context, interceptID string) (bool, 
 	return removed, wait()
 }
 
+func noWait() error {
+	return nil
+}
+
 func (s *state) UnlockedRemoveIntercept(ctx context.Context, interceptID string) (bool, CleanupWaiter) {
-	intercept, didDelete := s.intercepts.LoadAndDelete(interceptID)
-	wait := func() error { return nil }
-	if state, ok := s.interceptStates[interceptID]; ok && didDelete {
-		delete(s.interceptStates, interceptID)
+	if intercept, didDelete := s.intercepts.LoadAndDelete(interceptID); didDelete {
+		return true, s.UnlockedFinalizeIntercept(ctx, intercept)
+	}
+	return false, noWait
+}
+
+// UnlockedFinalizeIntercept calls all the finalizers for the intercept and removes its state. The intercept
+// is not removed from the subscription list.
+func (s *state) UnlockedFinalizeIntercept(ctx context.Context, intercept *rpc.InterceptInfo) CleanupWaiter {
+	wait := noWait
+	if is, ok := s.interceptStates[intercept.Id]; ok {
+		delete(s.interceptStates, intercept.Id)
 		call := &interceptFinalizerCall{
-			state: state,
+			state: is,
 			info:  intercept,
 			errCh: make(chan error),
 			ctx:   ctx,
@@ -649,8 +690,17 @@ func (s *state) UnlockedRemoveIntercept(ctx context.Context, interceptID string)
 			return <-call.errCh
 		}
 	}
+	return wait
+}
 
-	return didDelete, wait
+// DropIntercept stops tracking intercept with the given ID. It's assume that has been finalized prior to
+// this call.
+func (s *state) DropIntercept(interceptID string) {
+	s.intercepts.Delete(interceptID)
+}
+
+func (s *state) LoadMatchingIntercepts(filter func(string, *rpc.InterceptInfo) bool) map[string]*rpc.InterceptInfo {
+	return s.intercepts.LoadAllMatching(filter)
 }
 
 func (s *state) runInterceptFinalizerQueue() {

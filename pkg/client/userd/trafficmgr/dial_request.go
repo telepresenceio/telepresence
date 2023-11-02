@@ -16,5 +16,5 @@ func (s *session) _dialRequestWatcher(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return tunnel.DialWaitLoop(ctx, s.managerClient, dialerStream, s.sessionInfo.SessionId)
+	return tunnel.DialWaitLoop(ctx, tunnel.ManagerProvider(s.managerClient), dialerStream, s.sessionInfo.SessionId)
 }

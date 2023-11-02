@@ -33,6 +33,10 @@ func (m *userdToManagerShortcut) Tunnel(ctx context.Context, opts ...grpc.CallOp
 	return m.ManagerClient.Tunnel(ctx, opts...)
 }
 
+func (m *userdToManagerShortcut) RealManagerClient() manager.ManagerClient {
+	return m.ManagerClient
+}
+
 // InProcSession is like Session, but also implements the daemon.DaemonClient interface. This makes it possible to use the session
 // in-process from the user daemon, without starting the root daemon gRPC service.
 type InProcSession struct {
@@ -102,6 +106,10 @@ func (rd *InProcSession) WaitForNetwork(ctx context.Context, in *empty.Empty, op
 		return &empty.Empty{}, status.Error(codes.Unavailable, err.Error())
 	}
 	return &empty.Empty{}, nil
+}
+
+func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	return rd.waitForAgentIP(ctx, request)
 }
 
 // NewInProcSession returns a root daemon session suitable to use in-process (from the user daemon) and is primarily intended for
