@@ -46,6 +46,7 @@ type DialerFunc func(context.Context, string) (net.Conn, error)
 type PortForwardDialer interface {
 	io.Closer
 	Dial(ctx context.Context, addr string) (net.Conn, error)
+	DialPod(ctx context.Context, name, namespace string, port uint16) (net.Conn, error)
 }
 
 // NewK8sPortForwardDialer returns a dialer function (matching the signature required by
@@ -71,17 +72,28 @@ func NewK8sPortForwardDialer(logCtx context.Context, kubeConfig *rest.Config, k8
 	return dialer, nil
 }
 
+type podAddress struct {
+	name      string
+	namespace string
+	port      uint16
+}
+
 // Dial dials a port of something in the cluster.  The address format is
 // "[objkind/]objname[.objnamespace]:port".
-func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (net.Conn, error) {
+func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
 	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.Dial(ctx, %q)", addr)
-
-	pod, podPortNumber, err := pf.resolve(ctx, addr)
-	if err != nil {
-		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
-		return nil, err
+	var pod *podAddress
+	if pod, err = pf.resolve(ctx, addr); err == nil {
+		if conn, err = pf.dial(pod); err == nil {
+			return conn, nil
+		}
 	}
-	conn, err := pf.dial(pod, podPortNumber)
+	dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
+	return nil, err
+}
+
+func (pf *k8sPortForwardDialer) DialPod(_ context.Context, name, namespace string, podPortNumber uint16) (net.Conn, error) {
+	conn, err := pf.dial(&podAddress{name: name, namespace: namespace, port: podPortNumber})
 	if err != nil {
 		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
 	}
@@ -100,11 +112,11 @@ func (pf *k8sPortForwardDialer) Close() error {
 	return nil
 }
 
-func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (pod *core.Pod, podPortNumber uint16, err error) {
+func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*podAddress, error) {
 	var hostName, portName string
-	hostName, portName, err = net.SplitHostPort(addr)
+	hostName, portName, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	var objKind, objQName string
@@ -125,12 +137,11 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (pod *
 	}
 
 	coreV1 := pf.k8sInterface.CoreV1()
-	switch objKind {
-	case "svc":
+	if objKind == "svc" {
 		// Get the service.
-		var svc *core.Service
-		if svc, err = coreV1.Services(objNamespace).Get(ctx, objName, meta.GetOptions{}); err != nil {
-			return nil, 0, err
+		svc, err := coreV1.Services(objNamespace).Get(ctx, objName, meta.GetOptions{})
+		if err != nil {
+			return nil, err
 		}
 		svcPortNumber, err := func() (int32, error) {
 			if svcPortNumber, err := strconv.Atoi(portName); err == nil {
@@ -139,7 +150,7 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (pod *
 			return util.LookupServicePortNumberByName(*svc, portName)
 		}()
 		if err != nil {
-			return nil, 0, fmt.Errorf("cannot find service port in %s.%s: %v", objName, objNamespace, err)
+			return nil, fmt.Errorf("cannot find service port in %s.%s: %v", objName, objNamespace, err)
 		}
 
 		// Resolve the Service to a Pod.
@@ -147,7 +158,7 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (pod *
 		var podNS string
 		podNS, selector, err = polymorphichelpers.SelectorsForObject(svc)
 		if err != nil {
-			return nil, 0, fmt.Errorf("cannot attach to %T: %v", svc, err)
+			return nil, fmt.Errorf("cannot attach to %T: %v", svc, err)
 		}
 		timeout := func() time.Duration {
 			if deadline, ok := ctx.Deadline(); ok {
@@ -158,34 +169,39 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (pod *
 		}()
 
 		sortBy := func(pods []*core.Pod) sort.Interface { return sort.Reverse(podutils.ActivePods(pods)) }
-		pod, _, err = polymorphichelpers.GetFirstPod(coreV1, podNS, selector.String(), timeout, sortBy)
+		pod, _, err := polymorphichelpers.GetFirstPod(coreV1, podNS, selector.String(), timeout, sortBy)
 		if err != nil {
-			return nil, 0, fmt.Errorf("cannot find first pod for %s.%s: %v", objName, objNamespace, err)
+			return nil, fmt.Errorf("cannot find first pod for %s.%s: %v", objName, objNamespace, err)
 		}
 		containerPortNumber, err := util.LookupContainerPortNumberByServicePort(*svc, *pod, svcPortNumber)
 		if err != nil {
-			return nil, 0, fmt.Errorf("cannot find first container port %s.%s: %v", pod.Name, pod.Namespace, err)
+			return nil, fmt.Errorf("cannot find first container port %s.%s: %v", pod.Name, pod.Namespace, err)
 		}
-		podPortNumber = uint16(containerPortNumber)
-	default:
-		// Get the pod.
-		pod, err = coreV1.Pods(objNamespace).Get(ctx, objName, meta.GetOptions{})
-		if err != nil {
-			return nil, 0, fmt.Errorf("unable to get %s %s.%s: %w", objKind, objName, objNamespace, err)
-		}
-		var pn int32
-		if p, err := strconv.Atoi(portName); err == nil {
-			pn = int32(p)
-		} else if pn, err = util.LookupContainerPortNumberByName(*pod, portName); err != nil {
-			return nil, 0, err
-		}
-		podPortNumber = uint16(pn)
+		return &podAddress{name: pod.Name, namespace: pod.Namespace, port: uint16(containerPortNumber)}, nil
 	}
-	return pod, podPortNumber, nil
+
+	if p, err := strconv.Atoi(portName); err == nil {
+		return &podAddress{name: objName, namespace: objNamespace, port: uint16(p)}, nil
+	}
+
+	// Get the pod.
+	pod, err := coreV1.Pods(objNamespace).Get(ctx, objName, meta.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get %s %s.%s: %w", objKind, objName, objNamespace, err)
+	}
+	pn, err := util.LookupContainerPortNumberByName(*pod, portName)
+	if err != nil {
+		return nil, err
+	}
+	return &podAddress{
+		name:      pod.Name,
+		namespace: pod.Namespace,
+		port:      uint16(pn),
+	}, nil
 }
 
-func (pf *k8sPortForwardDialer) spdyStream(pod *core.Pod) (httpstream.Connection, error) {
-	cacheKey := pod.Name + "." + pod.Namespace
+func (pf *k8sPortForwardDialer) spdyStream(pod *podAddress) (httpstream.Connection, error) {
+	cacheKey := pod.name + "." + pod.namespace
 	pf.spdyStreamsMu.Lock()
 	defer pf.spdyStreamsMu.Unlock()
 	if spdyStream, ok := pf.spdyStreams[cacheKey]; ok {
@@ -199,15 +215,15 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *core.Pod) (httpstream.Connection
 	reqURL := pf.k8sInterface.CoreV1().RESTClient().
 		Post().
 		Resource("pods").
-		Namespace(pod.Namespace).
-		Name(pod.Name).
+		Namespace(pod.namespace).
+		Name(pod.name).
 		SubResource("portforward").
 		URL()
 
-	// Don't bother caching dialers in .pf, they're just statelss utility structures.
+	// Don't bother caching dialers in .pf, they're just stateless utility structures.
 	spdyDialer := spdy.NewDialer(pf.spdyUpgrader, &http.Client{Transport: pf.spdyTransport}, http.MethodPost, reqURL)
 
-	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.spdyDial(ctx, Pod./%s.%s)", pod.Name, pod.Namespace)
+	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.spdyDial(ctx, Pod./%s.%s)", pod.name, pod.namespace)
 
 	spdyStream, _, err := spdyDialer.Dial(portforward.PortForwardProtocolV1Name)
 	if err != nil {
@@ -225,11 +241,11 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *core.Pod) (httpstream.Connection
 	return spdyStream, nil
 }
 
-func (pf *k8sPortForwardDialer) dial(pod *core.Pod, port uint16) (conn *kpfConn, err error) {
+func (pf *k8sPortForwardDialer) dial(pod *podAddress) (conn *kpfConn, err error) {
 	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, Pod./%s.%s, %d)",
-		pod.Name,
-		pod.Namespace,
-		port)
+		pod.name,
+		pod.namespace,
+		pod.port)
 
 	// All port-forwards to the same Pod get multiplexed over the same SPDY stream.
 	spdyStream, err := pf.spdyStream(pod)
@@ -239,7 +255,7 @@ func (pf *k8sPortForwardDialer) dial(pod *core.Pod, port uint16) (conn *kpfConn,
 	defer func() {
 		if err != nil {
 			pf.spdyStreamsMu.Lock()
-			delete(pf.spdyStreams, pod.Name+"."+pod.Namespace)
+			delete(pf.spdyStreams, pod.name+"."+pod.namespace)
 			pf.spdyStreamsMu.Unlock()
 		}
 	}()
@@ -247,7 +263,7 @@ func (pf *k8sPortForwardDialer) dial(pod *core.Pod, port uint16) (conn *kpfConn,
 	requestID := atomic.AddInt64(&pf.nextRequestID, 1) - 1
 
 	headers := http.Header{}
-	headers.Set(core.PortHeader, strconv.FormatInt(int64(port), 10))
+	headers.Set(core.PortHeader, strconv.FormatInt(int64(pod.port), 10))
 	headers.Set(core.PortForwardRequestIDHeader, strconv.FormatInt(requestID, 10))
 
 	// Quick note: spdyStream.CreateStream returns httpstream.Stream objects.  These have
@@ -275,7 +291,7 @@ func (pf *k8sPortForwardDialer) dial(pod *core.Pod, port uint16) (conn *kpfConn,
 
 	conn = &kpfConn{
 		Stream:      dataStream,
-		remoteAddr:  net.JoinHostPort(pod.Name+"."+pod.Namespace, strconv.FormatInt(int64(port), 10)),
+		remoteAddr:  net.JoinHostPort(pod.name+"."+pod.namespace, strconv.FormatInt(int64(pod.port), 10)),
 		errorStream: errorStream,
 	}
 	conn.init()

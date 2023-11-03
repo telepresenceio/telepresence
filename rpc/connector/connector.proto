@@ -160,6 +160,7 @@ message ConnectRequest {
   bool is_pod_daemon = 4;
   repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+  repeated string allow_conflicting_subnets = 10;
   string manager_namespace = 7;
   map<string, string> environment = 8;
 }

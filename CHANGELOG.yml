@@ -41,13 +41,28 @@ items:
           TELEPRESENCE_CLIENT_IMAGE</code>, and then to the value preset by the telepresence binary. This
           configuration setting is primarily intended for testing purposes.
       - type: feature
+        title: Use traffic-agent port-forwards for outbound and intercepted traffic.
+        body: >-
+          The telepresence TUN-device is now capable of establishing direct port-forwards to a traffic-agent in the
+          connected namespace. That port-forward is then used for all outbound traffic to the device, and also for
+          all traffic that arrives from intercepted workloads. Getting rid of the extra hop via the traffic-manager
+          improves performance and reduces the load on the traffic-manager. The feature can only be used if the client
+          has Kubernetes port-forward permissions to the connected namespace. It can be disabled by setting <code>
+          cluster.agentPortForward</code> to <code>false</code> in <code>config.yml</code>.
+      - type: feature
         title: Improve outbound traffic performance.
         body: >-
           The root-daemon now communicates directly with the traffic-manager instead of routing all outbound traffic
           through the user-daemon. The root-daemon uses a patched kubeconfig where <code>exec</code> configurations to
           obtain credentials are dispatched to the user-daemon. This to ensure that all authentication plugins will
           execute in user-space. The old behavior of routing everything through the user-daemon can be restored by
-          setting <code>cluster.connectFromUserDaemon</code> to <code>true</code> in <code>config.yml</code>.
+          setting <code>cluster.connectFromRootDaemon</code> to <code>false</code> in <code>config.yml</code>.
+      - type: feature
+        title: New networking CLI flag --allow-conflicting-subnets
+        body: >-
+          telepresence connect (and other commands that kick off a connect) now accepts an --allow-conflicting-subnets
+          CLI flag. This is equivalent to client.routing.allowConflictingSubnets in the helm chart, but can be specified
+          at connect time. It will be appended to any configuration pushed from the traffic manager.
       - type: change
         title: The authenticator binary was removed from the docker image.
         body: >-

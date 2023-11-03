@@ -213,22 +213,23 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		// Been there, done that
 		return nil
 	}
-	config, err := patcher.CreateExternalKubeConfig(ctx, cr.KubeFlags, func(configFiles []string) (string, string, error) {
-		port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
-		if err != nil {
-			return "", "", err
-		}
-		// The telepresence command that will run in order to retrieve the credentials from the authenticator service
-		// will run in a container, so the first argument must be a path that finds the telepresence executable and
-		// the second must be an address that will find the host's port, not the container's localhost.
-		return "telepresence", fmt.Sprintf("host.docker.internal:%d", port), nil
-	})
+	config, err := patcher.CreateExternalKubeConfig(ctx, cr.KubeFlags,
+		func(configFiles []string) (string, string, error) {
+			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
+			if err != nil {
+				return "", "", err
+			}
+
+			// The telepresence command that will run in order to retrieve the credentials from the authenticator service
+			// will run in a container, so the first argument must be a path that finds the telepresence executable and
+			// the second must be an address that will find the host's port, not the container's localhost.
+			return "telepresence", fmt.Sprintf("host.docker.internal:%d", port), nil
+		},
+		func(config *api.Config) error {
+			return handleLocalK8s(ctx, daemonID, config)
+		})
 	if err != nil {
 		return err
-	}
-	err = handleLocalK8s(ctx, daemonID, config)
-	if err != nil {
-		dlog.Errorf(ctx, "unable to handle local K8s: %v", err)
 	}
 	patcher.AnnotateConnectRequest(&cr.ConnectRequest, TpCache, config.CurrentContext)
 	return err
@@ -240,6 +241,7 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	cc := config.Contexts[config.CurrentContext]
 	cl := config.Clusters[cc.Cluster]
 	isKind := strings.HasPrefix(cc.Cluster, "kind-")
+	dlog.Debugf(ctx, "isKind %t", isKind)
 	isMinikube := false
 	if !isKind {
 		if ex, ok := cl.Extensions["cluster_info"].(*runtime2.Unknown); ok {
@@ -283,6 +285,7 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	var hostPort, network string
 	if isKind {
 		hostPort, network = detectKind(cjs, addrPort)
+		dlog.Debugf(ctx, "hostPort %s, network %s", hostPort, network)
 	} else if isMinikube {
 		hostPort, network = detectMinikube(cjs, addrPort, cc.Cluster)
 	}
@@ -292,6 +295,7 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	}
 	if network != "" {
 		dcName := daemonID.ContainerName()
+		dlog.Debugf(ctx, "Connecting network %s to container %s", network, dcName)
 		if err = cli.NetworkConnect(ctx, network, dcName, nil); err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				dlog.Debugf(ctx, "failed to connect network %s to container %s: %v", network, dcName, err)
