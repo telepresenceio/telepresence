@@ -30,16 +30,25 @@ linters-settings:
     max-complexity: 32
     skip-tests: true
   depguard:
-    list-type: blacklist
-    include-go-root: true
-    packages-with-error-message:
-      - io/ioutil:                         "`io/ioutil` is deprecated in Go 1.16, use `io` or `os` instead"
-      - os/exec:                           "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
-      - syscall:                           "Use `golang.org/x/sys/...` instead of `syscall`"
-      - github.com/golang/protobuf:        "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
-      - github.com/kballard/go-shellquote: "Use `github.com/telepresenceio/telepresence/pkg/shellquote.ShellString` instead of `github.com/kballard/go-shellquote.Join`"
-      - github.com/datawire/dlib/dutil:    "Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`"
-      - golang.org/x/net/http2/h2c:        "Use `github.com/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
+    rules:
+      main:
+        files:
+          - $all
+        deny:
+          - pkg: io/ioutil
+            desc: "`io/ioutil` is deprecated in Go 1.16, use `io` or `os` instead"
+          - pkg: os/exec
+            desc: "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
+          - pkg: syscall
+            desc: "Use `golang.org/x/sys/...` instead of `syscall`"
+          - pkg: github.com/golang/protobuf
+            desc: "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
+          - pkg: github.com/kballard/go-shellquote
+            desc: "Use `github.com/telepresenceio/telepresence/pkg/shellquote.ShellString` instead of `github.com/kballard/go-shellquote.Join`"
+          - pkg: github.com/datawire/dlib/dutil
+            desc: "Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`"
+          - pkg: golang.org/x/net/http2/h2c
+            desc: "Use `github.com/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
   gomodguard:
     blocked:
       modules:

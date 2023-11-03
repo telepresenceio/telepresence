@@ -8,8 +8,10 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -307,11 +309,46 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		}
 	}
 
+	// warn if version diff between cli and manager is > 3
+	warnMngrVersion := func() error {
+		version, err := userD.TrafficManagerVersion(ctx, &emptypb.Empty{})
+		if err != nil {
+			return err
+		}
+
+		// remove leading v from semver
+		mSemver, err := semver.Parse(strings.TrimPrefix(version.Version, "v"))
+		if err != nil {
+			return err
+		}
+
+		cliSemver := client.Semver()
+
+		var diff uint64
+		if cliSemver.Minor > mSemver.Minor {
+			diff = cliSemver.Minor - mSemver.Minor
+		} else {
+			diff = mSemver.Minor - cliSemver.Minor
+		}
+
+		maxDiff := uint64(3)
+		if diff > maxDiff {
+			ioutil.Printf(output.Info(ctx),
+				"Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.\n",
+				version.Version, maxDiff, client.Version())
+		}
+		return nil
+	}
+
 	connectResult := func(ci *connector.ConnectInfo) (*daemon.Session, error) {
 		var msg string
 		switch ci.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
 			ioutil.Printf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
+			err := warnMngrVersion()
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
 			return session(ci, true), nil
 		case connector.ConnectInfo_ALREADY_CONNECTED:
 			return session(ci, false), nil

@@ -3,7 +3,6 @@ package rootd
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -439,9 +438,6 @@ func run(cmd *cobra.Command, args []string) error {
 	if !proc.IsAdmin() {
 		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
 	}
-
-	// seed random generator (used when shuffling IPs)
-	rand.Seed(time.Now().UnixNano())
 
 	loggingDir := args[0]
 	configDir := args[1]
