@@ -76,7 +76,7 @@ type State interface {
 	SetPrometheusMetrics(interceptCounterVec *prometheus.CounterVec,
 		interceptStatusGaugeVec *prometheus.GaugeVec,
 		connectCounterVec *prometheus.CounterVec,
-		connectStatusGaugeVec *prometheus.GaugeVec, )
+		connectStatusGaugeVec *prometheus.GaugeVec)
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
 	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo

@@ -195,7 +195,7 @@ func (s *service) servePrometheus(ctx context.Context) error {
 	s.state.SetPrometheusMetrics(
 		newCounterVecFunc("connect_count", "The total number of connects by user", labels),
 		newGaugeVecFunc("connect_active_status", "Flag to indicate when a connect is active. 1 for active, 0 for not active.", labels),
-		newCounterVecFunc("intercept_count", "The total number of global intercepts by user", labels),
+		newCounterVecFunc("intercept_count", "The total number of intercepts by user", labels),
 		newGaugeVecFunc("intercept_active_status",
 			"Flag to indicate when an intercept is active. 1 for active, 0 for not active.", append(labels, "workload")),
 	)
