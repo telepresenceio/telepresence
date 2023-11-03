@@ -35,10 +35,6 @@ var (
 	DisplayName                 = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
 	NewServiceFunc              = NewService                          //nolint:gochecknoglobals // extension point
 	WithAgentImageRetrieverFunc = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
-	InterceptCounter            *prometheus.CounterVec                //nolint:gochecknoglobals // prometheus metric
-	InterceptActiveStatusGauge  *prometheus.GaugeVec                  //nolint:gochecknoglobals // prometheus metric
-	ConnectCounter              *prometheus.CounterVec                //nolint:gochecknoglobals // prometheus metric
-	ConnectActiveStatusGauge    *prometheus.GaugeVec                  //nolint:gochecknoglobals // prometheus metric
 )
 
 // Main starts up the traffic manager and blocks until it ends.
@@ -196,18 +192,20 @@ func (s *service) servePrometheus(ctx context.Context) error {
 	})
 
 	labels := []string{"client", "install_id"}
-	InterceptCounter = newCounterVecFunc("intercept_count", "The total number of global intercepts by user", labels)
-	InterceptActiveStatusGauge = newGaugeVecFunc("intercept_active_status",
-		"Flag to indicate when an intercept is active. 1 for active, 0 for not active.", append(labels, "workload"))
-	ConnectCounter = newCounterVecFunc("connect_count", "The total number of connects by user", labels)
-	ConnectActiveStatusGauge = newGaugeVecFunc("connect_active_status", "Flag to indicate when a connect is active. 1 for active, 0 for not active.", labels)
+	s.state.SetPrometheusMetrics(
+		newCounterVecFunc("connect_count", "The total number of connects by user", labels),
+		newGaugeVecFunc("connect_active_status", "Flag to indicate when a connect is active. 1 for active, 0 for not active.", labels),
+		newCounterVecFunc("intercept_count", "The total number of global intercepts by user", labels),
+		newGaugeVecFunc("intercept_active_status",
+			"Flag to indicate when an intercept is active. 1 for active, 0 for not active.", append(labels, "workload")),
+	)
 
-	s.state.SetConnectionEstablishedFinalizer(func(client, installId string) {
-		SetGauge(ConnectActiveStatusGauge, client, installId, nil, 0)
+	s.state.SetAllClientSessionsFinalizer(func(client *rpc.ClientInfo) {
+		SetGauge(s.state.GetConnectActiveStatus(), client.Name, client.InstallId, nil, 0)
 	})
 
-	s.state.SetInterceptEstablishedFinalizer(func(client, installId string, workload *string) {
-		SetGauge(InterceptActiveStatusGauge, client, installId, workload, 0)
+	s.state.SetAllInterceptsFinalizer(func(client *rpc.ClientInfo, workload *string) {
+		SetGauge(s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, workload, 0)
 	})
 
 	sc := &dhttp.ServerConfig{
