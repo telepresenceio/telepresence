@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
@@ -53,6 +55,10 @@ type State interface {
 	GetSessionConsumptionMetrics(string) *SessionConsumptionMetrics
 	GetAllSessionConsumptionMetrics() map[string]*SessionConsumptionMetrics
 	GetIntercept(string) (*rpc.InterceptInfo, bool)
+	GetConnectCounter() *prometheus.CounterVec
+	GetConnectActiveStatus() *prometheus.GaugeVec
+	GetInterceptCounter() *prometheus.CounterVec
+	GetInterceptActiveStatus() *prometheus.GaugeVec
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
@@ -65,6 +71,12 @@ type State interface {
 	RemoveSession(context.Context, string) error
 	SessionDone(string) (<-chan struct{}, error)
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
+	SetAllClientSessionsFinalizer(finalizer allClientSessionsFinalizer)
+	SetAllInterceptsFinalizer(finalizer allInterceptsFinalizer)
+	SetPrometheusMetrics(interceptCounterVec *prometheus.CounterVec,
+		interceptStatusGaugeVec *prometheus.GaugeVec,
+		connectCounterVec *prometheus.CounterVec,
+		connectStatusGaugeVec *prometheus.GaugeVec)
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
 	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo
@@ -86,6 +98,11 @@ type interceptFinalizerCall struct {
 	ctx   context.Context
 }
 
+type (
+	allClientSessionsFinalizer func(client *rpc.ClientInfo)
+	allInterceptsFinalizer     func(client *rpc.ClientInfo, workload *string)
+)
+
 // state is the total state of the Traffic Manager.  A zero state is invalid; you must call
 // NewState.
 type state struct {
@@ -93,7 +110,9 @@ type state struct {
 	// need to exceed the context of a request into the state object, e.g. session contexts.
 	backgroundCtx context.Context
 
-	interceptFinalizerCh chan *interceptFinalizerCall
+	interceptFinalizerCh       chan *interceptFinalizerCall
+	allClientSessionsFinalizer allClientSessionsFinalizer
+	allInterceptsFinalizer     allInterceptsFinalizer
 
 	mu sync.RWMutex
 	// Things protected by 'mu': While the watchable.WhateverMaps have their own locking to
@@ -111,18 +130,22 @@ type state struct {
 	//  7. `cfgMapLocks` access must be concurrency protected
 	//  8. `cachedAgentImage` access must be concurrency protected
 	//  9. `interceptState` must be concurrency protected and updated/deleted in sync with intercepts
-	intercepts           watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
-	agents               watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
-	clients              watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
-	sessions             map[string]SessionState              // info for all sessions, keyed by session id
-	agentsByName         map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
-	interceptStates      map[string]*interceptState
-	timedLogLevel        log.TimedLevel
-	llSubs               *loglevelSubscribers
-	cfgMapLocks          map[string]*sync.Mutex
-	tunnelCounter        int32
-	tunnelIngressCounter uint64
-	tunnelEgressCounter  uint64
+	intercepts                 watchable.Map[*rpc.InterceptInfo]    // info for intercepts, keyed by intercept id
+	agents                     watchable.Map[*rpc.AgentInfo]        // info for agent sessions, keyed by session id
+	clients                    watchable.Map[*rpc.ClientInfo]       // info for client sessions, keyed by session id
+	sessions                   map[string]SessionState              // info for all sessions, keyed by session id
+	agentsByName               map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
+	interceptStates            map[string]*interceptState
+	timedLogLevel              log.TimedLevel
+	llSubs                     *loglevelSubscribers
+	cfgMapLocks                map[string]*sync.Mutex
+	tunnelCounter              int32
+	tunnelIngressCounter       uint64
+	tunnelEgressCounter        uint64
+	connectCounter             *prometheus.CounterVec
+	connectActiveStatusGauge   *prometheus.GaugeVec
+	interceptCounter           *prometheus.CounterVec
+	interceptActiveStatusGauge *prometheus.GaugeVec
 
 	// Possibly extended version of the state. Use when calling interface methods.
 	self State
@@ -263,6 +286,10 @@ func (s *state) gcSessionIntercepts(ctx context.Context, sessionID string) Clean
 		if intercept.ClientSession.SessionId == sessionID {
 			// Client went away:
 			// Delete it.
+			if client := s.GetClient(sessionID); client != nil {
+				workload := strings.SplitN(interceptID, ":", 2)[1]
+				s.allInterceptsFinalizerCall(client, &workload)
+			}
 			_, iceptWait := s.self.UnlockedRemoveIntercept(ctx, interceptID)
 			newWait := func() error {
 				err := wait()
@@ -294,6 +321,7 @@ func (s *state) unlockedRemoveSession(ctx context.Context, sessionID string) Cle
 		defer sess.Cancel()
 
 		wait = s.gcSessionIntercepts(ctx, sessionID)
+		client := s.GetClient(sessionID)
 
 		agent, isAgent := s.agents.LoadAndDelete(sessionID)
 		if isAgent {
@@ -306,6 +334,9 @@ func (s *state) unlockedRemoveSession(ctx context.Context, sessionID string) Cle
 			scm := sess.(*clientSessionState).consumptionMetrics
 			atomic.AddUint64(&s.tunnelIngressCounter, scm.FromClientBytes.GetValue())
 			atomic.AddUint64(&s.tunnelEgressCounter, scm.ToClientBytes.GetValue())
+			if client != nil {
+				s.allClientSessionsFinalizerCall(client)
+			}
 		}
 		delete(s.sessions, sessionID)
 	}
@@ -892,4 +923,52 @@ func (s *state) InitialTempLogLevel() *rpc.LogLevelRequest {
 // of the last request that was made.
 func (s *state) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
 	return s.llSubs.subscriberLoop(stream.Context(), stream)
+}
+
+func (s *state) SetPrometheusMetrics(
+	connectCounterVec *prometheus.CounterVec,
+	connectStatusGaugeVec *prometheus.GaugeVec,
+	interceptCounterVec *prometheus.CounterVec,
+	interceptStatusGaugeVec *prometheus.GaugeVec,
+) {
+	s.connectCounter = connectCounterVec
+	s.connectActiveStatusGauge = connectStatusGaugeVec
+	s.interceptCounter = interceptCounterVec
+	s.interceptActiveStatusGauge = interceptStatusGaugeVec
+}
+
+func (s *state) GetConnectCounter() *prometheus.CounterVec {
+	return s.connectCounter
+}
+
+func (s *state) GetConnectActiveStatus() *prometheus.GaugeVec {
+	return s.connectActiveStatusGauge
+}
+
+func (s *state) GetInterceptCounter() *prometheus.CounterVec {
+	return s.interceptCounter
+}
+
+func (s *state) GetInterceptActiveStatus() *prometheus.GaugeVec {
+	return s.interceptActiveStatusGauge
+}
+
+func (s *state) SetAllClientSessionsFinalizer(finalizer allClientSessionsFinalizer) {
+	s.allClientSessionsFinalizer = finalizer
+}
+
+func (s *state) allClientSessionsFinalizerCall(client *rpc.ClientInfo) {
+	if s.allClientSessionsFinalizer != nil {
+		s.allClientSessionsFinalizer(client)
+	}
+}
+
+func (s *state) SetAllInterceptsFinalizer(finalizer allInterceptsFinalizer) {
+	s.allInterceptsFinalizer = finalizer
+}
+
+func (s *state) allInterceptsFinalizerCall(client *rpc.ClientInfo, workload *string) {
+	if s.allInterceptsFinalizer != nil {
+		s.allInterceptsFinalizer(client, workload)
+	}
 }
