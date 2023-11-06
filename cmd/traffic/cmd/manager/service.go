@@ -39,6 +39,7 @@ type Service interface {
 	rpc.ManagerServer
 	ID() string
 	InstallID() string
+	ClusterID() string
 	MakeInterceptID(context.Context, string, string) (string, error)
 	RegisterServers(*grpc.Server)
 	TrafficManagerConfig() []byte
@@ -107,6 +108,10 @@ func (s *service) State() state.State {
 
 func (s *service) InstallID() string {
 	return s.clusterInfo.ID()
+}
+
+func (s *service) ClusterID() string {
+	return s.clusterInfo.ClusterID()
 }
 
 func (s *service) TrafficManagerConfig() []byte {
