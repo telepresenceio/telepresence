@@ -55,7 +55,8 @@ func TestNewInfo_GetClusterID(t *testing.T) {
 
 		info := NewInfo(ctx)
 		require.NotNil(t, info)
-		require.Equal(t, info.ID(), defaultUID)
+		// always use manager ns to gen ID
+		require.Equal(t, info.ID(), testUID)
 	})
 
 	t.Run("from non-default namespace", func(t *testing.T) {
