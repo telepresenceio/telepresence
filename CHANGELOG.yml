@@ -30,9 +30,17 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.16.2
+  - version: 2.17.0
     date: "(TBD)"
     notes:
+      - type: feature
+        title: Additional Prometheus metrics to track intercept/connect activity
+        body: >-
+          This feature adds the following metrics to the Prometheus endpoint: <code>connect_count</code>, 
+          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code. 
+          These are labeled by client/install_id. 
+          Additionally, the <code>intercept_count</code> metric has been renamed to <code>active_intercept_count</code> 
+          for clarity.
       - type: feature
         title: Make the Telepresence client docker image configurable.
         body: >-
@@ -77,12 +85,12 @@ items:
     date: "2023-10-03"
     notes:
       - type: feature
-        title: Add <code>--docker-debug</code> flag to the <code>telepresence intercept</code> command.
+        title: Add --docker-debug flag to the telepresence intercept command.
         body: >-
           This flag is similar to <code>--docker-build</code> but will start the container with more relaxed security
           using the <code>docker run</code> flags <code>--security-opt apparmor=unconfined --cap-add SYS_PTRACE</code>.
       - type: feature
-        title: Add a <code>--export</code> option to the <code>telepresence connect</code> command.
+        title: Add a --export option to the telepresence connect command.
         body: >-
           In some situations it is necessary to make some ports available to the
           host from a containerized telepresence daemon. This commit adds a
