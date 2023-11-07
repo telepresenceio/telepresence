@@ -36,20 +36,20 @@ const (
 var universalDeserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer() //nolint:gochecknoglobals // constant
 
 // JSON patch, see https://tools.ietf.org/html/rfc6902 .
-type patchOperation struct {
+type PatchOperation struct {
 	Op    string `json:"op"`
 	Path  string `json:"path"`
 	Value any    `json:"value,omitempty"`
 }
 
-type patchOps []patchOperation
+type PatchOps []PatchOperation
 
-func (p patchOps) String() string {
+func (p PatchOps) String() string {
 	b, _ := json.MarshalIndent(p, "", "  ")
 	return string(b)
 }
 
-type mutatorFunc func(context.Context, *admission.AdmissionRequest) (patchOps, error)
+type mutatorFunc func(context.Context, *admission.AdmissionRequest) (PatchOps, error)
 
 func ServeMutator(ctx context.Context) error {
 	certPath := filepath.Join(tlsDir, tlsCertFile)
@@ -71,12 +71,12 @@ func ServeMutator(ctx context.Context) error {
 		return nil
 	}
 
-	var ai *agentInjector
+	var ai AgentInjector
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		dlog.Debug(ctx, "Received webhook request...")
-		bytes, statusCode, err := serveMutatingFunc(ctx, r, ai.inject)
+		bytes, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
 		if err != nil {
 			dlog.Errorf(ctx, "error handling webhook request: %v", err)
 			w.WriteHeader(statusCode)
@@ -91,7 +91,7 @@ func ServeMutator(ctx context.Context) error {
 	mux.HandleFunc("/uninstall", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		dlog.Debug(ctx, "Received uninstall request...")
-		statusCode, err := serveRequest(ctx, r, http.MethodDelete, ai.uninstall)
+		statusCode, err := serveRequest(ctx, r, http.MethodDelete, ai.Uninstall)
 		if err != nil {
 			dlog.Errorf(ctx, "error handling uninstall request: %v", err)
 			w.WriteHeader(statusCode)
@@ -105,7 +105,7 @@ func ServeMutator(ctx context.Context) error {
 		ctx := r.Context()
 		dlog.Debug(ctx, "Received upgrade-legacy request...")
 		statusCode, err := serveRequest(ctx, r, http.MethodPost, func(ctx context.Context) {
-			ai.upgradeLegacy(ctx)
+			ai.UpgradeLegacy(ctx)
 		})
 		if err != nil {
 			dlog.Errorf(ctx, "error handling upgrade-legacy request: %v", err)
@@ -123,7 +123,7 @@ func ServeMutator(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ai = &agentInjector{agentConfigs: cw}
+	ai = NewAgentInjectorFunc(ctx, cw)
 	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
 		dtime.SleepWithContext(ctx, time.Second) // Give the server some time to start
 		return cw.Run(ctx)
@@ -217,7 +217,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 		Response: &response,
 	}
 
-	var patchOps patchOps
+	var patchOps PatchOps
 	// Apply the mf() function only namespaces of interest
 	if isNamespaceOfInterest(request.Namespace) {
 		patchOps, err = mf(ctx, request)

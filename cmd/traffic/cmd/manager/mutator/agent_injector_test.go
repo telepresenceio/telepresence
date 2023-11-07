@@ -784,6 +784,13 @@ func TestTrafficAgentInjector(t *testing.T) {
 		}
 	}
 
+	podObjectMetaInjected := func(name string) meta.ObjectMeta {
+		meta := podObjectMeta(name)
+		meta.Labels[agentconfig.WorkloadNameLabel] = name
+		meta.Labels[agentconfig.WorkloadEnabledLabel] = "true"
+		return meta
+	}
+
 	podNamedPort := core.Pod{
 		ObjectMeta: podObjectMeta("named-port"),
 		Spec: core.PodSpec{
@@ -1022,6 +1029,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
+- op: replace
+  path: /metadata/labels
+  value:
+    service: named-port
+    telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadName: named-port
 `,
 			"",
 			nil,
@@ -1107,6 +1120,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
+- op: replace
+  path: /metadata/labels
+  value:
+    service: named-port
+    telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadName: named-port
 - op: replace
   path: /spec/containers/0/env
   value: []
@@ -1241,6 +1260,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
+- op: replace
+  path: /metadata/labels
+  value:
+    service: named-port
+    telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadName: named-port
 `,
 			"",
 			nil,
@@ -1331,6 +1356,12 @@ func TestTrafficAgentInjector(t *testing.T) {
     name: export-volume
   - emptyDir: {}
     name: tel-agent-tmp
+- op: replace
+  path: /metadata/labels
+  value:
+    service: numeric-port
+    telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadName: numeric-port
 `,
 			"",
 			nil,
@@ -1425,6 +1456,12 @@ func TestTrafficAgentInjector(t *testing.T) {
     name: export-volume
   - emptyDir: {}
     name: tel-agent-tmp
+- op: replace
+  path: /metadata/labels
+  value:
+    service: numeric-port
+    telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadName: numeric-port
 `,
 			"",
 			nil,
@@ -1432,7 +1469,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 		{
 			"Apply Patch: re-processing, null patch",
 			&core.Pod{
-				ObjectMeta: podObjectMeta("numeric-port"),
+				ObjectMeta: podObjectMetaInjected("numeric-port"),
 				Spec: core.PodSpec{
 					InitContainers: []core.Container{{
 						Name:  agentconfig.InitContainerName,
@@ -1643,6 +1680,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
+- op: replace
+  path: /metadata/labels
+  value:
+    service: named-port
+    telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadName: named-port
 `,
 			"",
 			nil,
@@ -1672,7 +1715,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ctx = managerutil.WithEnv(ctx, &newEnv)
 				agentmap.GeneratorConfigFunc = newEnv.GeneratorConfig
 			}
-			var actualPatch patchOps
+			var actualPatch PatchOps
 			var actualErr error
 			cw := NewWatcher("")
 			if test.generateConfig {
@@ -1686,7 +1729,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			if actualErr == nil {
 				request := toAdmissionRequest(podResource, test.pod)
 				a := agentInjector{agentConfigs: cw}
-				actualPatch, actualErr = a.inject(ctx, request)
+				actualPatch, actualErr = a.Inject(ctx, request)
 			}
 			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.pod.Name))
 			if actualPatch != nil || test.expectedPatch != "" {
