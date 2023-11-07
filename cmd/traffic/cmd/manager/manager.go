@@ -32,9 +32,20 @@ import (
 )
 
 var (
-	DisplayName                 = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
-	NewServiceFunc              = NewService                          //nolint:gochecknoglobals // extension point
-	WithAgentImageRetrieverFunc = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
+	DisplayName                   = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
+	NewServiceFunc                = NewService                          //nolint:gochecknoglobals // extension point
+	WithAgentImageRetrieverFunc   = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
+	IncrementInterceptCounterFunc = func(metric *prometheus.CounterVec, client, installId string, spec *rpc.InterceptSpec) {
+		if metric != nil {
+			labels := prometheus.Labels{
+				"client":         client,
+				"install_id":     installId,
+				"intercept_type": "global",
+			}
+
+			metric.With(labels).Inc()
+		}
+	}
 )
 
 // Main starts up the traffic manager and blocks until it ends.
@@ -195,7 +206,7 @@ func (s *service) servePrometheus(ctx context.Context) error {
 	s.state.SetPrometheusMetrics(
 		newCounterVecFunc("connect_count", "The total number of connects by user", labels),
 		newGaugeVecFunc("connect_active_status", "Flag to indicate when a connect is active. 1 for active, 0 for not active.", labels),
-		newCounterVecFunc("intercept_count", "The total number of intercepts by user", labels),
+		newCounterVecFunc("intercept_count", "The total number of intercepts by user", append(labels, "intercept_type")),
 		newGaugeVecFunc("intercept_active_status",
 			"Flag to indicate when an intercept is active. 1 for active, 0 for not active.", append(labels, "workload")),
 	)

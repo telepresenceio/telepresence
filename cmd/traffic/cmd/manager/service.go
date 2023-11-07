@@ -597,7 +597,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 
 	SetGauge(s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, &spec.Name, 1)
 
-	IncrementCounter(s.state.GetInterceptCounter(), client.Name, client.InstallId)
+	IncrementInterceptCounterFunc(s.state.GetInterceptCounter(), client.Name, client.InstallId, spec)
 
 	return interceptInfo, nil
 }
