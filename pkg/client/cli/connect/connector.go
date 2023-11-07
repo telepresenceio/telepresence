@@ -334,7 +334,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		maxDiff := uint64(3)
 		if diff > maxDiff {
 			ioutil.Printf(output.Info(ctx),
-				"Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.\n",
+				"The Traffic Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.\n",
 				version.Version, maxDiff, client.Version())
 		}
 		return nil
