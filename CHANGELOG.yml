@@ -72,7 +72,7 @@ items:
           CLI flag. This is equivalent to client.routing.allowConflictingSubnets in the helm chart, but can be specified
           at connect time. It will be appended to any configuration pushed from the traffic manager.
       - type: change
-        title: Warn if large version mismatch.
+        title: Warn if large version mismatch between traffic manager and client.
         body: >-
           Print a warning if the minor version diff between the client and the traffic manager is greater than three.
       - type: change
