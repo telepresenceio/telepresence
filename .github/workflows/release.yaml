@@ -37,6 +37,10 @@ jobs:
           path: build-output/release
           retention-days: 1
       - if: runner.os == 'Linux' && runner.arch == 'X64'
+        uses: docker/setup-buildx-action@v2
+        with:
+          platforms: linux/amd64,linux/arm64
+      - if: runner.os == 'Linux' && runner.arch == 'X64'
         name: Upload Docker image
         run: |
           docker login -u="${{ secrets.DOCKERHUB_USERNAME }}" -p="${{ secrets.DOCKERHUB_PASSWORD }}"
