@@ -133,14 +133,14 @@ following Free and Open Source software:
     github.com/xeipuuv/gojsonreference                                           v0.0.0-20180127040603-bd5ef7bd5415    Apache License 2.0
     github.com/xeipuuv/gojsonschema                                              v1.2.0                                Apache License 2.0
     github.com/xlab/treeprint                                                    v1.2.0                                MIT license
-    go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc  v0.45.0                               Apache License 2.0
+    go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc  v0.46.0                               Apache License 2.0
     go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp                v0.45.0                               Apache License 2.0
-    go.opentelemetry.io/otel                                                     v1.19.0                               Apache License 2.0
+    go.opentelemetry.io/otel                                                     v1.20.0                               Apache License 2.0
     go.opentelemetry.io/otel/exporters/otlp/otlptrace                            v1.19.0                               Apache License 2.0
     go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc              v1.19.0                               Apache License 2.0
-    go.opentelemetry.io/otel/metric                                              v1.19.0                               Apache License 2.0
+    go.opentelemetry.io/otel/metric                                              v1.20.0                               Apache License 2.0
     go.opentelemetry.io/otel/sdk                                                 v1.19.0                               Apache License 2.0
-    go.opentelemetry.io/otel/trace                                               v1.19.0                               Apache License 2.0
+    go.opentelemetry.io/otel/trace                                               v1.20.0                               Apache License 2.0
     go.opentelemetry.io/proto/otlp                                               v1.0.0                                Apache License 2.0
     go.starlark.net                                                              v0.0.0-20231101134539-556fd59b42f6    3-clause BSD license
     golang.org/x/crypto                                                          v0.14.0                               3-clause BSD license
