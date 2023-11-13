@@ -27,8 +27,10 @@ type bufEntry struct {
 	entries []Entry
 }
 
-type ReportAnnotator func(map[string]any)
-type ReportMutator func(context.Context, []Entry) []Entry
+type (
+	ReportAnnotator func(map[string]any)
+	ReportMutator   func(context.Context, []Entry) []Entry
+)
 
 // Reporter is a Metriton reporter.
 type Reporter interface {

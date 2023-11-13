@@ -91,5 +91,4 @@ func (l *Logger) ReportFailures() bool {
 		fmt.Fprintf(os.Stderr, "\n%s.%s\n%s\n%s\n", testID.Package, testID.Test, output, separator)
 	}
 	return true
-
 }
