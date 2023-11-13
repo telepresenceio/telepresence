@@ -34,7 +34,6 @@ func sessionReportMutator(ctx context.Context, e []Entry) []Entry {
 	select {
 	// session is dead
 	case <-session.Done():
-		return e
 	default:
 		v := session.ManagerVersion()
 		e = append(e, Entry{

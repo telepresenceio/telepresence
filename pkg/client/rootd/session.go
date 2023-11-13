@@ -334,8 +334,6 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 		done:                    make(chan struct{}),
 	}
 
-	// store session in
-
 	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
 		s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
 	} else {

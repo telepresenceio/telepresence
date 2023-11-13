@@ -27,8 +27,10 @@ type bufEntry struct {
 	entries []Entry
 }
 
-type ReportAnnotator func(map[string]any)
-type ReportMutator func(context.Context, []Entry) []Entry
+type (
+	ReportAnnotator func(map[string]any)
+	ReportMutator   func(context.Context, []Entry) []Entry
+)
 
 // Reporter is a Metriton reporter.
 type Reporter interface {
@@ -369,7 +371,7 @@ func (r *reporter) Run(ctx context.Context) error {
 // attempt (correlated by the trace_id set at the start).
 func (r *reporter) Report(ctx context.Context, action string, entries ...Entry) {
 	for _, m := range r.reportMutators {
-		// IDEA allow rm to cancel report
+		// IDEA allow mutator to cancel report
 		entries = m(ctx, entries)
 	}
 	select {

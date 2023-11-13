@@ -193,7 +193,7 @@ func NewSession(
 	}
 
 	// store session in ctx for reporting
-	scout.WithSession(ctx, tmgr)
+	ctx = scout.WithSession(ctx, tmgr)
 	defer report(ctx)
 
 	tmgr.sessionConfig = client.GetDefaultConfig()

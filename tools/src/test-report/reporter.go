@@ -38,7 +38,8 @@ type Reporter struct {
 }
 
 func NewReporter(ctx context.Context, progress *progressBar, onError func(error)) (*Reporter, error) {
-	r := &Reporter{reportCh: make(chan *Line, reportChanSz),
+	r := &Reporter{
+		reportCh:     make(chan *Line, reportChanSz),
 		doneCh:       make(chan struct{}),
 		onError:      onError,
 		requestQueue: make(chan *Line, requestQueueSz),
