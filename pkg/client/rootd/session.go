@@ -296,6 +296,8 @@ func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Sess
 	}
 	s := newSession(c, mi, mc, ver)
 	s.clientConn = conn
+	// store session in ctx for reporting
+	c = scout.WithSession(c, s)
 	return c, s, nil
 }
 
@@ -331,6 +333,8 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 		config:                  cfg,
 		done:                    make(chan struct{}),
 	}
+
+	// store session in
 
 	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
 		s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
@@ -921,6 +925,10 @@ func (s *Session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 	return &empty.Empty{}, err
 }
 
-func (s *Session) Done() chan struct{} {
+func (s *Session) Done() <-chan struct{} {
 	return s.done
+}
+
+func (s *Session) ManagerVersion() semver.Version {
+	return s.managerVersion
 }

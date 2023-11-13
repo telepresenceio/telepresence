@@ -28,6 +28,7 @@ type bufEntry struct {
 }
 
 type ReportAnnotator func(map[string]any)
+type ReportMutator func(context.Context, []Entry) []Entry
 
 // Reporter is a Metriton reporter.
 type Reporter interface {
@@ -44,6 +45,7 @@ type reporter struct {
 	buffer           chan bufEntry
 	done             chan struct{}
 	reportAnnotators []ReportAnnotator
+	reportMutators   []ReportMutator
 	reporter         *metriton.Reporter
 }
 
@@ -173,7 +175,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 // before entries are discarded.
 const bufferSize = 40
 
-func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType, reportAnnotators []ReportAnnotator) Reporter {
+func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType, reportAnnotators []ReportAnnotator, reportMutators []ReportMutator) Reporter {
 	r := &reporter{
 		reporter: &metriton.Reporter{
 			Application: "telepresence2",
@@ -189,6 +191,7 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 			},
 		},
 		reportAnnotators: reportAnnotators,
+		reportMutators:   reportMutators,
 	}
 	if env := client.GetEnv(ctx); env != nil && !env.ScoutDisable {
 		// Some tests disable scout reporting by setting the host IP to 127.0.0.1. This spams
@@ -210,10 +213,13 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 // DefaultReportAnnotators are the default annotator functions that the NewReporter function will pass to NewReporterForInstallType.
 var DefaultReportAnnotators []ReportAnnotator //nolint:gochecknoglobals // extension point
 
+// DefaultReportMutators are the default mutator functions that the NewReporter function will pass to NewReporterForInstallType.
+var DefaultReportMutators []ReportMutator = []ReportMutator{sessionReportMutator} //nolint:gochecknoglobals // extension point
+
 // NewReporter creates a new initialized Reporter instance that can be used to
 // send telepresence reports to Metriton and assigns it to the current context.
 func NewReporter(ctx context.Context, mode string) context.Context {
-	return WithReporter(ctx, NewReporterForInstallType(ctx, mode, CLI, DefaultReportAnnotators))
+	return WithReporter(ctx, NewReporterForInstallType(ctx, mode, CLI, DefaultReportAnnotators, DefaultReportMutators))
 }
 
 func InstallID(ctx context.Context) string {
@@ -362,6 +368,10 @@ func (r *reporter) Run(ctx context.Context) error {
 // determine the correct order of reported events for this installation
 // attempt (correlated by the trace_id set at the start).
 func (r *reporter) Report(ctx context.Context, action string, entries ...Entry) {
+	for _, m := range r.reportMutators {
+		// IDEA allow rm to cancel report
+		entries = m(ctx, entries)
+	}
 	select {
 	case r.buffer <- bufEntry{action, entries}:
 	default:
