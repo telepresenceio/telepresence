@@ -50,7 +50,7 @@ require (
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.17.0-rc.1 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.17.0-rc.2 // indirect
 	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
