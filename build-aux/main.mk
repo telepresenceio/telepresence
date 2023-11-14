@@ -254,9 +254,12 @@ prepare-release: generate wix
 	rm -f CHANGELOG.OLD.md.bak
 	git add CHANGELOG.OLD.md
 
-	sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%m-%d')\"/" CHANGELOG.yml
-	rm -f CHANGELOG.yml.bak
-	git add CHANGELOG.yml
+	@# Check if the version is in the x.x.x format (GA release)
+	if echo "$(TELEPRESENCE_VERSION)" | grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%m-%d')\"/" CHANGELOG.yml; \
+		rm -f CHANGELOG.yml.bak; \
+		git add CHANGELOG.yml; \
+	fi
 
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
 	git add go.mod
