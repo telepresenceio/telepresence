@@ -409,8 +409,7 @@ func (s *Service) serveGrpc(c context.Context, l net.Listener, tracer common.Tra
 	}()
 
 	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
-		grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	}
 	cfg := client.GetConfig(c)
 	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {

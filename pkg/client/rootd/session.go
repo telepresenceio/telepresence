@@ -251,8 +251,7 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 
 	var conn *grpc.ClientConn
 	conn, err := socket.Dial(tc, socket.UserDaemonPath(c),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	var mgrVer semver.Version
 	if err != nil {
@@ -296,6 +295,8 @@ func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Sess
 	}
 	s := newSession(c, mi, mc, ver)
 	s.clientConn = conn
+	// store session in ctx for reporting
+	c = scout.WithSession(c, s)
 	return c, s, nil
 }
 
@@ -921,6 +922,10 @@ func (s *Session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 	return &empty.Empty{}, err
 }
 
-func (s *Session) Done() chan struct{} {
+func (s *Session) Done() <-chan struct{} {
 	return s.done
+}
+
+func (s *Session) ManagerVersion() semver.Version {
+	return s.managerVersion
 }

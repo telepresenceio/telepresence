@@ -307,7 +307,7 @@ func TestInstallID(t *testing.T) {
 			}
 
 			// Then do...
-			scout := NewReporterForInstallType(ctx, "go-test", CLI, DefaultReportAnnotators).(*reporter)
+			scout := NewReporterForInstallType(ctx, "go-test", CLI, DefaultReportAnnotators, DefaultReportMutators).(*reporter)
 			scout.reporter.Endpoint = metriton.BetaEndpoint
 			actualID := scout.reporter.InstallID()
 			actualErr, _ := scout.reporter.BaseMetadata["install_id_error"].(string)
