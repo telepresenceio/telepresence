@@ -60,8 +60,7 @@ func dialClusterGRPC(ctx context.Context, address string, grpcDialer dnet.Dialer
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()))
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 }
 
 func getVersion(ctx context.Context, gc versionAPI) (*manager.VersionInfo2, error) {

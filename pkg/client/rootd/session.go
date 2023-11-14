@@ -251,8 +251,7 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 
 	var conn *grpc.ClientConn
 	conn, err := socket.Dial(tc, socket.UserDaemonPath(c),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	var mgrVer semver.Version
 	if err != nil {

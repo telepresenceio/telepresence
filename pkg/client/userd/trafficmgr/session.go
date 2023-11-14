@@ -1121,8 +1121,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 	} else {
 		var conn *grpc.ClientConn
 		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx),
-			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("unable open root daemon socket: %w", err)

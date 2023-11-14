@@ -226,8 +226,7 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		})
 
 		grpcOpts = []grpc.ServerOption{
-			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
-			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+			grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		}
 	}
 
