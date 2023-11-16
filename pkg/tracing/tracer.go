@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
-	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -85,7 +85,7 @@ func (ts *TraceServer) Shutdown(ctx context.Context) {
 	if err := ts.tp.Shutdown(ctx); err != nil {
 		dlog.Error(ctx, "error shutting down tracer: ", err)
 	}
-	otel.SetTracerProvider(trace.NewNoopTracerProvider())
+	otel.SetTracerProvider(noop.NewTracerProvider())
 }
 
 func (ts *TraceServer) ServeGrpc(ctx context.Context, port uint16) error {

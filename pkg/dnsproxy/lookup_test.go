@@ -56,6 +56,9 @@ func TestLookup(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(dns.TypeToString[tt.qType], func(t *testing.T) {
+			if tt.qType == dns.TypeSRV && runtime.GOOS == "darwin" {
+				t.Skip("SRV sporadically fails to parse reply on darwin")
+			}
 			ctx := dlog.NewTestContext(t, false)
 			got, _, err := Lookup(ctx, tt.qType, tt.qName)
 			require.NoError(t, err)

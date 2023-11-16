@@ -44,6 +44,8 @@ func (is interceptsStringer) String() string {
 	return sb.String()
 }
 
+var NewExtendedManagerClient func(conn *grpc.ClientConn, ossManager rpc.ManagerClient) rpc.ManagerClient //nolint:gochecknoglobals // extension point
+
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -51,8 +53,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	conn, err := grpc.DialContext(ctx, address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		return err
@@ -60,6 +61,9 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	defer conn.Close()
 
 	manager := rpc.NewManagerClient(conn)
+	if NewExtendedManagerClient != nil {
+		manager = NewExtendedManagerClient(conn, manager)
+	}
 
 	ver, err := manager.Version(ctx, &empty.Empty{})
 	if err != nil {
@@ -137,7 +141,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 	wg.Go("dialWait", func(ctx context.Context) error {
-		return tunnel.DialWaitLoop(ctx, manager, dialerStream, session.SessionId)
+		return tunnel.DialWaitLoop(ctx, tunnel.ManagerProvider(manager), dialerStream, session.SessionId)
 	})
 
 	// Deal with log-level changes

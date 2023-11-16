@@ -1,0 +1,14 @@
+{{- if eq .Values.agentInjector.certificate.method "certmanager" }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.agentInjector.secret.name }}
+spec:
+  secretName: {{ .Values.agentInjector.secret.name }}
+  dnsNames:
+  - {{ (printf "%s.%s" .Values.agentInjector.name .Release.Namespace ) }}
+  - {{ (printf "%s.%s.svc" .Values.agentInjector.name .Release.Namespace ) }}
+  {{- with .Values.agentInjector.certificate.certmanager }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

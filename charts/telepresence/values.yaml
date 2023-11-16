@@ -136,6 +136,23 @@ agentInjector:
     name: mutator-webhook-tls
   certificate:
     regenerate: false
+
+    # The method used to generate the TLS certificate for the agent-injector.
+    #
+    # Possible options: helm or certmanager
+    #
+    # Default: helm
+    method: helm
+
+    # The certmanager configuration block
+    #
+    certmanager:
+      commonName: agent-injector
+      duration: 2160h0m0s
+      issuerRef:
+        name: telepresence
+        kind: Issuer
+
   injectPolicy: OnDemand
   webhook:
     name: agent-injector-webhook

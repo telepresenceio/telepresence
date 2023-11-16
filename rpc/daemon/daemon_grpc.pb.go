@@ -33,6 +33,7 @@ const (
 	Daemon_SetDNSMappings_FullMethodName   = "/telepresence.daemon.Daemon/SetDNSMappings"
 	Daemon_SetLogLevel_FullMethodName      = "/telepresence.daemon.Daemon/SetLogLevel"
 	Daemon_WaitForNetwork_FullMethodName   = "/telepresence.daemon.Daemon/WaitForNetwork"
+	Daemon_WaitForAgentIP_FullMethodName   = "/telepresence.daemon.Daemon/WaitForAgentIP"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -61,6 +62,8 @@ type DaemonClient interface {
 	SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WaitForNetwork waits for the network of the currently connected session to become ready.
 	WaitForNetwork(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// WaitForAgentIP waits for the network of an intercepted agent to become ready.
+	WaitForAgentIP(ctx context.Context, in *WaitForAgentIPRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type daemonClient struct {
@@ -170,6 +173,15 @@ func (c *daemonClient) WaitForNetwork(ctx context.Context, in *emptypb.Empty, op
 	return out, nil
 }
 
+func (c *daemonClient) WaitForAgentIP(ctx context.Context, in *WaitForAgentIPRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Daemon_WaitForAgentIP_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility
@@ -196,6 +208,8 @@ type DaemonServer interface {
 	SetLogLevel(context.Context, *manager.LogLevelRequest) (*emptypb.Empty, error)
 	// WaitForNetwork waits for the network of the currently connected session to become ready.
 	WaitForNetwork(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	// WaitForAgentIP waits for the network of an intercepted agent to become ready.
+	WaitForAgentIP(context.Context, *WaitForAgentIPRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -235,6 +249,9 @@ func (UnimplementedDaemonServer) SetLogLevel(context.Context, *manager.LogLevelR
 }
 func (UnimplementedDaemonServer) WaitForNetwork(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WaitForNetwork not implemented")
+}
+func (UnimplementedDaemonServer) WaitForAgentIP(context.Context, *WaitForAgentIPRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WaitForAgentIP not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 
@@ -447,6 +464,24 @@ func _Daemon_WaitForNetwork_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_WaitForAgentIP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WaitForAgentIPRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).WaitForAgentIP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_WaitForAgentIP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).WaitForAgentIP(ctx, req.(*WaitForAgentIPRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -497,6 +532,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WaitForNetwork",
 			Handler:    _Daemon_WaitForNetwork_Handler,
+		},
+		{
+			MethodName: "WaitForAgentIP",
+			Handler:    _Daemon_WaitForAgentIP_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

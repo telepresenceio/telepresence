@@ -7,9 +7,11 @@ maintainer responsibilities.
 
 Maintainers are listed in alphabetical order.
 
+* Guillaume Veschambre, [shepz](https://github.com/shepz), <gveschambre@datawire.io>
 * Jose Cortes, [josecv](https://github.com/josecv), <josecortes@datawire.io>
 * Kévin Lambert, [knlambert](https://github.com/knlambert), <klambert@datawire.io>
 * Nick Powell, [njayp](https://github.com/njayp), <nickpowell@datawire.io>
+* Sarabraj Singh, [sarabrajsingh](https://github.com/sarabrajsingh), <rsingh@datawire.io>
 * Thomas Hallgren, [thallgren](https://github.com/thallgren), <thomas@datawire.io>
 
 ## Maintainers Emeriti

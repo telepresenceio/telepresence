@@ -30,9 +30,17 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.16.2
-    date: "(TBD)"
+  - version: 2.17.0
+    date: "2023-11-14"
     notes:
+      - type: feature
+        title: Additional Prometheus metrics to track intercept/connect activity
+        body: >-
+          This feature adds the following metrics to the Prometheus endpoint: <code>connect_count</code>, 
+          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code. 
+          These are labeled by client/install_id. 
+          Additionally, the <code>intercept_count</code> metric has been renamed to <code>active_intercept_count</code> 
+          for clarity.
       - type: feature
         title: Make the Telepresence client docker image configurable.
         body: >-
@@ -41,13 +49,32 @@ items:
           TELEPRESENCE_CLIENT_IMAGE</code>, and then to the value preset by the telepresence binary. This
           configuration setting is primarily intended for testing purposes.
       - type: feature
+        title: Use traffic-agent port-forwards for outbound and intercepted traffic.
+        body: >-
+          The telepresence TUN-device is now capable of establishing direct port-forwards to a traffic-agent in the
+          connected namespace. That port-forward is then used for all outbound traffic to the device, and also for
+          all traffic that arrives from intercepted workloads. Getting rid of the extra hop via the traffic-manager
+          improves performance and reduces the load on the traffic-manager. The feature can only be used if the client
+          has Kubernetes port-forward permissions to the connected namespace. It can be disabled by setting <code>
+          cluster.agentPortForward</code> to <code>false</code> in <code>config.yml</code>.
+      - type: feature
         title: Improve outbound traffic performance.
         body: >-
           The root-daemon now communicates directly with the traffic-manager instead of routing all outbound traffic
           through the user-daemon. The root-daemon uses a patched kubeconfig where <code>exec</code> configurations to
           obtain credentials are dispatched to the user-daemon. This to ensure that all authentication plugins will
           execute in user-space. The old behavior of routing everything through the user-daemon can be restored by
-          setting <code>cluster.connectFromUserDaemon</code> to <code>true</code> in <code>config.yml</code>.
+          setting <code>cluster.connectFromRootDaemon</code> to <code>false</code> in <code>config.yml</code>.
+      - type: feature
+        title: New networking CLI flag --allow-conflicting-subnets
+        body: >-
+          telepresence connect (and other commands that kick off a connect) now accepts an --allow-conflicting-subnets
+          CLI flag. This is equivalent to client.routing.allowConflictingSubnets in the helm chart, but can be specified
+          at connect time. It will be appended to any configuration pushed from the traffic manager.
+      - type: change
+        title: Warn if large version mismatch between traffic manager and client.
+        body: >-
+          Print a warning if the minor version diff between the client and the traffic manager is greater than three.
       - type: change
         title: The authenticator binary was removed from the docker image.
         body: >-
@@ -58,12 +85,12 @@ items:
     date: "2023-10-12"
     notes:
       - type: feature
-        title: Add <code>--docker-debug</code> flag to the <code>telepresence intercept</code> command.
+        title: Add --docker-debug flag to the telepresence intercept command.
         body: >-
           This flag is similar to <code>--docker-build</code> but will start the container with more relaxed security
           using the <code>docker run</code> flags <code>--security-opt apparmor=unconfined --cap-add SYS_PTRACE</code>.
       - type: feature
-        title: Add a <code>--export</code> option to the <code>telepresence connect</code> command.
+        title: Add a --export option to the telepresence connect command.
         body: >-
           In some situations it is necessary to make some ports available to the
           host from a containerized telepresence daemon. This commit adds a

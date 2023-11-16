@@ -45,10 +45,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -141,7 +141,7 @@ func NewSession(
 	dlog.Info(ctx, "-- Starting new session")
 
 	connectStart := time.Now()
-	defer func() {
+	report := func(ctx context.Context) {
 		if info.Error == connector.ConnectInfo_UNSPECIFIED {
 			scout.Report(ctx, "connect",
 				scout.Entry{
@@ -170,12 +170,13 @@ func NewSession(
 					Value: len(cr.MappedNamespaces),
 				})
 		}
-	}()
+	}
 
 	dlog.Info(ctx, "Connecting to k8s cluster...")
 	cluster, err := k8s.ConnectCluster(ctx, cr, config)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
+		report(ctx)
 		return ctx, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
@@ -187,8 +188,13 @@ func NewSession(
 	tmgr, err := connectMgr(ctx, cluster, scout.InstallID(ctx), cr)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
+		report(ctx)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
+
+	// store session in ctx for reporting
+	ctx = scout.WithSession(ctx, tmgr)
+	defer report(ctx)
 
 	tmgr.sessionConfig = client.GetDefaultConfig()
 	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
@@ -207,6 +213,7 @@ func NewSession(
 			dlog.Warnf(ctx, "Failed to set remote kubeconfig values: %v", err)
 		}
 	}
+	ctx = dnet.WithPortForwardDialer(ctx, tmgr.pfDialer)
 
 	oi := tmgr.getOutboundInfo(ctx)
 	rootRunning := userd.GetService(ctx).RootSessionInProcess()
@@ -217,7 +224,7 @@ func NewSession(
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
 
-		if rootRunning && !client.GetConfig(ctx).Cluster().ConnectFromUserDaemon {
+		if rootRunning && client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
 			// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 			// must be executed by the user, not by root.
 			konfig, err := patcher.CreateExternalKubeConfig(ctx, cluster.EffectiveFlagMap, func([]string) (string, string, error) {
@@ -226,7 +233,7 @@ func NewSession(
 					authGrpc.RegisterAuthenticatorServer(s.Server(), config.ConfigFlags.ToRawKubeConfigLoader())
 				}
 				return client.GetExe(), s.ListenerAddress(ctx), nil
-			})
+			}, nil)
 			if err != nil {
 				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 			}
@@ -346,7 +353,7 @@ func connectMgr(
 	if err != nil {
 		return nil, err
 	}
-	conn, mClient, vi, err := tm.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
+	conn, mClient, vi, err := k8sclient.ConnectToManager(ctx, cluster.GetManagerNamespace(), pfDialer.Dial)
 	if err != nil {
 		return nil, err
 	}
@@ -421,8 +428,14 @@ func connectMgr(
 		return nil, fmt.Errorf("failed to parse extra never proxy: %w", err)
 	}
 
+	extraAllow, err := parseCIDR(cr.GetAllowConflictingSubnets())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse extra allow conflicting subnets: %w", err)
+	}
+
 	cluster.AlsoProxy = append(cluster.AlsoProxy, extraAlsoProxy...)
 	cluster.NeverProxy = append(cluster.NeverProxy, extraNeverProxy...)
+	cluster.AllowConflictingSubnets = append(cluster.AllowConflictingSubnets, extraAllow...)
 
 	sess := &session{
 		Cluster:          cluster,
@@ -868,7 +881,7 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 	}
 
 	if s.SetMappedNamespaces(c, namespaces) {
-		if len(namespaces) == 0 && s.CanWatchNamespaces(c) {
+		if len(namespaces) == 0 && k8sclient.CanWatchNamespaces(c) {
 			s.StartNamespaceWatcher(c)
 		}
 		s.currentInterceptsLock.Lock()
@@ -1059,6 +1072,7 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 		Session:           s.sessionInfo,
 		NeverProxySubnets: neverProxy,
 		HomeDir:           homedir.HomeDir(),
+		Namespace:         s.Namespace,
 		ManagerNamespace:  s.GetManagerNamespace(),
 	}
 
@@ -1084,6 +1098,12 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 			info.AlsoProxySubnets[i] = iputil.IPNetToRPC((*net.IPNet)(ap))
 		}
 	}
+	if len(s.AllowConflictingSubnets) > 0 {
+		info.AllowConflictingSubnets = make([]*manager.IPNet, len(s.AllowConflictingSubnets))
+		for i, ap := range s.AllowConflictingSubnets {
+			info.AllowConflictingSubnets[i] = iputil.IPNetToRPC((*net.IPNet)(ap))
+		}
+	}
 	return info
 }
 
@@ -1101,8 +1121,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 	} else {
 		var conn *grpc.ClientConn
 		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx),
-			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-			grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("unable open root daemon socket: %w", err)
