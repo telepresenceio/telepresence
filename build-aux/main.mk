@@ -280,6 +280,11 @@ prepare-release: generate wix
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
 
+.PHONY: push-tags
+push-tags:
+	git push origin $(TELEPRESENCE_VERSION)
+	git push origin rpc/$(TELEPRESENCE_VERSION)
+
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.

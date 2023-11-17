@@ -82,7 +82,7 @@ items:
           retrieval, has been removed. The functionality was instead added as a subcommand to the <code>telepresence
           </code> binary.
   - version: 2.16.1
-    date: "2023-10-03"
+    date: "2023-10-12"
     notes:
       - type: feature
         title: Add --docker-debug flag to the telepresence intercept command.
