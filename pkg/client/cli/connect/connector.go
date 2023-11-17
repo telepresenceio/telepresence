@@ -251,7 +251,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 		}
 	}()
 
-	if daemon.GetUserClient(ctx) != nil {
+	if ud = daemon.GetUserClient(ctx); ud != nil {
 		return ctx, nil
 	}
 	if ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required); err != nil {
