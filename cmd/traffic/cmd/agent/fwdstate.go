@@ -112,7 +112,7 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 	fs.forwarder.SetIntercepting(activeIntercept)
 
 	// Review waiting intercepts
-	var reviews []*manager.ReviewInterceptRequest
+	reviews := make([]*manager.ReviewInterceptRequest, 0, len(cepts))
 	for _, cept := range cepts {
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active

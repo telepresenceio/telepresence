@@ -125,7 +125,6 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 				dlog.Debugf(ctx, "intercept id %s svc=%q, svcPortId=%q matches config svc=%q, svcPort=%d, protocol=%s",
 					ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort, ic.Protocol)
 				ms = append(ms, ii)
-				break // Break inner loop, we don't want to add ii more than once
 			}
 		}
 		rs = append(rs, ist.HandleIntercepts(ctx, ms)...)
