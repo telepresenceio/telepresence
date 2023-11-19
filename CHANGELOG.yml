@@ -30,6 +30,15 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.17.1
+    date: (TBD)
+    notes:
+      - type: change
+        title: Removal of backward support for versions predating 2.6.0
+        body: >-
+          The telepresence helm installer will no longer discover and convert workloads that were modified by versions
+          prior to 2.6.0. The traffic manager will and no longer support the muxed tunnels used in versions prior to
+          2.5.0.
   - version: 2.17.0
     date: "2023-11-14"
     notes:

@@ -1148,7 +1148,6 @@ const (
 	ManagerProxy_GetClientConfig_FullMethodName  = "/telepresence.connector.ManagerProxy/GetClientConfig"
 	ManagerProxy_WatchClusterInfo_FullMethodName = "/telepresence.connector.ManagerProxy/WatchClusterInfo"
 	ManagerProxy_LookupDNS_FullMethodName        = "/telepresence.connector.ManagerProxy/LookupDNS"
-	ManagerProxy_LookupHost_FullMethodName       = "/telepresence.connector.ManagerProxy/LookupHost"
 	ManagerProxy_Tunnel_FullMethodName           = "/telepresence.connector.ManagerProxy/Tunnel"
 )
 
@@ -1166,10 +1165,6 @@ type ManagerProxyClient interface {
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(ctx context.Context, in *manager.DNSRequest, opts ...grpc.CallOption) (*manager.DNSResponse, error)
-	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
-	// active, the lookup will be performed from the intercepted pods.
-	// Deprecated: Retained for backward compatibility. Replaced by LookupDNS
-	LookupHost(ctx context.Context, in *manager.LookupHostRequest, opts ...grpc.CallOption) (*manager.LookupHostResponse, error)
 	// A Tunnel represents one single connection where the client or
 	// traffic-agent represents one end (the client-side) and the
 	// traffic-manager represents the other (the server side). The first
@@ -1246,15 +1241,6 @@ func (c *managerProxyClient) LookupDNS(ctx context.Context, in *manager.DNSReque
 	return out, nil
 }
 
-func (c *managerProxyClient) LookupHost(ctx context.Context, in *manager.LookupHostRequest, opts ...grpc.CallOption) (*manager.LookupHostResponse, error) {
-	out := new(manager.LookupHostResponse)
-	err := c.cc.Invoke(ctx, ManagerProxy_LookupHost_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *managerProxyClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (ManagerProxy_TunnelClient, error) {
 	stream, err := c.cc.NewStream(ctx, &ManagerProxy_ServiceDesc.Streams[1], ManagerProxy_Tunnel_FullMethodName, opts...)
 	if err != nil {
@@ -1300,10 +1286,6 @@ type ManagerProxyServer interface {
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(context.Context, *manager.DNSRequest) (*manager.DNSResponse, error)
-	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
-	// active, the lookup will be performed from the intercepted pods.
-	// Deprecated: Retained for backward compatibility. Replaced by LookupDNS
-	LookupHost(context.Context, *manager.LookupHostRequest) (*manager.LookupHostResponse, error)
 	// A Tunnel represents one single connection where the client or
 	// traffic-agent represents one end (the client-side) and the
 	// traffic-manager represents the other (the server side). The first
@@ -1329,9 +1311,6 @@ func (UnimplementedManagerProxyServer) WatchClusterInfo(*manager.SessionInfo, Ma
 }
 func (UnimplementedManagerProxyServer) LookupDNS(context.Context, *manager.DNSRequest) (*manager.DNSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
-}
-func (UnimplementedManagerProxyServer) LookupHost(context.Context, *manager.LookupHostRequest) (*manager.LookupHostResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
 }
 func (UnimplementedManagerProxyServer) Tunnel(ManagerProxy_TunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
@@ -1424,24 +1403,6 @@ func _ManagerProxy_LookupDNS_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ManagerProxy_LookupHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.LookupHostRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerProxyServer).LookupHost(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ManagerProxy_LookupHost_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerProxyServer).LookupHost(ctx, req.(*manager.LookupHostRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _ManagerProxy_Tunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(ManagerProxyServer).Tunnel(&managerProxyTunnelServer{stream})
 }
@@ -1486,10 +1447,6 @@ var ManagerProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupDNS",
 			Handler:    _ManagerProxy_LookupDNS_Handler,
-		},
-		{
-			MethodName: "LookupHost",
-			Handler:    _ManagerProxy_LookupHost_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

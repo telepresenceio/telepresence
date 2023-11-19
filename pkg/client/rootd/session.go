@@ -333,11 +333,7 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 		done:                    make(chan struct{}),
 	}
 
-	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
-		s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
-	} else {
-		s.dnsServer = dns.NewServer(mi.Dns, s.legacyClusterLookup, true)
-	}
+	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
 	s.SetSearchPath(c, nil, nil)
 	dlog.Infof(c, "also-proxy subnets %v", as)
 	dlog.Infof(c, "never-proxy subnets %v", ns)
@@ -359,38 +355,6 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 		return nil, dns2.RcodeServerFailure, err
 	}
 	return dnsproxy.FromRPC(r)
-}
-
-// clusterLookup sends a LookupHost request to the traffic-manager and returns the result.
-func (s *Session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rrs dnsproxy.RRs, rCode int, err error) {
-	qType := q.Qtype
-	if !(qType == dns2.TypeA || qType == dns2.TypeAAAA) {
-		return nil, dns2.RcodeNotImplemented, nil
-	}
-	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
-	s.dnsLookups++
-
-	var r *manager.LookupHostResponse //nolint:staticcheck // retained for backward compatibility
-	if r, err = s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{Session: s.session, Name: q.Name[:len(q.Name)-1]}); err != nil {
-		s.dnsFailures++
-		return nil, dns2.RcodeServerFailure, err
-	}
-	ips := iputil.IPsFromBytesSlice(r.Ips)
-	if len(ips) == 0 {
-		return nil, dns2.RcodeNameError, nil
-	}
-	rrHeader := func() dns2.RR_Header {
-		return dns2.RR_Header{Name: q.Name, Rrtype: qType, Class: dns2.ClassINET, Ttl: 4}
-	}
-	for _, ip := range ips {
-		if ip4 := ip.To4(); ip4 != nil {
-			rrs = append(rrs, &dns2.A{
-				Hdr: rrHeader(),
-				A:   ip4,
-			})
-		}
-	}
-	return rrs, dns2.RcodeSuccess, nil
 }
 
 func (s *Session) getNetworkConfig() *rpc.NetworkConfig {
