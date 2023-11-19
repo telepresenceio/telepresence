@@ -147,18 +147,6 @@ func (p *mgrProxy) Tunnel(fhClient connector.ManagerProxy_TunnelServer) error {
 	return nil
 }
 
-// LookupHost
-// Deprecated: Use LookupDNS
-//
-//nolint:staticcheck // retained for backward compatibility
-func (p *mgrProxy) LookupHost(ctx context.Context, arg *manager.LookupHostRequest) (*manager.LookupHostResponse, error) {
-	client, callOptions, err := p.get()
-	if err != nil {
-		return nil, err
-	}
-	return client.LookupHost(ctx, arg, callOptions...)
-}
-
 func (p *mgrProxy) LookupDNS(ctx context.Context, arg *manager.DNSRequest) (*manager.DNSResponse, error) {
 	client, callOptions, err := p.get()
 	if err != nil {

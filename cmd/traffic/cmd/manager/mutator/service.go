@@ -101,21 +101,6 @@ func ServeMutator(ctx context.Context) error {
 			w.WriteHeader(http.StatusOK)
 		}
 	})
-	mux.HandleFunc("/upgrade-legacy", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		dlog.Debug(ctx, "Received upgrade-legacy request...")
-		statusCode, err := serveRequest(ctx, r, http.MethodPost, func(ctx context.Context) {
-			ai.UpgradeLegacy(ctx)
-		})
-		if err != nil {
-			dlog.Errorf(ctx, "error handling upgrade-legacy request: %v", err)
-			w.WriteHeader(statusCode)
-			_, _ = w.Write([]byte(err.Error()))
-		} else {
-			dlog.Debug(ctx, "upgrade-legacy request handled successfully")
-			w.WriteHeader(http.StatusOK)
-		}
-	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

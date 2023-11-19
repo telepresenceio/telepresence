@@ -34,7 +34,6 @@ var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: 
 type AgentInjector interface {
 	Inject(ctx context.Context, req *admission.AdmissionRequest) (p PatchOps, err error)
 	Uninstall(ctx context.Context)
-	UpgradeLegacy(ctx context.Context)
 }
 
 // NewAgentInjector creates a new agentInjector.
@@ -225,11 +224,6 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 func (a *agentInjector) Uninstall(ctx context.Context) {
 	atomic.StoreInt64(&a.terminating, 1)
 	a.agentConfigs.DeleteMapsAndRolloutAll(ctx)
-}
-
-// upgradeLegacy.
-func (a *agentInjector) UpgradeLegacy(ctx context.Context) {
-	a.agentConfigs.UninstallV25(ctx)
 }
 
 func needInitContainer(config *agentconfig.Sidecar) bool {

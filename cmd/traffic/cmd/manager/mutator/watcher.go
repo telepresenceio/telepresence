@@ -23,7 +23,6 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -36,7 +35,6 @@ type Map interface {
 	Delete(context.Context, string, string) error
 	Store(context.Context, agentconfig.SidecarExt, bool) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
-	UninstallV25(ctx context.Context)
 }
 
 var NewWatcherFunc = NewWatcher //nolint:gochecknoglobals // extension point
@@ -870,39 +868,6 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 		}
 		if err := api.ConfigMaps(ns).Delete(ctx, agentconfig.ConfigMap, *now); err != nil {
 			dlog.Errorf(ctx, "unable to delete ConfigMap %s-%s: %v", agentconfig.ConfigMap, ns, err)
-		}
-	}
-}
-
-// UninstallV25 will undo changes that telepresence versions prior to 2.6.0 did to workloads and
-// also add an initial entry in the agents ConfigMap for all workloads that had an agent or
-// was annotated to inject an agent.
-func (c *configWatcher) UninstallV25(ctx context.Context) {
-	var affectedWorkloads []k8sapi.Workload
-	if len(c.namespaces) == 0 {
-		affectedWorkloads = v25uninstall.RemoveAgents(ctx, "")
-	} else {
-		for _, ns := range c.namespaces {
-			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
-		}
-	}
-	img := managerutil.GetAgentImage(ctx)
-	if img == "" {
-		dlog.Warn(ctx, "no traffic-agents will be injected because the traffic-manager is unable to determine which image to use")
-		return
-	}
-	gc, err := agentmap.GeneratorConfigFunc(img)
-	if err != nil {
-		dlog.Error(ctx, err)
-		return
-	}
-	for _, wl := range affectedWorkloads {
-		scx, err := gc.Generate(ctx, wl, agentconfig.ReplacePolicyNever, nil)
-		if err == nil {
-			err = c.self.Store(ctx, scx, false)
-		}
-		if err != nil {
-			dlog.Warn(ctx, err)
 		}
 	}
 }

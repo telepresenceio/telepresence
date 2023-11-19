@@ -428,14 +428,6 @@ message AmbassadorCloudConnection {
   bool can_connect = 1;
 }
 
-// ConnMessage is a payload intended for a connection with a given id.
-// Deprecated. Telepresence now uses connection specific Tunnels and TunnelMessages
-message ConnMessage {
-  // conn_id is composed of L4 protocol, source IP, source port, destination IP and destination port
-  bytes conn_id = 1;
-  bytes payload = 5;
-}
-
 // TunnelMessage is a message sent over a Tunnel. First byte indicates type of message
 message TunnelMessage {
   bytes payload = 1;
@@ -446,31 +438,6 @@ message DialRequest {
   int64 roundtrip_latency = 2;
   int64 dial_timeout = 3;
   map<string,string> trace_context = 4;
-}
-
-// LookupHost request sent from a client
-// Deprecated: Retained for backward compatibility. Replaced by DNSRequest
-message LookupHostRequest {
-  // Client session
-  SessionInfo session = 1;
-  string name = 2;
-}
-
-// Deprecated: Retained for backward compatibility. Replaced by DNSResponse
-message LookupHostResponse {
-  repeated bytes ips = 1;
-}
-
-// Deprecated: Retained for backward compatibility. Replaced by DNSAgentResponse
-message LookupHostAgentResponse {
-  // Agent session
-  SessionInfo session = 1;
-
-  // LookupHostRequest is the request that this is a response to
-  LookupHostRequest request = 2;
-
-  // The response, which might be nil in case no address was found
-  LookupHostResponse response = 3;
 }
 
 // LookupHost request sent from a client
@@ -683,29 +650,6 @@ service Manager {
   // changing the disposition from "WATING" to "ACTIVE" or to an
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
-
-  // ClientTunnel receives messages from the client and dispatches them to tracked
-  // net.Conn instances in the traffic-manager. Responses from tracked instances
-  // are sent back on the returned message stream
-  rpc ClientTunnel(stream ConnMessage) returns (stream ConnMessage);
-
-  // AgentTunnel receives messages from the agent and dispatches them to tracked
-  // net.Conn instances in the traffic-manager. Responses from tracked instances
-  // are sent back on the returned message stream
-  rpc AgentTunnel(stream ConnMessage) returns (stream ConnMessage);
-
-  // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
-  // active, the lookup will be performed from the intercepted pods.
-  // Deprecated: Retained for backward compatibility. Replaced by LookupDNS
-  rpc LookupHost(LookupHostRequest) returns (LookupHostResponse);
-
-  // AgentLookupHostResponse lets an agent respond for lookup requests
-  // Deprecated: Retained for backward compatibility. Replaced by AgentLookupDNSResponse
-  rpc AgentLookupHostResponse(LookupHostAgentResponse) returns (google.protobuf.Empty);
-
-  // WatchLookupHost lets an agent receive lookup requests
-  // Deprecated: Retained for backward compatibility. Replaced by WatchLookupDNS
-  rpc WatchLookupHost(SessionInfo) returns (stream LookupHostRequest);
 
   // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.

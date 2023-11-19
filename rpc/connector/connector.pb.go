@@ -2190,7 +2190,7 @@ var file_connector_connector_proto_rawDesc = []byte{
 	0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x64, 0x61, 0x65, 0x6d, 0x6f, 0x6e, 0x2e,
 	0x53, 0x65, 0x74, 0x44, 0x4e, 0x53, 0x4d, 0x61, 0x70, 0x70, 0x69, 0x6e, 0x67, 0x73, 0x52, 0x65,
 	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x32, 0x88, 0x04,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x32, 0xa7, 0x03,
 	0x0a, 0x0c, 0x4d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x12, 0x45,
 	0x0a, 0x07, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
 	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74,
@@ -2212,22 +2212,16 @@ var file_connector_connector_proto_rawDesc = []byte{
 	0x72, 0x2e, 0x44, 0x4e, 0x53, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21, 0x2e, 0x74,
 	0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61,
 	0x67, 0x65, 0x72, 0x2e, 0x44, 0x4e, 0x53, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x5f, 0x0a, 0x0a, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x12, 0x27, 0x2e,
-	0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e,
-	0x61, 0x67, 0x65, 0x72, 0x2e, 0x4c, 0x6f, 0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65,
-	0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x4c, 0x6f,
-	0x6f, 0x6b, 0x75, 0x70, 0x48, 0x6f, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x56, 0x0a, 0x06, 0x54, 0x75, 0x6e, 0x6e, 0x65, 0x6c, 0x12, 0x23, 0x2e, 0x74, 0x65, 0x6c,
-	0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65,
-	0x72, 0x2e, 0x54, 0x75, 0x6e, 0x6e, 0x65, 0x6c, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x1a,
-	0x23, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d,
-	0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x54, 0x75, 0x6e, 0x6e, 0x65, 0x6c, 0x4d, 0x65, 0x73,
-	0x73, 0x61, 0x67, 0x65, 0x28, 0x01, 0x30, 0x01, 0x42, 0x39, 0x5a, 0x37, 0x67, 0x69, 0x74, 0x68,
-	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65,
-	0x6e, 0x63, 0x65, 0x69, 0x6f, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e,
-	0x63, 0x65, 0x2f, 0x72, 0x70, 0x63, 0x2f, 0x76, 0x32, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63,
-	0x74, 0x6f, 0x72, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x56, 0x0a, 0x06, 0x54, 0x75, 0x6e, 0x6e, 0x65, 0x6c, 0x12, 0x23, 0x2e, 0x74, 0x65, 0x6c, 0x65,
+	0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72,
+	0x2e, 0x54, 0x75, 0x6e, 0x6e, 0x65, 0x6c, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x1a, 0x23,
+	0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x6d, 0x61,
+	0x6e, 0x61, 0x67, 0x65, 0x72, 0x2e, 0x54, 0x75, 0x6e, 0x6e, 0x65, 0x6c, 0x4d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x28, 0x01, 0x30, 0x01, 0x42, 0x39, 0x5a, 0x37, 0x67, 0x69, 0x74, 0x68, 0x75,
+	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e,
+	0x63, 0x65, 0x69, 0x6f, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63,
+	0x65, 0x2f, 0x72, 0x70, 0x63, 0x2f, 0x76, 0x32, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74,
+	0x6f, 0x72, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -2292,14 +2286,12 @@ var file_connector_connector_proto_goTypes = []interface{}{
 	(*daemon.SetDNSExcludesRequest)(nil),    // 44: telepresence.daemon.SetDNSExcludesRequest
 	(*daemon.SetDNSMappingsRequest)(nil),    // 45: telepresence.daemon.SetDNSMappingsRequest
 	(*manager.DNSRequest)(nil),              // 46: telepresence.manager.DNSRequest
-	(*manager.LookupHostRequest)(nil),       // 47: telepresence.manager.LookupHostRequest
-	(*manager.TunnelMessage)(nil),           // 48: telepresence.manager.TunnelMessage
-	(*common.Result)(nil),                   // 49: telepresence.common.Result
-	(*manager.VersionInfo2)(nil),            // 50: telepresence.manager.VersionInfo2
-	(*manager.CLIConfig)(nil),               // 51: telepresence.manager.CLIConfig
-	(*manager.ClusterInfo)(nil),             // 52: telepresence.manager.ClusterInfo
-	(*manager.DNSResponse)(nil),             // 53: telepresence.manager.DNSResponse
-	(*manager.LookupHostResponse)(nil),      // 54: telepresence.manager.LookupHostResponse
+	(*manager.TunnelMessage)(nil),           // 47: telepresence.manager.TunnelMessage
+	(*common.Result)(nil),                   // 48: telepresence.common.Result
+	(*manager.VersionInfo2)(nil),            // 49: telepresence.manager.VersionInfo2
+	(*manager.CLIConfig)(nil),               // 50: telepresence.manager.CLIConfig
+	(*manager.ClusterInfo)(nil),             // 51: telepresence.manager.ClusterInfo
+	(*manager.DNSResponse)(nil),             // 52: telepresence.manager.DNSResponse
 }
 var file_connector_connector_proto_depIdxs = []int32{
 	22, // 0: telepresence.connector.ConnectRequest.kube_flags:type_name -> telepresence.connector.ConnectRequest.KubeFlagsEntry
@@ -2357,42 +2349,40 @@ var file_connector_connector_proto_depIdxs = []int32{
 	40, // 52: telepresence.connector.ManagerProxy.GetClientConfig:input_type -> google.protobuf.Empty
 	33, // 53: telepresence.connector.ManagerProxy.WatchClusterInfo:input_type -> telepresence.manager.SessionInfo
 	46, // 54: telepresence.connector.ManagerProxy.LookupDNS:input_type -> telepresence.manager.DNSRequest
-	47, // 55: telepresence.connector.ManagerProxy.LookupHost:input_type -> telepresence.manager.LookupHostRequest
-	48, // 56: telepresence.connector.ManagerProxy.Tunnel:input_type -> telepresence.manager.TunnelMessage
-	31, // 57: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
-	31, // 58: telepresence.connector.Connector.RootDaemonVersion:output_type -> telepresence.common.VersionInfo
-	31, // 59: telepresence.connector.Connector.TrafficManagerVersion:output_type -> telepresence.common.VersionInfo
-	36, // 60: telepresence.connector.Connector.GetIntercept:output_type -> telepresence.manager.InterceptInfo
-	6,  // 61: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
-	40, // 62: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
-	21, // 63: telepresence.connector.Connector.GetClusterSubnets:output_type -> telepresence.connector.ClusterSubnets
-	6,  // 64: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
-	13, // 65: telepresence.connector.Connector.CanIntercept:output_type -> telepresence.connector.InterceptResult
-	13, // 66: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
-	13, // 67: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
-	36, // 68: telepresence.connector.Connector.UpdateIntercept:output_type -> telepresence.manager.InterceptInfo
-	49, // 69: telepresence.connector.Connector.Uninstall:output_type -> telepresence.common.Result
-	12, // 70: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	12, // 71: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	40, // 72: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
-	40, // 73: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
-	17, // 74: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
-	49, // 75: telepresence.connector.Connector.GatherTraces:output_type -> telepresence.common.Result
-	40, // 76: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
-	40, // 77: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
-	19, // 78: telepresence.connector.Connector.GetNamespaces:output_type -> telepresence.connector.GetNamespacesResponse
-	49, // 79: telepresence.connector.Connector.RemoteMountAvailability:output_type -> telepresence.common.Result
-	20, // 80: telepresence.connector.Connector.GetConfig:output_type -> telepresence.connector.ClientConfig
-	40, // 81: telepresence.connector.Connector.SetDNSExcludes:output_type -> google.protobuf.Empty
-	40, // 82: telepresence.connector.Connector.SetDNSMappings:output_type -> google.protobuf.Empty
-	50, // 83: telepresence.connector.ManagerProxy.Version:output_type -> telepresence.manager.VersionInfo2
-	51, // 84: telepresence.connector.ManagerProxy.GetClientConfig:output_type -> telepresence.manager.CLIConfig
-	52, // 85: telepresence.connector.ManagerProxy.WatchClusterInfo:output_type -> telepresence.manager.ClusterInfo
-	53, // 86: telepresence.connector.ManagerProxy.LookupDNS:output_type -> telepresence.manager.DNSResponse
-	54, // 87: telepresence.connector.ManagerProxy.LookupHost:output_type -> telepresence.manager.LookupHostResponse
-	48, // 88: telepresence.connector.ManagerProxy.Tunnel:output_type -> telepresence.manager.TunnelMessage
-	57, // [57:89] is the sub-list for method output_type
-	25, // [25:57] is the sub-list for method input_type
+	47, // 55: telepresence.connector.ManagerProxy.Tunnel:input_type -> telepresence.manager.TunnelMessage
+	31, // 56: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
+	31, // 57: telepresence.connector.Connector.RootDaemonVersion:output_type -> telepresence.common.VersionInfo
+	31, // 58: telepresence.connector.Connector.TrafficManagerVersion:output_type -> telepresence.common.VersionInfo
+	36, // 59: telepresence.connector.Connector.GetIntercept:output_type -> telepresence.manager.InterceptInfo
+	6,  // 60: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
+	40, // 61: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
+	21, // 62: telepresence.connector.Connector.GetClusterSubnets:output_type -> telepresence.connector.ClusterSubnets
+	6,  // 63: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
+	13, // 64: telepresence.connector.Connector.CanIntercept:output_type -> telepresence.connector.InterceptResult
+	13, // 65: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
+	13, // 66: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
+	36, // 67: telepresence.connector.Connector.UpdateIntercept:output_type -> telepresence.manager.InterceptInfo
+	48, // 68: telepresence.connector.Connector.Uninstall:output_type -> telepresence.common.Result
+	12, // 69: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	12, // 70: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	40, // 71: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
+	40, // 72: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
+	17, // 73: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
+	48, // 74: telepresence.connector.Connector.GatherTraces:output_type -> telepresence.common.Result
+	40, // 75: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
+	40, // 76: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
+	19, // 77: telepresence.connector.Connector.GetNamespaces:output_type -> telepresence.connector.GetNamespacesResponse
+	48, // 78: telepresence.connector.Connector.RemoteMountAvailability:output_type -> telepresence.common.Result
+	20, // 79: telepresence.connector.Connector.GetConfig:output_type -> telepresence.connector.ClientConfig
+	40, // 80: telepresence.connector.Connector.SetDNSExcludes:output_type -> google.protobuf.Empty
+	40, // 81: telepresence.connector.Connector.SetDNSMappings:output_type -> google.protobuf.Empty
+	49, // 82: telepresence.connector.ManagerProxy.Version:output_type -> telepresence.manager.VersionInfo2
+	50, // 83: telepresence.connector.ManagerProxy.GetClientConfig:output_type -> telepresence.manager.CLIConfig
+	51, // 84: telepresence.connector.ManagerProxy.WatchClusterInfo:output_type -> telepresence.manager.ClusterInfo
+	52, // 85: telepresence.connector.ManagerProxy.LookupDNS:output_type -> telepresence.manager.DNSResponse
+	47, // 86: telepresence.connector.ManagerProxy.Tunnel:output_type -> telepresence.manager.TunnelMessage
+	56, // [56:87] is the sub-list for method output_type
+	25, // [25:56] is the sub-list for method input_type
 	25, // [25:25] is the sub-list for extension type_name
 	25, // [25:25] is the sub-list for extension extendee
 	0,  // [0:25] is the sub-list for field type_name
