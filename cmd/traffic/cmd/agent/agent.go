@@ -180,7 +180,9 @@ func sidecar(ctx context.Context, s SimpleState, info *rpc.AgentInfo) error {
 				return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 			})
 			cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
-			s.AddInterceptState(s.NewInterceptState(fwd, ics, cnMountPoint, env))
+			for _, ic := range ics {
+				s.AddInterceptState(s.NewInterceptState(fwd, ic, cnMountPoint, env))
+			}
 		}
 	}
 	TalkToManagerLoop(ctx, s, info)

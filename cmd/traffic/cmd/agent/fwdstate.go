@@ -16,7 +16,7 @@ import (
 
 type fwdState struct {
 	*simpleState
-	intercepts []*agentconfig.Intercept
+	intercept  *agentconfig.Intercept
 	forwarder  forwarder.Interceptor
 	mountPoint string
 	env        map[string]string
@@ -24,18 +24,18 @@ type fwdState struct {
 
 // NewInterceptState creates a InterceptState that performs intercepts by using an Interceptor which indiscriminately
 // intercepts all traffic to the port that it forwards.
-func (s *simpleState) NewInterceptState(forwarder forwarder.Interceptor, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
+func (s *simpleState) NewInterceptState(forwarder forwarder.Interceptor, intercept *agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
 	return &fwdState{
 		simpleState: s,
 		mountPoint:  mountPoint,
-		intercepts:  intercepts,
+		intercept:   intercept,
 		forwarder:   forwarder,
 		env:         env,
 	}
 }
 
-func (fs *fwdState) InterceptConfigs() []*agentconfig.Intercept {
-	return fs.intercepts
+func (fs *fwdState) InterceptConfig() *agentconfig.Intercept {
+	return fs.intercept
 }
 
 func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
@@ -112,7 +112,7 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 	fs.forwarder.SetIntercepting(activeIntercept)
 
 	// Review waiting intercepts
-	var reviews []*manager.ReviewInterceptRequest
+	reviews := make([]*manager.ReviewInterceptRequest, 0, len(cepts))
 	for _, cept := range cepts {
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active

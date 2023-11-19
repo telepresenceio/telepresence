@@ -6,6 +6,7 @@ import (
 
 	"github.com/blang/semver"
 	"github.com/puzpuzpuz/xsync/v3"
+	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
@@ -36,15 +37,14 @@ type State interface {
 
 type SimpleState interface {
 	State
-	NewInterceptState(forwarder forwarder.Interceptor, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState
+	NewInterceptState(forwarder forwarder.Interceptor, intercept *agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState
 }
 
 // An InterceptState implements what's needed to intercept one port.
 type InterceptState interface {
 	State
-	InterceptConfigs() []*agentconfig.Intercept
+	InterceptConfig() *agentconfig.Intercept
 	InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error)
-	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
 }
 
 // State of the Traffic Agent.
@@ -120,13 +120,11 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 	for _, ist := range s.interceptStates {
 		ms := make([]*manager.InterceptInfo, 0, len(iis))
 		for _, ii := range iis {
-			for _, ic := range ist.InterceptConfigs() {
-				if agentconfig.SpecMatchesIntercept(ii.Spec, ic) {
-					dlog.Debugf(ctx, "intercept id %s svc=%q, svcPortId=%q matches config svc=%q, svcPort=%d, protocol=%s",
-						ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort, ic.Protocol)
-					ms = append(ms, ii)
-					break // Break inner loop, we don't want to add ii more than once
-				}
+			ic := ist.InterceptConfig()
+			if agentconfig.SpecMatchesIntercept(ii.Spec, ic) {
+				dlog.Debugf(ctx, "intercept id %s svc=%q, svcPortId=%q matches config svc=%q, svcPort=%d, protocol=%s",
+					ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.ServiceName, ic.ServicePort, ic.Protocol)
+				ms = append(ms, ii)
 			}
 		}
 		rs = append(rs, ist.HandleIntercepts(ctx, ms)...)
@@ -155,7 +153,8 @@ func (s *simpleState) HandleIntercepts(ctx context.Context, iis []*manager.Inter
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
 	for _, is := range s.interceptStates {
-		if containerPort == 0 || containerPort == is.InterceptConfigs()[0].ContainerPort {
+		ic := is.InterceptConfig()
+		if containerPort == ic.ContainerPort && ic.Protocol == core.ProtocolTCP {
 			return is.InterceptInfo(ctx, callerID, path, containerPort, headers)
 		}
 	}
