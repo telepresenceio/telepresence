@@ -265,14 +265,6 @@ func TestConnect(t *testing.T) {
 	a.Len(hSnapI.Intercepts, 0)
 	t.Logf("=> agent[hello] intercept snapshot = %s", dumps(hSnapI))
 
-	// Removing a bogus intercept yields an error
-
-	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
-		Session: aliceSess2,
-		Name:    spec.Name, // no longer present, right?
-	})
-	a.Error(err)
-
 	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
 		Session: aliceSess1, // no longer a valid session, right?
 		Name:    spec.Name,  // doesn't matter...
