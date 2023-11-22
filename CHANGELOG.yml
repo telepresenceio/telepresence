@@ -33,6 +33,10 @@ items:
   - version: 2.17.1
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Fix panic in user daemon when traffic-manager was unreachable
+        body: The user daemon would panic if the traffic-manager was unreachable. It will now instead report
+          a proper error to the client.
       - type: change
         title: Removal of backward support for versions predating 2.6.0
         body: >-

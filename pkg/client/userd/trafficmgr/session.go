@@ -141,7 +141,7 @@ func NewSession(
 	dlog.Info(ctx, "-- Starting new session")
 
 	connectStart := time.Now()
-	report := func(ctx context.Context) {
+	defer func() {
 		if info.Error == connector.ConnectInfo_UNSPECIFIED {
 			scout.Report(ctx, "connect",
 				scout.Entry{
@@ -170,13 +170,12 @@ func NewSession(
 					Value: len(cr.MappedNamespaces),
 				})
 		}
-	}
+	}()
 
 	dlog.Info(ctx, "Connecting to k8s cluster...")
 	cluster, err := k8s.ConnectCluster(ctx, cr, config)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
-		report(ctx)
 		return ctx, nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
 	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
@@ -188,13 +187,11 @@ func NewSession(
 	tmgr, err := connectMgr(ctx, cluster, scout.InstallID(ctx), cr)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
-		report(ctx)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 
 	// store session in ctx for reporting
 	ctx = scout.WithSession(ctx, tmgr)
-	defer report(ctx)
 
 	tmgr.sessionConfig = client.GetDefaultConfig()
 	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
