@@ -34,6 +34,10 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Root daemon refuses to disconnect.
+        body: The root daemon would sometimes hang forever when attempting to disconnect due to a deadlock in
+          the VIF-device.
+      - type: bugfix
         title: Fix panic in user daemon when traffic-manager was unreachable
         body: The user daemon would panic if the traffic-manager was unreachable. It will now instead report
           a proper error to the client.

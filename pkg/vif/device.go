@@ -37,6 +37,7 @@ type Device interface {
 	AddSubnet(context.Context, *net.IPNet) error
 	RemoveSubnet(context.Context, *net.IPNet) error
 	SetDNS(context.Context, string, net.IP, []string) (err error)
+	WaitForDevice()
 }
 
 const defaultDevMtu = 1500
@@ -147,7 +148,7 @@ func (d *device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) (err error
 	return d.dev.removeSubnet(sCtx, subnet)
 }
 
-func (d *device) Wait() {
+func (d *device) WaitForDevice() {
 	d.wg.Wait()
 	dlog.Info(d.ctx, "Endpoint done")
 }
