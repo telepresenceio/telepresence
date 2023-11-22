@@ -124,11 +124,6 @@ service ManagerProxy {
   // active, the lookup will be performed from the intercepted pods.
   rpc LookupDNS(manager.DNSRequest) returns (manager.DNSResponse);
 
-  // LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
-  // active, the lookup will be performed from the intercepted pods.
-  // Deprecated: Retained for backward compatibility. Replaced by LookupDNS
-  rpc LookupHost(manager.LookupHostRequest) returns (manager.LookupHostResponse);
-
   // A Tunnel represents one single connection where the client or
   // traffic-agent represents one end (the client-side) and the
   // traffic-manager represents the other (the server side). The first
@@ -160,6 +155,7 @@ message ConnectRequest {
   bool is_pod_daemon = 4;
   repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
+  repeated string allow_conflicting_subnets = 10;
   string manager_namespace = 7;
   map<string, string> environment = 8;
 }

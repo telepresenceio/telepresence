@@ -10,7 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/tm"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 )
@@ -42,7 +42,7 @@ func (m *managerGRPCSuite) SetupSuite() {
 
 	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, k8sCluster.RestConfig, k8sapi.GetK8sInterface(ctx))
 	m.Require().NoError(err)
-	m.conn, m.client, _, err = tm.ConnectToManager(ctx, m.ManagerNamespace(), pfDialer.Dial)
+	m.conn, m.client, _, err = k8sclient.ConnectToManager(ctx, m.ManagerNamespace(), pfDialer.Dial)
 	m.Require().NoError(err)
 
 	_, err = m.client.Version(ctx, &empty.Empty{})

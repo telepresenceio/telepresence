@@ -23,7 +23,6 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator/v25uninstall"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -36,8 +35,9 @@ type Map interface {
 	Delete(context.Context, string, string) error
 	Store(context.Context, agentconfig.SidecarExt, bool) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
-	UninstallV25(ctx context.Context)
 }
+
+var NewWatcherFunc = NewWatcher //nolint:gochecknoglobals // extension point
 
 func Load(ctx context.Context) (m Map, err error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -50,7 +50,7 @@ func Load(ctx context.Context) (m Map, err error) {
 	env := managerutil.GetEnv(ctx)
 	ns := env.ManagedNamespaces
 	dlog.Infof(ctx, "Loading ConfigMaps from %v", ns)
-	return NewWatcher(agentconfig.ConfigMap, ns...), nil
+	return NewWatcherFunc(agentconfig.ConfigMap, ns...), nil
 }
 
 func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Workload, error) {
@@ -209,13 +209,15 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorCo
 	return err
 }
 
-func NewWatcher(name string, namespaces ...string) *configWatcher {
-	return &configWatcher{
+func NewWatcher(name string, namespaces ...string) Map {
+	w := &configWatcher{
 		name:           name,
 		namespaces:     namespaces,
 		data:           make(map[string]map[string]string),
 		configUpdaters: make(map[string]*configUpdater),
 	}
+	w.self = w
+	return w
 }
 
 type configWatcher struct {
@@ -229,6 +231,8 @@ type configWatcher struct {
 
 	configUpdatersLock sync.RWMutex
 	configUpdaters     map[string]*configUpdater
+
+	self Map // For extension
 }
 
 type entry struct {
@@ -236,6 +240,10 @@ type entry struct {
 	namespace string
 	value     string
 	link      trace.Link
+}
+
+func (c *configWatcher) SetSelf(self Map) {
+	c.self = self
 }
 
 func (c *configWatcher) Run(ctx context.Context) error {
@@ -291,7 +299,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 		}
 		if acx, err := gc.Generate(ctx, wl, 0, ac); err != nil {
 			dlog.Error(ctx, err)
-		} else if err = c.Store(ctx, acx, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
+		} else if err = c.self.Store(ctx, acx, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
 		}
 		return
@@ -740,7 +748,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		if err != nil {
 			if errors.IsNotFound(err) {
 				dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-				if err = c.Delete(ctx, ac.AgentName, ac.Namespace); err != nil {
+				if err = c.self.Delete(ctx, ac.AgentName, ac.Namespace); err != nil {
 					dlog.Error(ctx, err)
 				}
 			} else {
@@ -754,7 +762,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 			dlog.Error(ctx, err)
 			continue
 		}
-		if err = c.Store(ctx, acn, false); err != nil {
+		if err = c.self.Store(ctx, acn, false); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}
@@ -860,39 +868,6 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 		}
 		if err := api.ConfigMaps(ns).Delete(ctx, agentconfig.ConfigMap, *now); err != nil {
 			dlog.Errorf(ctx, "unable to delete ConfigMap %s-%s: %v", agentconfig.ConfigMap, ns, err)
-		}
-	}
-}
-
-// UninstallV25 will undo changes that telepresence versions prior to 2.6.0 did to workloads and
-// also add an initial entry in the agents ConfigMap for all workloads that had an agent or
-// was annotated to inject an agent.
-func (c *configWatcher) UninstallV25(ctx context.Context) {
-	var affectedWorkloads []k8sapi.Workload
-	if len(c.namespaces) == 0 {
-		affectedWorkloads = v25uninstall.RemoveAgents(ctx, "")
-	} else {
-		for _, ns := range c.namespaces {
-			affectedWorkloads = append(affectedWorkloads, v25uninstall.RemoveAgents(ctx, ns)...)
-		}
-	}
-	img := managerutil.GetAgentImage(ctx)
-	if img == "" {
-		dlog.Warn(ctx, "no traffic-agents will be injected because the traffic-manager is unable to determine which image to use")
-		return
-	}
-	gc, err := agentmap.GeneratorConfigFunc(img)
-	if err != nil {
-		dlog.Error(ctx, err)
-		return
-	}
-	for _, wl := range affectedWorkloads {
-		scx, err := gc.Generate(ctx, wl, agentconfig.ReplacePolicyNever, nil)
-		if err == nil {
-			err = c.Store(ctx, scx, false)
-		}
-		if err != nil {
-			dlog.Warn(ctx, err)
 		}
 	}
 }

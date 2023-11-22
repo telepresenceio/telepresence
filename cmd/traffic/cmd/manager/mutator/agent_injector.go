@@ -31,6 +31,21 @@ import (
 
 var podResource = meta.GroupVersionResource{Version: "v1", Group: "", Resource: "pods"} //nolint:gochecknoglobals // constant
 
+type AgentInjector interface {
+	Inject(ctx context.Context, req *admission.AdmissionRequest) (p PatchOps, err error)
+	Uninstall(ctx context.Context)
+}
+
+// NewAgentInjector creates a new agentInjector.
+func NewAgentInjector(ctx context.Context, agentConfigs Map) AgentInjector {
+	ai := &agentInjector{
+		agentConfigs: agentConfigs,
+	}
+	return ai
+}
+
+var NewAgentInjectorFunc = NewAgentInjector //nolint:gochecknoglobals // extension point
+
 type agentInjector struct {
 	sync.Mutex
 	agentConfigs Map
@@ -74,7 +89,7 @@ func getPod(req *admission.AdmissionRequest, isDelete bool) (*core.Pod, error) {
 	return &pod, nil
 }
 
-func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequest) (p patchOps, err error) {
+func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequest) (p PatchOps, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.inject")
 	defer tracing.EndAndRecord(span, err)
 
@@ -179,7 +194,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	// Create patch operations to add the traffic-agent sidecar
 	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
 
-	var patches patchOps
+	var patches PatchOps
 	config := scx.AgentConfig()
 	patches = deleteAppContainer(ctx, pod, config, patches)
 	patches = addInitContainer(pod, config, patches)
@@ -188,6 +203,7 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 	patches = addAgentVolumes(pod, config, patches)
 	patches = hidePorts(pod, config, patches)
 	patches = addPodAnnotations(ctx, pod, patches)
+	patches = addPodLabels(ctx, pod, config, patches)
 
 	if config.APIPort != 0 {
 		tpEnv := make(map[string]string)
@@ -205,14 +221,9 @@ func (a *agentInjector) inject(ctx context.Context, req *admission.AdmissionRequ
 
 // uninstall ensures that no more webhook injections is made and that all the workloads of currently injected
 // pods are rolled out.
-func (a *agentInjector) uninstall(ctx context.Context) {
+func (a *agentInjector) Uninstall(ctx context.Context) {
 	atomic.StoreInt64(&a.terminating, 1)
 	a.agentConfigs.DeleteMapsAndRolloutAll(ctx)
-}
-
-// upgradeLegacy.
-func (a *agentInjector) upgradeLegacy(ctx context.Context) {
-	a.agentConfigs.UninstallV25(ctx)
 }
 
 func needInitContainer(config *agentconfig.Sidecar) bool {
@@ -226,12 +237,12 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 	return false
 }
 
-func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
 podContainers:
 	for i, pc := range pod.Spec.Containers {
 		for _, cc := range config.Containers {
 			if cc.Name == pc.Name && cc.Replace == agentconfig.ReplacePolicyActive {
-				patches = append(patches, patchOperation{
+				patches = append(patches, PatchOperation{
 					Op:   "remove",
 					Path: fmt.Sprintf("/spec/containers/%d", i),
 				})
@@ -243,11 +254,11 @@ podContainers:
 	return patches
 }
 
-func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
 	if !needInitContainer(config) {
 		for i, oc := range pod.Spec.InitContainers {
 			if agentconfig.InitContainerName == oc.Name {
-				return append(patches, patchOperation{
+				return append(patches, PatchOperation{
 					Op:   "remove",
 					Path: fmt.Sprintf("/spec/initContainers/%d", i),
 				})
@@ -259,7 +270,7 @@ func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchO
 	pis := pod.Spec.InitContainers
 	ic := agentconfig.InitContainer(config)
 	if len(pis) == 0 {
-		return append(patches, patchOperation{
+		return append(patches, PatchOperation{
 			Op:    "replace",
 			Path:  "/spec/initContainers",
 			Value: []core.Container{*ic},
@@ -275,7 +286,7 @@ func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchO
 				compareCapabilities(ic.SecurityContext, oc.SecurityContext) {
 				return patches
 			}
-			return append(patches, patchOperation{
+			return append(patches, PatchOperation{
 				Op:    "replace",
 				Path:  fmt.Sprintf("/spec/initContainers/%d", i),
 				Value: ic,
@@ -283,14 +294,14 @@ func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches patchO
 		}
 	}
 
-	return append(patches, patchOperation{
+	return append(patches, PatchOperation{
 		Op:    "add",
 		Path:  "/spec/initContainers/-",
 		Value: ic,
 	})
 }
 
-func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) patchOps {
+func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches PatchOps) PatchOps {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == agentconfig.AnnotationVolumeName {
 			return patches
@@ -305,7 +316,7 @@ func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) p
 	// any volumes and automountServiceAccountToken == false
 	if pod.Spec.Volumes == nil {
 		patches = append(patches,
-			patchOperation{
+			PatchOperation{
 				Op:    "replace",
 				Path:  "/spec/volumes",
 				Value: avs,
@@ -313,7 +324,7 @@ func addAgentVolumes(pod *core.Pod, ag *agentconfig.Sidecar, patches patchOps) p
 	} else {
 		for _, av := range avs {
 			patches = append(patches,
-				patchOperation{
+				PatchOperation{
 					Op:    "add",
 					Path:  "/spec/volumes/-",
 					Value: av,
@@ -388,8 +399,8 @@ func addAgentContainer(
 	ctx context.Context,
 	pod *core.Pod,
 	config *agentconfig.Sidecar,
-	patches patchOps,
-) patchOps {
+	patches PatchOps,
+) PatchOps {
 	acn := agentconfig.AgentContainer(ctx, pod, config)
 	if acn == nil {
 		return patches
@@ -404,7 +415,7 @@ func addAgentContainer(
 				return patches
 			}
 			dlog.Debugf(ctx, "Pod %s already has container %s but it is modified", refPodName, agentconfig.ContainerName)
-			return append(patches, patchOperation{
+			return append(patches, PatchOperation{
 				Op:    "replace",
 				Path:  "/spec/containers/" + strconv.Itoa(i),
 				Value: acn,
@@ -412,7 +423,7 @@ func addAgentContainer(
 		}
 	}
 
-	return append(patches, patchOperation{
+	return append(patches, PatchOperation{
 		Op:    "add",
 		Path:  "/spec/containers/-",
 		Value: acn,
@@ -423,13 +434,13 @@ func addAgentContainer(
 func addPullSecrets(
 	pod *core.Pod,
 	config *agentconfig.Sidecar,
-	patches patchOps,
-) patchOps {
+	patches PatchOps,
+) PatchOps {
 	if len(config.PullSecrets) == 0 {
 		return patches
 	}
 	if len(pod.Spec.ImagePullSecrets) == 0 {
-		return append(patches, patchOperation{
+		return append(patches, PatchOperation{
 			Op:    "replace",
 			Path:  "/spec/imagePullSecrets",
 			Value: config.PullSecrets,
@@ -444,7 +455,7 @@ func addPullSecrets(
 			}
 		}
 		if !found {
-			patches = append(patches, patchOperation{
+			patches = append(patches, PatchOperation{
 				Op:    "add",
 				Path:  "/spec/imagePullSecrets/-",
 				Value: nps,
@@ -455,7 +466,7 @@ func addPullSecrets(
 }
 
 // addTPEnv adds telepresence specific environment variables to all interceptable app containers.
-func addTPEnv(pod *core.Pod, config *agentconfig.Sidecar, env map[string]string, patches patchOps) patchOps {
+func addTPEnv(pod *core.Pod, config *agentconfig.Sidecar, env map[string]string, patches PatchOps) PatchOps {
 	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		patches = addContainerTPEnv(pod, app, env, patches)
 	})
@@ -463,7 +474,7 @@ func addTPEnv(pod *core.Pod, config *agentconfig.Sidecar, env map[string]string,
 }
 
 // addContainerTPEnv adds telepresence specific environment variables to the app container.
-func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string, patches patchOps) patchOps {
+func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string, patches PatchOps) PatchOps {
 	if l := len(cn.Env); l > 0 {
 		for _, e := range cn.Env {
 			if e.ValueFrom == nil && env[e.Name] == e.Value {
@@ -490,14 +501,14 @@ func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string,
 	}
 	sort.Strings(keys)
 	if cn.Env == nil {
-		patches = append(patches, patchOperation{
+		patches = append(patches, PatchOperation{
 			Op:    "replace",
 			Path:  fmt.Sprintf("%s/%s", containerPath, "env"),
 			Value: []core.EnvVar{},
 		})
 	}
 	for _, k := range keys {
-		patches = append(patches, patchOperation{
+		patches = append(patches, PatchOperation{
 			Op:   "add",
 			Path: fmt.Sprintf("%s/%s", containerPath, "env/-"),
 			Value: core.EnvVar{
@@ -512,7 +523,7 @@ func addContainerTPEnv(pod *core.Pod, cn *core.Container, env map[string]string,
 
 // hidePorts  will replace the symbolic name of a container port with a generated name. It will perform
 // the same replacement on all references to that port from the probes of the container.
-func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) patchOps {
+func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
 	agentconfig.EachContainer(pod, config, func(app *core.Container, cc *agentconfig.Container) {
 		for _, ic := range agentconfig.PortUniqueIntercepts(cc) {
 			if ic.Headless || ic.TargetPortNumeric {
@@ -527,7 +538,7 @@ func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches patchOps) pat
 
 // hideContainerPorts  will replace the symbolic name of a container port with a generated name. It will perform
 // the same replacement on all references to that port from the probes of the container.
-func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, patches patchOps) patchOps {
+func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, patches PatchOps) PatchOps {
 	cns := pod.Spec.Containers
 	var containerPath string
 	for i := range cns {
@@ -539,7 +550,7 @@ func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, pat
 
 	hiddenPortName := hiddenPortName(portName, 0)
 	hidePort := func(path string) {
-		patches = append(patches, patchOperation{
+		patches = append(patches, PatchOperation{
 			Op:    "replace",
 			Path:  fmt.Sprintf("%s/%s", containerPath, path),
 			Value: hiddenPortName,
@@ -570,7 +581,7 @@ func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, pat
 	return patches
 }
 
-func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patchOps {
+func addPodAnnotations(_ context.Context, pod *core.Pod, patches PatchOps) PatchOps {
 	op := "replace"
 	changed := false
 	am := pod.Annotations
@@ -587,10 +598,38 @@ func addPodAnnotations(_ context.Context, pod *core.Pod, patches patchOps) patch
 	}
 
 	if changed {
-		patches = append(patches, patchOperation{
+		patches = append(patches, PatchOperation{
 			Op:    op,
 			Path:  "/metadata/annotations",
 			Value: am,
+		})
+	}
+	return patches
+}
+
+func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarExt, patches PatchOps) PatchOps {
+	op := "replace"
+	changed := false
+	lm := pod.Labels
+	if lm == nil {
+		op = "add"
+		lm = make(map[string]string)
+	} else {
+		lm = maps.Copy(lm)
+	}
+	if _, ok := pod.Labels[agentconfig.WorkloadNameLabel]; !ok {
+		changed = true
+		lm[agentconfig.WorkloadNameLabel] = config.AgentConfig().WorkloadName
+	}
+	if _, ok := pod.Labels[agentconfig.WorkloadEnabledLabel]; !ok {
+		changed = true
+		lm[agentconfig.WorkloadEnabledLabel] = "true"
+	}
+	if changed {
+		patches = append(patches, PatchOperation{
+			Op:    op,
+			Path:  "/metadata/labels",
+			Value: lm,
 		})
 	}
 	return patches

@@ -126,6 +126,13 @@ func (s *service) As(ptr any) {
 	}
 }
 
+func (s *service) ListenerAddress(ctx context.Context) string {
+	if s.daemonAddress != nil {
+		return s.daemonAddress.String()
+	}
+	return "unix:" + socket.UserDaemonPath(ctx)
+}
+
 func (s *service) SetSelf(self userd.Service) {
 	s.self = self
 }
@@ -428,8 +435,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	siCh := make(chan userd.Service)
 	g.Go("service", func(c context.Context) error {
 		opts := []grpc.ServerOption{
-			grpc.UnaryInterceptor(otelgrpc.UnaryServerInterceptor()),
-			grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor()),
+			grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		}
 		if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))

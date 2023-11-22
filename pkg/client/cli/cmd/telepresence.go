@@ -134,8 +134,9 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 
 func WithSubCommands(ctx context.Context) context.Context {
 	return MergeSubCommands(ctx,
-		configCmd(), connectCmd(), currentClusterId(), gatherLogs(), gatherTraces(), genYAML(), helmCmd(), interceptCmd(), leave(),
-		list(), loglevel(), quit(), statusCmd(), testVPN(), uninstall(), uploadTraces(), version(), listNamespaces(), listContexts(),
+		configCmd(), connectCmd(), gatherLogs(), gatherTraces(), genYAML(), helmCmd(),
+		interceptCmd(), kubeauthCmd(), leave(), list(), listContexts(), listNamespaces(), loglevel(), quit(), statusCmd(),
+		testVPN(), uninstall(), uploadTraces(), version(), listNamespaces(), listContexts(),
 	)
 }
 

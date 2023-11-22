@@ -4,7 +4,6 @@ package docker
 import (
 	"bytes"
 	"context"
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,13 +23,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	runtime2 "k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -45,7 +42,7 @@ import (
 
 const (
 	telepresenceImage = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
-	dockerTpCache     = "/root/.cache/telepresence"
+	TpCache           = "/root/.cache/telepresence"
 	dockerTpConfig    = "/root/.config/telepresence"
 	dockerTpLog       = "/root/.cache/telepresence/logs"
 )
@@ -81,7 +78,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
 		"-p", fmt.Sprintf("%s:%d", addr, port),
 		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), dockerTpConfig),
-		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), dockerTpCache),
+		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), dockerTpLog),
 	}
 	cr := daemon.GetRequest(ctx)
@@ -156,31 +153,6 @@ func readPortFile(ctx context.Context, portFile string, configFiles []string) (u
 	return 0, os.ErrNotExist
 }
 
-func appendKubeFlags(kubeFlags map[string]string, args []string) ([]string, error) {
-	for k, v := range kubeFlags {
-		switch k {
-		case "as-group":
-			// Multi valued
-			r := csv.NewReader(strings.NewReader(v))
-			gs, err := r.Read()
-			if err != nil {
-				return nil, err
-			}
-			for _, g := range gs {
-				args = append(args, "--"+k, g)
-			}
-		case "disable-compression", "insecure-skip-tls-verify":
-			// Boolean with false default.
-			if v != "false" {
-				args = append(args, "--"+k)
-			}
-		default:
-			args = append(args, "--"+k, v)
-		}
-	}
-	return args, nil
-}
-
 func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, error) {
 	// remove any stale port file
 	_ = os.Remove(portFile)
@@ -188,7 +160,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	args := make([]string, 0, 4+len(kubeFlags)*2)
 	args = append(args, client.GetExe(), kubeauth.CommandName, "--portfile", portFile)
 	var err error
-	if args, err = appendKubeFlags(kubeFlags, args); err != nil {
+	if args, err = client.AppendKubeFlags(kubeFlags, args); err != nil {
 		return 0, err
 	}
 	if err := proc.StartInBackground(true, args...); err != nil {
@@ -237,95 +209,39 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if cr.Implicit {
 		return nil
 	}
-	if kkf, ok := cr.ContainerKubeFlagOverrides["kubeconfig"]; ok && strings.HasPrefix(kkf, dockerTpCache) {
+	if kkf, ok := cr.ContainerKubeFlagOverrides["kubeconfig"]; ok && strings.HasPrefix(kkf, TpCache) {
 		// Been there, done that
 		return nil
 	}
-	configFlags, err := client.ConfigFlags(cr.KubeFlags)
+	config, err := patcher.CreateExternalKubeConfig(ctx, cr.KubeFlags,
+		func(configFiles []string) (string, string, error) {
+			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
+			if err != nil {
+				return "", "", err
+			}
+
+			// The telepresence command that will run in order to retrieve the credentials from the authenticator service
+			// will run in a container, so the first argument must be a path that finds the telepresence executable and
+			// the second must be an address that will find the host's port, not the container's localhost.
+			return "telepresence", fmt.Sprintf("host.docker.internal:%d", port), nil
+		},
+		func(config *api.Config) error {
+			return handleLocalK8s(ctx, daemonID, config)
+		})
 	if err != nil {
 		return err
 	}
-	loader := configFlags.ToRawKubeConfigLoader()
-	ns, _, err := loader.Namespace()
-	if err != nil {
-		return err
-	}
-
-	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
-	dlog.Debugf(ctx, "host kubeconfig = %v", configFiles)
-	config, err := loader.RawConfig()
-	if err != nil {
-		return err
-	}
-
-	// Minify the config so that we only deal with the current context.
-	if cx := configFlags.Context; cx != nil && *cx != "" {
-		config.CurrentContext = *cx
-	}
-	if err = api.MinifyConfig(&config); err != nil {
-		return err
-	}
-	dlog.Debugf(ctx, "context = %q, namespace %q", config.CurrentContext, ns)
-
-	// Minify guarantees that the CurrentContext is set, but not that it has a cluster
-	cc := config.Contexts[config.CurrentContext]
-	if cc.Cluster == "" {
-		return fmt.Errorf("current context %q has no cluster", config.CurrentContext)
-	}
-
-	if patcher.NeedsStubbedExec(&config) {
-		port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
-		if err != nil {
-			return err
-		}
-		// Replace any auth exec with a stub
-		addr := fmt.Sprintf("host.docker.internal:%d", port)
-		if err := patcher.ReplaceAuthExecWithStub(&config, addr); err != nil {
-			return err
-		}
-	}
-
-	// Ensure that all certs are embedded instead of reachable using a path
-	if err = api.FlattenConfig(&config); err != nil {
-		return err
-	}
-
-	// Store the file using its context name under the <telepresence cache>/kube directory
-	kubeConfigFile := strings.ReplaceAll(config.CurrentContext, "/", "-")
-	kubeConfigDir := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeConfigs)
-	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
-		return err
-	}
-	err = handleLocalK8s(ctx, daemonID, cc.Cluster, config.Clusters[cc.Cluster])
-	if err != nil {
-		dlog.Errorf(ctx, "unable to handle local K8s: %v", err)
-	}
-
-	if err = clientcmd.WriteToFile(config, filepath.Join(kubeConfigDir, kubeConfigFile)); err != nil {
-		return err
-	}
-	AnnotateConnectRequest(&cr.ConnectRequest, config.CurrentContext)
-	return nil
-}
-
-func AnnotateConnectRequest(cr *connector.ConnectRequest, kubeContext string) {
-	kubeConfigFile := strings.ReplaceAll(kubeContext, "/", "-")
-	// Concatenate using "/". This will be used in linux
-	if cr.ContainerKubeFlagOverrides == nil {
-		cr.ContainerKubeFlagOverrides = make(map[string]string)
-	}
-	cr.ContainerKubeFlagOverrides["kubeconfig"] = fmt.Sprintf("%s/%s/%s", dockerTpCache, kubeConfigs, kubeConfigFile)
-
-	// We never instruct the remote containerized daemon to modify its KUBECONFIG environment.
-	delete(cr.Environment, "KUBECONFIG")
-	delete(cr.Environment, "-KUBECONFIG")
+	patcher.AnnotateConnectRequest(&cr.ConnectRequest, TpCache, config.CurrentContext)
+	return err
 }
 
 // handleLocalK8s checks if the cluster is using a well known provider (currently minikube or kind)
-// and ensures that the service is modified to access the docker internal address instead of an
-// address available on the host.
-func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, clusterName string, cl *api.Cluster) error {
-	isKind := strings.HasPrefix(clusterName, "kind-")
+// and if so, ensures that the daemon container is connected to its network.
+func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *api.Config) error {
+	cc := config.Contexts[config.CurrentContext]
+	cl := config.Clusters[cc.Cluster]
+	isKind := strings.HasPrefix(cc.Cluster, "kind-")
+	dlog.Debugf(ctx, "isKind %t", isKind)
 	isMinikube := false
 	if !isKind {
 		if ex, ok := cl.Extensions["cluster_info"].(*runtime2.Unknown); ok {
@@ -369,8 +285,9 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, clusterNam
 	var hostPort, network string
 	if isKind {
 		hostPort, network = detectKind(cjs, addrPort)
+		dlog.Debugf(ctx, "hostPort %s, network %s", hostPort, network)
 	} else if isMinikube {
-		hostPort, network = detectMinikube(cjs, addrPort, clusterName)
+		hostPort, network = detectMinikube(cjs, addrPort, cc.Cluster)
 	}
 	if hostPort != "" {
 		server.Host = hostPort
@@ -378,6 +295,7 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, clusterNam
 	}
 	if network != "" {
 		dcName := daemonID.ContainerName()
+		dlog.Debugf(ctx, "Connecting network %s to container %s", network, dcName)
 		if err = cli.NetworkConnect(ctx, network, dcName, nil); err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				dlog.Debugf(ctx, "failed to connect network %s to container %s: %v", network, dcName, err)

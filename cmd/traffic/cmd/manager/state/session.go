@@ -3,9 +3,10 @@ package state
 import (
 	"context"
 	"fmt"
-	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v3"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/grpc/codes"
@@ -35,11 +36,10 @@ type awaitingBidiPipe struct {
 }
 
 type sessionState struct {
-	sync.Mutex
 	doneCh              <-chan struct{}
 	cancel              context.CancelFunc
-	lastMarked          time.Time
-	awaitingBidiPipeMap map[tunnel.ConnID]*awaitingBidiPipe
+	lastMarked          int64
+	awaitingBidiPipeMap *xsync.MapOf[tunnel.ConnID, awaitingBidiPipe]
 	dials               chan *rpc.DialRequest
 }
 
@@ -50,15 +50,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 	// Dispatch directly to agent and let the dial happen there
 	bidiPipeCh := make(chan tunnel.Endpoint)
 	id := stream.ID()
-	abp := &awaitingBidiPipe{ctx: ctx, stream: stream, bidiPipeCh: bidiPipeCh}
-
-	ss.Lock()
-	if ss.awaitingBidiPipeMap == nil {
-		ss.awaitingBidiPipeMap = map[tunnel.ConnID]*awaitingBidiPipe{id: abp}
-	} else {
-		ss.awaitingBidiPipeMap[id] = abp
-	}
-	ss.Unlock()
+	ss.awaitingBidiPipeMap.Store(id, awaitingBidiPipe{ctx: ctx, stream: stream, bidiPipeCh: bidiPipeCh})
 
 	// Send dial request to the client/agent
 	dr := &rpc.DialRequest{
@@ -90,9 +82,7 @@ func (ss *sessionState) EstablishBidiPipe(ctx context.Context, stream tunnel.Str
 }
 
 func (ss *sessionState) AwaitingBidiMapOwnerSessionID(stream tunnel.Stream) string {
-	ss.Lock()
-	defer ss.Unlock()
-	if abp, ok := ss.awaitingBidiPipeMap[stream.ID()]; ok {
+	if abp, ok := ss.awaitingBidiPipeMap.Load(stream.ID()); ok {
 		return abp.stream.SessionID()
 	}
 	return ""
@@ -108,14 +98,8 @@ func (ss *sessionState) OnConnect(
 	consumptionMetrics *SessionConsumptionMetrics,
 ) (tunnel.Endpoint, error) {
 	id := stream.ID()
-	ss.Lock()
 	// abp is a session corresponding to an end user machine
-	abp, ok := ss.awaitingBidiPipeMap[id]
-	if ok {
-		delete(ss.awaitingBidiPipeMap, id)
-	}
-	ss.Unlock()
-
+	abp, ok := ss.awaitingBidiPipeMap.LoadAndDelete(id)
 	if !ok {
 		return nil, nil
 	}
@@ -152,20 +136,21 @@ func (ss *sessionState) Done() <-chan struct{} {
 }
 
 func (ss *sessionState) LastMarked() time.Time {
-	return ss.lastMarked
+	return time.Unix(0, atomic.LoadInt64(&ss.lastMarked))
 }
 
 func (ss *sessionState) SetLastMarked(lastMarked time.Time) {
-	ss.lastMarked = lastMarked
+	atomic.StoreInt64(&ss.lastMarked, lastMarked.UnixNano())
 }
 
 func newSessionState(ctx context.Context, now time.Time) sessionState {
 	ctx, cancel := context.WithCancel(ctx)
 	return sessionState{
-		doneCh:     ctx.Done(),
-		cancel:     cancel,
-		lastMarked: now,
-		dials:      make(chan *rpc.DialRequest),
+		doneCh:              ctx.Done(),
+		cancel:              cancel,
+		lastMarked:          now.UnixNano(),
+		dials:               make(chan *rpc.DialRequest),
+		awaitingBidiPipeMap: xsync.NewMapOf[tunnel.ConnID, awaitingBidiPipe](),
 	}
 }
 

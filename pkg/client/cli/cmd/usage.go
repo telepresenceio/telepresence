@@ -12,6 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 )
 
+var CLIHelpDocumentationURL = "https://www.telepresence.io" //nolint:gochecknoglobals // extension point
+
 const (
 	help = `Telepresence can connect to a cluster and route all outbound traffic from your
 workstation to that cluster so that software running locally can communicate
@@ -59,7 +61,7 @@ Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
 
 Use "{{.CommandPath}} [command] --help" for more information about a command.
 
-For complete documentation and quick-start guides, check out our website at https://www.telepresence.io{{end}}
+For complete documentation and quick-start guides, check out our website at {{ getDocumentationURL }}{{end}}
 `
 )
 
@@ -135,6 +137,9 @@ func addUsageTemplate(cmd *cobra.Command) {
 			}
 		}
 		return flags.FlagUsagesWrapped(cols)
+	})
+	cobra.AddTemplateFunc("getDocumentationURL", func() string {
+		return CLIHelpDocumentationURL
 	})
 
 	// Set a usage template that is derived from the default but replaces the "Available Commands"

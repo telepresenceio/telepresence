@@ -54,5 +54,6 @@ func (vif *TunnelingDevice) Close(ctx context.Context) error {
 
 func (vif *TunnelingDevice) Run(ctx context.Context) error {
 	vif.stack.Wait()
+	vif.Device.Wait()
 	return nil
 }

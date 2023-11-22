@@ -18,7 +18,7 @@ jobs:
           ref: "${{ github.event.pull_request.head.sha }}"
       - uses: actions/setup-go@v3
         with:
-          go-version: '~1.21.3'
+          go-version: '~1.21.4'
       - name: Build dev image
         run: |
           make save-tel2-image
@@ -79,5 +79,5 @@ jobs:
           kubeconfig: "${{ steps.kluster.outputs.kubeconfig }}"
       - uses: ./.github/actions/upload-logs
         env:
-          LOG_SUFFIX: "-${{ runner.os }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
+          LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
         if: always()

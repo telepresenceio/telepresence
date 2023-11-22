@@ -145,9 +145,9 @@ func (e envCtxLookuper) Lookup(key string) (string, bool) {
 }
 
 // WithEnv adds environment variables to be used by the Command function.
-func WithEnv(ctx context.Context, env map[string]string) context.Context {
+func WithEnv(ctx context.Context, env dos.MapEnv) context.Context {
 	if prevEnv := getEnv(ctx); prevEnv != nil {
-		merged := make(map[string]string, len(prevEnv)+len(env))
+		merged := make(dos.MapEnv, len(prevEnv)+len(env))
 		maps.Merge(merged, prevEnv)
 		maps.Merge(merged, env)
 		env = merged
@@ -180,8 +180,8 @@ func LookupEnv(ctx context.Context, key string) (value string, ok bool) {
 	return
 }
 
-func getEnv(ctx context.Context) map[string]string {
-	if env, ok := ctx.Value(envContextKey{}).(map[string]string); ok {
+func getEnv(ctx context.Context) dos.MapEnv {
+	if env, ok := ctx.Value(envContextKey{}).(dos.MapEnv); ok {
 		return env
 	}
 	return nil

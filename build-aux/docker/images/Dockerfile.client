@@ -22,7 +22,6 @@ WORKDIR telepresence
 COPY go.mod .
 COPY go.sum .
 COPY cmd/telepresence/ cmd/telepresence/
-COPY cmd/authenticator/ cmd/authenticator/
 COPY pkg/ pkg/
 COPY rpc/ rpc/
 COPY charts/ charts/
@@ -36,11 +35,6 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /usr/local/bin/ -trimpath -tags docker -ldflags=-X=$(go list ./pkg/version).Version=$(cat version.txt) ./cmd/telepresence/...
 
-RUN \
-    --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg/mod \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /usr/local/bin -trimpath ./cmd/authenticator/...
-
 # setcap is necessary because the process will listen to privileged ports
 RUN setcap 'cap_net_bind_service+ep' /usr/local/bin/telepresence
 
@@ -51,7 +45,6 @@ RUN apk add --no-cache ca-certificates iptables bash
 
 # the telepresence binary
 COPY --from=telepresence-build /usr/local/bin/telepresence /usr/local/bin
-COPY --from=telepresence-build /usr/local/bin/authenticator /usr/local/bin/
 
 ENTRYPOINT ["telepresence"]
 CMD []

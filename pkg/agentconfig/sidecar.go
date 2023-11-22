@@ -49,6 +49,9 @@ const (
 	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
 	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
 	LegacyOriginatingTLSSecretAnnotation = "getambassador.io/inject-originating-tls-secret"
+	WorkloadNameLabel                    = "telepresence.io/workloadName"
+	WorkloadEnabledLabel                 = "telepresence.io/workloadEnabled"
+	K8SCreatedByLabel                    = "app.kubernetes.io/created-by"
 )
 
 type ReplacePolicy int

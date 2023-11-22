@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -126,14 +125,9 @@ func (s *state) getOrCreateAgentConfig(
 	defer tracing.EndAndRecord(span, err)
 
 	ns := wl.GetNamespace()
-	s.mu.Lock()
-	cl, ok := s.cfgMapLocks[ns]
-	if !ok {
-		cl = &sync.Mutex{}
-		s.cfgMapLocks[ns] = cl
-	}
-	s.mu.Unlock()
-
+	cl, _ := s.cfgMapLocks.LoadOrCompute(ns, func() *sync.Mutex {
+		return &sync.Mutex{}
+	})
 	cl.Lock()
 	defer cl.Unlock()
 
@@ -602,16 +596,13 @@ func (is *interceptState) addFinalizer(finalizer InterceptFinalizer) {
 	is.finalizers = append(is.finalizers, finalizer)
 }
 
-func (is *interceptState) terminate(ctx context.Context, interceptInfo *managerrpc.InterceptInfo) error {
+func (is *interceptState) terminate(ctx context.Context, interceptInfo *managerrpc.InterceptInfo) {
 	is.Lock()
 	defer is.Unlock()
-	var err error
 	for i := len(is.finalizers) - 1; i >= 0; i-- {
 		f := is.finalizers[i]
-		tErr := f(ctx, interceptInfo)
-		if tErr != nil {
-			err = multierror.Append(err, tErr)
+		if err := f(ctx, interceptInfo); err != nil {
+			dlog.Errorf(ctx, "finalizer for intercept %s failed: %v", interceptInfo.Id, err)
 		}
 	}
-	return err
 }

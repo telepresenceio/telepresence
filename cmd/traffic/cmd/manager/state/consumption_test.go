@@ -11,17 +11,17 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 	now := time.Now()
 	session1 := &clientSessionState{}
 	session3 := &clientSessionState{}
-	s.state.sessions["session-1"] = session1
-	s.state.sessions["session-2"] = &agentSessionState{}
-	s.state.sessions["session-3"] = session3
+	s.state.sessions.Store("session-1", session1)
+	s.state.sessions.Store("session-2", &agentSessionState{})
+	s.state.sessions.Store("session-3", session3)
 	session1.consumptionMetrics = &SessionConsumptionMetrics{
-		ConnectDuration: 42,
-		LastUpdate:      now.Add(-time.Minute),
+		connectDuration: int64(42 * time.Second),
+		lastUpdate:      now.Add(-time.Minute).UnixNano(),
 	}
 	// staled metric
 	session3.consumptionMetrics = &SessionConsumptionMetrics{
-		ConnectDuration: 36,
-		LastUpdate:      now.Add(-SessionConsumptionMetricsStaleTTL - time.Minute),
+		connectDuration: int64(36 * time.Second),
+		lastUpdate:      now.Add(-SessionConsumptionMetricsStaleTTL - time.Minute).UnixNano(),
 	}
 
 	// when
@@ -31,10 +31,10 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 	s.state.RefreshSessionConsumptionMetrics("session-4") // doesn't exist but shouldn't fail.
 
 	// then
-	ccs1 := s.state.sessions["session-1"].(*clientSessionState)
-	ccs3 := s.state.sessions["session-3"].(*clientSessionState)
+	ccs1, _ := s.state.sessions.Load("session-1")
+	ccs3, _ := s.state.sessions.Load("session-3")
 
 	assert.Len(s.T(), s.state.GetAllSessionConsumptionMetrics(), 2)
-	assert.True(s.T(), (ccs1.ConsumptionMetrics().ConnectDuration) > 42)
-	assert.Equal(s.T(), 36, int(ccs3.ConsumptionMetrics().ConnectDuration))
+	assert.True(s.T(), ccs1.(*clientSessionState).ConsumptionMetrics().ConnectDuration() > 42*time.Second)
+	assert.Equal(s.T(), 36*time.Second, ccs3.(*clientSessionState).ConsumptionMetrics().ConnectDuration())
 }

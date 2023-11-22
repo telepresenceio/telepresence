@@ -1,17 +1,12 @@
 package dnsproxy
 
 import (
-	"github.com/blang/semver"
 	"github.com/miekg/dns"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
-
-func ManagerCanDoDNSQueryTypes(v semver.Version) bool {
-	return v.Major > 2 || v.Major == 2 && v.Minor > 7
-}
 
 func ToRPC(rrs RRs, rCode int) (*manager.DNSResponse, error) {
 	l := 0

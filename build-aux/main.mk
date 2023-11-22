@@ -175,13 +175,8 @@ endif
 
 ifeq ($(GOOS),windows)
 $(TELEPRESENCE_INSTALLER): $(TELEPRESENCE)
-	./packaging/windows-package.sh
+	bash ./packaging/windows-package.sh
 endif
-
-# Make local authenticator. This is for test only as it's really only intended to run from within a container
-.PHONY: authenticator
-authenticator:
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -trimpath -o $(BINDIR)/$@ ./cmd/$@
 
 .PHONY: release-binary
 ifeq ($(GOOS),windows)
@@ -259,9 +254,12 @@ prepare-release: generate wix
 	rm -f CHANGELOG.OLD.md.bak
 	git add CHANGELOG.OLD.md
 
-	sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%m-%d')\"/" CHANGELOG.yml
-	rm -f CHANGELOG.yml.bak
-	git add CHANGELOG.yml
+	@# Check if the version is in the x.x.x format (GA release)
+	if echo "$(TELEPRESENCE_VERSION)" | grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%m-%d')\"/" CHANGELOG.yml; \
+		rm -f CHANGELOG.yml.bak; \
+		git add CHANGELOG.yml; \
+	fi
 
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
 	git add go.mod
@@ -281,6 +279,11 @@ prepare-release: generate wix
 
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
+
+.PHONY: push-tags
+push-tags:
+	git push origin $(TELEPRESENCE_VERSION)
+	git push origin rpc/$(TELEPRESENCE_VERSION)
 
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload

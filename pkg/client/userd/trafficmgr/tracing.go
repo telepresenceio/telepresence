@@ -105,7 +105,7 @@ func (*traceCollector) launchTraceWriter(ctx context.Context, destFile string) (
 }
 
 func (c *traceCollector) userdTraces(ctx context.Context, tCh chan<- []byte) error {
-	userdConn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
+	userdConn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (c *traceCollector) userdTraces(ctx context.Context, tCh chan<- []byte) err
 }
 
 func (c *traceCollector) rootdTraces(ctx context.Context, tCh chan<- []byte) error {
-	dConn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()))
+	dConn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session
 		grpc.WithNoProxy(),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	}
 
 	conn, err := grpc.DialContext(tc, grpcAddr, opts...)
@@ -162,7 +162,7 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 			grpc.WithNoProxy(),
 			grpc.WithBlock(),
 			grpc.WithReturnConnectionError(),
-			grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		}
 
 		conn, err := grpc.DialContext(tc, addr, opts...)

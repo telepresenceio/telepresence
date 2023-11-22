@@ -96,10 +96,11 @@ type ManagerConfig struct {
 
 // KubeconfigExtension is an extension read from the selected kubeconfig Cluster.
 type KubeconfigExtension struct {
-	DNS        *DnsConfig       `json:"dns,omitempty"`
-	AlsoProxy  []*iputil.Subnet `json:"also-proxy,omitempty"`
-	NeverProxy []*iputil.Subnet `json:"never-proxy,omitempty"`
-	Manager    *ManagerConfig   `json:"manager,omitempty"`
+	DNS                     *DnsConfig       `json:"dns,omitempty"`
+	AlsoProxy               []*iputil.Subnet `json:"also-proxy,omitempty"`
+	NeverProxy              []*iputil.Subnet `json:"never-proxy,omitempty"`
+	AllowConflictingSubnets []*iputil.Subnet `json:"allow-conflicting-subnets,omitempty"`
+	Manager                 *ManagerConfig   `json:"manager,omitempty"`
 }
 
 type Kubeconfig struct {
@@ -209,6 +210,34 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 		return nil, err
 	}
 	return newKubeconfig(c, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags)
+}
+
+// AppendKubeFlags appends the flags in the given map to the given slice in the form of
+// flag arguments suitable for command execution. Flags known to be multivalued are assumed
+// to be in the form of comma-separated list and will be added using repeated options.
+func AppendKubeFlags(kubeFlags map[string]string, args []string) ([]string, error) {
+	for k, v := range kubeFlags {
+		switch k {
+		case "as-group":
+			// Multivalued
+			r := csv.NewReader(strings.NewReader(v))
+			gs, err := r.Read()
+			if err != nil {
+				return nil, err
+			}
+			for _, g := range gs {
+				args = append(args, "--"+k, g)
+			}
+		case "disable-compression", "insecure-skip-tls-verify":
+			// Boolean with false default.
+			if v != "false" {
+				args = append(args, "--"+k)
+			}
+		default:
+			args = append(args, "--"+k, v)
+		}
+	}
+	return args, nil
 }
 
 func newKubeconfig(
@@ -353,7 +382,6 @@ func (kf *Kubeconfig) GetRestConfig() *rest.Config {
 }
 
 func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml []byte) error {
-	dlog.Debugf(ctx, "Applying remote dns and routing: %s", cfgYaml)
 	remote := struct {
 		DNS     *DNS     `yaml:"dns,omitempty"`
 		Routing *Routing `yaml:"routing,omitempty"`
@@ -367,22 +395,45 @@ func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml 
 	if dns := remote.DNS; dns != nil {
 		if kf.DNS.LocalIP == "" {
 			kf.DNS.LocalIP = iputil.IPKey(dns.LocalIP)
+			dlog.Debugf(ctx, "Applying remote dns local IP: %s", dns.LocalIP)
 		}
 		if kf.DNS.RemoteIP == "" {
 			kf.DNS.RemoteIP = iputil.IPKey(dns.RemoteIP)
+			dlog.Debugf(ctx, "Applying remote dns remote IP: %s", dns.RemoteIP)
 		}
-		kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, dns.ExcludeSuffixes...)
-		kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, dns.IncludeSuffixes...)
-		kf.DNS.Excludes = append(kf.DNS.Excludes, dns.Excludes...)
-		kf.DNS.Mappings = append(kf.DNS.Mappings, dns.Mappings...)
+		if len(dns.ExcludeSuffixes) > 0 {
+			dlog.Debugf(ctx, "Applying remote excludeSuffixes: %v", dns.ExcludeSuffixes)
+			kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, dns.ExcludeSuffixes...)
+		}
+		if len(dns.IncludeSuffixes) > 0 {
+			dlog.Debugf(ctx, "Applying remote includeSuffixes: %v", dns.IncludeSuffixes)
+			kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, dns.IncludeSuffixes...)
+		}
+		if len(dns.Excludes) > 0 {
+			dlog.Debugf(ctx, "Applying remote excludes: %v", dns.Excludes)
+			kf.DNS.Excludes = append(kf.DNS.Excludes, dns.Excludes...)
+		}
+		if len(dns.Mappings) > 0 {
+			for _, m := range dns.Mappings {
+				dlog.Debugf(ctx, "Applying remote mapping: Name: %s, AliasFor %s", m.Name, m.AliasFor)
+			}
+			kf.DNS.Mappings = append(kf.DNS.Mappings, dns.Mappings...)
+		}
 
 		if kf.DNS.LookupTimeout.Duration == 0 {
+			dlog.Debugf(ctx, "Applying remote lookupTimeout: %s", dns.LookupTimeout)
 			kf.DNS.LookupTimeout.Duration = dns.LookupTimeout
 		}
 	}
 	if routing := remote.Routing; routing != nil {
-		kf.AlsoProxy = append(kf.AlsoProxy, routing.AlsoProxy...)
-		kf.NeverProxy = append(kf.NeverProxy, routing.NeverProxy...)
+		if len(routing.AlsoProxy) > 0 {
+			dlog.Debugf(ctx, "Applying remote alsoProxy: %v", routing.AlsoProxy)
+			kf.AlsoProxy = append(kf.AlsoProxy, routing.AlsoProxy...)
+		}
+		if len(routing.NeverProxy) > 0 {
+			dlog.Debugf(ctx, "Applying remote neverProxy: %v", routing.NeverProxy)
+			kf.NeverProxy = append(kf.NeverProxy, routing.NeverProxy...)
+		}
 	}
 	return nil
 }

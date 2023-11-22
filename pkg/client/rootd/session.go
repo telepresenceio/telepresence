@@ -28,17 +28,22 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -73,11 +78,17 @@ type Session struct {
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
 
+	// agentClients provides the gRPC tunnel to traffic-agents in the connected namespace
+	agentClients agentpf.Clients
+
 	// managerClient provides the gRPC tunnel to the traffic-manager
 	managerClient connector.ManagerProxyClient
 
 	// managerVersion is the version of the connected traffic-manager
 	managerVersion semver.Version
+
+	// namespace that the client is connected to
+	namespace string
 
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
@@ -154,7 +165,7 @@ type Session struct {
 	done chan struct{}
 }
 
-type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (*Session, error)
+type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (context.Context, *Session, error)
 
 type newSessionKey struct{}
 
@@ -169,7 +180,69 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 	panic("No User daemon Session creator has been registered")
 }
 
+func createPortForwardDialer(ctx context.Context, flags map[string]string) (dnet.PortForwardDialer, kubernetes.Interface, error) {
+	configFlags, err := client.ConfigFlags(flags)
+	if err != nil {
+		return nil, nil, err
+	}
+	rs, err := configFlags.ToRESTConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+	cs, err := kubernetes.NewForConfig(rs)
+	if err != nil {
+		return nil, nil, err
+	}
+	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, rs, cs)
+	return pfDialer, cs, err
+}
+
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
+func connectToManager(
+	ctx context.Context,
+	namespace string,
+	kubeFlags map[string]string,
+) (
+	context.Context,
+	*grpc.ClientConn,
+	connector.ManagerProxyClient,
+	semver.Version,
+	error,
+) {
+	if !client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
+		conn, mp, v, err := connectToUserDaemon(ctx)
+		return ctx, conn, mp, v, err
+	}
+	var mgrVer semver.Version
+	pfDialer, cs, err := createPortForwardDialer(ctx, kubeFlags)
+	if err != nil {
+		return ctx, nil, nil, mgrVer, err
+	}
+	ctx = k8sapi.WithK8sInterface(ctx, cs)
+
+	clientConfig := client.GetConfig(ctx)
+	tos := clientConfig.Timeouts()
+
+	timedCtx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	defer cancel()
+	conn, mc, ver, err := k8sclient.ConnectToManager(timedCtx, namespace, pfDialer.Dial)
+	if err != nil {
+		return ctx, nil, nil, mgrVer, err
+	}
+
+	verStr := strings.TrimPrefix(ver.Version, "v")
+	dlog.Infof(ctx, "Connected to Manager %s", verStr)
+	mgrVer, err = semver.Parse(verStr)
+	if err != nil {
+		conn.Close()
+		return ctx, nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+	}
+	return dnet.WithPortForwardDialer(ctx, pfDialer), conn, &userdToManagerShortcut{mc}, mgrVer, nil
+}
+
+// connectToUserDaemon is like connectToManager but the port-forward will be established from the user-daemon
+// instead. This doesn't matter when the daemon is containerized, but it will introduce an extra hop for all
+// outgoing traffic when it isn't.
 func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
 	// First check. Establish connection
 	tos := client.GetConfig(c).Timeouts()
@@ -178,8 +251,7 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 
 	var conn *grpc.ClientConn
 	conn, err := socket.Dial(tc, socket.UserDaemonPath(c),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	var mgrVer semver.Version
 	if err != nil {
@@ -214,16 +286,18 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 }
 
 // NewSession returns a new properly initialized session object.
-func NewSession(c context.Context, mi *rpc.OutboundInfo) (*Session, error) {
+func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Session, error) {
 	dlog.Info(c, "-- Starting new session")
 
-	conn, mc, ver, err := connectToUserDaemon(c)
+	c, conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags)
 	if mc == nil || err != nil {
-		return nil, err
+		return c, nil, err
 	}
 	s := newSession(c, mi, mc, ver)
 	s.clientConn = conn
-	return s, nil
+	// store session in ctx for reporting
+	c = scout.WithSession(c, s)
+	return c, s, nil
 }
 
 func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
@@ -237,29 +311,29 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}
 	}
+	dlog.Debugf(c, "Creating session with id %v", mi.Session)
 
 	as := iputil.ConvertSubnets(mi.AlsoProxySubnets)
 	ns := iputil.ConvertSubnets(mi.NeverProxySubnets)
+	allow := iputil.ConvertSubnets(mi.AllowConflictingSubnets)
 	s := &Session{
-		handlers:          tunnel.NewPool(),
-		rndSource:         rand.NewSource(time.Now().UnixNano()),
-		session:           mi.Session,
-		managerClient:     mc,
-		managerVersion:    ver,
-		alsoProxySubnets:  as,
-		neverProxySubnets: ns,
-		proxyClusterPods:  true,
-		proxyClusterSvcs:  true,
-		vifReady:          make(chan error, 2),
-		config:            cfg,
-		done:              make(chan struct{}),
+		handlers:                tunnel.NewPool(),
+		rndSource:               rand.NewSource(time.Now().UnixNano()),
+		session:                 mi.Session,
+		namespace:               mi.Namespace,
+		managerClient:           mc,
+		managerVersion:          ver,
+		alsoProxySubnets:        as,
+		neverProxySubnets:       ns,
+		allowConflictingSubnets: allow,
+		proxyClusterPods:        true,
+		proxyClusterSvcs:        true,
+		vifReady:                make(chan error, 2),
+		config:                  cfg,
+		done:                    make(chan struct{}),
 	}
 
-	if dnsproxy.ManagerCanDoDNSQueryTypes(ver) {
-		s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
-	} else {
-		s.dnsServer = dns.NewServer(mi.Dns, s.legacyClusterLookup, true)
-	}
+	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
 	s.SetSearchPath(c, nil, nil)
 	dlog.Infof(c, "also-proxy subnets %v", as)
 	dlog.Infof(c, "never-proxy subnets %v", ns)
@@ -281,38 +355,6 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 		return nil, dns2.RcodeServerFailure, err
 	}
 	return dnsproxy.FromRPC(r)
-}
-
-// clusterLookup sends a LookupHost request to the traffic-manager and returns the result.
-func (s *Session) legacyClusterLookup(ctx context.Context, q *dns2.Question) (rrs dnsproxy.RRs, rCode int, err error) {
-	qType := q.Qtype
-	if !(qType == dns2.TypeA || qType == dns2.TypeAAAA) {
-		return nil, dns2.RcodeNotImplemented, nil
-	}
-	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
-	s.dnsLookups++
-
-	var r *manager.LookupHostResponse //nolint:staticcheck // retained for backward compatibility
-	if r, err = s.managerClient.LookupHost(ctx, &manager.LookupHostRequest{Session: s.session, Name: q.Name[:len(q.Name)-1]}); err != nil {
-		s.dnsFailures++
-		return nil, dns2.RcodeServerFailure, err
-	}
-	ips := iputil.IPsFromBytesSlice(r.Ips)
-	if len(ips) == 0 {
-		return nil, dns2.RcodeNameError, nil
-	}
-	rrHeader := func() dns2.RR_Header {
-		return dns2.RR_Header{Name: q.Name, Rrtype: qType, Class: dns2.ClassINET, Ttl: 4}
-	}
-	for _, ip := range ips {
-		if ip4 := ip.To4(); ip4 != nil {
-			rrs = append(rrs, &dns2.A{
-				Hdr: rrHeader(),
-				A:   ip4,
-			})
-		}
-	}
-	return rrs, dns2.RcodeSuccess, nil
 }
 
 func (s *Session) getNetworkConfig() *rpc.NetworkConfig {
@@ -593,7 +635,9 @@ func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.Cl
 		s.neverProxySubnets = ns
 
 		if r.AllowConflictingSubnets != nil {
-			s.allowConflictingSubnets = iputil.ConvertSubnets(r.AllowConflictingSubnets)
+			allow := subnet.Unique(append(s.allowConflictingSubnets, iputil.ConvertSubnets(r.AllowConflictingSubnets)...))
+			dlog.Infof(ctx, "allow-conflicting subnets %v", allow)
+			s.allowConflictingSubnets = allow
 		}
 	}
 }
@@ -720,6 +764,20 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		return s.watchClusterInfo(ctx)
 	})
 
+	if rmc, ok := s.managerClient.(interface{ RealManagerClient() manager.ManagerClient }); ok {
+		clusterCfg := client.GetConfig(c).Cluster()
+		if clusterCfg.AgentPortForward && clusterCfg.ConnectFromRootDaemon {
+			if k8sclient.CanPortForward(c, s.namespace) {
+				s.agentClients = agentpf.NewClients(s.session)
+				g.Go("agentPods", func(ctx context.Context) error {
+					return s.agentClients.WatchAgentPods(ctx, rmc.RealManagerClient())
+				})
+			} else {
+				dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
+			}
+		}
+	}
+
 	// At this point, we wait until the VIF is ready. It will be, shortly after
 	// the first ClusterInfo is received from the traffic-manager. A timeout
 	// is needed so that we don't wait forever on a traffic-manager that has
@@ -811,6 +869,27 @@ func (s *Session) applyConfig(ctx context.Context) error {
 	return client.MergeAndReplace(ctx, s.config, cfg, true)
 }
 
-func (s *Session) Done() chan struct{} {
+func (s *Session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (*empty.Empty, error) {
+	if s.agentClients == nil {
+		return nil, status.Error(codes.Unavailable, "")
+	}
+	err := s.agentClients.WaitForIP(ctx, request.Timeout.AsDuration(), request.Ip)
+	switch {
+	case err == nil:
+	case errors.Is(err, context.DeadlineExceeded):
+		err = status.Error(codes.DeadlineExceeded, "")
+	case errors.Is(err, context.Canceled):
+		err = status.Error(codes.Canceled, "")
+	default:
+		err = status.Error(codes.Internal, err.Error())
+	}
+	return &empty.Empty{}, err
+}
+
+func (s *Session) Done() <-chan struct{} {
 	return s.done
+}
+
+func (s *Session) ManagerVersion() semver.Version {
+	return s.managerVersion
 }

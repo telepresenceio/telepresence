@@ -36,6 +36,7 @@ const (
 	Manager_Depart_FullMethodName                    = "/telepresence.manager.Manager/Depart"
 	Manager_SetLogLevel_FullMethodName               = "/telepresence.manager.Manager/SetLogLevel"
 	Manager_GetLogs_FullMethodName                   = "/telepresence.manager.Manager/GetLogs"
+	Manager_WatchAgentPods_FullMethodName            = "/telepresence.manager.Manager/WatchAgentPods"
 	Manager_WatchAgents_FullMethodName               = "/telepresence.manager.Manager/WatchAgents"
 	Manager_WatchAgentsNS_FullMethodName             = "/telepresence.manager.Manager/WatchAgentsNS"
 	Manager_WatchIntercepts_FullMethodName           = "/telepresence.manager.Manager/WatchIntercepts"
@@ -46,16 +47,12 @@ const (
 	Manager_UpdateIntercept_FullMethodName           = "/telepresence.manager.Manager/UpdateIntercept"
 	Manager_GetIntercept_FullMethodName              = "/telepresence.manager.Manager/GetIntercept"
 	Manager_ReviewIntercept_FullMethodName           = "/telepresence.manager.Manager/ReviewIntercept"
-	Manager_ClientTunnel_FullMethodName              = "/telepresence.manager.Manager/ClientTunnel"
-	Manager_AgentTunnel_FullMethodName               = "/telepresence.manager.Manager/AgentTunnel"
-	Manager_LookupHost_FullMethodName                = "/telepresence.manager.Manager/LookupHost"
-	Manager_AgentLookupHostResponse_FullMethodName   = "/telepresence.manager.Manager/AgentLookupHostResponse"
-	Manager_WatchLookupHost_FullMethodName           = "/telepresence.manager.Manager/WatchLookupHost"
 	Manager_LookupDNS_FullMethodName                 = "/telepresence.manager.Manager/LookupDNS"
 	Manager_AgentLookupDNSResponse_FullMethodName    = "/telepresence.manager.Manager/AgentLookupDNSResponse"
 	Manager_WatchLookupDNS_FullMethodName            = "/telepresence.manager.Manager/WatchLookupDNS"
 	Manager_WatchLogLevel_FullMethodName             = "/telepresence.manager.Manager/WatchLogLevel"
 	Manager_Tunnel_FullMethodName                    = "/telepresence.manager.Manager/Tunnel"
+	Manager_ReportMetrics_FullMethodName             = "/telepresence.manager.Manager/ReportMetrics"
 	Manager_WatchDial_FullMethodName                 = "/telepresence.manager.Manager/WatchDial"
 )
 
@@ -94,6 +91,10 @@ type ManagerClient interface {
 	// (pending the request) and return them to the caller
 	// Deprecated: Will return an empty response
 	GetLogs(ctx context.Context, in *GetLogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
+	// WatchAgentPods notifies a client of the set of known Agents from the client
+	// connections namespace that the client can connect to when port-forwards are
+	// allowed.
+	WatchAgentPods(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentPodsClient, error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -129,24 +130,6 @@ type ManagerClient interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// ClientTunnel receives messages from the client and dispatches them to tracked
-	// net.Conn instances in the traffic-manager. Responses from tracked instances
-	// are sent back on the returned message stream
-	ClientTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ClientTunnelClient, error)
-	// AgentTunnel receives messages from the agent and dispatches them to tracked
-	// net.Conn instances in the traffic-manager. Responses from tracked instances
-	// are sent back on the returned message stream
-	AgentTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_AgentTunnelClient, error)
-	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
-	// active, the lookup will be performed from the intercepted pods.
-	// Deprecated: Retained for backward compatibility. Replaced by LookupDNS
-	LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error)
-	// AgentLookupHostResponse lets an agent respond for lookup requests
-	// Deprecated: Retained for backward compatibility. Replaced by AgentLookupDNSResponse
-	AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// WatchLookupHost lets an agent receive lookup requests
-	// Deprecated: Retained for backward compatibility. Replaced by WatchLookupDNS
-	WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error)
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error)
@@ -163,6 +146,9 @@ type ManagerClient interface {
 	// always contain the session ID, connection ID, and timeouts used by
 	// the dialer endpoints.
 	Tunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_TunnelClient, error)
+	// ReportMetrics is used by a traffic-agent to report metrics for streams
+	// established when clients connect directly to traffic-agents using port-forward.
+	ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WatchDial makes it possible for the client side to receive
 	// DialRequests from the traffic-manager. Requests are sent when an
 	// intercepted traffic-agent creates a Tunnel that needs to be extended
@@ -290,8 +276,40 @@ func (c *managerClient) GetLogs(ctx context.Context, in *GetLogsRequest, opts ..
 	return out, nil
 }
 
+func (c *managerClient) WatchAgentPods(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentPodsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[0], Manager_WatchAgentPods_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerWatchAgentPodsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Manager_WatchAgentPodsClient interface {
+	Recv() (*AgentPodInfoSnapshot, error)
+	grpc.ClientStream
+}
+
+type managerWatchAgentPodsClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerWatchAgentPodsClient) Recv() (*AgentPodInfoSnapshot, error) {
+	m := new(AgentPodInfoSnapshot)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[0], Manager_WatchAgents_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[1], Manager_WatchAgents_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +341,7 @@ func (x *managerWatchAgentsClient) Recv() (*AgentInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchAgentsNS(ctx context.Context, in *AgentsRequest, opts ...grpc.CallOption) (Manager_WatchAgentsNSClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[1], Manager_WatchAgentsNS_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchAgentsNS_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +373,7 @@ func (x *managerWatchAgentsNSClient) Recv() (*AgentInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchIntercepts_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchIntercepts_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +405,7 @@ func (x *managerWatchInterceptsClient) Recv() (*InterceptInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchClusterInfo_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchClusterInfo_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -472,118 +490,6 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 	return out, nil
 }
 
-func (c *managerClient) ClientTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_ClientTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_ClientTunnel_FullMethodName, opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &managerClientTunnelClient{stream}
-	return x, nil
-}
-
-type Manager_ClientTunnelClient interface {
-	Send(*ConnMessage) error
-	Recv() (*ConnMessage, error)
-	grpc.ClientStream
-}
-
-type managerClientTunnelClient struct {
-	grpc.ClientStream
-}
-
-func (x *managerClientTunnelClient) Send(m *ConnMessage) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *managerClientTunnelClient) Recv() (*ConnMessage, error) {
-	m := new(ConnMessage)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func (c *managerClient) AgentTunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_AgentTunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_AgentTunnel_FullMethodName, opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &managerAgentTunnelClient{stream}
-	return x, nil
-}
-
-type Manager_AgentTunnelClient interface {
-	Send(*ConnMessage) error
-	Recv() (*ConnMessage, error)
-	grpc.ClientStream
-}
-
-type managerAgentTunnelClient struct {
-	grpc.ClientStream
-}
-
-func (x *managerAgentTunnelClient) Send(m *ConnMessage) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *managerAgentTunnelClient) Recv() (*ConnMessage, error) {
-	m := new(ConnMessage)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func (c *managerClient) LookupHost(ctx context.Context, in *LookupHostRequest, opts ...grpc.CallOption) (*LookupHostResponse, error) {
-	out := new(LookupHostResponse)
-	err := c.cc.Invoke(ctx, Manager_LookupHost_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) AgentLookupHostResponse(ctx context.Context, in *LookupHostAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, Manager_AgentLookupHostResponse_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) WatchLookupHost(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupHostClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchLookupHost_FullMethodName, opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &managerWatchLookupHostClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type Manager_WatchLookupHostClient interface {
-	Recv() (*LookupHostRequest, error)
-	grpc.ClientStream
-}
-
-type managerWatchLookupHostClient struct {
-	grpc.ClientStream
-}
-
-func (x *managerWatchLookupHostClient) Recv() (*LookupHostRequest, error) {
-	m := new(LookupHostRequest)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error) {
 	out := new(DNSResponse)
 	err := c.cc.Invoke(ctx, Manager_LookupDNS_FullMethodName, in, out, opts...)
@@ -603,7 +509,7 @@ func (c *managerClient) AgentLookupDNSResponse(ctx context.Context, in *DNSAgent
 }
 
 func (c *managerClient) WatchLookupDNS(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupDNSClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_WatchLookupDNS_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchLookupDNS_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +541,7 @@ func (x *managerWatchLookupDNSClient) Recv() (*DNSRequest, error) {
 }
 
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_WatchLogLevel_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchLogLevel_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -667,7 +573,7 @@ func (x *managerWatchLogLevelClient) Recv() (*LogLevelRequest, error) {
 }
 
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_TunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], Manager_Tunnel_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_Tunnel_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -697,8 +603,17 @@ func (x *managerTunnelClient) Recv() (*TunnelMessage, error) {
 	return m, nil
 }
 
+func (c *managerClient) ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Manager_ReportMetrics_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchDialClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[10], Manager_WatchDial_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_WatchDial_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -764,6 +679,10 @@ type ManagerServer interface {
 	// (pending the request) and return them to the caller
 	// Deprecated: Will return an empty response
 	GetLogs(context.Context, *GetLogsRequest) (*LogsResponse, error)
+	// WatchAgentPods notifies a client of the set of known Agents from the client
+	// connections namespace that the client can connect to when port-forwards are
+	// allowed.
+	WatchAgentPods(*SessionInfo, Manager_WatchAgentPodsServer) error
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -799,24 +718,6 @@ type ManagerServer interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error)
-	// ClientTunnel receives messages from the client and dispatches them to tracked
-	// net.Conn instances in the traffic-manager. Responses from tracked instances
-	// are sent back on the returned message stream
-	ClientTunnel(Manager_ClientTunnelServer) error
-	// AgentTunnel receives messages from the agent and dispatches them to tracked
-	// net.Conn instances in the traffic-manager. Responses from tracked instances
-	// are sent back on the returned message stream
-	AgentTunnel(Manager_AgentTunnelServer) error
-	// LookupHost performs a DNS lookup in the cluster. If the caller has intercepts
-	// active, the lookup will be performed from the intercepted pods.
-	// Deprecated: Retained for backward compatibility. Replaced by LookupDNS
-	LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error)
-	// AgentLookupHostResponse lets an agent respond for lookup requests
-	// Deprecated: Retained for backward compatibility. Replaced by AgentLookupDNSResponse
-	AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error)
-	// WatchLookupHost lets an agent receive lookup requests
-	// Deprecated: Retained for backward compatibility. Replaced by WatchLookupDNS
-	WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error)
@@ -833,6 +734,9 @@ type ManagerServer interface {
 	// always contain the session ID, connection ID, and timeouts used by
 	// the dialer endpoints.
 	Tunnel(Manager_TunnelServer) error
+	// ReportMetrics is used by a traffic-agent to report metrics for streams
+	// established when clients connect directly to traffic-agents using port-forward.
+	ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error)
 	// WatchDial makes it possible for the client side to receive
 	// DialRequests from the traffic-manager. Requests are sent when an
 	// intercepted traffic-agent creates a Tunnel that needs to be extended
@@ -885,6 +789,9 @@ func (UnimplementedManagerServer) SetLogLevel(context.Context, *LogLevelRequest)
 func (UnimplementedManagerServer) GetLogs(context.Context, *GetLogsRequest) (*LogsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLogs not implemented")
 }
+func (UnimplementedManagerServer) WatchAgentPods(*SessionInfo, Manager_WatchAgentPodsServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchAgentPods not implemented")
+}
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgents not implemented")
 }
@@ -915,21 +822,6 @@ func (UnimplementedManagerServer) GetIntercept(context.Context, *GetInterceptReq
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
 }
-func (UnimplementedManagerServer) ClientTunnel(Manager_ClientTunnelServer) error {
-	return status.Errorf(codes.Unimplemented, "method ClientTunnel not implemented")
-}
-func (UnimplementedManagerServer) AgentTunnel(Manager_AgentTunnelServer) error {
-	return status.Errorf(codes.Unimplemented, "method AgentTunnel not implemented")
-}
-func (UnimplementedManagerServer) LookupHost(context.Context, *LookupHostRequest) (*LookupHostResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method LookupHost not implemented")
-}
-func (UnimplementedManagerServer) AgentLookupHostResponse(context.Context, *LookupHostAgentResponse) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupHostResponse not implemented")
-}
-func (UnimplementedManagerServer) WatchLookupHost(*SessionInfo, Manager_WatchLookupHostServer) error {
-	return status.Errorf(codes.Unimplemented, "method WatchLookupHost not implemented")
-}
 func (UnimplementedManagerServer) LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
 }
@@ -944,6 +836,9 @@ func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, Manager_WatchLog
 }
 func (UnimplementedManagerServer) Tunnel(Manager_TunnelServer) error {
 	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
+}
+func (UnimplementedManagerServer) ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReportMetrics not implemented")
 }
 func (UnimplementedManagerServer) WatchDial(*SessionInfo, Manager_WatchDialServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchDial not implemented")
@@ -1177,6 +1072,27 @@ func _Manager_GetLogs_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_WatchAgentPods_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SessionInfo)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchAgentPods(m, &managerWatchAgentPodsServer{stream})
+}
+
+type Manager_WatchAgentPodsServer interface {
+	Send(*AgentPodInfoSnapshot) error
+	grpc.ServerStream
+}
+
+type managerWatchAgentPodsServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerWatchAgentPodsServer) Send(m *AgentPodInfoSnapshot) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 func _Manager_WatchAgents_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SessionInfo)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1369,115 +1285,6 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_ClientTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ManagerServer).ClientTunnel(&managerClientTunnelServer{stream})
-}
-
-type Manager_ClientTunnelServer interface {
-	Send(*ConnMessage) error
-	Recv() (*ConnMessage, error)
-	grpc.ServerStream
-}
-
-type managerClientTunnelServer struct {
-	grpc.ServerStream
-}
-
-func (x *managerClientTunnelServer) Send(m *ConnMessage) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *managerClientTunnelServer) Recv() (*ConnMessage, error) {
-	m := new(ConnMessage)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func _Manager_AgentTunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ManagerServer).AgentTunnel(&managerAgentTunnelServer{stream})
-}
-
-type Manager_AgentTunnelServer interface {
-	Send(*ConnMessage) error
-	Recv() (*ConnMessage, error)
-	grpc.ServerStream
-}
-
-type managerAgentTunnelServer struct {
-	grpc.ServerStream
-}
-
-func (x *managerAgentTunnelServer) Send(m *ConnMessage) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *managerAgentTunnelServer) Recv() (*ConnMessage, error) {
-	m := new(ConnMessage)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func _Manager_LookupHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LookupHostRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).LookupHost(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Manager_LookupHost_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).LookupHost(ctx, req.(*LookupHostRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_AgentLookupHostResponse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(LookupHostAgentResponse)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).AgentLookupHostResponse(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Manager_AgentLookupHostResponse_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).AgentLookupHostResponse(ctx, req.(*LookupHostAgentResponse))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_WatchLookupHost_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(SessionInfo)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ManagerServer).WatchLookupHost(m, &managerWatchLookupHostServer{stream})
-}
-
-type Manager_WatchLookupHostServer interface {
-	Send(*LookupHostRequest) error
-	grpc.ServerStream
-}
-
-type managerWatchLookupHostServer struct {
-	grpc.ServerStream
-}
-
-func (x *managerWatchLookupHostServer) Send(m *LookupHostRequest) error {
-	return x.ServerStream.SendMsg(m)
-}
-
 func _Manager_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DNSRequest)
 	if err := dec(in); err != nil {
@@ -1582,6 +1389,24 @@ func (x *managerTunnelServer) Recv() (*TunnelMessage, error) {
 	return m, nil
 }
 
+func _Manager_ReportMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TunnelMetrics)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).ReportMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_ReportMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).ReportMetrics(ctx, req.(*TunnelMetrics))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_WatchDial_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SessionInfo)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1683,14 +1508,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Manager_ReviewIntercept_Handler,
 		},
 		{
-			MethodName: "LookupHost",
-			Handler:    _Manager_LookupHost_Handler,
-		},
-		{
-			MethodName: "AgentLookupHostResponse",
-			Handler:    _Manager_AgentLookupHostResponse_Handler,
-		},
-		{
 			MethodName: "LookupDNS",
 			Handler:    _Manager_LookupDNS_Handler,
 		},
@@ -1698,8 +1515,17 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "AgentLookupDNSResponse",
 			Handler:    _Manager_AgentLookupDNSResponse_Handler,
 		},
+		{
+			MethodName: "ReportMetrics",
+			Handler:    _Manager_ReportMetrics_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchAgentPods",
+			Handler:       _Manager_WatchAgentPods_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "WatchAgents",
 			Handler:       _Manager_WatchAgents_Handler,
@@ -1718,23 +1544,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchClusterInfo",
 			Handler:       _Manager_WatchClusterInfo_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "ClientTunnel",
-			Handler:       _Manager_ClientTunnel_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "AgentTunnel",
-			Handler:       _Manager_AgentTunnel_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "WatchLookupHost",
-			Handler:       _Manager_WatchLookupHost_Handler,
 			ServerStreams: true,
 		},
 		{

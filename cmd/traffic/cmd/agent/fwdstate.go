@@ -4,17 +4,19 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type fwdState struct {
 	*simpleState
-	intercepts []*agentconfig.Intercept
+	intercept  *agentconfig.Intercept
 	forwarder  forwarder.Interceptor
 	mountPoint string
 	env        map[string]string
@@ -22,18 +24,18 @@ type fwdState struct {
 
 // NewInterceptState creates a InterceptState that performs intercepts by using an Interceptor which indiscriminately
 // intercepts all traffic to the port that it forwards.
-func NewInterceptState(s State, forwarder forwarder.Interceptor, intercepts []*agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
+func (s *simpleState) NewInterceptState(forwarder forwarder.Interceptor, intercept *agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
 	return &fwdState{
-		simpleState: s.(*simpleState),
+		simpleState: s,
 		mountPoint:  mountPoint,
-		intercepts:  intercepts,
+		intercept:   intercept,
 		forwarder:   forwarder,
 		env:         env,
 	}
 }
 
-func (fs *fwdState) InterceptConfigs() []*agentconfig.Intercept {
-	return fs.intercepts
+func (fs *fwdState) InterceptConfig() *agentconfig.Intercept {
+	return fs.intercept
 }
 
 func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
@@ -52,6 +54,23 @@ func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, co
 	}
 	dlog.Debugf(ctx, "no match found for path %q%s, %s", path, portInfo, headers)
 	return &restapi.InterceptInfo{Intercepted: false}, nil
+}
+
+type ProviderMux struct {
+	AgentProvider   tunnel.ClientStreamProvider
+	ManagerProvider tunnel.StreamProvider
+}
+
+func (pm *ProviderMux) ReportMetrics(ctx context.Context, metrics *manager.TunnelMetrics) {
+	pm.AgentProvider.ReportMetrics(ctx, metrics)
+}
+
+func (pm *ProviderMux) CreateClientStream(ctx context.Context, sessionID string, id tunnel.ConnID, roundTripLatency, dialTimeout time.Duration) (tunnel.Stream, error) {
+	s, err := pm.AgentProvider.CreateClientStream(ctx, sessionID, id, roundTripLatency, dialTimeout)
+	if err == nil && s == nil {
+		s, err = pm.ManagerProvider.CreateClientStream(ctx, sessionID, id, roundTripLatency, dialTimeout)
+	}
+	return s, err
 }
 
 func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
@@ -82,12 +101,18 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 		}
 	}
 
-	// Update forwarding.
-	fs.forwarder.SetManager(fs.SessionInfo(), fs.ManagerClient(), fs.ManagerVersion())
+	if fs.sessionInfo != nil {
+		// Update forwarding.
+		fs.forwarder.SetStreamProvider(
+			&ProviderMux{
+				AgentProvider:   fs,
+				ManagerProvider: &tunnel.TrafficManagerStreamProvider{Manager: fs.ManagerClient(), AgentSessionID: fs.sessionInfo.SessionId},
+			})
+	}
 	fs.forwarder.SetIntercepting(activeIntercept)
 
 	// Review waiting intercepts
-	reviews := []*manager.ReviewInterceptRequest{}
+	reviews := make([]*manager.ReviewInterceptRequest, 0, len(cepts))
 	for _, cept := range cepts {
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active

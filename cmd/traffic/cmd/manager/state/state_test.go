@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
@@ -26,10 +27,10 @@ func (s *suiteState) SetupTest() {
 	s.ctx = dlog.NewTestContext(s.T(), false)
 	s.state = &state{
 		backgroundCtx:   s.ctx,
-		sessions:        make(map[string]SessionState),
-		agentsByName:    make(map[string]map[string]*manager.AgentInfo),
-		cfgMapLocks:     make(map[string]*sync.Mutex),
-		interceptStates: make(map[string]*interceptState),
+		sessions:        xsync.NewMapOf[string, SessionState](),
+		agentsByName:    xsync.NewMapOf[string, *xsync.MapOf[string, *manager.AgentInfo]](),
+		cfgMapLocks:     xsync.NewMapOf[string, *sync.Mutex](),
+		interceptStates: xsync.NewMapOf[string, *interceptState](),
 		timedLogLevel:   log.NewTimedLevel("debug", log.SetLevel),
 		llSubs:          newLoglevelSubscribers(),
 	}
@@ -143,7 +144,7 @@ func (s *suiteState) TestStateInternal() {
 		a.NotNil(s.GetClient(c2))
 		a.Nil(s.GetClient(c3))
 
-		a.NoError(s.RemoveSession(ctx, c2))
+		s.RemoveSession(ctx, c2)
 
 		a.NotNil(s.GetClient(c1))
 		a.Nil(s.GetClient(c2))
@@ -169,21 +170,21 @@ func (s *suiteState) TestAddClient() {
 	}, now)
 
 	// then
-	assert.Len(s.T(), s.state.sessions, 1)
+	assert.Equal(s.T(), 1, s.state.sessions.Size())
 }
 
 func (s *suiteState) TestRemoveSession() {
 	// given
 	now := time.Now()
-	s.state.sessions["session-1"] = newClientSessionState(s.ctx, now)
-	s.state.sessions["session-2"] = newAgentSessionState(s.ctx, now)
+	s.state.sessions.Store("session-1", newClientSessionState(s.ctx, now))
+	s.state.sessions.Store("session-2", newAgentSessionState(s.ctx, now))
 
 	// when
-	s.NoError(s.state.RemoveSession(s.ctx, "session-1"))
-	s.NoError(s.state.RemoveSession(s.ctx, "session-2")) // won't fail trying to delete consumption.
+	s.state.RemoveSession(s.ctx, "session-1")
+	s.state.RemoveSession(s.ctx, "session-2") // won't fail trying to delete consumption.
 
 	// then
-	assert.Len(s.T(), s.state.sessions, 0)
+	assert.Equal(s.T(), s.state.sessions.Size(), 0)
 }
 
 func TestSuiteState(testing *testing.T) {
