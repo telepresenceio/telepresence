@@ -215,10 +215,7 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	sessionID := session.GetSessionId()
 	dlog.Debug(ctx, "Depart called")
 
-	if err := s.state.RemoveSession(ctx, sessionID); err != nil {
-		return nil, err
-	}
-
+	s.state.RemoveSession(ctx, sessionID)
 	return &empty.Empty{}, nil
 }
 
@@ -557,12 +554,6 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, spec)
 
-	client := s.state.GetClient(sessionID)
-
-	if client == nil {
-		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
-	}
-
 	if val := validateIntercept(spec); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
@@ -574,7 +565,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		}
 	}
 
-	interceptInfo, err := s.state.AddIntercept(ctx, sessionID, s.clusterInfo.ID(), client, ciReq)
+	client, interceptInfo, err := s.state.AddIntercept(ctx, sessionID, s.clusterInfo.ID(), ciReq)
 	if err != nil {
 		return nil, err
 	}
@@ -639,12 +630,7 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 	SetGauge(s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, &name, 0)
 
-	if removed, err := s.state.RemoveIntercept(ctx, sessionID+":"+name); err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to finalize intercept %q: %v", name, err)
-	} else if !removed {
-		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
-	}
-
+	s.state.RemoveIntercept(ctx, sessionID+":"+name)
 	return &empty.Empty{}, nil
 }
 

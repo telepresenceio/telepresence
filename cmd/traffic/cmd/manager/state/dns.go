@@ -48,7 +48,7 @@ func (s *state) PostLookupDNSResponse(ctx context.Context, response *rpc.DNSAgen
 	request := response.GetRequest()
 	rid := requestId(request)
 	s.mu.RLock()
-	as, ok := s.sessions[response.GetSession().SessionId].(*agentSessionState)
+	as, ok := s.GetSession(response.GetSession().SessionId).(*agentSessionState)
 	if ok {
 		var rch chan<- *rpc.DNSResponse
 		if rch, ok = as.dnsResponses[rid]; ok {
@@ -66,13 +66,11 @@ func (s *state) PostLookupDNSResponse(ctx context.Context, response *rpc.DNSAgen
 }
 
 func (s *state) WatchLookupDNS(agentSessionID string) <-chan *rpc.DNSRequest {
-	s.mu.RLock()
-	ss, ok := s.sessions[agentSessionID]
-	s.mu.RUnlock()
-	if !ok {
-		return nil
+	ss, ok := s.GetSession(agentSessionID).(*agentSessionState)
+	if ok {
+		return ss.dnsRequests
 	}
-	return ss.(*agentSessionState).dnsRequests
+	return nil
 }
 
 func (s *state) agentsLookup(ctx context.Context, clientSessionID string, request *rpc.DNSRequest) []*rpc.DNSResponse {
@@ -143,7 +141,7 @@ func (s *state) startLookup(agentSessionID, rid string, request *rpc.DNSRequest)
 		ok  bool
 	)
 	s.mu.Lock()
-	if as, ok = s.sessions[agentSessionID].(*agentSessionState); ok {
+	if as, ok = s.GetSession(agentSessionID).(*agentSessionState); ok {
 		if rch, ok = as.dnsResponses[rid]; !ok {
 			rch = make(chan *rpc.DNSResponse)
 			as.dnsResponses[rid] = rch
@@ -171,7 +169,7 @@ func (s *state) startLookup(agentSessionID, rid string, request *rpc.DNSRequest)
 
 func (s *state) endLookup(agentSessionID, rid string) {
 	s.mu.Lock()
-	if as, ok := s.sessions[agentSessionID].(*agentSessionState); ok {
+	if as, ok := s.GetSession(agentSessionID).(*agentSessionState); ok {
 		if rch, ok := as.dnsResponses[rid]; ok {
 			delete(as.dnsResponses, rid)
 			close(rch)

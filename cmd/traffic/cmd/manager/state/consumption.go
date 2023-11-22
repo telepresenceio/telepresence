@@ -1,6 +1,7 @@
 package state
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -13,17 +14,16 @@ const SessionConsumptionMetricsStaleTTL = 60 * time.Minute
 
 func NewSessionConsumptionMetrics() *SessionConsumptionMetrics {
 	return &SessionConsumptionMetrics{
-		ConnectDuration: 0,
+		connectDuration: 0,
 		FromClientBytes: tunnel.NewCounterProbe("FromClientBytes"),
 		ToClientBytes:   tunnel.NewCounterProbe("ToClientBytes"),
-
-		LastUpdate: time.Now(),
+		lastUpdate:      time.Now().UnixNano(),
 	}
 }
 
 type SessionConsumptionMetrics struct {
-	ConnectDuration uint32
-	LastUpdate      time.Time
+	connectDuration int64
+	lastUpdate      int64
 
 	// data from client to the traffic manager.
 	FromClientBytes *tunnel.CounterProbe
@@ -31,33 +31,34 @@ type SessionConsumptionMetrics struct {
 	ToClientBytes *tunnel.CounterProbe
 }
 
+func (m *SessionConsumptionMetrics) ConnectDuration() time.Duration {
+	return time.Duration(atomic.LoadInt64(&m.connectDuration))
+}
+
+func (m *SessionConsumptionMetrics) LastUpdate() time.Time {
+	return time.Unix(0, atomic.LoadInt64(&m.lastUpdate))
+}
+
 func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumptionMetrics {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for i := range s.sessions {
-		if css, ok := s.sessions[i].(*clientSessionState); i == sessionID && ok {
-			return css.ConsumptionMetrics()
-		}
+	if css, ok := s.GetSession(sessionID).(*clientSessionState); ok {
+		return css.ConsumptionMetrics()
 	}
 	return nil
 }
 
 func (s *state) GetAllSessionConsumptionMetrics() map[string]*SessionConsumptionMetrics {
 	allSCM := make(map[string]*SessionConsumptionMetrics)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for sessionID := range s.sessions {
-		if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
+	s.sessions.Range(func(sessionID string, sess SessionState) bool {
+		if css, ok := sess.(*clientSessionState); ok {
 			allSCM[sessionID] = css.ConsumptionMetrics()
 		}
-	}
+		return true
+	})
 	return allSCM
 }
 
 func (s *state) AddSessionConsumptionMetrics(metrics *manager.TunnelMetrics) {
-	s.mu.RLock()
-	cs, ok := s.sessions[metrics.ClientSessionId].(*clientSessionState)
-	s.mu.RUnlock()
+	cs, ok := s.GetSession(metrics.ClientSessionId).(*clientSessionState)
 	if ok {
 		cm := cs.consumptionMetrics
 		cm.FromClientBytes.Increment(metrics.IngressBytes)
@@ -67,20 +68,18 @@ func (s *state) AddSessionConsumptionMetrics(metrics *manager.TunnelMetrics) {
 
 // RefreshSessionConsumptionMetrics refreshes the metrics associated to a specific session.
 func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var scm *SessionConsumptionMetrics
-	if css, ok := s.sessions[sessionID].(*clientSessionState); ok {
-		scm = css.ConsumptionMetrics()
-	} else {
+	css, ok := s.GetSession(sessionID).(*clientSessionState)
+	if !ok {
 		return
 	}
+	scm := css.ConsumptionMetrics()
 
 	// If last update is more than SessionConsumptionMetricsStaleTTL old, probably that the reporting was interrupted.
-	wasInterrupted := time.Now().After(scm.LastUpdate.Add(SessionConsumptionMetricsStaleTTL))
+	lu := scm.LastUpdate()
+	now := time.Now()
+	wasInterrupted := now.After(lu.Add(SessionConsumptionMetricsStaleTTL))
 	if !wasInterrupted { // If it wasn't stale, we want to count duration since last metric update.
-		scm.ConnectDuration += uint32(time.Since(scm.LastUpdate).Seconds())
+		atomic.AddInt64(&scm.connectDuration, int64(now.Sub(lu)))
 	}
-	scm.LastUpdate = time.Now()
+	atomic.StoreInt64(&scm.lastUpdate, now.UnixNano())
 }
