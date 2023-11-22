@@ -19,7 +19,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -90,16 +89,10 @@ func MainWithEnv(ctx context.Context) error {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
-	mgr, ctx, err := NewServiceFunc(ctx)
+	mgr, g, err := NewServiceFunc(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
-	ctx, imgRetErr := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
-
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		EnableSignalHandling: true,
-		SoftShutdownTimeout:  5 * time.Second,
-	})
 
 	g.Go("cli-config", mgr.runConfigWatcher)
 
@@ -108,11 +101,12 @@ func MainWithEnv(ctx context.Context) error {
 
 	g.Go("prometheus", mgr.servePrometheus)
 
-	if imgRetErr != nil {
-		dlog.Errorf(ctx, "unable to initialize agent injector: %v", imgRetErr)
-	} else {
-		g.Go("agent-injector", mutator.ServeMutator)
-	}
+	g.Go("agent-injector", func(ctx context.Context) error {
+		if managerutil.GetAgentImageRetriever(ctx) == nil {
+			return nil
+		}
+		return mutator.ServeMutator(ctx)
+	})
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
 

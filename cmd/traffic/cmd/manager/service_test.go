@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -299,41 +300,40 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 		GitVersion: "v1.17.0",
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
-	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
+
+	env := managerutil.Env{
 		MaxReceiveSize:  resource.Quantity{},
 		PodCIDRStrategy: "environment",
 		PodCIDRs: []*net.IPNet{{
 			IP:   net.IP{192, 168, 0, 0},
 			Mask: net.CIDRMask(16, 32),
 		}},
-	})
+	}
+	ctx = managerutil.WithEnv(ctx, &env)
 
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
+	agentmap.GeneratorConfigFunc = env.GeneratorConfig
 
 	s := grpc.NewServer()
-	mgr, ctx, err := manager.NewServiceFunc(ctx)
+	mgr, g, err := manager.NewServiceFunc(ctx)
 	if err != nil {
 		t.Fatalf("failed to build manager: %v", err)
 	}
 	mgr.RegisterServers(s)
-
-	errCh := make(chan error)
-	go func() {
+	g.Go("server", func(ctx context.Context) error {
 		sc := &dhttp.ServerConfig{
 			Handler: s,
 		}
-		errCh <- sc.Serve(ctx, lis)
-		close(errCh)
-	}()
+		return sc.Serve(ctx, lis)
+	})
 	t.Cleanup(func() {
 		cancel()
-		if err := <-errCh; err != nil && err != ctx.Err() {
+		if err := g.Wait(); err != nil && err != ctx.Err() {
 			t.Error(err)
 		}
 	})
-
 	return conn
 }
