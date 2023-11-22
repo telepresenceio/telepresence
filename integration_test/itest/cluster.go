@@ -1011,7 +1011,7 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 	wg.Wait()
 }
 
-// StartLocalHttpEchoServerWithAddress is like StartLocalHttpEchoServer but binds to a specific host instead of localhost.
+// StartLocalHttpEchoServerWithHost is like StartLocalHttpEchoServer but binds to a specific host instead of localhost.
 func StartLocalHttpEchoServerWithHost(ctx context.Context, name string, host string) (int, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(ctx)
 	lc := net.ListenConfig{}
