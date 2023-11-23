@@ -8,9 +8,9 @@ import (
 )
 
 func Test_Integration(t *testing.T) {
-	moduleRoot, err := filepath.Abs("..")
+	ossRoot, err := filepath.Abs(".")
 	if err != nil {
 		t.Fatalf("unable to get absolute path of .oss: %v", err)
 	}
-	itest.RunTests(itest.TestContext(t, moduleRoot, moduleRoot))
+	itest.RunTests(itest.TestContext(t, ossRoot, filepath.Dir(ossRoot)))
 }

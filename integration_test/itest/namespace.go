@@ -117,7 +117,7 @@ func (s *nsPair) setup(ctx context.Context) bool {
 	if t.Failed() {
 		return false
 	}
-	err := Kubectl(ctx, s.Namespace, "apply", "-f", filepath.Join(GetOSSRoot(ctx), "integration_test", "testdata", "k8s", "client_sa.yaml"))
+	err := Kubectl(ctx, s.Namespace, "apply", "-f", filepath.Join(GetOSSRoot(ctx), "testdata", "k8s", "client_sa.yaml"))
 	assert.NoError(t, err, "failed to create connect ServiceAccount")
 	return !t.Failed()
 }
