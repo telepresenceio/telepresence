@@ -34,6 +34,12 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: The DNS search path on Windows is now restored when Telepresence quits
+        body: The DNS search path that Telepresence uses to simulate the DNS lookup functionality in the connected
+          cluster namespace was not removed by a <code>telepresence quit</code>, resulting in connectivity problems
+          from the workstation. Telepresence will now remove the entries that it has added to the search list when
+          it quits.
+      - type: bugfix
         title: Multiple services ports using the same target port would not get intercepted correctly.
         body: Intercepts didn't work when multiple service ports were using the same container port. Telepresence would
           think that one of the ports wasn't intercepted and therefore disable the intercept of the container port.

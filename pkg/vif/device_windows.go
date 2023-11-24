@@ -203,22 +203,26 @@ func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server 
 	if err != nil {
 		return err
 	}
-	// Windows does not use a dot suffix in the search path.
-	clusterDomain = strings.TrimSuffix(clusterDomain, ".")
-
 	// Put our new search path in front of other entries. Then include those
 	// that don't end with our cluster domain (these are entries that aren't
 	// managed by Telepresence).
 	uniq := make(map[string]int, len(searchList)+len(gss))
 	i := 0
 	for _, gs := range searchList {
+		gs = strings.TrimSuffix(gs, ".")
 		if _, ok := uniq[gs]; !ok {
 			uniq[gs] = i
 			i++
 		}
 	}
+	clusterDomainDot := "." + clusterDomain
+	clusterDomain = strings.TrimSuffix(clusterDomainDot, ".")
+	ours := func(gs string) bool {
+		return strings.HasSuffix(gs, clusterDomain) || strings.HasSuffix(gs, clusterDomainDot) || gs == "tel2-search"
+	}
+
 	for _, gs := range gss {
-		if !strings.HasSuffix(gs, clusterDomain) {
+		if !ours(gs) {
 			if _, ok := uniq[gs]; !ok {
 				uniq[gs] = i
 				i++
@@ -241,7 +245,7 @@ func psList(values []string) string {
 			sb.WriteByte(',')
 		}
 		sb.WriteByte('"')
-		sb.WriteString(strings.TrimSuffix(gs, "."))
+		sb.WriteString(gs)
 		sb.WriteByte('"')
 	}
 	sb.WriteByte(')')
@@ -311,7 +315,9 @@ func (t *nativeDevice) setRegistryGlobalSearchList(ctx context.Context, gss []st
 		dlog.Errorf(ctx, `creating/opening registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
 	} else {
 		defer rk.Close()
-		if err = rk.SetStringValue(searchListKey, strings.Join(gss, ",")); err != nil {
+		rv := strings.Join(gss, ",")
+		dlog.Debugf(ctx, `setting registry value %s\%s to %s`, tcpParamKey, searchListKey, rv)
+		if err = rk.SetStringValue(searchListKey, rv); err != nil {
 			dlog.Errorf(ctx, `setting registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
 		}
 	}
