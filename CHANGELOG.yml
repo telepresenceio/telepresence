@@ -34,6 +34,10 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Multiple services ports using the same target port would not get intercepted correctly.
+        body: Intercepts didn't work when multiple service ports were using the same container port. Telepresence would
+          think that one of the ports wasn't intercepted and therefore disable the intercept of the container port.
+      - type: bugfix
         title: Root daemon refuses to disconnect.
         body: The root daemon would sometimes hang forever when attempting to disconnect due to a deadlock in
           the VIF-device.

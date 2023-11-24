@@ -76,11 +76,11 @@ func GetOSSRoot(ctx context.Context) string {
 	if dir, ok := ctx.Value(ossRootKey{}).(string); ok {
 		return dir
 	}
-	moduleRoot, err := os.Getwd()
+	ossRoot, err := os.Getwd()
 	if err != nil {
 		panic("failed to get current directory")
 	}
-	return filepath.Dir(moduleRoot)
+	return ossRoot
 }
 
 // SetOSSRoot sets the OSS module root for the given context to dir.

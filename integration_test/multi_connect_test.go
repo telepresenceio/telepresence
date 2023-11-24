@@ -63,7 +63,7 @@ func (s *multiConnectSuite) SetupSuite() {
 	}()
 
 	ctx2 := itest.WithNamespaces(ctx, &itest.Namespaces{Namespace: s.mgrSpace2, ManagedNamespaces: []string{s.appSpace2}})
-	err := itest.Kubectl(ctx2, s.mgrSpace2, "apply", "-f", filepath.Join(itest.GetOSSRoot(ctx2), "integration_test", "testdata", "k8s", "client_sa.yaml"))
+	err := itest.Kubectl(ctx2, s.mgrSpace2, "apply", "-f", filepath.Join(itest.GetOSSRoot(ctx2), "testdata", "k8s", "client_sa.yaml"))
 	require.NoError(err, "failed to create connect ServiceAccount")
 
 	ctx2 = itest.WithUser(ctx2, s.mgrSpace2+":"+itest.TestUser)

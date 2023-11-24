@@ -54,18 +54,21 @@ func (h *harness) HarnessContext() context.Context {
 }
 
 func (h *harness) RunSuite(s TestingSuite) {
-	ctx := h.HarnessContext()
-	suiteRx := dos.Getenv(ctx, "TEST_SUITE")
-	if suiteRx != "" {
-		r, err := regexp.Compile(suiteRx)
-		if err != nil {
-			getT(ctx).Fatal(err)
-		}
-		if !r.MatchString(s.SuiteName()) {
-			return
-		}
+	if suiteEnabled(h.HarnessContext(), s) {
+		h.HarnessT().Run(s.SuiteName(), func(t *testing.T) { suite.Run(t, s) })
 	}
-	h.HarnessT().Run(s.SuiteName(), func(t *testing.T) { suite.Run(t, s) })
+}
+
+func suiteEnabled(ctx context.Context, s TestingSuite) bool {
+	suiteRx := dos.Getenv(ctx, "TEST_SUITE")
+	if suiteRx == "" {
+		return true
+	}
+	r, err := regexp.Compile(suiteRx)
+	if err != nil {
+		getT(ctx).Fatal(err)
+	}
+	return r.MatchString(s.SuiteName())
 }
 
 // SetupSuite calls all functions that has been added with AddSetup in the order they

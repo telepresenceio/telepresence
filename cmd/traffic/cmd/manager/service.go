@@ -15,12 +15,14 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
@@ -76,10 +78,15 @@ func (wall) Now() time.Time {
 	return time.Now()
 }
 
-func NewService(ctx context.Context) (Service, context.Context, error) {
+func NewService(ctx context.Context) (Service, *dgroup.Group, error) {
 	ret := &service{
 		clock: wall{},
 		id:    uuid.New().String(),
+	}
+
+	ctx, err := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
+	if err != nil {
+		dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
 	}
 	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
 	ret.ctx = ctx
@@ -87,7 +94,11 @@ func NewService(ctx context.Context) (Service, context.Context, error) {
 	ret.clusterInfo = cluster.NewInfo(ctx)
 	ret.state = state.NewStateFunc(ctx)
 	ret.self = ret
-	return ret, ctx, nil
+	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		EnableSignalHandling: true,
+		SoftShutdownTimeout:  5 * time.Second,
+	})
+	return ret, g, nil
 }
 
 func (s *service) SetSelf(self Service) {
