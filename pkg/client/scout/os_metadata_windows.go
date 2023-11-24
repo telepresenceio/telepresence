@@ -10,14 +10,13 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func getOsMetadata(ctx context.Context) map[string]any {
+func setOsMetadata(ctx context.Context, osMeta map[string]any) {
 	cmd := proc.CommandContext(ctx, "wmic", "os", "get", "Caption,Version,BuildNumber", "/value")
 	cmd.DisableLogging = true
 	r, err := cmd.Output()
-	osMeta := map[string]any{}
 	if err != nil {
 		dlog.Warnf(ctx, "Error running wmic: %v", err)
-		return osMeta
+		return
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(r))
 	for scanner.Scan() {
@@ -42,5 +41,4 @@ func getOsMetadata(ctx context.Context) map[string]any {
 	if err := scanner.Err(); err != nil {
 		dlog.Warnf(ctx, "Unable to scan wmic output: %v", err)
 	}
-	return osMeta
 }

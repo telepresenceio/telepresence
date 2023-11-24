@@ -10,12 +10,10 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-func getOsMetadata(ctx context.Context) map[string]any {
-	osMeta := map[string]any{
-		"os_version":       "unknown",
-		"os_build_version": "unknown",
-		"os_name":          "unknown",
-	}
+func setOsMetadata(ctx context.Context, osMeta map[string]any) {
+	osMeta["os_version"] = "unknown"
+	osMeta["os_build_version"] = "unknown"
+	osMeta["os_name"] = "unknown"
 	cmd := dexec.CommandContext(ctx, "sw_vers")
 	cmd.DisableLogging = true
 	if r, err := cmd.Output(); err != nil {
@@ -36,5 +34,4 @@ func getOsMetadata(ctx context.Context) map[string]any {
 			}
 		}
 	}
-	return osMeta
 }

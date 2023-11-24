@@ -35,21 +35,30 @@ items:
     notes:
       - type: bugfix
         title: The DNS search path on Windows is now restored when Telepresence quits
-        body: The DNS search path that Telepresence uses to simulate the DNS lookup functionality in the connected
+        body: >-
+          The DNS search path that Telepresence uses to simulate the DNS lookup functionality in the connected
           cluster namespace was not removed by a <code>telepresence quit</code>, resulting in connectivity problems
           from the workstation. Telepresence will now remove the entries that it has added to the search list when
           it quits.
       - type: bugfix
+        title: The user-daemon would sometimes get killed when used by multiple simultaneous CLI clients.
+        body: >-
+          The user-daemon would die with a fatal &quot;fatal error: concurrent map writes&quot; error in the
+          <code>connector.log</code>, effectively killing the ongoing connection.
+      - type: bugfix
         title: Multiple services ports using the same target port would not get intercepted correctly.
-        body: Intercepts didn't work when multiple service ports were using the same container port. Telepresence would
+        body: >-
+          Intercepts didn't work when multiple service ports were using the same container port. Telepresence would
           think that one of the ports wasn't intercepted and therefore disable the intercept of the container port.
       - type: bugfix
         title: Root daemon refuses to disconnect.
-        body: The root daemon would sometimes hang forever when attempting to disconnect due to a deadlock in
+        body: >-
+          The root daemon would sometimes hang forever when attempting to disconnect due to a deadlock in
           the VIF-device.
       - type: bugfix
         title: Fix panic in user daemon when traffic-manager was unreachable
-        body: The user daemon would panic if the traffic-manager was unreachable. It will now instead report
+        body: >-
+          The user daemon would panic if the traffic-manager was unreachable. It will now instead report
           a proper error to the client.
       - type: change
         title: Removal of backward support for versions predating 2.6.0
