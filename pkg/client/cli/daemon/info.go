@@ -25,6 +25,7 @@ type Info struct {
 	Namespace    string            `json:"namespace,omitempty"`
 	DaemonPort   int               `json:"daemon_port,omitempty"`
 	ExposedPorts []string          `json:"exposed_ports,omitempty"`
+	Hostname     string            `json:"hostname,omitempty"`
 }
 
 func (info *Info) DaemonID() *Identifier {

@@ -30,6 +30,9 @@ type Request struct {
 	// Ports exposed by a containerized daemon. Only valid when Docker == true
 	ExposedPorts []string
 
+	// Hostname used by a containerized daemon. Only valid when Docker == true
+	Hostname string
+
 	// Match expression to use when finding an existing connection by name
 	Use *regexp.Regexp
 
@@ -56,22 +59,27 @@ func InitRequest(cmd *cobra.Command) *Request {
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
 			`Defaults to all namespaces`)
+	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
+		`Overrides any other manager namespace set in config`)
 	nwFlags.StringSliceVar(&cr.AlsoProxy,
 		"also-proxy", nil, ``+
 			`Additional comma separated list of CIDR to proxy`)
-
 	nwFlags.StringSliceVar(&cr.NeverProxy,
 		"never-proxy", nil, ``+
 			`Comma separated list of CIDR to never proxy`)
-	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
-		`Overrides any other manager namespace set in config`)
+	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
+		"allow-conflicting-subnets", nil, ``+
+			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
+
+	// Docker flags
 	nwFlags.Bool(global.FlagDocker, false, "Start, or connect to, daemon in a docker container")
 	nwFlags.StringArrayVar(&cr.ExposedPorts,
 		"expose", nil, ``+
 			`Port that a containerized daemon will expose. See docker run -p for more info. Can be repeated`)
-	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
-		"allow-conflicting-subnets", nil, ``+
-			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
+	nwFlags.StringVar(&cr.Hostname,
+		"hostname", "", ``+
+			`Hostname used by a containerized daemon`)
+
 	flags.AddFlagSet(nwFlags)
 
 	dbgFlags := pflag.NewFlagSet("Debug and Profiling flags", 0)

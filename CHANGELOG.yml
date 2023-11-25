@@ -30,9 +30,14 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.17.2
+  - version: 2.18.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Ability to set the hostname of a containerized daemon.
+        body: >-
+          The hostname of a containerized daemon defaults to be the container's ID in Docker. You now can override the
+          hostname using <code>telepresence connect --docker --hostname &lt;a name&gt;</code>.
       - type: bugfix
         title: "Fix &quot;tls: bad certificate&quot; errors when refreshing the mutator-webhook secret"
         body: >-
