@@ -112,8 +112,13 @@ func Quit(ctx context.Context) {
 // Disconnect disconnects from a session in the user daemon.
 func Disconnect(ctx context.Context) {
 	stdout := output.Out(ctx)
-	ioutil.Print(stdout, "Telepresence Daemons ")
 	ud := daemon.GetUserClient(ctx)
+	ioutil.Print(stdout, "Telepresence Daemon")
+	if ud.Containerized() {
+		ioutil.Print(stdout, " ") // There's only one daemon.
+	} else {
+		ioutil.Print(stdout, "s ") // Plural, because both user-daemon and root-daemon disconnects
+	}
 	if ud == nil {
 		ioutil.Println(stdout, "have already quit")
 		quitRootDaemon(ctx) // Can't have a root daemon unless there's a user daemon.
@@ -277,6 +282,7 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 	if s == nil {
 		return ctx, nil
 	}
+
 	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
 		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
 	}
