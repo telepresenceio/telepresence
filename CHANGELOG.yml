@@ -51,6 +51,12 @@ items:
           <code>telepresence-agents</code> configmap in a state that indicated that an agent had been added, which
           caused problems for subsequent intercepts after the problem causing the first failure had been fixed.
       - type: bugfix
+        title: The <code>telepresence version</code> command will now report the version of all running daemons.
+        body: >-
+          A <code>telepresence version</code>, issued when multiple containerized daemons were active, would error with
+          &quot;multiple daemons are running, please select one using the --use &lt;match&gt; flag&quot;. This is now
+          fixed so that the command instead reports the version of all running daemons.
+      - type: bugfix
         title: Multiple containerized daemons can now be disconnected using <code>telepresence quit -s</code>
         body: >-
           A <code>telepresence quit -s</code>, issued when multiple containerized daemons were active, would error with

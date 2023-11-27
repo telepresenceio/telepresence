@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -33,14 +34,7 @@ func version() *cobra.Command {
 	}
 }
 
-func printVersion(cmd *cobra.Command, _ []string) error {
-	if err := connect.InitCommand(cmd); err != nil {
-		return err
-	}
-	kvf := ioutil.DefaultKeyValueFormatter()
-	kvf.Add(client.DisplayName, client.Version())
-	ctx := cmd.Context()
-
+func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 	remote := false
 	userD := daemon.GetUserClient(ctx)
 	if userD != nil {
@@ -78,6 +72,39 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	} else {
 		kvf.Add("User Daemon", "not running")
 	}
+}
+
+func printVersion(cmd *cobra.Command, _ []string) error {
+	kvf := ioutil.DefaultKeyValueFormatter()
+	kvf.Add(client.DisplayName, client.Version())
+
+	var mdErr daemon.MultipleDaemonsError
+	err := connect.InitCommand(cmd)
+	if err != nil {
+		if !errors.As(err, &mdErr) {
+			return err
+		}
+	}
+	ctx := cmd.Context()
+
+	if len(mdErr) > 0 {
+		for _, info := range mdErr {
+			subKvf := &ioutil.KeyValueFormatter{
+				Indent:    kvf.Indent,
+				Separator: kvf.Separator,
+			}
+			ud, err := connect.ExistingDaemon(ctx, info)
+			if err != nil {
+				subKvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
+			}
+			addDaemonVersions(daemon.WithUserClient(ctx, ud), subKvf)
+			kvf.Add("Connection "+ud.DaemonID.Name, "\n"+subKvf.String())
+			ud.Conn.Close()
+		}
+	} else {
+		addDaemonVersions(ctx, kvf)
+	}
+
 	kvf.Println(cmd.OutOrStdout())
 	return nil
 }

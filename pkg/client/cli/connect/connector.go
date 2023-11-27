@@ -99,6 +99,14 @@ func DialDaemon(ctx context.Context, info *daemon.Info) (*grpc.ClientConn, error
 	return conn, err
 }
 
+func ExistingDaemon(ctx context.Context, info *daemon.Info) (*daemon.UserClient, error) {
+	conn, err := DialDaemon(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	return newUserDaemon(conn, info.DaemonID()), nil
+}
+
 // Quit shuts down all daemons.
 func Quit(ctx context.Context) {
 	stdout := output.Out(ctx)
@@ -175,11 +183,7 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, kubeContext, name
 	if len(cr.ExposedPorts) > 0 && !slices.Equal(info.ExposedPorts, cr.ExposedPorts) {
 		return nil, errcat.User.New("exposed ports differ. Please quit and reconnect")
 	}
-	conn, err := DialDaemon(ctx, info)
-	if err != nil {
-		return nil, err
-	}
-	return newUserDaemon(conn, info.DaemonID()), nil
+	return ExistingDaemon(ctx, info)
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
@@ -398,6 +402,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 				KubeContext:  daemonID.KubeContext,
 				Namespace:    daemonID.Namespace,
 				ExposedPorts: request.ExposedPorts,
+				Hostname:     request.Hostname,
 			}, daemonID.InfoFileName())
 		if err != nil {
 			return nil, errcat.NoDaemonLogs.New(err)
