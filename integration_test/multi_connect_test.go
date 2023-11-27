@@ -137,11 +137,11 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 
 	st := itest.TelepresenceStatusOk(ctx1, "--use", n1)
 	require.Equal(st.UserDaemon.Namespace, ns1)
-	name1 := st.UserDaemon.ConnectionName
+	name1 := st.UserDaemon.Name
 
 	st = itest.TelepresenceStatusOk(ctx1, "--use", n2)
 	require.Equal(st.UserDaemon.Namespace, ns2)
-	name2 := st.UserDaemon.ConnectionName
+	name2 := st.UserDaemon.Name
 
 	cacheDir := filelocation.AppUserCacheDir(ctx1)
 	var di daemon.Info

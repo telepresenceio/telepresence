@@ -3,6 +3,7 @@ package integration_test
 import (
 	"context"
 	goRuntime "runtime"
+	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -50,7 +51,7 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 	status := itest.TelepresenceStatusOk(ctx)
 	ud := status.UserDaemon
 	s.True(ud.Running)
-	s.Equal(ud.Name, "OSS Daemon in container")
+	s.True(strings.HasSuffix(ud.Name, s.AppNamespace()+"-cn"), "ends with suffix <namespace>-cn")
 	s.Equal(ud.Status, "Connected")
 }
 

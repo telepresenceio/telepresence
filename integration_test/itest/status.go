@@ -12,9 +12,15 @@ import (
 )
 
 type StatusResponse struct {
-	RootDaemon cmd.RootDaemonStatus `json:"root_daemon,omitempty"`
-	UserDaemon cmd.UserDaemonStatus `json:"user_daemon,omitempty"`
-	Error      string               `json:"err,omitempty"`
+	RootDaemon          *cmd.RootDaemonStatus          `json:"root_daemon,omitempty"`
+	UserDaemon          *cmd.UserDaemonStatus          `json:"user_daemon,omitempty"`
+	ContainerizedDaemon *cmd.ContainerizedDaemonStatus `json:"daemon,omitempty"`
+	Connections         []struct {
+		RootDaemon          *cmd.RootDaemonStatus          `json:"root_daemon,omitempty"`
+		UserDaemon          *cmd.UserDaemonStatus          `json:"user_daemon,omitempty"`
+		ContainerizedDaemon *cmd.ContainerizedDaemonStatus `json:"daemon,omitempty"`
+	} `json:"connections,omitempty"`
+	Error string `json:"err,omitempty"`
 }
 
 func TelepresenceStatus(ctx context.Context, args ...string) (*StatusResponse, error) {
@@ -31,6 +37,16 @@ func TelepresenceStatus(ctx context.Context, args ...string) (*StatusResponse, e
 	}
 	if jErr != nil {
 		return nil, jErr
+	}
+	if cd := status.ContainerizedDaemon; cd != nil {
+		status.UserDaemon = cd.UserDaemonStatus
+		status.RootDaemon = &cmd.RootDaemonStatus{
+			Running:      cd.Running,
+			Name:         cd.Name,
+			Version:      cd.Version,
+			DNS:          cd.DNS,
+			RoutingSnake: cd.RoutingSnake,
+		}
 	}
 	return &status, nil
 }
