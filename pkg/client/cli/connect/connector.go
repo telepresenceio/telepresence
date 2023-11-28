@@ -199,10 +199,13 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 		if ud.Containerized() {
 			ctx = docker.EnableClient(ctx)
 			cr.Docker = true
-		} else if cr.Docker {
-			return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
 		}
-		return ctx, ud, nil
+		if ud.Containerized() == cr.Docker {
+			return ctx, ud, nil
+		}
+		// A daemon running on the host does not fulfill a request for a containerized daemon. They can
+		// coexist though.
+		err = os.ErrNotExist
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return ctx, nil, errcat.NoDaemonLogs.New(err)

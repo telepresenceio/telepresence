@@ -55,12 +55,11 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 	s.Equal(ud.Status, "Connected")
 }
 
-func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonConflict() {
+func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonNoConflict() {
 	ctx := s.Context()
 	s.TelepresenceConnect(ctx)
-	_, stdErr, err := itest.Telepresence(ctx, "connect", "--docker", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
-	s.Error(err)
-	s.Contains(stdErr, "option --docker cannot be used as long as a daemon is running on the host")
+	_, _, err := itest.Telepresence(ctx, "connect", "--docker", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+	s.NoError(err)
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {

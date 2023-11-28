@@ -34,6 +34,12 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: It is now possible use a host-based connection and containerized connections simultaneously.
+        body: >-
+          Only one host-based connection can exist because that connection will alter the DNS to reflect the namespace
+          of the connection. but it's now possible to create additional connections using <code>--docker</code> while
+          retaining the host-based connection.
+      - type: feature
         title: Ability to set the hostname of a containerized daemon.
         body: >-
           The hostname of a containerized daemon defaults to be the container's ID in Docker. You now can override the
