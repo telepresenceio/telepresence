@@ -66,22 +66,22 @@ items:
           The telepresence helm installer will no longer discover and convert workloads that were modified by versions
           prior to 2.6.0. The traffic manager will and no longer support the muxed tunnels used in versions prior to
           2.5.0.
+      - type: feature
+        title: Brew now supports MacOS (amd64/arm64) / Linux (amd64)
+        body: >-
+          The brew formula can now dynamically support MacOS (amd64/arm64) / Linux (amd64) in a single formula
+        docs: https://github.com/datawire/homebrew-blackbird/issues/19
   - version: 2.17.0
     date: "2023-11-14"
     notes:
       - type: feature
         title: Additional Prometheus metrics to track intercept/connect activity
         body: >-
-          This feature adds the following metrics to the Prometheus endpoint: <code>connect_count</code>, 
-          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code. 
-          These are labeled by client/install_id. 
-          Additionally, the <code>intercept_count</code> metric has been renamed to <code>active_intercept_count</code> 
+          This feature adds the following metrics to the Prometheus endpoint: <code>connect_count</code>,
+          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code.
+          These are labeled by client/install_id.
+          Additionally, the <code>intercept_count</code> metric has been renamed to <code>active_intercept_count</code>
           for clarity.
-      - type: feature
-        title: Brew now supports MacOS (amd64/arm64) / Linux (amd64)
-        body: >-
-          The brew formula can now dynamically support MacOS (amd64/arm64) / Linux (amd64) in a single formula
-        docs: https://github.com/datawire/homebrew-blackbird/issues/19
       - type: feature
         title: Make the Telepresence client docker image configurable.
         body: >-
