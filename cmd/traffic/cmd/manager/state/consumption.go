@@ -35,8 +35,16 @@ func (m *SessionConsumptionMetrics) ConnectDuration() time.Duration {
 	return time.Duration(atomic.LoadInt64(&m.connectDuration))
 }
 
+func (m *SessionConsumptionMetrics) SetConnectDuration(d time.Duration) {
+	atomic.StoreInt64(&m.connectDuration, int64(d))
+}
+
 func (m *SessionConsumptionMetrics) LastUpdate() time.Time {
 	return time.Unix(0, atomic.LoadInt64(&m.lastUpdate))
+}
+
+func (m *SessionConsumptionMetrics) SetLastUpdate(t time.Time) {
+	atomic.StoreInt64(&m.lastUpdate, t.UnixNano())
 }
 
 func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumptionMetrics {
@@ -79,7 +87,7 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 	now := time.Now()
 	wasInterrupted := now.After(lu.Add(SessionConsumptionMetricsStaleTTL))
 	if !wasInterrupted { // If it wasn't stale, we want to count duration since last metric update.
-		atomic.AddInt64(&scm.connectDuration, int64(now.Sub(lu)))
+		scm.SetConnectDuration(now.Sub(lu))
 	}
-	atomic.StoreInt64(&scm.lastUpdate, now.UnixNano())
+	scm.SetLastUpdate(now)
 }

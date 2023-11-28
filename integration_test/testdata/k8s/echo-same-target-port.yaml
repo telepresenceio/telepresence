@@ -1,0 +1,42 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-stp
+spec:
+  type: ClusterIP
+  selector:
+    service: echo-stp
+  ports:
+    - name: eighty
+      port: 80
+      targetPort: 8080
+    - name: eighty-eighty
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-stp
+  labels:
+    service: echo-stp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: echo-stp
+  template:
+    metadata:
+      labels:
+        service: echo-stp
+    spec:
+      containers:
+        - name: echo-stp
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

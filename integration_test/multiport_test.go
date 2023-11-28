@@ -185,3 +185,30 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 		wg.Wait()
 	})
 }
+
+// TestSameContainerPort tests the use-case where multiple services using
+// the same container port.
+func (s *connectedSuite) Test_SameContainerPort() {
+	ctx := s.Context()
+	dep := "echo-stp"
+	s.ApplyApp(ctx, "echo-same-target-port", "deploy/"+dep)
+	defer s.KubectlOk(ctx, "delete", "deploy", dep)
+
+	portTest := func(svcPort string) {
+		ctx := s.Context()
+		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, dep)
+		defer cancel()
+		itest.TelepresenceOk(ctx, "intercept", "--mount=false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
+		defer itest.TelepresenceOk(ctx, "leave", dep)
+
+		// Both ports are now intercepted because the intercept is on the container port
+		itest.PingInterceptedEchoServer(ctx, dep, "80")
+		itest.PingInterceptedEchoServer(ctx, dep, "8080")
+	}
+	s.Run("port 80", func() {
+		portTest("eighty")
+	})
+	s.Run("port 8080", func() {
+		portTest("eighty-eighty")
+	})
+}

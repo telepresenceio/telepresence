@@ -8,7 +8,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -16,7 +15,7 @@ import (
 
 type fwdState struct {
 	*simpleState
-	intercept  *agentconfig.Intercept
+	intercept  InterceptTarget
 	forwarder  forwarder.Interceptor
 	mountPoint string
 	env        map[string]string
@@ -24,7 +23,7 @@ type fwdState struct {
 
 // NewInterceptState creates a InterceptState that performs intercepts by using an Interceptor which indiscriminately
 // intercepts all traffic to the port that it forwards.
-func (s *simpleState) NewInterceptState(forwarder forwarder.Interceptor, intercept *agentconfig.Intercept, mountPoint string, env map[string]string) InterceptState {
+func (s *simpleState) NewInterceptState(forwarder forwarder.Interceptor, intercept InterceptTarget, mountPoint string, env map[string]string) InterceptState {
 	return &fwdState{
 		simpleState: s,
 		mountPoint:  mountPoint,
@@ -34,7 +33,7 @@ func (s *simpleState) NewInterceptState(forwarder forwarder.Interceptor, interce
 	}
 }
 
-func (fs *fwdState) InterceptConfig() *agentconfig.Intercept {
+func (fs *fwdState) Target() InterceptTarget {
 	return fs.intercept
 }
 

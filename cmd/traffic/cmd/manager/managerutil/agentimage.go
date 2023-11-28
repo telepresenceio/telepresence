@@ -3,6 +3,7 @@ package managerutil
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/datawire/dlib/dlog"
@@ -49,6 +50,13 @@ func WithResolvedAgentImageRetriever(ctx context.Context, ir ImageRetriever) con
 	return context.WithValue(ctx, irKey{}, ir)
 }
 
+func GetAgentImageRetriever(ctx context.Context) ImageRetriever {
+	if ir, ok := ctx.Value(irKey{}).(ImageRetriever); ok {
+		return ir
+	}
+	return nil
+}
+
 // GetAgentImage returns the fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.7.4",
 // or an empty string if no agent image has been configured.
 func GetAgentImage(ctx context.Context) string {
@@ -56,5 +64,6 @@ func GetAgentImage(ctx context.Context) string {
 		return ir.GetImage()
 	}
 	// The code isn't doing what it's supposed to do during startup.
+	dlog.Error(ctx, string(debug.Stack()))
 	panic("no ImageRetriever has been configured")
 }

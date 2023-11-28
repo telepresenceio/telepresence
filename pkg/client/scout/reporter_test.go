@@ -334,13 +334,9 @@ func TestInstallID(t *testing.T) {
 
 func TestReport(t *testing.T) {
 	const (
-		mockVersion     = "v2.4.5-test"
-		mockApplication = "telepresence2"
-		mockInstallID   = "00000000-1111-2222-3333-444444444444"
-		mockMode        = "test-mode"
-		mockOS          = "linux"
-		mockARCH        = "amd64"
-		mockAction      = "test-action"
+		mockInstallID = "00000000-1111-2222-3333-444444444444"
+		mockMode      = "test-mode"
+		mockAction    = "test-action"
 	)
 	type testcase struct {
 		InputEnv         map[string]string
@@ -353,8 +349,8 @@ func TestReport(t *testing.T) {
 			ExpectedMetadata: map[string]any{
 				"action": mockAction,
 				"mode":   mockMode,
-				"goos":   mockOS,
-				"goarch": mockARCH,
+				"goos":   runtime.GOOS,
+				"goarch": runtime.GOARCH,
 			},
 		},
 		"with-additional-scout-meta": {
@@ -371,8 +367,8 @@ func TestReport(t *testing.T) {
 			ExpectedMetadata: map[string]any{
 				"action":        mockAction,
 				"mode":          mockMode,
-				"goos":          mockOS,
-				"goarch":        mockARCH,
+				"goos":          runtime.GOOS,
+				"goarch":        runtime.GOARCH,
 				"extra_field_1": "extra value 1",
 				"extra_field_2": "extra value 2",
 			},
@@ -385,8 +381,8 @@ func TestReport(t *testing.T) {
 			ExpectedMetadata: map[string]any{
 				"action":        mockAction,
 				"mode":          mockMode,
-				"goos":          mockOS,
-				"goarch":        mockARCH,
+				"goos":          runtime.GOOS,
+				"goarch":        runtime.GOARCH,
 				"extra_field_1": "extra value 1",
 				"extra_field_2": "extra value 2",
 			},
@@ -405,8 +401,8 @@ func TestReport(t *testing.T) {
 			ExpectedMetadata: map[string]any{
 				"action":        mockAction,
 				"mode":          mockMode,
-				"goos":          mockOS,
-				"goarch":        mockARCH,
+				"goos":          runtime.GOOS,
+				"goarch":        runtime.GOARCH,
 				"extra_field_1": "extra value 1",
 			},
 		},
@@ -420,8 +416,8 @@ func TestReport(t *testing.T) {
 			ExpectedMetadata: map[string]any{
 				"action": mockAction,
 				"mode":   "overridden mode",
-				"goos":   mockOS,
-				"goarch": mockARCH,
+				"goos":   runtime.GOOS,
+				"goarch": runtime.GOARCH,
 			},
 		},
 		"with-report-annotators": {
@@ -445,8 +441,8 @@ func TestReport(t *testing.T) {
 			ExpectedMetadata: map[string]any{
 				"action":      "overridden action",
 				"mode":        "overridden mode",
-				"goos":        mockOS,
-				"goarch":      mockARCH,
+				"goos":        runtime.GOOS,
+				"goarch":      runtime.GOARCH,
 				"extra_field": "extra value", // Not overridden by annotation
 				"annotation":  "annotated value",
 			},
@@ -488,19 +484,12 @@ func TestReport(t *testing.T) {
 			for k, v := range tcData.InputEnv {
 				os.Setenv(k, v)
 			}
-			scout := &reporter{
-				buffer: make(chan bufEntry, 40),
-				reporter: &metriton.Reporter{
-					Application: mockApplication,
-					Version:     mockVersion,
-					GetInstallID: func(r *metriton.Reporter) (string, error) {
-						return mockInstallID, nil
-					},
-					Endpoint: testServer.URL,
-				},
-				reportAnnotators: tcData.ReportAnnotators,
+
+			setInstallIDFromFilesystem = func(ctx context.Context, installType InstallType, md map[string]any) (string, error) {
+				return mockInstallID, nil
 			}
-			scout.initialize(ctx, mockMode, mockOS, mockARCH)
+			scout := NewReporterForInstallType(ctx, mockMode, CLI, tcData.ReportAnnotators, nil).(*reporter)
+			scout.reporter.Endpoint = testServer.URL
 
 			// Start scout report processing...
 			sc, cancel := context.WithCancel(dcontext.WithSoftness(ctx))

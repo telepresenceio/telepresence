@@ -8,7 +8,8 @@ import (
 
 func TestOsMetadata(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
-	osMeta := getOsMetadata(ctx)
+	osMeta := make(map[string]any)
+	setOsMetadata(ctx, osMeta)
 	for _, k := range []string{"os_version", "os_name"} {
 		v := osMeta[k]
 		if v == "" || v == "unknown" {

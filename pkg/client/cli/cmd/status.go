@@ -56,10 +56,10 @@ type UserDaemonStatus struct {
 	Namespace         string                   `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	ManagerNamespace  string                   `json:"manager_namespace,omitempty" yaml:"manager_namespace,omitempty"`
 	MappedNamespaces  []string                 `json:"mapped_namespaces,omitempty" yaml:"mapped_namespaces,omitempty"`
-	Intercepts        []connectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
+	Intercepts        []ConnectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
 }
 
-type connectStatusIntercept struct {
+type ConnectStatusIntercept struct {
 	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
 	Client string `json:"client,omitempty" yaml:"client,omitempty"`
 }
@@ -176,7 +176,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 		us.KubernetesServer = status.ClusterServer
 		us.KubernetesContext = status.ClusterContext
 		for _, icept := range status.GetIntercepts().GetIntercepts() {
-			us.Intercepts = append(us.Intercepts, connectStatusIntercept{
+			us.Intercepts = append(us.Intercepts, ConnectStatusIntercept{
 				Name:   icept.Spec.Name,
 				Client: icept.Spec.Client,
 			})

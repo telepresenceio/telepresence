@@ -198,7 +198,7 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 func (s *cluster) tearDown(ctx context.Context) {
 	s.ensureQuit(ctx)
 	if s.kubeConfig != "" {
-		ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
+		ctx = WithWorkingDir(ctx, GetOSSRoot(ctx))
 		_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml"))
 		_ = Run(ctx, "kubectl", "delete", "--wait=false", "ns", "-l", "purpose=tp-cli-testing")
 	}
@@ -569,7 +569,7 @@ func (s *cluster) InstallTrafficManagerVersion(ctx context.Context, version stri
 func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]string) error {
 	settings := s.self.GetValuesForHelm(ctx, values, release)
 
-	ctx = WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "integration_test"))
+	ctx = WithWorkingDir(ctx, GetOSSRoot(ctx))
 	nss := GetNamespaces(ctx)
 	args := []string{"install", "-n", nss.Namespace, "--wait"}
 	args = append(args, settings...)
@@ -1011,7 +1011,7 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 	wg.Wait()
 }
 
-// StartLocalHttpEchoServerWithAddress is like StartLocalHttpEchoServer but binds to a specific host instead of localhost.
+// StartLocalHttpEchoServerWithHost is like StartLocalHttpEchoServer but binds to a specific host instead of localhost.
 func StartLocalHttpEchoServerWithHost(ctx context.Context, name string, host string) (int, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(ctx)
 	lc := net.ListenConfig{}

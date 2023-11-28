@@ -13,7 +13,9 @@ import (
 	dns2 "github.com/miekg/dns"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
@@ -193,6 +195,12 @@ func handleInterceptLoop(ctx context.Context, snapshots <-chan *rpc.InterceptInf
 			for _, review := range reviews {
 				review.Session = session
 				if _, err := manager.ReviewIntercept(ctx, review); err != nil {
+					if status.Code(err) == codes.NotFound {
+						// An intercept may be removed after a snapshot has arrived and before
+						// the next snapshot. This is not an error. We can safely assume that
+						// a new snapshot will arrive.
+						continue
+					}
 					return err
 				}
 			}

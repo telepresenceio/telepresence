@@ -144,9 +144,11 @@ func (r *runner) RunTests(c context.Context) { //nolint:gocognit
 				t := getT(c)
 				for _, f := range r.withCluster {
 					s := f(c)
-					t.Run(s.SuiteName(), func(t *testing.T) {
-						suite.Run(t, f(c))
-					})
+					if suiteEnabled(c, s) {
+						t.Run(s.SuiteName(), func(t *testing.T) {
+							suite.Run(t, f(c))
+						})
+					}
 				}
 			}()
 			for s, sr := range r.withSuffix {
