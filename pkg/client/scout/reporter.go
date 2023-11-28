@@ -69,9 +69,11 @@ var idFiles = map[InstallType]string{ //nolint:gochecknoglobals // constant
 	Docker: "docker_id",
 }
 
-// getInstallIDFromFilesystem returns the telepresence install ID, and also sets the reporter base
-// metadata to include any conflicting install IDs written by old versions of the product.
-func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter, installType InstallType) (string, error) {
+// setInstallIDFromFilesystem sets the telepresence install ID in the given map, including any conflicting
+// install IDs written by old versions of the product.
+//
+//nolint:gochecknoglobals // can be overridden for test purposes
+var setInstallIDFromFilesystem = func(ctx context.Context, installType InstallType, md map[string]any) (string, error) {
 	type filecacheEntry struct {
 		Body string
 		Err  error
@@ -146,7 +148,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 		}
 	}
 
-	reporter.BaseMetadata["new_install"] = len(allIDs) == 0
+	md["new_install"] = len(allIDs) == 0
 
 	// We don't want to add the extra ids until we've decided if it's a new install or not
 	// this is because we'd like a new install of type A to be reported even if there's already
@@ -167,7 +169,7 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 
 	for product, id := range allIDs {
 		if id != retID {
-			reporter.BaseMetadata["install_id_"+product] = id
+			md["install_id_"+product] = id
 		}
 	}
 	return retID, nil
@@ -178,23 +180,28 @@ func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter
 const bufferSize = 40
 
 func NewReporterForInstallType(ctx context.Context, mode string, installType InstallType, reportAnnotators []ReportAnnotator, reportMutators []ReportMutator) Reporter {
-	r := &reporter{
-		reporter: &metriton.Reporter{
-			Application: "telepresence2",
-			Version:     client.Version(),
-			GetInstallID: func(r *metriton.Reporter) (string, error) {
-				id, err := getInstallIDFromFilesystem(ctx, r, installType)
-				if err != nil {
-					id = "00000000-0000-0000-0000-000000000000"
-					r.BaseMetadata["new_install"] = true
-					r.BaseMetadata["install_id_error"] = err.Error()
-				}
-				return id, nil
-			},
-		},
-		reportAnnotators: reportAnnotators,
-		reportMutators:   reportMutators,
+	md := make(map[string]any, 12)
+	setOsMetadata(ctx, md)
+	installID, err := setInstallIDFromFilesystem(ctx, installType, md)
+	if err != nil {
+		installID = "00000000-0000-0000-0000-000000000000"
+		md["new_install"] = true
+		md["install_id_error"] = err.Error()
 	}
+	// Fixed (growing) metadata passed with every report
+	md["mode"] = mode
+	md["trace_id"] = uuid.NewString() //  It's sent as JSON so might as well convert it to a string once here.
+	md["goos"] = runtime.GOOS
+	md["goarch"] = runtime.GOARCH
+
+	// Discover how Telepresence was installed based on the binary's location
+	installMethod, err := client.GetInstallMechanism()
+	if err != nil {
+		dlog.Errorf(ctx, "scout error getting executable: %s", err)
+	}
+	md["install_method"] = installMethod
+	setDefaultEnvironmentMetadata(md)
+
 	if env := client.GetEnv(ctx); env != nil && !env.ScoutDisable {
 		// Some tests disable scout reporting by setting the host IP to 127.0.0.1. This spams
 		// the logs with lots of "connection refused" messages and makes them hard to read.
@@ -208,8 +215,21 @@ func NewReporterForInstallType(ctx context.Context, mode string, installType Ins
 			}
 		}
 	}
-	r.initialize(ctx, mode, runtime.GOOS, runtime.GOARCH)
-	return r
+
+	return &reporter{
+		reporter: &metriton.Reporter{
+			Application: "telepresence2",
+			Version:     client.Version(),
+			GetInstallID: func(r *metriton.Reporter) (string, error) {
+				return installID, nil
+			},
+			BaseMetadata: md,
+		},
+		reportAnnotators: reportAnnotators,
+		reportMutators:   reportMutators,
+		buffer:           make(chan bufEntry, bufferSize),
+		done:             make(chan struct{}),
+	}
 }
 
 // DefaultReportAnnotators are the default annotator functions that the NewReporter function will pass to NewReporterForInstallType.
@@ -265,30 +285,6 @@ func SetMetadatum(ctx context.Context, key string, value any) {
 	if r := getReporter(ctx); r != nil {
 		r.SetMetadatum(ctx, key, value)
 	}
-}
-
-// initialization broken out or constructor for the benefit of testing.
-func (r *reporter) initialize(ctx context.Context, mode, goos, goarch string) {
-	r.buffer = make(chan bufEntry, bufferSize)
-	r.done = make(chan struct{})
-
-	// Fixed (growing) metadata passed with every report
-	baseMeta := getOsMetadata(ctx)
-	baseMeta["mode"] = mode
-	baseMeta["trace_id"] = uuid.NewString() //  It's sent as JSON so might as well convert it to a string once here.
-	baseMeta["goos"] = goos
-	baseMeta["goarch"] = goarch
-
-	// Discover how Telepresence was installed based on the binary's location
-	installMethod, err := client.GetInstallMechanism()
-	if err != nil {
-		dlog.Errorf(ctx, "scout error getting executable: %s", err)
-	}
-	baseMeta["install_method"] = installMethod
-	for k, v := range getDefaultEnvironmentMetadata() {
-		baseMeta[k] = v
-	}
-	r.reporter.BaseMetadata = baseMeta
 }
 
 func (r *reporter) InstallID() string {
@@ -399,9 +395,8 @@ func (r *reporter) doReport(ctx context.Context, be *bufEntry) {
 	}
 }
 
-// Returns a metadata map containing all the additional environment variables to be reported.
-func getDefaultEnvironmentMetadata() map[string]string {
-	metadata := map[string]string{}
+// setDefaultEnvironmentMetadata sets all the additional environment variables to be reported.
+func setDefaultEnvironmentMetadata(metadata map[string]any) {
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
 		if strings.HasPrefix(pair[0], EnvironmentMetadataPrefix) {
@@ -409,5 +404,4 @@ func getDefaultEnvironmentMetadata() map[string]string {
 			metadata[key] = pair[1]
 		}
 	}
-	return metadata
 }

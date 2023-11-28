@@ -31,6 +31,11 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		// No need to close listener. It's closed by the dns server.
+		defer func() {
+			c, cancel := context.WithTimeout(context.WithoutCancel(c), 5*time.Second)
+			_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, nil)
+			cancel()
+		}()
 		s.processSearchPaths(g, s.updateRouterDNS, dev)
 		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
 	})
