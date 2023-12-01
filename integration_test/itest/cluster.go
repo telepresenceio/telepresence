@@ -837,9 +837,7 @@ func TelepresenceDisconnectOk(ctx context.Context, args ...string) {
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Daemons disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Daemons are already disconnected") ||
-		strings.Contains(stdout, "Telepresence Daemons have already quit"))
+	assert.True(t, strings.Contains(stdout, "Disconnected") || strings.Contains(stdout, "Not connected"))
 	if t.Failed() {
 		t.Logf("Disconnect output was %q", stdout)
 	}

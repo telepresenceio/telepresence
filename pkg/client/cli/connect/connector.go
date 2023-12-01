@@ -119,29 +119,18 @@ func Quit(ctx context.Context) {
 
 // Disconnect disconnects from a session in the user daemon.
 func Disconnect(ctx context.Context) {
-	stdout := output.Out(ctx)
-	ud := daemon.GetUserClient(ctx)
-	ioutil.Print(stdout, "Telepresence Daemon")
-	if ud.Containerized() {
-		ioutil.Print(stdout, " ") // There's only one daemon.
+	if ud := daemon.GetUserClient(ctx); ud == nil {
+		ioutil.Println(output.Out(ctx), "Not connected")
 	} else {
-		ioutil.Print(stdout, "s ") // Plural, because both user-daemon and root-daemon disconnects
-	}
-	if ud == nil {
-		ioutil.Println(stdout, "have already quit")
-		quitRootDaemon(ctx) // Can't have a root daemon unless there's a user daemon.
-		return
-	}
-
-	ioutil.Print(stdout, "disconnecting...")
-	if _, err := ud.Disconnect(ctx, &emptypb.Empty{}); err != nil {
-		if status.Code(err) != codes.Unavailable {
-			ioutil.Println(output.Err(ctx), err.Error())
-		} else {
-			ioutil.Println(stdout, "are already disconnected")
+		_, err := ud.Disconnect(ctx, &emptypb.Empty{})
+		switch {
+		case err == nil:
+			ioutil.Println(output.Out(ctx), "Disconnected")
+		case status.Code(err) == codes.Unavailable:
+			ioutil.Println(output.Out(ctx), "Not connected")
+		default:
+			ioutil.Printf(output.Err(ctx), "failed to disconnect: %v\n", err)
 		}
-	} else {
-		ioutil.Println(stdout, "done")
 	}
 }
 
