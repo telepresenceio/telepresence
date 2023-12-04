@@ -30,6 +30,15 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.17.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Keep telepresence-agents configmap in sync with pod states.
+        body: >-
+          An intercept attempt that resulted in a timeout due to failure of injecting the traffic-agent left the
+          <code>telepresence-agents</code> configmap in a state that indicated that an agent had been added, which
+          caused problems for subsequent intercepts after the problem causing the first failure had been fixed.
   - version: 2.17.1
     date: (TBD)
     notes:

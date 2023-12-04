@@ -47,11 +47,11 @@ import (
 // It's expected that the client that makes the call will update any unqualified service port identifiers
 // with the ones in the returned PreparedIntercept.
 func (s *state) PrepareIntercept(
-	ctx context.Context,
+	parentCtx context.Context,
 	cr *managerrpc.CreateInterceptRequest,
 	replacePolicy agentconfig.ReplacePolicy,
 ) (pi *managerrpc.PreparedIntercept, err error) {
-	ctx, cancel := context.WithTimeout(ctx, managerutil.GetEnv(ctx).AgentArrivalTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
 	defer cancel()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
 	defer tracing.EndAndRecord(span, err)
@@ -88,6 +88,11 @@ func (s *state) PrepareIntercept(
 		return interceptError(err)
 	}
 	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace, failedCreateCh); err != nil {
+		// If no agent arrives, then drop its entry from the configmap. This ensures that there
+		// are no false positives the next time an intercept is attempted.
+		if dropErr := s.dropAgentConfig(parentCtx, wl); dropErr != nil {
+			dlog.Errorf(ctx, "failed to remove configmap entry for %s.%s: %v", wl.GetName(), wl.GetNamespace(), dropErr)
+		}
 		return interceptError(err)
 	}
 	return &managerrpc.PreparedIntercept{
@@ -112,6 +117,27 @@ func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error)
 	} else if extended {
 		err = errcat.User.New("traffic-manager does not support intercepts that require an extended traffic-agent")
 	}
+	return err
+}
+
+func (s *state) dropAgentConfig(
+	ctx context.Context,
+	wl k8sapi.Workload,
+) error {
+	ns := wl.GetNamespace()
+	cl, _ := s.cfgMapLocks.LoadOrCompute(ns, func() *sync.Mutex {
+		return &sync.Mutex{}
+	})
+	cl.Lock()
+	defer cl.Unlock()
+
+	cmAPI := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
+	cm, err := loadConfigMap(ctx, cmAPI, ns)
+	if err != nil {
+		return err
+	}
+	delete(cm.Data, wl.GetName())
+	_, err = cmAPI.Update(ctx, cm, meta.UpdateOptions{})
 	return err
 }
 
