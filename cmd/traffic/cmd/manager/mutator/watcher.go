@@ -66,10 +66,95 @@ func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Wo
 	return ac, wl, nil
 }
 
-func triggerRollout(ctx context.Context, wl k8sapi.Workload) {
+func agentContainer(pod *core.Pod) *core.Container {
+	cns := pod.Spec.Containers
+	for i := range cns {
+		cn := &cns[i]
+		if cn.Name == agentconfig.ContainerName {
+			return cn
+		}
+	}
+	return nil
+}
+
+func isPodRunning(pod *core.Pod) bool {
+	for _, cn := range pod.Status.ContainerStatuses {
+		if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+			// At least one container is running.
+			return true
+		}
+	}
+	return false
+}
+
+// isRolloutNeeded checks if the agent's entry in telepresence-agents matches the actual state of the
+// pods. If it does, then there's no reason to trigger a rollout.
+func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) bool {
+	podLabels := wl.GetPodTemplate().GetObjectMeta().GetLabels()
+	if len(podLabels) == 0 {
+		// Have never seen this, but if it happens, then rollout only if an agent is desired
+		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. Pod template has no pod labels",
+			wl.GetName(), wl.GetNamespace())
+		return true
+	}
+
+	pods, err := k8sapi.Pods(ctx, wl.GetNamespace(), podLabels)
+	if err != nil {
+		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. Unable to retrieve current pods: %v",
+			wl.GetName(), wl.GetNamespace(), err)
+		return true
+	}
+
+	runningPods := 0
+	for _, podObj := range pods {
+		pod, ok := k8sapi.PodImpl(podObj)
+		if !(ok && isPodRunning(pod)) {
+			continue
+		}
+		runningPods++
+
+		podAc := agentContainer(pod)
+		if ac == nil {
+			if podAc == nil {
+				continue
+			}
+			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. No agent is desired but the pod %s has one",
+				wl.GetName(), wl.GetNamespace(), pod.GetName())
+			return true
+		}
+		if podAc == nil {
+			// Rollout because an agent is desired but the pod doesn't have one
+			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An agent is desired but the pod %s doesn't have one",
+				wl.GetName(), wl.GetNamespace(), pod.GetName())
+			return true
+		}
+		desiredAc := agentconfig.AgentContainer(ctx, pod, ac)
+		if !containerEqual(podAc, desiredAc) {
+			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired agent is not equal to the existing agent in pod %s",
+				wl.GetName(), wl.GetNamespace(), pod.GetName())
+			return true
+		}
+	}
+	// Rollout if there are no running pods
+	if runningPods == 0 && ac != nil {
+		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An agent is desired and there are no pods",
+			wl.GetName(), wl.GetNamespace())
+		return true
+	}
+	dlog.Debugf(ctx, "Rollout of %s.%s is not necessary. All pods have the desired agent state",
+		wl.GetName(), wl.GetNamespace())
+	return false
+}
+
+func triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) {
+	if !isRolloutNeeded(ctx, wl, ac) {
+		return
+	}
+
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.triggerRollout")
 	defer span.End()
 	tracing.RecordWorkloadInfo(span, wl)
+
 	if rs, ok := k8sapi.ReplicaSetImpl(wl); ok {
 		triggerRolloutReplicaSet(ctx, wl, rs, span)
 		return
@@ -304,7 +389,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 		}
 		return
 	}
-	triggerRollout(ctx, wl)
+	triggerRollout(ctx, wl, ac)
 }
 
 func (*configWatcher) handleDelete(ctx context.Context, e entry) {
@@ -328,7 +413,7 @@ func (*configWatcher) handleDelete(ctx context.Context, e entry) {
 		// Deleted before it was generated or manually added, just ignore
 		return
 	}
-	triggerRollout(ctx, wl)
+	triggerRollout(ctx, wl, nil)
 }
 
 func (c *configWatcher) Get(key, ns string) (agentconfig.SidecarExt, error) {
@@ -864,7 +949,7 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 				// Deleted before it was generated or manually added, just ignore
 				continue
 			}
-			triggerRollout(ctx, wl)
+			triggerRollout(ctx, wl, nil)
 		}
 		if err := api.ConfigMaps(ns).Delete(ctx, agentconfig.ConfigMap, *now); err != nil {
 			dlog.Errorf(ctx, "unable to delete ConfigMap %s-%s: %v", agentconfig.ConfigMap, ns, err)
