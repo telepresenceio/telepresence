@@ -51,6 +51,8 @@ spec:
           {{- end }}
           - name: MUTATOR_WEBHOOK_PORT
             value: {{ .agentInjector.webhook.port | quote }}
+          - name: AGENT_INJECTOR_SECRET
+            value: {{ .agentInjector.secret.name }}
           {{- with .tracing }}
           {{- if .grpcPort }}
           - name: TRACING_GRPC_PORT
@@ -238,11 +240,8 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          volumeMounts:
-          - name: tls
-            mountPath: /var/run/secrets/tls
-            readOnly: true
         {{- if and .trafficManager .trafficManager.mountsTemplate }}
+          volumeMounts:
           {{- template "traffic-manager-mounts" . }}
         {{- end }}
       {{- with .nodeSelector }}
@@ -260,12 +259,8 @@ spec:
       {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
-      volumes:
-      - name: tls
-        secret:
-          defaultMode: 420
-          secretName: {{ .agentInjector.secret.name }}
     {{- if and .trafficManager .trafficManager.volsTemplate }}
+      volumes:
       {{- template "traffic-manager-vols" . }}
     {{- end }}
       serviceAccount: traffic-manager

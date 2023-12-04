@@ -1,14 +1,16 @@
 package mutator
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
-	"os"
-	"path/filepath"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -20,14 +22,13 @@ import (
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
 const (
-	tlsDir          = `/var/run/secrets/tls`
 	tlsCertFile     = `tls.crt`
 	tlsKeyFile      = `tls.key`
 	jsonContentType = `application/json`
@@ -51,26 +52,60 @@ func (p PatchOps) String() string {
 
 type mutatorFunc func(context.Context, *admission.AdmissionRequest) (PatchOps, error)
 
-func ServeMutator(ctx context.Context) error {
-	certPath := filepath.Join(tlsDir, tlsCertFile)
-	keyPath := filepath.Join(tlsDir, tlsKeyFile)
-	missing := ""
-	if _, err := os.Stat(certPath); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		missing = certPath
-	} else if _, err = os.Stat(keyPath); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		missing = keyPath
+// tlsListener rereads the certificate from the mutator-webhook secret every time
+// it creates a TLS connection, thereby ensuring that it uses a certificate that
+// is up-to-date with the one used by the webhook caller.
+type tlsListener struct {
+	net.Listener
+	sync.Mutex
+	ctx         context.Context
+	config      tls.Config
+	certPEM     []byte
+	keyPEM      []byte
+	tcpListener net.Listener
+}
+
+func (l *tlsListener) Accept() (net.Conn, error) {
+	conn, err := l.tcpListener.Accept()
+	if err != nil {
+		return conn, err
 	}
-	if missing != "" {
-		dlog.Infof(ctx, "%q is not present so mutator service is disabled", missing)
-		return nil
+	return l.tlsConn(conn)
+}
+
+func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
+	// Because Listener is a convenience function, help out with
+	// this too.  This is not possible for the caller to set once
+	// we return a *tcp.Conn wrapping an inaccessible net.Conn.
+	// If callers don't want this, they can do things the manual
+	// way and tweak as needed. But this is what net/http does
+	// itself, so copy that. If net/http changes, we can change
+	// here too.
+	tcpConn := conn.(*net.TCPConn)
+	_ = tcpConn.SetKeepAlive(true)
+	_ = tcpConn.SetKeepAlivePeriod(3 * time.Minute)
+
+	newCertPEM, newKeyPEM, err := loadCert(l.ctx)
+	if err != nil {
+		return nil, err
 	}
 
+	l.Lock()
+	defer l.Unlock()
+	if !(bytes.Equal(newCertPEM, l.certPEM) && bytes.Equal(newKeyPEM, l.keyPEM)) {
+		dlog.Debug(l.ctx, "Replacing certificate")
+		cert, err := tls.X509KeyPair(newCertPEM, newKeyPEM)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create X509 key pair: %v", err)
+		}
+		l.config.Certificates[0] = cert
+		l.certPEM = newCertPEM
+		l.keyPEM = newKeyPEM
+	}
+	return tls.Server(tcpConn, &l.config), nil
+}
+
+func ServeMutator(ctx context.Context) error {
 	var ai AgentInjector
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
@@ -117,15 +152,54 @@ func ServeMutator(ctx context.Context) error {
 	wrapped := otelhttp.NewHandler(mux, "agent-injector", otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 		return operation + r.URL.Path
 	}))
-	server := &dhttp.ServerConfig{Handler: wrapped}
-	addr := fmt.Sprintf(":%d", managerutil.GetEnv(ctx).MutatorWebhookPort)
-
-	dlog.Infof(ctx, "Mutating webhook service is listening on %v", addr)
-	defer dlog.Info(ctx, "Mutating webhook service stopped")
-	if err = server.ListenAndServeTLS(ctx, addr, certPath, keyPath); err != nil {
-		return fmt.Errorf("mutating webhook service stopped. %w", err)
+	server := http.Server{
+		Handler: wrapped,
+		BaseContext: func(n net.Listener) context.Context {
+			return ctx
+		},
 	}
-	return nil
+	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", managerutil.GetEnv(ctx).MutatorWebhookPort))
+}
+
+func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
+	certPEM, keyPEM, err := loadCert(ctx)
+	if err != nil {
+		return err
+	}
+	defer dlog.Debug(ctx, "service stopped")
+	dlog.Debug(ctx, "service started")
+
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("failed to create TLS listener: %v", err)
+	}
+	lc := net.ListenConfig{}
+	tcpListener, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
+		return err
+	}
+	defer tcpListener.Close()
+
+	return s.Serve(
+		&tlsListener{
+			ctx:         ctx,
+			config:      tls.Config{Certificates: []tls.Certificate{cert}},
+			certPEM:     certPEM,
+			keyPEM:      keyPEM,
+			tcpListener: tcpListener,
+		},
+	)
+}
+
+func loadCert(ctx context.Context) (cert, key []byte, err error) {
+	env := managerutil.GetEnv(ctx)
+	ns := env.ManagerNamespace
+	sn := env.AgentInjectorSecret
+	s, err := k8sapi.GetK8sInterface(ctx).CoreV1().Secrets(ns).Get(ctx, sn, meta.GetOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to get %s.%s: %w", sn, ns, err)
+	}
+	return s.Data[tlsCertFile], s.Data[tlsKeyFile], nil
 }
 
 // Skip mutate requests in these namespaces.
