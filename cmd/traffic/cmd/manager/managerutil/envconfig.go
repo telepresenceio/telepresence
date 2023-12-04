@@ -58,6 +58,7 @@ type Env struct {
 	AgentResources           *core.ResourceRequirements  `env:"AGENT_RESOURCES,          parser=json-resources, default="`
 	AgentInitResources       *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
 	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string"`
+	AgentInjectorSecret      string                      `env:"AGENT_INJECTOR_SECRET,    parser=nonempty-string"`
 
 	ClientRoutingAlsoProxySubnets        []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets       []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`

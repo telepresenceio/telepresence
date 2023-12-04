@@ -168,3 +168,36 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 	}, 12*time.Second, 3*time.Second)
 	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
 }
+
+// Test_HelmUpgradeWebhookSecret tests that updating the webhook secret doesn't interfere with
+// intercept operations.
+// See https://github.com/telepresenceio/telepresence/issues/3442 for more info.
+func (s *singleServiceSuite) Test_HelmUpgradeWebhookSecret() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	// Uninstall the agent. We want to be sure that the webhook kicks in to inject it once
+	// we intercept.
+	func() {
+		// TODO: Uninstall should be CLI only and not require a traffic-manager connection
+		defer func() {
+			// Restore original user
+			itest.TelepresenceDisconnectOk(ctx)
+			s.TelepresenceConnect(ctx)
+		}()
+		itest.TelepresenceDisconnectOk(ctx)
+		s.TelepresenceConnect(itest.WithUser(ctx, "default"))
+		itest.TelepresenceOk(ctx, "uninstall", "--agent", s.ServiceName())
+	}()
+
+	s.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "agentInjector.certificate.regenerate=true,logLevel=debug"))
+	time.Sleep(5 * time.Second)
+
+	stdout := itest.TelepresenceOk(ctx, "intercept", s.ServiceName(), "--mount=false")
+	rq.Contains(stdout, "Using Deployment "+s.ServiceName())
+	rq.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
+		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
+	}, 12*time.Second, 3*time.Second)
+	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+}
