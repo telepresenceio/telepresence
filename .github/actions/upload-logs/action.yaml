@@ -19,7 +19,7 @@ runs:
       shell: bash
       name: Gather logs
     - name: Upload logs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         # If an environment variable LOG_SUFFIX is set, it will be appended to the log filename.
         name: ${{github.job}}-logs-${{ env.LOG_SUFFIX }}

@@ -36,7 +36,7 @@ runs:
         fi
         echo "KUBECONFIG=$KUBECONFIG" >> $GITHUB_OUTPUT
     - name: Create cluster
-      uses: datawire/infra-actions/provision-cluster@v0.2.0
+      uses: datawire/infra-actions/provision-cluster@v0.2.6
       with:
         distribution: ${{ inputs.cluster-distribution }}
         version: ${{ inputs.cluster-version }}

@@ -20,7 +20,7 @@ jobs:
           - windows-2019
     runs-on: ${{ matrix.runners }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-dependencies
@@ -37,7 +37,7 @@ jobs:
           path: build-output/release
           retention-days: 1
       - if: runner.os == 'Linux' && runner.arch == 'X64'
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
         with:
           platforms: linux/amd64,linux/arm64
       - if: runner.os == 'Linux' && runner.arch == 'X64'
@@ -106,7 +106,7 @@ jobs:
           - windows-2019
     runs-on: ${{ matrix.runners }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Test release
         uses: ./.github/actions/test-release
         with:

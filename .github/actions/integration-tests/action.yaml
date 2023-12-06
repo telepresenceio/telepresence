@@ -12,7 +12,7 @@ runs:
         DTEST_KUBECONFIG: "${{ inputs.kubeconfig }}"
         DTEST_REGISTRY: "docker.io/datawire"
         SCOUT_DISABLE: "1"
-      uses: nick-invision/retry@v2.8.2
+      uses: nick-fields/retry@v2
       with:
         max_attempts: 2
         timeout_minutes: 60

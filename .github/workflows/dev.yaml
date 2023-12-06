@@ -9,16 +9,17 @@ jobs:
     if: ${{ github.event.label.name == 'ok to test' }}
     steps:
       - name: Remove label
-        uses: andymckay/labeler@master
+        uses: buildsville/add-remove-label@v2.0.1
         with:
-          remove-labels: "ok to test"
-        if: always()
-      - uses: actions/checkout@v3
+          token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ok to test
+          type: remove
+      - uses: actions/checkout@v4
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
-          go-version: '~1.21.4'
+          go-version: stable
       - name: Build dev image
         run: |
           make save-tel2-image
@@ -39,11 +40,11 @@ jobs:
           - macOS-arm64
         clusters:
           - distribution: Kubeception
-            version: "1.26"
+            version: "1.27"
     runs-on: ${{ matrix.runners }}
     needs: "build_image"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
