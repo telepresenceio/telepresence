@@ -3,10 +3,20 @@ on:
   pull_request_target:
     types:
       - labeled
+
+env:
+  KUBECONFIG: ${{ github.workspace }}/kubeconfig.yaml
+  DTEST_KUBECONFIG: ${{ github.workspace }}/kubeconfig.yaml
+  TELEPRESENCE_REGISTRY: localhost:5000
+  DTEST_REGISTRY: localhost:5000
+  SCOUT_DISABLE: "1"
+
 jobs:
-  "build_image":
-    runs-on: ubuntu-latest
+  build_image:
     if: ${{ github.event.label.name == 'ok to test' }}
+    runs-on: ubuntu-latest
+    outputs:
+      telepresenceVersion: ${{ steps.build.outputs.version }}
     steps:
       - name: Remove label
         uses: buildsville/add-remove-label@v2.0.1
@@ -17,12 +27,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
+          fetch-depth: 0
+          show-progress: false
       - uses: actions/setup-go@v4
         with:
           go-version: stable
       - name: Build dev image
+        id: build
         run: |
           make save-tel2-image
+          echo "version=$(cat build-output/version.txt)" >> $GITHUB_OUTPUT
       - name: Upload image
         uses: actions/upload-artifact@v3
         with:
@@ -42,42 +56,67 @@ jobs:
           - distribution: Kubeception
             version: "1.27"
     runs-on: ${{ matrix.runners }}
-    needs: "build_image"
+    needs: build_image
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: ./.github/actions/install-dependencies
-        name: install dependencies
-      - uses: actions/download-artifact@v3
-        with:
-          name: image
-      - if: runner.os == 'Linux' && runner.arch == 'arm64'
-        name: install dependencies for arm64
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
+      - name: install dependencies for arm64
+        if: runner.os == 'Linux' && runner.arch == 'arm64'
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update -y
           sudo apt-get install -y socat gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make jq uidmap
-      - if: runner.os == 'Linux' && runner.arch == 'arm64'
-        name: install docker for arm64
+      - name: install docker for arm64
+        if: runner.os == 'Linux' && runner.arch == 'arm64'
         run: |
           curl -fsSL https://get.docker.com -o get-docker.sh
           sudo sh get-docker.sh
           dockerd-rootless-setuptool.sh install
-      - run: make build
-      - uses: ./.github/actions/prepare-cluster
+      - name: Build client
+        env:
+          TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
+        run: make build
+      - name: Build client image
+        if: runner.os == 'Linux'
+        env:
+          TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
+        run: make client-image
+      - name: Create cluster
+        uses: datawire/infra-actions/provision-cluster@v0.2.6
         with:
-          kubeception-token: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
+          kubeconfig: ${{ env.KUBECONFIG }}
+          kubeceptionToken: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           kubeceptionProfile: small
-          gke-credentials: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          tel-image: tel2-image.tar
-          cluster-distribution: ${{ matrix.clusters.distribution }}
-          cluster-version: ${{ matrix.clusters.version }}
-        id: kluster
-      - uses: ./.github/actions/integration-tests
+          distribution: ${{ matrix.clusters.distribution }}
+          version: ${{ matrix.clusters.version }}
+          gkeCredentials: '{"project_id": "foo"}' # See https://github.com/datawire/infra-actions/issues/66
+      - name: Download prebuilt docker image
+        uses: actions/download-artifact@v3
         with:
-          kubeconfig: "${{ steps.kluster.outputs.kubeconfig }}"
+          name: image
+      - name: Upload docker image to cluster
+        shell: bash
+        run: |
+          kubectl apply -f build-aux/image-importer.yaml
+          kubectl rollout status -w deployment/image-importer
+          POD_NAME=$(kubectl get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
+          kubectl cp tel2-image.tar "$POD_NAME:/tmp/image.tar"
+          kubectl exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar
+      - name: Run integration tests
+        env:
+          DEV_TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
+          TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
+        shell: bash
+        run: |
+          set -ex
+          if [[ ${RUNNER_OS} == "Windows" ]]; then
+            export PATH="$PATH:/C/Program Files/SSHFS-Win/bin"
+          fi
+          make check-integration
       - uses: ./.github/actions/upload-logs
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
