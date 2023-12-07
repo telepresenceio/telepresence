@@ -44,8 +44,8 @@ type Service interface {
 	ClusterID() string
 	MakeInterceptID(context.Context, string, string) (string, error)
 	RegisterServers(*grpc.Server)
-	TrafficManagerConfig() []byte
 	State() state.State
+	ClusterInfo() cluster.Info
 
 	// unexported methods.
 	runConfigWatcher(context.Context) error
@@ -123,10 +123,6 @@ func (s *service) InstallID() string {
 
 func (s *service) ClusterID() string {
 	return s.clusterInfo.ClusterID()
-}
-
-func (s *service) TrafficManagerConfig() []byte {
-	return s.configWatcher.GetTrafficManagerConfigYaml()
 }
 
 func (s *service) runConfigWatcher(ctx context.Context) error {
