@@ -1,10 +1,13 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"sync"
+
+	"golang.org/x/exp/slices"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
@@ -98,11 +101,26 @@ func clusterInfoEqual(a, b *rpc.ClusterInfo) bool {
 		!net.IP(a.Dns.KubeIp).Equal(b.Dns.KubeIp) {
 		return false
 	}
-	for i, aps := range a.PodSubnets {
-		bps := b.PodSubnets[i]
-		if !net.IP(aps.Ip).Equal(bps.Ip) || aps.Mask != bps.Mask {
-			return false
-		}
+	ipNetEQ := func(a, b *rpc.IPNet) bool {
+		return a.Mask == b.Mask && bytes.Equal(a.Ip, b.Ip)
+	}
+	if !slices.EqualFunc(a.PodSubnets, b.PodSubnets, ipNetEQ) {
+		return false
+	}
+	if !slices.EqualFunc(a.Routing.AlsoProxySubnets, b.Routing.AlsoProxySubnets, ipNetEQ) {
+		return false
+	}
+	if !slices.EqualFunc(a.Routing.NeverProxySubnets, b.Routing.NeverProxySubnets, ipNetEQ) {
+		return false
+	}
+	if !slices.EqualFunc(a.Routing.AllowConflictingSubnets, b.Routing.AllowConflictingSubnets, ipNetEQ) {
+		return false
+	}
+	if !slices.Equal(a.Dns.IncludeSuffixes, b.Dns.IncludeSuffixes) {
+		return false
+	}
+	if !slices.Equal(a.Dns.ExcludeSuffixes, b.Dns.ExcludeSuffixes) {
+		return false
 	}
 	return true
 }
