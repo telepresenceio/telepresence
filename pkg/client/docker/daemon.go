@@ -85,6 +85,9 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 	for _, ep := range cr.ExposedPorts {
 		opts = append(opts, "-p", ep)
 	}
+	if cr.Hostname != "" {
+		opts = append(opts, "--hostname", cr.Hostname)
+	}
 	if runtime.GOOS == "linux" {
 		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
 	}
@@ -470,13 +473,16 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port int, args 
 		return "", fmt.Errorf("launch of daemon container failed: %s", errStr)
 	}
 	cid := strings.TrimSpace(stdOut.String())
+	cr := daemon.GetRequest(ctx)
 	return cid, daemon.SaveInfo(ctx,
 		&daemon.Info{
-			Options:     map[string]string{"cid": cid},
-			InDocker:    true,
-			DaemonPort:  port,
-			Name:        daemonID.Name,
-			KubeContext: daemonID.KubeContext,
-			Namespace:   daemonID.Namespace,
+			Options:      map[string]string{"cid": cid},
+			InDocker:     true,
+			DaemonPort:   port,
+			Name:         daemonID.Name,
+			KubeContext:  daemonID.KubeContext,
+			Namespace:    daemonID.Namespace,
+			ExposedPorts: cr.ExposedPorts,
+			Hostname:     cr.Hostname,
 		}, daemonID.InfoFileName())
 }

@@ -25,6 +25,7 @@ type Info struct {
 	Namespace    string            `json:"namespace,omitempty"`
 	DaemonPort   int               `json:"daemon_port,omitempty"`
 	ExposedPorts []string          `json:"exposed_ports,omitempty"`
+	Hostname     string            `json:"hostname,omitempty"`
 }
 
 func (info *Info) DaemonID() *Identifier {
@@ -154,7 +155,44 @@ func (i InfoMatchError) Error() string {
 	return string(i)
 }
 
+type MultipleDaemonsError []*Info //nolint:errname // Don't want a plural name just because the type is a slice
+
+func (m MultipleDaemonsError) Error() string {
+	sb := strings.Builder{}
+	sb.WriteString("multiple daemons are running, please select ")
+	l := len(m)
+	i := 0
+	if l > 2 {
+		sb.WriteString("one of ")
+		for ; i+2 < l; i++ {
+			sb.WriteString(m[i].DaemonID().Name)
+			sb.WriteString(", ")
+		}
+	} else {
+		sb.WriteString(m[i].DaemonID().Name)
+		i++
+	}
+	sb.WriteString(" or ")
+	sb.WriteString(m[i].DaemonID().Name)
+	sb.WriteString(" using the --use <match> flag")
+	return sb.String()
+}
+
 func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) {
+	if match == nil {
+		infos, err := LoadInfos(ctx)
+		if err != nil {
+			return nil, err
+		}
+		switch len(infos) {
+		case 0:
+			return nil, os.ErrNotExist
+		case 1:
+			return infos[0], err
+		default:
+			return nil, MultipleDaemonsError(infos)
+		}
+	}
 	files, err := infoFiles(ctx)
 	if err != nil {
 		return nil, err
@@ -166,11 +204,8 @@ func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) 
 			continue
 		}
 		// If a match is given, then strip ".json" and apply it.
-		if match == nil || match.MatchString(name[:len(name)-5]) {
+		if match.MatchString(name[:len(name)-5]) {
 			if found != "" {
-				if match == nil {
-					return nil, errcat.User.New(InfoMatchError("multiple daemons are running, please select one using the --use <match> flag"))
-				}
 				return nil, errcat.User.New(
 					InfoMatchError(fmt.Sprintf("the expression %q does not uniquely identify a running daemon", match.String())))
 			}

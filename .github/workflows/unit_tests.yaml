@@ -7,17 +7,13 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: '~1.21.4'
-            #- uses: azure/setup-kubectl@v1
-            #with:
-            #version: 'v1.19.3'
-            #id: kubectl
+          go-version: stable
       - name: "Install dependencies"
         env:
           HOMEBREW_NO_INSTALL_FROM_API: ""
@@ -33,7 +29,7 @@ jobs:
       - name: "Test amd64 build"
         run: make build
       - name: Run tests
-        uses: nick-invision/retry/@v2.4.0
+        uses: nick-fields/retry/@v2
         with:
           max_attempts: 3
           timeout_minutes: 12
@@ -43,13 +39,13 @@ jobs:
   windows:
     runs-on: windows-2019
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: '~1.21.4'
+          go-version: stable
       - name: "Download winfsp"
         shell: bash
         run: |
@@ -66,7 +62,7 @@ jobs:
       - name: Lint
         run: make lint
       - name: Run tests
-        uses: nick-invision/retry/@v2.4.0
+        uses: nick-fields/retry/@v2
         with:
           max_attempts: 3
           timeout_minutes: 12
@@ -78,13 +74,13 @@ jobs:
   linux-amd64:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: '~1.21.4'
+          go-version: stable
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
@@ -94,7 +90,7 @@ jobs:
       - name: "Test amd64 build"
         run: make build
       - name: Run tests
-        uses: nick-invision/retry/@v2.4.0
+        uses: nick-fields/retry/@v2
         with:
           max_attempts: 3
           timeout_minutes: 10
@@ -104,13 +100,13 @@ jobs:
   linux-arm64:
     runs-on: ubuntu-arm64
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: '~1.21.4'
+          go-version: stable
       - run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
@@ -120,7 +116,7 @@ jobs:
       - name: "Test arm64 build"
         run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
       - name: Run tests
-        uses: nick-invision/retry/@v2.4.0
+        uses: nick-fields/retry/@v2
         with:
           max_attempts: 3
           timeout_minutes: 10

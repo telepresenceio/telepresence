@@ -99,6 +99,14 @@ func DialDaemon(ctx context.Context, info *daemon.Info) (*grpc.ClientConn, error
 	return conn, err
 }
 
+func ExistingDaemon(ctx context.Context, info *daemon.Info) (*daemon.UserClient, error) {
+	conn, err := DialDaemon(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	return newUserDaemon(conn, info.DaemonID()), nil
+}
+
 // Quit shuts down all daemons.
 func Quit(ctx context.Context) {
 	stdout := output.Out(ctx)
@@ -111,24 +119,18 @@ func Quit(ctx context.Context) {
 
 // Disconnect disconnects from a session in the user daemon.
 func Disconnect(ctx context.Context) {
-	stdout := output.Out(ctx)
-	ioutil.Print(stdout, "Telepresence Daemons ")
-	ud := daemon.GetUserClient(ctx)
-	if ud == nil {
-		ioutil.Println(stdout, "have already quit")
-		quitRootDaemon(ctx) // Can't have a root daemon unless there's a user daemon.
-		return
-	}
-
-	ioutil.Print(stdout, "disconnecting...")
-	if _, err := ud.Disconnect(ctx, &emptypb.Empty{}); err != nil {
-		if status.Code(err) != codes.Unavailable {
-			ioutil.Println(output.Err(ctx), err.Error())
-		} else {
-			ioutil.Println(stdout, "are already disconnected")
-		}
+	if ud := daemon.GetUserClient(ctx); ud == nil {
+		ioutil.Println(output.Out(ctx), "Not connected")
 	} else {
-		ioutil.Println(stdout, "done")
+		_, err := ud.Disconnect(ctx, &emptypb.Empty{})
+		switch {
+		case err == nil:
+			ioutil.Println(output.Out(ctx), "Disconnected")
+		case status.Code(err) == codes.Unavailable:
+			ioutil.Println(output.Out(ctx), "Not connected")
+		default:
+			ioutil.Printf(output.Err(ctx), "failed to disconnect: %v\n", err)
+		}
 	}
 }
 
@@ -170,11 +172,7 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, kubeContext, name
 	if len(cr.ExposedPorts) > 0 && !slices.Equal(info.ExposedPorts, cr.ExposedPorts) {
 		return nil, errcat.User.New("exposed ports differ. Please quit and reconnect")
 	}
-	conn, err := DialDaemon(ctx, info)
-	if err != nil {
-		return nil, err
-	}
-	return newUserDaemon(conn, info.DaemonID()), nil
+	return ExistingDaemon(ctx, info)
 }
 
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
@@ -190,10 +188,13 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 		if ud.Containerized() {
 			ctx = docker.EnableClient(ctx)
 			cr.Docker = true
-		} else if cr.Docker {
-			return ctx, nil, errcat.User.New("option --docker cannot be used as long as a daemon is running on the host. Try telepresence quit -s")
 		}
-		return ctx, ud, nil
+		if ud.Containerized() == cr.Docker {
+			return ctx, ud, nil
+		}
+		// A daemon running on the host does not fulfill a request for a containerized daemon. They can
+		// coexist though.
+		err = os.ErrNotExist
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return ctx, nil, errcat.NoDaemonLogs.New(err)
@@ -277,6 +278,7 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 	if s == nil {
 		return ctx, nil
 	}
+
 	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
 		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
 	}
@@ -392,6 +394,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 				KubeContext:  daemonID.KubeContext,
 				Namespace:    daemonID.Namespace,
 				ExposedPorts: request.ExposedPorts,
+				Hostname:     request.Hostname,
 			}, daemonID.InfoFileName())
 		if err != nil {
 			return nil, errcat.NoDaemonLogs.New(err)

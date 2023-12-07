@@ -512,7 +512,7 @@ func (s *service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) 
 }
 
 func (s *service) TrafficManagerVersion(ctx context.Context, _ *empty.Empty) (vi *common.VersionInfo, err error) {
-	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "TrafficManagerVersion", func(ctx context.Context, session userd.Session) error {
 		vi = &common.VersionInfo{Name: session.ManagerName(), Version: "v" + session.ManagerVersion().String()}
 		return nil
 	})
@@ -530,7 +530,7 @@ func (s *service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi
 func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rpc.ClusterSubnets, err error) {
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}
-	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "GetClusterSubnets", func(ctx context.Context, session userd.Session) error {
 		// The manager can sometimes send the different subnets in different Sends,
 		// but after 5 seconds of listening to it, we should expect to have everything
 		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
@@ -560,7 +560,7 @@ func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rp
 }
 
 func (s *service) GetIntercept(ctx context.Context, request *manager.GetInterceptRequest) (ii *manager.InterceptInfo, err error) {
-	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "GetIntercept", func(ctx context.Context, session userd.Session) error {
 		ii = session.GetInterceptInfo(request.Name)
 		if ii == nil {
 			return status.Errorf(codes.NotFound, "found no intercept named %s", request.Name)

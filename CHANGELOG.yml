@@ -30,9 +30,34 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.17.2
+  - version: 2.18.0
     date: (TBD)
     notes:
+      - type: feature
+        title: It is now possible use a host-based connection and containerized connections simultaneously.
+        body: >-
+          Only one host-based connection can exist because that connection will alter the DNS to reflect the namespace
+          of the connection. but it's now possible to create additional connections using <code>--docker</code> while
+          retaining the host-based connection.
+      - type: feature
+        title: Ability to set the hostname of a containerized daemon.
+        body: >-
+          The hostname of a containerized daemon defaults to be the container's ID in Docker. You now can override the
+          hostname using <code>telepresence connect --docker --hostname &lt;a name&gt;</code>.
+      - type: feature
+        title: New <code>--multi-daemon</code>flag to enforce a consistent structure for the status command output.
+        body: >-
+          The output of the <code>telepresence status</code> when using <code>--output json</code> or <code>--output
+          yaml</code> will either show an object where the <code>user_daemon</code> and <code>root_daemon</code>
+          are top level elements, or when multiple connections are used, an object where a <code>connections</code>
+          list contains objects with those daemons. The flag <code>--multi-daemon</code> will enforce the latter
+          structure even when only one daemon is connected so that the output can be parsed consistently. The reason
+          for keeping the former structure is to retain backward compatibility with existing parsers.
+      - type: bugfix
+        title: Make output from telepresence quit more consistent.
+        body: >-
+          A quit (without -s) just disconnects the host user and root daemons but will quit a container based daemon.
+          The message printed was simplified to remove some have/has is/are errors caused by the difference.
       - type: bugfix
         title: "Fix &quot;tls: bad certificate&quot; errors when refreshing the mutator-webhook secret"
         body: >-
@@ -45,6 +70,24 @@ items:
           An intercept attempt that resulted in a timeout due to failure of injecting the traffic-agent left the
           <code>telepresence-agents</code> configmap in a state that indicated that an agent had been added, which
           caused problems for subsequent intercepts after the problem causing the first failure had been fixed.
+      - type: bugfix
+        title: The <code>telepresence status</code> command will now report the status of all running daemons.
+        body: >-
+          A <code>telepresence status</code>, issued when multiple containerized daemons were active, would error with
+          &quot;multiple daemons are running, please select one using the --use &lt;match&gt; flag&quot;. This is now
+          fixed so that the command instead reports the status of all running daemons.
+      - type: bugfix
+        title: The <code>telepresence version</code> command will now report the version of all running daemons.
+        body: >-
+          A <code>telepresence version</code>, issued when multiple containerized daemons were active, would error with
+          &quot;multiple daemons are running, please select one using the --use &lt;match&gt; flag&quot;. This is now
+          fixed so that the command instead reports the version of all running daemons.
+      - type: bugfix
+        title: Multiple containerized daemons can now be disconnected using <code>telepresence quit -s</code>
+        body: >-
+          A <code>telepresence quit -s</code>, issued when multiple containerized daemons were active, would error with
+          &quot;multiple daemons are running, please select one using the --use &lt;match&gt; flag&quot;. This is now
+          fixed so that the command instead quits all daemons.
   - version: 2.17.1
     date: (TBD)
     notes:

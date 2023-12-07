@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -22,13 +24,19 @@ import (
 )
 
 type StatusInfo struct {
-	RootDaemon io.WriterTo `json:"root_daemon" yaml:"root_daemon"`
-	UserDaemon io.WriterTo `json:"user_daemon" yaml:"user_daemon"`
+	RootDaemon     RootDaemonStatus     `json:"root_daemon" yaml:"root_daemon"`
+	UserDaemon     UserDaemonStatus     `json:"user_daemon" yaml:"user_daemon"`
+	TrafficManager TrafficManagerStatus `json:"traffic_manager" yaml:"traffic_manager"`
 }
 
-type StatusInfoEmbedded struct {
-	RootDaemon io.WriterTo `json:"root_daemon" yaml:"root_daemon"`
-	UserDaemon io.WriterTo `json:"user_daemon" yaml:"user_daemon"`
+type MultiConnectStatusInfo struct {
+	extendedInfo ioutil.WriterTos
+	statusInfos  []ioutil.WriterTos
+}
+
+type SingleConnectStatusInfo struct {
+	extendedInfo ioutil.WriterTos
+	statusInfo   ioutil.WriterTos
 }
 
 type RootDaemonStatus struct {
@@ -42,27 +50,46 @@ type RootDaemonStatus struct {
 
 type UserDaemonStatus struct {
 	Running           bool                     `json:"running,omitempty" yaml:"running,omitempty"`
+	InDocker          bool                     `json:"in_docker,omitempty" yaml:"in_docker,omitempty"`
 	Name              string                   `json:"name,omitempty" yaml:"name,omitempty"`
+	DaemonPort        int                      `json:"daemon_port,omitempty" yaml:"daemon_port,omitempty"`
 	ContainerNetwork  string                   `json:"container_network,omitempty" yaml:"container_network,omitempty"`
+	Hostname          string                   `json:"hostname,omitempty" yaml:"hostname,omitempty"`
+	ExposedPorts      []string                 `json:"exposedPorts,omitempty" yaml:"exposedPorts,omitempty"`
 	Version           string                   `json:"version,omitempty" yaml:"version,omitempty"`
-	APIVersion        int32                    `json:"api_version,omitempty" yaml:"api_version,omitempty"`
 	Executable        string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
 	InstallID         string                   `json:"install_id,omitempty" yaml:"install_id,omitempty"`
 	Status            string                   `json:"status,omitempty" yaml:"status,omitempty"`
 	Error             string                   `json:"error,omitempty" yaml:"error,omitempty"`
 	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
 	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
-	ConnectionName    string                   `json:"connection_name,omitempty" yaml:"connection_name,omitempty"`
 	Namespace         string                   `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	ManagerNamespace  string                   `json:"manager_namespace,omitempty" yaml:"manager_namespace,omitempty"`
 	MappedNamespaces  []string                 `json:"mapped_namespaces,omitempty" yaml:"mapped_namespaces,omitempty"`
 	Intercepts        []ConnectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
+	versionName       string
+}
+
+type ContainerizedDaemonStatus struct {
+	*UserDaemonStatus    `yaml:",inline"`
+	DNS                  *client.DNSSnake `json:"dns,omitempty" yaml:"dns,omitempty"`
+	*client.RoutingSnake `yaml:",inline"`
+}
+
+type TrafficManagerStatus struct {
+	Name    string `json:"name,omitempty" yaml:"name,omitempty"`
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
 }
 
 type ConnectStatusIntercept struct {
 	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
 	Client string `json:"client,omitempty" yaml:"client,omitempty"`
 }
+
+const (
+	multiDaemonFlag = "multi-daemon"
+	jsonFlag        = "json"
+)
 
 func statusCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -77,14 +104,15 @@ func statusCmd() *cobra.Command {
 		},
 	}
 	flags := cmd.Flags()
-	flags.BoolP("json", "j", false, "output as json object")
-	flags.Lookup("json").Hidden = true
+	flags.Bool(multiDaemonFlag, false, "always use multi-daemon output format, even if there's only one daemon connected")
+	flags.BoolP(jsonFlag, "j", false, "output as json object")
+	flags.Lookup(jsonFlag).Hidden = true
 	return cmd
 }
 
 func fixFlag(cmd *cobra.Command, _ []string) error {
 	flags := cmd.Flags()
-	json, err := flags.GetBool("json")
+	json, err := flags.GetBool(jsonFlag)
 	if err != nil {
 		return err
 	}
@@ -99,71 +127,146 @@ func fixFlag(cmd *cobra.Command, _ []string) error {
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
 func run(cmd *cobra.Command, _ []string) error {
-	if err := connect.InitCommand(cmd); err != nil {
-		return err
+	var mdErr daemon.MultipleDaemonsError
+	err := connect.InitCommand(cmd)
+	if err != nil {
+		if !errors.As(err, &mdErr) {
+			return err
+		}
 	}
 	ctx := cmd.Context()
 
-	si, err := GetStatusInfo(ctx)
+	var sis []ioutil.WriterTos
+	if len(mdErr) > 0 {
+		sis = make([]ioutil.WriterTos, len(mdErr))
+		for i, info := range mdErr {
+			ud, err := connect.ExistingDaemon(ctx, info)
+			if err != nil {
+				return err
+			}
+			sis[i], err = getStatusInfo(daemon.WithUserClient(ctx, ud), info)
+			ud.Conn.Close()
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		si, err := getStatusInfo(ctx, nil)
+		if err != nil {
+			return err
+		}
+		sis = []ioutil.WriterTos{si}
+	}
+
+	sx, err := GetStatusInfo(ctx)
 	if err != nil {
 		return err
 	}
 
-	if output.WantsFormatted(cmd) {
-		output.Object(ctx, si, true)
+	multiFormat := len(sis) > 1
+	if !multiFormat {
+		multiFormat, _ = cmd.Flags().GetBool(multiDaemonFlag)
+	}
+	var as ioutil.WriterTos
+	if multiFormat {
+		as = &MultiConnectStatusInfo{
+			extendedInfo: sx,
+			statusInfos:  sis,
+		}
 	} else {
-		_, _ = ioutil.WriteAllTo(cmd.OutOrStdout(), si.WriterTos()...)
+		as = &SingleConnectStatusInfo{
+			extendedInfo: sx,
+			statusInfo:   sis[0],
+		}
+	}
+
+	if output.WantsFormatted(cmd) {
+		output.Object(ctx, &as, true)
+	} else {
+		_, _ = ioutil.WriteAllTo(cmd.OutOrStdout(), as.WriterTos()...)
 	}
 	return nil
 }
 
-// GetStatusInfo may return an extended struct, based on the one returned by the BasicGetStatusInfo.
-var GetStatusInfo = BasicGetStatusInfo //nolint:gochecknoglobals // extension point
+// GetStatusInfo may return an extended struct
+//
+//nolint:gochecknoglobals // extension point
+var GetStatusInfo = func(ctx context.Context) (ioutil.WriterTos, error) {
+	return nil, nil
+}
 
-func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
-	rs := RootDaemonStatus{}
-	us := UserDaemonStatus{}
+func (s *StatusInfo) WriterTos() []io.WriterTo {
+	if s.UserDaemon.InDocker {
+		return []io.WriterTo{
+			&ContainerizedDaemonStatus{
+				UserDaemonStatus: &s.UserDaemon,
+				DNS:              s.RootDaemon.DNS,
+				RoutingSnake:     s.RootDaemon.RoutingSnake,
+			},
+			&s.TrafficManager,
+		}
+	}
+	return []io.WriterTo{&s.UserDaemon, &s.RootDaemon, &s.TrafficManager}
+}
+
+func (s *StatusInfo) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.toMap())
+}
+
+func (s *StatusInfo) MarshalYAML() (any, error) {
+	return s.toMap(), nil
+}
+
+func (s *StatusInfo) toMap() map[string]any {
+	if s.UserDaemon.InDocker {
+		return map[string]any{
+			"daemon": &ContainerizedDaemonStatus{
+				UserDaemonStatus: &s.UserDaemon,
+				DNS:              s.RootDaemon.DNS,
+				RoutingSnake:     s.RootDaemon.RoutingSnake,
+			},
+			"traffic_manager": &s.TrafficManager,
+		}
+	}
+	return map[string]any{
+		"user_daemon":     &s.UserDaemon,
+		"root_daemon":     &s.RootDaemon,
+		"traffic_manager": &s.TrafficManager,
+	}
+}
+
+func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
+	wt := &StatusInfo{}
 	userD := daemon.GetUserClient(ctx)
 	if userD == nil {
-		return &StatusInfo{
-			RootDaemon: &rs,
-			UserDaemon: &us,
-		}, nil
-	}
-	var wt ioutil.WriterTos
-	if userD.Containerized() {
-		sie := StatusInfoEmbedded{
-			RootDaemon: &rs,
-			UserDaemon: &us,
-		}
-		wt = &sie
-	} else {
-		si := StatusInfo{
-			RootDaemon: &rs,
-			UserDaemon: &us,
-		}
-		wt = &si
+		return wt, nil
 	}
 	ctx = scout.NewReporter(ctx, "cli")
+	us := &wt.UserDaemon
 	us.InstallID = scout.InstallID(ctx)
 	us.Running = true
-	version, err := userD.Version(ctx, &empty.Empty{})
+	v, err := userD.Version(ctx, &empty.Empty{})
 	if err != nil {
 		return nil, err
 	}
-	us.Name = version.Name
-	if us.Name == "" {
-		if userD.Containerized() {
-			us.Name = "Daemon"
-		} else {
-			us.Name = "User Daemon"
-		}
-	}
-	us.Version = version.Version
-	us.APIVersion = version.ApiVersion
-	us.Executable = version.Executable
+	us.Version = v.Version
+	us.versionName = v.Name
+	us.Executable = v.Executable
+	us.Name = userD.DaemonID.Name
+
 	if userD.Containerized() {
+		us.InDocker = true
+		us.DaemonPort = userD.DaemonPort()
+		if di != nil {
+			us.Hostname = di.Hostname
+			us.ExposedPorts = di.ExposedPorts
+		}
 		us.ContainerNetwork = "container:" + userD.DaemonID.ContainerName()
+		if us.versionName == "" {
+			us.versionName = "Daemon"
+		}
+	} else if us.versionName == "" {
+		us.versionName = "User daemon"
 	}
 
 	status, err := userD.Status(ctx, &empty.Empty{})
@@ -181,7 +284,6 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 				Client: icept.Spec.Client,
 			})
 		}
-		us.ConnectionName = status.ConnectionName
 		us.Namespace = status.Namespace
 		us.ManagerNamespace = status.ManagerNamespace
 		us.MappedNamespaces = status.MappedNamespaces
@@ -199,6 +301,7 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 
 	rStatus := status.DaemonStatus
 	if rStatus != nil {
+		rs := &wt.RootDaemon
 		rs.Running = true
 		rs.Name = rStatus.Version.Name
 		if rs.Name == "" {
@@ -229,28 +332,109 @@ func BasicGetStatusInfo(ctx context.Context) (ioutil.WriterTos, error) {
 			}
 		}
 	}
+
+	if v, err := userD.TrafficManagerVersion(ctx, &empty.Empty{}); err == nil {
+		tm := &wt.TrafficManager
+		tm.Name = v.Name
+		tm.Version = v.Version
+	}
+
 	return wt, nil
 }
 
-func (s *StatusInfo) WriterTos() []io.WriterTo {
-	return []io.WriterTo{s.UserDaemon, s.RootDaemon}
+func (s *SingleConnectStatusInfo) WriterTos() []io.WriterTo {
+	var wts []io.WriterTo
+	if s.extendedInfo != nil {
+		wts = s.extendedInfo.WriterTos()
+	}
+	wts = append(wts, s.statusInfo.WriterTos()...)
+	return wts
 }
 
-func (s *StatusInfoEmbedded) WriterTos() []io.WriterTo {
-	return []io.WriterTo{s}
+func (s *SingleConnectStatusInfo) MarshalJSON() ([]byte, error) {
+	m, err := s.toMap()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(m)
 }
 
-func (s *StatusInfoEmbedded) WriteTo(out io.Writer) (int64, error) {
+func (s *SingleConnectStatusInfo) MarshalYAML() (any, error) {
+	return s.toMap()
+}
+
+func (s *SingleConnectStatusInfo) toMap() (map[string]any, error) {
+	m := make(map[string]any)
+	if s.extendedInfo != nil {
+		sx, err := json.Marshal(s.extendedInfo)
+		if err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(sx, &m); err != nil {
+			return nil, err
+		}
+	}
+	sx, err := json.Marshal(s.statusInfo)
+	if err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(sx, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (s *MultiConnectStatusInfo) MarshalJSON() ([]byte, error) {
+	m, err := s.toMap()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(m)
+}
+
+func (s *MultiConnectStatusInfo) MarshalYAML() (any, error) {
+	return s.toMap()
+}
+
+func (s *MultiConnectStatusInfo) toMap() (map[string]any, error) {
+	m := make(map[string]any)
+	if s.extendedInfo != nil {
+		sx, err := json.Marshal(s.extendedInfo)
+		if err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(sx, &m); err != nil {
+			return nil, err
+		}
+	}
+	m["connections"] = s.statusInfos
+	return m, nil
+}
+
+func (s *MultiConnectStatusInfo) WriterTos() []io.WriterTo {
+	var wts []io.WriterTo
+	if s.extendedInfo != nil {
+		wts = s.extendedInfo.WriterTos()
+	}
+	for _, v := range s.statusInfos {
+		wts = append(wts, v.WriterTos()...)
+	}
+	return wts
+}
+
+func (cs *ContainerizedDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
-	cs := s.UserDaemon.(*UserDaemonStatus)
-	if cs.Running {
-		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
+	if cs.UserDaemonStatus.Running {
+		n += ioutil.Printf(out, "%s %s: Running\n", cs.UserDaemonStatus.versionName, cs.UserDaemonStatus.Name)
 		kvf := ioutil.DefaultKeyValueFormatter()
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
 		cs.print(kvf)
-		if rs, ok := s.RootDaemon.(*RootDaemonStatus); ok && rs.Running {
-			rs.printNetwork(kvf)
+		if cs.DNS != nil {
+			printDNS(kvf, cs.DNS)
+		}
+		if cs.RoutingSnake != nil {
+			printRouting(kvf, cs.RoutingSnake)
 		}
 		n += kvf.Println(out)
 	} else {
@@ -267,22 +451,17 @@ func (ds *RootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
 		kvf.Add("Version", ds.Version)
-		ds.printNetwork(kvf)
+		if ds.DNS != nil {
+			printDNS(kvf, ds.DNS)
+		}
+		if ds.RoutingSnake != nil {
+			printRouting(kvf, ds.RoutingSnake)
+		}
 		n += kvf.Println(out)
 	} else {
 		n += ioutil.Println(out, "Root Daemon: Not running")
 	}
 	return int64(n), nil
-}
-
-func (ds *RootDaemonStatus) printNetwork(kvf *ioutil.KeyValueFormatter) {
-	kvf.Add("Version", ds.Version)
-	if ds.DNS != nil {
-		printDNS(kvf, ds.DNS)
-	}
-	if ds.RoutingSnake != nil {
-		printRouting(kvf, ds.RoutingSnake)
-	}
 }
 
 func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
@@ -329,7 +508,7 @@ func printRouting(kvf *ioutil.KeyValueFormatter, r *client.RoutingSnake) {
 func (cs *UserDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if cs.Running {
-		n += ioutil.Printf(out, "%s: Running\n", cs.Name)
+		n += ioutil.Printf(out, "%s: Running\n", cs.versionName)
 		kvf := ioutil.DefaultKeyValueFormatter()
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
@@ -354,11 +533,16 @@ func (cs *UserDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
 	if cs.ContainerNetwork != "" {
 		kvf.Add("Container network", cs.ContainerNetwork)
 	}
-	kvf.Add("Connection name", cs.ConnectionName)
 	kvf.Add("Namespace", cs.Namespace)
 	kvf.Add("Manager namespace", cs.ManagerNamespace)
 	if len(cs.MappedNamespaces) > 0 {
 		kvf.Add("Mapped namespaces", fmt.Sprintf("%v", cs.MappedNamespaces))
+	}
+	if cs.Hostname != "" {
+		kvf.Add("Hostname", cs.Hostname)
+	}
+	if len(cs.ExposedPorts) > 0 {
+		kvf.Add("Exposed ports", fmt.Sprintf("%v", cs.ExposedPorts))
 	}
 	out := &strings.Builder{}
 	fmt.Fprintf(out, "%d total\n", len(cs.Intercepts))
@@ -371,4 +555,19 @@ func (cs *UserDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
 		subKvf.Println(out)
 	}
 	kvf.Add("Intercepts", out.String())
+}
+
+func (ts *TrafficManagerStatus) WriteTo(out io.Writer) (int64, error) {
+	n := 0
+	if ts.Name != "" {
+		n += ioutil.Printf(out, "%s: Connected\n", ts.Name)
+		kvf := ioutil.DefaultKeyValueFormatter()
+		kvf.Prefix = "  "
+		kvf.Indent = "  "
+		kvf.Add("Version", ts.Version)
+		n += kvf.Println(out)
+	} else {
+		n += ioutil.Println(out, "Traffic Manager: Not connected")
+	}
+	return int64(n), nil
 }

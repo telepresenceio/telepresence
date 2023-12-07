@@ -3,6 +3,7 @@ package integration_test
 import (
 	"context"
 	goRuntime "runtime"
+	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -50,16 +51,15 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_status() {
 	status := itest.TelepresenceStatusOk(ctx)
 	ud := status.UserDaemon
 	s.True(ud.Running)
-	s.Equal(ud.Name, "OSS Daemon in container")
+	s.True(strings.HasSuffix(ud.Name, s.AppNamespace()+"-cn"), "ends with suffix <namespace>-cn")
 	s.Equal(ud.Status, "Connected")
 }
 
-func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonConflict() {
+func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonNoConflict() {
 	ctx := s.Context()
 	s.TelepresenceConnect(ctx)
-	_, stdErr, err := itest.Telepresence(ctx, "connect", "--docker", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
-	s.Error(err)
-	s.Contains(stdErr, "option --docker cannot be used as long as a daemon is running on the host")
+	_, _, err := itest.Telepresence(ctx, "connect", "--docker", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+	s.NoError(err)
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {
