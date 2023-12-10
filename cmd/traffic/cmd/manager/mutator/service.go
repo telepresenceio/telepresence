@@ -56,7 +56,6 @@ type mutatorFunc func(context.Context, *admission.AdmissionRequest) (PatchOps, e
 // it creates a TLS connection, thereby ensuring that it uses a certificate that
 // is up-to-date with the one used by the webhook caller.
 type tlsListener struct {
-	net.Listener
 	sync.Mutex
 	ctx         context.Context
 	config      tls.Config
@@ -71,6 +70,15 @@ func (l *tlsListener) Accept() (net.Conn, error) {
 		return conn, err
 	}
 	return l.tlsConn(conn)
+}
+
+func (l *tlsListener) Close() error {
+	// Ignore close call. We close the tcpListener explicitly
+	return nil
+}
+
+func (l *tlsListener) Addr() net.Addr {
+	return l.tcpListener.Addr()
 }
 
 func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
