@@ -1001,6 +1001,11 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
 	for _, ns := range namespaces {
+		if t.Failed() {
+			if out, err := KubectlOut(ctx, ns, "get", "events"); err == nil {
+				dlog.Debugf(ctx, "Events from namespace %s\n%s", ns, out)
+			}
+		}
 		go func(ns string) {
 			defer wg.Done()
 			assert.NoError(t, Kubectl(ctx, "", "delete", "namespace", "--wait=false", ns))
