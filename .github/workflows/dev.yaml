@@ -117,7 +117,11 @@ jobs:
             export PATH="$PATH:/C/Program Files/SSHFS-Win/bin"
           fi
           make check-integration
+      - name: Sleep for 1 hour on failure
+        if: ${{ failure() }}
+        run: sleep 7200
       - uses: ./.github/actions/upload-logs
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
         if: always()
+
