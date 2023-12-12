@@ -30,6 +30,12 @@ rules:
   - list
   - get
   - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/log
+  verbs:
+  - get
 {{- /* Needed to be able to find the cluster DNS resolver */}}
 - apiGroups:
   - ""

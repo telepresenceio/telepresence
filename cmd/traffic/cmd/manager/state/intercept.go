@@ -3,6 +3,8 @@ package state
 import (
 	"context"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -441,7 +443,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 
 func (s *state) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
 	snapshotCh := s.WatchAgents(ctx, nil)
-
+	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + namespace)
 	// fes collects events from the failedCreatedCh and is included in the error message in case
 	// the waitForAgent call times out.
 	var fes []*events.Event
@@ -455,8 +457,25 @@ func (s *state) waitForAgent(ctx context.Context, name, namespace string, failed
 				switch fe.Reason {
 				case "BackOff":
 					// The traffic-agent container was injected, but it fails to start
+					if rr := failedContainerRx.FindStringSubmatch(msg); rr != nil {
+						cn := rr[1]
+						pod := rr[2]
+						rq := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).GetLogs(pod, &core.PodLogOptions{
+							Container: cn,
+						})
+						if rs, err := rq.Stream(ctx); err == nil {
+							if log, err := io.ReadAll(rs); err == nil {
+								dlog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
+							} else {
+								dlog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
+							}
+							_ = rs.Close()
+						} else {
+							dlog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
+						}
+					}
 					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
-				case "FailedCreate", "FailedScheduling":
+				case "Failed", "FailedCreate", "FailedScheduling":
 					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
 					if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
 						strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
