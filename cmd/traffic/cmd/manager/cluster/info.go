@@ -1,10 +1,12 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +49,10 @@ type Info interface {
 	// GetTrafficAgentPods acquires all pods that have a `traffic-agent`
 	// container in their spec
 	GetTrafficAgentPods(context.Context, string) ([]*corev1.Pod, error)
+
+	// SetAdditionalAlsoProxy assigns a slice that will be added to the Routing.AlsoProxySubnets slice
+	// when notifications are sent.
+	SetAdditionalAlsoProxy(ctx context.Context, subnets []*rpc.IPNet)
 }
 
 type subnetRetriever interface {
@@ -57,6 +63,10 @@ type subnetRetriever interface {
 type info struct {
 	rpc.ClusterInfo
 	ciSubs *clusterInfoSubscribers
+
+	// addAlsoProxy are extra subnets that will be added to the also-proxy slice
+	// when sending notifications to the client.
+	addAlsoProxy []*rpc.IPNet
 
 	// namespaceID is the UID of the manager's namespace
 	namespaceID string
@@ -364,6 +374,18 @@ func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfo
 	return oi.ciSubs.subscriberLoop(ctx, oiStream)
 }
 
+// SetAdditionalAlsoProxy assigns a slice that will be added to the Routing.AlsoProxySubnets slice
+// when notifications are sent.
+func (oi *info) SetAdditionalAlsoProxy(ctx context.Context, subnets []*rpc.IPNet) {
+	eq := func(a, b *rpc.IPNet) bool {
+		return a.Mask == b.Mask && bytes.Equal(a.Ip, b.Ip)
+	}
+	if !slices.EqualFunc(oi.addAlsoProxy, subnets, eq) {
+		oi.addAlsoProxy = subnets
+		oi.ciSubs.notify(ctx, oi.clusterInfo())
+	}
+}
+
 func (oi *info) ID() string {
 	return oi.namespaceID
 }
@@ -373,6 +395,24 @@ func (oi *info) ClusterID() string {
 }
 
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
+	rt := oi.Routing
+	if len(oi.addAlsoProxy) > 0 {
+		aps := rt.AlsoProxySubnets
+		cps := append(make([]*rpc.IPNet, 0, len(aps)+len(oi.addAlsoProxy)), aps...)
+		for _, s := range oi.addAlsoProxy {
+			if !slices.ContainsFunc(cps, func(a *rpc.IPNet) bool {
+				return a.Mask == s.Mask && bytes.Equal(a.Ip, s.Ip)
+			}) {
+				cps = append(cps, s)
+			}
+		}
+		rt = &rpc.Routing{
+			AlsoProxySubnets:        cps,
+			NeverProxySubnets:       rt.NeverProxySubnets,
+			AllowConflictingSubnets: rt.AllowConflictingSubnets,
+		}
+	}
+
 	ci := &rpc.ClusterInfo{
 		ServiceSubnet:   oi.ServiceSubnet,
 		PodSubnets:      make([]*rpc.IPNet, len(oi.PodSubnets)),
@@ -381,7 +421,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		InjectorSvcIp:   oi.InjectorSvcIp,
 		InjectorSvcPort: oi.InjectorSvcPort,
 		InjectorSvcHost: oi.InjectorSvcHost,
-		Routing:         oi.Routing,
+		Routing:         rt,
 		Dns:             oi.Dns,
 		KubeDnsIp:       oi.Dns.KubeIp,
 		ClusterDomain:   oi.Dns.ClusterDomain,
