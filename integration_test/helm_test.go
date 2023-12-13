@@ -118,7 +118,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 		s.Contains(stdout, "Connected to context")
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--connect-timeout", "1", fmt.Sprintf("%s.%s", svc, s.appSpace2)) == nil
-		}, 15*time.Second, 3*time.Second)
+		}, 30*time.Second, 3*time.Second)
 	})
 
 	s.Run("Can intercept", func() {

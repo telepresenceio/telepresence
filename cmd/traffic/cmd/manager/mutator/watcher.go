@@ -134,6 +134,30 @@ func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Si
 				wl.GetName(), wl.GetNamespace(), pod.GetName())
 			return true
 		}
+		for _, cn := range ac.Containers {
+			var found *core.Container
+			cns := pod.Spec.Containers
+			for i := range cns {
+				if cns[i].Name == cn.Name {
+					found = &cns[i]
+					break
+				}
+			}
+			if cn.Replace == agentconfig.ReplacePolicyActive {
+				// Ensure that the replaced container is not present
+				if found != nil {
+					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod should not contain replaced container %s",
+						wl.GetName(), wl.GetNamespace(), cn.Name)
+					return true
+				}
+			} else {
+				if found == nil {
+					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod should contain container %s",
+						wl.GetName(), wl.GetNamespace(), cn.Name)
+					return true
+				}
+			}
+		}
 	}
 	// Rollout if there are no running pods
 	if runningPods == 0 && ac != nil {
