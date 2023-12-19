@@ -20,7 +20,7 @@ following Free and Open Source software:
     github.com/cenkalti/backoff/v4                                               v4.2.1                                MIT license
     github.com/cespare/xxhash/v2                                                 v2.2.0                                MIT license
     github.com/chai2010/gettext-go                                               v1.0.2                                3-clause BSD license
-    github.com/containerd/containerd                                             v1.7.9                                Apache License 2.0
+    github.com/containerd/containerd                                             v1.7.11                               Apache License 2.0
     github.com/containerd/log                                                    v0.1.0                                Apache License 2.0
     github.com/coreos/go-iptables                                                v0.7.0                                Apache License 2.0
     github.com/cyphar/filepath-securejoin                                        v0.2.4                                3-clause BSD license
