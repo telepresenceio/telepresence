@@ -1040,7 +1040,12 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 // PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
 // that an intercept is active for the given svc and svcPort that will redirect to that local server.
 func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers ...string) {
-	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+	wl := svc
+	if slashIdx := strings.IndexByte(svc, '/'); slashIdx > 0 {
+		wl = svc[slashIdx+1:]
+		svc = svc[:slashIdx]
+	}
+	expectedOutput := fmt.Sprintf("%s from intercept at /", wl)
 	require.Eventually(getT(ctx), func() bool {
 		// condition
 		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc)
