@@ -1017,16 +1017,18 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 }
 
 type Routing struct {
-	Subnets    []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
-	AlsoProxy  []*iputil.Subnet `json:"alsoProxy,omitempty" yaml:"alsoProxy,omitempty"`
-	NeverProxy []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
+	Subnets          []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
+	AlsoProxy        []*iputil.Subnet `json:"alsoProxy,omitempty" yaml:"alsoProxy,omitempty"`
+	NeverProxy       []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
+	AllowConflicting []*iputil.Subnet `json:"allowConflicting,omitempty" yaml:"allowConflicting,omitempty"`
 }
 
 // RoutingSnake is the same as Routing but with snake_case json/yaml names.
 type RoutingSnake struct {
-	Subnets    []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
-	AlsoProxy  []*iputil.Subnet `json:"also_proxy_subnets,omitempty" yaml:"also_proxy_subnets,omitempty"`
-	NeverProxy []*iputil.Subnet `json:"never_proxy_subnets,omitempty" yaml:"never_proxy_subnets,omitempty"`
+	Subnets          []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
+	AlsoProxy        []*iputil.Subnet `json:"also_proxy_subnets,omitempty" yaml:"also_proxy_subnets,omitempty"`
+	NeverProxy       []*iputil.Subnet `json:"never_proxy_subnets,omitempty" yaml:"never_proxy_subnets,omitempty"`
+	AllowConflicting []*iputil.Subnet `json:"allow_conflicting_subnets,omitempty" yaml:"allow_conflicting_subnets,omitempty"`
 }
 
 type DNS struct {

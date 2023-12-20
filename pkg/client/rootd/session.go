@@ -381,6 +381,12 @@ func (s *Session) getNetworkConfig() *rpc.NetworkConfig {
 			info.NeverProxySubnets[i] = iputil.IPNetToRPC(np)
 		}
 	}
+	if len(s.allowConflictingSubnets) > 0 {
+		info.AllowConflictingSubnets = make([]*manager.IPNet, len(s.allowConflictingSubnets))
+		for i, np := range s.allowConflictingSubnets {
+			info.AllowConflictingSubnets[i] = iputil.IPNetToRPC(np)
+		}
+	}
 	if s.tunVif != nil {
 		curSubnets := s.tunVif.Router.GetRoutedSubnets()
 		nc.Subnets = make([]*manager.IPNet, len(curSubnets))
