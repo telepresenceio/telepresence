@@ -3,6 +3,7 @@ package integration
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
@@ -39,11 +40,17 @@ func (s *interceptEnvSuite) Test_ExcludeVariables() {
 	itest.TelepresenceOk(ctx, "intercept", "echo-easy", "--env-file", helloEnv)
 
 	// then
-	file, err := os.ReadFile(helloEnv)
-	s.Require().NoError(err)
+	var file string
+	s.Require().Eventually(func() bool {
+		if dt, err := os.ReadFile(helloEnv); err == nil {
+			file = string(dt)
+			return true
+		}
+		return false
+	}, 5*time.Second, 1*time.Second)
 
-	s.NotContains(string(file), "DATABASE_HOST")
-	s.NotContains(string(file), "DATABASE_PASSWORD")
-	s.Contains(string(file), "TEST=DATA")
-	s.Contains(string(file), "INTERCEPT=ENV")
+	s.NotContains(file, "DATABASE_HOST")
+	s.NotContains(file, "DATABASE_PASSWORD")
+	s.Contains(file, "TEST=DATA")
+	s.Contains(file, "INTERCEPT=ENV")
 }
