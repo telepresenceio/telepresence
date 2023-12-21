@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,7 +80,8 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			dlog.Error(ctx, err)
 			return false
 		}
-		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
+		m := regexp.MustCompile(`Never Proxy\s*:\s*\((\d+) subnets\)`).FindStringSubmatch(stdout)
+		if m == nil || m[1] != strconv.Itoa(neverProxiedCount) {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets", neverProxiedCount)
 			return false
 		}
@@ -102,6 +106,41 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		dlog.Infof(ctx, "Success! Never-proxied IP %s is not reachable", ip)
 		return true
 	}, timeout, 5*time.Second, "never-proxy not updated in %s", timeout)
+}
+
+func (s *notConnectedSuite) Test_CloudAllowConflicting() {
+	require := s.Require()
+	ctx := s.Context()
+
+	acs, err := netip.ParsePrefix("10.88.2.4/30")
+	require.NoError(err)
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.allowConflictingSubnets={%s}", acs)))
+	defer s.RollbackTM(ctx)
+
+	timeout := 20 * time.Second
+	if runtime.GOOS == "windows" {
+		timeout *= 5
+	}
+	s.Eventuallyf(func() bool {
+		defer func() {
+			stdout, stderr, err := itest.Telepresence(ctx, "quit")
+			dlog.Infof(ctx, "stdout: %q", stdout)
+			dlog.Infof(ctx, "stderr: %q", stderr)
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
+		}()
+		s.TelepresenceConnect(ctx)
+		sr, err := itest.TelepresenceStatus(ctx)
+		if err != nil {
+			return false
+		}
+		ac := sr.RootDaemon.AllowConflicting
+		if len(ac) != 1 {
+			return false
+		}
+		return len(ac) == 1 && netip.MustParsePrefix(ac[0].String()) == acs
+	}, timeout, 5*time.Second, "allow-conflicting-subnets not updated in %s", timeout)
 }
 
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {

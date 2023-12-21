@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,16 +65,16 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	s.TelepresenceConnect(ctx, "--context", "extra")
 
 	expectedLen := len(ips)
-	expect := fmt.Sprintf("Also Proxy : (%d subnets)", expectedLen)
+	expect := regexp.MustCompile(`Also Proxy\s*:\s*\((\d+) subnets\)`)
 	s.Eventually(func() bool {
 		stdout, stderr, err := itest.Telepresence(ctx, "status")
-		if err == nil && strings.Contains(stdout, expect) {
-			return true
-		}
-		if err != nil {
-			dlog.Errorf(ctx, "%s: %v", stderr, err)
+		if err == nil {
+			if m := expect.FindStringSubmatch(stdout); m != nil && m[1] == strconv.Itoa(expectedLen) {
+				return true
+			}
+			dlog.Infof(ctx, "%q does not match %q to %d subnets", stdout, expect, expectedLen)
 		} else {
-			dlog.Infof(ctx, "%q does not contain %q", stdout, expect)
+			dlog.Errorf(ctx, "%s: %v", stderr, err)
 		}
 		return false
 	}, 30*time.Second, 3*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
@@ -117,7 +119,11 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	neverProxiedCount := len(ips) + 1
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "status")
-		return err == nil && strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount))
+		if err != nil {
+			return false
+		}
+		m := regexp.MustCompile(`Never Proxy\s*:\s*\((\d+) subnets\)`).FindStringSubmatch(stdout)
+		return m != nil && m[1] == strconv.Itoa(neverProxiedCount)
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets", neverProxiedCount))
 
 	s.Eventually(func() bool {

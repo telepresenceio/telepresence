@@ -73,6 +73,7 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 		}
 		cfg.Routing.AlsoProxy = kc.AlsoProxy
 		cfg.Routing.NeverProxy = kc.NeverProxy
+		cfg.Routing.AllowConflicting = kc.AllowConflictingSubnets
 		if dns := kc.DNS; dns != nil {
 			cfg.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
 			cfg.DNS.IncludeSuffixes = dns.IncludeSuffixes
