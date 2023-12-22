@@ -330,6 +330,9 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 			for _, subnet := range obc.NeverProxySubnets {
 				rs.RoutingSnake.NeverProxy = append(rs.RoutingSnake.NeverProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
 			}
+			for _, subnet := range obc.AllowConflictingSubnets {
+				rs.RoutingSnake.AllowConflicting = append(rs.RoutingSnake.AllowConflicting, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
+			}
 		}
 	}
 
@@ -494,8 +497,11 @@ func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 
 func printRouting(kvf *ioutil.KeyValueFormatter, r *client.RoutingSnake) {
 	printSubnets := func(title string, subnets []*iputil.Subnet) {
+		if len(subnets) == 0 {
+			return
+		}
 		out := &strings.Builder{}
-		fmt.Fprintf(out, "(%d subnets)", len(subnets))
+		ioutil.Printf(out, "(%d subnets)", len(subnets))
 		for _, subnet := range subnets {
 			ioutil.Printf(out, "\n- %s", subnet)
 		}
@@ -503,6 +509,7 @@ func printRouting(kvf *ioutil.KeyValueFormatter, r *client.RoutingSnake) {
 	}
 	printSubnets("Also Proxy", r.AlsoProxy)
 	printSubnets("Never Proxy", r.NeverProxy)
+	printSubnets("Allow conflicts for", r.AllowConflicting)
 }
 
 func (cs *UserDaemonStatus) WriteTo(out io.Writer) (int64, error) {

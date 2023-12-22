@@ -30,6 +30,14 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.18.1
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Show allow-conflicting-subnets in telepresence status and telepresence config view.
+        body: >-
+          The <code>telepresence status</code> and <code>telepresence config view</code> commands didn't show the
+          <code>allowConflictingSubnets</code> CIDRs because the value wasn't propagated correctly to the CLI.
   - version: 2.18.0
     date: (TBD)
     notes:

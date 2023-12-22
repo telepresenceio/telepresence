@@ -20,7 +20,7 @@ following Free and Open Source software:
     github.com/cenkalti/backoff/v4                                               v4.2.1                                MIT license
     github.com/cespare/xxhash/v2                                                 v2.2.0                                MIT license
     github.com/chai2010/gettext-go                                               v1.0.2                                3-clause BSD license
-    github.com/containerd/containerd                                             v1.7.9                                Apache License 2.0
+    github.com/containerd/containerd                                             v1.7.11                               Apache License 2.0
     github.com/containerd/log                                                    v0.1.0                                Apache License 2.0
     github.com/coreos/go-iptables                                                v0.7.0                                Apache License 2.0
     github.com/cyphar/filepath-securejoin                                        v0.2.4                                3-clause BSD license
@@ -143,14 +143,14 @@ following Free and Open Source software:
     go.opentelemetry.io/otel/trace                                               v1.21.0                               Apache License 2.0
     go.opentelemetry.io/proto/otlp                                               v1.0.0                                Apache License 2.0
     go.starlark.net                                                              v0.0.0-20231101134539-556fd59b42f6    3-clause BSD license
-    golang.org/x/crypto                                                          v0.15.0                               3-clause BSD license
+    golang.org/x/crypto                                                          v0.17.0                               3-clause BSD license
     golang.org/x/exp                                                             v0.0.0-20231110203233-9a3e6036ecaa    3-clause BSD license
     golang.org/x/mod                                                             v0.14.0                               3-clause BSD license
     golang.org/x/net                                                             v0.18.0                               3-clause BSD license
     golang.org/x/oauth2                                                          v0.14.0                               3-clause BSD license
     golang.org/x/sync                                                            v0.5.0                                3-clause BSD license
-    golang.org/x/sys                                                             v0.14.0                               3-clause BSD license
-    golang.org/x/term                                                            v0.14.0                               3-clause BSD license
+    golang.org/x/sys                                                             v0.15.0                               3-clause BSD license
+    golang.org/x/term                                                            v0.15.0                               3-clause BSD license
     golang.org/x/text                                                            v0.14.0                               3-clause BSD license
     golang.org/x/time                                                            v0.4.0                                3-clause BSD license
     golang.org/x/tools                                                           v0.15.0                               3-clause BSD license

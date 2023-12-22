@@ -37,9 +37,10 @@ func (s *session) GetConfig(ctx context.Context) (*client.SessionConfig, error) 
 			LookupTimeout:   dns.LookupTimeout.AsDuration(),
 		},
 		Routing: client.Routing{
-			Subnets:    subnets(nc.Subnets),
-			AlsoProxy:  subnets(oi.AlsoProxySubnets),
-			NeverProxy: subnets(oi.NeverProxySubnets),
+			Subnets:          subnets(nc.Subnets),
+			AlsoProxy:        subnets(oi.AlsoProxySubnets),
+			NeverProxy:       subnets(oi.NeverProxySubnets),
+			AllowConflicting: subnets(oi.AllowConflictingSubnets),
 		},
 		ManagerNamespace: s.GetManagerNamespace(),
 	}, nil

@@ -434,6 +434,10 @@ func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml 
 			dlog.Debugf(ctx, "Applying remote neverProxy: %v", routing.NeverProxy)
 			kf.NeverProxy = append(kf.NeverProxy, routing.NeverProxy...)
 		}
+		if len(routing.AllowConflicting) > 0 {
+			dlog.Debugf(ctx, "Applying remote allowConflicting: %v", routing.AllowConflicting)
+			kf.AllowConflictingSubnets = append(kf.AllowConflictingSubnets, routing.AllowConflicting...)
+		}
 	}
 	return nil
 }
