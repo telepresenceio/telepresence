@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -28,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -213,6 +215,20 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 
 	var conn *grpc.ClientConn
 	if cr.Docker {
+		// Ensure that the logfile is present before the daemon starts so that it isn't created with
+		// permissions from the docker container.
+		logDir := filelocation.AppUserLogDir(ctx)
+		logFile := filepath.Join(logDir, "connector.log")
+		if _, err := os.Stat(logFile); err != nil {
+			if !os.IsNotExist(err) {
+				return ctx, nil, err
+			}
+			fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o666)
+			if err != nil {
+				return ctx, nil, err
+			}
+			_ = fh.Close()
+		}
 		ctx = docker.EnableClient(ctx)
 		conn, err = docker.LaunchDaemon(ctx, daemonID)
 	} else {

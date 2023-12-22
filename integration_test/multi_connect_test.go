@@ -51,15 +51,27 @@ func (s *multiConnectSuite) SetupSuite() {
 	itest.CreateNamespaces(ctx, s.appSpace2, s.mgrSpace2)
 
 	const svc = "echo"
+	appData := itest.AppData{
+		AppName: svc,
+		Image:   "jmalloc/echo-server:0.1.0",
+		Ports: []itest.AppPort{
+			{
+				ServicePortNumber: 80,
+				TargetPortName:    "http",
+				TargetPortNumber:  8080,
+			},
+		},
+		Env: map[string]string{"PORT": "8080"},
+	}
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		itest.ApplyEchoService(ctx, svc, s.AppNamespace(), 80)
+		itest.ApplyAppTemplate(ctx, s.AppNamespace(), &appData)
 	}()
 	go func() {
 		defer wg.Done()
-		itest.ApplyEchoService(ctx, svc, s.appSpace2, 80)
+		itest.ApplyAppTemplate(ctx, s.appSpace2, &appData)
 	}()
 
 	ctx2 := itest.WithNamespaces(ctx, &itest.Namespaces{Namespace: s.mgrSpace2, ManagedNamespaces: []string{s.appSpace2}})
@@ -75,6 +87,9 @@ func (s *multiConnectSuite) SetupSuite() {
 	_, err = itest.Output(ctx, "docker", "build", "-t", s.handlerTag, testDir)
 	require.NoError(err)
 	wg.Wait()
+	if s.T().Failed() {
+		s.T().FailNow()
+	}
 }
 
 func (s *multiConnectSuite) TearDownSuite() {

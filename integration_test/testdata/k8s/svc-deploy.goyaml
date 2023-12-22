@@ -1,0 +1,61 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ default .AppName .ServiceName }}
+  labels:
+    app: {{ .AppName }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .AppName }}
+  ports:
+  {{- range .Ports }}
+    - port: {{ .ServicePortNumber }}
+    {{- if .ServicePortName }}
+      name: {{ .ServicePortName }}
+    {{- end }}
+    {{- if .AppProtocol }}
+      appProtocol: {{ .AppProtocol }}
+    {{- end }}
+      protocol: {{ default "TCP" .Protocol }}
+      targetPort: {{ default .TargetPortNumber .TargetPortName }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ default .AppName .DeploymentName }}
+  labels:
+    app: {{ .AppName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .AppName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .AppName }}
+    spec:
+      containers:
+        - name: {{ default .AppName .ContainerName }}
+          image: {{ default "datawire/helloserver" .Image }}
+          imagePullPolicy: {{ default "IfNotPresent" .PullPolicy }}
+          env:
+          {{- range $key, $value := .Env }}
+            - name: {{  $key }}
+              value: {{ quote $value }}
+          {{- end }}
+          ports:
+          {{- range .Ports }}
+            - containerPort: {{ .TargetPortNumber }}
+            {{- if .TargetPortName }}
+              name: {{ .TargetPortName }}
+            {{- end }}
+              protocol: {{ default "TCP" .Protocol }}
+          {{- end }}
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
