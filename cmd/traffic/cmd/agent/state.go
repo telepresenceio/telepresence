@@ -151,6 +151,9 @@ func (s *simpleState) HandleIntercepts(ctx context.Context, iis []*manager.Inter
 }
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
+	if containerPort == 0 && len(s.interceptStates) == 1 {
+		containerPort = s.interceptStates[0].Target().ContainerPort()
+	}
 	for _, is := range s.interceptStates {
 		ic := is.Target()
 		if containerPort == ic.ContainerPort() && ic.Protocol() == core.ProtocolTCP {
