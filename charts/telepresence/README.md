@@ -10,19 +10,15 @@ their services.
 
 ## Install
 
+The telepresence binary embeds the helm chart, so the easiest way to install is:
+
 ```sh
-helm repo add datawire https://app.getambassador.io
-helm install traffic-manager -n ambassador datawire/telepresence \
---create-namespace \
+$ telepresence helm install [--set x=y | --values &lt;values file&gt;]
 ```
-
-## Changelog
-
-Notable chart changes are listed in the [CHANGELOG](./CHANGELOG.md)
 
 ## Configuration
 
-The following tables lists the configurable parameters of the Ambassador chart and their default values.
+The following tables lists the configurable parameters of the Telepresence chart and their default values.
 
 | Parameter                                            | Description                                                                                                                 | Default                                                                     |
 |------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
@@ -102,7 +98,7 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | client.dns.excludeSuffixes                           | Suffixes for which the client DNS resolver will always fail (or fallback in case of the overriding resolver)                | `[".com", ".io", ".net", ".org", ".ru"]`                                    |
 | client.dns.includeSuffixes                           | Suffixes for which the client DNS resolver will always attempt to do a lookup. Includes have higher priority than excludes. | `[]`                                                                        |
 
-## RBAC
+### RBAC
 
 Telepresence requires a cluster for installation but restricted RBAC roles can
 be used to give users access to create intercepts if they are not cluster
@@ -114,7 +110,7 @@ give access to the entire cluster or restrict to certain namespaces.
 You can also create a separate release for managing RBAC by setting
 `Values.rbac.only: true`.
 
-## Namespace-scoped traffic manager
+### Namespace-scoped traffic manager
 
 Telepresence's Helm chart supports installing a Traffic Manager at the namespace scope.
 You might want to do this if you have multiple namespaces, say representing multiple different environments, and would like their Traffic Managers to be isolated from one another.
@@ -122,7 +118,7 @@ To do this, set `managerRbac.namespaced=true` and `managerRbac.namespaces={a,b,c
 
 **NOTE** Do not install namespace-scoped traffic managers and a cluster-scoped traffic manager in the same cluster!
 
-### Namespace collision detection
+#### Namespace collision detection
 
 The Telepresence Helm chart will try to prevent namespace-scoped Traffic Managers from managing the same namespaces.
 It will do this by creating a ConfigMap, called `traffic-manager-claim`, in each namespace that a given install manages.
@@ -130,13 +126,13 @@ It will do this by creating a ConfigMap, called `traffic-manager-claim`, in each
 So, for example, suppose you install one Traffic Manager to manage namespaces `a` and `b`, as:
 
 ```bash
-helm install traffic-manager --namespace a datawire/telepresence --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={a,b}'
+$ telepresence helm install --namespace a --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={a,b}'
 ```
 
 You might then attempt to install another Traffic Manager to manage namespaces `b` and `c`:
 
 ```bash
-helm install traffic-manager --namespace c datawire/telepresence --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={b,c}'
+$ telepresence helm install --namespace c --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={b,c}'
 ```
 
 This would fail with an error:
@@ -147,7 +143,7 @@ Error: rendered manifests contain a resource that already exists. Unable to cont
 
 To fix this error, fix the overlap either by removing `b` from the first install, or from the second.
 
-## Pod CIDRs
+#### Pod CIDRs
 
 The traffic manager is responsible for keeping track of what CIDRs the cluster uses for the pods. The Telepresence client uses this
 information to configure the network so that it provides access to the pods. In some cases, the traffic-manager will not be able to retrieve
