@@ -40,10 +40,10 @@ jobs:
           set -e
           git add .
           if [[ -n "$(git status --porcelain)" ]]; then
-            echo '::set-output name=diff::'$(PAGER= git diff --cached 2>&1 | base64 -w0)
-            echo "::set-output name=up-to-date::no"
+            echo "diff=$(PAGER= git diff --cached 2>&1 | base64 -w0)" >> $GITHUB_OUTPUT
+            echo "up-to-date=no" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=up-to-date::yes"
+            echo "up-to-date=yes" >> $GITHUB_OUTPUT
           fi
   up_to_date_check_linux:
     name: "Linux: Check out-of-date licenses"
