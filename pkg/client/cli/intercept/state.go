@@ -80,7 +80,8 @@ func (s *state) Cmd() *cobra.Command {
 
 func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	spec := &manager.InterceptSpec{
-		Name: s.Name(),
+		Name:    s.Name(),
+		Replace: s.Replace,
 	}
 	ir := &connector.CreateInterceptRequest{
 		Spec:         spec,
