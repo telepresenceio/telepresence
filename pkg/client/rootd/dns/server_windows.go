@@ -25,7 +25,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	if err != nil {
 		return err
 	}
-	configureDNS(s.config.RemoteIp, dnsAddr)
+	configureDNS(s.remoteIP, dnsAddr)
 
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
@@ -33,7 +33,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		// No need to close listener. It's closed by the dns server.
 		defer func() {
 			c, cancel := context.WithTimeout(context.WithoutCancel(c), 5*time.Second)
-			_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, nil)
+			_ = dev.SetDNS(c, s.clusterDomain, s.remoteIP, nil)
 			cancel()
 		}()
 		s.processSearchPaths(g, s.updateRouterDNS, dev)
@@ -55,11 +55,11 @@ func (s *Server) updateRouterDNS(c context.Context, paths []string, dev vif.Devi
 			namespaces[path] = struct{}{}
 		}
 	}
-	s.domainsLock.Lock()
+	s.Lock()
 	s.namespaces = namespaces
 	s.search = search
-	s.domainsLock.Unlock()
-	err := dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, search)
+	err := dev.SetDNS(c, s.clusterDomain, s.remoteIP, search)
+	s.Unlock()
 	s.flushDNS()
 	if err != nil {
 		return fmt.Errorf("failed to set DNS: %w", err)

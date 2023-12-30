@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/puzpuzpuz/xsync/v3"
+	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dcontext"
@@ -54,11 +57,12 @@ const (
 
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface.
 type Server struct {
+	sync.RWMutex
 	ctx          context.Context // necessary to make logging work in ServeDNS function
 	fallbackPool FallbackPool
 	resolve      Resolver
 	requestCount int64
-	cache        sync.Map
+	cache        *xsync.MapOf[cacheKey, *cacheEntry]
 	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
 	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
 	dropSuffixes []string //nolint:unused // only used on linux
@@ -68,16 +72,20 @@ type Server struct {
 	domains    map[string]struct{}
 	search     []string
 
-	// The domainsLock locks usage of namespaces, domains, and search
-	domainsLock sync.RWMutex
-
 	// searchPathCh receives requests to change the search path.
 	searchPathCh chan []string
 
-	config *rpc.DNSConfig
+	includeSuffixes []string
 
-	// configLock ensures thread safety for the DNS config for certain fields that can be modified remotely.
-	configLock sync.RWMutex
+	excludeSuffixes []string
+
+	excludes []string
+	mappings map[string]string
+
+	lookupTimeout time.Duration
+
+	localIP  net.IP
+	remoteIP net.IP
 
 	// clusterDomain reported by the traffic-manager
 	clusterDomain string
@@ -88,6 +96,8 @@ type Server struct {
 	// onlyNames is set to true when using a legacy traffic-manager incapable of
 	// using query types
 	onlyNames bool
+
+	error string
 
 	// ready is closed when the DNS server is fully configured
 	ready chan struct{}
@@ -134,16 +144,24 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 		config.LookupTimeout = durationpb.New(8 * time.Second)
 	}
 	s := &Server{
-		config:        config,
-		configLock:    sync.RWMutex{},
-		namespaces:    make(map[string]struct{}),
-		domains:       make(map[string]struct{}),
-		search:        []string{""},
-		searchPathCh:  make(chan []string, 5),
-		clusterDomain: defaultClusterDomain,
-		clusterLookup: clusterLookup,
-		onlyNames:     onlyNames,
-		ready:         make(chan struct{}),
+		cache:           xsync.NewMapOf[cacheKey, *cacheEntry](),
+		namespaces:      make(map[string]struct{}),
+		domains:         make(map[string]struct{}),
+		excludes:        config.Excludes,
+		excludeSuffixes: config.ExcludeSuffixes,
+		includeSuffixes: config.IncludeSuffixes,
+		mappings:        mappingsMap(config.Mappings),
+		localIP:         config.LocalIp,
+		remoteIP:        config.RemoteIp,
+		search:          []string{""},
+		searchPathCh:    make(chan []string, 5),
+		clusterDomain:   defaultClusterDomain,
+		clusterLookup:   clusterLookup,
+		onlyNames:       onlyNames,
+		ready:           make(chan struct{}),
+	}
+	if lt := config.LookupTimeout; lt != nil {
+		s.lookupTimeout = lt.AsDuration()
 	}
 	s.cacheResolve = s.resolveWithRecursionCheck
 	return s
@@ -175,7 +193,9 @@ var (
 func (s *Server) tel2SubDomainHostname(query string) string {
 	// Has to be trimmed since value for an unqualified hostname can be :
 	// - <hostname>.tel2-search.cluster.local
+	s.RLock()
 	uqHostSuffix := "." + tel2SubDomainDot + s.clusterDomain
+	s.RUnlock()
 	if strings.HasSuffix(query, uqHostSuffix) {
 		return strings.TrimSuffix(query, uqHostSuffix) + "."
 	}
@@ -187,6 +207,7 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 		// Reject "wpad.*"
 		return false
 	}
+
 	if strings.HasSuffix(query, "."+s.clusterDomain) && strings.Count(query, ".") < 4 {
 		// Reject "<label>.cluster.local."
 		return false
@@ -209,14 +230,14 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	}
 
 	// Always include configured includeSuffixes
-	for _, sfx := range s.config.IncludeSuffixes {
+	for _, sfx := range s.includeSuffixes {
 		if strings.HasSuffix(query, sfx) {
 			return true
 		}
 	}
 
 	// Skip configured excludeSuffixes
-	for _, sfx := range s.config.ExcludeSuffixes {
+	for _, sfx := range s.excludeSuffixes {
 		if strings.HasSuffix(query, sfx) {
 			return false
 		}
@@ -225,21 +246,18 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 }
 
 func (s *Server) isExcluded(query string) bool {
-	s.configLock.RLock()
-	defer s.configLock.RUnlock()
-
-	if slice.Contains(s.config.Excludes, query[:len(query)-1]) {
+	qLen := len(query)
+	if slice.Contains(s.excludes, query[:qLen-1]) {
 		return true
 	}
 
 	// When intercepting, this function will potentially receive the hostname of any search param, so their
 	// unqualified hostname should be evaluated too.
 	for _, sp := range s.search {
-		if strings.HasSuffix(query, sp) && slice.Contains(s.config.Excludes, query[:len(query)-len(sp)-1]) {
+		if strings.HasSuffix(query, sp) && slice.Contains(s.excludes, query[:qLen-len(sp)-1]) {
 			return true
 		}
 	}
-
 	return false
 }
 
@@ -276,7 +294,7 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	}
 
 	// Give the cluster lookup a reasonable timeout.
-	c, cancel := context.WithTimeout(c, s.config.LookupTimeout.AsDuration())
+	c, cancel := context.WithTimeout(c, s.lookupTimeout)
 	defer cancel()
 
 	result, rCode, err = s.clusterLookup(c, q)
@@ -297,31 +315,38 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	return result, rCode, nil
 }
 
-func (s *Server) ResolveMappingAlias(query string) *string {
-	s.configLock.RLock()
-	defer s.configLock.RUnlock()
-	for i := range s.config.Mappings {
-		mappingName := s.config.Mappings[i].Name + "."
-		if mappingName == query {
-			dotName := s.config.Mappings[i].AliasFor + "."
-			return &dotName
-		}
-	}
-	return nil
+func (s *Server) resolveMappingAlias(query string) (string, bool) {
+	s.RLock()
+	a, ok := s.mappings[query]
+	s.RUnlock()
+	return a, ok
 }
 
 func (s *Server) GetConfig() *rpc.DNSConfig {
-	sc := s.config
-	return &rpc.DNSConfig{
-		LocalIp:         sc.LocalIp,
-		RemoteIp:        sc.RemoteIp,
-		ExcludeSuffixes: sc.ExcludeSuffixes,
-		IncludeSuffixes: sc.IncludeSuffixes,
-		Excludes:        sc.Excludes,
-		Mappings:        sc.Mappings,
-		LookupTimeout:   sc.LookupTimeout,
-		Error:           sc.Error,
+	s.RLock()
+	c := rpc.DNSConfig{
+		LocalIp:         s.localIP,
+		RemoteIp:        s.remoteIP,
+		ExcludeSuffixes: s.excludeSuffixes,
+		IncludeSuffixes: s.includeSuffixes,
+		Excludes:        s.excludes,
+		Error:           s.error,
 	}
+	if s.lookupTimeout != 0 {
+		c.LookupTimeout = durationpb.New(s.lookupTimeout)
+	}
+	if len(s.mappings) > 0 {
+		ns := maps.Keys(s.mappings)
+		slices.Sort(ns)
+		for _, n := range ns {
+			c.Mappings = append(c.Mappings, &rpc.DNSMapping{
+				Name:     strings.TrimSuffix(n, "."),
+				AliasFor: strings.TrimSuffix(s.mappings[n], "."),
+			})
+		}
+	}
+	s.RUnlock()
+	return &c
 }
 
 func (s *Server) Ready() <-chan struct{} {
@@ -338,40 +363,25 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
+	s.Lock()
 	s.clusterDomain = dns.ClusterDomain
-	if s.config == nil {
-		s.config = &rpc.DNSConfig{}
+	if s.remoteIP == nil {
+		s.remoteIP = remoteIP
 	}
-	if s.config.RemoteIp == nil {
-		s.config.RemoteIp = remoteIP
-	}
-	contains := func(s []string, a string) bool {
-		for _, x := range s {
-			if x == a {
-				return true
-			}
-		}
-		return false
-	}
-	appendUnique := func(a, b []string) []string {
-		for _, x := range b {
-			if !contains(a, x) {
-				a = append(a, x)
-			}
-		}
-		return a
-	}
-	s.config.ExcludeSuffixes = appendUnique(s.config.ExcludeSuffixes, dns.ExcludeSuffixes)
-	s.config.IncludeSuffixes = appendUnique(s.config.IncludeSuffixes, dns.IncludeSuffixes)
+	s.excludeSuffixes = slice.AppendUnique(s.excludeSuffixes, dns.ExcludeSuffixes...)
+	s.includeSuffixes = slice.AppendUnique(s.includeSuffixes, dns.IncludeSuffixes...)
+	s.Unlock()
 }
 
 // SetSearchPath updates the DNS search path used by the resolver.
 func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) {
 	if len(namespaces) > 0 {
 		// Provide direct access to intercepted namespaces
+		s.RLock()
 		for _, ns := range namespaces {
 			paths = append(paths, ns+".svc."+s.clusterDomain)
 		}
+		s.RUnlock()
 		paths = append(paths, tel2SubDomain)
 	}
 
@@ -386,34 +396,45 @@ func (s *Server) purgeRecordsFromCache(keyName string) {
 	for _, qType := range []uint16{dns.TypeA, dns.TypeAAAA} {
 		toDeleteKey := cacheKey{name: keyName, qType: qType}
 		if old, ok := s.cache.LoadAndDelete(toDeleteKey); ok {
-			old.(*cacheEntry).close()
+			old.close()
 		}
 	}
 }
 
 // SetExcludes sets the excludes list in the config.
 func (s *Server) SetExcludes(excludes []string) {
-	s.configLock.Lock()
-	toFlush := excludes
-	toFlush = append(toFlush, s.config.Excludes...)
-
-	// Flush the excludes
-	for i := range toFlush {
-		s.purgeRecordsFromCache(toFlush[i])
+	for _, e := range excludes {
+		s.purgeRecordsFromCache(e)
 	}
-	s.config.Excludes = excludes
-	s.configLock.Unlock()
+	s.Lock()
+	for _, e := range s.excludes {
+		s.purgeRecordsFromCache(e)
+	}
+	s.excludes = excludes
+	s.Unlock()
+}
+
+func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
+	if l := len(mappings); l > 0 {
+		mm := make(map[string]string, l)
+		for _, m := range mappings {
+			mm[m.Name+"."] = m.AliasFor + "."
+		}
+		return mm
+	}
+	return nil
 }
 
 // SetMappings sets the Mappings list in the config.
 func (s *Server) SetMappings(mappings []*rpc.DNSMapping) {
-	s.configLock.Lock()
+	mm := mappingsMap(mappings)
+	s.Lock()
 	// Flush the mappings.
-	for i := range s.config.Mappings {
-		s.purgeRecordsFromCache(s.config.Mappings[i].Name)
+	for n := range s.mappings {
+		s.purgeRecordsFromCache(n)
 	}
-	s.config.Mappings = mappings
-	s.configLock.Unlock()
+	s.mappings = mm
+	s.Unlock()
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
@@ -423,7 +444,9 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
 	g.Go("RecursionCheck", func(c context.Context) error {
-		_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, []string{tel2SubDomain})
+		s.RLock()
+		_ = dev.SetDNS(c, s.clusterDomain, s.remoteIP, []string{tel2SubDomain})
+		s.RUnlock()
 		if runtime.GOOS == "windows" {
 			// Give the DNS setting some time to take effect.
 			dtime.SleepWithContext(c, 500*time.Millisecond)
@@ -469,9 +492,9 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 }
 
 func (s *Server) flushDNS() {
-	s.cache.Range(func(key, _ any) bool {
+	s.cache.Range(func(key cacheKey, _ *cacheEntry) bool {
 		if old, ok := s.cache.LoadAndDelete(key); ok {
-			old.(*cacheEntry).close()
+			old.close()
 		}
 		return true
 	})
@@ -516,8 +539,7 @@ type cacheKey struct {
 func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
-	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
-		oldDv := v.(*cacheEntry)
+	if oldDv, loaded := s.cache.LoadOrStore(key, newDv); loaded {
 		if atomic.LoadInt32(&s.recursive) == recursionDetected && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			// We have to assume that this is a recursion from the cluster.
 			return nil, dns.RcodeNameError, nil
@@ -571,8 +593,7 @@ func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnspr
 func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
-	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
-		oldDv := v.(*cacheEntry)
+	if oldDv, loaded := s.cache.LoadOrStore(key, newDv); loaded {
 		if strings.HasPrefix(q.Name, recursionCheck) {
 			atomic.StoreInt32(&s.recursive, recursionDetected)
 		}
@@ -615,7 +636,9 @@ func (s *Server) performRecursionCheck(c context.Context) {
 	if runtime.GOOS != "darwin" {
 		rc = recursionCheck + tel2SubDomain
 	} else {
+		s.RLock()
 		rc = recursionCheck + s.clusterDomain
+		s.RUnlock()
 	}
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
@@ -650,7 +673,9 @@ func (s *Server) performRecursionCheck(c context.Context) {
 		dtime.SleepWithContext(c, 100*time.Millisecond)
 	}
 	if i == maxRecursionTestRetries {
-		s.config.Error = "DNS doesn't seem to work properly"
+		s.Lock()
+		s.error = "DNS doesn't seem to work properly"
+		s.Unlock()
 	}
 }
 
@@ -731,7 +756,10 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// The recursion check query, or queries that end with the cluster domain name, are not dispatched to the
 	// fallback DNS-server.
-	if s.fallbackPool == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, s.clusterDomain) {
+	s.RLock()
+	cd := s.clusterDomain
+	s.RUnlock()
+	if s.fallbackPool == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, cd) {
 		if err == nil {
 			rCode = dns.RcodeNameError
 		} else {
@@ -748,7 +776,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}
 
 	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
-	dc := &dns.Client{Net: "udp", Timeout: s.config.LookupTimeout.AsDuration()}
+	dc := &dns.Client{Net: "udp", Timeout: s.lookupTimeout}
 	msg, _, err = s.fallbackPool.Exchange(c, dc, r)
 	if err != nil {
 		msg = new(dns.Msg)
@@ -801,16 +829,16 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, in
 	}()
 
 	// Returns a CNAME pointing to the mapping when there is a hit.
-	if mappingAlias := s.ResolveMappingAlias(q.Name); mappingAlias != nil {
+	if mappingAlias, ok := s.resolveMappingAlias(q.Name); ok {
 		dv.answer = dnsproxy.RRs{&dns.CNAME{
 			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
-			Target: *mappingAlias,
+			Target: mappingAlias,
 		}}
 		// On Windows, or in a Linux container, just returning the cname isn't enough, and the DNS resolver won't try
 		// to get the record with a subsequent request, so we need to resolve the record until we get a better solution.
 		if runtime.GOOS == "windows" || proc.RunningInContainer() {
 			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
-				Name:   *mappingAlias,
+				Name:   mappingAlias,
 				Qtype:  q.Qtype,
 				Qclass: q.Qclass,
 			})

@@ -1,11 +1,11 @@
 package dns
 
 import (
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
@@ -20,11 +20,7 @@ type suiteServer struct {
 
 func (s *suiteServer) SetupSuite() {
 	s.server = &Server{
-		cache: sync.Map{},
-		config: &rpc.DNSConfig{
-			Excludes: nil,
-			Mappings: nil,
-		},
+		cache: xsync.NewMapOf[cacheKey, *cacheEntry](),
 	}
 }
 
@@ -39,11 +35,8 @@ func (s *suiteServer) TestSetMappings() {
 	s.server.cache.Store(toDelete4ARecordKey, entry)
 	s.server.cache.Store(toKeepARecordKey, entry)
 
-	s.server.config.Mappings = []*rpc.DNSMapping{
-		{
-			Name:     "echo-easy-alias",
-			AliasFor: "echo-easy.blue.svc.cluster.local",
-		},
+	s.server.mappings = map[string]string{
+		"echo-easy-alias.": "echo-easy.blue.svc.cluster.local.",
 	}
 
 	// when
@@ -51,12 +44,12 @@ func (s *suiteServer) TestSetMappings() {
 
 	// then
 	_, exists := s.server.cache.Load(toDeleteARecordKey)
-	assert.False(s.T(), exists, "Mapping's A record was purged")
+	s.False(exists, "Mapping's A record was purged")
 	_, exists = s.server.cache.Load(toDelete4ARecordKey)
-	assert.False(s.T(), exists, "Mapping's AAAA record was purged")
+	s.False(exists, "Mapping's AAAA record was purged")
 	_, exists = s.server.cache.Load(toKeepARecordKey)
-	assert.Truef(s.T(), exists, "Service's A record wasn't purged")
-	assert.Equal(s.T(), []*rpc.DNSMapping{}, s.server.config.Mappings)
+	s.Truef(exists, "Service's A record wasn't purged")
+	s.Empty(s.server.mappings)
 }
 
 func (s *suiteServer) TestSetExcludes() {
@@ -70,7 +63,7 @@ func (s *suiteServer) TestSetExcludes() {
 	s.server.cache.Store(toDelete4ARecordKey, entry)
 	s.server.cache.Store(toDeleteNewARecordKey, entry)
 
-	s.server.config.Excludes = []string{"echo-easy"}
+	s.server.excludes = []string{"echo-easy"}
 
 	// when
 	newExcluded := []string{"new-excluded"}
@@ -83,12 +76,12 @@ func (s *suiteServer) TestSetExcludes() {
 	assert.False(s.T(), exists, "Excluded AAAA record was purged")
 	_, exists = s.server.cache.Load(toDeleteNewARecordKey)
 	assert.False(s.T(), exists, "New excluded record was purged")
-	assert.Equal(s.T(), newExcluded, s.server.config.Excludes)
+	assert.Equal(s.T(), newExcluded, s.server.excludes)
 }
 
 func (s *suiteServer) TestIsExcluded() {
 	// given
-	s.server.config.Excludes = []string{
+	s.server.excludes = []string{
 		"echo-easy",
 	}
 	s.server.search = []string{

@@ -91,7 +91,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 			AliasFor: aliasedService,
 		},
 		{
-			Name:     "my-alias.some-fantasist-root-domain.cluster.local",
+			Name:     "my-alias.vx-root-domain.cluster.local",
 			AliasFor: aliasedService,
 		},
 	}

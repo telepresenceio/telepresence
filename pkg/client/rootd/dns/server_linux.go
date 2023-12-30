@@ -97,7 +97,9 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 		query = strings.TrimSuffix(query, sfx)
 	}
 
+	s.RLock()
 	if !s.shouldDoClusterLookup(query) {
+		s.RUnlock()
 		return nil, dns.RcodeNameError, nil
 	}
 
@@ -112,11 +114,12 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 		}
 		q.Name = origQuery
 	}
+	s.RUnlock()
 	return s.resolveInCluster(c, q)
 }
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
-	if s.config.LocalIp == nil {
+	if s.localIP == nil {
 		rf, err := readResolveFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -124,7 +127,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 		dlog.Debug(c, rf.String())
 		if len(rf.nameservers) > 0 {
 			ip := iputil.Parse(rf.nameservers[0])
-			s.config.LocalIp = ip
+			s.localIP = ip
 			dlog.Infof(c, "Automatically set -dns=%s", ip)
 		}
 
@@ -134,7 +137,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			s.dropSuffixes = append(s.dropSuffixes, sp+".")
 		}
 	}
-	if s.config.LocalIp == nil {
+	if s.localIP == nil {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
@@ -151,7 +154,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	pool, err := NewConnPool(net.IP(s.config.LocalIp).String(), 10)
+	pool, err := NewConnPool(s.localIP.String(), 10)
 	if err != nil {
 		return err
 	}
@@ -175,10 +178,10 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 					namespaces[path] = struct{}{}
 				}
 			}
-			s.domainsLock.Lock()
+			s.Lock()
 			s.namespaces = namespaces
 			s.search = search
-			s.domainsLock.Unlock()
+			s.Unlock()
 			s.flushDNS()
 			return nil
 		}, dev)
@@ -215,7 +218,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.config.LocalIp, dnsResolverAddr, pool.LocalAddrs())
+			err := routeDNS(c, s.localIP, dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {
 				return err
 			}
