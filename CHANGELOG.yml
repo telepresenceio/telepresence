@@ -34,6 +34,12 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Environment interpolation expressions were prefixed twice.
+        body: >-
+          Telepresence would sometimes prefix environment interpolation expressions in the traffic-agent twice so
+          that an expression that looked like <code>$(SOME_NAME)</code> in the app-container, ended up as <code>
+          $(_TEL_APP_A__TEL_APP_A_SOME_NAME)</code> in the corresponding expression in the traffic-agent.
+      - type: bugfix
         title: Panic in root-daemon on darwin workstations with full access to cluster network.
         body: >-
           A darwin machine with full access to the cluster's subnets will never create a TUN-device, and a check was
