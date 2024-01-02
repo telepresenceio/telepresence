@@ -1,0 +1,103 @@
+{{- $altNames := list (printf "itest-injector.%s" .Values.namespace) (printf "itest-injector.%s.svc" .Values.namespace) -}}
+{{- $genCA := genCA "itest-injector-ca" 365 -}}
+{{- $genCert := genSignedCert "itest-injector" nil $altNames 365 $genCA -}}
+---
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  name: itest-injector-tls
+  namespace: {{ .Values.namespace }}
+data:
+  ca.crt: {{ $genCA.Cert | b64enc }}
+  tls.crt: {{ $genCert.Cert | b64enc }}
+  tls.key: {{ $genCert.Key | b64enc }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: itest-injector
+  name: itest-injector
+  namespace: {{ .Values.namespace }}
+spec:
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+  selector:
+    app: itest-injector
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: itest-injector
+  name: itest-injector
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: itest-injector
+  template:
+    metadata:
+      labels:
+        app: itest-injector
+    spec:
+      containers:
+        - name: itest-injector
+          image: localhost:5000/injector:latest
+          ports:
+            - containerPort: 8443
+              name: https
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /certs
+              name: certs
+      volumes:
+        - name: certs
+          secret:
+            secretName: itest-injector-tls
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  labels:
+    app: itest-injector
+  name: itest-injector-webhook
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: {{ $genCA.Cert | b64enc }}
+      service:
+        name: itest-injector
+        namespace: {{ .Values.namespace }}
+        path: /inject
+        port: 443
+    failurePolicy: Ignore
+    matchPolicy: Equivalent
+    name: itest-injector.getambassador.io
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - kube-node-lease
+    reinvocationPolicy: IfNeeded
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods
+        scope: '*'
+    sideEffects: None
+    timeoutSeconds: 5

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: itest-injector
+description: A chart for deploying the itest-injector
+type: application
+version: 0.1.1
