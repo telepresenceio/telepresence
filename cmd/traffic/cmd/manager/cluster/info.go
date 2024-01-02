@@ -362,6 +362,7 @@ func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 	subnets := managerutil.GetEnv(ctx).PodCIDRs
 	if len(subnets) > 0 {
 		oi.PodSubnets = subnetsToRPC(subnets)
+		oi.ciSubs.notify(ctx, oi.clusterInfo())
 		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
 		return true
 	}
