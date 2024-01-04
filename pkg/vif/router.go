@@ -105,8 +105,8 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 	return nil
 }
 
-func (rt *Router) UpdateRoutes(ctx context.Context, plaseProxy, dontProxy []*net.IPNet) (err error) {
-	if err := rt.ValidateRoutes(ctx, plaseProxy); err != nil {
+func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy []*net.IPNet) (err error) {
+	if err := rt.ValidateRoutes(ctx, pleaseProxy); err != nil {
 		return err
 	}
 	for _, n := range dontProxy {
@@ -128,7 +128,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, plaseProxy, dontProxy []*net
 	// Remove all no longer desired subnets from the routedSubnets
 	var removed []*net.IPNet
 	rt.routedSubnets, removed = subnet.Partition(rt.routedSubnets, func(_ int, sn *net.IPNet) bool {
-		for _, d := range plaseProxy {
+		for _, d := range pleaseProxy {
 			if subnet.Equal(sn, d) {
 				return true
 			}
@@ -137,7 +137,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, plaseProxy, dontProxy []*net
 	})
 
 	// Remove already routed subnets from the pleaseProxy list
-	added, _ := subnet.Partition(plaseProxy, func(_ int, sn *net.IPNet) bool {
+	added, _ := subnet.Partition(pleaseProxy, func(_ int, sn *net.IPNet) bool {
 		for _, d := range rt.routedSubnets {
 			if subnet.Equal(sn, d) {
 				return false
