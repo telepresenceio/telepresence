@@ -1,7 +1,6 @@
 package agentconfig
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"strconv"
@@ -36,10 +35,9 @@ func AgentContainer(
 
 	evs := make([]core.EnvVar, 0, len(config.Containers)*5)
 	efs := make([]core.EnvFromSource, 0, len(config.Containers)*3)
-	subst := make(map[string]string, len(evs)+len(efs))
 	EachContainer(pod, config, func(app *core.Container, cc *Container) {
-		evs = appendAppContainerEnv(app, cc, evs, subst)
-		efs = appendAppContainerEnvFrom(app, cc, efs, subst)
+		evs = appendAppContainerEnv(app, cc, evs)
+		efs = appendAppContainerEnvFrom(app, cc, efs)
 	})
 	if config.APIPort > 0 {
 		evs = append(evs, core.EnvVar{
@@ -155,39 +153,44 @@ func AgentContainer(
 		ac.Resources = *r
 	}
 
-	// Assign the security context of the first container (with both intercepts
-	// and a set security context) to the traffic agent.
-outerLoop:
-	for _, cc := range config.Containers {
-		if cc.Intercepts == nil {
-			continue
-		}
-
-		for _, app := range pod.Spec.Containers {
-			if app.Name == cc.Name {
-				if app.SecurityContext != nil {
-					ac.SecurityContext = app.SecurityContext
-					break outerLoop
-				}
-				break
-			}
-		}
-	}
-
-	// Replace all occurrences of "$(ENV" with "$(PFX_ENV"
-	aj, err := json.Marshal(&ac)
+	// Assign the security context of the first container to the traffic agent.
+	appSc, err := firstAppSecurityContext(pod, config)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return nil
 	}
-	for k, pk := range subst {
-		aj = bytes.ReplaceAll(aj, []byte("$("+k), []byte("$("+pk))
-	}
-	if err = json.Unmarshal(aj, &ac); err != nil {
-		dlog.Error(ctx, err)
-		return nil
-	}
+	ac.SecurityContext = appSc
 	return ac
+}
+
+// Find security context of the first container (with both intercepts and a set security context) and ensure
+// that any env interpolations in it are prefixed with the env-prefix of the corresponding config container.
+func firstAppSecurityContext(pod *core.Pod, config *Sidecar) (*core.SecurityContext, error) {
+	cns := pod.Spec.Containers
+	for _, cc := range config.Containers {
+		if len(cc.Intercepts) > 0 {
+			for i := range cns {
+				app := &cns[i]
+				if app.Name != cc.Name {
+					continue
+				}
+				if app.SecurityContext == nil {
+					break
+				}
+				js, err := json.Marshal(app.SecurityContext)
+				if err != nil {
+					return nil, err
+				}
+				sc := core.SecurityContext{}
+				err = json.Unmarshal([]byte(prefixInterpolated(string(js), EnvPrefixApp+cc.EnvPrefix)), &sc)
+				if err != nil {
+					return nil, err
+				}
+				return &sc, nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 func InitContainer(config *Sidecar) *core.Container {
@@ -297,7 +300,7 @@ func appendSecretVolume(env dos.Env, annotation, volumeName string, pod *core.Po
 func EachContainer(pod *core.Pod, config *Sidecar, f func(*core.Container, *Container)) {
 	cns := pod.Spec.Containers
 	for _, cc := range config.Containers {
-		for i := range pod.Spec.Containers {
+		for i := range cns {
 			if app := &cns[i]; app.Name == cc.Name {
 				f(app, cc)
 				break
@@ -327,6 +330,7 @@ func appendAppContainerVolumeMounts(
 	}
 
 	volPaths := make([]string, 0, len(app.VolumeMounts))
+	pfx := EnvPrefixApp + cc.EnvPrefix
 	for _, m := range app.VolumeMounts {
 		if _, ok := ignoredVolumeMounts[m.Name]; ok {
 			continue
@@ -335,27 +339,92 @@ func appendAppContainerVolumeMounts(
 			continue
 		}
 		volPaths = append(volPaths, m.MountPath)
-		m.MountPath = cc.MountPoint + "/" + strings.TrimPrefix(m.MountPath, "/")
+		m.Name = prefixInterpolated(m.Name, pfx)
+		m.MountPath = prefixInterpolated(cc.MountPoint+"/"+strings.TrimPrefix(m.MountPath, "/"), pfx)
+		m.SubPath = prefixInterpolated(m.SubPath, pfx)
+		m.SubPathExpr = prefixInterpolated(m.SubPathExpr, pfx)
 		mounts = append(mounts, m)
 	}
 	return volPaths, mounts
 }
 
-func appendAppContainerEnv(app *core.Container, cc *Container, es []core.EnvVar, subst map[string]string) []core.EnvVar {
+// prefixInterpolated will prefix all environment variable names that are referenced using $(NAME) expressions
+// in the given string with the given prefix and return the result. Escaped expressions in the form $$(NAME),
+// unbalanced, or otherwise invalid expressions are not prefixed.
+func prefixInterpolated(str, pfx string) string {
+	const (
+		stNormal = iota
+		stDollarSeen
+		stDollarParenSeen
+	)
+	st := stNormal
+	var bd, ev strings.Builder
+	for _, c := range str {
+		switch c {
+		case '$':
+			switch st {
+			case stDollarParenSeen:
+				// '$' is not a legal character in an environment interpolation expression so
+				// terminate that expression without prefixing it.
+				bd.WriteString(ev.String())
+				ev.Reset()
+				st = stDollarSeen
+			case stDollarSeen:
+				st = stNormal
+			default:
+				st = stDollarSeen
+			}
+			bd.WriteByte('$')
+		case '(':
+			switch st {
+			case stDollarParenSeen:
+				// '(' is not a legal character in an environment interpolation expression so
+				// terminate that expression without prefixing it.
+				bd.WriteString(ev.String())
+				ev.Reset()
+				st = stNormal
+			case stDollarSeen:
+				st = stDollarParenSeen
+			default:
+				st = stNormal
+			}
+			bd.WriteByte('(')
+		case ')':
+			if st == stDollarParenSeen && ev.Len() > 0 {
+				bd.WriteString(pfx)
+				bd.WriteString(ev.String())
+				ev.Reset()
+			}
+			st = stNormal
+			bd.WriteByte(')')
+		default:
+			switch st {
+			case stDollarParenSeen:
+				ev.WriteRune(c)
+			default:
+				bd.WriteRune(c)
+				st = stNormal
+			}
+		}
+	}
+	if ev.Len() > 0 {
+		// Unbalanced interpolation. Just leave it as is.
+		bd.WriteString(ev.String())
+	}
+	return bd.String()
+}
+
+func appendAppContainerEnv(app *core.Container, cc *Container, es []core.EnvVar) []core.EnvVar {
 	for _, e := range app.Env {
-		pn := EnvPrefixApp + cc.EnvPrefix + e.Name
-		subst[e.Name] = pn
-		e.Name = pn
+		e.Name = EnvPrefixApp + cc.EnvPrefix + e.Name
 		es = append(es, e)
 	}
 	return es
 }
 
-func appendAppContainerEnvFrom(app *core.Container, cc *Container, es []core.EnvFromSource, subst map[string]string) []core.EnvFromSource {
+func appendAppContainerEnvFrom(app *core.Container, cc *Container, es []core.EnvFromSource) []core.EnvFromSource {
 	for _, e := range app.EnvFrom {
-		pn := EnvPrefixApp + cc.EnvPrefix + e.Prefix
-		subst[e.Prefix] = pn
-		e.Prefix = pn
+		e.Prefix = EnvPrefixApp + cc.EnvPrefix + e.Prefix
 		es = append(es, e)
 	}
 	return es
