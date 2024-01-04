@@ -276,11 +276,12 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 			i := 0
 			for _, a := range agm {
 				agents[i] = &rpc.AgentPodInfo{
-					PodName:     a.PodName,
-					Namespace:   a.Namespace,
-					PodIp:       iputil.Parse(a.PodIp),
-					ApiPort:     a.ApiPort,
-					Intercepted: isIntercepted(a.Name, a.Namespace),
+					WorkloadName: a.Name,
+					PodName:      a.PodName,
+					Namespace:    a.Namespace,
+					PodIp:        iputil.Parse(a.PodIp),
+					ApiPort:      a.ApiPort,
+					Intercepted:  isIntercepted(a.Name, a.Namespace),
 				}
 				agentNames[i] = a.Name
 				i++

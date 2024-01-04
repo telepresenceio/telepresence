@@ -546,6 +546,7 @@ message AgentPodInfo {
   bytes pod_ip = 3;
   int32 api_port = 4;
   bool intercepted = 5;
+  string workload_name = 6;
 }
 
 message AgentPodInfoSnapshot {
