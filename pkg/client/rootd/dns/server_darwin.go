@@ -71,7 +71,9 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		return err
 	}
 
+	s.RLock()
 	kubernetesZone := s.clusterDomain
+	s.RUnlock()
 	if kubernetesZone == "" {
 		kubernetesZone = "cluster.local."
 	}
@@ -149,14 +151,14 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 	}
 
 	// All namespaces and include suffixes become domains
-	domains := make(map[string]struct{}, len(namespaces)+len(s.config.IncludeSuffixes))
+	domains := make(map[string]struct{}, len(namespaces)+len(s.includeSuffixes))
 	maps.Merge(domains, namespaces)
-	for _, sfx := range s.config.IncludeSuffixes {
+	for _, sfx := range s.includeSuffixes {
 		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
 	}
 
-	s.domainsLock.Lock()
-	defer s.domainsLock.Unlock()
+	s.Lock()
+	defer s.Unlock()
 
 	// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
 	// for each namespace in its own domain file under /etc/resolver. Each file

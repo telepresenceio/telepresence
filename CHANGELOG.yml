@@ -30,6 +30,14 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.18.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Panic in root-daemon on darwin workstations with full access to cluster network.
+        body: >-
+          A darwin machine with full access to the cluster's subnets will never create a TUN-device, and a check was
+          missing if the device actually existed, which caused a panic in the root daemon.
   - version: 2.18.1
     date: (TBD)
     notes:

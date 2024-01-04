@@ -34,7 +34,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	if err != nil {
 		return err
 	}
-	dnsIP := net.IP(s.config.RemoteIp)
+	dnsIP := s.remoteIP
 	configureDNS(dnsIP, dnsResolverAddr)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
@@ -111,15 +111,17 @@ func (s *Server) updateLinkDomains(c context.Context, paths []string, dev vif.De
 			paths[i] = "~" + path
 		}
 	}
-	for _, sfx := range s.config.IncludeSuffixes {
+	for _, sfx := range s.includeSuffixes {
 		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
 	}
+
+	s.Lock()
 	paths = append(paths, "~"+s.clusterDomain, tel2SubDomainDot+s.clusterDomain)
 
-	s.domainsLock.Lock()
 	s.namespaces = namespaces
 	s.search = search
-	s.domainsLock.Unlock()
+	s.Unlock()
+
 	if err := dbus.SetLinkDomains(dcontext.HardContext(c), int(dev.Index()), paths...); err != nil {
 		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
 	}
