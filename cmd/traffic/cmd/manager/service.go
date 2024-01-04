@@ -552,6 +552,22 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	return s.state.PrepareIntercept(ctx, request, replacePolicy)
 }
 
+func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*empty.Empty, error) {
+	session := request.GetSession()
+	ctx = managerutil.WithSessionInfo(ctx, session)
+	dlog.Debugf(ctx, "EnsureAgent called")
+	sessionID := session.GetSessionId()
+	client := s.state.GetClient(sessionID)
+	if client == nil {
+		return &empty.Empty{}, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+	err := s.state.EnsureAgent(ctx, request.Name, client.Namespace)
+	if err != nil {
+		err = status.Errorf(codes.Internal, "failed to ensure agent for workload %s: %v", request.Name, err)
+	}
+	return &empty.Empty{}, err
+}
+
 // CreateIntercept lets a client create an intercept.
 func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())

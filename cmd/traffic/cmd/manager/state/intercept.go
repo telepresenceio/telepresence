@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
 	events "k8s.io/api/events/v1"
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
@@ -49,12 +49,10 @@ import (
 // It's expected that the client that makes the call will update any unqualified service port identifiers
 // with the ones in the returned PreparedIntercept.
 func (s *state) PrepareIntercept(
-	parentCtx context.Context,
+	ctx context.Context,
 	cr *managerrpc.CreateInterceptRequest,
 	replacePolicy agentconfig.ReplacePolicy,
 ) (pi *managerrpc.PreparedIntercept, err error) {
-	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
-	defer cancel()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
 	defer tracing.EndAndRecord(span, err)
 	span.SetAttributes(attribute.Stringer("request", cr))
@@ -67,38 +65,17 @@ func (s *state) PrepareIntercept(
 	}
 
 	spec := cr.InterceptSpec
-	wl, err := tracing.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
-	if err != nil {
-		if errors2.IsNotFound(err) {
-			err = errcat.User.New(err)
-		}
-		return interceptError(err)
-	}
-
-	failedCreateCh, err := watchFailedInjectionEvents(ctx, spec.Agent, spec.Namespace)
+	extended := s.isExtended(spec)
+	ac, err := s.ensureAgent(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind, extended, replacePolicy)
 	if err != nil {
 		return interceptError(err)
 	}
-
-	sce, err := s.getOrCreateAgentConfig(ctx, wl, spec, replacePolicy)
-	if err != nil {
-		return interceptError(err)
-	}
-	ac := sce.AgentConfig()
 	_, ic, err := findIntercept(ac, spec)
 	if err != nil {
 		return interceptError(err)
 	}
-	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace, failedCreateCh); err != nil {
-		// If no agent arrives, then drop its entry from the configmap. This ensures that there
-		// are no false positives the next time an intercept is attempted.
-		if dropErr := s.dropAgentConfig(parentCtx, wl); dropErr != nil {
-			dlog.Errorf(ctx, "failed to remove configmap entry for %s.%s: %v", wl.GetName(), wl.GetNamespace(), dropErr)
-		}
-		return interceptError(err)
-	}
 	return &managerrpc.PreparedIntercept{
-		Namespace:       spec.Namespace,
+		Namespace:       ac.Namespace,
 		ServiceUid:      string(ic.ServiceUID),
 		ServiceName:     ic.ServiceName,
 		ServicePortName: ic.ServicePortName,
@@ -106,6 +83,44 @@ func (s *state) PrepareIntercept(
 		AgentImage:      ac.AgentImage,
 		WorkloadKind:    ac.WorkloadKind,
 	}, nil
+}
+
+func (s *state) EnsureAgent(ctx context.Context, n, ns string) error {
+	_, err := s.ensureAgent(ctx, n, ns, "", false, agentconfig.ReplacePolicyCurrent)
+	return err
+}
+
+func (s *state) ensureAgent(parentCtx context.Context, n, ns, kind string, extended bool, replacePolicy agentconfig.ReplacePolicy) (*agentconfig.Sidecar, error) {
+	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
+	defer cancel()
+
+	wl, err := tracing.GetWorkload(ctx, n, ns, kind)
+	if err != nil {
+		if k8sErrors.IsNotFound(err) {
+			err = errcat.User.New(err)
+		}
+		return nil, err
+	}
+
+	failedCreateCh, err := watchFailedInjectionEvents(ctx, wl.GetName(), wl.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	sce, err := s.getOrCreateAgentConfig(ctx, wl, extended, replacePolicy)
+	if err != nil {
+		return nil, err
+	}
+	ac := sce.AgentConfig()
+	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace, failedCreateCh); err != nil {
+		// If no agent arrives, then drop its entry from the configmap. This ensures that there
+		// are no false positives the next time an intercept is attempted.
+		if dropErr := s.dropAgentConfig(parentCtx, wl); dropErr != nil {
+			dlog.Errorf(ctx, "failed to remove configmap entry for %s.%s: %v", wl.GetName(), wl.GetNamespace(), dropErr)
+		}
+		return nil, err
+	}
+	return ac, nil
 }
 
 func (s *state) isExtended(spec *managerrpc.InterceptSpec) bool {
@@ -146,7 +161,7 @@ func (s *state) dropAgentConfig(
 func (s *state) getOrCreateAgentConfig(
 	ctx context.Context,
 	wl k8sapi.Workload,
-	spec *managerrpc.InterceptSpec,
+	extended bool,
 	replacePolicy agentconfig.ReplacePolicy,
 ) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
@@ -164,7 +179,7 @@ func (s *state) getOrCreateAgentConfig(
 	if err != nil {
 		return nil, err
 	}
-	return s.loadAgentConfig(ctx, cmAPI, cm, wl, spec, replacePolicy)
+	return s.loadAgentConfig(ctx, cmAPI, cm, wl, extended, replacePolicy)
 }
 
 func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (cm *core.ConfigMap, err error) {
@@ -176,7 +191,7 @@ func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespac
 		span.SetAttributes(attribute.Bool("tel2.cm-found", true))
 		return cm, nil
 	}
-	if !errors2.IsNotFound(err) {
+	if !k8sErrors.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to get ConfigMap %s.%s: %w", agentconfig.ConfigMap, namespace, err)
 	}
 	span.SetAttributes(attribute.Bool("tel2.cm-found", false))
@@ -206,13 +221,12 @@ func (s *state) loadAgentConfig(
 	cmAPI typed.ConfigMapInterface,
 	cm *core.ConfigMap,
 	wl k8sapi.Workload,
-	spec *managerrpc.InterceptSpec,
+	extended bool,
 	replacePolicy agentconfig.ReplacePolicy,
 ) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
-	extended := s.isExtended(spec)
 	enabled, err := checkInterceptAnnotations(wl)
 	if err != nil {
 		return nil, err
@@ -272,21 +286,23 @@ func (s *state) loadAgentConfig(
 			ac.AgentImage = agentImage
 			doUpdate = true
 		}
-		for _, cn := range ac.Containers {
-			if cn.Replace != replacePolicy {
-				span.AddEvent("container-replace-changed")
-				if (cn.Replace == agentconfig.ReplacePolicyActive && replacePolicy == agentconfig.ReplacePolicyInactive) ||
-					(cn.Replace == agentconfig.ReplacePolicyInactive && replacePolicy == agentconfig.ReplacePolicyActive) {
-					span.AddEvent("container-replace-accepted")
-					cn.Replace = replacePolicy
-					doUpdate = true
-				} else {
-					span.AddEvent("container-replace-rejected")
-					flagValue := cn.Replace != agentconfig.ReplacePolicyNever
-					return nil, errcat.User.Newf("intercept %s.%s has the --replace flag"+
-						" set to %t, please use 'telepresence uninstall --agent %s'"+
-						" then 'telepresence intercept' again to change it",
-						spec.Agent, spec.Namespace, flagValue, spec.Agent)
+		if replacePolicy != agentconfig.ReplacePolicyCurrent {
+			for _, cn := range ac.Containers {
+				if cn.Replace != replacePolicy {
+					span.AddEvent("container-replace-changed")
+					if (cn.Replace == agentconfig.ReplacePolicyActive && replacePolicy == agentconfig.ReplacePolicyInactive) ||
+						(cn.Replace == agentconfig.ReplacePolicyInactive && replacePolicy == agentconfig.ReplacePolicyActive) {
+						span.AddEvent("container-replace-accepted")
+						cn.Replace = replacePolicy
+						doUpdate = true
+					} else {
+						span.AddEvent("container-replace-rejected")
+						flagValue := cn.Replace != agentconfig.ReplacePolicyNever
+						return nil, errcat.User.Newf("intercept %s.%s has the --replace flag"+
+							" set to %t, please use 'telepresence uninstall --agent %s'"+
+							" then 'telepresence intercept' again to change it",
+							wl.GetName(), wl.GetNamespace(), flagValue, wl.GetName())
+					}
 				}
 			}
 		}

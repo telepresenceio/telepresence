@@ -57,12 +57,17 @@ const (
 type ReplacePolicy int
 
 const (
-	// --replace is false.
+	// ReplacePolicyNever means that --replace is false.
 	ReplacePolicyNever ReplacePolicy = iota
-	// --replace is true, the intercept is active.
+
+	// ReplacePolicyActive means that --replace is true, and the intercept is active.
 	ReplacePolicyActive
-	// --replace is true, the intercept is inactive.
+
+	// ReplacePolicyInactive means that --replace is true, but the intercept is inactive.
 	ReplacePolicyInactive
+
+	// ReplacePolicyCurrent is used when we just want to keep the current setting.
+	ReplacePolicyCurrent
 )
 
 // Intercept describes the mapping between a service port and an intercepted container port.

@@ -116,6 +116,9 @@ service ManagerProxy {
   // GetClientConfig returns the config that connected clients should use for this manager.
   rpc GetClientConfig(google.protobuf.Empty) returns (manager.CLIConfig);
 
+  // EnsureAgent ensures that an agent is injected to the pods of a workload
+  rpc EnsureAgent(manager.EnsureAgentRequest) returns (google.protobuf.Empty);
+
   // WatchClusterInfo returns information needed when establishing
   // connectivity to the cluster.
   rpc WatchClusterInfo(manager.SessionInfo) returns (stream manager.ClusterInfo);

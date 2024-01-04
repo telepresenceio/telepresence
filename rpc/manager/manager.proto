@@ -290,6 +290,11 @@ message CreateInterceptRequest {
   string api_key = 3;
 }
 
+message EnsureAgentRequest {
+  SessionInfo session = 1;
+  string name = 2;
+}
+
 message PreparedIntercept {
   string error = 1;
   int32 error_category = 2;
@@ -626,6 +631,9 @@ service Manager {
   // WatchClusterInfo returns information needed when establishing
   // connectivity to the cluster.
   rpc WatchClusterInfo(SessionInfo) returns (stream ClusterInfo);
+
+  // EnsureAgent ensures that an agent is injected to the pods of a workload
+  rpc EnsureAgent(EnsureAgentRequest) returns (google.protobuf.Empty);
 
   // Request that the traffic-manager makes the preparations necessary to
   // create the given intercept.
