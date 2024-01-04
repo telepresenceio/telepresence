@@ -26,7 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -823,39 +822,48 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 // keep this low to avoid such caching.
 const dnsTTL = 4
 
-func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, int, error) {
+func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (answer dnsproxy.RRs, rCode int, err error) {
 	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
 	defer func() {
+		if rCode != dns.RcodeSuccess {
+			s.cache.Delete(cacheKey{name: q.Name, qType: q.Qtype}) // Don't cache unless the lookup succeeded.
+		}
 		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
 		dv.close()
 	}()
 
-	// Returns a CNAME pointing to the mapping when there is a hit.
-	if mappingAlias, ok := s.resolveMappingAlias(q.Name); ok {
-		dv.answer = dnsproxy.RRs{&dns.CNAME{
-			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
-			Target: mappingAlias,
-		}}
-		// On Windows, or in a Linux container, just returning the cname isn't enough, and the DNS resolver won't try
-		// to get the record with a subsequent request, so we need to resolve the record until we get a better solution.
-		if runtime.GOOS == "windows" || proc.RunningInContainer() {
-			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
-				Name:   mappingAlias,
-				Qtype:  q.Qtype,
-				Qclass: q.Qclass,
-			})
-			if err == nil && rCode == dns.RcodeSuccess && len(answer) > 0 {
-				dv.answer = append(dv.answer, answer[0])
+	switch q.Qtype {
+	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME:
+		if mappingAlias, ok := s.resolveMappingAlias(q.Name); ok {
+			cnameRRs := dnsproxy.RRs{&dns.CNAME{
+				Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
+				Target: mappingAlias,
+			}}
+
+			if q.Qtype == dns.TypeCNAME {
+				// A query for the CNAME must only return the CNAME.
+				answer = cnameRRs
+				rCode = dns.RcodeSuccess
+			} else {
+				// A query for an A or AAAA must resolve the CNAME and then return both the result and the
+				// CNAME that resolved to it.
+				answer, rCode, err = s.resolve(s.ctx, &dns.Question{
+					Name:   mappingAlias,
+					Qtype:  q.Qtype,
+					Qclass: q.Qclass,
+				})
+				if err != nil || dv.rCode != dns.RcodeSuccess {
+					return cnameRRs, dv.rCode, err
+				}
+				answer = copyRRs(answer, []uint16{q.Qtype})
+				answer = append(cnameRRs, answer...)
 			}
+			return answer, rCode, nil
 		}
-		dv.rCode = dns.RcodeSuccess
-		return copyRRs(dv.answer, []uint16{dns.TypeCNAME, q.Qtype}), dv.rCode, nil
 	}
 
-	var err error
 	dv.answer, dv.rCode, err = s.resolve(s.ctx, q)
 	if err != nil || dv.rCode != dns.RcodeSuccess {
-		s.cache.Delete(cacheKey{name: q.Name, qType: q.Qtype}) // Don't cache unless the lookup succeeded.
 		return nil, dv.rCode, err
 	}
 
