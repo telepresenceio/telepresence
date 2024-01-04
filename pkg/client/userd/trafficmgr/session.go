@@ -1053,6 +1053,9 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 			}
 		}
 		for _, ip := range ips {
+			if ip.IsLoopback() {
+				continue
+			}
 			mask := net.CIDRMask(128, 128)
 			if ipv4 := ip.To4(); ipv4 != nil {
 				mask = net.CIDRMask(32, 32)

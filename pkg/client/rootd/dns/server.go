@@ -417,7 +417,11 @@ func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
 	if l := len(mappings); l > 0 {
 		mm := make(map[string]string, l)
 		for _, m := range mappings {
-			mm[m.Name+"."] = m.AliasFor + "."
+			al := m.AliasFor
+			if ip := iputil.Parse(al); ip == nil {
+				al += "."
+			}
+			mm[m.Name+"."] = al
 		}
 		return mm
 	}
@@ -835,6 +839,25 @@ func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (answer dnsproxy.
 	switch q.Qtype {
 	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME:
 		if mappingAlias, ok := s.resolveMappingAlias(q.Name); ok {
+			if ip := iputil.Parse(mappingAlias); ip != nil {
+				// The name resolves to an A or AAAA record known by this DNS server.
+				var rr dns.RR
+				if len(ip) == 4 {
+					rr = &dns.A{
+						Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: dnsTTL},
+						A:   ip,
+					}
+				} else {
+					rr = &dns.AAAA{
+						Hdr:  dns.RR_Header{Name: q.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: dnsTTL},
+						AAAA: ip,
+					}
+				}
+				dv.answer = dnsproxy.RRs{rr}
+				dv.rCode = dns.RcodeSuccess
+				return copyRRs(dv.answer, []uint16{q.Qtype}), dv.rCode, nil
+			}
+
 			cnameRRs := dnsproxy.RRs{&dns.CNAME{
 				Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
 				Target: mappingAlias,

@@ -80,6 +80,9 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 	itest.ApplyEchoService(ctx, serviceName, s.AppNamespace(), port)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", serviceName)
 
+	localPort, cancel := itest.StartLocalHttpEchoServer(ctx, "my-hello")
+	defer cancel()
+
 	aliasedService := fmt.Sprintf("%s.%s", serviceName, s.AppNamespace())
 	dnsMappings := client.DNSMappings{
 		{
@@ -94,8 +97,12 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 			Name:     "my-alias.vx-root-domain.cluster.local",
 			AliasFor: aliasedService,
 		},
+		{
+			Name:     "my-hello",
+			AliasFor: "127.0.0.1",
+		},
 	}
-	mappings := make([]map[string]string, 3)
+	mappings := make([]map[string]string, len(dnsMappings))
 	for i, dm := range dnsMappings {
 		mappings[i] = map[string]string{"name": dm.Name, "aliasFor": dm.AliasFor}
 	}
@@ -110,8 +117,12 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 
 	// then
 	for _, mapping := range dnsMappings {
+		dialPort := port
+		if mapping.Name == "my-hello" {
+			dialPort = localPort
+		}
 		s.Eventually(func() bool {
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", mapping.Name, port), 5000*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", mapping.Name, dialPort), 5000*time.Millisecond)
 			if err == nil {
 				_ = conn.Close()
 			}
