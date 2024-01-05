@@ -241,7 +241,6 @@ func setUDPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.Str
 }
 
 func newConnID(proto tcpip.TransportProtocolNumber, id stack.TransportEndpointID) tunnel.ConnID {
-	id.RemoteAddress.AsSlice()
 	return tunnel.NewConnID(int(proto), id.RemoteAddress.AsSlice(), id.LocalAddress.AsSlice(), id.RemotePort, id.LocalPort)
 }
 
