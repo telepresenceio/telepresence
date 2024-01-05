@@ -571,11 +571,19 @@ func (s *service) GetIntercept(ctx context.Context, request *manager.GetIntercep
 }
 
 func (s *service) SetDNSExcludes(ctx context.Context, req *daemon.SetDNSExcludesRequest) (*emptypb.Empty, error) {
-	return s.session.RootDaemon().SetDNSExcludes(ctx, req)
+	err := s.WithSession(ctx, "SetDNSExcludes", func(ctx context.Context, session userd.Session) error {
+		_, err := session.RootDaemon().SetDNSExcludes(ctx, req)
+		return err
+	})
+	return &empty.Empty{}, err
 }
 
 func (s *service) SetDNSMappings(ctx context.Context, req *daemon.SetDNSMappingsRequest) (*emptypb.Empty, error) {
-	return s.session.RootDaemon().SetDNSMappings(ctx, req)
+	err := s.WithSession(ctx, "SetDNSMappings", func(ctx context.Context, session userd.Session) error {
+		_, err := session.RootDaemon().SetDNSMappings(ctx, req)
+		return err
+	})
+	return &empty.Empty{}, err
 }
 
 func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {

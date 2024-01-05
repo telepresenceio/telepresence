@@ -337,11 +337,12 @@ func (s *Server) GetConfig() *rpc.DNSConfig {
 	if len(s.mappings) > 0 {
 		ns := maps.Keys(s.mappings)
 		slices.Sort(ns)
-		for _, n := range ns {
-			c.Mappings = append(c.Mappings, &rpc.DNSMapping{
+		c.Mappings = make([]*rpc.DNSMapping, len(s.mappings))
+		for i, n := range ns {
+			c.Mappings[i] = &rpc.DNSMapping{
 				Name:     strings.TrimSuffix(n, "."),
 				AliasFor: strings.TrimSuffix(s.mappings[n], "."),
-			})
+			}
 		}
 	}
 	s.RUnlock()
@@ -363,12 +364,14 @@ func (s *Server) Stop() {
 
 func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
 	s.Lock()
-	s.clusterDomain = dns.ClusterDomain
 	if s.remoteIP == nil {
 		s.remoteIP = remoteIP
 	}
-	s.excludeSuffixes = slice.AppendUnique(s.excludeSuffixes, dns.ExcludeSuffixes...)
-	s.includeSuffixes = slice.AppendUnique(s.includeSuffixes, dns.IncludeSuffixes...)
+	if dns != nil {
+		s.clusterDomain = dns.ClusterDomain
+		s.excludeSuffixes = slice.AppendUnique(s.excludeSuffixes, dns.ExcludeSuffixes...)
+		s.includeSuffixes = slice.AppendUnique(s.includeSuffixes, dns.IncludeSuffixes...)
+	}
 	s.Unlock()
 }
 
@@ -402,15 +405,14 @@ func (s *Server) purgeRecordsFromCache(keyName string) {
 
 // SetExcludes sets the excludes list in the config.
 func (s *Server) SetExcludes(excludes []string) {
-	for _, e := range excludes {
-		s.purgeRecordsFromCache(e)
-	}
 	s.Lock()
-	for _, e := range s.excludes {
-		s.purgeRecordsFromCache(e)
-	}
+	oldExcludes := s.excludes
 	s.excludes = excludes
 	s.Unlock()
+
+	for _, e := range slice.AppendUnique(oldExcludes, excludes...) {
+		s.purgeRecordsFromCache(e)
+	}
 }
 
 func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
@@ -432,12 +434,17 @@ func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
 func (s *Server) SetMappings(mappings []*rpc.DNSMapping) {
 	mm := mappingsMap(mappings)
 	s.Lock()
-	// Flush the mappings.
-	for n := range s.mappings {
-		s.purgeRecordsFromCache(n)
-	}
+	oldMappings := s.mappings
 	s.mappings = mm
 	s.Unlock()
+
+	// Flush old and the mappings.
+	for n := range oldMappings {
+		s.purgeRecordsFromCache(n)
+	}
+	for n := range mm {
+		s.purgeRecordsFromCache(n)
+	}
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
