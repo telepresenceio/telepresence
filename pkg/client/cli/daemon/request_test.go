@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"net/netip"
 	"reflect"
 	"testing"
 
@@ -11,33 +12,33 @@ func Test_parseSubnetViaWorkload(t *testing.T) {
 	tests := []struct {
 		name    string
 		dps     string
-		want    *daemon.SubnetViaWorkload
+		want    prefixViaWL
 		wantErr bool
 	}{
 		{
 			"empty",
 			"",
-			nil,
+			prefixViaWL{},
 			true,
 		},
 		{
 			"workload with dot",
 			"127.1.2.3/32=workload.namespace",
-			nil,
+			prefixViaWL{},
 			true,
 		},
 		{
 			"invalid subnet",
 			"bad=workload",
-			nil,
+			prefixViaWL{},
 			true,
 		},
 		{
 			"ok",
 			"127.1.2.3/32=workload",
-			&daemon.SubnetViaWorkload{
-				Subnet:   "127.1.2.3/32",
-				Workload: "workload",
+			prefixViaWL{
+				subnet:   netip.MustParsePrefix("127.1.2.3/32"),
+				workload: "workload",
 			},
 			false,
 		},
@@ -51,6 +52,58 @@ func Test_parseSubnetViaWorkload(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseDomainProxy(%q) got = %v, want %v", tt.dps, got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_parseProxyVias(t *testing.T) {
+	tests := []struct {
+		name     string
+		proxyVia []string
+		want     []*daemon.SubnetViaWorkload
+		wantErr  bool
+	}{
+		{
+			name:     "single",
+			proxyVia: []string{"127.1.2.0/24=workload"},
+			want: []*daemon.SubnetViaWorkload{{
+				Subnet:   "127.1.2.0/24",
+				Workload: "workload",
+			}},
+			wantErr: false,
+		},
+		{
+			name:     "multi",
+			proxyVia: []string{"127.1.2.0/24=workload1", "127.1.3.0/24=workload2"},
+			want: []*daemon.SubnetViaWorkload{
+				{
+					Subnet:   "127.1.2.0/24",
+					Workload: "workload1",
+				},
+				{
+					Subnet:   "127.1.3.0/24",
+					Workload: "workload2",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:     "multi-overlap",
+			proxyVia: []string{"127.1.2.0/16=workload1", "127.1.3.0/16=workload2"},
+			want:     nil,
+			wantErr:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseProxyVias(tt.proxyVia)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("parseProxyVias() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseProxyVias() got = %v, want %v", got, tt.want)
 			}
 		})
 	}
