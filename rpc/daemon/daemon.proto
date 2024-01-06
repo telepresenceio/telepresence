@@ -96,6 +96,14 @@ message DNSConfig {
   reserved 5;
 }
 
+message SubnetViaWorkload {
+  // The remote IP that the DNS resolver translates into a Virtual IP to use locally.
+  string subnet = 1;
+
+  // The workload that the virtual IP will be routed to.
+  string workload = 2;
+}
+
 // OutboundInfo contains all information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
 message OutboundInfo {
@@ -107,6 +115,9 @@ message OutboundInfo {
 
   // DNS configuration
   DNSConfig dns = 3;
+
+  // Route subnets via given workload using virtual IPs
+  repeated SubnetViaWorkload subnet_via_workloads = 4;
 
   // also_proxy are user-added subnets.
   repeated manager.IPNet also_proxy_subnets = 5;
@@ -128,8 +139,6 @@ message OutboundInfo {
 
   // Kubernetes flags
   map<string, string> kube_flags = 9;
-
-  reserved 4;
 }
 
 message NetworkConfig {

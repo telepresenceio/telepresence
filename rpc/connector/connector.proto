@@ -159,6 +159,7 @@ message ConnectRequest {
   repeated string also_proxy = 5; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string never_proxy = 6; // protolint:disable:this REPEATED_FIELD_NAMES_PLURALIZED
   repeated string allow_conflicting_subnets = 10;
+  repeated daemon.SubnetViaWorkload subnet_via_workloads = 11;
   string manager_namespace = 7;
   map<string, string> environment = 8;
 }
@@ -215,6 +216,7 @@ message ConnectInfo {
   string manager_namespace = 14;
 
   repeated string mapped_namespaces = 15;
+  repeated daemon.SubnetViaWorkload subnet_via_workloads = 18;
 
   reserved 7;
   reserved 9;

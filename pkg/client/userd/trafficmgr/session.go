@@ -71,7 +71,8 @@ type apiMatcher struct {
 
 type session struct {
 	*k8s.Cluster
-	rootDaemon rootdRpc.DaemonClient
+	rootDaemon         rootdRpc.DaemonClient
+	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
 
 	// local information
 	installID   string // telepresence's install ID
@@ -435,20 +436,21 @@ func connectMgr(
 	cluster.AllowConflictingSubnets = append(cluster.AllowConflictingSubnets, extraAllow...)
 
 	sess := &session{
-		Cluster:          cluster,
-		installID:        installID,
-		daemonID:         daemonID,
-		userAndHost:      userAndHost,
-		managerClient:    mClient,
-		managerConn:      conn,
-		pfDialer:         pfDialer,
-		managerName:      managerName,
-		managerVersion:   managerVersion,
-		sessionInfo:      si,
-		interceptWaiters: make(map[string]*awaitIntercept),
-		wlWatcher:        newWASWatcher(),
-		isPodDaemon:      cr.IsPodDaemon,
-		done:             make(chan struct{}),
+		Cluster:            cluster,
+		installID:          installID,
+		daemonID:           daemonID,
+		userAndHost:        userAndHost,
+		managerClient:      mClient,
+		managerConn:        conn,
+		pfDialer:           pfDialer,
+		managerName:        managerName,
+		managerVersion:     managerVersion,
+		sessionInfo:        si,
+		interceptWaiters:   make(map[string]*awaitIntercept),
+		wlWatcher:          newWASWatcher(),
+		isPodDaemon:        cr.IsPodDaemon,
+		done:               make(chan struct{}),
+		subnetViaWorkloads: cr.SubnetViaWorkloads,
 	}
 	sess.self = sess
 	return sess, nil
@@ -885,21 +887,23 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 		s.ingressInfo = nil
 		s.currentInterceptsLock.Unlock()
 	}
+	s.subnetViaWorkloads = cr.SubnetViaWorkloads
 	return s.Status(c)
 }
 
 func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 	cfg := s.Kubeconfig
 	ret := &rpc.ConnectInfo{
-		Error:          rpc.ConnectInfo_ALREADY_CONNECTED,
-		ClusterContext: cfg.Context,
-		ClusterServer:  cfg.Server,
-		ClusterId:      s.GetClusterId(c),
-		SessionInfo:    s.SessionInfo(),
-		ConnectionName: s.daemonID.Name,
-		KubeFlags:      s.OriginalFlagMap,
-		Namespace:      s.Namespace,
-		Intercepts:     &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
+		Error:              rpc.ConnectInfo_ALREADY_CONNECTED,
+		ClusterContext:     cfg.Context,
+		ClusterServer:      cfg.Server,
+		ClusterId:          s.GetClusterId(c),
+		SessionInfo:        s.SessionInfo(),
+		ConnectionName:     s.daemonID.Name,
+		KubeFlags:          s.OriginalFlagMap,
+		Namespace:          s.Namespace,
+		Intercepts:         &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
+		SubnetViaWorkloads: s.subnetViaWorkloads,
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
@@ -1053,9 +1057,6 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 			}
 		}
 		for _, ip := range ips {
-			if ip.IsLoopback() {
-				continue
-			}
 			mask := net.CIDRMask(128, 128)
 			if ipv4 := ip.To4(); ipv4 != nil {
 				mask = net.CIDRMask(32, 32)
@@ -1069,11 +1070,12 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 		neverProxy = append(neverProxy, iputil.IPNetToRPC((*net.IPNet)(np)))
 	}
 	info := &rootdRpc.OutboundInfo{
-		Session:           s.sessionInfo,
-		NeverProxySubnets: neverProxy,
-		HomeDir:           homedir.HomeDir(),
-		Namespace:         s.Namespace,
-		ManagerNamespace:  s.GetManagerNamespace(),
+		Session:            s.sessionInfo,
+		NeverProxySubnets:  neverProxy,
+		HomeDir:            homedir.HomeDir(),
+		Namespace:          s.Namespace,
+		ManagerNamespace:   s.GetManagerNamespace(),
+		SubnetViaWorkloads: s.subnetViaWorkloads,
 	}
 
 	if s.DNS != nil {
