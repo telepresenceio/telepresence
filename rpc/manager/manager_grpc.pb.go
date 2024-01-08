@@ -25,6 +25,7 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	Manager_Version_FullMethodName                   = "/telepresence.manager.Manager/Version"
+	Manager_GetAgentImageFQN_FullMethodName          = "/telepresence.manager.Manager/GetAgentImageFQN"
 	Manager_GetLicense_FullMethodName                = "/telepresence.manager.Manager/GetLicense"
 	Manager_CanConnectAmbassadorCloud_FullMethodName = "/telepresence.manager.Manager/CanConnectAmbassadorCloud"
 	Manager_GetCloudConfig_FullMethodName            = "/telepresence.manager.Manager/GetCloudConfig"
@@ -63,6 +64,8 @@ const (
 type ManagerClient interface {
 	// Version returns the version information of the Manager.
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
+	// GetAgentImageFQN returns fully qualified name of the image that is injected into intercepted pods.
+	GetAgentImageFQN(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AgentImageFQN, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*License, error)
@@ -174,6 +177,15 @@ func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
 func (c *managerClient) Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error) {
 	out := new(VersionInfo2)
 	err := c.cc.Invoke(ctx, Manager_Version_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) GetAgentImageFQN(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AgentImageFQN, error) {
+	out := new(AgentImageFQN)
+	err := c.cc.Invoke(ctx, Manager_GetAgentImageFQN_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -662,6 +674,8 @@ func (x *managerWatchDialClient) Recv() (*DialRequest, error) {
 type ManagerServer interface {
 	// Version returns the version information of the Manager.
 	Version(context.Context, *emptypb.Empty) (*VersionInfo2, error)
+	// GetAgentImageFQN returns fully qualified name of the image that is injected into intercepted pods.
+	GetAgentImageFQN(context.Context, *emptypb.Empty) (*AgentImageFQN, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(context.Context, *emptypb.Empty) (*License, error)
@@ -769,6 +783,9 @@ type UnimplementedManagerServer struct {
 
 func (UnimplementedManagerServer) Version(context.Context, *emptypb.Empty) (*VersionInfo2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
+}
+func (UnimplementedManagerServer) GetAgentImageFQN(context.Context, *emptypb.Empty) (*AgentImageFQN, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAgentImageFQN not implemented")
 }
 func (UnimplementedManagerServer) GetLicense(context.Context, *emptypb.Empty) (*License, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLicense not implemented")
@@ -887,6 +904,24 @@ func _Manager_Version_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).Version(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_GetAgentImageFQN_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetAgentImageFQN(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_GetAgentImageFQN_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetAgentImageFQN(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1473,6 +1508,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Version",
 			Handler:    _Manager_Version_Handler,
+		},
+		{
+			MethodName: "GetAgentImageFQN",
+			Handler:    _Manager_GetAgentImageFQN_Handler,
 		},
 		{
 			MethodName: "GetLicense",

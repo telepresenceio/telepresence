@@ -26,6 +26,7 @@ const (
 	Connector_Version_FullMethodName                 = "/telepresence.connector.Connector/Version"
 	Connector_RootDaemonVersion_FullMethodName       = "/telepresence.connector.Connector/RootDaemonVersion"
 	Connector_TrafficManagerVersion_FullMethodName   = "/telepresence.connector.Connector/TrafficManagerVersion"
+	Connector_AgentImageFQN_FullMethodName           = "/telepresence.connector.Connector/AgentImageFQN"
 	Connector_GetIntercept_FullMethodName            = "/telepresence.connector.Connector/GetIntercept"
 	Connector_Connect_FullMethodName                 = "/telepresence.connector.Connector/Connect"
 	Connector_Disconnect_FullMethodName              = "/telepresence.connector.Connector/Disconnect"
@@ -59,8 +60,10 @@ type ConnectorClient interface {
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Returns version information from the Root Daemon
 	RootDaemonVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
-	// Returns version information from the Root Daemon
+	// Returns version information from the Traffic Manager
 	TrafficManagerVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
+	// Returns the fully qualified image name of the traffic-agent that the agent-injector is configured to inject.
+	AgentImageFQN(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.AgentImageFQN, error)
 	// GetIntercept gets info from intercept name
 	GetIntercept(ctx context.Context, in *manager.GetInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
@@ -151,6 +154,15 @@ func (c *connectorClient) RootDaemonVersion(ctx context.Context, in *emptypb.Emp
 func (c *connectorClient) TrafficManagerVersion(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
 	out := new(common.VersionInfo)
 	err := c.cc.Invoke(ctx, Connector_TrafficManagerVersion_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) AgentImageFQN(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.AgentImageFQN, error) {
+	out := new(manager.AgentImageFQN)
+	err := c.cc.Invoke(ctx, Connector_AgentImageFQN_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -395,8 +407,10 @@ type ConnectorServer interface {
 	Version(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
 	// Returns version information from the Root Daemon
 	RootDaemonVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
-	// Returns version information from the Root Daemon
+	// Returns version information from the Traffic Manager
 	TrafficManagerVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error)
+	// Returns the fully qualified image name of the traffic-agent that the agent-injector is configured to inject.
+	AgentImageFQN(context.Context, *emptypb.Empty) (*manager.AgentImageFQN, error)
 	// GetIntercept gets info from intercept name
 	GetIntercept(context.Context, *manager.GetInterceptRequest) (*manager.InterceptInfo, error)
 	// Connects to the cluster and connects the laptop's network (via
@@ -471,6 +485,9 @@ func (UnimplementedConnectorServer) RootDaemonVersion(context.Context, *emptypb.
 }
 func (UnimplementedConnectorServer) TrafficManagerVersion(context.Context, *emptypb.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TrafficManagerVersion not implemented")
+}
+func (UnimplementedConnectorServer) AgentImageFQN(context.Context, *emptypb.Empty) (*manager.AgentImageFQN, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AgentImageFQN not implemented")
 }
 func (UnimplementedConnectorServer) GetIntercept(context.Context, *manager.GetInterceptRequest) (*manager.InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetIntercept not implemented")
@@ -604,6 +621,24 @@ func _Connector_TrafficManagerVersion_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).TrafficManagerVersion(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_AgentImageFQN_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).AgentImageFQN(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_AgentImageFQN_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).AgentImageFQN(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1043,6 +1078,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TrafficManagerVersion",
 			Handler:    _Connector_TrafficManagerVersion_Handler,
+		},
+		{
+			MethodName: "AgentImageFQN",
+			Handler:    _Connector_AgentImageFQN_Handler,
 		},
 		{
 			MethodName: "GetIntercept",

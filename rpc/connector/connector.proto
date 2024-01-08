@@ -19,8 +19,11 @@ service Connector {
   // Returns version information from the Root Daemon
   rpc RootDaemonVersion(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
 
-  // Returns version information from the Root Daemon
+  // Returns version information from the Traffic Manager
   rpc TrafficManagerVersion(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
+
+  // Returns the fully qualified image name of the traffic-agent that the agent-injector is configured to inject.
+  rpc AgentImageFQN(google.protobuf.Empty) returns (telepresence.manager.AgentImageFQN);
 
   // GetIntercept gets info from intercept name
   rpc GetIntercept(manager.GetInterceptRequest) returns (manager.InterceptInfo);

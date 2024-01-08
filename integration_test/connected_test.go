@@ -51,4 +51,7 @@ func (s *connectedSuite) Test_StatusWithJSON() {
 	s.NotEmpty(status.UserDaemon.KubernetesContext)
 	s.NotEmpty(status.UserDaemon.InstallID)
 	s.Equal(status.UserDaemon.ManagerNamespace, s.ManagerNamespace())
+	s.Require().NotNil(status.TrafficManager)
+	s.NotEmpty(status.TrafficManager.Version)
+	s.NotEmpty(status.TrafficManager.TrafficAgent)
 }

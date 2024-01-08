@@ -77,8 +77,9 @@ type ContainerizedDaemonStatus struct {
 }
 
 type TrafficManagerStatus struct {
-	Name    string `json:"name,omitempty" yaml:"name,omitempty"`
-	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+	Name         string `json:"name,omitempty" yaml:"name,omitempty"`
+	Version      string `json:"version,omitempty" yaml:"version,omitempty"`
+	TrafficAgent string `json:"traffic_agent,omitempty" yaml:"traffic_agent,omitempty"`
 }
 
 type ConnectStatusIntercept struct {
@@ -340,6 +341,9 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		tm := &wt.TrafficManager
 		tm.Name = v.Name
 		tm.Version = v.Version
+		if af, err := userD.AgentImageFQN(ctx, &empty.Empty{}); err == nil {
+			tm.TrafficAgent = af.FQN
+		}
 	}
 
 	return wt, nil
@@ -572,6 +576,9 @@ func (ts *TrafficManagerStatus) WriteTo(out io.Writer) (int64, error) {
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
 		kvf.Add("Version", ts.Version)
+		if ts.TrafficAgent != "" {
+			kvf.Add("Traffic Agent", ts.TrafficAgent)
+		}
 		n += kvf.Println(out)
 	} else {
 		n += ioutil.Println(out, "Traffic Manager: Not connected")

@@ -540,6 +540,10 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+message AgentImageFQN {
+  string f_q_n = 1;
+}
+
 message AgentPodInfo {
   string pod_name = 1;
   string namespace = 2;
@@ -566,6 +570,9 @@ message TunnelMetrics {
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
+
+  // GetAgentImageFQN returns fully qualified name of the image that is injected into intercepted pods.
+  rpc GetAgentImageFQN(google.protobuf.Empty) returns (AgentImageFQN);
 
   // GetLicense returns the License information (the license itself and
   // domain that granted it) known to the manager.
