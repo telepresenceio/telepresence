@@ -652,7 +652,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	verb := "install"
 	if upgrade {
 		verb = "upgrade"
-		settings = append(settings, "--reuse-values")
 	}
 	args := []string{"helm", verb, "-n", nss.Namespace, "-f", valuesFile}
 	args = append(args, settings...)

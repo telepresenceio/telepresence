@@ -157,18 +157,6 @@ func upgradeExisting(
 	values map[string]any,
 ) error {
 	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, client.Version())
-	if req.ReuseValues && len(values) > 0 {
-		// We want the values applied even though ReuseValues is set.
-		getValues := action.NewGetValues(helmConfig)
-		oldValues, err := getValues.Run(releaseName)
-		if err != nil {
-			return fmt.Errorf("failed to get values for %s: %w", releaseName, err)
-		}
-		if len(oldValues) > 0 {
-			values = chartutil.CoalesceTables(values, oldValues)
-		}
-		req.ReuseValues = false
-	}
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Namespace = ns
