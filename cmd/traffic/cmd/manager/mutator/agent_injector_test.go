@@ -49,7 +49,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 		ManagerNamespace: "default",
 		AgentRegistry:    "docker.io/datawire",
-		AgentImage:       "tel2:2.14.0",
+		AgentImageName:   "tel2",
+		AgentImageTag:    "2.14.0",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)
@@ -747,7 +748,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 
 		ManagerNamespace:  "default",
 		AgentRegistry:     "docker.io/datawire",
-		AgentImage:        "tel2:2.13.3",
+		AgentImageName:    "tel2",
+		AgentImageTag:     "2.13.3",
 		AgentPort:         9900,
 		AgentInjectPolicy: agentconfig.WhenEnabled,
 	}
@@ -1473,7 +1475,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				Spec: core.PodSpec{
 					InitContainers: []core.Container{{
 						Name:  agentconfig.InitContainerName,
-						Image: env.AgentRegistry + "/" + env.AgentImage,
+						Image: env.AgentRegistry + "/" + env.AgentImageName + ":" + env.AgentImageTag,
 						Args:  []string{"agent-init"},
 						VolumeMounts: []core.VolumeMount{{
 							Name:      agentconfig.ConfigVolumeName,

@@ -2,7 +2,6 @@ package managerutil
 
 import (
 	"context"
-	"fmt"
 	"runtime/debug"
 	"strings"
 
@@ -31,11 +30,16 @@ type irKey struct{}
 // variable is empty.
 func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context, string) error) (context.Context, error) {
 	env := GetEnv(ctx)
-	var img string
-	if env.AgentImage == "" {
-		env.AgentImage = fmt.Sprintf("tel2:%s", strings.TrimPrefix(version.Version, "v"))
+	if env.AgentImageName == "" {
+		env.AgentImageName = "tel2"
 	}
-	img = env.QualifiedAgentImage()
+	if env.AgentImageTag == "" {
+		env.AgentImageTag = strings.TrimPrefix(version.Version, "v")
+	}
+	if env.AgentRegistry == "" {
+		env.AgentRegistry = env.Registry
+	}
+	img := env.QualifiedAgentImage()
 	ctx = WithResolvedAgentImageRetriever(ctx, ImageFromEnv(img))
 	if img != "" {
 		LogAgentImageInfo(ctx, img)

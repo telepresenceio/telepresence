@@ -337,8 +337,6 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	if agentImage := GetAgentImage(c); agentImage != nil {
 		images.PrivateAgentImage = agentImage.FQName()
 		images.PrivateWebhookRegistry = agentImage.Registry
-	} else {
-		images.PrivateWebhookRegistry = s.Registry()
 	}
 	if clientImage := GetClientImage(c); clientImage != nil {
 		images.PrivateClientImage = clientImage.FQName()

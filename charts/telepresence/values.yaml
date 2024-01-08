@@ -182,7 +182,7 @@ agent:
   appProtocolStrategy: http2Probe
   port: 9900
   image:
-    registry: docker.io/datawire
+    registry:
     name:
     tag:
     pullSecrets: []

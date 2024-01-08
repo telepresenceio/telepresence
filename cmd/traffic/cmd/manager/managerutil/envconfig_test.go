@@ -18,6 +18,7 @@ import (
 func TestEnvconfig(t *testing.T) {
 	// Default environment, providing what's necessary for the traffic-manager
 	env := map[string]string{
+		"REGISTRY":                      "docker.io/datawire",
 		"AGENT_APP_PROTO_STRATEGY":      k8sapi.Http2Probe.String(),
 		"AGENT_ENVOY_ADMIN_PORT":        "19000",
 		"AGENT_ENVOY_SERVER_PORT":       "18000",
@@ -26,7 +27,6 @@ func TestEnvconfig(t *testing.T) {
 		"AGENT_INJECTOR_NAME":           "agent-injector",
 		"AGENT_INJECTOR_SECRET":         "mutator-webhook-tls",
 		"AGENT_PORT":                    "9900",
-		"AGENT_REGISTRY":                "docker.io/datawire",
 		"AGENT_ARRIVAL_TIMEOUT":         "45s",
 		"CLIENT_CONNECTION_TTL":         (24 * time.Hour).String(),
 		"CLIENT_DNS_EXCLUDE_SUFFIXES":   ".com .io .net .org .ru",
@@ -39,10 +39,10 @@ func TestEnvconfig(t *testing.T) {
 	}
 
 	defaults := managerutil.Env{
+		Registry:                 "docker.io/datawire",
 		AgentAppProtocolStrategy: k8sapi.Http2Probe,
 		AgentLogLevel:            "info",
 		AgentPort:                9900,
-		AgentRegistry:            "docker.io/datawire",
 		AgentInjectorName:        "agent-injector",
 		AgentInjectorSecret:      "mutator-webhook-tls",
 		AgentArrivalTimeout:      45 * time.Second,

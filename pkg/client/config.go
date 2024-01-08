@@ -675,10 +675,7 @@ func (img *Images) Registry(c context.Context) string {
 }
 
 func (img *Images) WebhookRegistry(c context.Context) string {
-	if img.PrivateWebhookRegistry != "" {
-		return img.PrivateWebhookRegistry
-	}
-	return img.Registry(c)
+	return img.PrivateWebhookRegistry
 }
 
 func (img *Images) AgentImage(c context.Context) string {

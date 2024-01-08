@@ -41,6 +41,10 @@ spec:
           env:
           - name: LOG_LEVEL
             value: {{ .logLevel }}
+          {{- with .image }}
+          - name: REGISTRY
+            value: "{{ .registry }}"
+          {{- end }}
           - name: SERVER_PORT
             value: {{ .apiPort | quote }}
           - name: POD_CIDR_STRATEGY
@@ -124,19 +128,28 @@ spec:
           {{- end }}
           {{- end }}
           {{- /* replaced by agent.image.name Retained for backward compatibility */}}
-          {{- if $.Values.agentInjector.agentImage.name }}
-          - name: AGENT_IMAGE
-            value: "{{ $.Values.agentInjector.agentImage.name }}:{{ $.Values.agentInjector.agentImage.tag | default $.Chart.AppVersion }}"
+          {{- if .agentInjector.agentImage.name }}
+          - name: AGENT_IMAGE_NAME
+            value: {{ .agentInjector.agentImage.name }}
           {{- else }}
           {{- if .agent.image.name }}
-          - name: AGENT_IMAGE
-            value: "{{ .agent.image.name }}:{{ .agent.image.tag | default $.Chart.AppVersion }}"
+          - name: AGENT_IMAGE_NAME
+            value: {{ .agent.image.name }}
+          {{- end }}
+          {{- end }}
+          {{- if .agentInjector.agentImage.tag }}
+          - name: AGENT_IMAGE_TAG
+            value: {{ .agentInjector.agentImage.tag }}
+          {{- else }}
+          {{- if .agent.image.tag }}
+          - name: AGENT_IMAGE_TAG
+            value: {{ .agent.image.tag }}
           {{- end }}
           {{- end }}
           {{- /* replaced by agent.image.registry Retained for backward compatibility */}}
-          {{- if $.Values.agentInjector.agentImage.registry }}
+          {{- if .agentInjector.agentImage.registry }}
           - name: AGENT_REGISTRY
-            value: {{ $.Values.agentInjector.agentImage.registry }}
+            value: {{ .agentInjector.agentImage.registry }}
           {{- else }}
           {{- if .agent.image.registry }}
           - name: AGENT_REGISTRY
