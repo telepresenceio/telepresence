@@ -73,9 +73,13 @@ func AgentContainer(
 			dlog.Errorf(ctx, "unable to parse agent version from image name %s", config.AgentImage)
 		}
 	}
+	// TODO could this be where we get volumes wrong?
+	dlog.Debugf(ctx, "looking for volume mounts on pod %s.%s ...", pod.Name, pod.Namespace)
 	EachContainer(pod, config, func(app *core.Container, cc *Container) {
 		var volPaths []string
+		dlog.Debugf(ctx, "looking for volume mounts on container %s ...", cc.Name)
 		volPaths, mounts = appendAppContainerVolumeMounts(app, cc, mounts, pod.ObjectMeta.Annotations, agentVersion)
+		dlog.Debugf(ctx, "found %d volume mounts on container %s: %v", len(volPaths), cc.Name, volPaths)
 		if len(volPaths) > 0 {
 			evs = append(evs, core.EnvVar{
 				Name:  cc.EnvPrefix + EnvInterceptMounts,

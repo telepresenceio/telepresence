@@ -191,11 +191,16 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}
 
+	config := scx.AgentConfig()
+	if agentAlreadyInjected(ctx, pod, config) {
+		dlog.Infof(ctx, "Pod %s.%s already has container %s", pod.Name, pod.Namespace, agentconfig.ContainerName)
+		return nil, nil
+	}
+
 	// Create patch operations to add the traffic-agent sidecar
 	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
 
 	var patches PatchOps
-	config := scx.AgentConfig()
 	patches = deleteAppContainer(ctx, pod, config, patches)
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
@@ -224,6 +229,19 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 func (a *agentInjector) Uninstall(ctx context.Context) {
 	atomic.StoreInt64(&a.terminating, 1)
 	a.agentConfigs.DeleteMapsAndRolloutAll(ctx)
+}
+
+func agentAlreadyInjected(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar) bool {
+	acn := agentconfig.AgentContainer(ctx, pod, config)
+	if acn == nil {
+		return false
+	}
+	for _, pcn := range pod.Spec.Containers {
+		if pcn.Name == agentconfig.ContainerName {
+			return true
+		}
+	}
+	return false
 }
 
 func needInitContainer(config *agentconfig.Sidecar) bool {
