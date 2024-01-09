@@ -12,6 +12,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -54,13 +55,18 @@ func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 	}
 
 	if userD != nil {
-		version, err := userD.Version(ctx, &empty.Empty{})
+		vi, err := userD.Version(ctx, &empty.Empty{})
 		if err == nil {
-			kvf.Add(version.Name, version.Version)
-			version, err = managerVersion(ctx)
+			kvf.Add(vi.Name, vi.Version)
+			vi, err = managerVersion(ctx)
 			switch {
 			case err == nil:
-				kvf.Add(version.Name, version.Version)
+				kvf.Add(vi.Name, vi.Version)
+				if af, err := trafficAgentFQN(ctx); err == nil {
+					kvf.Add("Traffic Agent", af.FQN)
+				} else if status.Code(err) != codes.Unavailable {
+					kvf.Add("Traffic Agent", fmt.Sprintf("error: %v", err))
+				}
 			case status.Code(err) == codes.Unavailable:
 				kvf.Add("Traffic Manager", "not connected")
 			default:
@@ -120,6 +126,13 @@ func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
 	if userD := daemon.GetUserClient(ctx); userD != nil {
 		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
+	}
+	return nil, connect.ErrNoUserDaemon
+}
+
+func trafficAgentFQN(ctx context.Context) (*manager.AgentImageFQN, error) {
+	if userD := daemon.GetUserClient(ctx); userD != nil {
+		return userD.AgentImageFQN(ctx, &empty.Empty{})
 	}
 	return nil, connect.ErrNoUserDaemon
 }

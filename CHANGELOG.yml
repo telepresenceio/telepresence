@@ -30,9 +30,14 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.18.2
+  - version: 2.19.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Include the image for the traffic-agent in the output of the version and status commands.
+        body: ->
+          The version and status commands will now output the image that the traffic-agent will be using when injected
+          by the agent-injector.
       - type: feature
         title: Custom DNS using the client DNS resolver.
         body: ->
@@ -41,6 +46,14 @@ items:
           are then routed (with reverse translation) via the pod's of a given workload. This makes it possible to handle
           custom DNS servers that resolve domains into loopback IPs. The flag may also be used in cases where the
           cluster's subnets are in conflict with the workstation's VPN.
+      - type: bugfix
+        title: Provide agent name and tag as separate values in Helm chart
+        body: >-
+          The <code>AGENT_IMAGE</code> was a concatenation of the agent's name and tag. This is now changed so that the
+          env instead contains an <code>AGENT_IMAGE_NAME</code> and <code>AGENT_INAGE_TAG</code>. The <code>AGENT_IMAGE
+          </code> is removed. Also, a new env <code>REGISTRY</code> is added, where the registry of the traffic-
+          manager image is provided. The <code>AGENT_REGISTRY</code> is no longer required
+          and will default to <code>REGISTRY</code> if not set.
       - type: bugfix
         title: Environment interpolation expressions were prefixed twice.
         body: >-

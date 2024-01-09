@@ -527,6 +527,14 @@ func (s *service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi
 	return vi, err
 }
 
+func (s *service) AgentImageFQN(ctx context.Context, empty *emptypb.Empty) (fqn *manager.AgentImageFQN, err error) {
+	err = s.WithSession(ctx, "AgentImageFQN", func(ctx context.Context, session userd.Session) error {
+		fqn, err = session.ManagerClient().GetAgentImageFQN(ctx, empty)
+		return err
+	})
+	return fqn, err
+}
+
 func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rpc.ClusterSubnets, err error) {
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}

@@ -14,10 +14,12 @@ import (
 type StatusResponse struct {
 	RootDaemon          *cmd.RootDaemonStatus          `json:"root_daemon,omitempty"`
 	UserDaemon          *cmd.UserDaemonStatus          `json:"user_daemon,omitempty"`
+	TrafficManager      *cmd.TrafficManagerStatus      `json:"traffic_manager,omitempty"`
 	ContainerizedDaemon *cmd.ContainerizedDaemonStatus `json:"daemon,omitempty"`
 	Connections         []struct {
 		RootDaemon          *cmd.RootDaemonStatus          `json:"root_daemon,omitempty"`
 		UserDaemon          *cmd.UserDaemonStatus          `json:"user_daemon,omitempty"`
+		TrafficManager      *cmd.TrafficManagerStatus      `json:"traffic_manager,omitempty"`
 		ContainerizedDaemon *cmd.ContainerizedDaemonStatus `json:"daemon,omitempty"`
 	} `json:"connections,omitempty"`
 	Error string `json:"err,omitempty"`

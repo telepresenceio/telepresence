@@ -68,7 +68,7 @@ type Cluster interface {
 	SetGeneralError(error)
 	Suffix() string
 	TelepresenceVersion() string
-	UninstallTrafficManager(ctx context.Context, managerNamespace string)
+	UninstallTrafficManager(ctx context.Context, managerNamespace string, args ...string)
 	PackageHelmChart(ctx context.Context) (string, error)
 	GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string
 	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
@@ -337,8 +337,6 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	if agentImage := GetAgentImage(c); agentImage != nil {
 		images.PrivateAgentImage = agentImage.FQName()
 		images.PrivateWebhookRegistry = agentImage.Registry
-	} else {
-		images.PrivateWebhookRegistry = s.Registry()
 	}
 	if clientImage := GetClientImage(c); clientImage != nil {
 		images.PrivateClientImage = clientImage.FQName()
@@ -654,7 +652,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	verb := "install"
 	if upgrade {
 		verb = "upgrade"
-		settings = append(settings, "--reuse-values")
 	}
 	args := []string{"helm", verb, "-n", nss.Namespace, "-f", valuesFile}
 	args = append(args, settings...)
@@ -683,10 +680,10 @@ func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, er
 	return filepath.Join(dir, fmt.Sprintf("telepresence-%s.tgz", version)), nil
 }
 
-func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
+func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string, args ...string) {
 	t := getT(ctx)
 	ctx = WithUser(ctx, "default")
-	TelepresenceOk(ctx, "helm", "uninstall", "--manager-namespace", managerNamespace)
+	TelepresenceOk(ctx, append([]string{"helm", "uninstall", "--manager-namespace", managerNamespace}, args...)...)
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },

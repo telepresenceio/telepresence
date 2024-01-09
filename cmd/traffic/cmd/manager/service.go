@@ -134,6 +134,12 @@ func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
 }
 
+func (s *service) GetAgentImageFQN(ctx context.Context, _ *empty.Empty) (*rpc.AgentImageFQN, error) {
+	return &rpc.AgentImageFQN{
+		FQN: managerutil.GetAgentImage(ctx),
+	}, nil
+}
+
 func (s *service) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
