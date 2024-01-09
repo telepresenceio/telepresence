@@ -62,6 +62,7 @@ type State interface {
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
+	EnsureAgent(context.Context, string, string) error
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string)
 	DropIntercept(string)

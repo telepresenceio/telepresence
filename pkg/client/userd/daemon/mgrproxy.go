@@ -147,6 +147,14 @@ func (p *mgrProxy) Tunnel(fhClient connector.ManagerProxy_TunnelServer) error {
 	return nil
 }
 
+func (p *mgrProxy) EnsureAgent(ctx context.Context, arg *manager.EnsureAgentRequest) (*emptypb.Empty, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.EnsureAgent(ctx, arg, callOptions...)
+}
+
 func (p *mgrProxy) LookupDNS(ctx context.Context, arg *manager.DNSRequest) (*manager.DNSResponse, error) {
 	client, callOptions, err := p.get()
 	if err != nil {

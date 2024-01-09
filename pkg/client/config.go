@@ -842,6 +842,7 @@ type Cluster struct {
 	MappedNamespaces        []string `json:"mappedNamespaces,omitempty" yaml:"mappedNamespaces,omitempty"`
 	ConnectFromRootDaemon   bool     `json:"connectFromRootDaemon,omitempty" yaml:"connectFromRootDaemon,omitempty"`
 	AgentPortForward        bool     `json:"agentPortForward,omitempty" yaml:"agentPortForward,omitempty"`
+	VirtualIPSubnet         string   `json:"virtualIPSubnet,omitempty" yaml:"virtualIPSubnet,omitempty"`
 }
 
 // This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
@@ -852,6 +853,7 @@ var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
 	DefaultManagerNamespace: defaultDefaultManagerNamespace,
 	ConnectFromRootDaemon:   true,
 	AgentPortForward:        true,
+	VirtualIPSubnet:         defaultVirtualIPSubnet,
 }
 
 func (cc *Cluster) merge(o *Cluster) {
@@ -867,6 +869,9 @@ func (cc *Cluster) merge(o *Cluster) {
 	if !o.AgentPortForward {
 		cc.AgentPortForward = false
 	}
+	if o.VirtualIPSubnet != defaultVirtualIPSubnet {
+		cc.VirtualIPSubnet = o.VirtualIPSubnet
+	}
 }
 
 // IsZero controls whether this element will be included in marshalled output.
@@ -874,7 +879,8 @@ func (cc Cluster) IsZero() bool {
 	return cc.DefaultManagerNamespace == defaultDefaultManagerNamespace &&
 		len(cc.MappedNamespaces) == 0 &&
 		cc.ConnectFromRootDaemon &&
-		cc.AgentPortForward
+		cc.AgentPortForward &&
+		cc.VirtualIPSubnet == defaultVirtualIPSubnet
 }
 
 // MarshalYAML is not using pointer receiver here, because Cluster is not pointer in the Config struct.
@@ -891,6 +897,9 @@ func (cc Cluster) MarshalYAML() (any, error) {
 	}
 	if !cc.AgentPortForward {
 		cm["agentPortForward"] = false
+	}
+	if cc.VirtualIPSubnet != defaultVirtualIPSubnet {
+		cm["virtualIPSubnet"] = cc.VirtualIPSubnet
 	}
 	return cm, nil
 }

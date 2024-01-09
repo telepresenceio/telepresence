@@ -33,6 +33,14 @@ items:
   - version: 2.18.2
     date: (TBD)
     notes:
+      - type: feature
+        title: Custom DNS using the client DNS resolver.
+        body: ->
+          A new <code>telepresence connect --proxy-via CIDR=WORKLOAD</code> flag was introduced, allowing Telepresence
+          to translate DNS responses matching specific subnets into virtual IPs that are used locally. Those virtual IPs
+          are then routed (with reverse translation) via the pod's of a given workload. This makes it possible to handle
+          custom DNS servers that resolve domains into loopback IPs. The flag may also be used in cases where the
+          cluster's subnets are in conflict with the workstation's VPN.
       - type: bugfix
         title: Environment interpolation expressions were prefixed twice.
         body: >-

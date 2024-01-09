@@ -1146,6 +1146,7 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 const (
 	ManagerProxy_Version_FullMethodName          = "/telepresence.connector.ManagerProxy/Version"
 	ManagerProxy_GetClientConfig_FullMethodName  = "/telepresence.connector.ManagerProxy/GetClientConfig"
+	ManagerProxy_EnsureAgent_FullMethodName      = "/telepresence.connector.ManagerProxy/EnsureAgent"
 	ManagerProxy_WatchClusterInfo_FullMethodName = "/telepresence.connector.ManagerProxy/WatchClusterInfo"
 	ManagerProxy_LookupDNS_FullMethodName        = "/telepresence.connector.ManagerProxy/LookupDNS"
 	ManagerProxy_Tunnel_FullMethodName           = "/telepresence.connector.ManagerProxy/Tunnel"
@@ -1159,6 +1160,8 @@ type ManagerProxyClient interface {
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.VersionInfo2, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.CLIConfig, error)
+	// EnsureAgent ensures that an agent is injected to the pods of a workload
+	EnsureAgent(ctx context.Context, in *manager.EnsureAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (ManagerProxy_WatchClusterInfoClient, error)
@@ -1194,6 +1197,15 @@ func (c *managerProxyClient) Version(ctx context.Context, in *emptypb.Empty, opt
 func (c *managerProxyClient) GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.CLIConfig, error) {
 	out := new(manager.CLIConfig)
 	err := c.cc.Invoke(ctx, ManagerProxy_GetClientConfig_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerProxyClient) EnsureAgent(ctx context.Context, in *manager.EnsureAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, ManagerProxy_EnsureAgent_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1280,6 +1292,8 @@ type ManagerProxyServer interface {
 	Version(context.Context, *emptypb.Empty) (*manager.VersionInfo2, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(context.Context, *emptypb.Empty) (*manager.CLIConfig, error)
+	// EnsureAgent ensures that an agent is injected to the pods of a workload
+	EnsureAgent(context.Context, *manager.EnsureAgentRequest) (*emptypb.Empty, error)
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(*manager.SessionInfo, ManagerProxy_WatchClusterInfoServer) error
@@ -1305,6 +1319,9 @@ func (UnimplementedManagerProxyServer) Version(context.Context, *emptypb.Empty) 
 }
 func (UnimplementedManagerProxyServer) GetClientConfig(context.Context, *emptypb.Empty) (*manager.CLIConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClientConfig not implemented")
+}
+func (UnimplementedManagerProxyServer) EnsureAgent(context.Context, *manager.EnsureAgentRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EnsureAgent not implemented")
 }
 func (UnimplementedManagerProxyServer) WatchClusterInfo(*manager.SessionInfo, ManagerProxy_WatchClusterInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
@@ -1360,6 +1377,24 @@ func _ManagerProxy_GetClientConfig_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerProxyServer).GetClientConfig(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ManagerProxy_EnsureAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.EnsureAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerProxyServer).EnsureAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagerProxy_EnsureAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerProxyServer).EnsureAgent(ctx, req.(*manager.EnsureAgentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1443,6 +1478,10 @@ var ManagerProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetClientConfig",
 			Handler:    _ManagerProxy_GetClientConfig_Handler,
+		},
+		{
+			MethodName: "EnsureAgent",
+			Handler:    _ManagerProxy_EnsureAgent_Handler,
 		},
 		{
 			MethodName: "LookupDNS",

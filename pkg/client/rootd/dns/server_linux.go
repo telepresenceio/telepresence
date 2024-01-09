@@ -102,8 +102,10 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 		s.RUnlock()
 		return nil, dns.RcodeNameError, nil
 	}
+	applySearch := s.shouldApplySearch(query)
+	s.RUnlock()
 
-	if s.shouldApplySearch(query) {
+	if applySearch {
 		origQuery := q.Name
 		for _, sp := range s.search {
 			q.Name = query + sp
@@ -114,7 +116,6 @@ func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.R
 		}
 		q.Name = origQuery
 	}
-	s.RUnlock()
 	return s.resolveInCluster(c, q)
 }
 

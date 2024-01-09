@@ -128,6 +128,7 @@ type Clients interface {
 	GetClient(net.IP) (ag tunnel.Provider)
 	WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error
 	WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error
+	GetWorkloadClient(workload string) (ag tunnel.Provider)
 }
 
 type clients struct {
@@ -171,6 +172,21 @@ func (s *clients) GetClient(ip net.IP) (pvd tunnel.Provider) {
 		pvd = ternary
 	}
 	return pvd
+}
+
+// GetWorkloadClient returns tunnel.Provider that opens a tunnel to a traffic-agent that
+// belongs to a pod created for the given workload.
+//
+// The function returns nil when there are no agents for the given workload in the connected namespace.
+func (s *clients) GetWorkloadClient(workload string) (pvd tunnel.Provider) {
+	s.clients.Range(func(_ string, ac *client) bool {
+		if ac.info.WorkloadName == workload {
+			pvd = ac
+			return false
+		}
+		return true
+	})
+	return
 }
 
 func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error {
@@ -238,7 +254,7 @@ outer:
 }
 
 func (s *clients) notifyWaiters() {
-	s.clients.Range(func(k string, ac *client) bool {
+	s.clients.Range(func(_ string, ac *client) bool {
 		if waiter, ok := s.ipWaiters.LoadAndDelete(iputil.IPKey(ac.info.PodIp)); ok {
 			close(waiter)
 		}
