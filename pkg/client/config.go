@@ -847,10 +847,7 @@ type Cluster struct {
 
 // This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
 // Hence, we don't default to "ambassador" but to empty, so that it can check that no default has been given.
-const (
-	defaultDefaultManagerNamespace = ""
-	defaultVirtualIPSubnet         = "240.240.0.0/16"
-)
+const defaultDefaultManagerNamespace = ""
 
 var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
 	DefaultManagerNamespace: defaultDefaultManagerNamespace,
