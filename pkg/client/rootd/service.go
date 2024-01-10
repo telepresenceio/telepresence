@@ -140,7 +140,9 @@ func (s *Service) Status(_ context.Context, _ *emptypb.Empty) (*rpc.DaemonStatus
 		},
 	}
 	if s.session != nil {
-		r.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+		nc := s.session.getNetworkConfig()
+		r.Subnets = nc.Subnets
+		r.OutboundConfig = nc.OutboundInfo
 	}
 	return r, nil
 }
