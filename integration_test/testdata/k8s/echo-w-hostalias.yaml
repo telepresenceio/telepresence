@@ -32,6 +32,7 @@ spec:
         - ip: 127.0.0.1
           hostnames:
             - echo-home
+            - echo-home.mydomain.local
       containers:
         - name: echo
           image: jmalloc/echo-server
