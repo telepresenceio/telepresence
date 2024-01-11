@@ -18,6 +18,7 @@ import (
 
 	"github.com/blang/semver"
 	dns2 "github.com/miekg/dns"
+	"github.com/puzpuzpuz/xsync/v3"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -52,6 +53,16 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
+
+type agentSubnet struct {
+	net.IPNet
+	workload string
+}
+
+type agentVIP struct {
+	workload      string
+	destinationIP net.IP
+}
 
 // Session resolves DNS names and routes outbound traffic that is centered around a TUN device. The router is
 // similar to a TUN-to-SOCKS5 but uses a bidirectional gRPC muxTunnel instead of SOCKS when communicating with the
@@ -118,6 +129,19 @@ type Session struct {
 	// Subnets that will be mapped even if they conflict with local routes
 	allowConflictingSubnets []*net.IPNet
 
+	// localTranslationTable maps an IP returned by the cluster's DNS to a virtual IP created by this server.
+	localTranslationTable *xsync.MapOf[iputil.IPKey, net.IP]
+
+	// IP addresses that the cluster's DNS resolves that are contained in one of the subnets in this
+	// slice are translated to a virtual IP (cached in the localTranslationTable)
+	localTranslationSubnets []agentSubnet
+
+	// virtualIPs maps a virtual IP to an agent tunnel.
+	virtualIPs *xsync.MapOf[iputil.IPKey, agentVIP]
+
+	// virtualIPProvider provides IPs in for a given range.
+	virtualIPProvider *vipProvider
+
 	// closing is set during shutdown and can have the values:
 	//   0 = running
 	//   1 = closing
@@ -162,7 +186,8 @@ type Session struct {
 	config client.Config
 
 	// done is closed when the session ends
-	done chan struct{}
+	done               chan struct{}
+	subnetViaWorkloads []*rpc.SubnetViaWorkload
 }
 
 type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (context.Context, *Session, error)
@@ -326,13 +351,13 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 		alsoProxySubnets:        as,
 		neverProxySubnets:       ns,
 		allowConflictingSubnets: allow,
+		subnetViaWorkloads:      mi.SubnetViaWorkloads,
 		proxyClusterPods:        true,
 		proxyClusterSvcs:        true,
 		vifReady:                make(chan error, 2),
 		config:                  cfg,
 		done:                    make(chan struct{}),
 	}
-
 	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
 	s.SetSearchPath(c, nil, nil)
 	dlog.Infof(c, "also-proxy subnets %v", as)
@@ -354,7 +379,53 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 		s.dnsFailures++
 		return nil, dns2.RcodeServerFailure, err
 	}
-	return dnsproxy.FromRPC(r)
+	answer, rCode, err := dnsproxy.FromRPC(r)
+	if err == nil && len(s.localTranslationSubnets) > 0 {
+		for _, rr := range answer {
+			switch rr := rr.(type) {
+			case *dns2.A:
+				rr.A, err = s.maybeGetVirtualIP(ctx, rr.A)
+			case *dns2.AAAA:
+				rr.AAAA, err = s.maybeGetVirtualIP(ctx, rr.AAAA)
+			}
+			if err != nil {
+				rCode = dns2.RcodeServerFailure
+				break
+			}
+		}
+	}
+	return answer, rCode, err
+}
+
+func (s *Session) maybeGetVirtualIP(ctx context.Context, destinationIP net.IP) (net.IP, error) {
+	var err error
+	vip, ok := s.localTranslationTable.Compute(iputil.IPKey(destinationIP), func(existing net.IP, loaded bool) (net.IP, bool) {
+		if loaded {
+			return existing, false
+		}
+		for _, sn := range s.localTranslationSubnets {
+			if sn.Contains(destinationIP) {
+				var nip net.IP
+				nip, err = s.nextVirtualIP(sn.workload, destinationIP)
+				return nip, err != nil
+			}
+		}
+		return nil, true
+	})
+	if ok {
+		dlog.Debugf(ctx, "using VIP %q for resolved IP %q", vip, destinationIP)
+		destinationIP = vip
+	}
+	return destinationIP, err
+}
+
+func (s *Session) nextVirtualIP(workload string, destinationIP net.IP) (net.IP, error) {
+	vip, err := s.virtualIPProvider.nextVIP()
+	if err != nil {
+		return nil, err
+	}
+	s.virtualIPs.Store(iputil.IPKey(vip), agentVIP{workload: workload, destinationIP: destinationIP})
+	return vip, nil
 }
 
 func (s *Session) getNetworkConfig() *rpc.NetworkConfig {
@@ -424,9 +495,13 @@ func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 	}()
 
 	// Create a unique slice of all desired subnets.
-	desired := make([]*net.IPNet, len(s.clusterSubnets)+len(s.alsoProxySubnets))
-	copy(desired, s.clusterSubnets)
-	copy(desired[len(s.clusterSubnets):], s.alsoProxySubnets)
+	desired := make([]*net.IPNet, 0, len(s.clusterSubnets)+len(s.alsoProxySubnets)+1)
+	desired = append(desired, s.clusterSubnets...)
+	desired = append(desired, s.alsoProxySubnets...)
+	if s.virtualIPProvider != nil {
+		desired = append(desired, &s.virtualIPProvider.IPNet)
+		dlog.Debugf(ctx, "Adding VIP subnet %q to TUN-device", s.virtualIPProvider.IPNet.String())
+	}
 	desired = subnet.Unique(desired)
 
 	return s.tunVif.Router.UpdateRoutes(ctx, desired, s.neverProxySubnets)
@@ -776,12 +851,19 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 			if k8sclient.CanPortForward(c, s.namespace) {
 				s.agentClients = agentpf.NewClients(s.session)
 				g.Go("agentPods", func(ctx context.Context) error {
+					if err := s.activateProxyViaWorkloads(c); err != nil {
+						return err
+					}
 					return s.agentClients.WatchAgentPods(ctx, rmc.RealManagerClient())
 				})
 			} else {
 				dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
 			}
 		}
+	}
+
+	if s.agentClients == nil && len(s.subnetViaWorkloads) > 0 {
+		return fmt.Errorf("--proxy-via can only be used when cluster.agentPortForward is enabled")
 	}
 
 	// At this point, we wait until the VIF is ready. It will be, shortly after
@@ -853,6 +935,40 @@ func (s *Session) stop(c context.Context) {
 			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)
 		}
 	}
+}
+
+func (s *Session) activateProxyViaWorkloads(ctx context.Context) error {
+	sl := len(s.subnetViaWorkloads)
+	if sl == 0 {
+		return nil
+	}
+	_, vipSubnet, err := net.ParseCIDR(client.GetConfig(ctx).Cluster().VirtualIPSubnet)
+	if err != nil {
+		return fmt.Errorf("unable to parse configuration value cluster.virtualIPSubnet: %w", err)
+	}
+	s.virtualIPProvider = newVipProvider(vipSubnet)
+	s.localTranslationTable = xsync.NewMapOf[iputil.IPKey, net.IP]()
+	s.virtualIPs = xsync.NewMapOf[iputil.IPKey, agentVIP]()
+	s.localTranslationSubnets = make([]agentSubnet, sl)
+	wlNames := make(map[string]struct{}, sl)
+	for i, svw := range s.subnetViaWorkloads {
+		_, ipn, err := net.ParseCIDR(svw.Subnet)
+		if err != nil {
+			return err
+		}
+		wlNames[svw.Workload] = struct{}{}
+		s.localTranslationSubnets[i] = agentSubnet{IPNet: *ipn, workload: svw.Workload}
+	}
+	for wlName := range wlNames {
+		_, err := s.managerClient.EnsureAgent(ctx, &manager.EnsureAgentRequest{
+			Session: s.session,
+			Name:    wlName,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {

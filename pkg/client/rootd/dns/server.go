@@ -26,7 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -338,11 +337,12 @@ func (s *Server) GetConfig() *rpc.DNSConfig {
 	if len(s.mappings) > 0 {
 		ns := maps.Keys(s.mappings)
 		slices.Sort(ns)
-		for _, n := range ns {
-			c.Mappings = append(c.Mappings, &rpc.DNSMapping{
+		c.Mappings = make([]*rpc.DNSMapping, len(s.mappings))
+		for i, n := range ns {
+			c.Mappings[i] = &rpc.DNSMapping{
 				Name:     strings.TrimSuffix(n, "."),
 				AliasFor: strings.TrimSuffix(s.mappings[n], "."),
-			})
+			}
 		}
 	}
 	s.RUnlock()
@@ -364,12 +364,14 @@ func (s *Server) Stop() {
 
 func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
 	s.Lock()
-	s.clusterDomain = dns.ClusterDomain
 	if s.remoteIP == nil {
 		s.remoteIP = remoteIP
 	}
-	s.excludeSuffixes = slice.AppendUnique(s.excludeSuffixes, dns.ExcludeSuffixes...)
-	s.includeSuffixes = slice.AppendUnique(s.includeSuffixes, dns.IncludeSuffixes...)
+	if dns != nil {
+		s.clusterDomain = dns.ClusterDomain
+		s.excludeSuffixes = slice.AppendUnique(s.excludeSuffixes, dns.ExcludeSuffixes...)
+		s.includeSuffixes = slice.AppendUnique(s.includeSuffixes, dns.IncludeSuffixes...)
+	}
 	s.Unlock()
 }
 
@@ -403,22 +405,25 @@ func (s *Server) purgeRecordsFromCache(keyName string) {
 
 // SetExcludes sets the excludes list in the config.
 func (s *Server) SetExcludes(excludes []string) {
-	for _, e := range excludes {
-		s.purgeRecordsFromCache(e)
-	}
 	s.Lock()
-	for _, e := range s.excludes {
-		s.purgeRecordsFromCache(e)
-	}
+	oldExcludes := s.excludes
 	s.excludes = excludes
 	s.Unlock()
+
+	for _, e := range slice.AppendUnique(oldExcludes, excludes...) {
+		s.purgeRecordsFromCache(e)
+	}
 }
 
 func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
 	if l := len(mappings); l > 0 {
 		mm := make(map[string]string, l)
 		for _, m := range mappings {
-			mm[m.Name+"."] = m.AliasFor + "."
+			al := m.AliasFor
+			if ip := iputil.Parse(al); ip == nil {
+				al += "."
+			}
+			mm[m.Name+"."] = al
 		}
 		return mm
 	}
@@ -429,12 +434,17 @@ func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
 func (s *Server) SetMappings(mappings []*rpc.DNSMapping) {
 	mm := mappingsMap(mappings)
 	s.Lock()
-	// Flush the mappings.
-	for n := range s.mappings {
-		s.purgeRecordsFromCache(n)
-	}
+	oldMappings := s.mappings
 	s.mappings = mm
 	s.Unlock()
+
+	// Flush old and the mappings.
+	for n := range oldMappings {
+		s.purgeRecordsFromCache(n)
+	}
+	for n := range mm {
+		s.purgeRecordsFromCache(n)
+	}
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
@@ -823,39 +833,67 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 // keep this low to avoid such caching.
 const dnsTTL = 4
 
-func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, int, error) {
+func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (answer dnsproxy.RRs, rCode int, err error) {
 	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
 	defer func() {
+		if rCode != dns.RcodeSuccess {
+			s.cache.Delete(cacheKey{name: q.Name, qType: q.Qtype}) // Don't cache unless the lookup succeeded.
+		}
 		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
 		dv.close()
 	}()
 
-	// Returns a CNAME pointing to the mapping when there is a hit.
-	if mappingAlias, ok := s.resolveMappingAlias(q.Name); ok {
-		dv.answer = dnsproxy.RRs{&dns.CNAME{
-			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
-			Target: mappingAlias,
-		}}
-		// On Windows, or in a Linux container, just returning the cname isn't enough, and the DNS resolver won't try
-		// to get the record with a subsequent request, so we need to resolve the record until we get a better solution.
-		if runtime.GOOS == "windows" || proc.RunningInContainer() {
-			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
-				Name:   mappingAlias,
-				Qtype:  q.Qtype,
-				Qclass: q.Qclass,
-			})
-			if err == nil && rCode == dns.RcodeSuccess && len(answer) > 0 {
-				dv.answer = append(dv.answer, answer[0])
+	switch q.Qtype {
+	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME:
+		if mappingAlias, ok := s.resolveMappingAlias(q.Name); ok {
+			if ip := iputil.Parse(mappingAlias); ip != nil {
+				// The name resolves to an A or AAAA record known by this DNS server.
+				var rr dns.RR
+				if len(ip) == 4 {
+					rr = &dns.A{
+						Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: dnsTTL},
+						A:   ip,
+					}
+				} else {
+					rr = &dns.AAAA{
+						Hdr:  dns.RR_Header{Name: q.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: dnsTTL},
+						AAAA: ip,
+					}
+				}
+				dv.answer = dnsproxy.RRs{rr}
+				dv.rCode = dns.RcodeSuccess
+				return copyRRs(dv.answer, []uint16{q.Qtype}), dv.rCode, nil
 			}
+
+			cnameRRs := dnsproxy.RRs{&dns.CNAME{
+				Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
+				Target: mappingAlias,
+			}}
+
+			if q.Qtype == dns.TypeCNAME {
+				// A query for the CNAME must only return the CNAME.
+				answer = cnameRRs
+				rCode = dns.RcodeSuccess
+			} else {
+				// A query for an A or AAAA must resolve the CNAME and then return both the result and the
+				// CNAME that resolved to it.
+				answer, rCode, err = s.resolve(s.ctx, &dns.Question{
+					Name:   mappingAlias,
+					Qtype:  q.Qtype,
+					Qclass: q.Qclass,
+				})
+				if err != nil || dv.rCode != dns.RcodeSuccess {
+					return cnameRRs, dv.rCode, err
+				}
+				answer = copyRRs(answer, []uint16{q.Qtype})
+				answer = append(cnameRRs, answer...)
+			}
+			return answer, rCode, nil
 		}
-		dv.rCode = dns.RcodeSuccess
-		return copyRRs(dv.answer, []uint16{dns.TypeCNAME, q.Qtype}), dv.rCode, nil
 	}
 
-	var err error
 	dv.answer, dv.rCode, err = s.resolve(s.ctx, q)
 	if err != nil || dv.rCode != dns.RcodeSuccess {
-		s.cache.Delete(cacheKey{name: q.Name, qType: q.Qtype}) // Don't cache unless the lookup succeeded.
 		return nil, dv.rCode, err
 	}
 

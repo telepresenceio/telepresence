@@ -134,6 +134,12 @@ func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
 }
 
+func (s *service) GetAgentImageFQN(ctx context.Context, _ *empty.Empty) (*rpc.AgentImageFQN, error) {
+	return &rpc.AgentImageFQN{
+		FQN: managerutil.GetAgentImage(ctx),
+	}, nil
+}
+
 func (s *service) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
@@ -276,11 +282,12 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 			i := 0
 			for _, a := range agm {
 				agents[i] = &rpc.AgentPodInfo{
-					PodName:     a.PodName,
-					Namespace:   a.Namespace,
-					PodIp:       iputil.Parse(a.PodIp),
-					ApiPort:     a.ApiPort,
-					Intercepted: isIntercepted(a.Name, a.Namespace),
+					WorkloadName: a.Name,
+					PodName:      a.PodName,
+					Namespace:    a.Namespace,
+					PodIp:        iputil.Parse(a.PodIp),
+					ApiPort:      a.ApiPort,
+					Intercepted:  isIntercepted(a.Name, a.Namespace),
 				}
 				agentNames[i] = a.Name
 				i++
@@ -550,6 +557,22 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 		replacePolicy = agentconfig.ReplacePolicyInactive
 	}
 	return s.state.PrepareIntercept(ctx, request, replacePolicy)
+}
+
+func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*empty.Empty, error) {
+	session := request.GetSession()
+	ctx = managerutil.WithSessionInfo(ctx, session)
+	dlog.Debugf(ctx, "EnsureAgent called")
+	sessionID := session.GetSessionId()
+	client := s.state.GetClient(sessionID)
+	if client == nil {
+		return &empty.Empty{}, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+	err := s.state.EnsureAgent(ctx, request.Name, client.Namespace)
+	if err != nil {
+		err = status.Errorf(codes.Internal, "failed to ensure agent for workload %s: %v", request.Name, err)
+	}
+	return &empty.Empty{}, err
 }
 
 // CreateIntercept lets a client create an intercept.

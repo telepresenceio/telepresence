@@ -56,19 +56,10 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 	require.NoError(s.TelepresenceHelmInstall(itest.WithAgentImage(ctx, nil), true))
 	defer s.RollbackTM(ctx)
 
-	image, err := itest.KubectlOut(ctx, s.ManagerNamespace(),
-		"get", "deploy", "traffic-manager",
-		"--ignore-not-found",
-		"-o",
-		"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='AGENT_IMAGE')].value}")
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceQuitOk(ctx)
 
-	require.NoError(err)
-	actualRegistry, err := itest.KubectlOut(ctx, s.ManagerNamespace(),
-		"get", "deploy", "traffic-manager",
-		"--ignore-not-found",
-		"-o",
-		"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='AGENT_REGISTRY')].value}")
-	require.NoError(err)
-	s.Equal("imageFromConfig:0.0.1", image)
-	s.Equal(s.Registry(), actualRegistry)
+	st := itest.TelepresenceStatusOk(ctx)
+	s.Require().NotNil(st.TrafficManager)
+	s.Equal(s.Registry()+"/imageFromConfig:0.0.1", st.TrafficManager.TrafficAgent)
 }

@@ -25,6 +25,7 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	Manager_Version_FullMethodName                   = "/telepresence.manager.Manager/Version"
+	Manager_GetAgentImageFQN_FullMethodName          = "/telepresence.manager.Manager/GetAgentImageFQN"
 	Manager_GetLicense_FullMethodName                = "/telepresence.manager.Manager/GetLicense"
 	Manager_CanConnectAmbassadorCloud_FullMethodName = "/telepresence.manager.Manager/CanConnectAmbassadorCloud"
 	Manager_GetCloudConfig_FullMethodName            = "/telepresence.manager.Manager/GetCloudConfig"
@@ -41,6 +42,7 @@ const (
 	Manager_WatchAgentsNS_FullMethodName             = "/telepresence.manager.Manager/WatchAgentsNS"
 	Manager_WatchIntercepts_FullMethodName           = "/telepresence.manager.Manager/WatchIntercepts"
 	Manager_WatchClusterInfo_FullMethodName          = "/telepresence.manager.Manager/WatchClusterInfo"
+	Manager_EnsureAgent_FullMethodName               = "/telepresence.manager.Manager/EnsureAgent"
 	Manager_PrepareIntercept_FullMethodName          = "/telepresence.manager.Manager/PrepareIntercept"
 	Manager_CreateIntercept_FullMethodName           = "/telepresence.manager.Manager/CreateIntercept"
 	Manager_RemoveIntercept_FullMethodName           = "/telepresence.manager.Manager/RemoveIntercept"
@@ -62,6 +64,8 @@ const (
 type ManagerClient interface {
 	// Version returns the version information of the Manager.
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
+	// GetAgentImageFQN returns fully qualified name of the image that is injected into intercepted pods.
+	GetAgentImageFQN(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AgentImageFQN, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*License, error)
@@ -112,6 +116,8 @@ type ManagerClient interface {
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error)
+	// EnsureAgent ensures that an agent is injected to the pods of a workload
+	EnsureAgent(ctx context.Context, in *EnsureAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Request that the traffic-manager makes the preparations necessary to
 	// create the given intercept.
 	PrepareIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*PreparedIntercept, error)
@@ -171,6 +177,15 @@ func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
 func (c *managerClient) Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionInfo2, error) {
 	out := new(VersionInfo2)
 	err := c.cc.Invoke(ctx, Manager_Version_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) GetAgentImageFQN(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AgentImageFQN, error) {
+	out := new(AgentImageFQN)
+	err := c.cc.Invoke(ctx, Manager_GetAgentImageFQN_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -436,6 +451,15 @@ func (x *managerWatchClusterInfoClient) Recv() (*ClusterInfo, error) {
 	return m, nil
 }
 
+func (c *managerClient) EnsureAgent(ctx context.Context, in *EnsureAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Manager_EnsureAgent_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) PrepareIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*PreparedIntercept, error) {
 	out := new(PreparedIntercept)
 	err := c.cc.Invoke(ctx, Manager_PrepareIntercept_FullMethodName, in, out, opts...)
@@ -650,6 +674,8 @@ func (x *managerWatchDialClient) Recv() (*DialRequest, error) {
 type ManagerServer interface {
 	// Version returns the version information of the Manager.
 	Version(context.Context, *emptypb.Empty) (*VersionInfo2, error)
+	// GetAgentImageFQN returns fully qualified name of the image that is injected into intercepted pods.
+	GetAgentImageFQN(context.Context, *emptypb.Empty) (*AgentImageFQN, error)
 	// GetLicense returns the License information (the license itself and
 	// domain that granted it) known to the manager.
 	GetLicense(context.Context, *emptypb.Empty) (*License, error)
@@ -700,6 +726,8 @@ type ManagerServer interface {
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error
+	// EnsureAgent ensures that an agent is injected to the pods of a workload
+	EnsureAgent(context.Context, *EnsureAgentRequest) (*emptypb.Empty, error)
 	// Request that the traffic-manager makes the preparations necessary to
 	// create the given intercept.
 	PrepareIntercept(context.Context, *CreateInterceptRequest) (*PreparedIntercept, error)
@@ -756,6 +784,9 @@ type UnimplementedManagerServer struct {
 func (UnimplementedManagerServer) Version(context.Context, *emptypb.Empty) (*VersionInfo2, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
+func (UnimplementedManagerServer) GetAgentImageFQN(context.Context, *emptypb.Empty) (*AgentImageFQN, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAgentImageFQN not implemented")
+}
 func (UnimplementedManagerServer) GetLicense(context.Context, *emptypb.Empty) (*License, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLicense not implemented")
 }
@@ -803,6 +834,9 @@ func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, Manager_WatchInt
 }
 func (UnimplementedManagerServer) WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
+}
+func (UnimplementedManagerServer) EnsureAgent(context.Context, *EnsureAgentRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EnsureAgent not implemented")
 }
 func (UnimplementedManagerServer) PrepareIntercept(context.Context, *CreateInterceptRequest) (*PreparedIntercept, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PrepareIntercept not implemented")
@@ -870,6 +904,24 @@ func _Manager_Version_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).Version(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_GetAgentImageFQN_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetAgentImageFQN(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_GetAgentImageFQN_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetAgentImageFQN(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1177,6 +1229,24 @@ func (x *managerWatchClusterInfoServer) Send(m *ClusterInfo) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _Manager_EnsureAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnsureAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).EnsureAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_EnsureAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).EnsureAgent(ctx, req.(*EnsureAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_PrepareIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateInterceptRequest)
 	if err := dec(in); err != nil {
@@ -1440,6 +1510,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Manager_Version_Handler,
 		},
 		{
+			MethodName: "GetAgentImageFQN",
+			Handler:    _Manager_GetAgentImageFQN_Handler,
+		},
+		{
 			MethodName: "GetLicense",
 			Handler:    _Manager_GetLicense_Handler,
 		},
@@ -1482,6 +1556,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLogs",
 			Handler:    _Manager_GetLogs_Handler,
+		},
+		{
+			MethodName: "EnsureAgent",
+			Handler:    _Manager_EnsureAgent_Handler,
 		},
 		{
 			MethodName: "PrepareIntercept",

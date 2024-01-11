@@ -2,13 +2,18 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/netip"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -16,6 +21,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
@@ -43,6 +49,9 @@ type Request struct {
 	kubeFlagSet             *pflag.FlagSet
 	UserDaemonProfilingPort uint16
 	RootDaemonProfilingPort uint16
+
+	// proxyVia holds the string version for the --proxy-via flag values.
+	proxyVia []string
 }
 
 // InitRequest adds the networking flags and Kubernetes flags to the given command and
@@ -67,6 +76,10 @@ func InitRequest(cmd *cobra.Command) *Request {
 	nwFlags.StringSliceVar(&cr.NeverProxy,
 		"never-proxy", nil, ``+
 			`Comma separated list of CIDR to never proxy`)
+	nwFlags.StringSliceVar(&cr.proxyVia,
+		"proxy-via", nil, ``+
+			`Locally translate cluster DNS responses matching CIDR to virtual IPs that are routed (with reverse `+
+			`translation) via WORKLOAD. Must be in the form CIDR=WORKLOAD.`)
 	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
 		"allow-conflicting-subnets", nil, ``+
 			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
@@ -116,11 +129,68 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) error {
 		}
 	})
 	cr.addKubeconfigEnv()
-	if err := cr.setGlobalConnectFlags(cmd); err != nil {
-		return err
+	err := cr.setGlobalConnectFlags(cmd)
+	if err != nil {
+		return errcat.User.New(err)
+	}
+	cr.SubnetViaWorkloads, err = parseProxyVias(cr.proxyVia)
+	if err != nil {
+		return errcat.User.New(err)
 	}
 	cmd.SetContext(context.WithValue(cmd.Context(), requestKey{}, cr))
 	return nil
+}
+
+type prefixViaWL struct {
+	subnet   netip.Prefix
+	workload string
+}
+
+func parseProxyVias(proxyVia []string) ([]*daemon.SubnetViaWorkload, error) {
+	l := len(proxyVia)
+	if l == 0 {
+		return nil, nil
+	}
+	pvs := make([]prefixViaWL, l)
+	for i, dps := range proxyVia {
+		dp, err := parseSubnetViaWorkload(dps)
+		if err != nil {
+			return nil, err
+		}
+		for pi := i - 1; pi >= 0; pi-- {
+			if pvs[pi].subnet.Overlaps(dp.subnet) {
+				return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pvs[pi].subnet, dp.subnet)
+			}
+		}
+		pvs[i] = dp
+	}
+	svs := make([]*daemon.SubnetViaWorkload, l)
+	for i, pv := range pvs {
+		svs[i] = &daemon.SubnetViaWorkload{
+			Subnet:   pv.subnet.String(),
+			Workload: pv.workload,
+		}
+	}
+	return svs, nil
+}
+
+func parseSubnetViaWorkload(dps string) (prefixViaWL, error) {
+	var pv prefixViaWL
+	eqIdx := strings.IndexByte(dps, '=')
+	if eqIdx <= 0 {
+		return pv, fmt.Errorf("--proxy-via %q is not in the format CIDR=WORKLOAD", dps)
+	}
+	sn, err := netip.ParsePrefix(dps[:eqIdx])
+	if err != nil {
+		return pv, err
+	}
+	wl := dps[eqIdx+1:]
+	if errs := validation.IsDNS1123Label(wl); len(errs) > 0 {
+		return pv, errors.New(errs[0])
+	}
+	pv.subnet = sn
+	pv.workload = wl
+	return pv, nil
 }
 
 func (cr *Request) addKubeconfigEnv() {

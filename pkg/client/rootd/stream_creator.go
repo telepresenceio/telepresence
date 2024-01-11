@@ -3,12 +3,14 @@ package rootd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -41,21 +43,42 @@ func (s *Session) streamCreator() tunnel.StreamCreator {
 				}
 			}
 		}
+
 		var err error
-		var ct tunnel.GRPCClientStream
-		if agentClient := s.getAgentClient(id.Destination()); agentClient != nil {
-			dlog.Debugf(c, "Opening traffic-agent tunnel for id %s", id)
-			ct, err = agentClient.Tunnel(c)
+		var tp tunnel.Provider
+		if a, ok := s.getAgentVIP(id); ok {
+			// s.agentClients is never nil when agentVIPs are used.
+			tp = s.agentClients.GetWorkloadClient(a.workload)
+			if tp == nil {
+				return nil, fmt.Errorf("unable to connect to a traffic-agent for workload %q", a.workload)
+			}
+			// Replace the virtual IP with the original destination IP. This will ensure that the agent
+			// dials the original destination when the tunnel is established.
+			id = tunnel.NewConnID(id.Protocol(), id.Source(), a.destinationIP, id.SourcePort(), id.DestinationPort())
+			dlog.Debugf(c, "Opening proxy-via %s tunnel for id %s", a.workload, id)
 		} else {
-			dlog.Debugf(c, "Opening traffic-manager tunnel for id %s", id)
-			ct, err = s.managerClient.Tunnel(c)
+			if tp = s.getAgentClient(id.Destination()); tp != nil {
+				dlog.Debugf(c, "Opening traffic-agent tunnel for id %s", id)
+			} else {
+				tp = tunnel.ManagerProxyProvider(s.managerClient)
+				dlog.Debugf(c, "Opening traffic-manager tunnel for id %s", id)
+			}
 		}
+		ct, err := tp.Tunnel(c)
 		if err != nil {
 			return nil, err
 		}
+
 		tc := client.GetConfig(c).Timeouts()
 		return tunnel.NewClientStream(c, ct, id, s.session.SessionId, tc.Get(client.TimeoutRoundtripLatency), tc.Get(client.TimeoutEndpointDial))
 	}
+}
+
+func (s *Session) getAgentVIP(id tunnel.ConnID) (a agentVIP, ok bool) {
+	if s.virtualIPs != nil {
+		a, ok = s.virtualIPs.Load(iputil.IPKey(id.Destination()))
+	}
+	return
 }
 
 func (s *Session) getAgentClient(ip net.IP) (pvd tunnel.Provider) {

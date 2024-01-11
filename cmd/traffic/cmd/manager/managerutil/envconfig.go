@@ -29,6 +29,7 @@ import (
 // The Env is responsible for all parsing of the environment strings. No parsing of such
 // strings should be made elsewhere in the code.
 type Env struct {
+	Registry            string        `env:"REGISTRY,                 parser=nonempty-string"`
 	LogLevel            string        `env:"LOG_LEVEL,                parser=logLevel"`
 	User                string        `env:"USER,                     parser=string,      default="`
 	ServerHost          string        `env:"SERVER_HOST,              parser=string,      default="`
@@ -47,8 +48,9 @@ type Env struct {
 	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
 	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
 
-	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=nonempty-string"`
-	AgentImage               string                      `env:"AGENT_IMAGE,              parser=string,         default="`
+	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=string,         default="`
+	AgentImageName           string                      `env:"AGENT_IMAGE_NAME,         parser=string,         default="`
+	AgentImageTag            string                      `env:"AGENT_IMAGE_TAG,          parser=string,         default="`
 	AgentImagePullPolicy     string                      `env:"AGENT_IMAGE_PULL_POLICY,  parser=string,         default="`
 	AgentImagePullSecrets    []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`
 	AgentInjectPolicy        agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
@@ -85,11 +87,15 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorCon
 }
 
 func (e *Env) QualifiedAgentImage() string {
-	img := e.AgentImage
+	img := e.AgentImageName
 	if img == "" {
 		return ""
 	}
-	return e.AgentRegistry + "/" + img
+	img = e.AgentRegistry + "/" + img
+	if e.AgentImageTag != "" {
+		img += ":" + e.AgentImageTag
+	}
+	return img
 }
 
 func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
