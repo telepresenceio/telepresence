@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -73,8 +74,7 @@ func (l *tlsListener) Accept() (net.Conn, error) {
 }
 
 func (l *tlsListener) Close() error {
-	// Ignore close call. We close the tcpListener explicitly
-	return nil
+	return l.tcpListener.Close()
 }
 
 func (l *tlsListener) Addr() net.Addr {
@@ -186,9 +186,14 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
 	if err != nil {
 		return err
 	}
-	defer tcpListener.Close()
 
-	return s.Serve(
+	errc := make(chan error, 1)
+	go func() {
+		<-ctx.Done()
+		errc <- s.Shutdown(dcontext.HardContext(ctx))
+	}()
+
+	err = s.Serve(
 		&tlsListener{
 			ctx:         ctx,
 			config:      tls.Config{Certificates: []tls.Certificate{cert}},
@@ -197,6 +202,11 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
 			tcpListener: tcpListener,
 		},
 	)
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("failed to serve: %v", err)
+	}
+
+	return <-errc
 }
 
 func loadCert(ctx context.Context) (cert, key []byte, err error) {
