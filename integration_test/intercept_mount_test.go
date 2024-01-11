@@ -134,6 +134,45 @@ func (s *singleServiceSuite) Test_InterceptMountRelative() {
 	require.True(st.IsDir(), "<mount point>/var is not a directory")
 }
 
+// Verifies proper forwarding of volume mounts when running a telepresence intercept with the
+// "--replace" flag.
+func (s *singleServiceSuite) Test_InterceptMountReplace() {
+	if runtime.GOOS == "darwin" {
+		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
+	}
+	if runtime.GOOS == "windows" {
+		s.T().Skip("Windows mount on driver letters. Relative mounts are not possible")
+	}
+	require := s.Require()
+
+	ctx := s.Context()
+	port, cancel := itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
+	defer cancel()
+
+	mountPoint, err := os.MkdirTemp("", "mount-") // Don't use the testing.Tempdir() because deletion is delayed.
+	require.NoError(err)
+	ctx = itest.WithWorkingDir(ctx, mountPoint)
+	stdout := itest.TelepresenceOk(ctx,
+		"intercept", "--replace", s.ServiceName(), "--mount", mountPoint, "--port", strconv.Itoa(port))
+	defer func() {
+		itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	}()
+	s.Contains(stdout, "Using Deployment "+s.ServiceName())
+
+	s.Eventually(func() bool {
+		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
+		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
+	}, 10*time.Second, time.Second)
+
+	time.Sleep(200 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
+	st, err := os.Stat(mountPoint)
+	require.NoError(err, "Stat on <mount point> failed")
+	require.True(st.IsDir(), "Mount point is not a directory")
+	st, err = os.Stat(filepath.Join(mountPoint, "var"))
+	require.NoError(err, "Stat on <mount point>/var failed")
+	require.True(st.IsDir(), "<mount point>/var is not a directory")
+}
+
 func (s *singleServiceSuite) Test_InterceptDetailedOutput() {
 	ctx := s.Context()
 	port, cancel := itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
