@@ -32,13 +32,20 @@ import (
 
 type Resolver func(context.Context, *dns.Question) (dnsproxy.RRs, int, error)
 
-// recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
-// is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
-// recursively. This is common when the cluster is running on the local host (k3s in docker for instance).
-const recursionCheck = "tel2-recursion-check.kube-system."
+const (
+	// recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
+	// is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
+	// recursively. This is common when the cluster is running on the local host (k3s in docker for instance).
+	recursionCheck = "tel2-recursion-check.kube-system."
 
-// defaultClusterDomain used unless traffic-manager reports otherwise.
-const defaultClusterDomain = "cluster.local."
+	// defaultClusterDomain used unless traffic-manager reports otherwise.
+	defaultClusterDomain = "cluster.local."
+
+	// sanityCheck is the query used when verifying that a DNS query reaches our DNS server. It should result
+	// in an increase of the requestCount but always yield an NXDOMAIN reply.
+	santiyCheck    = "jhfweoitnkgyeta." + tel2SubDomain
+	santiyCheckDot = santiyCheck + "."
+)
 
 type FallbackPool interface {
 	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
@@ -702,6 +709,42 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	}()
 
 	q := &r.Question[0]
+	atomic.AddInt64(&s.requestCount, 1)
+	if q.Name == santiyCheckDot {
+		msg := new(dns.Msg)
+		msg.SetRcode(r, dns.RcodeSuccess)
+		var rr dns.RR
+		switch q.Qtype {
+		case dns.TypeA:
+			rr = &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   q.Name,
+					Rrtype: q.Qtype,
+					Class:  q.Qclass,
+				},
+				A: localhostIPv4,
+			}
+		case dns.TypeAAAA:
+			rr = &dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name:   q.Name,
+					Rrtype: q.Qtype,
+					Class:  q.Qclass,
+				},
+				AAAA: localhostIPv6,
+			}
+		default:
+			msg = new(dns.Msg)
+			msg.SetRcode(r, dns.RcodeNotImplemented)
+			return
+		}
+		msg.Answer = dnsproxy.RRs{rr}
+		msg.Authoritative = true
+		dlog.Debug(c, "sanity-check OK")
+		_ = w.WriteMsg(msg)
+		return
+	}
+
 	qts := dns.TypeToString[q.Qtype]
 	dlog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
 

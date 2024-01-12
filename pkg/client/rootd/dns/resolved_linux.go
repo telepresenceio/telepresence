@@ -83,16 +83,23 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 		cmdC, cmdCancel := context.WithTimeout(c, 2*time.Second)
 		defer cmdCancel()
 		for cmdC.Err() == nil {
-			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
-			if s.RequestCount() > 0 {
-				// The query went all way through. Start processing search paths systemd-resolved style
-				// and return nil for successful validation.
-				s.processSearchPaths(g, s.updateLinkDomains, dev)
-				return nil
-			}
-			s.flushDNS()
-			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
+			go func() {
+				dlog.Debug(cmdC, "sanity-check lookup")
+				_, _ = net.DefaultResolver.LookupHost(cmdC, santiyCheck)
+				if s.RequestCount() > 0 {
+					cmdCancel()
+				}
+			}()
+			dtime.SleepWithContext(cmdC, 200*time.Millisecond)
 		}
+		<-cmdC.Done()
+		if s.RequestCount() > 0 {
+			// The query went all way through. Start processing search paths systemd-resolved style
+			// and return nil for successful validation.
+			s.processSearchPaths(g, s.updateLinkDomains, dev)
+			return nil
+		}
+		s.flushDNS()
 		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
 		return errResolveDNotConfigured
 	})
