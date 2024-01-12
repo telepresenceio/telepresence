@@ -276,17 +276,24 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 		// But it does, so I need this in order to be
 		// productive at home.  We should really
 		// root-cause this, because it's weird.
+		hdr := dns.RR_Header{
+			Name:   q.Name,
+			Rrtype: q.Qtype,
+			Class:  q.Qclass,
+		}
 		switch q.Qtype {
 		case dns.TypeA:
 			return dnsproxy.RRs{&dns.A{
-				Hdr: dns.RR_Header{},
+				Hdr: hdr,
 				A:   localhostIPv4,
 			}}, dns.RcodeSuccess, nil
 		case dns.TypeAAAA:
 			return dnsproxy.RRs{&dns.AAAA{
-				Hdr:  dns.RR_Header{},
+				Hdr:  hdr,
 				AAAA: localhostIPv6,
 			}}, dns.RcodeSuccess, nil
+		default:
+			return nil, dns.RcodeNameError, nil
 		}
 	}
 
@@ -299,9 +306,28 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	defer cancel()
 
 	result, rCode, err = s.clusterLookup(c, q)
+	if err != nil || rCode != dns.RcodeSuccess {
+		// For A and AAAA queries, we check if we have a successful counterpart in the cache. If we
+		// do, then this query must return NOERROR EMPTY
+		ck := cacheKey{name: q.Name, qType: dns.TypeNone}
+		switch q.Qtype {
+		case dns.TypeA:
+			ck.qType = dns.TypeAAAA
+		case dns.TypeAAAA:
+			ck.qType = dns.TypeA
+		}
+		if ck.qType != dns.TypeNone {
+			if ce, ok := s.cache.Load(ck); ok && !ce.expired() {
+				err = nil
+				rCode = dns.RcodeSuccess
+			}
+		}
+	}
 	if err != nil {
+		dlog.Debugf(c, "clusterLookup returned error: %v", err)
 		return nil, rCode, client.CheckTimeout(c, err)
 	}
+
 	// Keep the TTLs of requests resolved in the cluster low. We
 	// cache them locally anyway, but our cache is flushed when things are
 	// intercepted or the namespaces change.
@@ -560,12 +586,17 @@ func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			copyQType := q.Qtype
-			// If answer is a mapping, the copy type should be a CNAME.
-			if len(oldDv.answer) == 1 && oldDv.answer[0].Header().Rrtype == dns.TypeCNAME {
-				copyQType = dns.TypeCNAME
+			qTypes := []uint16{q.Qtype}
+			if q.Qtype != dns.TypeCNAME {
+				// Allow additional CNAME records if they are present.
+				for _, rr := range oldDv.answer {
+					if rr.Header().Rrtype == dns.TypeCNAME {
+						qTypes = append(qTypes, dns.TypeCNAME)
+						break
+					}
+				}
 			}
-			return copyRRs(oldDv.answer, []uint16{copyQType}), oldDv.rCode, nil
+			return copyRRs(oldDv.answer, qTypes), oldDv.rCode, nil
 		}
 		s.cache.Store(key, newDv)
 	}
@@ -742,8 +773,6 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	qts := dns.TypeToString[q.Qtype]
 	dlog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
-
-	atomic.AddInt64(&s.requestCount, 1)
 
 	var err error
 	var rCode int
