@@ -99,10 +99,6 @@ type Server struct {
 	// Function that sends a lookup request to the traffic-manager
 	clusterLookup Resolver
 
-	// onlyNames is set to true when using a legacy traffic-manager incapable of
-	// using query types
-	onlyNames bool
-
 	error string
 
 	// ready is closed when the DNS server is fully configured
@@ -133,7 +129,7 @@ func (dv *cacheEntry) close() {
 }
 
 // NewServer returns a new dns.Server.
-func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *Server {
+func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 	if config == nil {
 		config = &rpc.DNSConfig{}
 	}
@@ -163,7 +159,6 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *S
 		searchPathCh:    make(chan []string, 5),
 		clusterDomain:   defaultClusterDomain,
 		clusterLookup:   clusterLookup,
-		onlyNames:       onlyNames,
 		ready:           make(chan struct{}),
 	}
 	if lt := config.LookupTimeout; lt != nil {
@@ -765,35 +760,12 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		_ = w.WriteMsg(msg)
 	}()
 
-	if s.onlyNames {
-		switch q.Qtype {
-		case dns.TypeA:
-			answer, rCode, err = s.cacheResolve(q)
-		case dns.TypeAAAA:
-			if atomic.LoadInt32(&s.recursive) == recursionDetected || q.Name == recursionCheck {
-				rCode = dns.RcodeNameError
-				break
-			}
-			q.Qtype = dns.TypeA
-			answer, rCode, err = s.cacheResolve(q)
-			q.Qtype = dns.TypeAAAA
-			if rCode == dns.RcodeSuccess {
-				// return EMPTY to indicate that dns.TypeA exists
-				answer = nil
-			}
-		default:
-			msg = new(dns.Msg)
-			msg.SetRcode(r, dns.RcodeNotImplemented)
-			return
-		}
-	} else {
-		if !dnsproxy.SupportedType(q.Qtype) {
-			msg = new(dns.Msg)
-			msg.SetRcode(r, dns.RcodeNotImplemented)
-			return
-		}
-		answer, rCode, err = s.cacheResolve(q)
+	if !dnsproxy.SupportedType(q.Qtype) {
+		msg = new(dns.Msg)
+		msg.SetRcode(r, dns.RcodeNotImplemented)
+		return
 	}
+	answer, rCode, err = s.cacheResolve(q)
 
 	if err == nil && rCode == dns.RcodeSuccess {
 		msg = new(dns.Msg)

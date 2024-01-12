@@ -363,7 +363,7 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 		config:                  cfg,
 		done:                    make(chan struct{}),
 	}
-	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup, false)
+	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
 	s.SetSearchPath(c, nil, nil)
 	dlog.Infof(c, "also-proxy subnets %v", as)
 	dlog.Infof(c, "never-proxy subnets %v", ns)
