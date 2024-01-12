@@ -42,6 +42,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -139,8 +140,8 @@ type Session struct {
 	// virtualIPs maps a virtual IP to an agent tunnel.
 	virtualIPs *xsync.MapOf[iputil.IPKey, agentVIP]
 
-	// virtualIPProvider provides IPs in for a given range.
-	virtualIPProvider *vipProvider
+	// vipGenerator generates virtual IPs for a given range.
+	vipGenerator vip.Generator
 
 	// closing is set during shutdown and can have the values:
 	//   0 = running
@@ -420,7 +421,7 @@ func (s *Session) maybeGetVirtualIP(ctx context.Context, destinationIP net.IP) (
 }
 
 func (s *Session) nextVirtualIP(workload string, destinationIP net.IP) (net.IP, error) {
-	vip, err := s.virtualIPProvider.nextVIP()
+	vip, err := s.vipGenerator.Next()
 	if err != nil {
 		return nil, err
 	}
@@ -498,9 +499,9 @@ func (s *Session) refreshSubnets(ctx context.Context) (err error) {
 	desired := make([]*net.IPNet, 0, len(s.clusterSubnets)+len(s.alsoProxySubnets)+1)
 	desired = append(desired, s.clusterSubnets...)
 	desired = append(desired, s.alsoProxySubnets...)
-	if s.virtualIPProvider != nil {
-		desired = append(desired, &s.virtualIPProvider.IPNet)
-		dlog.Debugf(ctx, "Adding VIP subnet %q to TUN-device", s.virtualIPProvider.IPNet.String())
+	if s.vipGenerator != nil {
+		desired = append(desired, s.vipGenerator.Subnet())
+		dlog.Debugf(ctx, "Adding VIP subnet %q to TUN-device", s.vipGenerator.Subnet().String())
 	}
 	desired = subnet.Unique(desired)
 
@@ -946,7 +947,7 @@ func (s *Session) activateProxyViaWorkloads(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("unable to parse configuration value cluster.virtualIPSubnet: %w", err)
 	}
-	s.virtualIPProvider = newVipProvider(vipSubnet)
+	s.vipGenerator = vip.NewGenerator(vipSubnet)
 	s.localTranslationTable = xsync.NewMapOf[iputil.IPKey, net.IP]()
 	s.virtualIPs = xsync.NewMapOf[iputil.IPKey, agentVIP]()
 	s.localTranslationSubnets = make([]agentSubnet, sl)
