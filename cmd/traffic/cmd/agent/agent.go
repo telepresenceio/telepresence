@@ -176,7 +176,7 @@ func sidecar(ctx context.Context, s SimpleState, info *rpc.AgentInfo) error {
 				return err
 			}
 			fwd := forwarder.NewInterceptor(lisAddr, "127.0.0.1", cp)
-			dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s:%d", cn.Name, cp), func(ctx context.Context) error {
+			dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s", iputil.JoinHostPort(cn.Name, cp)), func(ctx context.Context) error {
 				return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 			})
 			cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))

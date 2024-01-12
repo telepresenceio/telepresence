@@ -751,7 +751,7 @@ func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.Cluste
 	client := &http.Client{Transport: tr}
 	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
-	url := net.JoinHostPort(ip, strconv.Itoa(int(port)))
+	url := iputil.JoinHostPort(ip, uint16(port))
 	url = fmt.Sprintf("https://%s/healthz", url)
 	request, err := http.NewRequestWithContext(tCtx, http.MethodGet, url, nil)
 	if err != nil {
@@ -795,7 +795,7 @@ func (s *Session) checkPodConnectivity(ctx context.Context, info *manager.Cluste
 	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
 	dlog.Debugf(ctx, "Performing pod connectivity check on IP %s with timeout %s", ip, ct)
-	conn, err := grpc.DialContext(tCtx, fmt.Sprintf("%s:%d", ip, port), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(tCtx, net.JoinHostPort(ip, strconv.Itoa(int(port))), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
 		return true

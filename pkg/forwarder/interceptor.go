@@ -9,6 +9,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -94,16 +95,18 @@ func (f *interceptor) SetIntercepting(intercept *manager.InterceptInfo) {
 
 	iceptInfo := func(ii *manager.InterceptInfo) string {
 		is := ii.Spec
-		return fmt.Sprintf("'%s' (%s:%d)", is.Name, is.Client, is.TargetPort)
+		return fmt.Sprintf("'%s' (%s)", is.Name, iputil.JoinHostPort(is.Client, uint16(is.TargetPort)))
 	}
 	if intercept == nil {
 		if f.intercept == nil {
 			return
 		}
-		dlog.Debugf(f.lCtx, "Forward target changed from intercept %s to %s:%d", iceptInfo(f.intercept), f.targetHost, f.targetPort)
+		dlog.Debugf(f.lCtx, "Forward target changed from intercept %s to %s",
+			iceptInfo(f.intercept), iputil.JoinHostPort(f.targetHost, f.targetPort))
 	} else {
 		if f.intercept == nil {
-			dlog.Debugf(f.lCtx, "Forward target changed from %s:%d to intercept %s", f.targetHost, f.targetPort, iceptInfo(intercept))
+			dlog.Debugf(f.lCtx, "Forward target changed from %s to intercept %s",
+				iputil.JoinHostPort(f.targetHost, f.targetPort), iceptInfo(intercept))
 		} else {
 			if f.intercept.Id == intercept.Id {
 				return

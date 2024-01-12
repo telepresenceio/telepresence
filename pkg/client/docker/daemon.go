@@ -68,7 +68,6 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 		return nil, nil, err
 	}
 	addr := as[0]
-	port := addr.Port
 	opts := []string{
 		"--name", daemonID.ContainerName(),
 		"--network", "telepresence",
@@ -77,7 +76,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 		"--device", "/dev/net/tun:/dev/net/tun",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
-		"-p", fmt.Sprintf("%s:%d", addr, port),
+		"-p", fmt.Sprintf("%s:%d", addr, addr.Port),
 		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), dockerTpLog),

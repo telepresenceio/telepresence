@@ -97,7 +97,7 @@ func (t *nativeDevice) Close() error {
 	// Send something to the TUN device so that the Read
 	// unlocks the NativeTun.closing mutex and let the actual
 	// Close call continue
-	conn, err := net.Dial("udp", t.dns.String()+":53")
+	conn, err := net.Dial("udp", net.JoinHostPort(t.dns.String(), "53"))
 	if err == nil {
 		_, _ = conn.Write([]byte("bogus"))
 	}

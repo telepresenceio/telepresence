@@ -198,7 +198,10 @@ func (id ConnID) Reply() ConnID {
 
 // ReplyString returns a formatted string suitable for logging showing the destination:destinationPort -> source:sourcePort.
 func (id ConnID) ReplyString() string {
-	return fmt.Sprintf("%s %s:%d -> %s:%d", ipproto.String(id.Protocol()), id.Destination(), id.DestinationPort(), id.Source(), id.SourcePort())
+	return fmt.Sprintf("%s %s -> %s",
+		ipproto.String(id.Protocol()),
+		iputil.JoinIpPort(id.Destination(), id.DestinationPort()),
+		iputil.JoinIpPort(id.Source(), id.SourcePort()))
 }
 
 // String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort.
@@ -206,5 +209,8 @@ func (id ConnID) String() string {
 	if len(id) < 13 {
 		return "bogus ConnID"
 	}
-	return fmt.Sprintf("%s %s:%d -> %s:%d", ipproto.String(id.Protocol()), id.Source(), id.SourcePort(), id.Destination(), id.DestinationPort())
+	return fmt.Sprintf("%s %s -> %s",
+		ipproto.String(id.Protocol()),
+		iputil.JoinIpPort(id.Source(), id.SourcePort()),
+		iputil.JoinIpPort(id.Destination(), id.DestinationPort()))
 }

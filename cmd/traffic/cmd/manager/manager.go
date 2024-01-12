@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -218,7 +219,7 @@ func (s *service) servePrometheus(ctx context.Context) error {
 	}
 	dlog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
 	defer dlog.Info(ctx, "Prometheus metrics server stopped")
-	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", env.ServerHost, env.PrometheusPort))
+	return sc.ListenAndServe(ctx, iputil.JoinHostPort(env.ServerHost, env.PrometheusPort))
 }
 
 func (s *service) serveHTTP(ctx context.Context) error {
