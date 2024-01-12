@@ -1062,8 +1062,10 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 				mask = net.CIDRMask(32, 32)
 				ip = ipv4
 			}
-			ipnet := &net.IPNet{IP: ip, Mask: mask}
-			neverProxy = append(neverProxy, iputil.IPNetToRPC(ipnet))
+			if !ip.IsLoopback() {
+				ipnet := &net.IPNet{IP: ip, Mask: mask}
+				neverProxy = append(neverProxy, iputil.IPNetToRPC(ipnet))
+			}
 		}
 	}
 	for _, np := range s.NeverProxy {
