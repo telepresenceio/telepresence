@@ -1292,6 +1292,12 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
   - args:
     - agent-init
+    env:
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.podIP
     image: docker.io/datawire/tel2:2.13.3
     name: tel-agent-init
     resources: {}
@@ -1392,6 +1398,12 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     args:
     - agent-init
+    env:
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.podIP
     image: docker.io/datawire/tel2:2.13.3
     name: tel-agent-init
     resources: {}
