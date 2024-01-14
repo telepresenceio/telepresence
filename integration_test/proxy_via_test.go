@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"net"
+	"path/filepath"
 	"regexp"
 	"time"
 
@@ -26,18 +27,42 @@ func init() {
 }
 
 func (s *proxyViaSuite) Test_ProxyVia() {
+	const domain = "mydomain.local"
+	const alias = "echo-home"
+	const fqnAlias = alias + "." + domain
+
 	ctx := s.Context()
+	tpl := struct {
+		AliasIP string
+		Aliases []string
+	}{
+		AliasIP: "127.0.0.1",
+		Aliases: []string{alias, fqnAlias},
+	}
+	if s.IsIPv6() {
+		tpl.AliasIP = "::1"
+	}
+	s.ApplyTemplate(ctx, filepath.Join("testdata", "k8s", "echo-w-hostalias.goyaml"), &tpl)
 	svc := "echo"
-	s.ApplyApp(ctx, "echo-w-hostalias", "deploy/"+svc)
 	defer func() {
 		s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 	}()
+
+	if s.IsIPv6() {
+		ctx = itest.WithConfig(ctx, func(config client.Config) {
+			config.Cluster().VirtualIPSubnet = "abac:0de0::/64"
+		})
+	}
 
 	err := s.TelepresenceHelmInstall(ctx, false, "--set", "client.dns.includeSuffixes={mydomain.local}")
 	s.Require().NoError(err)
 	defer s.UninstallTrafficManager(ctx, s.ManagerNamespace())
 
-	s.TelepresenceConnect(ctx, "--proxy-via", "127.0.0.1/32="+svc)
+	if s.IsIPv6() {
+		s.TelepresenceConnect(ctx, "--proxy-via", "::1/128="+svc)
+	} else {
+		s.TelepresenceConnect(ctx, "--proxy-via", "127.0.0.1/32="+svc)
+	}
 	defer itest.TelepresenceQuitOk(ctx)
 
 	_, virtualIPSubnet, err := net.ParseCIDR(client.GetConfig(ctx).Cluster().VirtualIPSubnet)
@@ -50,13 +75,13 @@ func (s *proxyViaSuite) Test_ProxyVia() {
 	}{
 		{
 			"single-label",
-			"echo-home",
-			regexp.MustCompile("Host: echo-home:8080"),
+			alias,
+			regexp.MustCompile("Host: " + alias + ":8080"),
 		},
 		{
 			"fully-qualified",
-			"echo-home.mydomain.local",
-			regexp.MustCompile("Host: echo-home.mydomain.local:8080"),
+			fqnAlias,
+			regexp.MustCompile("Host: " + fqnAlias + ":8080"),
 		},
 	}
 	for _, tt := range tests {
@@ -76,7 +101,7 @@ func (s *proxyViaSuite) Test_ProxyVia() {
 					return false
 				}
 				return true
-			}, 10*time.Second, 2*time.Second)
+			}, 30*time.Second, 2*time.Second)
 			vip := ips[0]
 			dlog.Infof(ctx, "%s uses IP %s", tt.hostName, vip)
 			rq.Truef(virtualIPSubnet.Contains(vip), "virtualIPSubnet %s does not contain %s", virtualIPSubnet, vip)

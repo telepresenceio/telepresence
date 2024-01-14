@@ -52,15 +52,17 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 		*/
 	}
 
+	// Figure out where the current end of the logfile is. This must be done before any
+	// of the tests run because the queries that the DNS resolver receives are dependent
+	// on how the system's DNS resolver handle search paths and caching.
+	st, err := os.Stat(logFile)
+	s.Require().NoError(err)
+	pos := st.Size()
+
 	for _, tt := range tests {
 		s.Run(tt.qn, func() {
 			require := s.Require()
 			ctx := s.Context()
-
-			// Figure out where the current end of the logfile is
-			s, err := os.Stat(logFile)
-			require.NoError(err)
-			pos := s.Size()
 
 			// Make an attempt to resolve the host
 			short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
@@ -85,7 +87,11 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 				txt := scn.Text()
 				if strings.Contains(txt, "wpad") {
 					if !hasLookup {
-						hasLookup = strings.Contains(txt, "Lookup A ")
+						if s.IsIPv6() {
+							hasLookup = strings.Contains(txt, "Lookup AAAA ")
+						} else {
+							hasLookup = strings.Contains(txt, "Lookup A ")
+						}
 					}
 					if !hasNX {
 						hasNX = strings.Contains(txt, "-> NXDOMAIN")

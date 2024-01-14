@@ -54,7 +54,14 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 		ips, err = getClusterIPs(cluster)
 		require.NoError(err)
 		for _, ip := range ips {
-			apiServers = append(apiServers, fmt.Sprintf(`%s/24`, ip))
+			if ip.IsLoopback() {
+				s.T().Skipf("test can't run on host with a loopback cluster IP %s", ip)
+			}
+			if len(ip) == 16 {
+				apiServers = append(apiServers, fmt.Sprintf(`%s/96`, ip))
+			} else {
+				apiServers = append(apiServers, fmt.Sprintf(`%s/24`, ip))
+			}
 			if defaultGW.Routes(ip) {
 				s.T().Skipf("test can't run on host with route %s and cluster IP %s", defaultGW.String(), ip)
 			}
@@ -106,17 +113,27 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		"-o",
 		"jsonpath={.spec.clusterIP}")
 	require.NoError(err)
+	mask := 32
+	if s.IsIPv6() {
+		mask = 128
+	}
 	var ips []net.IP
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		var err error
 		ips, err = getClusterIPs(cluster)
 		require.NoError(err)
-		return map[string]any{"never-proxy": []string{ip + "/32"}}
+		return map[string]any{"never-proxy": []string{fmt.Sprintf("%s/%d", ip, mask)}}
 	})
 	s.TelepresenceConnect(ctx, "--context", "extra")
 
-	// The cluster's IP address will also be never proxied, so we gotta account for that.
-	neverProxiedCount := len(ips) + 1
+	neverProxiedCount := 1
+
+	// The cluster's IP address will be never proxied unless it's a loopback, so we gotta account for that.
+	for _, cip := range ips {
+		if !cip.IsLoopback() {
+			neverProxiedCount++
+		}
+	}
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "status")
 		if err != nil {
@@ -128,7 +145,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 
 	s.Eventually(func() bool {
 		status, err := itest.TelepresenceStatus(ctx)
-		return err == nil && len(status.RootDaemon.NeverProxy) == neverProxiedCount
+		return err == nil && status.RootDaemon != nil && len(status.RootDaemon.NeverProxy) == neverProxiedCount
 	}, 5*time.Second, 1*time.Second, fmt.Sprintf("did not find %d never-proxied subnets in json status", neverProxiedCount))
 
 	s.Eventually(func() bool {

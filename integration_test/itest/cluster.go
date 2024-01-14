@@ -42,6 +42,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -64,6 +65,7 @@ type Cluster interface {
 	InstallTrafficManager(ctx context.Context, values map[string]string) error
 	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error
 	IsCI() bool
+	IsIPv6() bool
 	Registry() string
 	SetGeneralError(error)
 	Suffix() string
@@ -87,6 +89,7 @@ type cluster struct {
 	suffix           string
 	isCI             bool
 	prePushed        bool
+	ipv6             bool
 	executable       string
 	testVersion      string
 	compatVersion    string
@@ -188,6 +191,19 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	close(errs)
 	for err := range errs {
 		assert.NoError(t, err)
+	}
+
+	if ipv6, err := strconv.ParseBool("DEV_IPV6_CLUSTER"); err == nil {
+		s.ipv6 = ipv6
+	} else {
+		output, err := Output(ctx, "kubectl", "--namespace", "kube-system", "get", "svc", "kube-dns", "-o", "jsonpath={.spec.clusterIP}")
+		if err == nil {
+			ip := iputil.Parse(strings.TrimSpace(output))
+			if len(ip) == 16 {
+				dlog.Info(ctx, "Using IPv6 because the kube-dns.kube-system has an IPv6 IP")
+				s.ipv6 = true
+			}
+		}
 	}
 
 	s.ensureQuit(ctx)
@@ -408,6 +424,10 @@ func (s *cluster) GeneralError() error {
 
 func (s *cluster) IsCI() bool {
 	return s.isCI
+}
+
+func (s *cluster) IsIPv6() bool {
+	return s.ipv6
 }
 
 func (s *cluster) Registry() string {
@@ -989,7 +1009,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers
 	expectedOutput := fmt.Sprintf("%s from intercept at /", wl)
 	require.Eventually(getT(ctx), func() bool {
 		// condition
-		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc)
+		ips, err := net.DefaultResolver.LookupIP(ctx, "ip", svc)
 		if err != nil {
 			dlog.Info(ctx, err)
 			return false

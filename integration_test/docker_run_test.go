@@ -177,7 +177,6 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		}, 30*time.Second, 3*time.Second)
 
-		// Response contains env variables TELEPRESENCE_CONTAINER and TELEPRESENCE_INTERCEPT_ID
 		expectedOutput := regexp.MustCompile(`Intercept id [0-9a-f-]+:` + svc)
 		s.Eventually(
 			// condition

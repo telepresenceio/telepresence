@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func (s *notConnectedSuite) Test_CloudNeverProxy() {
@@ -30,12 +31,22 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
 	defer itest.DeleteSvcAndWorkload(ctx, "deploy", svcName, s.AppNamespace())
 
-	ip, err := itest.Output(ctx, "kubectl",
+	ipStr, err := itest.Output(ctx, "kubectl",
 		"--namespace", s.AppNamespace(),
 		"get", "svc", svcName,
 		"-o",
 		"jsonpath={.spec.clusterIP}")
 	require.NoError(err)
+	ip := iputil.Parse(ipStr)
+	require.NotNil(ip)
+	if ip.IsLoopback() {
+		s.T().Skipf("test can't run on host with a loopback cluster IP %s", ip)
+	}
+
+	mask := 32
+	if s.IsIPv6() {
+		mask = 128
+	}
 
 	kc := itest.KubeConfig(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
@@ -47,7 +58,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	ips, err := getClusterIPs(cluster)
 	require.NoError(err)
 
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/32}", ip)))
+	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/%d}", ip, mask)))
 	defer s.RollbackTM(ctx)
 
 	timeout := 20 * time.Second
@@ -71,8 +82,15 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
-		// The cluster's IP address will also be never proxied, so we gotta account for that.
-		neverProxiedCount := len(ips) + 1
+		neverProxiedCount := 1
+
+		// The cluster's IP address will be never proxied unless it's a loopback, so we gotta account for that.
+		for _, cip := range ips {
+			if !cip.IsLoopback() {
+				neverProxiedCount++
+			}
+		}
+
 		stdout, stderr, err = itest.Telepresence(ctx, "status")
 		dlog.Infof(ctx, "stdout: %q", stdout)
 		dlog.Infof(ctx, "stderr: %q", stderr)
@@ -98,7 +116,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
-		if itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip) == nil {
+		if itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip.String()) == nil {
 			dlog.Errorf(ctx, "never-proxied IP %s is reachable", ip)
 			return false
 		}
