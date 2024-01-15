@@ -261,3 +261,22 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		assertNotIntercepted(ctx)
 	})
 }
+
+func (s *dockerDaemonSuite) Test_DockerRun_VolumePresent() {
+	ctx := s.Context()
+	s.KubectlOk(ctx, "create", "serviceaccount", testIamServiceAccount)
+	defer s.KubectlOk(ctx, "delete", "serviceaccount", testIamServiceAccount)
+
+	s.ApplyApp(ctx, "hello-w-volumes", "deploy/hello")
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", "hello")
+
+	s.TelepresenceConnect(ctx, "--docker")
+	defer itest.TelepresenceQuitOk(ctx)
+
+	stdout, stderr, err := itest.Telepresence(ctx, "intercept", "--docker-run", "hello", "-p", "8080:http", "--",
+		"--rm", "busybox", "ls", "/var/run/secrets/datawire.io/auth")
+	s.NoError(err)
+	s.Empty(stderr)
+	dlog.Infof(ctx, "stdout = %s", stdout)
+	s.True(strings.HasSuffix(stdout, "\nusername"))
+}

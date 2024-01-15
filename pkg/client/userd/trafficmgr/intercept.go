@@ -75,8 +75,9 @@ type intercept struct {
 // interceptResult is what gets written to the awaitIntercept's waitCh channel when the
 // awaited intercept arrives.
 type interceptResult struct {
-	intercept *intercept
-	err       error
+	intercept  *intercept
+	mountsDone <-chan struct{}
+	err        error
 }
 
 // awaitIntercept is what the traffic-manager is using to notify the watchInterceptsLoop
@@ -122,6 +123,10 @@ type podIntercepts struct {
 	// The set controls which podIntercepts that are considered alive when cancelUnwanted
 	// is called
 	snapshot map[podInterceptKey]struct{}
+
+	// mountsDone contains channels that are closed when the mounts are prepared for the
+	// given id and podIP
+	mountsDone map[podInterceptKey]chan struct{}
 }
 
 func (ic *intercept) localPorts() []string {
@@ -180,10 +185,6 @@ func newPodIntercepts() *podIntercepts {
 
 // start a port forward for the given intercept and remembers that it's alive.
 func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.DaemonClient) {
-	if !ic.shouldForward() && !ic.shouldMount() {
-		return
-	}
-
 	// The mounts performed here are synced on by podIP + port to keep track of active
 	// mounts. This is not enough in situations when a pod is deleted and another pod
 	// takes over. That is two different IPs so an additional synchronization on the actual
@@ -192,6 +193,17 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.Da
 	fk := podInterceptKey{
 		Id:    ic.Id,
 		PodIP: ic.PodIp,
+	}
+
+	defer func() {
+		if md, ok := lpf.mountsDone[fk]; ok {
+			delete(lpf.mountsDone, fk)
+			close(md)
+		}
+	}()
+
+	if !ic.shouldForward() && !ic.shouldMount() {
+		return
 	}
 
 	// Make part of current snapshot tracking so that it isn't removed once the
@@ -208,7 +220,7 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.Da
 		// mount or port-forward to localhost.
 		_, err := rd.WaitForAgentIP(ctx, &daemon.WaitForAgentIPRequest{
 			Ip:      iputil.Parse(ic.PodIp),
-			Timeout: durationpb.New(5 * time.Second),
+			Timeout: durationpb.New(10 * time.Second),
 		})
 		switch grpcStatus.Code(err) {
 		// Unavailable means that the feature disabled. This is OK, the traffic-manager will do the forwarding
@@ -237,6 +249,17 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.Da
 // initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted.
 func (lpf *podIntercepts) initSnapshot() {
 	lpf.snapshot = make(map[podInterceptKey]struct{})
+	lpf.mountsDone = make(map[podInterceptKey]chan struct{})
+}
+
+func (lpf *podIntercepts) getOrCreateMountsDone(ic *intercept) <-chan struct{} {
+	fk := podInterceptKey{Id: ic.Id, PodIP: ic.PodIp}
+	md, ok := lpf.mountsDone[fk]
+	if !ok {
+		md = make(chan struct{})
+		lpf.mountsDone[fk] = md
+	}
+	return md
 }
 
 // cancelUnwanted cancels all port forwards that hasn't been started since initSnapshot.
@@ -246,6 +269,11 @@ func (lpf *podIntercepts) cancelUnwanted(ctx context.Context) {
 			dlog.Infof(ctx, "Terminating mounts and port-forwards for %+v", fk)
 			lp.cancelPod()
 			delete(lpf.alivePods, fk)
+			md, ok := lpf.mountsDone[fk]
+			if ok {
+				delete(lpf.mountsDone, fk)
+				close(md)
+			}
 			lp.wg.Wait()
 		}
 	}
@@ -316,8 +344,9 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
 			select {
 			case aw.waitCh <- interceptResult{
-				intercept: ic,
-				err:       err,
+				intercept:  ic,
+				err:        err,
+				mountsDone: podIcepts.getOrCreateMountsDone(ic),
 			}:
 			default:
 				// Channel was closed
@@ -614,6 +643,11 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 			result.InterceptInfo = ii
 			if !waitForDNS(c, spec.ServiceName) {
 				dlog.Warningf(c, "DNS cannot resolve name of intercepted %q service", spec.ServiceName)
+			}
+			select {
+			case <-c.Done():
+				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, client.CheckTimeout(c, c.Err()))
+			case <-wr.mountsDone:
 			}
 			if er := self.InterceptEpilog(c, ir, result); er != nil {
 				return er
