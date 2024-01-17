@@ -383,10 +383,20 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 	})
 	if err != nil {
 		s.dnsFailures++
-		return nil, dns2.RcodeServerFailure, err
+		rCode := dns2.RcodeServerFailure
+		switch status.Code(err) {
+		case codes.Unavailable, codes.DeadlineExceeded:
+			rCode = dns2.RcodeNameError
+			err = nil
+		}
+		return nil, rCode, err
 	}
 	answer, rCode, err := dnsproxy.FromRPC(r)
-	if err == nil && len(s.localTranslationSubnets) > 0 {
+	if err != nil {
+		s.dnsFailures++
+		return nil, dns2.RcodeServerFailure, err
+	}
+	if len(s.localTranslationSubnets) > 0 {
 		for _, rr := range answer {
 			switch rr := rr.(type) {
 			case *dns2.A:
