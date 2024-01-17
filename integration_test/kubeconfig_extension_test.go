@@ -3,7 +3,9 @@ package integration_test
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -18,6 +20,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
@@ -210,45 +214,175 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 	}
 }
 
-func (s *notConnectedSuite) Test_DNSIncludes() {
-	ctx := s.Context()
+func (s *notConnectedSuite) Test_DNSSuffixRules() {
+	const randomName = "zwslkjsdf"
+	const randomDomain = ".xnrqj"
+	tests := []struct {
+		name             string
+		domainName       string
+		includeSuffixes  []string
+		excludeSuffixes  []string
+		wantedLogEntry   []string
+		mustHaveWanted   bool
+		unwantedLogEntry []string
+	}{
+		{
+			"default-exclude-com",
+			randomName + ".com",
+			nil,
+			nil,
+			[]string{
+				`Cluster DNS excluded by exclude-suffix ".com" for name "` + randomName + `.com"`,
+			},
+			false,
+			[]string{
+				`Lookup A "` + randomName + `.com`,
+			},
+		},
+		{
+			"default-exclude-random-domain",
+			randomName + randomDomain,
+			nil,
+			nil,
+			[]string{
+				`Cluster DNS excluded for name "` + randomName + randomDomain + `". No inclusion rule was matched`,
+			},
+			false,
+			[]string{
+				`Lookup A "` + randomName + randomDomain,
+			},
+		},
+		{
+			"include-random-domain",
+			randomName + randomDomain,
+			[]string{randomDomain},
+			dns.DefaultExcludeSuffixes,
+			[]string{
+				`Cluster DNS included by include-suffix "` + randomDomain + `" for name "` + randomName + randomDomain,
+				`Lookup A "` + randomName + randomDomain,
+			},
+			true,
+			nil,
+		},
+		{
+			"equally specific include overrides exclude",
+			randomName + ".org",
+			[]string{".org"},
+			dns.DefaultExcludeSuffixes,
+			[]string{
+				`Cluster DNS included by include-suffix ".org" (overriding exclude-suffix ".org") for name "` + randomName + `.org"`,
+				`Lookup A "` + randomName + `.org."`,
+			},
+			true,
+			nil,
+		},
+		{
+			"more specific include overrides exclude",
+			randomName + ".my-domain.org",
+			[]string{".my-domain.org"},
+			dns.DefaultExcludeSuffixes,
+			[]string{
+				`Cluster DNS included by include-suffix ".my-domain.org" (overriding exclude-suffix ".org") for name "` + randomName + `.my-domain.org"`,
+				`Lookup A "` + randomName + `.my-domain.org."`,
+			},
+			true,
+			nil,
+		},
+		{
+			"more specific exclude overrides include",
+			randomName + ".my-domain.org",
+			[]string{".org"},
+			[]string{".com", ".my-domain.org"},
+			[]string{
+				`Cluster DNS excluded by exclude-suffix ".my-domain.org" for name "` + randomName + `.my-domain.org"`,
+			},
+			true,
+			[]string{
+				`Lookup A "` + randomName + `.my-domain.org."`,
+			},
+		},
+	}
+	logFile := filepath.Join(filelocation.AppUserLogDir(s.Context()), "daemon.log")
 
-	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
-		return map[string]any{"dns": map[string][]string{"include-suffixes": {".org"}}}
-	})
-	require := s.Require()
-	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
+	for _, tt := range tests {
+		tt := tt
+		s.Run(tt.name, func() {
+			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]any {
+				return map[string]any{
+					"dns": map[string][]string{
+						"exclude-suffixes": tt.excludeSuffixes,
+						"include-suffixes": tt.includeSuffixes,
+					},
+				}
+			})
+			require := s.Require()
 
-	s.TelepresenceConnect(ctx, "--context", "extra")
-	defer itest.TelepresenceDisconnectOk(ctx)
+			s.TelepresenceConnect(ctx, "--context", "extra")
+			defer itest.TelepresenceDisconnectOk(ctx)
 
-	// Check that config view -c includes the includeSuffixes
-	stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only")
-	require.Contains(stdout, "    includeSuffixes:\n        - .org")
+			// Check that config view -c includes the includeSuffixes
+			var cfg client.SessionConfig
+			stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only", "--output", "json")
+			require.NoError(json.Unmarshal([]byte(stdout), &cfg))
+			require.Equal(cfg.DNS.ExcludeSuffixes, tt.excludeSuffixes)
+			require.Equal(cfg.DNS.IncludeSuffixes, tt.includeSuffixes)
 
-	retryCount := 0
-	s.Eventually(func() bool {
-		// Test with ".org" suffix that was added as an include-suffix
-		host := fmt.Sprintf("zwslkjsdf-%d.org", retryCount)
-		short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
-		defer cancel()
-		_, _ = net.DefaultResolver.LookupIPAddr(short, host)
+			rootLog, err := os.Open(logFile)
+			require.NoError(err)
+			defer rootLog.Close()
 
-		// Give query time to reach telepresence and produce a log entry
-		dtime.SleepWithContext(ctx, 100*time.Millisecond)
+			// Figure out where the current end of the logfile is. This must be done before any
+			// of the tests run because the queries that the DNS resolver receives are dependent
+			// on how the system's DNS resolver handle search paths and caching.
+			st, err := rootLog.Stat()
+			s.Require().NoError(err)
+			pos := st.Size()
 
-		rootLog, err := os.Open(logFile)
-		require.NoError(err)
-		defer rootLog.Close()
+			short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+			defer cancel()
+			_, _ = net.DefaultResolver.LookupIPAddr(short, tt.domainName)
 
-		scanFor := fmt.Sprintf(`Lookup A "%s."`, host)
-		scn := bufio.NewScanner(rootLog)
-		for scn.Scan() {
-			if strings.Contains(scn.Text(), scanFor) {
-				return true
+			// Give query time to reach telepresence and produce a log entry
+			dtime.SleepWithContext(ctx, 100*time.Millisecond)
+
+			for _, wl := range tt.wantedLogEntry {
+				_, err = rootLog.Seek(pos, io.SeekStart)
+				require.NoError(err)
+				scn := bufio.NewScanner(rootLog)
+				found := false
+
+				// mustHaveWanted caters for cases where the default behavior from the system's resolver
+				// is to not send unwanted queries to our resolver at all (based on search and routes).
+				// It is forced to true for inclusion tests.
+				mustHaveWanted := tt.mustHaveWanted
+				for scn.Scan() {
+					txt := scn.Text()
+					if strings.Contains(txt, wl) {
+						found = true
+						break
+					}
+					if !mustHaveWanted {
+						if strings.Contains(txt, " ServeDNS ") && strings.Contains(txt, tt.domainName) {
+							mustHaveWanted = true
+						}
+					}
+				}
+				s.Truef(found || !mustHaveWanted, "Unable to find %q", wl)
 			}
-		}
-		retryCount++
-		return false
-	}, 30*time.Second, time.Second, "daemon.log does not contain expected LookupHost entry")
+
+			for _, wl := range tt.unwantedLogEntry {
+				_, err = rootLog.Seek(pos, io.SeekStart)
+				require.NoError(err)
+				scn := bufio.NewScanner(rootLog)
+				found := false
+				for scn.Scan() {
+					if strings.Contains(scn.Text(), wl) {
+						found = true
+						break
+					}
+				}
+				s.Falsef(found, "Found unwanted %q", wl)
+			}
+		})
+	}
 }
