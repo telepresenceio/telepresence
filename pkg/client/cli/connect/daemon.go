@@ -47,6 +47,9 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) error {
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
 	}
+	if os.Getenv("SCOUT_DISABLE") == "1" {
+		args = append(args, "--disable-metriton")
+	}
 	args = append(args, logDir, filelocation.AppUserConfigDir(ctx))
 	return proc.StartInBackgroundAsRoot(ctx, args...)
 }
