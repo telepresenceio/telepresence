@@ -175,7 +175,7 @@ func GetUser(ctx context.Context) string {
 
 func LookupEnv(ctx context.Context, key string) (value string, ok bool) {
 	if value, ok = getEnv(ctx)[key]; !ok {
-		value, ok = GetGlobalHarness(ctx).GlobalEnv()[key]
+		value, ok = GetGlobalHarness(ctx).GlobalEnv(ctx)[key]
 	}
 	return
 }
