@@ -69,8 +69,7 @@ type Server struct {
 	resolve      Resolver
 	requestCount int64
 	cache        *xsync.MapOf[cacheKey, *cacheEntry]
-	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
-	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
+	recursive    int32    // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
 	dropSuffixes []string //nolint:unused // only used on linux
 
 	// routes are typically namespaces, accessible using <service-name>.<namespace-name>.
@@ -171,7 +170,6 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 	if lt := config.LookupTimeout; lt != nil {
 		s.lookupTimeout = lt.AsDuration()
 	}
-	s.cacheResolve = s.resolveWithRecursionCheck
 	return s
 }
 
@@ -580,15 +578,17 @@ type cacheKey struct {
 	qType uint16
 }
 
-// resolveThruCache resolves the given query by first performing a cache lookup. If a cached
-// entry is found that hasn't expired, it's returned. If not, this function will call
-// resolveQuery() to resolve and store in the case.
-func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
+// resolveWithRecursionCheck is a special version of resolveThruCache which is only used until the
+// recursionCheck query has completed, and it has been determined whether a query that is propagated
+// to the cluster will recurse back to this resolver or not.
+func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, error) {
 	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
 	if oldDv, loaded := s.cache.LoadOrStore(key, newDv); loaded {
-		if atomic.LoadInt32(&s.recursive) == recursionDetected && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
-			// We have to assume that this is a recursion from the cluster.
+		if strings.HasPrefix(q.Name, recursionCheck) {
+			atomic.StoreInt32(&s.recursive, recursionDetected)
+		}
+		if atomic.LoadInt32(&s.recursive) == recursionDetected {
 			return nil, dns.RcodeNameError, nil
 		}
 		<-oldDv.wait
@@ -607,7 +607,17 @@ func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
 		}
 		s.cache.Store(key, newDv)
 	}
-	return s.resolveQuery(q, newDv)
+
+	answer, rCode, err := s.resolveQuery(q, newDv)
+	if strings.HasPrefix(q.Name, recursionCheck) {
+		if atomic.LoadInt32(&s.recursive) == recursionDetected {
+			dlog.Debug(s.ctx, "DNS resolver is recursive")
+		} else {
+			atomic.StoreInt32(&s.recursive, recursionNotDetected)
+			dlog.Debug(s.ctx, "DNS resolver is not recursive")
+		}
+	}
+	return answer, rCode, err
 }
 
 func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnsproxy.RRs, int, error) {
@@ -626,7 +636,7 @@ func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnspr
 		q.Name = uhm
 	}
 
-	rrs, rCode, err := s.resolveThruCache(q)
+	rrs, rCode, err := s.resolveWithRecursionCheck(q)
 
 	// Restore the original query name which was stripped before, or the response won't be formed correctly.
 	if uhm != "" {
@@ -637,39 +647,6 @@ func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnspr
 	}
 
 	return rrs, rCode, err
-}
-
-// resolveWithRecursionCheck is a special version of resolveThruCache which is only used until the
-// recursionCheck query has completed, and it has been determined whether a query that is propagated
-// to the cluster will recurse back to this resolver or not.
-func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, error) {
-	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
-	key := cacheKey{name: q.Name, qType: q.Qtype}
-	if oldDv, loaded := s.cache.LoadOrStore(key, newDv); loaded {
-		if strings.HasPrefix(q.Name, recursionCheck) {
-			atomic.StoreInt32(&s.recursive, recursionDetected)
-		}
-		if atomic.LoadInt32(&s.recursive) == recursionDetected {
-			return nil, dns.RcodeNameError, nil
-		}
-		<-oldDv.wait
-		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, []uint16{q.Qtype}), oldDv.rCode, nil
-		}
-		s.cache.Store(key, newDv)
-	}
-
-	answer, rCode, err := s.resolveQuery(q, newDv)
-	if strings.HasPrefix(q.Name, recursionCheck) {
-		if atomic.LoadInt32(&s.recursive) == recursionDetected {
-			dlog.Debug(s.ctx, "DNS resolver is recursive")
-		} else {
-			atomic.StoreInt32(&s.recursive, recursionNotDetected)
-			dlog.Debug(s.ctx, "DNS resolver is not recursive")
-		}
-		s.cacheResolve = s.resolveThruCacheWithUnqualifiedHostName
-	}
-	return answer, rCode, err
 }
 
 // dfs is a func that implements the fmt.Stringer interface. Used in log statements to ensure
@@ -801,7 +778,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		msg.SetRcode(r, dns.RcodeNotImplemented)
 		return
 	}
-	answer, rCode, err = s.cacheResolve(q)
+	answer, rCode, err = s.resolveThruCacheWithUnqualifiedHostName(q)
 
 	if err == nil && rCode == dns.RcodeSuccess {
 		msg = new(dns.Msg)
