@@ -146,6 +146,13 @@ func (dv *cacheEntry) close() {
 	}
 }
 
+func sliceToLower(ss []string) []string {
+	for i, s := range ss {
+		ss[i] = strings.ToLower(s)
+	}
+	return ss
+}
+
 // NewServer returns a new dns.Server.
 func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 	if config == nil {
@@ -161,9 +168,9 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 		cache:           xsync.NewMapOf[cacheKey, *cacheEntry](),
 		routes:          make(map[string]struct{}),
 		domains:         make(map[string]struct{}),
-		excludes:        config.Excludes,
-		excludeSuffixes: config.ExcludeSuffixes,
-		includeSuffixes: config.IncludeSuffixes,
+		excludes:        sliceToLower(config.Excludes),
+		excludeSuffixes: sliceToLower(config.ExcludeSuffixes),
+		includeSuffixes: sliceToLower(config.IncludeSuffixes),
 		mappings:        mappingsMap(config.Mappings),
 		localIP:         config.LocalIp,
 		remoteIP:        config.RemoteIp,
@@ -395,12 +402,12 @@ func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
 	}
 	if dns != nil {
 		if slices.Equal(s.excludeSuffixes, DefaultExcludeSuffixes) && len(dns.ExcludeSuffixes) > 0 {
-			s.excludeSuffixes = dns.ExcludeSuffixes
+			s.excludeSuffixes = sliceToLower(dns.ExcludeSuffixes)
 		}
 		if len(s.includeSuffixes) == 0 {
-			s.includeSuffixes = dns.IncludeSuffixes
+			s.includeSuffixes = sliceToLower(dns.IncludeSuffixes)
 		}
-		s.clusterDomain = dns.ClusterDomain
+		s.clusterDomain = strings.ToLower(dns.ClusterDomain)
 	}
 	s.Unlock()
 }
@@ -437,6 +444,9 @@ func (s *Server) purgeRecordsFromCache(keyName string) {
 
 // SetExcludes sets the excludes list in the config.
 func (s *Server) SetExcludes(excludes []string) {
+	for i, e := range excludes {
+		excludes[i] = strings.ToLower(e)
+	}
 	s.Lock()
 	oldExcludes := s.excludes
 	s.excludes = excludes
@@ -455,7 +465,7 @@ func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
 			if ip := iputil.Parse(al); ip == nil {
 				al += "."
 			}
-			mm[m.Name+"."] = al
+			mm[strings.ToLower(m.Name+".")] = strings.ToLower(al)
 		}
 		return mm
 	}
@@ -513,6 +523,7 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 				routes := make(map[string]struct{})
 				search := make([]string, 0)
 				for _, path := range paths {
+					path = strings.ToLower(path)
 					if path == tel2SubDomain || strings.ContainsRune(path, '.') {
 						search = append(search, path)
 					} else if path != "" {
@@ -826,7 +837,6 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// We make changes to the query name, so we better restore it prior to writing an
 	// answer back, or the caller will get confused.
 	origName := q.Name
-	q.Name = strings.ToLower(origName)
 	defer func() {
 		qs := msg.Question
 		if len(qs) > 0 {
@@ -843,6 +853,9 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		}
 		q.Name = origName
 	}()
+
+	// We're all about lowercase in here
+	q.Name = strings.ToLower(origName)
 
 	// The tel2SubDomain serves one purpose and one purpose alone. It's there to coerce the
 	// system DNS resolver to direct requests to this resolver. The system configuration to
