@@ -239,7 +239,7 @@ func runNatTableCmd(c context.Context, args ...string) error {
 	// want to leave things in a half-cleaned-up state.
 	args = append([]string{"-t", "nat"}, args...)
 	cmd := dexec.CommandContext(c, "iptables", args...)
-	cmd.DisableLogging = true
+	cmd.DisableLogging = dlog.MaxLogLevel(c) < dlog.LogLevelDebug
 	dlog.Debug(c, shellquote.ShellString("iptables", args))
 	return cmd.Run()
 }
