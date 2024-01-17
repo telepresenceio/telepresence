@@ -73,10 +73,17 @@ type Server struct {
 	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
 	dropSuffixes []string //nolint:unused // only used on linux
 
-	// Namespaces, accessible using <service-name>.<namespace-name>
-	namespaces map[string]struct{}
-	domains    map[string]struct{}
-	search     []string
+	// routes are typically namespaces, accessible using <service-name>.<namespace-name>.
+	routes map[string]struct{}
+
+	// search are appended to a query to form new names that are then dispatched to the
+	// DNS resolver. The act of appending is not performed by this server, but rather
+	// by the system's DNS resolver before calling on this server.
+	search []string
+
+	// domains contains the sum of the include-suffixes and routes. It is currently only
+	// used by the darwin resolver to keep track of files to add or remove.
+	domains map[string]struct{}
 
 	// searchPathCh receives requests to change the search path.
 	searchPathCh chan []string
@@ -147,7 +154,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 	}
 	s := &Server{
 		cache:           xsync.NewMapOf[cacheKey, *cacheEntry](),
-		namespaces:      make(map[string]struct{}),
+		routes:          make(map[string]struct{}),
 		domains:         make(map[string]struct{}),
 		excludes:        config.Excludes,
 		excludeSuffixes: config.ExcludeSuffixes,

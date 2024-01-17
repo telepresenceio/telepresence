@@ -107,13 +107,13 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 }
 
 func (s *Server) updateLinkDomains(c context.Context, paths []string, dev vif.Device) error {
-	namespaces := make(map[string]struct{})
+	routes := make(map[string]struct{})
 	search := make([]string, 0)
 	for i, path := range paths {
 		if strings.ContainsRune(path, '.') {
 			search = append(search, path)
 		} else {
-			namespaces[path] = struct{}{}
+			routes[path] = struct{}{}
 			// Turn namespace into a route
 			paths[i] = "~" + path
 		}
@@ -125,7 +125,7 @@ func (s *Server) updateLinkDomains(c context.Context, paths []string, dev vif.De
 	s.Lock()
 	paths = append(paths, "~"+s.clusterDomain, tel2SubDomainDot+s.clusterDomain)
 
-	s.namespaces = namespaces
+	s.routes = routes
 	s.search = search
 	s.Unlock()
 

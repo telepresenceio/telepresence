@@ -140,19 +140,19 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 	}
 
 	// paths that contain a dot are search paths, the ones that don't are namespaces.
-	namespaces := make(map[string]struct{})
+	routes := make(map[string]struct{})
 	search := make([]string, 0)
 	for _, path := range paths {
 		if strings.ContainsRune(path, '.') {
 			search = append(search, path)
 		} else if path != "" {
-			namespaces[path] = struct{}{}
+			routes[path] = struct{}{}
 		}
 	}
 
 	// All namespaces and include suffixes become domains
-	domains := make(map[string]struct{}, len(namespaces)+len(s.includeSuffixes))
-	maps.Merge(domains, namespaces)
+	domains := make(map[string]struct{}, len(routes)+len(s.includeSuffixes))
+	maps.Merge(domains, routes)
 	for _, sfx := range s.includeSuffixes {
 		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
 	}
@@ -180,7 +180,7 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 	search = append([]string{tel2SubDomainDot + s.clusterDomain}, search...)
 
 	s.search = search
-	s.namespaces = namespaces
+	s.routes = routes
 	s.domains = domains
 
 	for _, domain := range removals {

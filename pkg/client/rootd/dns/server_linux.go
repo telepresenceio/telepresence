@@ -96,17 +96,17 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 		defer close(serverDone)
 		// Server will close the listener, so no need to close it here.
 		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
-			namespaces := make(map[string]struct{})
+			routes := make(map[string]struct{})
 			search := make([]string, 0)
 			for _, path := range paths {
 				if strings.ContainsRune(path, '.') {
 					search = append(search, path)
 				} else if path != "" {
-					namespaces[path] = struct{}{}
+					routes[path] = struct{}{}
 				}
 			}
 			s.Lock()
-			s.namespaces = namespaces
+			s.routes = routes
 			s.search = search
 			s.Unlock()
 			s.flushDNS()
