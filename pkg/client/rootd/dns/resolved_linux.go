@@ -61,13 +61,6 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 			}
 			// No need to close listeners here. They are closed by the dnsServer
 		}()
-		// Some installation have default DNS configured with ~. routing path.
-		// If two interfaces with DefaultRoute: yes present, the one with the
-		// routing key used and SanityCheck fails. Hence, tel2SubDomain
-		// must be used as a route.
-		s.Lock()
-		s.routes = map[string]struct{}{tel2SubDomain: {}}
-		s.Unlock()
 		if err = s.updateLinkDomains(c, dev); err != nil {
 			dlog.Error(c, err)
 			initDone <- struct{}{}
@@ -111,7 +104,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 
 func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	s.Lock()
-	paths := make([]string, len(s.routes)+len(s.search)+len(s.includeSuffixes)+1)
+	paths := make([]string, len(s.search)+len(s.routes)+len(s.includeSuffixes)+1)
 
 	// Namespaces are copied verbatim. Entries that aren't prefixed with "~" are considered search path entries.
 	copy(paths, s.search)

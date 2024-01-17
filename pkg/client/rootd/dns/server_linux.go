@@ -61,10 +61,18 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			dlog.Infof(c, "Automatically set -dns=%s", ip)
 		}
 
-		// The search entries in /etc/resolv.conf is not intended for this resolver so
+		// The search entries in /etc/resolv.conf are not intended for this resolver so
 		// ensure that we strip them off when we send queries to the cluster.
 		for _, sp := range rf.search {
-			s.dropSuffixes = append(s.dropSuffixes, sp+".")
+			if len(sp) > 0 {
+				if sp[0] == '.' {
+					sp = sp[1:]
+				}
+				if sp[len(sp)-1] != '.' {
+					sp += "."
+				}
+				s.dropSuffixes = append(s.dropSuffixes, strings.ToLower(sp))
+			}
 		}
 	}
 	if s.localIP == nil {

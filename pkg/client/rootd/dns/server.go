@@ -77,8 +77,12 @@ type Server struct {
 	resolve      Resolver
 	requestCount int64
 	cache        *xsync.MapOf[cacheKey, *cacheEntry]
-	recursive    int32    // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
-	dropSuffixes []string //nolint:unused // only used on linux
+	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
+
+	// Suffixes to immediately drop from the query before processing. This list will always contain the tel2Search domain.
+	// The overriding resolver will also add the search path found in /etc/resolv.conf, because that search path is not
+	// intended for this resolver and will get reapplied when passing things on to the fallback resolver.
+	dropSuffixes []string
 
 	// routes are typically namespaces, accessible using <service-name>.<namespace-name>.
 	routes map[string]struct{}
@@ -163,7 +167,8 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 		mappings:        mappingsMap(config.Mappings),
 		localIP:         config.LocalIp,
 		remoteIP:        config.RemoteIp,
-		search:          []string{""},
+		dropSuffixes:    []string{tel2SubDomainDot},
+		search:          []string{tel2SubDomain},
 		searchPathCh:    make(chan []string, 5),
 		clusterDomain:   defaultClusterDomain,
 		clusterLookup:   clusterLookup,
@@ -843,17 +848,28 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// system DNS resolver to direct requests to this resolver. The system configuration to
 	// make this happen vary depending on OS, but the purpose is always the same. Given that,
 	// the first step in the resolution is to remove this domain-suffix if it exists.
-	if strings.Contains(q.Name, tel2SubDomainDot) {
-		strippedName := strings.TrimSuffix(q.Name, tel2SubDomainDot)
-		if strippedName == q.Name {
-			// This is a bogus name because it has some domain after
-			// the tel2-search domain. Should normally never happen, but
-			// will happen if someone queries for the tel2-search domain
-			// as a single label name.
-			msg.SetRcode(r, dns.RcodeNameError)
-			return
+	ln := len(q.Name)
+	for _, dropSuffix := range s.dropSuffixes {
+		if strings.HasSuffix(q.Name, dropSuffix) {
+			// Remove the suffix and ensure that the name still ends
+			// with a dot after the removal. If it doesn't, then this
+			// was not really a domain suffix but rather a partial
+			// domain name.
+			n := q.Name[:ln-len(dropSuffix)]
+			if last := len(n) - 1; last > 0 && n[last] == '.' {
+				q.Name = n
+				break
+			}
 		}
-		q.Name = strippedName
+	}
+
+	if strings.Contains(q.Name, tel2SubDomainDot) {
+		// This is a bogus name because it has some domain after
+		// the tel2-search domain. Should normally never happen, but
+		// will happen if someone queries for the tel2-search domain
+		// as a single label name.
+		msg.SetRcode(r, dns.RcodeNameError)
+		return
 	}
 
 	// try and resolve any mappings before consulting the cache, so that mapping hits don't
@@ -885,7 +901,10 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	s.RLock()
 	cd := s.clusterDomain
 	s.RUnlock()
-	if s.fallbackPool == nil || strings.HasPrefix(q.Name, recursionCheck2) || strings.HasSuffix(q.Name, cd) {
+	if s.fallbackPool == nil ||
+		strings.HasPrefix(q.Name, recursionCheck2) ||
+		strings.HasSuffix(q.Name, cd) ||
+		strings.HasSuffix(origName, tel2SubDomainDot) {
 		if err == nil {
 			rCode = dns.RcodeNameError
 		} else {
@@ -900,6 +919,8 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		return
 	}
 
+	// Use original query name when sending things to the fallback resolver.
+	q.Name = origName
 	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
 	dc := &dns.Client{Net: "udp", Timeout: s.lookupTimeout}
 	var poolMsg *dns.Msg
