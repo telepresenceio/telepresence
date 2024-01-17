@@ -61,6 +61,15 @@ const (
 	recursionTestInProgress
 )
 
+//nolint:gochecknoglobals // constant
+var DefaultExcludeSuffixes = []string{
+	".com",
+	".io",
+	".net",
+	".org",
+	".ru",
+}
+
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface.
 type Server struct {
 	sync.RWMutex
@@ -140,13 +149,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 		config = &rpc.DNSConfig{}
 	}
 	if len(config.ExcludeSuffixes) == 0 {
-		config.ExcludeSuffixes = []string{
-			".com",
-			".io",
-			".net",
-			".org",
-			".ru",
-		}
+		config.ExcludeSuffixes = DefaultExcludeSuffixes
 	}
 	if config.LookupTimeout.AsDuration() <= 0 {
 		config.LookupTimeout = durationpb.New(8 * time.Second)
