@@ -42,9 +42,19 @@ func configView() *cobra.Command {
 func runConfigView(cmd *cobra.Command, _ []string) error {
 	var cfg client.SessionConfig
 	clientOnly, _ := cmd.Flags().GetBool("client-only")
+	if !clientOnly {
+		cmd.Annotations = map[string]string{
+			ann.Session: ann.Required,
+		}
+		if err := connect.InitCommand(cmd); err != nil {
+			// Unable to establish a session, so try to convey the local config instead. It
+			// may be helpful in diagnosing the problem.
+			cmd.Annotations = map[string]string{}
+			clientOnly = true
+		}
+	}
+
 	if clientOnly {
-		// Unable to establish a session, so try to convey the local config instead. It
-		// may be helpful in diagnosing the problem.
 		if err := connect.InitCommand(cmd); err != nil {
 			return err
 		}
