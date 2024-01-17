@@ -18,7 +18,6 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -28,7 +27,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -641,9 +639,6 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 				continue
 			}
 			result.InterceptInfo = ii
-			if !waitForDNS(c, spec.ServiceName) {
-				dlog.Warningf(c, "DNS cannot resolve name of intercepted %q service", spec.ServiceName)
-			}
 			select {
 			case <-c.Done():
 				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, client.CheckTimeout(c, c.Err()))
@@ -664,21 +659,6 @@ func (s *session) InterceptProlog(context.Context, *manager.CreateInterceptReque
 
 func (s *session) InterceptEpilog(context.Context, *rpc.CreateInterceptRequest, *rpc.InterceptResult) *rpc.InterceptResult {
 	return nil
-}
-
-func waitForDNS(c context.Context, host string) bool {
-	c, cancel := context.WithTimeout(c, 12*time.Second)
-	defer cancel()
-	for c.Err() == nil {
-		dtime.SleepWithContext(c, 200*time.Millisecond)
-		dlog.Debugf(c, "Attempting to resolve DNS for %s", host)
-		ips := dnsproxy.TimedExternalLookup(c, host, 5*time.Second)
-		if len(ips) > 0 {
-			dlog.Debugf(c, "Attempt succeeded, DNS for %s is %v", host, ips)
-			return true
-		}
-	}
-	return false
 }
 
 // RemoveIntercept removes one intercept by name.
