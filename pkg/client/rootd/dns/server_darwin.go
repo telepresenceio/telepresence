@@ -105,8 +105,8 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
-			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr, paths)
+		s.processSearchPaths(g, func(c context.Context, _ vif.Device) error {
+			return s.updateResolverFiles(c, resolverDirName, resolverFileName, dnsAddr)
 		}, dev)
 		// Server will close the listener, so no need to close it here.
 		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
@@ -132,33 +132,21 @@ func (s *Server) removeResolverFiles(c context.Context, resolverDirName string) 
 	return nil
 }
 
-func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr, paths []string) error {
-	dlog.Infof(c, "setting search paths %s", strings.Join(paths, " "))
+func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolverFileName string, dnsAddr *net.UDPAddr) error {
 	rf, err := readResolveFile(resolverFileName)
 	if err != nil {
 		return err
 	}
+	s.Lock()
+	defer s.Unlock()
 
-	// paths that contain a dot are search paths, the ones that don't are namespaces.
-	routes := make(map[string]struct{})
-	search := make([]string, 0)
-	for _, path := range paths {
-		if strings.ContainsRune(path, '.') {
-			search = append(search, path)
-		} else if path != "" {
-			routes[path] = struct{}{}
-		}
-	}
+	// All routes and include suffixes become domains
 
-	// All namespaces and include suffixes become domains
-	domains := make(map[string]struct{}, len(routes)+len(s.includeSuffixes))
-	maps.Merge(domains, routes)
+	domains := make(map[string]struct{}, len(s.routes)+len(s.includeSuffixes))
+	maps.Merge(domains, s.routes)
 	for _, sfx := range s.includeSuffixes {
 		domains[strings.TrimPrefix(sfx, ".")] = struct{}{}
 	}
-
-	s.Lock()
-	defer s.Unlock()
 
 	// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
 	// for each namespace in its own domain file under /etc/resolver. Each file
@@ -176,11 +164,6 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 			additions = append(additions, domain)
 		}
 	}
-
-	search = append([]string{tel2SubDomainDot + s.clusterDomain}, search...)
-
-	s.search = search
-	s.routes = routes
 	s.domains = domains
 
 	for _, domain := range removals {
@@ -203,7 +186,7 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName, resolve
 		}
 	}
 
-	rf.setSearchPaths(search...)
+	rf.setSearchPaths(s.search...)
 
 	// Versions prior to Big Sur will not trigger an update unless the resolver file
 	// is removed and recreated.

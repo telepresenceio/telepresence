@@ -64,8 +64,11 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 		// Some installation have default DNS configured with ~. routing path.
 		// If two interfaces with DefaultRoute: yes present, the one with the
 		// routing key used and SanityCheck fails. Hence, tel2SubDomain
-		// must be used as a routing key.
-		if err = s.updateLinkDomains(c, []string{tel2SubDomain}, dev); err != nil {
+		// must be used as a route.
+		s.Lock()
+		s.routes = map[string]struct{}{tel2SubDomain: {}}
+		s.Unlock()
+		if err = s.updateLinkDomains(c, dev); err != nil {
 			dlog.Error(c, err)
 			initDone <- struct{}{}
 			return errResolveDNotConfigured
@@ -106,27 +109,26 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	return g.Wait()
 }
 
-func (s *Server) updateLinkDomains(c context.Context, paths []string, dev vif.Device) error {
-	routes := make(map[string]struct{})
-	search := make([]string, 0)
-	for i, path := range paths {
-		if strings.ContainsRune(path, '.') {
-			search = append(search, path)
-		} else {
-			routes[path] = struct{}{}
-			// Turn namespace into a route
-			paths[i] = "~" + path
-		}
-	}
-	for _, sfx := range s.includeSuffixes {
-		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
-	}
-
+func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	s.Lock()
-	paths = append(paths, "~"+s.clusterDomain, tel2SubDomainDot+s.clusterDomain)
+	paths := make([]string, len(s.routes)+len(s.search)+len(s.includeSuffixes)+1)
 
-	s.routes = routes
-	s.search = search
+	// Namespaces are copied verbatim. Entries that aren't prefixed with "~" are considered search path entries.
+	copy(paths, s.search)
+	i := len(s.search)
+	for ns := range s.routes {
+		paths[i] = "~" + ns
+		i++
+	}
+
+	// Include-suffixes are routes, i.e. in contrast to search paths, they are never appended to the name, but
+	// used as a filter that will direct queries for names ending with them to this resolver. Routes must be
+	// prefixed with "~".
+	for _, sfx := range s.includeSuffixes {
+		paths[i] = "~" + strings.TrimPrefix(sfx, ".")
+		i++
+	}
+	paths[i] = "~" + s.clusterDomain
 	s.Unlock()
 
 	if err := dbus.SetLinkDomains(dcontext.HardContext(c), int(dev.Index()), paths...); err != nil {

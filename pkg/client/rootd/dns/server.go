@@ -488,23 +488,10 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
 }
 
-func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
-	g.Go("RecursionCheck", func(c context.Context) error {
-		if dev != nil {
-			s.RLock()
-			_ = dev.SetDNS(c, s.clusterDomain, s.remoteIP, []string{tel2SubDomain})
-			s.RUnlock()
-		}
-		if runtime.GOOS == "windows" {
-			// Give the DNS setting some time to take effect.
-			dtime.SleepWithContext(c, 500*time.Millisecond)
-		}
-		s.performRecursionCheck(c)
-		return nil
-	})
-
+func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, vif.Device) error, dev vif.Device) {
 	g.Go("SearchPaths", func(c context.Context) error {
-		var prevPaths []string
+		s.performRecursionCheck(c)
+		prevPaths := s.search
 		unchanged := func(paths []string) bool {
 			if len(paths) != len(prevPaths) {
 				return false
@@ -522,17 +509,31 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 			case <-c.Done():
 				return nil
 			case paths := <-s.searchPathCh:
-				if len(s.searchPathCh) > 0 {
-					// Only interested in the last one
+				// Only interested in the last one, and only if it differs
+				if len(s.searchPathCh) > 0 || unchanged(paths) {
 					continue
 				}
-				if !unchanged(paths) {
-					dlog.Debugf(c, "%v -> %v", prevPaths, paths)
-					prevPaths = make([]string, len(paths))
-					copy(prevPaths, paths)
-					if err := processor(c, paths, dev); err != nil {
-						return err
+
+				dlog.Debugf(c, "%v -> %v", prevPaths, paths)
+				prevPaths = make([]string, len(paths))
+				copy(prevPaths, paths)
+
+				routes := make(map[string]struct{})
+				search := make([]string, 0)
+				for _, path := range paths {
+					if path == tel2SubDomain || strings.ContainsRune(path, '.') {
+						search = append(search, path)
+					} else if path != "" {
+						routes[path] = struct{}{}
 					}
+				}
+				s.Lock()
+				s.routes = routes
+				s.search = search
+				s.Unlock()
+
+				if err := processor(c, dev); err != nil {
+					return err
 				}
 			}
 		}

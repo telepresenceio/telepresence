@@ -23,7 +23,10 @@ import (
 
 const (
 	maxRecursionTestRetries = 10
-	recursionTestTimeout    = 500 * time.Millisecond
+
+	// We use a fairly short delay here because if DNS recursion is a thing, then the cluster's DNS-server
+	// has access to the caller host's network, so it runs locally in a Docker container or similar.
+	recursionTestTimeout = 200 * time.Millisecond
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
@@ -95,20 +98,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
 		// Server will close the listener, so no need to close it here.
-		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
-			routes := make(map[string]struct{})
-			search := make([]string, 0)
-			for _, path := range paths {
-				if strings.ContainsRune(path, '.') {
-					search = append(search, path)
-				} else if path != "" {
-					routes[path] = struct{}{}
-				}
-			}
-			s.Lock()
-			s.routes = routes
-			s.search = search
-			s.Unlock()
+		s.processSearchPaths(g, func(c context.Context, _ vif.Device) error {
 			s.flushDNS()
 			return nil
 		}, dev)
