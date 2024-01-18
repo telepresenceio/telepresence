@@ -325,6 +325,9 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 			rs.DNS.Mappings.FromRPC(dns.Mappings)
 			rs.DNS.LookupTimeout = dns.LookupTimeout.AsDuration()
 			rs.RoutingSnake = &client.RoutingSnake{}
+			for _, subnet := range rStatus.Subnets {
+				rs.RoutingSnake.Subnets = append(rs.RoutingSnake.Subnets, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
+			}
 			for _, subnet := range obc.AlsoProxySubnets {
 				rs.RoutingSnake.AlsoProxy = append(rs.RoutingSnake.AlsoProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
 			}
@@ -511,6 +514,7 @@ func printRouting(kvf *ioutil.KeyValueFormatter, r *client.RoutingSnake) {
 		}
 		kvf.Add(title, out.String())
 	}
+	printSubnets("Subnets", r.Subnets)
 	printSubnets("Also Proxy", r.AlsoProxy)
 	printSubnets("Never Proxy", r.NeverProxy)
 	printSubnets("Allow conflicts for", r.AllowConflicting)

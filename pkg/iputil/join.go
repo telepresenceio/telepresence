@@ -15,3 +15,7 @@ func JoinIpPort(ip net.IP, port uint16) string {
 	}
 	return ":" + ps
 }
+
+func JoinHostPort(host string, port uint16) string {
+	return net.JoinHostPort(host, strconv.Itoa(int(port)))
+}

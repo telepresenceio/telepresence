@@ -29,9 +29,11 @@ spec:
         service: echo
     spec:
       hostAliases:
-        - ip: 127.0.0.1
+        - ip: "{{ .AliasIP }}"
           hostnames:
-            - echo-home
+            {{- range .Aliases }}
+            - {{ . }}
+            {{- end }}
       containers:
         - name: echo
           image: jmalloc/echo-server

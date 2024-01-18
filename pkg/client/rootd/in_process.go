@@ -53,13 +53,15 @@ func (rd *InProcSession) Version(ctx context.Context, in *empty.Empty, opts ...g
 }
 
 func (rd *InProcSession) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*rpc.DaemonStatus, error) {
+	nc := rd.getNetworkConfig()
 	return &rpc.DaemonStatus{
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
 			Name:       client.DisplayName,
 		},
-		OutboundConfig: rd.getNetworkConfig().OutboundInfo,
+		Subnets:        nc.Subnets,
+		OutboundConfig: nc.OutboundInfo,
 	}, nil
 }
 

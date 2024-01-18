@@ -198,6 +198,17 @@ func InitContainer(config *Sidecar) *core.Container {
 		Name:  InitContainerName,
 		Image: config.AgentImage,
 		Args:  []string{"agent-init"},
+		Env: []core.EnvVar{
+			{
+				Name: "POD_IP",
+				ValueFrom: &core.EnvVarSource{
+					FieldRef: &core.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "status.podIP",
+					},
+				},
+			},
+		},
 		VolumeMounts: []core.VolumeMount{{
 			Name:      ConfigVolumeName,
 			MountPath: ConfigMountPoint,

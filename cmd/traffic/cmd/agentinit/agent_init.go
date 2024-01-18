@@ -19,6 +19,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -45,7 +46,7 @@ func loadConfig(ctx context.Context) (*config, error) {
 	return &c, nil
 }
 
-func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTables, loopback string) error {
+func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTables, loopback, localHostCIDR string) error {
 	// These iptables rules implement routing such that a packet directed to the appPort will hit the agentPort instead.
 	// If there's no mesh this is simply request -> agent -> app (or intercept)
 	// However, if there's a service mesh we want to make sure we don't bypass the mesh, so the traffic
@@ -123,7 +124,7 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 		err = iptables.Insert(nat, "OUTPUT", 1,
 			"-o", loopback,
 			"-p", strings.ToLower(string(proto)),
-			"!", "-d", "127.0.0.1/32",
+			"!", "-d", localHostCIDR,
 			"-m", "owner", "--uid-owner", agentUID,
 			"-j", chain)
 		if err != nil {
@@ -180,13 +181,19 @@ func Main(ctx context.Context, args ...string) error {
 		dlog.Error(ctx, err)
 		return err
 	}
-	it, err := iptables.New()
+	proto := iptables.ProtocolIPv4
+	localhostCIDR := "127.0.0.1/32"
+	if len(iputil.Parse(os.Getenv("POD_IP"))) == 16 {
+		proto = iptables.ProtocolIPv6
+		localhostCIDR = "::1/128"
+	}
+	it, err := iptables.NewWithProtocol(proto)
 	if err != nil {
 		err = fmt.Errorf("unable to create iptables instance: %w", err)
 		dlog.Error(ctx, err)
 		return err
 	}
-	if err = cfg.configureIptables(ctx, it, lo); err != nil {
+	if err = cfg.configureIptables(ctx, it, lo, localhostCIDR); err != nil {
 		dlog.Error(ctx, err)
 	}
 	return err

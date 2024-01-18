@@ -125,6 +125,15 @@ func NewInfo(ctx context.Context) Info {
 			oi.clusterID, err)
 	}
 
+	dummyIP := "1.1.1.1"
+	oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
+	if err != nil {
+		dlog.Warn(ctx, err)
+	} else if len(oi.InjectorSvcIp) == 16 {
+		// Must use an IPv6 IP to get the correct error message.
+		dummyIP = "1:1::1"
+	}
+
 	// make an attempt to create a service with ClusterIP that is out of range and then
 	// check the error message for the correct range as suggested tin the second answer here:
 	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
@@ -140,9 +149,10 @@ func NewInfo(ctx context.Context) Info {
 		},
 		Spec: corev1.ServiceSpec{
 			Ports:     []corev1.ServicePort{{Port: 443}},
-			ClusterIP: "1.1.1.1",
+			ClusterIP: dummyIP,
 		},
 	}
+
 	if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, metav1.CreateOptions{}); err != nil {
 		svcCIDRrx := regexp.MustCompile(`range of valid IPs is (.*)$`)
 		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
@@ -161,22 +171,17 @@ func NewInfo(ctx context.Context) Info {
 	if err != nil {
 		dlog.Warn(ctx, err)
 	}
-	if oi.ServiceSubnet == nil {
+	if oi.ServiceSubnet == nil && len(oi.InjectorSvcIp) > 0 {
 		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
 		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
-		// from the traffic-manager service IP. This is cheating but a cluster may only have one service subnet
-		// and the mask is unlikely to cover less than half the bits.
-		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", "traffic-manager")
-		if err != nil || len(ips) == 0 {
-			dlog.Warn(ctx, "traffic manager is not able to resolve the IP of its own service")
-		} else {
-			ip := ips[0]
-			dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of traffic-manager.%s)", ip, env.ManagerNamespace)
-			bits := len(ip) * 8
-			ones := bits / 2
-			mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
-			oi.ServiceSubnet = &rpc.IPNet{Ip: ip.Mask(mask), Mask: int32(ones)}
-		}
+		// from the agent-injector service IP (the traffic-manager has clusterIP=None). This is cheating but
+		// a cluster may only have one service subnet and the mask is unlikely to cover less than half the bits.
+		ip := net.IP(oi.InjectorSvcIp)
+		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of agent-injector.%s)", ip, env.ManagerNamespace)
+		bits := len(ip) * 8
+		ones := bits / 2
+		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
+		oi.ServiceSubnet = &rpc.IPNet{Ip: ip.Mask(mask), Mask: int32(ones)}
 	}
 
 	podCIDRStrategy := env.PodCIDRStrategy
@@ -184,10 +189,6 @@ func NewInfo(ctx context.Context) Info {
 
 	oi.ManagerPodIp = env.PodIP
 	oi.ManagerPodPort = int32(env.ServerPort)
-	oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
-	if err != nil {
-		dlog.Warnf(ctx, "failed to detect injector service ClusterIP; service connectivity check will be disabled in clients: %s", err)
-	}
 	oi.InjectorSvcHost = fmt.Sprintf("%s.%s", env.AgentInjectorName, env.ManagerNamespace)
 
 	alsoProxy := env.ClientRoutingAlsoProxySubnets

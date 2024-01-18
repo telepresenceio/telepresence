@@ -68,15 +68,15 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 		return nil, nil, err
 	}
 	addr := as[0]
-	port := addr.Port
 	opts := []string{
 		"--name", daemonID.ContainerName(),
 		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
+		"--sysctl", "net.ipv6.conf.all.disable_ipv6=0",
 		"--device", "/dev/net/tun:/dev/net/tun",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
-		"-p", fmt.Sprintf("%s:%d", addr, port),
+		"-p", fmt.Sprintf("%s:%d", addr, addr.Port),
 		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), dockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), dockerTpLog),
@@ -285,15 +285,16 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	}
 	cjs := runningContainers(ctx, cli)
 
-	var hostPort, network string
+	var hostPort netip.AddrPort
+	var network string
 	if isKind {
-		hostPort, network = detectKind(cjs, addrPort)
-		dlog.Debugf(ctx, "hostPort %s, network %s", hostPort, network)
+		hostPort, network = detectKind(ctx, cjs, addrPort)
 	} else if isMinikube {
-		hostPort, network = detectMinikube(cjs, addrPort, cc.Cluster)
+		hostPort, network = detectMinikube(ctx, cjs, addrPort, cc.Cluster)
 	}
-	if hostPort != "" {
-		server.Host = hostPort
+	if hostPort.IsValid() {
+		dlog.Debugf(ctx, "hostPort %s, network %s", hostPort, network)
+		server.Host = hostPort.String()
 		cl.Server = server.String()
 	}
 	if network != "" {
@@ -372,10 +373,14 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (conn *grpc.
 }
 
 // containerPort returns the port that the container uses internally to expose the given
-// addrPort on the host. An empty string is returned when the addrPort is not found among
+// addrPort on the host. Zero is returned when the addrPort is not found among
 // the container's port bindings.
-func containerPort(addrPort netip.AddrPort, ns *types.NetworkSettings) string {
-	for port, bindings := range ns.Ports {
+// The additional bool is true if the host address is IPv6.
+func containerPort(addrPort netip.AddrPort, ns *types.NetworkSettings) (port uint16, isIPv6 bool) {
+	for portDef, bindings := range ns.Ports {
+		if portDef.Proto() != "tcp" {
+			continue
+		}
 		for _, binding := range bindings {
 			addr, err := netip.ParseAddr(binding.HostIP)
 			if err != nil {
@@ -386,11 +391,11 @@ func containerPort(addrPort netip.AddrPort, ns *types.NetworkSettings) string {
 				continue
 			}
 			if netip.AddrPortFrom(addr, uint16(pn)) == addrPort {
-				return port.Port()
+				return uint16(portDef.Int()), addr.Is6()
 			}
 		}
 	}
-	return ""
+	return 0, false
 }
 
 // runningContainers returns the inspect data for all containers with status=running.
@@ -414,39 +419,77 @@ func runningContainers(ctx context.Context, cli dockerClient.APIClient) []types.
 	return cjs
 }
 
+func localAddr(ctx context.Context, cnID, nwID string, isIPv6 bool) (addr netip.Addr, err error) {
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return addr, err
+	}
+	nw, err := cli.NetworkInspect(ctx, nwID, types.NetworkInspectOptions{})
+	if err != nil {
+		return addr, err
+	}
+	if cn, ok := nw.Containers[cnID]; ok {
+		// These aren't IP-addresses at all. They are prefixes!
+		var prefix string
+		if isIPv6 {
+			prefix = cn.IPv6Address
+		} else {
+			prefix = cn.IPv4Address
+		}
+		ap, err := netip.ParsePrefix(prefix)
+		if err == nil {
+			addr = ap.Addr()
+		}
+	}
+	return addr, err
+}
+
 // detectMinikube returns the container IP:port for the given hostAddrPort for a container where the
 // "name.minikube.sigs.k8s.io" label is equal to the given cluster name.
 // Returns the internal IP:port for the given hostAddrPort and the name of a network that makes the
 // IP available.
-func detectMinikube(cns []types.ContainerJSON, hostAddrPort netip.AddrPort, clusterName string) (string, string) {
+func detectMinikube(ctx context.Context, cns []types.ContainerJSON, hostAddrPort netip.AddrPort, clusterName string) (netip.AddrPort, string) {
 	for _, cn := range cns {
 		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["name.minikube.sigs.k8s.io"] == clusterName {
-			if port := containerPort(hostAddrPort, ns); port != "" {
+			if port, isIPv6 := containerPort(hostAddrPort, ns); port != 0 {
 				for networkName, network := range ns.Networks {
-					return net.JoinHostPort(network.IPAddress, port), networkName
+					addr, err := localAddr(ctx, cn.ID, network.NetworkID, isIPv6)
+					if err != nil {
+						dlog.Error(ctx, err)
+						break
+					}
+					return netip.AddrPortFrom(addr, port), networkName
 				}
 			}
 		}
 	}
-	return "", ""
+	return netip.AddrPort{}, ""
 }
 
 // detectKind returns the container hostname:port for the given hostAddrPort for a container where the
 // "io.x-k8s.kind.role" label is equal to "control-plane".
 // Returns the internal hostname:port for the given hostAddrPort and the name of a network that makes the
 // hostname available.
-func detectKind(cns []types.ContainerJSON, hostAddrPort netip.AddrPort) (string, string) {
+func detectKind(ctx context.Context, cns []types.ContainerJSON, hostAddrPort netip.AddrPort) (netip.AddrPort, string) {
 	for _, cn := range cns {
 		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["io.x-k8s.kind.role"] == "control-plane" {
-			if port := containerPort(hostAddrPort, ns); port != "" {
-				hostPort := net.JoinHostPort(cfg.Hostname, port)
-				for networkName := range ns.Networks {
-					return hostPort, networkName
+			if port, isIPv6 := containerPort(hostAddrPort, ns); port != 0 {
+				for n, nw := range ns.Networks {
+					for _, alias := range nw.Aliases {
+						if strings.HasSuffix(alias, "-control-plane") {
+							addr, err := localAddr(ctx, cn.ID, nw.NetworkID, isIPv6)
+							if err != nil {
+								dlog.Error(ctx, err)
+								break
+							}
+							return netip.AddrPortFrom(addr, port), n
+						}
+					}
 				}
 			}
 		}
 	}
-	return "", ""
+	return netip.AddrPort{}, ""
 }
 
 func stopContainer(ctx context.Context, daemonID *daemon.Identifier) {

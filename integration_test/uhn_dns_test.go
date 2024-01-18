@@ -11,6 +11,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type unqualifiedHostNameDNSSuite struct {
@@ -60,7 +61,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 	// then
 	for _, excluded := range excludes {
 		s.Eventually(func() bool {
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", excluded, port), 5000*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", iputil.JoinHostPort(excluded, uint16(port)), 5000*time.Millisecond)
 			if err == nil {
 				_ = conn.Close()
 			}
@@ -122,7 +123,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 			dialPort = localPort
 		}
 		s.Eventually(func() bool {
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", mapping.Name, dialPort), 5000*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", iputil.JoinHostPort(mapping.Name, uint16(dialPort)), 5000*time.Millisecond)
 			if err == nil {
 				_ = conn.Close()
 			}

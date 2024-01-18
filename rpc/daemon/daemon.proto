@@ -49,9 +49,10 @@ service Daemon {
 }
 
 message DaemonStatus {
+  repeated manager.IPNet subnets = 1;
   OutboundInfo outbound_config = 4;
   telepresence.common.VersionInfo version = 5;
-  reserved 1, 2, 3;
+  reserved 2, 3;
 }
 
 message Paths {

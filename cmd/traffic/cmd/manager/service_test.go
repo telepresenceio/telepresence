@@ -323,14 +323,19 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 		t.Fatalf("failed to build manager: %v", err)
 	}
 	mgr.RegisterServers(s)
+	sc := &dhttp.ServerConfig{
+		Handler: s,
+	}
+
+	shutdownServer := func() {}
 	g.Go("server", func(ctx context.Context) error {
-		sc := &dhttp.ServerConfig{
-			Handler: s,
-		}
-		return sc.Serve(ctx, lis)
+		defer cancel()
+		var serverCtx context.Context
+		serverCtx, shutdownServer = context.WithCancel(ctx)
+		return sc.Serve(serverCtx, lis)
 	})
 	t.Cleanup(func() {
-		cancel()
+		shutdownServer()
 		if err := g.Wait(); err != nil && err != ctx.Err() {
 			t.Error(err)
 		}
