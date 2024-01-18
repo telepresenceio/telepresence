@@ -47,6 +47,13 @@ items:
           custom DNS servers that resolve domains into loopback IPs. The flag may also be used in cases where the
           cluster's subnets are in conflict with the workstation's VPN.
       - type: bugfix
+        title: Kubeconfig exec authentication with context names containing colon didn't work on Windows
+        body: >-
+          The logic added to allow the root daemon to connect directly to the cluster using the user daemon as a proxy
+          for exec type authentication in the kube-config, didn't take into account that a context name sometimes
+          contains the colon ":" character. That character cannot be used in filenames on windows because it is the
+          drive letter separator.
+      - type: bugfix
         title: Provide agent name and tag as separate values in Helm chart
         body: >-
           The <code>AGENT_IMAGE</code> was a concatenation of the agent's name and tag. This is now changed so that the

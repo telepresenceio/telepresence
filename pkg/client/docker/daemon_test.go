@@ -3,7 +3,7 @@ package docker
 import (
 	"testing"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func TestSafeContainerName(t *testing.T) {
@@ -47,8 +47,8 @@ func TestSafeContainerName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := daemon.SafeContainerName(tt.name); got != tt.want {
-				t.Errorf("SafeContainerName() = %v, want %v", got, tt.want)
+			if got := ioutil.SafeName(tt.name); got != tt.want {
+				t.Errorf("SafeName() = %v, want %v", got, tt.want)
 			}
 		})
 	}
