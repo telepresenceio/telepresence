@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -215,6 +216,10 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 }
 
 func (s *notConnectedSuite) Test_DNSSuffixRules() {
+	if s.IsCI() && runtime.GOOS == "linux" && runtime.GOARCH == "arm64" {
+		s.T().Skip("The DNS on the linux-arm64 GitHub runner is not configured correctly")
+	}
+
 	const randomName = "zwslkjsdf"
 	const randomDomain = ".xnrqj"
 	tests := []struct {
