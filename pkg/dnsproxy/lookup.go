@@ -170,6 +170,13 @@ func lookupIP(ctx context.Context, network, qName string, r *net.Resolver) ([]ne
 		dlog.Errorf(ctx, "LookupIP failed, trying LookupIP %q", qName)
 		ips, err = r.LookupIP(ctx, network, qName)
 	}
+	if err == nil && len(ips) == 0 {
+		err = &net.DNSError{
+			Err:        "no such host",
+			Name:       name,
+			IsNotFound: true,
+		}
+	}
 	return ips, err
 }
 
@@ -180,9 +187,9 @@ func makeError(err error) (RRs, int, error) {
 		case dnsErr.IsNotFound:
 			return nil, dns.RcodeNameError, nil
 		case dnsErr.IsTemporary:
-			return nil, dns.RcodeServerFailure, status.Error(codes.Unavailable, dnsErr.Error())
+			return nil, dns.RcodeNameError, status.Error(codes.Unavailable, dnsErr.Error())
 		case dnsErr.IsTimeout:
-			return nil, dns.RcodeServerFailure, status.Error(codes.DeadlineExceeded, dnsErr.Error())
+			return nil, dns.RcodeNameError, status.Error(codes.DeadlineExceeded, dnsErr.Error())
 		}
 	}
 	return nil, dns.RcodeServerFailure, status.Error(codes.Internal, err.Error())

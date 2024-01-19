@@ -3,7 +3,6 @@ package integration_test
 import (
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -56,7 +55,6 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 
 	// when
 	s.TelepresenceConnect(ctx, "--context", "extra")
-	itest.TelepresenceOk(ctx, "intercept", serviceName, "--port", strconv.Itoa(port))
 
 	// then
 	for _, excluded := range excludes {

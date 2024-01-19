@@ -59,7 +59,7 @@ type Cluster interface {
 	CompatVersion() string
 	Executable() string
 	GeneralError() error
-	GlobalEnv() dos.MapEnv
+	GlobalEnv(context.Context) dos.MapEnv
 	AgentVersion(context.Context) string
 	Initialize(context.Context) context.Context
 	InstallTrafficManager(ctx context.Context, values map[string]string) error
@@ -372,12 +372,13 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	return c
 }
 
-func (s *cluster) GlobalEnv() dos.MapEnv {
+func (s *cluster) GlobalEnv(ctx context.Context) dos.MapEnv {
 	globalEnv := dos.MapEnv{
 		"KUBECONFIG": s.kubeConfig,
 	}
 	yes := struct{}{}
 	includeEnv := map[string]struct{}{
+		"SCOUT_DISABLE":             yes,
 		"HOME":                      yes,
 		"PATH":                      yes,
 		"LOGNAME":                   yes,
@@ -403,7 +404,7 @@ func (s *cluster) GlobalEnv() dos.MapEnv {
 		includeEnv["USERNAME"] = yes
 		includeEnv["windir"] = yes
 	}
-	for _, env := range os.Environ() {
+	for _, env := range dos.Environ(ctx) {
 		if eqIdx := strings.IndexByte(env, '='); eqIdx > 0 {
 			key := env[:eqIdx]
 			if _, ok := includeEnv[key]; ok {
@@ -633,16 +634,18 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 	nsl := nss.UniqueList()
 	vx := struct {
-		LogLevel    string  `json:"logLevel"`
-		Image       *Image  `json:"image,omitempty"`
-		Agent       *xAgent `json:"agent,omitempty"`
-		ClientRbac  xRbac   `json:"clientRbac"`
-		ManagerRbac xRbac   `json:"managerRbac"`
-		Client      xClient `json:"client"`
+		LogLevel        string  `json:"logLevel"`
+		MetritonEnabled bool    `json:"metritonEnabled"`
+		Image           *Image  `json:"image,omitempty"`
+		Agent           *xAgent `json:"agent,omitempty"`
+		ClientRbac      xRbac   `json:"clientRbac"`
+		ManagerRbac     xRbac   `json:"managerRbac"`
+		Client          xClient `json:"client"`
 	}{
-		LogLevel: "debug",
-		Image:    GetImage(ctx),
-		Agent:    agent,
+		LogLevel:        "debug",
+		MetritonEnabled: false,
+		Image:           GetImage(ctx),
+		Agent:           agent,
 		ClientRbac: xRbac{
 			Create:     true,
 			Namespaced: len(nss.ManagedNamespaces) > 0,
@@ -775,7 +778,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 }
 
 func EnvironMap(ctx context.Context) dos.MapEnv {
-	env := GetGlobalHarness(ctx).GlobalEnv()
+	env := GetGlobalHarness(ctx).GlobalEnv(ctx)
 	maps.Merge(env, getEnv(ctx))
 	return env
 }

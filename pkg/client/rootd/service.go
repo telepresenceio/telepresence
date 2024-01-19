@@ -53,9 +53,10 @@ func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
 }
 
 const (
-	ProcessName = "daemon"
-	titleName   = "Daemon"
-	pprofFlag   = "pprof"
+	ProcessName         = "daemon"
+	titleName           = "Daemon"
+	pprofFlag           = "pprof"
+	metritonDisableFlag = "disable-metriton"
 )
 
 func help() string {
@@ -118,6 +119,7 @@ func Command() *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
+	flags.Bool(metritonDisableFlag, false, "disable metriton reporting")
 	return cmd
 }
 
@@ -461,6 +463,9 @@ func run(cmd *cobra.Command, args []string) error {
 				dlog.Error(c, err)
 			}
 		}()
+	}
+	if disableMetriton, _ := flags.GetBool(metritonDisableFlag); disableMetriton {
+		_ = os.Setenv("SCOUT_DISABLE", "1")
 	}
 
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)

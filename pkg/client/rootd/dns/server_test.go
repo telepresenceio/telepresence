@@ -27,29 +27,60 @@ func (s *suiteServer) SetupSuite() {
 func (s *suiteServer) TestSetMappings() {
 	// given
 	entry := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
-	toDeleteARecordKey := cacheKey{name: "echo-easy-alias.", qType: dns.TypeA}
-	toDelete4ARecordKey := cacheKey{name: "echo-easy-alias.", qType: dns.TypeAAAA}
-	toKeepARecordKey := cacheKey{name: "echo-easy.blue.svc.cluster.local.", qType: dns.TypeA}
+	aliasKeyA := cacheKey{name: "echo-easy-alias.", qType: dns.TypeA}
+	aliasKeyAAAA := cacheKey{name: "echo-easy-alias.", qType: dns.TypeAAAA}
+	aliasedToKeyA := cacheKey{name: "echo-easy.blue.svc.cluster.local.", qType: dns.TypeA}
+	aliasedToKeyAAAA := cacheKey{name: "echo-easy.blue.svc.cluster.local.", qType: dns.TypeA}
 
-	s.server.cache.Store(toDeleteARecordKey, entry)
-	s.server.cache.Store(toDelete4ARecordKey, entry)
-	s.server.cache.Store(toKeepARecordKey, entry)
+	s.server.cache.Store(aliasKeyA, entry)
+	s.server.cache.Store(aliasKeyAAAA, entry)
+	s.server.cache.Store(aliasedToKeyA, entry)
+	s.server.cache.Store(aliasedToKeyAAAA, entry)
 
-	s.server.mappings = map[string]string{
+	s.server.mappings = map[string]string{}
+
+	// when
+	s.server.SetMappings([]*rpc.DNSMapping{
+		{
+			Name:     "echo-easy-alias",
+			AliasFor: "echo-easy.blue.svc.cluster.local",
+		},
+	})
+
+	// then
+	_, exists := s.server.cache.Load(aliasKeyA)
+	s.False(exists, "Mapping's A record wasn't purged")
+	_, exists = s.server.cache.Load(aliasKeyAAAA)
+	s.False(exists, "Mapping's AAAA record wasn't purged")
+	_, exists = s.server.cache.Load(aliasedToKeyA)
+	s.True(exists, "Service's A record was purged")
+	_, exists = s.server.cache.Load(aliasedToKeyAAAA)
+	s.True(exists, "Service's AAAA record was purged")
+
+	s.Equal(s.server.mappings, map[string]string{
 		"echo-easy-alias.": "echo-easy.blue.svc.cluster.local.",
-	}
+	})
+
+	// given
+	s.server.cache.Store(aliasKeyA, entry)
+	s.server.cache.Store(aliasKeyAAAA, entry)
 
 	// when
 	s.server.SetMappings([]*rpc.DNSMapping{})
 
 	// then
-	_, exists := s.server.cache.Load(toDeleteARecordKey)
-	s.False(exists, "Mapping's A record was purged")
-	_, exists = s.server.cache.Load(toDelete4ARecordKey)
-	s.False(exists, "Mapping's AAAA record was purged")
-	_, exists = s.server.cache.Load(toKeepARecordKey)
-	s.Truef(exists, "Service's A record wasn't purged")
+	// mappings are empty
 	s.Empty(s.server.mappings)
+
+	// nothing is purged when clearing the mappings because mappings never make it to the cache
+	_, exists = s.server.cache.Load(aliasKeyA)
+	s.True(exists, "Mapping's A record was purged")
+	_, exists = s.server.cache.Load(aliasKeyAAAA)
+	s.True(exists, "Mapping's AAAA record was purged")
+	_, exists = s.server.cache.Load(aliasedToKeyA)
+	s.True(exists, "Service's A record was purged")
+	_, exists = s.server.cache.Load(aliasedToKeyAAAA)
+	s.True(exists, "Service's AAAA record was purged")
 }
 
 func (s *suiteServer) TestSetExcludes() {
@@ -85,15 +116,15 @@ func (s *suiteServer) TestIsExcluded() {
 		"echo-easy",
 	}
 	s.server.search = []string{
-		tel2SubDomainDot + "cluster.local.",
-		"blue.svc.cluster.local.",
+		tel2SubDomainDot + "cluster.local",
+		"blue.svc.cluster.local",
 	}
 
 	// when & then
-	assert.True(s.T(), s.server.isExcluded("echo-easy."))
-	assert.True(s.T(), s.server.isExcluded("echo-easy.tel2-search.cluster.local."))
-	assert.True(s.T(), s.server.isExcluded("echo-easy.blue.svc.cluster.local."))
-	assert.False(s.T(), s.server.isExcluded("something-else."))
+	assert.True(s.T(), s.server.isExcluded("echo-easy"))
+	assert.True(s.T(), s.server.isExcluded("echo-easy.tel2-search.cluster.local"))
+	assert.True(s.T(), s.server.isExcluded("echo-easy.blue.svc.cluster.local"))
+	assert.False(s.T(), s.server.isExcluded("something-else"))
 }
 
 func TestServerTestSuite(t *testing.T) {
