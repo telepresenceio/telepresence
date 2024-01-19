@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type Identifier struct {
@@ -31,7 +32,7 @@ func NewIdentifier(name, contextName, namespace string, containerized bool) (*Id
 	return &Identifier{
 		KubeContext:   contextName,
 		Namespace:     namespace,
-		Name:          SafeContainerName(name),
+		Name:          ioutil.SafeName(name),
 		Containerized: containerized,
 	}, nil
 }

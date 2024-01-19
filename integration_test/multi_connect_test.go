@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type multiConnectSuite struct {
@@ -110,7 +111,7 @@ func (s *multiConnectSuite) Test_MultipleConnect() {
 	kc := itest.KubeConfig(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(err)
-	ctxName := daemon.SafeContainerName(cfg.CurrentContext)
+	ctxName := ioutil.SafeName(cfg.CurrentContext)
 	s.doubleConnectCheck(ctx, ctx2, ctxName+"-"+s.AppNamespace()+"-cn", ctxName+"-"+s.appSpace2+"-cn", s.AppNamespace(), s.appSpace2, "")
 }
 
