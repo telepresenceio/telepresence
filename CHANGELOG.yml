@@ -53,6 +53,14 @@ items:
           <tr><td><code>all</code></td><td>All of the above.</td></tr>
           </table></p>
       - type: bugfix
+        title: Restore ability to run the telepresence CLI in a docker container.
+        body: >-
+          The improvements made to be able to run the telepresence daemon in docker
+          using <code>telepresence connect --docker</code> made it impossible to run
+          both the CLI and the daemon in docker. This commit fixes that and
+          also ensures that the user- and root-daemons are merged in this
+          scenario when the container runs as root.
+      - type: bugfix
         title: Kubeconfig exec authentication with context names containing colon didn't work on Windows
         body: >-
           The logic added to allow the root daemon to connect directly to the cluster using the user daemon as a proxy
