@@ -320,6 +320,9 @@ func (s *state) loadAgentConfig(
 		if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
 			return nil, err
 		}
+		if replacePolicy == agentconfig.ReplacePolicyCurrent {
+			replacePolicy = agentconfig.ReplacePolicyNever
+		}
 		if sce, err = gc.Generate(ctx, wl, replacePolicy, nil); err != nil {
 			return nil, err
 		}
