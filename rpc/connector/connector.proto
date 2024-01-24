@@ -170,6 +170,8 @@ message ConnectRequest {
 message ConnectInfo {
   enum ErrType {
     UNSPECIFIED       = 0; // success
+    UNAUTHORIZED      = 1; // not authorized to connect
+    UNAUTHENTICATED   = 5; // not logged in
     ALREADY_CONNECTED = 2; // success
     MUST_RESTART      = 7; // would-be-success, but kubeconfig has changed
 
@@ -184,9 +186,6 @@ message ConnectInfo {
 
     // failure: error talking to the on-laptop root daemon; error_text and error_category are set
     DAEMON_FAILED = 8;
-
-    reserved 1;
-    reserved 5;
   }
   ErrType error = 1;
 

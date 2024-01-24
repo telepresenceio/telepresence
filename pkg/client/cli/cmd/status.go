@@ -288,6 +288,12 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		us.Namespace = status.Namespace
 		us.ManagerNamespace = status.ManagerNamespace
 		us.MappedNamespaces = status.MappedNamespaces
+	case connector.ConnectInfo_UNAUTHORIZED:
+		us.Status = "Not authorized to connect"
+		us.Error = status.ErrorText
+	case connector.ConnectInfo_UNAUTHENTICATED:
+		us.Status = "Not logged in"
+		us.Error = status.ErrorText
 	case connector.ConnectInfo_MUST_RESTART:
 		us.Status = "Connected, but must restart"
 	case connector.ConnectInfo_DISCONNECTED:
