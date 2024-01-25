@@ -80,6 +80,7 @@ type TrafficManagerStatus struct {
 	Name         string `json:"name,omitempty" yaml:"name,omitempty"`
 	Version      string `json:"version,omitempty" yaml:"version,omitempty"`
 	TrafficAgent string `json:"traffic_agent,omitempty" yaml:"traffic_agent,omitempty"`
+	extendedInfo ioutil.KeyValueProvider
 }
 
 type ConnectStatusIntercept struct {
@@ -194,6 +195,13 @@ func run(cmd *cobra.Command, _ []string) error {
 //nolint:gochecknoglobals // extension point
 var GetStatusInfo = func(ctx context.Context) (ioutil.WriterTos, error) {
 	return nil, nil
+}
+
+// GetTrafficManagerStatusExtras may return an extended struct
+//
+//nolint:gochecknoglobals // extension point
+var GetTrafficManagerStatusExtras = func(context.Context, *daemon.UserClient) ioutil.KeyValueProvider {
+	return nil
 }
 
 func (s *StatusInfo) WriterTos() []io.WriterTo {
@@ -353,6 +361,7 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		if af, err := userD.AgentImageFQN(ctx, &empty.Empty{}); err == nil {
 			tm.TrafficAgent = af.FQN
 		}
+		tm.extendedInfo = GetTrafficManagerStatusExtras(ctx, userD)
 	}
 
 	return wt, nil
@@ -578,6 +587,35 @@ func (cs *UserDaemonStatus) print(kvf *ioutil.KeyValueFormatter) {
 	kvf.Add("Intercepts", out.String())
 }
 
+func (ts *TrafficManagerStatus) MarshalJSON() ([]byte, error) {
+	m, err := ts.toMap()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(m)
+}
+
+func (ts *TrafficManagerStatus) MarshalYAML() (any, error) {
+	return ts.toMap()
+}
+
+func (ts *TrafficManagerStatus) toMap() (map[string]any, error) {
+	m := make(map[string]any)
+	if ts.extendedInfo != nil {
+		sx, err := json.Marshal(ts.extendedInfo)
+		if err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(sx, &m); err != nil {
+			return nil, err
+		}
+	}
+	m["name"] = ts.Name
+	m["traffic_agent"] = ts.TrafficAgent
+	m["version"] = ts.Version
+	return m, nil
+}
+
 func (ts *TrafficManagerStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ts.Name != "" {
@@ -588,6 +626,9 @@ func (ts *TrafficManagerStatus) WriteTo(out io.Writer) (int64, error) {
 		kvf.Add("Version", ts.Version)
 		if ts.TrafficAgent != "" {
 			kvf.Add("Traffic Agent", ts.TrafficAgent)
+		}
+		if ts.extendedInfo != nil {
+			ts.extendedInfo.AddTo(kvf)
 		}
 		n += kvf.Println(out)
 	} else {

@@ -17,6 +17,10 @@ type KeyValueFormatter struct {
 	Separator string
 }
 
+type KeyValueProvider interface {
+	AddTo(*KeyValueFormatter)
+}
+
 func DefaultKeyValueFormatter() *KeyValueFormatter {
 	return &KeyValueFormatter{
 		Indent:    "    ",
