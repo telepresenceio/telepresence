@@ -7,20 +7,12 @@ import (
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
-var GetIDFunc = GetID //nolint:gochecknoglobals // extension point
+var GetInstallIDFunc = GetNamespaceID //nolint:gochecknoglobals // extension point
 
-func GetID(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
-	// change: old IDs were generated from default ns
-	// now always generate ID from manager namespace
-	return idFromNamespace(ctx, client, namespace)
-}
-
-func idFromNamespace(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
-	opts := metav1.GetOptions{}
-	ns, err := client.Namespaces().Get(ctx, namespace, opts)
+func GetNamespaceID(ctx context.Context, client v1.CoreV1Interface, namespace string) (string, error) {
+	ns, err := client.Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if err == nil {
 		return string(ns.GetUID()), nil
 	}
-
 	return "", err
 }
