@@ -49,7 +49,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -320,55 +319,68 @@ func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Sess
 	if mc == nil || err != nil {
 		return c, nil, err
 	}
-	s := newSession(c, mi, mc, ver)
+	s, err := newSession(c, mi, mc, ver)
+	if err != nil {
+		return c, nil, err
+	}
 	s.clientConn = conn
 	// store session in ctx for reporting
 	c = scout.WithSession(c, s)
 	return c, s, nil
 }
 
-func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) *Session {
+func nope() bool { return false }
+
+func yep() bool { return true }
+
+func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) (*Session, error) {
 	cfg := client.GetDefaultConfig()
 	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
 	if err != nil {
 		dlog.Warnf(c, "Failed to get remote config from traffic manager: %v", err)
 	} else {
-		err := yaml.Unmarshal(cliCfg.ConfigYaml, cfg)
+		err = yaml.Unmarshal(cliCfg.ConfigYaml, cfg)
 		if err != nil {
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}
 	}
 	dlog.Debugf(c, "Creating session with id %v", mi.Session)
 
-	as := validateSubnets(c, "also-proxy", mi.AlsoProxySubnets)
-	as = slice.AppendUnique(make([]*net.IPNet, 0, len(as)), as...)
-	ns := validateSubnets(c, "never-proxy", mi.NeverProxySubnets)
-	ns = slice.AppendUnique(make([]*net.IPNet, 0, len(ns)), ns...)
-	allow := validateSubnets(c, "never-proxy", mi.AllowConflictingSubnets)
-	allow = slice.AppendUnique(make([]*net.IPNet, 0, len(allow)), allow...)
 	s := &Session{
-		handlers:                tunnel.NewPool(),
-		rndSource:               rand.NewSource(time.Now().UnixNano()),
-		session:                 mi.Session,
-		namespace:               mi.Namespace,
-		managerClient:           mc,
-		managerVersion:          ver,
-		alsoProxySubnets:        as,
-		neverProxySubnets:       ns,
-		allowConflictingSubnets: allow,
-		subnetViaWorkloads:      mi.SubnetViaWorkloads,
-		proxyClusterPods:        true,
-		proxyClusterSvcs:        true,
-		vifReady:                make(chan error, 2),
-		config:                  cfg,
-		done:                    make(chan struct{}),
+		handlers:           tunnel.NewPool(),
+		rndSource:          rand.NewSource(time.Now().UnixNano()),
+		session:            mi.Session,
+		namespace:          mi.Namespace,
+		managerClient:      mc,
+		managerVersion:     ver,
+		subnetViaWorkloads: mi.SubnetViaWorkloads,
+		proxyClusterPods:   true,
+		proxyClusterSvcs:   true,
+		vifReady:           make(chan error, 2),
+		config:             cfg,
+		done:               make(chan struct{}),
 	}
+	s.alsoProxySubnets, err = validateSubnets("also-proxy", mi.AlsoProxySubnets, yep)
+	if err != nil {
+		return nil, err
+	}
+	dlog.Infof(c, "also-proxy subnets %v", s.alsoProxySubnets)
+
+	s.neverProxySubnets, err = validateSubnets("never-proxy", mi.NeverProxySubnets, nope)
+	if err != nil {
+		return nil, err
+	}
+	dlog.Infof(c, "never-proxy subnets %v", s.neverProxySubnets)
+
+	s.allowConflictingSubnets, err = validateSubnets("allow-conflicting", mi.AllowConflictingSubnets, nope)
+	if err != nil {
+		return nil, err
+	}
+	dlog.Infof(c, "allow-conflicting subnets %v", s.allowConflictingSubnets)
+
 	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
 	s.SetSearchPath(c, nil, nil)
-	dlog.Infof(c, "also-proxy subnets %v", as)
-	dlog.Infof(c, "never-proxy subnets %v", ns)
-	dlog.Infof(c, "allow-conflicting subnets %v", ns)
-	return s
+	return s, nil
 }
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
@@ -721,32 +733,46 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	return nil
 }
 
-func validateSubnets(ctx context.Context, name string, sns []*manager.IPNet) (rs []*net.IPNet) {
+func validateSubnets(name string, sns []*manager.IPNet, allowLoopback func() bool) ([]*net.IPNet, error) {
 	ns := iputil.ConvertSubnets(sns)
-	if len(ns) > 0 {
-		rs = make([]*net.IPNet, 0, len(ns))
-		for _, s := range ns {
-			if s.IP.IsLoopback() {
-				dlog.Errorf(ctx, "Loopback subnets cannot be proxied. Ignoring %s subnet %s", name, s)
-			} else {
-				rs = append(rs, s)
-			}
-		}
+	if len(ns) == 0 {
+		return nil, nil
 	}
-	return rs
+	ns = subnet.Unique(ns)
+	rs := make([]*net.IPNet, 0, len(ns))
+	for _, sn := range ns {
+		if sn.IP.IsLoopback() && !allowLoopback() {
+			return nil, fmt.Errorf(`%s subnet %s is a loopback subnet. It is never proxied`, name, sn)
+		}
+		rs = append(rs, sn)
+	}
+	return subnet.Unique(rs), nil
 }
 
-func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+func (s *Session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.ClusterInfo) error {
 	if r := mgrInfo.Routing; r != nil {
-		s.alsoProxySubnets = subnet.Unique(append(s.alsoProxySubnets, validateSubnets(ctx, "also-proxy", r.AlsoProxySubnets)...))
+		sns, err := validateSubnets("also-proxy", r.AlsoProxySubnets, yep)
+		if err != nil {
+			return err
+		}
+		s.alsoProxySubnets = subnet.Unique(append(s.alsoProxySubnets, sns...))
 		dlog.Infof(ctx, "also-proxy subnets %v", s.alsoProxySubnets)
 
-		s.neverProxySubnets = subnet.Unique(append(s.neverProxySubnets, validateSubnets(ctx, "never-proxy", r.NeverProxySubnets)...))
+		sns, err = validateSubnets("never-proxy", r.NeverProxySubnets, nope)
+		if err != nil {
+			return err
+		}
+		s.neverProxySubnets = subnet.Unique(append(s.neverProxySubnets, sns...))
 		dlog.Infof(ctx, "never-proxy subnets %v", s.neverProxySubnets)
 
-		s.allowConflictingSubnets = subnet.Unique(append(s.allowConflictingSubnets, validateSubnets(ctx, "allow-conflicting", r.AllowConflictingSubnets)...))
+		sns, err = validateSubnets("allow-conflicting", r.AllowConflictingSubnets, nope)
+		if err != nil {
+			return err
+		}
+		s.allowConflictingSubnets = subnet.Unique(append(s.allowConflictingSubnets, sns...))
 		dlog.Infof(ctx, "allow-conflicting subnets %v", s.allowConflictingSubnets)
 	}
+	return nil
 }
 
 func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
