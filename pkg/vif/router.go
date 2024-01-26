@@ -33,18 +33,6 @@ func NewRouter(device Device, table routing.Table) *Router {
 	return &Router{device: device, routingTable: table}
 }
 
-func (rt *Router) firstAndLastIPs(n *net.IPNet) (net.IP, net.IP) {
-	firstIP := make(net.IP, len(n.IP))
-	lastIP := make(net.IP, len(n.IP))
-	copy(firstIP, n.IP)
-	copy(lastIP, n.IP)
-	for i := range n.Mask {
-		firstIP[i] &= n.Mask[i]
-		lastIP[i] |= ^n.Mask[i]
-	}
-	return firstIP, lastIP
-}
-
 func (rt *Router) isNeverProxied(n *net.IPNet) bool {
 	for _, r := range rt.neverProxyRoutes {
 		if subnet.Equal(r.RoutedNet, n) {
@@ -69,9 +57,8 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 		return err
 	}
 	_, nonWhitelisted := subnet.Partition(routes, func(_ int, r *net.IPNet) bool {
-		first, last := rt.firstAndLastIPs(r)
 		for _, w := range rt.whitelistedSubnets {
-			if w.Contains(first) && w.Contains(last) {
+			if subnet.Covers(w, r) {
 				// This is a whitelisted subnet, so we'll overlap it if needed
 				return true
 			}
@@ -204,7 +191,6 @@ removing:
 		}
 	}
 	rt.staticOverrides = desired
-
 	return nil
 }
 
