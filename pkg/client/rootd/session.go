@@ -930,6 +930,7 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 
 	if s.tunVif != nil {
 		g.Go("vif", s.tunVif.Run)
+		return s.waitForProxyViaWorkloads(c)
 	}
 	return nil
 }
@@ -992,6 +993,31 @@ func (s *Session) activateProxyViaWorkloads(ctx context.Context) error {
 		})
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (s *Session) waitForProxyViaWorkloads(ctx context.Context) error {
+	wc := len(s.subnetViaWorkloads)
+	if wc == 0 {
+		return nil
+	}
+	to := client.GetConfig(ctx).Timeouts().Get(client.TimeoutIntercept)
+	waitCh := make(chan error)
+	for _, svw := range s.subnetViaWorkloads {
+		go func(wl string) {
+			waitCh <- s.agentClients.WaitForWorkload(ctx, to, wl)
+		}(svw.Workload)
+	}
+	for dc := 0; dc < wc; dc++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		case err := <-waitCh:
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
