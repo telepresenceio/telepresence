@@ -79,7 +79,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 	nwFlags.StringSliceVar(&cr.proxyVia,
 		"proxy-via", nil, ``+
 			`Locally translate cluster DNS responses matching CIDR to virtual IPs that are routed (with reverse `+
-			`translation) via WORKLOAD. Must be in the form CIDR=WORKLOAD.`)
+			`translation) via WORKLOAD. Must be in the form CIDR=WORKLOAD. CIDR can be substituted for the symblic name "service", "pods", "also", or "all".`)
 	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
 		"allow-conflicting-subnets", nil, ``+
 			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
@@ -143,6 +143,7 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) error {
 
 type prefixViaWL struct {
 	subnet   netip.Prefix
+	symbolic string
 	workload string
 }
 
@@ -151,23 +152,55 @@ func parseProxyVias(proxyVia []string) ([]*daemon.SubnetViaWorkload, error) {
 	if l == 0 {
 		return nil, nil
 	}
-	pvs := make([]prefixViaWL, l)
-	for i, dps := range proxyVia {
+	pvs := make([]prefixViaWL, 0, l)
+	for _, dps := range proxyVia {
 		dp, err := parseSubnetViaWorkload(dps)
 		if err != nil {
 			return nil, err
 		}
-		for pi := i - 1; pi >= 0; pi-- {
-			if pvs[pi].subnet.Overlaps(dp.subnet) {
-				return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pvs[pi].subnet, dp.subnet)
+		lastPvs := len(pvs) - 1
+		switch dp.symbolic {
+		case "":
+			for pi := lastPvs; pi >= 0; pi-- {
+				pv := pvs[pi]
+				if pv.symbolic == "" && pv.subnet.Overlaps(dp.subnet) {
+					return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pv.subnet, dp.subnet)
+				}
 			}
+			pvs = append(pvs, dp)
+		case "all":
+			for pi := lastPvs; pi >= 0; pi-- {
+				pv := pvs[pi]
+				if pv.symbolic != "" {
+					return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pv.symbolic, dp.symbolic)
+				}
+			}
+			// Normalize by replacing "all" with "also", "pods", and "service"
+			for _, sym := range []string{"also", "pods", "service"} {
+				pvs = append(pvs,
+					prefixViaWL{
+						symbolic: sym,
+						workload: dp.workload,
+					})
+			}
+		default:
+			for pi := lastPvs; pi >= 0; pi-- {
+				pv := pvs[pi]
+				if pv.symbolic == dp.symbolic {
+					return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pv.symbolic, dp.symbolic)
+				}
+			}
+			pvs = append(pvs, dp)
 		}
-		pvs[i] = dp
 	}
-	svs := make([]*daemon.SubnetViaWorkload, l)
+	svs := make([]*daemon.SubnetViaWorkload, len(pvs))
 	for i, pv := range pvs {
+		n := pv.symbolic
+		if n == "" {
+			n = pv.subnet.String()
+		}
 		svs[i] = &daemon.SubnetViaWorkload{
-			Subnet:   pv.subnet.String(),
+			Subnet:   n,
 			Workload: pv.workload,
 		}
 	}
@@ -180,16 +213,20 @@ func parseSubnetViaWorkload(dps string) (prefixViaWL, error) {
 	if eqIdx <= 0 {
 		return pv, fmt.Errorf("--proxy-via %q is not in the format CIDR=WORKLOAD", dps)
 	}
-	sn, err := netip.ParsePrefix(dps[:eqIdx])
-	if err != nil {
-		return pv, err
-	}
-	wl := dps[eqIdx+1:]
-	if errs := validation.IsDNS1123Label(wl); len(errs) > 0 {
+	lhs := dps[:eqIdx]
+	rhs := dps[eqIdx+1:]
+	if errs := validation.IsDNS1123Label(rhs); len(errs) > 0 {
 		return pv, errors.New(errs[0])
 	}
-	pv.subnet = sn
-	pv.workload = wl
+	if sn, err := netip.ParsePrefix(lhs); err != nil {
+		if !(lhs == "all" || lhs == "also" || lhs == "pods" || lhs == "service") {
+			return pv, err
+		}
+		pv.symbolic = lhs
+	} else {
+		pv.subnet = sn
+	}
+	pv.workload = rhs
 	return pv, nil
 }
 
