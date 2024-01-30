@@ -33,7 +33,7 @@ func (s *Session) streamCreator() tunnel.StreamCreator {
 			}
 			if id.SourcePort() == 53 {
 				srcIp := id.Source()
-				for _, sn := range s.clusterSubnets {
+				for _, sn := range s.podSubnets {
 					if sn.Contains(srcIp) && !srcIp.Equal(sn.IP.Mask(sn.Mask)) {
 						// This is call was made by the cluster's DNS service. Typically, seen when
 						// running a Kind cluster locally. Letting it through causes recursion and

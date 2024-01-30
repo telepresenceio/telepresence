@@ -33,27 +33,6 @@ func NewRouter(device Device, table routing.Table) *Router {
 	return &Router{device: device, routingTable: table}
 }
 
-func (rt *Router) firstAndLastIPs(n *net.IPNet) (net.IP, net.IP) {
-	firstIP := make(net.IP, len(n.IP))
-	lastIP := make(net.IP, len(n.IP))
-	copy(firstIP, n.IP)
-	copy(lastIP, n.IP)
-	for i := range n.Mask {
-		firstIP[i] &= n.Mask[i]
-		lastIP[i] |= ^n.Mask[i]
-	}
-	return firstIP, lastIP
-}
-
-func (rt *Router) isNeverProxied(n *net.IPNet) bool {
-	for _, r := range rt.neverProxyRoutes {
-		if subnet.Equal(r.RoutedNet, n) {
-			return true
-		}
-	}
-	return false
-}
-
 func (rt *Router) GetRoutedSubnets() []*net.IPNet {
 	return rt.routedSubnets
 }
@@ -69,9 +48,8 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 		return err
 	}
 	_, nonWhitelisted := subnet.Partition(routes, func(_ int, r *net.IPNet) bool {
-		first, last := rt.firstAndLastIPs(r)
 		for _, w := range rt.whitelistedSubnets {
-			if w.Contains(first) && w.Contains(last) {
+			if subnet.Covers(w, r) {
 				// This is a whitelisted subnet, so we'll overlap it if needed
 				return true
 			}
@@ -105,25 +83,27 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 	return nil
 }
 
-func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy []*net.IPNet) (err error) {
+func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy []*net.IPNet) error {
+	// Don't never-proxy subnets that aren't routed
 	if err := rt.ValidateRoutes(ctx, pleaseProxy); err != nil {
 		return err
 	}
+
+	npRoutes := make([]*routing.Route, 0, len(dontProxy))
 	for _, n := range dontProxy {
-		if !rt.isNeverProxied(n) {
-			r, err := routing.GetRoute(ctx, n)
-			if err != nil {
-				dlog.Error(ctx, err)
-			} else {
-				// Ensure the route we append is the one the user requested, not whatever is in the routing table.
-				// This is important because if, say, the route requested is 10.0.2.0/24 and the routing table has something like 10.0.0.0/8,
-				// we would end up routing all of 10.0.0.0/8 without meaning to.
-				r.RoutedNet = n
-				r.Default = false
-				rt.neverProxyRoutes = append(rt.neverProxyRoutes, r)
-			}
+		r, err := routing.GetRoute(ctx, n)
+		if err != nil {
+			dlog.Error(ctx, err)
+		} else {
+			// Ensure the route we append is the one the user requested, not whatever is in the routing table.
+			// This is important because if, say, the route requested is 10.0.2.0/24 and the routing table has something like 10.0.0.0/8,
+			// we would end up routing all of 10.0.0.0/8 without meaning to.
+			r.RoutedNet = n
+			r.Default = false
+			npRoutes = append(npRoutes, r)
 		}
 	}
+	rt.neverProxyRoutes = npRoutes
 
 	// Remove all no longer desired subnets from the routedSubnets
 	var removed []*net.IPNet
@@ -204,7 +184,6 @@ removing:
 		}
 	}
 	rt.staticOverrides = desired
-
 	return nil
 }
 

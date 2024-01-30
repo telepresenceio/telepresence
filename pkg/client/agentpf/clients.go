@@ -128,6 +128,7 @@ type Clients interface {
 	GetClient(net.IP) (ag tunnel.Provider)
 	WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error
 	WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error
+	WaitForWorkload(ctx context.Context, timeout time.Duration, name string) error
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
 }
 
@@ -135,11 +136,17 @@ type clients struct {
 	session   *manager.SessionInfo
 	clients   *xsync.MapOf[string, *client]
 	ipWaiters *xsync.MapOf[iputil.IPKey, chan struct{}]
+	wlWaiters *xsync.MapOf[string, chan struct{}]
 	disabled  atomic.Bool
 }
 
 func NewClients(session *manager.SessionInfo) Clients {
-	return &clients{session: session, clients: xsync.NewMapOf[string, *client](), ipWaiters: xsync.NewMapOf[iputil.IPKey, chan struct{}]()}
+	return &clients{
+		session:   session,
+		clients:   xsync.NewMapOf[string, *client](),
+		ipWaiters: xsync.NewMapOf[iputil.IPKey, chan struct{}](),
+		wlWaiters: xsync.NewMapOf[string, chan struct{}](),
+	}
 }
 
 // GetClient returns tunnel.Provider that opens a tunnel to a known traffic-agent.
@@ -254,21 +261,18 @@ outer:
 }
 
 func (s *clients) notifyWaiters() {
-	s.clients.Range(func(_ string, ac *client) bool {
+	s.clients.Range(func(name string, ac *client) bool {
 		if waiter, ok := s.ipWaiters.LoadAndDelete(iputil.IPKey(ac.info.PodIp)); ok {
+			close(waiter)
+		}
+		if waiter, ok := s.wlWaiters.LoadAndDelete(ac.info.WorkloadName); ok {
 			close(waiter)
 		}
 		return true
 	})
 }
 
-func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error {
-	if s.disabled.Load() {
-		return nil
-	}
-	waitOn, _ := s.ipWaiters.LoadOrCompute(iputil.IPKey(ip), func() chan struct{} {
-		return make(chan struct{})
-	})
+func (s *clients) waitWithTimeout(ctx context.Context, timeout time.Duration, waitOn <-chan struct{}) error {
 	s.notifyWaiters()
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -278,6 +282,26 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip net.I
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error {
+	if s.disabled.Load() {
+		return nil
+	}
+	waitOn, _ := s.ipWaiters.LoadOrCompute(iputil.IPKey(ip), func() chan struct{} {
+		return make(chan struct{})
+	})
+	return s.waitWithTimeout(ctx, timeout, waitOn)
+}
+
+func (s *clients) WaitForWorkload(ctx context.Context, timeout time.Duration, name string) error {
+	if s.disabled.Load() {
+		return nil
+	}
+	waitOn, _ := s.wlWaiters.LoadOrCompute(name, func() chan struct{} {
+		return make(chan struct{})
+	})
+	return s.waitWithTimeout(ctx, timeout, waitOn)
 }
 
 func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo) error {
