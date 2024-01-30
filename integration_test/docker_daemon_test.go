@@ -26,7 +26,7 @@ func init() {
 }
 
 func (s *dockerDaemonSuite) SetupSuite() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
+	if s.IsCI() && !(goRuntime.GOOS == "linux" && goRuntime.GOARCH == "amd64") {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 		return
 	}

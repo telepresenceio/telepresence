@@ -15,7 +15,7 @@ import (
 )
 
 func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
+	if s.IsCI() && !(goRuntime.GOOS == "linux" && goRuntime.GOARCH == "amd64") {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 	}
 	require := s.Require()
@@ -138,7 +138,7 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 }
 
 func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
+	if s.IsCI() && !(goRuntime.GOOS == "linux" && goRuntime.GOARCH == "amd64") {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 	}
 	svc := "echo"
