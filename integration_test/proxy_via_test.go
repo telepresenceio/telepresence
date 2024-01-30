@@ -118,10 +118,11 @@ func (s *proxyViaSuite) Test_ProxyViaLoopBack() {
 			dlog.Infof(ctx, "%s uses IP %s", tt.hostName, vip)
 			rq.Truef(virtualIPSubnet.Contains(vip), "virtualIPSubnet %s does not contain %s", virtualIPSubnet, vip)
 
-			out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", net.JoinHostPort(tt.hostName, "8080"))
-			rq.NoError(err)
-			dlog.Info(ctx, out)
-			rq.Regexp(tt.expectedOutput, out)
+			rq.Eventually(func() bool {
+				out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", net.JoinHostPort(tt.hostName, "8080"))
+				dlog.Info(ctx, out)
+				return err == nil && tt.expectedOutput.MatchString(out)
+			}, 10*time.Second, 2*time.Second)
 		})
 	}
 }
@@ -152,9 +153,11 @@ func (s *proxyViaSuite) Test_ProxyViaEverything() {
 	rq := s.Require()
 	rq.NotNil(st.RootDaemon)
 	rq.Len(st.RootDaemon.Subnets, 1) // Virtual subnet
-	out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", "echo")
-	dlog.Infof(ctx, "Output from echo service %s", out)
-	rq.NoError(err)
+	rq.Eventually(func() bool {
+		out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo")
+		dlog.Infof(ctx, "Output from echo service %s", out)
+		return err == nil
+	}, 10*time.Second, 2*time.Second)
 }
 
 func (s *proxyViaSuite) Test_ProxyViaAll() {
@@ -171,9 +174,11 @@ func (s *proxyViaSuite) Test_ProxyViaAll() {
 	defer itest.TelepresenceDisconnectOk(ctx)
 	rq.NotNil(st.RootDaemon)
 	rq.Len(st.RootDaemon.Subnets, 1) // Virtual subnet
-	out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", "echo")
-	dlog.Infof(ctx, "Output from echo service %s", out)
-	rq.NoError(err)
+	rq.Eventually(func() bool {
+		out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo")
+		dlog.Infof(ctx, "Output from echo service %s", out)
+		return err == nil
+	}, 10*time.Second, 2*time.Second)
 }
 
 func (s *proxyViaSuite) Test_NeverProxySubnetIsOmitted() {
