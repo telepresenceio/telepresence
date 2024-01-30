@@ -761,9 +761,6 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			attribute.String("tel2.cluster-domain", d.ClusterDomain),
 		)
 	}
-	if s.tunVif == nil {
-		return nil
-	}
 
 	subnets = subnet.Unique(subnets)
 	dontProxy := slices.Clone(s.neverProxySubnets)
@@ -797,6 +794,9 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			scout.Entry{Key: "allow_conflicting_subnets", Value: len(s.allowConflictingSubnets)},
 		)
 	}()
+	if s.tunVif == nil {
+		return nil
+	}
 	rt := s.tunVif.Router
 	rt.UpdateWhitelist(s.allowConflictingSubnets)
 	return rt.UpdateRoutes(ctx, subnets, dontProxy)

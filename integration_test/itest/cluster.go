@@ -966,8 +966,8 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 	wg.Add(len(namespaces))
 	for _, ns := range namespaces {
 		if t.Failed() {
-			if out, err := KubectlOut(ctx, ns, "get", "events"); err == nil {
-				dlog.Debugf(ctx, "Events from namespace %s\n%s", ns, out)
+			if out, err := KubectlOut(ctx, ns, "get", "events", "--field-selector", "type!=Normal"); err == nil {
+				dlog.Debugf(ctx, "Events where type != Normal from namespace %s\n%s", ns, out)
 			}
 		}
 		go func(ns string) {
