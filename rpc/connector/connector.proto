@@ -170,6 +170,8 @@ message ConnectRequest {
 message ConnectInfo {
   enum ErrType {
     UNSPECIFIED       = 0; // success
+    UNAUTHORIZED      = 1; // not authorized to connect
+    UNAUTHENTICATED   = 5; // not logged in
     ALREADY_CONNECTED = 2; // success
     MUST_RESTART      = 7; // would-be-success, but kubeconfig has changed
 
@@ -184,9 +186,6 @@ message ConnectInfo {
 
     // failure: error talking to the on-laptop root daemon; error_text and error_category are set
     DAEMON_FAILED = 8;
-
-    reserved 1;
-    reserved 5;
   }
   ErrType error = 1;
 
@@ -210,9 +209,14 @@ message ConnectInfo {
   // the namespace that the connector is connected to.
   string namespace = 6;
 
+  string manager_install_id = 7;
+
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
 
   telepresence.manager.SessionInfo session_info = 10;
+
+  // cluster_id
+  // deprecated. Use manager_install_id
   string cluster_id = 11;
 
   daemon.DaemonStatus daemon_status = 13;
@@ -221,7 +225,6 @@ message ConnectInfo {
   repeated string mapped_namespaces = 15;
   repeated daemon.SubnetViaWorkload subnet_via_workloads = 18;
 
-  reserved 7;
   reserved 9;
 }
 

@@ -215,6 +215,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 
 	// Add whatever metadata we already have to scout
 	scout.SetMetadatum(ctx, "service_name", s.AgentName)
+	scout.SetMetadatum(ctx, "manager_install_id", s.status.ManagerInstallId)
 	scout.SetMetadatum(ctx, "cluster_id", s.status.ClusterId)
 	scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
 	scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))

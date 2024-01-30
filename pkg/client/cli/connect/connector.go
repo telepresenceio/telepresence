@@ -39,6 +39,19 @@ var (
 	ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
 )
 
+type ConnectError struct {
+	error
+	code connector.ConnectInfo_ErrType
+}
+
+func (ce *ConnectError) Code() connector.ConnectInfo_ErrType {
+	return ce.code
+}
+
+func (ce *ConnectError) Unwrap() error {
+	return ce.error
+}
+
 //nolint:gochecknoglobals // extension point
 var QuitDaemonFuncs = []func(context.Context){
 	quitHostConnector, quitDockerDaemons,
@@ -321,8 +334,6 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 	if userD.Containerized() && !proc.RunningInContainer() {
 		patcher.AnnotateConnectRequest(&request.ConnectRequest, docker.TpCache, userD.DaemonID.KubeContext)
 	}
-	cat := errcat.Unknown
-
 	session := func(ci *connector.ConnectInfo, started bool) *daemon.Session {
 		// Update the request from the connect info.
 		request.KubeFlags = ci.KubeFlags
@@ -374,6 +385,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 
 	connectResult := func(ci *connector.ConnectInfo) (*daemon.Session, error) {
 		var msg string
+		cat := errcat.Unknown
 		switch ci.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
 			ioutil.Printf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
@@ -392,7 +404,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 				cat = errcat.Category(ci.ErrorCategory)
 			}
 		}
-		return nil, cat.Newf("connector.Connect: %s", msg)
+		return nil, &ConnectError{error: cat.Newf("connector.Connect: %s", msg), code: ci.Error}
 	}
 
 	if request.Implicit {

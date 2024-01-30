@@ -263,6 +263,7 @@ func NewSession(
 		ClusterContext:   cluster.Kubeconfig.Context,
 		ClusterServer:    cluster.Kubeconfig.Server,
 		ClusterId:        cluster.GetClusterId(ctx),
+		ManagerInstallId: cluster.GetManagerInstallId(ctx),
 		SessionInfo:      tmgr.SessionInfo(),
 		ConnectionName:   tmgr.daemonID.Name,
 		KubeFlags:        tmgr.OriginalFlagMap,
@@ -863,10 +864,11 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 		}
 		if !(envEQ && s.Kubeconfig.ContextServiceAndFlagsEqual(config)) {
 			return &rpc.ConnectInfo{
-				Error:          rpc.ConnectInfo_MUST_RESTART,
-				ClusterContext: s.Kubeconfig.Context,
-				ClusterServer:  s.Kubeconfig.Server,
-				ClusterId:      s.GetClusterId(c),
+				Error:            rpc.ConnectInfo_MUST_RESTART,
+				ClusterContext:   s.Kubeconfig.Context,
+				ClusterServer:    s.Kubeconfig.Server,
+				ClusterId:        s.GetClusterId(c),
+				ManagerInstallId: s.GetManagerInstallId(c),
 			}
 		}
 	}
@@ -898,6 +900,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		ClusterContext:     cfg.Context,
 		ClusterServer:      cfg.Server,
 		ClusterId:          s.GetClusterId(c),
+		ManagerInstallId:   s.GetManagerInstallId(c),
 		SessionInfo:        s.SessionInfo(),
 		ConnectionName:     s.daemonID.Name,
 		KubeFlags:          s.OriginalFlagMap,

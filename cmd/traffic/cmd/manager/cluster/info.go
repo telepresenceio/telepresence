@@ -68,8 +68,8 @@ type info struct {
 	// when sending notifications to the client.
 	addAlsoProxy []*rpc.IPNet
 
-	// namespaceID is the UID of the manager's namespace
-	namespaceID string
+	// installID is the UID of the manager's namespace
+	installID string
 
 	// clusterID is the UID of the default namespace
 	clusterID string
@@ -106,17 +106,17 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	client := ki.CoreV1()
-	if oi.namespaceID, err = GetIDFunc(ctx, client, env.ManagerNamespace); err != nil {
+	if oi.installID, err = GetInstallIDFunc(ctx, client, env.ManagerNamespace); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
-		oi.namespaceID = IDZero
-		dlog.Warnf(ctx, "unable to get namespace \"%s\", will use default clusterID: %s: %v",
-			env.ManagerNamespace, oi.namespaceID, err)
+		oi.installID = IDZero
+		dlog.Warnf(ctx, "unable to get namespace \"%s\", will use default installID: %s: %v",
+			env.ManagerNamespace, oi.installID, err)
 	}
 
 	// backwards compat
 	// TODO delete after default ns licenses expire
-	if oi.clusterID, err = GetIDFunc(ctx, client, "default"); err != nil {
+	if oi.clusterID, err = GetInstallIDFunc(ctx, client, "default"); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = IDZero
@@ -389,7 +389,7 @@ func (oi *info) SetAdditionalAlsoProxy(ctx context.Context, subnets []*rpc.IPNet
 }
 
 func (oi *info) ID() string {
-	return oi.namespaceID
+	return oi.installID
 }
 
 func (oi *info) ClusterID() string {

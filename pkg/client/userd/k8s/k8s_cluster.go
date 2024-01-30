@@ -240,6 +240,11 @@ func (kc *Cluster) GetClusterId(ctx context.Context) string {
 	return clusterID
 }
 
+func (kc *Cluster) GetManagerInstallId(ctx context.Context) string {
+	managerID, _ := k8sapi.GetNamespaceID(ctx, kc.GetManagerNamespace())
+	return managerID
+}
+
 func (kc *Cluster) WithK8sInterface(c context.Context) context.Context {
 	return k8sapi.WithK8sInterface(c, kc.ki)
 }
