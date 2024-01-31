@@ -62,9 +62,15 @@ func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 			switch {
 			case err == nil:
 				kvf.Add(vi.Name, vi.Version)
-				if af, err := trafficAgentFQN(ctx); err == nil {
+				af, err := trafficAgentFQN(ctx)
+				switch status.Code(err) {
+				case codes.OK:
 					kvf.Add("Traffic Agent", af.FQN)
-				} else if status.Code(err) != codes.Unavailable {
+				case codes.Unimplemented:
+					kvf.Add("Traffic Agent", "not reported by traffic-manager")
+				case codes.Unavailable:
+					kvf.Add("Traffic Agent", "not currently available")
+				default:
 					kvf.Add("Traffic Agent", fmt.Sprintf("error: %v", err))
 				}
 			case status.Code(err) == codes.Unavailable:
