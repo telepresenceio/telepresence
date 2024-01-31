@@ -17,8 +17,10 @@ import (
 	"strings"
 	"time"
 
+	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dlog"
@@ -44,6 +46,78 @@ func (is *installSuite) SuiteName() string {
 func init() {
 	itest.AddNamespacePairSuite("-install", func(h itest.NamespacePair) itest.TestingSuite {
 		return &installSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
+	})
+}
+
+func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
+	helmConfig := &action.Configuration{}
+	err := helmConfig.Init(configFlags, namespace, "secrets", func(format string, args ...any) {
+		ctx := dlog.WithField(ctx, "source", "helm")
+		dlog.Infof(ctx, format, args...)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return helmConfig, nil
+}
+
+func (is *installSuite) Test_UpgradeRetainsValues() {
+	ctx := is.Context()
+	rq := is.Require()
+	rq.NoError(is.TelepresenceHelmInstall(ctx, false, "--set", "logLevel=debug"))
+	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
+
+	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
+	helmConfig, err := getHelmConfig(ctx, kc.ConfigFlags, is.ManagerNamespace())
+	rq.NoError(err)
+
+	getValues := func() (map[string]any, error) {
+		return action.NewGetValues(helmConfig).Run("traffic-manager")
+	}
+	containsKey := func(m map[string]any, key string) bool {
+		_, ok := m[key]
+		return ok
+	}
+
+	oldValues, err := getValues()
+	rq.NoError(err)
+
+	is.Run("default reuse-values", func() {
+		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace())
+		newValues, err := getValues()
+		if is.NoError(err) {
+			is.Equal(oldValues, newValues)
+		}
+	})
+
+	is.Run("default reset-values", func() {
+		// Setting a value means that the default behavior is to reset old values.
+		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace(), "--set", "apiPort=8765")
+		newValues, err := getValues()
+		if is.NoError(err) {
+			is.Equal(8765.0, newValues["apiPort"])
+			is.False(containsKey(newValues, "logLevel")) // Should be back at default
+		}
+	})
+
+	is.Run("explicit reuse-values", func() {
+		// Set new value and enforce merge with of old values.
+		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace(), "--set", "logLevel=debug", "--reuse-values")
+		newValues, err := getValues()
+		if is.NoError(err) {
+			is.Equal(8765.0, newValues["apiPort"])
+			is.Equal("debug", newValues["logLevel"])
+		}
+	})
+
+	is.Run("explicit reset-values", func() {
+		// Enforce reset of old values.
+		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace(), "--reset-values")
+		newValues, err := getValues()
+		if is.NoError(err) {
+			is.False(containsKey(newValues, "apiPort"))  // Should be back at default
+			is.False(containsKey(newValues, "logLevel")) // Should be back at default
+		}
 	})
 }
 

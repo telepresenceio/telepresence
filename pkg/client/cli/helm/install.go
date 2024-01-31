@@ -280,15 +280,25 @@ func ensureIsInstalled(
 	}
 
 	// OK, now install things.
-	var vals map[string]any
+	var providedVals map[string]any
 	if len(req.ValuesJson) > 0 {
-		if err := json.Unmarshal(req.ValuesJson, &vals); err != nil {
+		if err := json.Unmarshal(req.ValuesJson, &providedVals); err != nil {
 			return fmt.Errorf("unable to parse values JSON: %w", err)
 		}
-		vals = chartutil.CoalesceTables(vals, GetValuesFunc(ctx))
+	}
+
+	var vals map[string]any
+	if len(providedVals) > 0 {
+		vals = chartutil.CoalesceTables(providedVals, GetValuesFunc(ctx))
 	} else {
+		// No values were provided. This means that an upgrade should retain existing values unless
+		// reset-values is true.
+		if req.Type == Upgrade && !req.ResetValues {
+			req.ReuseValues = true
+		}
 		vals = GetValuesFunc(ctx)
 	}
+	dlog.Debugf(ctx, "reuse-values: %t, reset-values: %t, provided-values %s, values: %v", req.ReuseValues, req.ResetValues, providedVals, vals)
 
 	switch {
 	case existing == nil: // fresh install
