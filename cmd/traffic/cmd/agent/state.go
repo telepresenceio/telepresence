@@ -29,7 +29,7 @@ type State interface {
 	ManagerVersion() semver.Version
 	SessionInfo() *manager.SessionInfo
 	SetFileSharingPorts(ftp uint16, sftp uint16)
-	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
+	SetManager(ctx context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
 }
@@ -164,7 +164,7 @@ func (s *state) InterceptInfo(ctx context.Context, callerID, path string, contai
 	return &restapi.InterceptInfo{}, nil
 }
 
-func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
+func (s *state) SetManager(_ context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
 	s.manager = manager
 	s.sessionInfo = sessionInfo
 	s.mgrVer = version
