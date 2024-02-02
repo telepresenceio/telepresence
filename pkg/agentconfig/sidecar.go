@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"encoding/json"
 	"reflect"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -54,21 +55,20 @@ const (
 	K8SCreatedByLabel                    = "app.kubernetes.io/created-by"
 )
 
-type ReplacePolicy int
+type ReplacePolicy bool
 
-const (
-	// ReplacePolicyNever means that --replace is false.
-	ReplacePolicyNever ReplacePolicy = iota
-
-	// ReplacePolicyActive means that --replace is true, and the intercept is active.
-	ReplacePolicyActive
-
-	// ReplacePolicyInactive means that --replace is true, but the intercept is inactive.
-	ReplacePolicyInactive
-
-	// ReplacePolicyCurrent is used when we just want to keep the current setting.
-	ReplacePolicyCurrent
-)
+func (r *ReplacePolicy) UnmarshalJSON(data []byte) error {
+	var v bool
+	if err := json.Unmarshal(data, &v); err != nil {
+		var i int
+		if intErr := json.Unmarshal(data, &i); intErr != nil {
+			return err
+		}
+		v = i == 1
+	}
+	*r = ReplacePolicy(v)
+	return nil
+}
 
 // Intercept describes the mapping between a service port and an intercepted container port.
 type Intercept struct {

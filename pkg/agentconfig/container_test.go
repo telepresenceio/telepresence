@@ -1,7 +1,11 @@
 package agentconfig
 
 import (
+	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_prefixInterpolated(t *testing.T) {
@@ -68,4 +72,18 @@ func Test_prefixInterpolated(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_ReplacePolicy(t *testing.T) {
+	var cn Container
+	require.NoError(t, json.Unmarshal([]byte(`{"replace": 0}`), &cn))
+	assert.False(t, bool(cn.Replace))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace": 1}`), &cn))
+	assert.True(t, bool(cn.Replace))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace": 2}`), &cn))
+	assert.False(t, bool(cn.Replace))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace": false}`), &cn))
+	assert.False(t, bool(cn.Replace))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace": true}`), &cn))
+	assert.True(t, bool(cn.Replace))
 }

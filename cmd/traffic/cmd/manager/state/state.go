@@ -25,7 +25,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -63,7 +62,7 @@ type State interface {
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	EnsureAgent(context.Context, string, string) error
-	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, error)
+	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string)
 	DropIntercept(string)
 	FinalizeIntercept(ctx context.Context, intercept *rpc.InterceptInfo)

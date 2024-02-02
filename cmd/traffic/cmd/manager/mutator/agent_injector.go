@@ -179,7 +179,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		if scx, err = gc.Generate(ctx, wl, 0, scx); err != nil {
+		if scx, err = gc.Generate(ctx, wl, scx); err != nil {
 			return nil, err
 		}
 
@@ -245,7 +245,7 @@ func disableAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig
 podContainers:
 	for i, pc := range pod.Spec.Containers {
 		for _, cc := range config.Containers {
-			if cc.Name == pc.Name && cc.Replace == agentconfig.ReplacePolicyActive {
+			if cc.Name == pc.Name && cc.Replace {
 				if pc.Image == sleeperImage && slices.Equal(pc.Args, sleeperArgs) {
 					continue podContainers
 				}

@@ -149,7 +149,7 @@ func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Si
 					wl.GetName(), wl.GetNamespace(), cn.Name)
 				return true
 			}
-			if cn.Replace == agentconfig.ReplacePolicyActive {
+			if cn.Replace {
 				// Ensure that the replaced container is disabled
 				if !(found.Image == sleeperImage && slices.Equal(found.Args, sleeperArgs)) {
 					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod's container %s should be disabled",
@@ -304,7 +304,7 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorCo
 				changed = true
 				continue
 			}
-			ncx, err := gc.Generate(ctx, wl, 0, acx)
+			ncx, err := gc.Generate(ctx, wl, acx)
 			if err != nil {
 				return err
 			}
@@ -413,7 +413,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 			dlog.Error(ctx, err)
 			return
 		}
-		if acx, err := gc.Generate(ctx, wl, 0, ac); err != nil {
+		if acx, err := gc.Generate(ctx, wl, ac); err != nil {
 			dlog.Error(ctx, err)
 		} else if err = c.self.Store(ctx, acx, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
@@ -873,7 +873,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 			continue
 		}
 		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-		acn, err := cfg.Generate(ctx, wl, 0, ac)
+		acn, err := cfg.Generate(ctx, wl, ac)
 		if err != nil {
 			dlog.Error(ctx, err)
 			continue

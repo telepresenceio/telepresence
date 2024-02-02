@@ -29,7 +29,6 @@ type GeneratorConfig interface {
 	Generate(
 		ctx context.Context,
 		wl k8sapi.Workload,
-		replaceContainers agentconfig.ReplacePolicy,
 		existingConfig agentconfig.SidecarExt,
 	) (sc agentconfig.SidecarExt, err error)
 }
@@ -53,7 +52,6 @@ type BasicGeneratorConfig struct {
 func (cfg *BasicGeneratorConfig) Generate(
 	ctx context.Context,
 	wl k8sapi.Workload,
-	replaceContainers agentconfig.ReplacePolicy,
 	existingConfig agentconfig.SidecarExt,
 ) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "agentmap.Generate")
@@ -96,7 +94,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
-		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, portNumber, ccs, replaceContainers, existingConfig); err != nil {
+		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, portNumber, ccs, existingConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -130,7 +128,6 @@ func appendAgentContainerConfigs(
 	pod *core.PodTemplateSpec,
 	portNumber func(int32) uint16,
 	ccs []*agentconfig.Container,
-	replaceContainers agentconfig.ReplacePolicy,
 	existingConfig agentconfig.SidecarExt,
 ) ([]*agentconfig.Container, error) {
 	portNameOrNumber := pod.Annotations[ServicePortAnnotation]
@@ -173,10 +170,11 @@ nextSvcPort:
 		}
 
 		// Validate that we're not being asked to clobber an existing configuration
+		var replaceContainer agentconfig.ReplacePolicy
 		if existingConfig != nil {
 			for _, cc := range existingConfig.AgentConfig().Containers {
 				if cc.Name == cn.Name {
-					replaceContainers = cc.Replace
+					replaceContainer = cc.Replace
 					break
 				}
 			}
@@ -202,7 +200,7 @@ nextSvcPort:
 			MountPoint: agentconfig.MountPrefixApp + "/" + cn.Name,
 			Mounts:     mounts,
 			Intercepts: []*agentconfig.Intercept{ic},
-			Replace:    replaceContainers,
+			Replace:    replaceContainer,
 		})
 	}
 	return ccs, nil
