@@ -3,16 +3,16 @@ kind: Deployment
 metadata:
   name: "manual-inject"
   labels:
-    service: manual-inject
+    app: manual-inject
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: manual-inject
+      app: manual-inject
   template:
     metadata:
       labels:
-        service: manual-inject
+        app: manual-inject
     spec:
       containers:
         - name: echo-container

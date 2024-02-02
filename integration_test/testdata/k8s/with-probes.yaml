@@ -7,14 +7,14 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      service: with-probes
+      app: with-probes
   template:
     metadata:
       annotations:
         consul.hashicorp.com/connect-inject: 'false'
         sidecar.istio.io/inject: 'false'
       labels:
-        service: with-probes
+        app: with-probes
     spec:
       containers:
         - name: sample-app
@@ -42,11 +42,11 @@ kind: Service
 metadata:
   name: with-probes
   labels:
-    service: with-probes
+    app: with-probes
 spec:
   ports:
     - port: 80
       name: http
       targetPort: http
   selector:
-    service: with-probes
+    app: with-probes

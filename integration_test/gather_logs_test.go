@@ -137,7 +137,7 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 		10*time.Second,
 		2*time.Second,
 	)
-	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherOne)
+	s.CapturePodLogs(ctx, svc, "traffic-agent", otherOne)
 	itest.TelepresenceDisconnectOk(ctx)
 
 	itest.TelepresenceOk(ctx, "connect", "--namespace", otherTwo, "--manager-namespace", s.ManagerNamespace())
@@ -150,7 +150,7 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 		10*time.Second,
 		2*time.Second,
 	)
-	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", svc), "traffic-agent", otherTwo)
+	s.CapturePodLogs(ctx, svc, "traffic-agent", otherTwo)
 	itest.TelepresenceOk(ctx, "leave", svc)
 
 	bothNsRx := fmt.Sprintf("(?:%s|%s)", otherOne, otherTwo)

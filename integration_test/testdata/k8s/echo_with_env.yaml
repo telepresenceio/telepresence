@@ -6,7 +6,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: echo-easy
+    app: echo-easy
   ports:
     - name: proxied
       port: 80
@@ -17,16 +17,16 @@ kind: Deployment
 metadata:
   name: "echo-easy"
   labels:
-    service: echo-easy
+    app: echo-easy
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: echo-easy
+      app: echo-easy
   template:
     metadata:
       labels:
-        service: echo-easy
+        app: echo-easy
     spec:
       containers:
         - name: echo-easy

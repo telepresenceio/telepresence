@@ -50,7 +50,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	// Scale up again (start intercepted pod)
 	assert.NoError(s.Kubectl(ctx, "scale", "deploy", s.ServiceName(), "--replicas", "1"))
 	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 1 }, itest.PodCreateTimeout(ctx), 6*time.Second)
-	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", s.ServiceName()), "traffic-agent", s.AppNamespace())
+	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
 
 	// Verify that intercept becomes active
 	assert.Eventually(func() bool {
@@ -98,12 +98,12 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 			func() bool {
 				return len(s.runningPods(ctx)) == 1
 			}, 15*time.Second, time.Second)
-		s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", s.ServiceName()), "traffic-agent", s.AppNamespace())
+		s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
 	}()
 
 	// Wait for second pod to arrive
 	assert.Eventually(func() bool { return len(s.runningPods(ctx)) == 2 }, itest.PodCreateTimeout(ctx), 6*time.Second)
-	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", s.ServiceName()), "traffic-agent", s.AppNamespace())
+	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
 
 	// Delete the currently intercepted pod
 	require.NoError(s.Kubectl(ctx, "delete", "pod", currentPod))
@@ -119,7 +119,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 			}
 			return len(pods) == 2
 		}, 15*time.Second, time.Second)
-	s.CapturePodLogs(ctx, fmt.Sprintf("app=%s", s.ServiceName()), "traffic-agent", s.AppNamespace())
+	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
 
 	// Verify that intercept is still active
 	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `\s+State\s*: ([^\n]+)\n`))

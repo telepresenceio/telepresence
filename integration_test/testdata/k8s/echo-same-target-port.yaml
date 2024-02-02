@@ -6,7 +6,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: echo-stp
+    app: echo-stp
   ports:
     - name: eighty
       port: 80
@@ -20,16 +20,16 @@ kind: Deployment
 metadata:
   name: echo-stp
   labels:
-    service: echo-stp
+    app: echo-stp
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: echo-stp
+      app: echo-stp
   template:
     metadata:
       labels:
-        service: echo-stp
+        app: echo-stp
     spec:
       containers:
         - name: echo-stp

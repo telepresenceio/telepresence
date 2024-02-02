@@ -5,7 +5,7 @@ metadata:
   name: subsonic
 spec:
   selector:
-    service: subsonic
+    app: subsonic
   clusterIP: None
   ports:
     - name: proxied
@@ -17,16 +17,16 @@ kind: Deployment
 metadata:
   name: echo-subsonic
   labels:
-    service: subsonic
+    app: subsonic
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: subsonic
+      app: subsonic
   template:
     metadata:
       labels:
-        service: subsonic
+        app: subsonic
     spec:
       hostname: echo
       subdomain: subsonic

@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -60,48 +61,58 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 	ctx := s.Context()
 	require := s.Require()
 
-	n1 := "container_replaced"
+	const (
+		n1 = "container_replaced"
+		c1 = "hello-container-1"
+		n2 = "container_kept"
+		c2 = "hello-container-2"
+	)
+
 	localPort1, cancel1 := itest.StartLocalHttpEchoServer(ctx, n1)
 	defer cancel1()
 
-	n2 := "container_kept"
 	localPort2, cancel2 := itest.StartLocalHttpEchoServer(ctx, n2)
 	defer cancel2()
 
 	tests := []struct {
-		name      string
-		iceptName string
-		replace   bool
-		localPort int
-		port      uint16
+		name         string
+		iceptName    string
+		appContainer string
+		replace      bool
+		localPort    int
+		port         uint16
 	}{
 		{
-			name:      n1,
-			iceptName: n1,
-			replace:   true,
-			localPort: localPort1,
-			port:      80,
+			name:         n1,
+			iceptName:    n1,
+			appContainer: c1,
+			replace:      true,
+			localPort:    localPort1,
+			port:         80,
 		},
 		{
-			name:      n2,
-			iceptName: n2,
-			replace:   false,
-			localPort: localPort2,
-			port:      81,
+			name:         n2,
+			iceptName:    n2,
+			appContainer: c2,
+			replace:      false,
+			localPort:    localPort2,
+			port:         81,
 		},
 		{
-			name:      "container_replace_kept",
-			iceptName: n1,
-			replace:   false,
-			localPort: localPort1,
-			port:      80,
+			name:         "container_replace_kept",
+			iceptName:    n1,
+			appContainer: c1,
+			replace:      false,
+			localPort:    localPort1,
+			port:         80,
 		},
 		{
-			name:      "container_kept_replaced",
-			iceptName: n2,
-			replace:   true,
-			localPort: localPort2,
-			port:      81,
+			name:         "container_kept_replaced",
+			iceptName:    n2,
+			appContainer: c2,
+			replace:      true,
+			localPort:    localPort2,
+			port:         81,
 		},
 	}
 
@@ -116,8 +127,13 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			}
 			args = append(args, "--port", fmt.Sprintf("%d:%d", tt.localPort, tt.port), "--output", "json", "--detailed-output", "--workload", s.serviceName, tt.iceptName)
 			jsOut := itest.TelepresenceOk(ctx, args...)
+			agentCaptureCtx, agentCaptureCancel := context.WithCancel(ctx)
+			s.CapturePodLogs(agentCaptureCtx, s.serviceName, "traffic-agent", s.AppNamespace())
+
 			defer func() {
+				agentCaptureCancel()
 				itest.TelepresenceOk(ctx, "leave", tt.iceptName)
+				s.CapturePodLogs(ctx, s.serviceName, tt.appContainer, s.AppNamespace())
 				s.Eventually(func() bool {
 					out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", iputil.JoinHostPort(s.serviceName, tt.port))
 					if err != nil {

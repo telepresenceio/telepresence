@@ -152,7 +152,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 		itest.TelepresenceOk(ctx, "loglevel", "trace")
 		defer itest.TelepresenceOk(ctx, "loglevel", "debug")
 		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--service", "echo-udp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
-		s.CapturePodLogs(ctx, "app="+dep, "traffic-agent", s.AppNamespace())
+		s.CapturePodLogs(ctx, dep, "traffic-agent", s.AppNamespace())
 		defer itest.TelepresenceOk(ctx, "leave", dep)
 
 		pingPong := func(conn net.Conn, msg string) {

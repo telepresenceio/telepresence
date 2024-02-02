@@ -155,7 +155,7 @@ func (s *mountsSuite) Test_CollidingMounts() {
 			defer itest.TelepresenceOk(ctx, "leave", "hello")
 			require.Contains(stdout, "Using Deployment hello")
 			if i == 0 {
-				s.CapturePodLogs(ctx, "app=hello", "traffic-agent", s.AppNamespace())
+				s.CapturePodLogs(ctx, "hello", "traffic-agent", s.AppNamespace())
 			} else {
 				// Mounts are sometimes slow
 				dtime.SleepWithContext(ctx, 3*time.Second)

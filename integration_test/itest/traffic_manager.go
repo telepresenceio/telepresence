@@ -30,7 +30,7 @@ func (th *trafficManager) setup(ctx context.Context) bool {
 	if t.Failed() {
 		return false
 	}
-	th.CapturePodLogs(ctx, "app=traffic-manager", "", th.ManagerNamespace())
+	th.CapturePodLogs(ctx, "traffic-manager", "", th.ManagerNamespace())
 	return true
 }
 

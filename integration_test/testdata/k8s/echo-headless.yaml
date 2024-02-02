@@ -7,7 +7,7 @@ spec:
   type: ClusterIP
   clusterIP: None
   selector:
-    service: echo-headless
+    app: echo-headless
   ports:
   - name: http
     port: 8080
@@ -18,17 +18,17 @@ kind: StatefulSet
 metadata:
   name: echo-headless
   labels:
-    service: echo-headless
+    app: echo-headless
 spec:
   replicas: 1
   serviceName: echo-headless
   selector:
     matchLabels:
-      service: echo-headless
+      app: echo-headless
   template:
     metadata:
       labels:
-        service: echo-headless
+        app: echo-headless
     spec:
       containers:
         - name: echo-headless

@@ -6,7 +6,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: rs-echo
+    app: rs-echo
   ports:
     - name: http
       port: 80
@@ -17,16 +17,16 @@ kind: ReplicaSet
 metadata:
   name: rs-echo
   labels:
-    service: rs-echo
+    app: rs-echo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: rs-echo
+      app: rs-echo
   template:
     metadata:
       labels:
-        service: rs-echo
+        app: rs-echo
     spec:
       containers:
         - name: rs-echo
