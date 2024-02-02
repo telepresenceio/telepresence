@@ -61,6 +61,13 @@ items:
           also ensures that the user- and root-daemons are merged in this
           scenario when the container runs as root.
       - type: bugfix
+        title: Remote mounts when intercepting with the --replace flag.
+        body: >-
+          A <code>telepresence intercept --replace</code> did not correctly mount all volumes, because when the
+          intercepted container was removed, its mounts were no longer visible to the agent-injector when it
+          was subjected to a second invocation. The container is now kept in place, but with an image that
+          just sleeps infinitely.
+      - type: bugfix
         title: Kubeconfig exec authentication with context names containing colon didn't work on Windows
         body: >-
           The logic added to allow the root daemon to connect directly to the cluster using the user daemon as a proxy

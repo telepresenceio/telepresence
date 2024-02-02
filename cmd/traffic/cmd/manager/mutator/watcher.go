@@ -3,6 +3,7 @@ package mutator
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -143,16 +144,22 @@ func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Si
 					break
 				}
 			}
+			if found == nil {
+				dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod should contain container %s",
+					wl.GetName(), wl.GetNamespace(), cn.Name)
+				return true
+			}
 			if cn.Replace == agentconfig.ReplacePolicyActive {
-				// Ensure that the replaced container is not present
-				if found != nil {
-					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod should not contain replaced container %s",
+				// Ensure that the replaced container is disabled
+				if !(found.Image == sleeperImage && slices.Equal(found.Args, sleeperArgs)) {
+					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod's container %s should be disabled",
 						wl.GetName(), wl.GetNamespace(), cn.Name)
 					return true
 				}
 			} else {
-				if found == nil {
-					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod should contain container %s",
+				// Ensure that the replaced container is not disabled
+				if found.Image == sleeperImage && slices.Equal(found.Args, sleeperArgs) {
+					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod's container %s should not be disabled",
 						wl.GetName(), wl.GetNamespace(), cn.Name)
 					return true
 				}
