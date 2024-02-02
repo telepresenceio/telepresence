@@ -19,6 +19,7 @@ func (s *connectedSuite) Test_PrefixInterpolated() {
 	}()
 
 	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc)
+	defer itest.TelepresenceOk(ctx, "leave", svc)
 	out, err := s.KubectlOut(ctx, "get", "pod", "-o", "json", "-l", "service="+svc)
 	rq.NoError(err)
 

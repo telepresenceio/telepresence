@@ -788,7 +788,7 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
 	stdout, stderr, err := Telepresence(ctx, args...)
-	assert.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
+	require.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
 	if err == nil {
 		if strings.HasPrefix(stderr, "Warning:") && !strings.ContainsRune(stderr, '\n') {
 			// Accept warnings, but log them.
@@ -990,7 +990,12 @@ func StartLocalHttpEchoServerWithHost(ctx context.Context, name string, host str
 				fmt.Fprintf(w, "%s from intercept at %s", name, r.URL.Path)
 			}),
 		}
-		_ = sc.Serve(ctx, l)
+		err := sc.Serve(ctx, l)
+		if err != nil {
+			dlog.Errorf(ctx, "http server on %s exited with error: %v", host, err)
+		} else {
+			dlog.Errorf(ctx, "http server on %s exited", host)
+		}
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
 }

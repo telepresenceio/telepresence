@@ -152,8 +152,8 @@ func (s *mountsSuite) Test_CollidingMounts() {
 			ctx := s.Context()
 			require := s.Require()
 			stdout := itest.TelepresenceOk(ctx, "intercept", "hello", "--mount", tt.mountPoint, "--port", fmt.Sprintf("%d:%d", tt.svcPort, tt.svcPort))
-			require.Contains(stdout, "Using Deployment hello")
 			defer itest.TelepresenceOk(ctx, "leave", "hello")
+			require.Contains(stdout, "Using Deployment hello")
 			if i == 0 {
 				s.CapturePodLogs(ctx, "app=hello", "traffic-agent", s.AppNamespace())
 			} else {
