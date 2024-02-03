@@ -59,7 +59,6 @@ func (s *interceptFlagSuite) TearDownSuite() {
 //   - Responses after the intercepts end are from the cluster
 func (s *interceptFlagSuite) Test_ContainerReplace() {
 	ctx := s.Context()
-	require := s.Require()
 
 	const (
 		n1 = "container_replaced"
@@ -149,6 +148,7 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			}()
 
 			var ii intercept.Info
+			require := s.Require()
 			require.NoError(json.Unmarshal([]byte(jsOut), &ii))
 			require.Equal(ii.Name, tt.iceptName)
 

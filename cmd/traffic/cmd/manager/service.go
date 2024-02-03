@@ -598,12 +598,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	if ciReq.InterceptSpec.Replace {
-		err := s.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, info *rpc.InterceptInfo) error {
-			dlog.Debugf(ctx, "Restoring app container for %s", info.Id)
-			ciReq.InterceptSpec.Replace = false
-			_, err := s.state.PrepareIntercept(ctx, ciReq)
-			return err
-		})
+		err := s.state.AddInterceptFinalizer(interceptInfo.Id, s.state.RestoreAppContainer)
 		if err != nil {
 			// The intercept's been created but we can't finalize it...
 			dlog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptInfo.Id, err)
@@ -644,11 +639,11 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	ctx = managerutil.WithSessionInfo(ctx, riReq.GetSession())
 	sessionID := riReq.GetSession().GetSessionId()
 	name := riReq.Name
-	client := s.state.GetClient(sessionID)
 
 	dlog.Debugf(ctx, "RemoveIntercept called: %s", name)
 
-	if s.state.GetClient(sessionID) == nil {
+	client := s.state.GetClient(sessionID)
+	if client == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
@@ -679,9 +674,9 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 	dlog.Debugf(ctx, "ReviewIntercept called: %s - %s", ceptID, rIReq.Disposition)
 
-	agent := s.state.GetAgent(sessionID)
+	agent := s.state.GetActiveAgent(sessionID)
 	if agent == nil {
-		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
+		return &empty.Empty{}, nil
 	}
 
 	rIReq.Environment = s.removeExcludedEnvVars(ctx, rIReq.Environment)
