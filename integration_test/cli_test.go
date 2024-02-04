@@ -7,6 +7,7 @@ import (
 	"regexp"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type cliSuite struct {
@@ -127,4 +128,13 @@ func (s *cliSuite) Test_StatusWithJSON() {
 	}
 	s.False(status.RootDaemon.Running)
 	s.False(status.UserDaemon.Running)
+}
+
+func (s *cliSuite) Test_ConfigViewClientOnly() {
+	ctx := itest.WithConfig(s.Context(), func(c client.Config) {
+		c.Timeouts().PrivateConnectivityCheck = 0
+	})
+	out := itest.TelepresenceOk(ctx, "config", "view", "--client-only")
+	// Ensure that zero (but not default) values are included in output
+	s.Regexp(regexp.MustCompile(`\sconnectivityCheck\s*:\s*0s\n`), out)
 }

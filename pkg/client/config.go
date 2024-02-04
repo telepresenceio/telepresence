@@ -176,31 +176,31 @@ type Timeouts struct {
 	// make them easy to grep for (`grep Private`) later.
 
 	// PrivateAgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
-	PrivateAgentInstall time.Duration `json:"agentInstall,omitempty" yaml:"agentInstall,omitempty"`
+	PrivateAgentInstall time.Duration `json:"agentInstall" yaml:"agentInstall"`
 	// PrivateApply is how long to wait for a k8s manifest to be applied
-	PrivateApply time.Duration `json:"apply,omitempty" yaml:"apply,omitempty"`
+	PrivateApply time.Duration `json:"apply" yaml:"apply"`
 	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
-	PrivateClusterConnect time.Duration `json:"clusterConnect,omitempty" yaml:"clusterConnect,omitempty"`
+	PrivateClusterConnect time.Duration `json:"clusterConnect" yaml:"clusterConnect"`
 	// PrivateConnectivityCheck timeout used when checking if cluster is already proxied on the workstation
-	PrivateConnectivityCheck time.Duration `json:"connectivityCheck,omitempty" yaml:"connectivityCheck,omitempty"`
+	PrivateConnectivityCheck time.Duration `json:"connectivityCheck" yaml:"connectivityCheck"`
 	// PrivateEndpointDial is how long to wait for a Dial to a service for which the IP is known.
-	PrivateEndpointDial time.Duration `json:"endpointDial,omitempty" yaml:"endpointDial,omitempty"`
+	PrivateEndpointDial time.Duration `json:"endpointDial" yaml:"endpointDial"`
 	// PrivateHelm is how long to wait for any helm operation.
-	PrivateHelm time.Duration `json:"helm,omitempty" yaml:"helm,omitempty"`
+	PrivateHelm time.Duration `json:"helm" yaml:"helm"`
 	// PrivateIntercept is the time to wait for an intercept after the agents has been installed
-	PrivateIntercept time.Duration `json:"intercept,omitempty" yaml:"intercept,omitempty"`
+	PrivateIntercept time.Duration `json:"intercept" yaml:"intercept"`
 	// PrivateRoundtripLatency is how much to add  to the EndpointDial timeout when establishing a remote connection.
-	PrivateRoundtripLatency time.Duration `json:"roundtripLatency,omitempty" yaml:"roundtripLatency,omitempty"`
+	PrivateRoundtripLatency time.Duration `json:"roundtripLatency" yaml:"roundtripLatency"`
 	// PrivateProxyDial is how long to wait for the proxy to establish an outbound connection
-	PrivateProxyDial time.Duration `json:"proxyDial,omitempty" yaml:"proxyDial,omitempty"`
+	PrivateProxyDial time.Duration `json:"proxyDial" yaml:"proxyDial"`
 	// PrivateTrafficManagerConnect is how long to wait for the traffic-manager API to connect
-	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty" yaml:"trafficManagerAPI,omitempty"`
+	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI" yaml:"trafficManagerAPI"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
-	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty" yaml:"trafficManagerConnect,omitempty"`
+	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect" yaml:"trafficManagerConnect"`
 	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
-	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite,omitempty" yaml:"ftpReadWrite,omitempty"`
+	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite" yaml:"ftpReadWrite"`
 	// PrivateFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
-	PrivateFtpShutdown time.Duration `json:"ftpShutdown,omitempty" yaml:"ftpShutdown,omitempty"`
+	PrivateFtpShutdown time.Duration `json:"ftpShutdown" yaml:"ftpShutdown"`
 }
 
 type TimeoutID int
@@ -358,6 +358,7 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 	if node.Kind != yaml.MappingNode {
 		return errors.New(WithLoc("timeouts must be an object", node))
 	}
+	*t = defaultTimeouts
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
@@ -457,43 +458,43 @@ func (t Timeouts) IsZero() bool {
 // MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct.
 func (t Timeouts) MarshalYAML() (any, error) {
 	tm := make(map[string]string)
-	if t.PrivateAgentInstall != 0 && t.PrivateAgentInstall != defaultTimeoutsAgentInstall {
+	if t.PrivateAgentInstall != defaultTimeoutsAgentInstall {
 		tm["agentInstall"] = t.PrivateAgentInstall.String()
 	}
-	if t.PrivateApply != 0 && t.PrivateApply != defaultTimeoutsApply {
+	if t.PrivateApply != defaultTimeoutsApply {
 		tm["apply"] = t.PrivateApply.String()
 	}
 	if t.PrivateClusterConnect != 0 && t.PrivateClusterConnect != defaultTimeoutsClusterConnect {
 		tm["clusterConnect"] = t.PrivateClusterConnect.String()
 	}
-	if t.PrivateConnectivityCheck != 0 && t.PrivateConnectivityCheck != defaultTimeoutsConnectivityCheck {
+	if t.PrivateConnectivityCheck != defaultTimeoutsConnectivityCheck {
 		tm["connectivityCheck"] = t.PrivateConnectivityCheck.String()
 	}
-	if t.PrivateEndpointDial != 0 && t.PrivateEndpointDial != defaultTimeoutsEndpointDial {
+	if t.PrivateEndpointDial != defaultTimeoutsEndpointDial {
 		tm["endpointDial"] = t.PrivateEndpointDial.String()
 	}
-	if t.PrivateHelm != 0 && t.PrivateHelm != defaultTimeoutsHelm {
+	if t.PrivateHelm != defaultTimeoutsHelm {
 		tm["helm"] = t.PrivateHelm.String()
 	}
-	if t.PrivateIntercept != 0 && t.PrivateIntercept != defaultTimeoutsIntercept {
+	if t.PrivateIntercept != defaultTimeoutsIntercept {
 		tm["intercept"] = t.PrivateIntercept.String()
 	}
-	if t.PrivateProxyDial != 0 && t.PrivateProxyDial != defaultTimeoutsProxyDial {
+	if t.PrivateProxyDial != defaultTimeoutsProxyDial {
 		tm["proxyDial"] = t.PrivateProxyDial.String()
 	}
-	if t.PrivateRoundtripLatency != 0 && t.PrivateRoundtripLatency != defaultTimeoutsRoundtripLatency {
+	if t.PrivateRoundtripLatency != defaultTimeoutsRoundtripLatency {
 		tm["roundtripLatency"] = t.PrivateRoundtripLatency.String()
 	}
-	if t.PrivateTrafficManagerAPI != 0 && t.PrivateTrafficManagerAPI != defaultTimeoutsTrafficManagerAPI {
+	if t.PrivateTrafficManagerAPI != defaultTimeoutsTrafficManagerAPI {
 		tm["trafficManagerAPI"] = t.PrivateTrafficManagerAPI.String()
 	}
-	if t.PrivateTrafficManagerConnect != 0 && t.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
+	if t.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
 		tm["trafficManagerConnect"] = t.PrivateTrafficManagerConnect.String()
 	}
-	if t.PrivateFtpReadWrite != 0 && t.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
+	if t.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
 		tm["ftpReadWrite"] = t.PrivateFtpReadWrite.String()
 	}
-	if t.PrivateFtpShutdown != 0 && t.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
+	if t.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
 		tm["ftpShutdown"] = t.PrivateFtpShutdown.String()
 	}
 	return tm, nil
@@ -568,6 +569,7 @@ func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
 		return errors.New(WithLoc("timeouts must be an object", node))
 	}
 
+	*ll = defaultLogLevels
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
@@ -622,6 +624,7 @@ func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
 		return errors.New(WithLoc("images must be an object", node))
 	}
 
+	*img = defaultImages
 	ms := node.Content
 	top := len(ms)
 	for i := 0; i < top; i += 2 {
