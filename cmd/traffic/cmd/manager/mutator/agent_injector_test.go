@@ -1800,5 +1800,5 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentma
 	default:
 		t.Fatalf("bad workload type %T", wi)
 	}
-	return gc.Generate(ctx, wl, 0, nil)
+	return gc.Generate(ctx, wl, nil)
 }

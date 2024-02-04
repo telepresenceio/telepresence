@@ -57,7 +57,7 @@ func (s *interceptMountSuite) SetupSuite() {
 	port, s.cancelLocal = itest.StartLocalHttpEchoServer(ctx, s.ServiceName())
 	stdout := itest.TelepresenceOk(ctx, "intercept", s.ServiceName(), "--mount", s.mountPoint, "--port", strconv.Itoa(port))
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
-	s.CapturePodLogs(ctx, "app=echo", "traffic-agent", s.AppNamespace())
+	s.CapturePodLogs(ctx, "echo", "traffic-agent", s.AppNamespace())
 }
 
 func (s *interceptMountSuite) TearDownSuite() {
@@ -191,7 +191,7 @@ func (s *singleServiceSuite) Test_NoInterceptorResponse() {
 	}, 10*time.Second, time.Second)
 
 	time.Sleep(2000 * time.Millisecond) // List is really fast now, so give the mount some time to become effective
-	s.CapturePodLogs(ctx, "app="+s.ServiceName(), "traffic-agent", s.AppNamespace())
+	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
 
 	mountPoint := filepath.Join(nwd, "rel-dir")
 	st, err := os.Stat(mountPoint)

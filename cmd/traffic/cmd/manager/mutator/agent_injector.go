@@ -179,7 +179,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		if scx, err = gc.Generate(ctx, wl, 0, scx); err != nil {
+		if scx, err = gc.Generate(ctx, wl, scx); err != nil {
 			return nil, err
 		}
 
@@ -196,7 +196,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 
 	var patches PatchOps
 	config := scx.AgentConfig()
-	patches = deleteAppContainer(ctx, pod, config, patches)
+	patches = disableAppContainer(ctx, pod, config, patches)
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
@@ -237,16 +237,51 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 	return false
 }
 
-func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
+const sleeperImage = "alpine:latest"
+
+var sleeperArgs = []string{"sleep", "infinity"} //nolint:gochecknoglobals // constant
+
+func disableAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
 podContainers:
 	for i, pc := range pod.Spec.Containers {
 		for _, cc := range config.Containers {
-			if cc.Name == pc.Name && cc.Replace == agentconfig.ReplacePolicyActive {
+			if cc.Name == pc.Name && cc.Replace {
+				if pc.Image == sleeperImage && slices.Equal(pc.Args, sleeperArgs) {
+					continue podContainers
+				}
 				patches = append(patches, PatchOperation{
-					Op:   "remove",
-					Path: fmt.Sprintf("/spec/containers/%d", i),
+					Op:    "replace",
+					Path:  fmt.Sprintf("/spec/containers/%d/image", i),
+					Value: sleeperImage,
 				})
-				dlog.Debugf(ctx, "Deleted container %s", pc.Name)
+				argsOp := "add"
+				if len(pc.Args) > 0 {
+					argsOp = "replace"
+				}
+				patches = append(patches, PatchOperation{
+					Op:    argsOp,
+					Path:  fmt.Sprintf("/spec/containers/%d/args", i),
+					Value: sleeperArgs,
+				})
+				if pc.StartupProbe != nil {
+					patches = append(patches, PatchOperation{
+						Op:   "remove",
+						Path: fmt.Sprintf("/spec/containers/%d/startupProbe", i),
+					})
+				}
+				if pc.LivenessProbe != nil {
+					patches = append(patches, PatchOperation{
+						Op:   "remove",
+						Path: fmt.Sprintf("/spec/containers/%d/livenessProbe", i),
+					})
+				}
+				if pc.ReadinessProbe != nil {
+					patches = append(patches, PatchOperation{
+						Op:   "remove",
+						Path: fmt.Sprintf("/spec/containers/%d/readinessProbe", i),
+					})
+				}
+				dlog.Debugf(ctx, "Disabled container %s", pc.Name)
 				continue podContainers
 			}
 		}

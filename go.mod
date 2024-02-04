@@ -12,7 +12,7 @@ require (
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/datawire/go-ftpserver v0.1.3
-	github.com/datawire/go-fuseftp/rpc v0.4.2
+	github.com/datawire/go-fuseftp/rpc v0.4.4
 	github.com/datawire/k8sapi v0.1.4
 	github.com/datawire/metriton-go-client v0.1.1
 	github.com/docker/docker v24.0.7+incompatible

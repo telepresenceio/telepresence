@@ -6,7 +6,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: echo-w-sidecars
+    app: echo-w-sidecars
   ports:
     - name: proxied
       port: 80
@@ -17,16 +17,16 @@ kind: Deployment
 metadata:
   name: echo-w-sidecars
   labels:
-    service: echo-w-sidecars
+    app: echo-w-sidecars
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: echo-w-sidecars
+      app: echo-w-sidecars
   template:
     metadata:
       labels:
-        service: echo-w-sidecars
+        app: echo-w-sidecars
     spec:
       containers:
         - name: echo-main

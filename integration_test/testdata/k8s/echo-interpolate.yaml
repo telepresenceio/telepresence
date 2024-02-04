@@ -13,7 +13,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: echo-interpolate
+    app: echo-interpolate
   ports:
     - name: proxied
       port: 80
@@ -24,16 +24,16 @@ kind: Deployment
 metadata:
   name: echo-interpolate
   labels:
-    service: echo-interpolate
+    app: echo-interpolate
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: echo-interpolate
+      app: echo-interpolate
   template:
     metadata:
       labels:
-        service: echo-interpolate
+        app: echo-interpolate
     spec:
       containers:
         - name: echo-interpolate

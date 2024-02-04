@@ -47,6 +47,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -460,61 +461,97 @@ func (s *cluster) RootdPProf() uint16 {
 }
 
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
-	var pods string
+	var pods []string
 	for i := 0; ; i++ {
-		var err error
-		pods, err = KubectlOut(ctx, ns, "get", "pods", "--field-selector", "status.phase=Running", "-l", app, "-o", "jsonpath={.items[*].metadata.name}")
-		if err != nil {
-			dlog.Errorf(ctx, "failed to get %s pod in namespace %s: %v", app, ns, err)
-			return
+		runningPods := RunningPods(ctx, app, ns)
+		if len(runningPods) > 0 {
+			if container == "" {
+				pods = runningPods
+			} else {
+				for _, pod := range runningPods {
+					cns, err := KubectlOut(ctx, ns, "get", "pods", pod, "-o", "jsonpath={.spec.containers[*].name}")
+					if err == nil && slice.Contains(strings.Split(cns, " "), container) {
+						pods = append(pods, pod)
+					}
+				}
+			}
 		}
-		pods = strings.TrimSpace(pods)
-		if pods != "" || i == 5 {
+		if len(pods) > 0 || i == 5 {
 			break
 		}
 		dtime.SleepWithContext(ctx, 2*time.Second)
 	}
-	if pods == "" {
-		dlog.Errorf(ctx, "found no %s pods in namespace %s", app, ns)
+
+	if len(pods) == 0 {
+		if container == "" {
+			dlog.Errorf(ctx, "found no %s pods in namespace %s", app, ns)
+		} else {
+			dlog.Errorf(ctx, "found no %s pods in namespace %s with a %s container", app, ns, container)
+		}
 		return
 	}
-
-	// Let command die when the pod that it logs die
-	ctx = context.WithoutCancel(ctx)
-
 	present := struct{}{}
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
-	dlog.Infof(ctx, "Capturing logs for pods %q", pods)
-	for _, pod := range strings.Split(pods, " ") {
-		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
-			continue
-		}
-		logFile, err := os.Create(
-			filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
-		if err != nil {
-			s.logCapturingPods.Delete(pod)
-			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
-			return
-		}
+	pod := pods[0]
+	key := pod
+	if container != "" {
+		key += "/" + container
+	}
+	if _, ok := s.logCapturingPods.LoadOrStore(key, present); ok {
+		return
+	}
 
-		args := []string{"--namespace", ns, "logs", "-f", pod}
-		if container != "" {
-			args = append(args, "-c", container)
-		}
-		cmd := Command(ctx, "kubectl", args...)
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
-		go func(pod string) {
-			defer func() {
-				_ = logFile.Close()
-				s.logCapturingPods.Delete(pod)
-			}()
-			if err := cmd.Run(); err != nil {
-				dlog.Errorf(ctx, "log capture failed: %v", err)
+	logFile, err := os.Create(
+		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
+	if err != nil {
+		s.logCapturingPods.Delete(pod)
+		dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
+		return
+	}
+
+	args := []string{"--namespace", ns, "logs", "-f", pod}
+	if container != "" {
+		args = append(args, "-c", container)
+	}
+	// Let command die when the pod that it logs die
+	cmd := Command(context.WithoutCancel(ctx), "kubectl", args...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	ready := make(chan struct{})
+	go func() {
+		defer func() {
+			_ = logFile.Close()
+			s.logCapturingPods.Delete(pod)
+		}()
+		err := cmd.Start()
+		if err == nil {
+			if container == "" {
+				dlog.Infof(ctx, "Capturing logs for pod %s", pod)
+			} else {
+				dlog.Infof(ctx, "Capturing logs for pod %s, container %s", pod, container)
 			}
-		}(pod)
+			close(ready)
+			err = cmd.Wait()
+		}
+		if err != nil {
+			if container == "" {
+				dlog.Errorf(ctx, "log capture for pod %s failed: %v", pod, err)
+			} else {
+				dlog.Errorf(ctx, "log capture for pod %s, container %s failed: %v", pod, container, err)
+			}
+			select {
+			case <-ready:
+			default:
+				close(ready)
+			}
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		dlog.Infof(ctx, "log capture for pod %s interrupted prior to start", pod)
+	case <-ready:
 	}
 }
 
@@ -598,7 +635,7 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 	if err == nil {
 		err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager")
 		if err == nil {
-			s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+			s.self.CapturePodLogs(ctx, "traffic-manager", "", nss.Namespace)
 		}
 	}
 	return err
@@ -685,7 +722,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager"); err != nil {
 		return err
 	}
-	s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+	s.self.CapturePodLogs(ctx, "traffic-manager", "", nss.Namespace)
 	return nil
 }
 
@@ -788,7 +825,7 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
 	stdout, stderr, err := Telepresence(ctx, args...)
-	assert.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
+	require.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
 	if err == nil {
 		if strings.HasPrefix(stderr, "Warning:") && !strings.ContainsRune(stderr, '\n') {
 			// Accept warnings, but log them.
@@ -990,7 +1027,12 @@ func StartLocalHttpEchoServerWithHost(ctx context.Context, name string, host str
 				fmt.Fprintf(w, "%s from intercept at %s", name, r.URL.Path)
 			}),
 		}
-		_ = sc.Serve(ctx, l)
+		err := sc.Serve(ctx, l)
+		if err != nil {
+			dlog.Errorf(ctx, "http server on %s exited with error: %v", host, err)
+		} else {
+			dlog.Errorf(ctx, "http server on %s exited", host)
+		}
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
 }

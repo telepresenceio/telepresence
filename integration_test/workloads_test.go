@@ -28,7 +28,7 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, svc+": intercepted")
 	require.NotContains(stdout, "Volume Mount Point")
-	s.CapturePodLogs(ctx, "service="+svc, "traffic-agent", s.AppNamespace())
+	s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 	itest.TelepresenceOk(ctx, "leave", svc)
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.NotContains(stdout, svc+": intercepted")

@@ -6,7 +6,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: echo
+    app: echo
   ports:
     - name: proxied
       port: 80
@@ -17,16 +17,16 @@ kind: Deployment
 metadata:
   name: echo
   labels:
-    service: echo
+    app: echo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: echo
+      app: echo
   template:
     metadata:
       labels:
-        service: echo
+        app: echo
     spec:
       hostAliases:
         - ip: "{{ .AliasIP }}"

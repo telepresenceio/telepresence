@@ -5,6 +5,6 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: manual-inject
+    app: manual-inject
   ports:
     - port: 80

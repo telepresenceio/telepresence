@@ -51,7 +51,6 @@ import (
 func (s *state) PrepareIntercept(
 	ctx context.Context,
 	cr *managerrpc.CreateInterceptRequest,
-	replacePolicy agentconfig.ReplacePolicy,
 ) (pi *managerrpc.PreparedIntercept, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
 	defer tracing.EndAndRecord(span, err)
@@ -66,7 +65,7 @@ func (s *state) PrepareIntercept(
 
 	spec := cr.InterceptSpec
 	extended := s.isExtended(spec)
-	ac, err := s.ensureAgent(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind, extended, replacePolicy)
+	ac, err := s.ensureAgent(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind, extended, spec)
 	if err != nil {
 		return interceptError(err)
 	}
@@ -86,11 +85,11 @@ func (s *state) PrepareIntercept(
 }
 
 func (s *state) EnsureAgent(ctx context.Context, n, ns string) error {
-	_, err := s.ensureAgent(ctx, n, ns, "", false, agentconfig.ReplacePolicyCurrent)
+	_, err := s.ensureAgent(ctx, n, ns, "", false, nil)
 	return err
 }
 
-func (s *state) ensureAgent(parentCtx context.Context, n, ns, kind string, extended bool, replacePolicy agentconfig.ReplacePolicy) (*agentconfig.Sidecar, error) {
+func (s *state) ensureAgent(parentCtx context.Context, n, ns, kind string, extended bool, spec *managerrpc.InterceptSpec) (*agentconfig.Sidecar, error) {
 	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
 	defer cancel()
 
@@ -107,7 +106,7 @@ func (s *state) ensureAgent(parentCtx context.Context, n, ns, kind string, exten
 		return nil, err
 	}
 
-	sce, err := s.getOrCreateAgentConfig(ctx, wl, extended, replacePolicy)
+	sce, err := s.getOrCreateAgentConfig(ctx, wl, extended, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +161,7 @@ func (s *state) getOrCreateAgentConfig(
 	ctx context.Context,
 	wl k8sapi.Workload,
 	extended bool,
-	replacePolicy agentconfig.ReplacePolicy,
+	spec *managerrpc.InterceptSpec,
 ) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
 	defer tracing.EndAndRecord(span, err)
@@ -179,7 +178,7 @@ func (s *state) getOrCreateAgentConfig(
 	if err != nil {
 		return nil, err
 	}
-	return s.loadAgentConfig(ctx, cmAPI, cm, wl, extended, replacePolicy)
+	return s.createOrUpdateAgentConfig(ctx, cmAPI, cm, wl, extended, spec)
 }
 
 func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (cm *core.ConfigMap, err error) {
@@ -216,15 +215,79 @@ func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespac
 	return cm, err
 }
 
-func (s *state) loadAgentConfig(
+func (s *state) RestoreAppContainer(ctx context.Context, ii *managerrpc.InterceptInfo) (err error) {
+	dlog.Debugf(ctx, "Restoring app container for %s", ii.Id)
+	spec := ii.Spec
+	n := spec.Agent
+	ns := spec.Namespace
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.RestoreAppContainer", trace.WithAttributes(
+		attribute.String("tel2.name", n),
+		attribute.String("tel2.namespace", ns),
+	))
+	defer func() {
+		tracing.EndAndRecord(span, err)
+	}()
+
+	cl, _ := s.cfgMapLocks.LoadOrCompute(ns, func() *sync.Mutex {
+		return &sync.Mutex{}
+	})
+	cl.Lock()
+	defer cl.Unlock()
+
+	cmAPI := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
+	cm, err := loadConfigMap(ctx, cmAPI, ns)
+	if err != nil {
+		return err
+	}
+	if y, ok := cm.Data[n]; ok {
+		var sce agentconfig.SidecarExt
+		if sce, err = unmarshalConfigMapEntry(y, n, ns); err == nil {
+			var cn *agentconfig.Container
+			if cn, _, err = findIntercept(sce.AgentConfig(), spec); err == nil && cn.Replace {
+				cn.Replace = false
+
+				// The pods for this workload will be killed once the new updated sidecar
+				// reaches the configmap. We remove them now, so that they don't continue to
+				// review intercepts.
+				for sessionID := range s.getAgentsByName(n, ns) {
+					if as, ok := s.GetSession(sessionID).(*agentSessionState); ok {
+						as.active.Store(false)
+					}
+				}
+				err = updateSidecar(ctx, sce, cmAPI, cm, n, ns)
+			}
+		}
+	}
+	return err
+}
+
+func updateSidecar(ctx context.Context, sce agentconfig.SidecarExt, cmAPI typed.ConfigMapInterface, cm *core.ConfigMap, n, ns string) (err error) {
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.createOrUpdateAgentConfig.update", trace.WithAttributes(
+		attribute.String("tel2.workload-name", n),
+		attribute.String("tel2.cm-name", agentconfig.ConfigMap),
+		attribute.String("tel2.cm-namespace", ns),
+	))
+	defer tracing.EndAndRecord(span, err)
+	yml, err := sce.Marshal()
+	if err != nil {
+		return err
+	}
+	cm.Data[n] = string(yml)
+	if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
+		return fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", n, agentconfig.ConfigMap, ns, err)
+	}
+	return err
+}
+
+func (s *state) createOrUpdateAgentConfig(
 	ctx context.Context,
 	cmAPI typed.ConfigMapInterface,
 	cm *core.ConfigMap,
 	wl k8sapi.Workload,
 	extended bool,
-	replacePolicy agentconfig.ReplacePolicy,
+	spec *managerrpc.InterceptSpec,
 ) (sc agentconfig.SidecarExt, err error) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig")
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.createOrUpdateAgentConfig")
 	defer tracing.EndAndRecord(span, err)
 
 	enabled, err := checkInterceptAnnotations(wl)
@@ -247,26 +310,10 @@ func (s *state) loadAgentConfig(
 		attribute.String("tel2.agent-image", agentImage),
 	)
 
-	update := func(sce agentconfig.SidecarExt) (err error) {
-		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig.update", trace.WithAttributes(
-			attribute.String("tel2.workload-name", wl.GetName()),
-			attribute.String("tel2.cm-name", agentconfig.ConfigMap),
-			attribute.String("tel2.cm-namespace", wl.GetNamespace()),
-		))
-		defer tracing.EndAndRecord(span, err)
-		yml, err := sce.Marshal()
-		if err != nil {
-			return err
-		}
-		cm.Data[wl.GetName()] = string(yml)
-		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
-			return fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
-		}
-		return err
-	}
-
 	var sce agentconfig.SidecarExt
-	if y, ok := cm.Data[wl.GetName()]; ok {
+	doUpdate := false
+	y, cmFound := cm.Data[wl.GetName()]
+	if cmFound {
 		span.AddEvent("workload-config-found")
 		if sce, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, err
@@ -279,37 +326,11 @@ func (s *state) loadAgentConfig(
 			}
 			ac = sce.AgentConfig()
 		}
-		doUpdate := false
 		// If the agentImage has changed, and the extended image is requested, then update
 		if ac.AgentImage != agentImage && extended {
 			span.AddEvent("agent-image-changed")
 			ac.AgentImage = agentImage
 			doUpdate = true
-		}
-		if replacePolicy != agentconfig.ReplacePolicyCurrent {
-			for _, cn := range ac.Containers {
-				if cn.Replace != replacePolicy {
-					span.AddEvent("container-replace-changed")
-					if (cn.Replace == agentconfig.ReplacePolicyActive && replacePolicy == agentconfig.ReplacePolicyInactive) ||
-						(cn.Replace == agentconfig.ReplacePolicyInactive && replacePolicy == agentconfig.ReplacePolicyActive) {
-						span.AddEvent("container-replace-accepted")
-						cn.Replace = replacePolicy
-						doUpdate = true
-					} else {
-						span.AddEvent("container-replace-rejected")
-						flagValue := cn.Replace != agentconfig.ReplacePolicyNever
-						return nil, errcat.User.Newf("intercept %s.%s has the --replace flag"+
-							" set to %t, please use 'telepresence uninstall --agent %s'"+
-							" then 'telepresence intercept' again to change it",
-							wl.GetName(), wl.GetNamespace(), flagValue, wl.GetName())
-					}
-				}
-			}
-		}
-		if doUpdate {
-			if err = update(sce); err != nil {
-				return nil, err
-			}
 		}
 	} else {
 		span.AddEvent("workload-config-not-found")
@@ -320,13 +341,36 @@ func (s *state) loadAgentConfig(
 		if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
 			return nil, err
 		}
-		if replacePolicy == agentconfig.ReplacePolicyCurrent {
-			replacePolicy = agentconfig.ReplacePolicyNever
-		}
-		if sce, err = gc.Generate(ctx, wl, replacePolicy, nil); err != nil {
+		if sce, err = gc.Generate(ctx, wl, nil); err != nil {
 			return nil, err
 		}
-		if err = update(sce); err != nil {
+		doUpdate = true
+	}
+
+	ac := sce.AgentConfig()
+	if spec != nil {
+		cn, _, err := findIntercept(ac, spec)
+		if err != nil {
+			return nil, err
+		}
+		if cn.Replace != agentconfig.ReplacePolicy(spec.Replace) {
+			span.AddEvent("container-replace-changed")
+			cn.Replace = agentconfig.ReplacePolicy(spec.Replace)
+			doUpdate = true
+		}
+	}
+	if doUpdate {
+		if cmFound {
+			// The pods for this workload be killed once the new updated sidecar
+			// reaches the configmap. We remove them now, so that they don't continue to
+			// review intercepts.
+			for sessionID := range s.getAgentsByName(wl.GetName(), wl.GetNamespace()) {
+				if as, ok := s.GetSession(sessionID).(*agentSessionState); ok {
+					as.active.Store(false)
+				}
+			}
+		}
+		if err = updateSidecar(ctx, sce, cmAPI, cm, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, err
 		}
 	}

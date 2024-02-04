@@ -25,7 +25,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -49,6 +48,7 @@ type State interface {
 	CountTunnelEgress() uint64
 	ExpireSessions(context.Context, time.Time, time.Time)
 	GetAgent(string) *rpc.AgentInfo
+	GetActiveAgent(string) *rpc.AgentInfo
 	GetAllClients() map[string]*rpc.ClientInfo
 	GetClient(string) *rpc.ClientInfo
 	GetSession(string) SessionState
@@ -63,9 +63,10 @@ type State interface {
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	EnsureAgent(context.Context, string, string) error
-	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest, agentconfig.ReplacePolicy) (*rpc.PreparedIntercept, error)
+	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string)
 	DropIntercept(string)
+	RestoreAppContainer(context.Context, *rpc.InterceptInfo) error
 	FinalizeIntercept(ctx context.Context, intercept *rpc.InterceptInfo)
 	LoadMatchingIntercepts(filter func(string, *rpc.InterceptInfo) bool) map[string]*rpc.InterceptInfo
 	RemoveSession(context.Context, string)
@@ -433,6 +434,15 @@ func (s *state) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 func (s *state) GetAgent(sessionID string) *rpc.AgentInfo {
 	ret, _ := s.agents.Load(sessionID)
 	return ret
+}
+
+func (s *state) GetActiveAgent(sessionID string) *rpc.AgentInfo {
+	if ret, ok := s.agents.Load(sessionID); ok {
+		if as := s.GetSession(sessionID); as != nil && as.Active() {
+			return ret
+		}
+	}
+	return nil
 }
 
 func (s *state) getAllAgents() map[string]*rpc.AgentInfo {

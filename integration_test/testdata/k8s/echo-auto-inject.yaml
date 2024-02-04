@@ -6,7 +6,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: echo-auto-inject
+    app: echo-auto-inject
   ports:
     - name: proxied
       port: 80
@@ -17,18 +17,18 @@ kind: Deployment
 metadata:
   name: echo-auto-inject
   labels:
-    service: echo-auto-inject
+    app: echo-auto-inject
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: echo-auto-inject
+      app: echo-auto-inject
   template:
     metadata:
       annotations:
         telepresence.getambassador.io/inject-traffic-agent: enabled
       labels:
-        service: echo-auto-inject
+        app: echo-auto-inject
     spec:
       containers:
         - name: echo-auto-inject
