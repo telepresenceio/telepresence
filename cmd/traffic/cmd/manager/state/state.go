@@ -74,10 +74,10 @@ type State interface {
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
 	SetAllClientSessionsFinalizer(finalizer allClientSessionsFinalizer)
 	SetAllInterceptsFinalizer(finalizer allInterceptsFinalizer)
-	SetPrometheusMetrics(interceptCounterVec *prometheus.CounterVec,
-		interceptStatusGaugeVec *prometheus.GaugeVec,
-		connectCounterVec *prometheus.CounterVec,
-		connectStatusGaugeVec *prometheus.GaugeVec)
+	SetPrometheusMetrics(connectCounterVec *prometheus.CounterVec,
+		connectStatusGaugeVec *prometheus.GaugeVec,
+		interceptCounterVec *prometheus.CounterVec,
+		interceptStatusGaugeVec *prometheus.GaugeVec)
 	Tunnel(context.Context, tunnel.Stream) error
 	UpdateIntercept(string, func(*rpc.InterceptInfo)) *rpc.InterceptInfo
 	UpdateClient(sessionID string, apply func(*rpc.ClientInfo)) *rpc.ClientInfo
