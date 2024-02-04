@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -32,6 +33,10 @@ func init() {
 }
 
 func (s *interceptFlagSuite) SetupSuite() {
+	if s.IsCI() && runtime.GOOS == "darwin" {
+		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
+		return
+	}
 	if s.CompatVersion() != "" {
 		s.T().Skip("Not part of compatibility suite")
 	}
