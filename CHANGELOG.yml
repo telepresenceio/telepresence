@@ -53,6 +53,11 @@ items:
           <tr><td><code>all</code></td><td>All of the above.</td></tr>
           </table></p>
       - type: bugfix
+        title: Include non-default zero values in output of telepresence config view.
+        body: >-
+          The <code>telepresence config view</code> command will now print zero values in the output when
+          the default for the value is non-zero.
+      - type: bugfix
         title: Restore ability to run the telepresence CLI in a docker container.
         body: >-
           The improvements made to be able to run the telepresence daemon in docker

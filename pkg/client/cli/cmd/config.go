@@ -22,6 +22,8 @@ func configCmd() *cobra.Command {
 	return cmd
 }
 
+const clientOnlyFlag = "client-only"
+
 func configView() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "view",
@@ -33,7 +35,7 @@ func configView() *cobra.Command {
 			ann.Session: ann.Optional,
 		},
 	}
-	cmd.Flags().BoolP("client-only", "c", false, "Only view config from client file.")
+	cmd.Flags().BoolP(clientOnlyFlag, "c", false, "Only view config from client file.")
 	return cmd
 }
 
@@ -64,7 +66,7 @@ func GetCommandKubeConfig(cmd *cobra.Command) (*client.Kubeconfig, error) {
 
 func runConfigView(cmd *cobra.Command, _ []string) error {
 	var cfg client.SessionConfig
-	clientOnly, _ := cmd.Flags().GetBool("client-only")
+	clientOnly, _ := cmd.Flags().GetBool(clientOnlyFlag)
 	if !clientOnly {
 		cmd.Annotations = map[string]string{
 			ann.Session: ann.Required,
@@ -86,6 +88,9 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
+		ctx := cmd.Context()
+		cfg.Config = client.GetConfig(ctx)
+		cfg.ClientFile = client.GetConfigFile(ctx)
 		cfg.Routing.AlsoProxy = kc.AlsoProxy
 		cfg.Routing.NeverProxy = kc.NeverProxy
 		cfg.Routing.AllowConflicting = kc.AllowConflictingSubnets
