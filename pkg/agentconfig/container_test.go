@@ -78,12 +78,23 @@ func Test_ReplacePolicy(t *testing.T) {
 	var cn Container
 	require.NoError(t, json.Unmarshal([]byte(`{"replace": 0}`), &cn))
 	assert.False(t, bool(cn.Replace))
-	require.NoError(t, json.Unmarshal([]byte(`{"replace": 1}`), &cn))
-	assert.True(t, bool(cn.Replace))
-	require.NoError(t, json.Unmarshal([]byte(`{"replace": 2}`), &cn))
+	require.NoError(t, json.Unmarshal([]byte(`{}`), &cn))
 	assert.False(t, bool(cn.Replace))
-	require.NoError(t, json.Unmarshal([]byte(`{"replace": false}`), &cn))
-	assert.False(t, bool(cn.Replace))
-	require.NoError(t, json.Unmarshal([]byte(`{"replace": true}`), &cn))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace":1}`), &cn))
 	assert.True(t, bool(cn.Replace))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace":2}`), &cn))
+	assert.False(t, bool(cn.Replace))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace":false}`), &cn))
+	assert.False(t, bool(cn.Replace))
+	require.NoError(t, json.Unmarshal([]byte(`{"replace":true}`), &cn))
+	assert.True(t, bool(cn.Replace))
+
+	cn.Replace = false
+	data, err := json.Marshal(&cn)
+	require.NoError(t, err)
+	require.Equal(t, string(data), `{}`)
+	cn.Replace = true
+	data, err = json.Marshal(&cn)
+	require.NoError(t, err)
+	require.Equal(t, string(data), `{"replace":1}`)
 }

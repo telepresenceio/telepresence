@@ -58,16 +58,26 @@ const (
 type ReplacePolicy bool
 
 func (r *ReplacePolicy) UnmarshalJSON(data []byte) error {
-	var v bool
-	if err := json.Unmarshal(data, &v); err != nil {
-		var i int
-		if intErr := json.Unmarshal(data, &i); intErr != nil {
+	var i int
+	if err := json.Unmarshal(data, &i); err != nil {
+		// Allow true/false too.
+		var v bool
+		if boolErr := json.Unmarshal(data, &v); boolErr != nil {
 			return err
 		}
-		v = i == 1
+		*r = ReplacePolicy(v)
+	} else {
+		*r = i == 1
 	}
-	*r = ReplacePolicy(v)
 	return nil
+}
+
+func (r ReplacePolicy) MarshalJSON() ([]byte, error) {
+	i := 0
+	if r {
+		i = 1
+	}
+	return json.Marshal(&i)
 }
 
 // Intercept describes the mapping between a service port and an intercepted container port.
@@ -121,7 +131,7 @@ type Container struct {
 	MountPoint string `json:"mountPoint,omitempty"`
 
 	// Mounts are the actual mount points that are mounted by this container
-	Mounts []string
+	Mounts []string `json:"Mounts,omitempty"`
 
 	// Replace is whether the agent should replace the intercepted container
 	Replace ReplacePolicy `json:"replace,omitempty"`
