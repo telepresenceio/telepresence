@@ -59,7 +59,7 @@ type mutatorFunc func(context.Context, *admission.AdmissionRequest) (PatchOps, e
 type tlsListener struct {
 	sync.Mutex
 	ctx         context.Context
-	config      tls.Config
+	cert        tls.Certificate
 	certPEM     []byte
 	keyPEM      []byte
 	tcpListener net.Listener
@@ -98,19 +98,25 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 
+	var cert tls.Certificate
 	l.Lock()
-	defer l.Unlock()
 	if !(bytes.Equal(newCertPEM, l.certPEM) && bytes.Equal(newKeyPEM, l.keyPEM)) {
 		dlog.Debug(l.ctx, "Replacing certificate")
-		cert, err := tls.X509KeyPair(newCertPEM, newKeyPEM)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create X509 key pair: %v", err)
+		cert, err = tls.X509KeyPair(newCertPEM, newKeyPEM)
+		if err == nil {
+			l.cert = cert
+			l.certPEM = newCertPEM
+			l.keyPEM = newKeyPEM
 		}
-		l.config.Certificates[0] = cert
-		l.certPEM = newCertPEM
-		l.keyPEM = newKeyPEM
+	} else {
+		cert = l.cert
 	}
-	return tls.Server(tcpConn, &l.config), nil
+	l.Unlock()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create X509 key pair: %v", err)
+	}
+	return tls.Server(tcpConn, &tls.Config{Certificates: []tls.Certificate{cert}}), nil
 }
 
 func ServeMutator(ctx context.Context) error {
@@ -196,7 +202,7 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
 	err = s.Serve(
 		&tlsListener{
 			ctx:         ctx,
-			config:      tls.Config{Certificates: []tls.Certificate{cert}},
+			cert:        cert,
 			certPEM:     certPEM,
 			keyPEM:      keyPEM,
 			tcpListener: tcpListener,
