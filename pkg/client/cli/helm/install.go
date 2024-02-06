@@ -298,7 +298,6 @@ func ensureIsInstalled(
 		}
 		vals = GetValuesFunc(ctx)
 	}
-	dlog.Debugf(ctx, "reuse-values: %t, reset-values: %t, provided-values %s, values: %v", req.ReuseValues, req.ResetValues, providedVals, vals)
 
 	switch {
 	case existing == nil: // fresh install

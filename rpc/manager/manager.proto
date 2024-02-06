@@ -415,6 +415,8 @@ message VersionInfo2 {
 message License {
   string license = 1;
   string host = 2;
+
+  // cluster_id is really the id of the namespace where the traffic-manager is installed.
   string cluster_id = 3;
   string err_msg = 4;
 }
