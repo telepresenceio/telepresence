@@ -140,6 +140,23 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		},
 	}
 
+	podGRPCPort := core.Pod{
+		ObjectMeta: podObjectMeta("grpc-port", "app"),
+		Spec: core.PodSpec{
+			AutomountServiceAccountToken: &no,
+			Containers: []core.Container{
+				{
+					Name: "some-container",
+					Ports: []core.ContainerPort{
+						{
+							ContainerPort: 8443,
+						},
+					},
+				},
+			},
+		},
+	}
+
 	podUnnamedNumericPort := core.Pod{
 		ObjectMeta: podObjectMeta("unnamed-numeric-port", "app"),
 		Spec: core.PodSpec{
@@ -321,6 +338,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	}
 	namedPortUID := makeUID()
 	numericPortUID := makeUID()
+	grpcPortUID := makeUID()
 	unnamedNumericPortUID := makeUID()
 	multiPortUID := makeUID()
 
@@ -421,24 +439,52 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				},
 			},
 		},
+		&core.Service{
+			TypeMeta: meta.TypeMeta{
+				Kind:       "Service",
+				APIVersion: "v1",
+			},
+			ObjectMeta: meta.ObjectMeta{
+				Name:      "grpc-port",
+				Namespace: "some-ns",
+				UID:       grpcPortUID,
+			},
+			Spec: core.ServiceSpec{
+				Ports: []core.ServicePort{
+					{
+						Protocol:   "TCP",
+						Name:       "grpc",
+						Port:       443,
+						TargetPort: intstr.FromInt32(8443),
+					},
+				},
+				Selector: map[string]string{
+					"app": "grpc-port",
+				},
+			},
+		},
 		&podNamedPort,
 		&podNumericPort,
+		&podGRPCPort,
 		&podNamedAndNumericPort,
 		&podMultiPort,
 		&podMultiSplitPort,
 		deployment(&podNamedPort),
 		deployment(&podNumericPort),
+		deployment(&podGRPCPort),
 		deployment(&podUnnamedNumericPort),
 		deployment(&podNamedAndNumericPort),
 		deployment(&podMultiPort),
 		deployment(&podMultiSplitPort),
 	)
-	tests := []struct {
+	type testInput struct {
 		name           string
 		request        *core.Pod
 		expectedConfig *agentconfig.Sidecar
 		expectedError  string
-	}{
+	}
+
+	tests := []testInput{
 		{
 			"Error Precondition: No port specified",
 			&core.Pod{
@@ -720,25 +766,69 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			"",
 		},
 	}
+
+	runFunc := func(t *testing.T, ctx context.Context, test *testInput) {
+		gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
+		require.NoError(t, err)
+		actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
+		requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
+		if actualConfig == nil {
+			actualConfig = &agentconfig.Sidecar{}
+		}
+		expectedConfig := test.expectedConfig
+		if expectedConfig == nil {
+			expectedConfig = &agentconfig.Sidecar{}
+		}
+		assert.Equal(t, expectedConfig, actualConfig, "configs differ")
+	}
+
+	ctx = k8sapi.WithK8sInterface(ctx, clientset)
 	for _, test := range tests {
 		test := test // pin it
-		ctx := k8sapi.WithK8sInterface(ctx, clientset)
 		agentmap.GeneratorConfigFunc = env.GeneratorConfig
 		t.Run(test.name, func(t *testing.T) {
-			gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
-			require.NoError(t, err)
-			actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
-			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
-			if actualConfig == nil {
-				actualConfig = &agentconfig.Sidecar{}
-			}
-			expectedConfig := test.expectedConfig
-			if expectedConfig == nil {
-				expectedConfig = &agentconfig.Sidecar{}
-			}
-			assert.Equal(t, expectedConfig, actualConfig, "configs differ")
+			runFunc(t, ctx, &test)
 		})
 	}
+
+	env.AgentAppProtocolStrategy = k8sapi.PortName
+	test := testInput{
+		"AppProtocolStrategy named and named grpc port without appProtocol",
+		&podGRPCPort,
+		&agentconfig.Sidecar{
+			AgentName:    "grpc-port",
+			AgentImage:   "docker.io/datawire/tel2:2.13.3",
+			Namespace:    "some-ns",
+			WorkloadName: "grpc-port",
+			WorkloadKind: "Deployment",
+			ManagerHost:  "traffic-manager.default",
+			ManagerPort:  8081,
+			Containers: []*agentconfig.Container{
+				{
+					Name: "some-container",
+					Intercepts: []*agentconfig.Intercept{
+						{
+							ServiceName:       "grpc-port",
+							ServiceUID:        grpcPortUID,
+							ServicePortName:   "grpc",
+							ServicePort:       443,
+							Protocol:          core.ProtocolTCP,
+							AgentPort:         9900,
+							ContainerPort:     8443,
+							AppProtocol:       "grpc",
+							TargetPortNumeric: true,
+						},
+					},
+					EnvPrefix:  "A_",
+					MountPoint: "/tel_app_mounts/some-container",
+				},
+			},
+		},
+		"",
+	}
+	t.Run(test.name, func(t *testing.T) {
+		runFunc(t, ctx, &test)
+	})
 }
 
 func TestTrafficAgentInjector(t *testing.T) {

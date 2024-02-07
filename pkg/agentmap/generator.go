@@ -47,6 +47,7 @@ type BasicGeneratorConfig struct {
 	Resources           *core.ResourceRequirements
 	PullPolicy          string
 	PullSecrets         []core.LocalObjectReference
+	AppProtocolStrategy k8sapi.AppProtocolStrategy
 }
 
 func (cfg *BasicGeneratorConfig) Generate(
@@ -94,7 +95,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
-		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, portNumber, ccs, existingConfig); err != nil {
+		if ccs, err = appendAgentContainerConfigs(ctx, svcImpl, pod, portNumber, ccs, existingConfig, cfg.AppProtocolStrategy); err != nil {
 			return nil, err
 		}
 	}
@@ -124,11 +125,13 @@ func (cfg *BasicGeneratorConfig) Generate(
 }
 
 func appendAgentContainerConfigs(
+	ctx context.Context,
 	svc *core.Service,
 	pod *core.PodTemplateSpec,
 	portNumber func(int32) uint16,
 	ccs []*agentconfig.Container,
 	existingConfig agentconfig.SidecarExt,
+	aps k8sapi.AppProtocolStrategy,
 ) ([]*agentconfig.Container, error) {
 	portNameOrNumber := pod.Annotations[ServicePortAnnotation]
 	ports, err := filterServicePorts(svc, portNameOrNumber)
@@ -151,10 +154,6 @@ nextSvcPort:
 		} else {
 			appPort = cn.Ports[i]
 		}
-		var appProto string
-		if port.AppProtocol != nil {
-			appProto = *port.AppProtocol
-		}
 
 		ic := &agentconfig.Intercept{
 			ServiceName:       svc.Name,
@@ -163,7 +162,7 @@ nextSvcPort:
 			ServicePort:       uint16(port.Port),
 			TargetPortNumeric: port.TargetPort.Type == intstr.Int,
 			Protocol:          port.Protocol,
-			AppProtocol:       appProto,
+			AppProtocol:       k8sapi.GetAppProto(ctx, aps, &port),
 			AgentPort:         portNumber(appPort.ContainerPort),
 			ContainerPortName: appPort.Name,
 			ContainerPort:     uint16(appPort.ContainerPort),
