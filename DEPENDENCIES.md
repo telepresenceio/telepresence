@@ -3,7 +3,7 @@ following Free and Open Source software:
 
     Name                                                                         Version                               License(s)
     ----                                                                         -------                               ----------
-    the Go language standard library ("std")                                     v1.21                                 3-clause BSD license
+    the Go language standard library ("std")                                     v1.22                                 3-clause BSD license
     github.com/AdaLogics/go-fuzz-headers                                         v0.0.0-20230811130428-ced1acdcaa24    Apache License 2.0
     github.com/Azure/go-ansiterm                                                 v0.0.0-20230124172434-306776ec8161    MIT license
     github.com/BurntSushi/toml                                                   v1.3.2                                MIT license
