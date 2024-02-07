@@ -298,7 +298,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 	if ud = daemon.GetUserClient(ctx); ud != nil {
 		return ctx, nil
 	}
-	if ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(), required); err != nil {
+	if ctx, ud, err = launchConnectorDaemon(ctx, client.GetExe(ctx), required); err != nil {
 		return ctx, err
 	}
 	ctx = daemon.WithUserClient(ctx, ud)
@@ -307,7 +307,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, erro
 
 func ensureDaemonVersion(ctx context.Context) error {
 	// Ensure that the already running daemon has the correct version
-	return versionCheck(ctx, client.GetExe(), daemon.GetUserClient(ctx))
+	return versionCheck(ctx, client.GetExe(ctx), daemon.GetUserClient(ctx))
 }
 
 func EnsureSession(ctx context.Context, useLine string, required bool) (context.Context, error) {

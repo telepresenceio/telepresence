@@ -161,7 +161,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	_ = os.Remove(portFile)
 
 	args := make([]string, 0, 4+len(kubeFlags)*2)
-	args = append(args, client.GetExe(), kubeauth.CommandName, "--portfile", portFile)
+	args = append(args, client.GetExe(ctx), kubeauth.CommandName, "--portfile", portFile)
 	var err error
 	if args, err = client.AppendKubeFlags(kubeFlags, args); err != nil {
 		return 0, err
@@ -184,7 +184,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 		}
 		return port, nil
 	}
-	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(), kubeauth.CommandName)
+	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), kubeauth.CommandName)
 }
 
 func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, error) {

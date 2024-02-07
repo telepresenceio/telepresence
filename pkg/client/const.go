@@ -1,11 +1,14 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
 const (
@@ -19,9 +22,9 @@ func DisplayVersion() string {
 }
 
 // GetExe returns the name of the running executable.
-func GetExe() string {
+func GetExe(ctx context.Context) string {
 	// Figure out our executable
-	exeName, err := os.Executable()
+	exeName, err := dos.Executable(ctx)
 	if err != nil {
 		panic(err)
 	}

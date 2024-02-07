@@ -230,7 +230,7 @@ func NewSession(
 				if _, ok := s.Server().GetServiceInfo()[authenticator.Authenticator_ServiceDesc.ServiceName]; !ok {
 					authGrpc.RegisterAuthenticatorServer(s.Server(), config.ConfigFlags.ToRawKubeConfigLoader())
 				}
-				return client.GetExe(), s.ListenerAddress(ctx), nil
+				return client.GetExe(ctx), s.ListenerAddress(ctx), nil
 			}, nil)
 			if err != nil {
 				return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
@@ -910,7 +910,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
-			Executable: client.GetExe(),
+			Executable: client.GetExe(c),
 			Name:       client.DisplayName,
 		},
 		ManagerNamespace: cfg.GetManagerNamespace(),
