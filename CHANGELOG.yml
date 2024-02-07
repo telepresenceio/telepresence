@@ -53,6 +53,11 @@ items:
           <tr><td><code>all</code></td><td>All of the above.</td></tr>
           </table></p>
       - type: bugfix
+        title: Ensure that agent.appProtocolStrategy is propagated correctly.
+        body: >-
+          The <code>agent.appProtocolStrategy</code> was inadvertently dropped when moving license related code fromm the
+          OSS repository the repository for the Enterprise version of Telepresence. It has now been restored.
+      - type: bugfix
         title: Include non-default zero values in output of telepresence config view.
         body: >-
           The <code>telepresence config view</code> command will now print zero values in the output when

@@ -83,6 +83,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorCon
 		Resources:           e.AgentResources,
 		PullPolicy:          e.AgentImagePullPolicy,
 		PullSecrets:         e.AgentImagePullSecrets,
+		AppProtocolStrategy: e.AgentAppProtocolStrategy,
 	}, nil
 }
 
