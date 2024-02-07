@@ -2097,8 +2097,9 @@ type License struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	License   string `protobuf:"bytes,1,opt,name=license,proto3" json:"license,omitempty"`
-	Host      string `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	License string `protobuf:"bytes,1,opt,name=license,proto3" json:"license,omitempty"`
+	Host    string `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	// cluster_id is really the id of the namespace where the traffic-manager is installed.
 	ClusterId string `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
 	ErrMsg    string `protobuf:"bytes,4,opt,name=err_msg,json=errMsg,proto3" json:"err_msg,omitempty"`
 }
