@@ -166,13 +166,17 @@ func ServeMutator(ctx context.Context) error {
 	wrapped := otelhttp.NewHandler(mux, "agent-injector", otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 		return operation + r.URL.Path
 	}))
+	port := managerutil.GetEnv(ctx).MutatorWebhookPort
+	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
+	lg.SetPrefix(fmt.Sprintf("agent-injector:%d", port))
 	server := http.Server{
-		Handler: wrapped,
+		Handler:  wrapped,
+		ErrorLog: lg,
 		BaseContext: func(n net.Listener) context.Context {
 			return ctx
 		},
 	}
-	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", managerutil.GetEnv(ctx).MutatorWebhookPort))
+	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port))
 }
 
 func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
