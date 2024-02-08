@@ -201,10 +201,10 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	if ha.Type() == helm.Uninstall {
-		err = helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, &ha.Request)
+		err = helm.DeleteTrafficManager(ctx, cluster.Kubeconfig, cluster.GetManagerNamespace(), false, &ha.Request)
 	} else {
 		dlog.Debug(ctx, "ensuring that traffic-manager exists")
-		err = helm.EnsureTrafficManager(cluster.WithK8sInterface(ctx), cluster.ConfigFlags, cluster.GetManagerNamespace(), &ha.Request)
+		err = helm.EnsureTrafficManager(cluster.WithK8sInterface(ctx), cluster.Kubeconfig, cluster.GetManagerNamespace(), &ha.Request)
 	}
 	if err != nil {
 		return err

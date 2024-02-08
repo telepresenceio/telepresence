@@ -209,12 +209,16 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 	panic("No User daemon Session creator has been registered")
 }
 
-func createPortForwardDialer(ctx context.Context, flags map[string]string) (dnet.PortForwardDialer, kubernetes.Interface, error) {
-	configFlags, err := client.ConfigFlags(flags)
+func createPortForwardDialer(ctx context.Context, kubeFlags map[string]string, kubeData []byte) (dnet.PortForwardDialer, kubernetes.Interface, error) {
+	configFlags, err := client.ConfigFlags(kubeFlags)
 	if err != nil {
 		return nil, nil, err
 	}
-	rs, err := configFlags.ToRESTConfig()
+	config, err := client.NewClientConfig(ctx, configFlags, kubeData)
+	if err != nil {
+		return nil, nil, err
+	}
+	rs, err := config.ClientConfig()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -231,6 +235,7 @@ func connectToManager(
 	ctx context.Context,
 	namespace string,
 	kubeFlags map[string]string,
+	kubeData []byte,
 ) (
 	context.Context,
 	*grpc.ClientConn,
@@ -243,7 +248,7 @@ func connectToManager(
 		return ctx, conn, mp, v, err
 	}
 	var mgrVer semver.Version
-	pfDialer, cs, err := createPortForwardDialer(ctx, kubeFlags)
+	pfDialer, cs, err := createPortForwardDialer(ctx, kubeFlags, kubeData)
 	if err != nil {
 		return ctx, nil, nil, mgrVer, err
 	}
@@ -318,7 +323,7 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Session, error) {
 	dlog.Info(c, "-- Starting new session")
 
-	c, conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags)
+	c, conn, mc, ver, err := connectToManager(c, mi.ManagerNamespace, mi.KubeFlags, mi.KubeconfigData)
 	if mc == nil || err != nil {
 		return c, nil, err
 	}

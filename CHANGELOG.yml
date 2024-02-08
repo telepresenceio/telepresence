@@ -34,6 +34,12 @@ items:
     date: "2024-2-9"
     notes:
       - type: feature
+        title: Add option to load the kubeconfig yaml from stdin during connect.
+        body: >-
+          This allows another process with a kubeconfig already loaded in memory
+          to directly pass it to <code>telepresence connect</code> without needing a separate
+          file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
+      - type: feature
         title: Include the image for the traffic-agent in the output of the version and status commands.
         body: >-
           The version and status commands will now output the image that the traffic-agent will be using when injected

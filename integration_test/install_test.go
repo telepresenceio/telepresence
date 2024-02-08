@@ -49,9 +49,9 @@ func init() {
 	})
 }
 
-func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
+func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
-	err := helmConfig.Init(configFlags, namespace, "secrets", func(format string, args ...any) {
+	err := helmConfig.Init(clientGetter, namespace, "secrets", func(format string, args ...any) {
 		ctx := dlog.WithField(ctx, "source", "helm")
 		dlog.Infof(ctx, format, args...)
 	})
@@ -68,7 +68,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
 	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
-	helmConfig, err := getHelmConfig(ctx, kc.ConfigFlags, is.ManagerNamespace())
+	helmConfig, err := getHelmConfig(ctx, kc.Kubeconfig, is.ManagerNamespace())
 	rq.NoError(err)
 
 	getValues := func() (map[string]any, error) {
@@ -334,12 +334,12 @@ func (is *installSuite) Test_RemoveManager_canUninstall() {
 	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
 
 	require.NoError(ensureTrafficManager(ctx, kc))
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, &helm.Request{}))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, kc.GetManagerNamespace(), true, &helm.Request{}))
 	// We want to make sure that we can re-install the manager after it's been uninstalled,
 	// so try to ensureManager again.
 	require.NoError(ensureTrafficManager(ctx, kc))
 	// Uninstall the manager one last time -- this should behave the same way as the previous uninstall
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), true, &helm.Request{}))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, kc.GetManagerNamespace(), true, &helm.Request{}))
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
@@ -393,7 +393,7 @@ func (is *installSuite) Test_No_Upgrade() {
 	jvp, err := json.Marshal(vp)
 	require.NoError(err)
 
-	require.NoError(helm.EnsureTrafficManager(ctx, kc.ConfigFlags, kc.GetManagerNamespace(), &helm.Request{
+	require.NoError(helm.EnsureTrafficManager(ctx, kc.Kubeconfig, kc.GetManagerNamespace(), &helm.Request{
 		Type:       helm.Upgrade,
 		ValuesJson: jvp,
 	}))
@@ -437,7 +437,7 @@ func (is *installSuite) cluster(ctx context.Context, context, managerNamespace s
 func ensureTrafficManager(ctx context.Context, kc *k8s.Cluster) error {
 	return helm.EnsureTrafficManager(
 		ctx,
-		kc.ConfigFlags,
+		kc.Kubeconfig,
 		kc.GetManagerNamespace(),
 		&helm.Request{Type: helm.Install})
 }
