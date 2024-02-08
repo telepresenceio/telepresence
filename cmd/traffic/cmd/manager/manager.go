@@ -214,8 +214,11 @@ func (s *service) servePrometheus(ctx context.Context) error {
 		SetGauge(s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, workload, 0)
 	})
 
+	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
+	lg.SetPrefix(fmt.Sprintf("prometheus:%d", env.PrometheusPort))
 	sc := &dhttp.ServerConfig{
-		Handler: promhttp.Handler(),
+		Handler:  promhttp.Handler(),
+		ErrorLog: lg,
 	}
 	dlog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
 	defer dlog.Info(ctx, "Prometheus metrics server stopped")
@@ -238,6 +241,13 @@ func (s *service) serveHTTP(ctx context.Context) error {
 		fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
 	}))
 
+	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
+	addr := iputil.JoinHostPort(host, port)
+	if host == "" {
+		lg.SetPrefix(fmt.Sprintf("grpc-api:%d", port))
+	} else {
+		lg.SetPrefix(fmt.Sprintf("grpc-api %s", addr))
+	}
 	sc := &dhttp.ServerConfig{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
@@ -250,6 +260,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 				atomic.AddInt32(&s.activeHttpRequests, -1)
 			}
 		}),
+		ErrorLog: lg,
 	}
 	s.self.RegisterServers(grpcHandler)
 	return sc.ListenAndServe(ctx, fmt.Sprintf("%s:%d", host, port))
