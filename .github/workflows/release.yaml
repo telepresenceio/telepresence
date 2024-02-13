@@ -6,6 +6,7 @@ on:
       # These aren't regexps. They are "Workflow Filter patterns"
       - v[0-9]+.[0-9]+.[0-9]
       - v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+
+      - v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+
 
 jobs:
   build-release:
@@ -52,15 +53,21 @@ jobs:
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v3
-      - name: Determine if version is RC or GA
+      - name: Determine if version is RC, TEST, or GA
         id: semver_check
         run: |
           if [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+$ ]]; then
-          echo "MAKE_LATEST=false" >> $GITHUB_ENV
-          echo "PRERELEASE=true" >> $GITHUB_ENV
+            echo "MAKE_LATEST=false" >> $GITHUB_ENV
+            echo "DRAFT=false" >> $GITHUB_ENV
+            echo "PRERELEASE=true" >> $GITHUB_ENV
+          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+$ ]]; then
+            echo "MAKE_LATEST=false" >> $GITHUB_ENV
+            echo "DRAFT=true" >> $GITHUB_ENV
+            echo "PRERELEASE=false" >> $GITHUB_ENV
           else
-          echo "MAKE_LATEST=true" >> $GITHUB_ENV
-          echo "PRERELEASE=false" >> $GITHUB_ENV
+            echo "MAKE_LATEST=true" >> $GITHUB_ENV
+            echo "DRAFT=false" >> $GITHUB_ENV
+            echo "PRERELEASE=false" >> $GITHUB_ENV
           fi
       - name: Create release
         uses: ncipollo/release-action@v1
@@ -69,6 +76,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: ${{ env.PRERELEASE }}
           makeLatest: ${{ env.MAKE_LATEST }}
+          draft: ${{ env.DRAFT }}
           tag: ${{ github.ref_name }}
           body: |
             ## Official Release Artifacts
@@ -111,31 +119,3 @@ jobs:
         uses: ./.github/actions/test-release
         with:
           release_version: ${{ github.ref_name }}
-
-  trigger-pro-release:
-    runs-on: ubuntu-latest
-    needs:
-      - test-release
-    steps:
-      - name: Trigger other releases
-        id: trigger
-        uses: datawire/telepresence-internal-actions/execute-release-commands@main
-        with:
-          gh_auto_release_token: ${{ secrets.GH_AUTO_RELEASE_TOKEN }}
-          gh_auto_release_email: ${{ secrets.GH_AUTO_RELEASE_EMAIL }}
-          gh_auto_release_user: ${{ secrets.GH_AUTO_RELEASE_USER }}
-          telepresence_version: ${{ github.ref_name }}
-          repository: ${{ secrets.PRO_REPOSITORY_NAME }}
-          pre_push_branch_commands: "make prepare-release && make generate"
-          post_push_branch_commands: "make push-tags"
-
-  slack-notification:
-    needs: trigger-pro-release
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Notify Developers about Workflow Error
-        id: slack
-        uses: datawire/telepresence-internal-actions/slack-notification-workflow-error@main
-        with:
-          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
