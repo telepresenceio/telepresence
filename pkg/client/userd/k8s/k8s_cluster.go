@@ -121,10 +121,7 @@ func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 }
 
 func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []string) (*Cluster, error) {
-	rs, err := kubeFlags.ConfigFlags.ToRESTConfig()
-	if err != nil {
-		return nil, err
-	}
+	rs := kubeFlags.RestConfig
 	cs, err := kubernetes.NewForConfig(rs)
 	if err != nil {
 		return nil, err

@@ -140,6 +140,9 @@ message OutboundInfo {
 
   // Kubernetes flags
   map<string, string> kube_flags = 9;
+
+  // Kubeconfig YAML, if not to be loaded from file.
+  optional bytes kubeconfig_data = 12;
 }
 
 message NetworkConfig {

@@ -213,7 +213,7 @@ func NewSession(
 	}
 	ctx = dnet.WithPortForwardDialer(ctx, tmgr.pfDialer)
 
-	oi := tmgr.getOutboundInfo(ctx)
+	oi := tmgr.getOutboundInfo(ctx, cr)
 	rootRunning := userd.GetService(ctx).RootSessionInProcess()
 	if !rootRunning {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
@@ -228,7 +228,7 @@ func NewSession(
 			konfig, err := patcher.CreateExternalKubeConfig(ctx, cluster.EffectiveFlagMap, func([]string) (string, string, error) {
 				s := userd.GetService(ctx)
 				if _, ok := s.Server().GetServiceInfo()[authenticator.Authenticator_ServiceDesc.ServiceName]; !ok {
-					authGrpc.RegisterAuthenticatorServer(s.Server(), config.ConfigFlags.ToRawKubeConfigLoader())
+					authGrpc.RegisterAuthenticatorServer(s.Server(), config.ClientConfig)
 				}
 				return client.GetExe(ctx), s.ListenerAddress(ctx), nil
 			}, nil)
@@ -1036,7 +1036,7 @@ func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*com
 	return errcat.ToResult(nil), nil
 }
 
-func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
+func (s *session) getOutboundInfo(ctx context.Context, cr *rpc.ConnectRequest) *rootdRpc.OutboundInfo {
 	// We'll figure out the IP address of the API server(s) so that we can tell the daemon never to proxy them.
 	// This is because in some setups the API server will be in the same CIDR range as the pods, and the
 	// daemon will attempt to proxy traffic to it. This usually results in a loss of all traffic to/from
@@ -1081,6 +1081,8 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 		Namespace:          s.Namespace,
 		ManagerNamespace:   s.GetManagerNamespace(),
 		SubnetViaWorkloads: s.subnetViaWorkloads,
+		KubeFlags:          cr.KubeFlags,
+		KubeconfigData:     cr.KubeconfigData,
 	}
 
 	if s.DNS != nil {

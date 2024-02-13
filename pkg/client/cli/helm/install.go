@@ -45,9 +45,9 @@ type Request struct {
 	NoHooks     bool
 }
 
-func getHelmConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string) (*action.Configuration, error) {
+func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
-	err := helmConfig.Init(configFlags, namespace, helmDriver, func(format string, args ...any) {
+	err := helmConfig.Init(clientGetter, namespace, helmDriver, func(format string, args ...any) {
 		ctx := dlog.WithField(ctx, "source", "helm")
 		dlog.Infof(ctx, format, args...)
 	})
@@ -181,9 +181,9 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, re
 	})
 }
 
-func isInstalled(ctx context.Context, configFlags *genericclioptions.ConfigFlags, releaseName, namespace string) (*release.Release, *action.Configuration, error) {
+func isInstalled(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, releaseName, namespace string) (*release.Release, *action.Configuration, error) {
 	dlog.Debug(ctx, "getHelmConfig")
-	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
+	helmConfig, err := getHelmConfig(ctx, clientGetter, namespace)
 	if err != nil {
 		err = fmt.Errorf("failed to initialize helm config: %w", err)
 		return nil, nil, err
@@ -225,7 +225,7 @@ func isInstalled(ctx context.Context, configFlags *genericclioptions.ConfigFlags
 	return existing, helmConfig, nil
 }
 
-func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, req *Request) error {
+func EnsureTrafficManager(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string, req *Request) error {
 	if req.Crds {
 		dlog.Debug(ctx, "loading build-in helm chart")
 		crdChart, err := loadCRDChart()
@@ -233,7 +233,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 			return fmt.Errorf("unable to load built-in helm chart: %w", err)
 		}
 
-		err = ensureIsInstalled(ctx, configFlags, crdChart, crdReleaseName, namespace, req)
+		err = ensureIsInstalled(ctx, clientGetter, crdChart, crdReleaseName, namespace, req)
 		if err != nil {
 			return fmt.Errorf("failed to install traffic manager CRDs: %w", err)
 		}
@@ -245,7 +245,7 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 		return fmt.Errorf("unable to load built-in helm chart: %w", err)
 	}
 
-	err = ensureIsInstalled(ctx, configFlags, coreChart, trafficManagerReleaseName, namespace, req)
+	err = ensureIsInstalled(ctx, clientGetter, coreChart, trafficManagerReleaseName, namespace, req)
 	if err != nil {
 		return fmt.Errorf("failed to install traffic manager: %w", err)
 	}
@@ -255,10 +255,10 @@ func EnsureTrafficManager(ctx context.Context, configFlags *genericclioptions.Co
 
 // EnsureTrafficManager ensures the traffic manager is installed.
 func ensureIsInstalled(
-	ctx context.Context, configFlags *genericclioptions.ConfigFlags, chrt *chart.Chart,
+	ctx context.Context, clientGetter genericclioptions.RESTClientGetter, chrt *chart.Chart,
 	releaseName, namespace string, req *Request,
 ) error {
-	existing, helmConfig, err := isInstalled(ctx, configFlags, releaseName, namespace)
+	existing, helmConfig, err := isInstalled(ctx, clientGetter, releaseName, namespace)
 	if err != nil {
 		return fmt.Errorf("err detecting %s: %w", releaseName, err)
 	}
@@ -329,17 +329,17 @@ func ensureIsInstalled(
 
 // DeleteTrafficManager deletes the traffic manager.
 func DeleteTrafficManager(
-	ctx context.Context, configFlags *genericclioptions.ConfigFlags, namespace string, errOnFail bool, req *Request,
+	ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string, errOnFail bool, req *Request,
 ) error {
 	if !req.Crds {
-		err := ensureIsDeleted(ctx, configFlags, trafficManagerReleaseName, namespace, errOnFail, req)
+		err := ensureIsDeleted(ctx, clientGetter, trafficManagerReleaseName, namespace, errOnFail, req)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	err := ensureIsDeleted(ctx, configFlags, crdReleaseName, namespace, errOnFail, req)
+	err := ensureIsDeleted(ctx, clientGetter, crdReleaseName, namespace, errOnFail, req)
 	if err != nil {
 		return err
 	}
@@ -349,12 +349,12 @@ func DeleteTrafficManager(
 
 func ensureIsDeleted(
 	ctx context.Context,
-	configFlags *genericclioptions.ConfigFlags,
+	clientGetter genericclioptions.RESTClientGetter,
 	releaseName, namespace string,
 	errOnFail bool,
 	req *Request,
 ) error {
-	helmConfig, err := getHelmConfig(ctx, configFlags, namespace)
+	helmConfig, err := getHelmConfig(ctx, clientGetter, namespace)
 	if err != nil {
 		return fmt.Errorf("failed to initialize helm config: %w", err)
 	}

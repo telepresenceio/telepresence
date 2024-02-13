@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/netip"
 	"os"
 	"regexp"
@@ -117,6 +118,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 type requestKey struct{}
 
 func (cr *Request) CommitFlags(cmd *cobra.Command) error {
+	var err error
 	cr.kubeFlagSet.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
 			var v string
@@ -124,12 +126,20 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) error {
 				v = slice.AsCSV(sv.GetSlice())
 			} else {
 				v = flag.Value.String()
+				if flag.Name == "kubeconfig" && v == "-" {
+					// Read kubeconfig from stdin
+					cr.KubeconfigData, err = io.ReadAll(cmd.InOrStdin())
+					return // kubernetes will not understand "-"
+				}
 			}
 			cr.KubeFlags[flag.Name] = v
 		}
 	})
+	if err != nil {
+		return err
+	}
 	cr.addKubeconfigEnv()
-	err := cr.setGlobalConnectFlags(cmd)
+	err = cr.setGlobalConnectFlags(cmd)
 	if err != nil {
 		return errcat.User.New(err)
 	}

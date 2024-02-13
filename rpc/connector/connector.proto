@@ -165,6 +165,9 @@ message ConnectRequest {
   repeated daemon.SubnetViaWorkload subnet_via_workloads = 11;
   string manager_namespace = 7;
   map<string, string> environment = 8;
+
+  // Kubeconfig YAML, if not to be loaded from file.
+  optional bytes kubeconfig_data = 12;
 }
 
 message ConnectInfo {
