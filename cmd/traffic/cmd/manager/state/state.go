@@ -22,9 +22,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -88,6 +90,7 @@ type State interface {
 	WatchDial(sessionID string) <-chan *rpc.DialRequest
 	WatchIntercepts(context.Context, func(sessionID string, intercept *rpc.InterceptInfo) bool) <-chan watchable.Snapshot[*rpc.InterceptInfo]
 	WatchLookupDNS(string) <-chan *rpc.DNSRequest
+	ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
 }
 
 type (
