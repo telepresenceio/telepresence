@@ -69,7 +69,7 @@ func (s *suiteConfigWatcher) TestStoreForEntryAlreadySet() {
 	}
 
 	// when
-	err := s.configWatcher.Store(ctx, sidecarConfig, true)
+	err := s.configWatcher.store(ctx, sidecarConfig, true)
 
 	// then
 	assert.NoError(s.T(), err)
@@ -118,7 +118,7 @@ func (s *suiteConfigWatcher) TestStoreForExistingConfigMap() {
 	}, meta.UpdateOptions{}).Return(nil, nil)
 
 	// when
-	err := s.configWatcher.Store(ctx, sidecarConfig, true)
+	err := s.configWatcher.store(ctx, sidecarConfig, true)
 
 	// then
 	assert.NoError(s.T(), err)
@@ -160,7 +160,7 @@ func (s *suiteConfigWatcher) TestStoreForNewConfigMapNoSnapshotUpdate() {
 		Return(nil, nil)
 
 	// when
-	err := s.configWatcher.Store(ctx, sidecarConfig, false)
+	err := s.configWatcher.store(ctx, sidecarConfig, false)
 
 	// then
 	assert.NoError(s.T(), err)
@@ -202,7 +202,7 @@ func (s *suiteConfigWatcher) TestStoreForNewConfigMapWithSnapshotUpdate() {
 		Return(nil, nil)
 
 	// when
-	err := s.configWatcher.Store(ctx, sidecarConfig, true)
+	err := s.configWatcher.store(ctx, sidecarConfig, true)
 
 	// then
 	assert.NoError(s.T(), err)
@@ -237,10 +237,10 @@ func (s *suiteConfigWatcher) TestStoreErrGroupBuffer() {
 	// when
 	testGroup, _ := errgroup.WithContext(ctx)
 	testGroup.Go(func() error {
-		return s.configWatcher.Store(ctx, sidecarConfigA, true)
+		return s.configWatcher.store(ctx, sidecarConfigA, true)
 	})
 	testGroup.Go(func() error {
-		return s.configWatcher.Store(ctx, sidecarConfigB, true)
+		return s.configWatcher.store(ctx, sidecarConfigB, true)
 	})
 	err := testGroup.Wait()
 
