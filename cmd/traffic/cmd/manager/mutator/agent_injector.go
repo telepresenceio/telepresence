@@ -565,7 +565,7 @@ func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) Pat
 				// Rely on iptables mapping instead of port renames
 				continue
 			}
-			patches = hideContainerPorts(pod, app, ic.ContainerPortName, patches)
+			patches = hideContainerPorts(pod, app, bool(cc.Replace), ic.ContainerPortName, patches)
 		}
 	})
 	return patches
@@ -573,7 +573,7 @@ func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) Pat
 
 // hideContainerPorts  will replace the symbolic name of a container port with a generated name. It will perform
 // the same replacement on all references to that port from the probes of the container.
-func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, patches PatchOps) PatchOps {
+func hideContainerPorts(pod *core.Pod, app *core.Container, isReplace bool, portName string, patches PatchOps) PatchOps {
 	cns := pod.Spec.Containers
 	var containerPath string
 	for i := range cns {
@@ -599,18 +599,22 @@ func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, pat
 		}
 	}
 
-	probes := []*core.Probe{app.LivenessProbe, app.ReadinessProbe, app.StartupProbe}
-	probeNames := []string{"livenessProbe/", "readinessProbe/", "startupProbe/"}
+	// A replacing intercept will swap the app-container for one that doesn't have any
+	// probes, so the patch must not contain renames for those.
+	if !isReplace {
+		probes := []*core.Probe{app.LivenessProbe, app.ReadinessProbe, app.StartupProbe}
+		probeNames := []string{"livenessProbe/", "readinessProbe/", "startupProbe/"}
 
-	for i, probe := range probes {
-		if probe == nil {
-			continue
-		}
-		if h := probe.HTTPGet; h != nil && h.Port.StrVal == portName {
-			hidePort(probeNames[i] + "httpGet/port")
-		}
-		if t := probe.TCPSocket; t != nil && t.Port.StrVal == portName {
-			hidePort(probeNames[i] + "tcpSocket/port")
+		for i, probe := range probes {
+			if probe == nil {
+				continue
+			}
+			if h := probe.HTTPGet; h != nil && h.Port.StrVal == portName {
+				hidePort(probeNames[i] + "httpGet/port")
+			}
+			if t := probe.TCPSocket; t != nil && t.Port.StrVal == portName {
+				hidePort(probeNames[i] + "tcpSocket/port")
+			}
 		}
 	}
 	return patches

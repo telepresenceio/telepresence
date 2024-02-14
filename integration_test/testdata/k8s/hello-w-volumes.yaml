@@ -128,6 +128,12 @@ spec:
               name: hello-secret-volume-1
             - mountPath: /etc/nginx/templates/
               name: nginx-config
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 3
         - name: hello-container-2
           image: nginx
           env:
