@@ -165,7 +165,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
 				if isDelete && scx != nil {
 					config := scx.AgentConfig()
-					err = a.agentConfigs.Delete(ctx, config.WorkloadName, config.Namespace)
+					err = a.agentConfigs.remove(ctx, config.WorkloadName, config.Namespace)
 				}
 			}
 			return nil, err
@@ -184,7 +184,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		}
 
 		scx.RecordInSpan(span)
-		if err = a.agentConfigs.Store(ctx, scx, true); err != nil {
+		if err = a.agentConfigs.store(ctx, scx, true); err != nil {
 			return nil, err
 		}
 	default:
