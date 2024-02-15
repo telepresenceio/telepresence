@@ -33,9 +33,12 @@ import (
 type Map interface {
 	Get(string, string) (agentconfig.SidecarExt, error)
 	Run(context.Context) error
-	Delete(context.Context, string, string) error
-	Store(context.Context, agentconfig.SidecarExt, bool) error
+	OnAdd(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
+	OnDelete(context.Context, k8sapi.Workload) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
+
+	store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error
+	remove(ctx context.Context, name, namespace string) error
 }
 
 var NewWatcherFunc = NewWatcher //nolint:gochecknoglobals // extension point
@@ -380,6 +383,16 @@ func (c *configWatcher) Run(ctx context.Context) error {
 	}
 }
 
+func (c *configWatcher) OnAdd(ctx context.Context, wl k8sapi.Workload, acx agentconfig.SidecarExt) error {
+	triggerRollout(ctx, wl, acx.AgentConfig())
+	return nil
+}
+
+func (c *configWatcher) OnDelete(ctx context.Context, wl k8sapi.Workload) error {
+	triggerRollout(ctx, wl, nil)
+	return nil
+}
+
 func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
 		trace.WithNewRoot(),
@@ -415,15 +428,17 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 		}
 		if acx, err := gc.Generate(ctx, wl, ac); err != nil {
 			dlog.Error(ctx, err)
-		} else if err = c.self.Store(ctx, acx, false); err != nil { // Calling Store() will generate a new event, so we skip rollout here
+		} else if err = c.store(ctx, acx, false); err != nil { // Calling store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
 		}
 		return
 	}
-	triggerRollout(ctx, wl, ac)
+	if err = c.self.OnAdd(ctx, wl, scx); err != nil {
+		dlog.Error(ctx, err)
+	}
 }
 
-func (*configWatcher) handleDelete(ctx context.Context, e entry) {
+func (c *configWatcher) handleDelete(ctx context.Context, e entry) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
 		trace.WithNewRoot(),
 		trace.WithLinks(e.link),
@@ -444,7 +459,9 @@ func (*configWatcher) handleDelete(ctx context.Context, e entry) {
 		// Deleted before it was generated or manually added, just ignore
 		return
 	}
-	triggerRollout(ctx, wl, nil)
+	if err = c.self.OnDelete(ctx, wl); err != nil {
+		dlog.Error(ctx, err)
+	}
 }
 
 func (c *configWatcher) Get(key, ns string) (agentconfig.SidecarExt, error) {
@@ -461,10 +478,10 @@ func (c *configWatcher) Get(key, ns string) (agentconfig.SidecarExt, error) {
 	return agentconfig.UnmarshalYAML([]byte(v))
 }
 
-// Delete will delete an agent config from the agents ConfigMap for the given namespace. It will
+// remove will delete an agent config from the agents ConfigMap for the given namespace. It will
 // also update the current snapshot.
 // An attempt to delete a manually added config is a no-op.
-func (c *configWatcher) Delete(ctx context.Context, name, namespace string) error {
+func (c *configWatcher) remove(ctx context.Context, name, namespace string) error {
 	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
 	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
 	if err != nil {
@@ -490,10 +507,10 @@ func (c *configWatcher) Delete(ctx context.Context, name, namespace string) erro
 	return err
 }
 
-// Store will store an agent config in the agents ConfigMap for the given namespace. It will
+// store an agent config in the agents ConfigMap for the given namespace. It will
 // also update the current snapshot if the updateSnapshot is true. This update will prevent
 // the rollout that otherwise occur when the ConfigMap is updated.
-func (c *configWatcher) Store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error {
+func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error {
 	js, err := acx.Marshal()
 	if err != nil {
 		return err
@@ -864,7 +881,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		if err != nil {
 			if errors.IsNotFound(err) {
 				dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-				if err = c.self.Delete(ctx, ac.AgentName, ac.Namespace); err != nil {
+				if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
 					dlog.Error(ctx, err)
 				}
 			} else {
@@ -878,7 +895,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 			dlog.Error(ctx, err)
 			continue
 		}
-		if err = c.self.Store(ctx, acn, false); err != nil {
+		if err = c.store(ctx, acn, false); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}

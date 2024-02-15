@@ -64,8 +64,15 @@ func (s *state) PrepareIntercept(
 	}
 
 	spec := cr.InterceptSpec
-	extended := s.isExtended(spec)
-	ac, err := s.ensureAgent(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind, extended, spec)
+	wl, err := tracing.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
+	if err != nil {
+		if k8sErrors.IsNotFound(err) {
+			err = errcat.User.New(err)
+		}
+		return interceptError(err)
+	}
+
+	ac, err := s.ensureAgent(ctx, wl, s.isExtended(spec), spec)
 	if err != nil {
 		return interceptError(err)
 	}
@@ -85,21 +92,24 @@ func (s *state) PrepareIntercept(
 }
 
 func (s *state) EnsureAgent(ctx context.Context, n, ns string) error {
-	_, err := s.ensureAgent(ctx, n, ns, "", false, nil)
-	return err
-}
-
-func (s *state) ensureAgent(parentCtx context.Context, n, ns, kind string, extended bool, spec *managerrpc.InterceptSpec) (*agentconfig.Sidecar, error) {
-	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
-	defer cancel()
-
-	wl, err := tracing.GetWorkload(ctx, n, ns, kind)
+	wl, err := tracing.GetWorkload(ctx, n, ns, "")
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			err = errcat.User.New(err)
 		}
-		return nil, err
+		return err
 	}
+	_, err = s.ensureAgent(ctx, wl, false, nil)
+	return err
+}
+
+func (s *state) ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error {
+	return nil
+}
+
+func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, extended bool, spec *managerrpc.InterceptSpec) (*agentconfig.Sidecar, error) {
+	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
+	defer cancel()
 
 	failedCreateCh, err := watchFailedInjectionEvents(ctx, wl.GetName(), wl.GetNamespace())
 	if err != nil {
@@ -368,6 +378,10 @@ func (s *state) createOrUpdateAgentConfig(
 				if as, ok := s.GetSession(sessionID).(*agentSessionState); ok {
 					as.active.Store(false)
 				}
+			}
+		} else {
+			if err = s.self.ValidateCreateAgent(ctx, wl, sce); err != nil {
+				return nil, err
 			}
 		}
 		if err = updateSidecar(ctx, sce, cmAPI, cm, wl.GetName(), wl.GetNamespace()); err != nil {
