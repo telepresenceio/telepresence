@@ -139,7 +139,7 @@ func (kf *Kubeconfig) ToRESTMapper() (meta.RESTMapper, error) {
 		return nil, err
 	}
 	mapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
-	expander := restmapper.NewShortcutExpander(mapper, discoveryClient)
+	expander := restmapper.NewShortcutExpander(mapper, discoveryClient, func(string) {})
 	return expander, nil
 }
 

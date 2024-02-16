@@ -207,7 +207,7 @@ var blockedUDPPorts = map[uint16]bool{ //nolint:gochecknoglobals // constant
 	139: true, // NETBIOS
 }
 
-func forwardUDP(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator, fr *udp.ForwarderRequest) {
+func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp.ForwarderRequest) {
 	id := fr.ID()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "UDPHandler",
 		trace.WithNewRoot(),
@@ -233,12 +233,12 @@ func forwardUDP(ctx context.Context, s *stack.Stack, streamCreator tunnel.Stream
 		dlog.Errorf(ctx, msg)
 		return
 	}
-	dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(s, &wq, ep), streamCreator)
+	dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(&wq, ep), streamCreator)
 }
 
 func setUDPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator) {
 	f := udp.NewForwarder(s, func(fr *udp.ForwarderRequest) {
-		forwardUDP(ctx, s, streamCreator, fr)
+		forwardUDP(ctx, streamCreator, fr)
 	})
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, f.HandlePacket)
 }
