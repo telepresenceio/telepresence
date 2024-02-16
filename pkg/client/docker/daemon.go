@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerClient "github.com/docker/docker/client"
 	"google.golang.org/grpc"
@@ -400,7 +401,7 @@ func containerPort(addrPort netip.AddrPort, ns *types.NetworkSettings) (port uin
 
 // runningContainers returns the inspect data for all containers with status=running.
 func runningContainers(ctx context.Context, cli dockerClient.APIClient) []types.ContainerJSON {
-	cl, err := cli.ContainerList(ctx, types.ContainerListOptions{
+	cl, err := cli.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(filters.KeyValuePair{Key: "status", Value: "running"}),
 	})
 	if err != nil {
