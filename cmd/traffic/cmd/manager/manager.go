@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -59,14 +62,15 @@ func Main(ctx context.Context, _ ...string) error {
 	return MainWithEnv(ctx)
 }
 
-func MainWithEnv(ctx context.Context) error {
+func MainWithEnv(ctx context.Context) (err error) {
+	defer runtime.RecoverFromPanic(&err)
+
 	dlog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
 
 	env := managerutil.GetEnv(ctx)
 	var tracer *tracing.TraceServer
 
 	if env.TracingGrpcPort != 0 {
-		var err error
 		tracer, err = tracing.NewTraceServer(ctx, "traffic-manager",
 			attribute.String("tel2.agent-image", env.QualifiedAgentImage()),
 			attribute.String("tel2.managed-namespaces", strings.Join(env.ManagedNamespaces, ",")),
@@ -89,6 +93,19 @@ func MainWithEnv(ctx context.Context) error {
 		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
+
+	// Ensure that the manager has access to shard informer factories for all relevant namespaces.
+	if len(env.ManagedNamespaces) == 0 {
+		ctx = informer.WithFactory(ctx, "")
+		ctx = informer.WithFactory(ctx, env.ManagerNamespace)
+	} else {
+		for _, ns := range env.ManagedNamespaces {
+			ctx = informer.WithFactory(ctx, ns)
+		}
+		if !slices.Contains(env.ManagedNamespaces, env.ManagerNamespace) {
+			ctx = informer.WithFactory(ctx, env.ManagerNamespace)
+		}
+	}
 
 	mgr, g, err := NewServiceFunc(ctx)
 	if err != nil {
