@@ -17,6 +17,7 @@ import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 
@@ -791,63 +792,48 @@ func (c *configWatcher) configMapEventHandler(ctx context.Context, evCh <-chan w
 	}
 }
 
-func (c *configWatcher) configsAffectedBySvcUID(ctx context.Context, nsData map[string]string, uid types.UID) []agentconfig.SidecarExt {
-	references := func(ac *agentconfig.Sidecar, uid types.UID) bool {
+type affectedConfig struct {
+	err error
+	wl  k8sapi.Workload // If a workload is retrieved, it will be cached here.
+	scx agentconfig.SidecarExt
+}
+
+func (c *configWatcher) configsAffectedBySvc(ctx context.Context, nsData map[string]string, svc *core.Service, isDelete bool) []affectedConfig {
+	references := func(ac *agentconfig.Sidecar) (k8sapi.Workload, error, bool) {
 		for _, cn := range ac.Containers {
 			for _, ic := range cn.Intercepts {
-				if ic.ServiceUID == uid {
-					return true
+				if ic.ServiceUID == svc.UID {
+					return nil, nil, true
 				}
 			}
 		}
-		return false
+		if isDelete {
+			// A deleted service will only affect configs that matches its UID
+			return nil, nil, false
+		}
+
+		// The config will be affected if a service is added or modified so that it now selects the pod for the workload.
+		wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+		if err != nil {
+			return nil, err, false
+		}
+		return wl, nil, labels.SelectorFromSet(svc.Spec.Selector).Matches(labels.Set(wl.GetPodTemplate().Labels))
 	}
 
-	var affected []agentconfig.SidecarExt
+	var affected []affectedConfig
 	for _, cfg := range nsData {
 		scx, err := agentconfig.UnmarshalYAML([]byte(cfg))
 		if err != nil {
 			dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", cfg)
-		} else if references(scx.AgentConfig(), uid) {
-			affected = append(affected, scx)
+		} else if wl, err, ok := references(scx.AgentConfig()); ok {
+			affected = append(affected, affectedConfig{scx: scx, wl: wl, err: err})
 		}
 	}
 	return affected
 }
 
-func (c *configWatcher) configsAffectedByWorkloads(ctx context.Context, nsData map[string]string, wls []k8sapi.Workload) []agentconfig.SidecarExt {
-	var affected []agentconfig.SidecarExt
-	for _, wl := range wls {
-		if nsd, ok := nsData[wl.GetName()]; ok {
-			scx, err := agentconfig.UnmarshalYAML([]byte(nsd))
-			if err != nil {
-				dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", nsd)
-			} else {
-				affected = append(affected, scx)
-			}
-		}
-	}
-	return affected
-}
-
-func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []agentconfig.SidecarExt {
+func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []affectedConfig {
 	ns := svc.Namespace
-
-	var wls []k8sapi.Workload
-	// Find workloads that the updated service is referencing.
-	selector := svc.Spec.Selector
-	if len(selector) > 0 {
-		if deps, err := k8sapi.Deployments(ctx, ns, selector); err == nil {
-			wls = append(wls, deps...)
-		}
-		if reps, err := k8sapi.ReplicaSets(ctx, ns, selector); err == nil {
-			wls = append(wls, reps...)
-		}
-		if stss, err := k8sapi.StatefulSets(ctx, ns, selector); err == nil {
-			wls = append(wls, stss...)
-		}
-	}
-
 	c.RLock()
 	defer c.RUnlock()
 	nsData, ok := c.data[ns]
@@ -855,12 +841,7 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 	if !ok || len(nsData) == 0 {
 		return nil
 	}
-
-	if isDelete {
-		return c.configsAffectedBySvcUID(ctx, nsData, svc.UID)
-	}
-
-	return c.configsAffectedByWorkloads(ctx, nsData, wls)
+	return c.configsAffectedBySvc(ctx, nsData, svc, isDelete)
 }
 
 func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDelete bool) {
@@ -875,19 +856,25 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		dlog.Error(ctx, err)
 		return
 	}
-	for _, scx := range c.affectedConfigs(ctx, svc, isDelete) {
-		ac := scx.AgentConfig()
-		wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-				if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
+	for _, ax := range c.affectedConfigs(ctx, svc, isDelete) {
+		ac := ax.scx.AgentConfig()
+		wl := ax.wl
+		if wl == nil {
+			err = ax.err
+			if err == nil {
+				wl, err = tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+			}
+			if err != nil {
+				if errors.IsNotFound(err) {
+					dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
+					if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
+						dlog.Error(ctx, err)
+					}
+				} else {
 					dlog.Error(ctx, err)
 				}
-			} else {
-				dlog.Error(ctx, err)
+				continue
 			}
-			continue
 		}
 		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
 		acn, err := cfg.Generate(ctx, wl, ac)
