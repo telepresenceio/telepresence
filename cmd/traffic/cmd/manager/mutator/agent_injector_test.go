@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
@@ -26,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
 
 const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -1803,6 +1805,13 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx = managerutil.WithEnv(ctx, env)
 			agentmap.GeneratorConfigFunc = env.GeneratorConfig
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
+			ctx = informer.WithFactory(ctx, "")
+			f := informer.GetFactory(ctx, "")
+			si := f.Core().V1().Services().Informer()
+			ci := f.Core().V1().ConfigMaps().Informer()
+			go si.Run(ctx.Done())
+			go ci.Run(ctx.Done())
+			cache.WaitForCacheSync(ctx.Done(), si.HasSynced, ci.HasSynced)
 			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 			require.NoError(t, err)
 			if test.envAdditions != nil {

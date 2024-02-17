@@ -1,16 +1,20 @@
 package agentmap
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -41,7 +45,15 @@ func FindOwnerWorkload(ctx context.Context, workloadCache map[string]k8sapi.Work
 func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {
 	switch {
 	case svcName != "":
-		svc, err := k8sapi.GetService(ctx, svcName, pod.Namespace)
+		var svc *core.Service
+		var err error
+		if f := informer.GetFactory(ctx, pod.Namespace); f != nil {
+			svc, err = f.Core().V1().Services().Lister().Services(pod.Namespace).Get(svcName)
+		} else {
+			// This shouldn't happen really.
+			dlog.Debugf(ctx, "fetching service %s.%s using direct API call", pod.Namespace, svcName)
+			svc, err = k8sapi.GetK8sInterface(ctx).CoreV1().Services(pod.Namespace).Get(ctx, svcName, meta.GetOptions{})
+		}
 		if err != nil {
 			if k8sErrors.IsNotFound(err) {
 				return nil, fmt.Errorf(
@@ -50,7 +62,7 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 			}
 			return nil, err
 		}
-		return []k8sapi.Object{svc}, nil
+		return []k8sapi.Object{k8sapi.Service(svc)}, nil
 	case len(pod.Labels) > 0:
 		lbs := labels.Set(pod.Labels)
 		svcs, err := findServicesSelecting(ctx, pod.Namespace, lbs)
@@ -66,19 +78,59 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 	}
 }
 
-func findServicesSelecting(c context.Context, namespace string, lbs labels.Labels) ([]k8sapi.Object, error) {
-	ss, err := k8sapi.Services(c, namespace, nil)
-	if err != nil {
-		return nil, err
+type objectsStringer []k8sapi.Object
+
+func (os objectsStringer) String() string {
+	b := bytes.Buffer{}
+	l := len(os)
+	for i, o := range os {
+		if i > 0 {
+			if l != 2 {
+				b.WriteString(", ")
+			}
+			if i == l-1 {
+				b.WriteString(" and ")
+			}
+		}
+		b.WriteString(o.GetName())
 	}
+	return b.String()
+}
+
+// findServicesSelecting finds all services that has a selector that matches the given labels.
+func findServicesSelecting(ctx context.Context, namespace string, lbs labels.Labels) ([]k8sapi.Object, error) {
 	var ms []k8sapi.Object
-	for _, s := range ss {
-		if sl, err := s.Selector(); err != nil {
+	var scanned int
+	if f := informer.GetFactory(ctx, namespace); f != nil {
+		ss, err := f.Core().V1().Services().Lister().List(labels.Everything())
+		if err != nil {
 			return nil, err
-		} else if sl != nil && !sl.Empty() && sl.Matches(lbs) {
-			ms = append(ms, s)
+		}
+		scanned = len(ss)
+		for _, s := range ss {
+			sel := s.Spec.Selector
+			if len(sel) > 0 && labels.SelectorFromValidatedSet(sel).Matches(lbs) {
+				ms = append(ms, k8sapi.Service(s))
+			}
+		}
+	} else {
+		// This shouldn't happen really.
+		dlog.Debugf(ctx, "Fetching services in %s using direct API call", namespace)
+		l, err := k8sapi.GetK8sInterface(ctx).CoreV1().Services(namespace).List(ctx, meta.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		items := l.Items
+		scanned = len(items)
+		for i := range items {
+			s := &items[i]
+			sel := s.Spec.Selector
+			if len(sel) > 0 && labels.SelectorFromValidatedSet(sel).Matches(lbs) {
+				ms = append(ms, k8sapi.Service(s))
+			}
 		}
 	}
+	dlog.Debugf(ctx, "Scanned %d services in namespace %s and found that %s selects labels %v", scanned, namespace, objectsStringer(ms), lbs)
 	return ms, nil
 }
 

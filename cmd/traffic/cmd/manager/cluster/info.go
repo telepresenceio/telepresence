@@ -22,6 +22,7 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -41,14 +42,6 @@ type Info interface {
 
 	// clusterID of the cluster
 	ClusterID() string
-
-	// GetTrafficManagerPods acquires all pods that have `traffic-manager` in
-	// their name
-	GetTrafficManagerPods(context.Context) ([]*corev1.Pod, error)
-
-	// GetTrafficAgentPods acquires all pods that have a `traffic-agent`
-	// container in their spec
-	GetTrafficAgentPods(context.Context, string) ([]*corev1.Pod, error)
 
 	// SetAdditionalAlsoProxy assigns a slice that will be added to the Routing.AlsoProxySubnets slice
 	// when notifications are sent.
@@ -334,18 +327,40 @@ func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {
 	wg := sync.WaitGroup{}
 	wg.Add(nsc)
 	for i, ns := range namespaces {
-		var opts []informers.SharedInformerOption
-		if ns != "" {
-			opts = []informers.SharedInformerOption{informers.WithNamespace(ns)}
-		}
-		informerFactory := informers.NewSharedInformerFactoryWithOptions(k8sapi.GetK8sInterface(ctx), 0, opts...)
-		podController := informerFactory.Core().V1().Pods()
+		f := informer.GetFactory(ctx, ns)
+		podController := f.Core().V1().Pods()
 		podListers[i] = podController.Lister()
-		podInformers[i] = podController.Informer()
+		pi := podController.Informer()
+		podInformers[i] = pi
+		_ = pi.SetTransform(func(o any) (any, error) {
+			if pod, ok := o.(*corev1.Pod); ok {
+				pod.ManagedFields = nil
+				pod.OwnerReferences = nil
+				pod.Finalizers = nil
+
+				ps := &pod.Status
+				// We're just interested in the podIP/podIPs
+				ps.Conditions = nil
+				ps.ContainerStatuses = nil
+				ps.EphemeralContainerStatuses = nil
+				ps.HostIPs = nil
+				ps.HostIP = ""
+				ps.InitContainerStatuses = nil
+				ps.Message = ""
+				ps.ResourceClaimStatuses = nil
+				ps.NominatedNodeName = ""
+				ps.Reason = ""
+				ps.Resize = ""
+			}
+			return o, nil
+		})
+		_ = pi.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+			dlog.Errorf(ctx, "Watcher for pods %s: %v", whereWeWatch(ns), err)
+		})
 		go func() {
 			defer wg.Done()
-			informerFactory.Start(ctx.Done())
-			informerFactory.WaitForCacheSync(ctx.Done())
+			f.Start(ctx.Done())
+			f.WaitForCacheSync(ctx.Done())
 		}()
 	}
 	wg.Wait()
@@ -451,59 +466,9 @@ func subnetsToRPC(subnets []*net.IPNet) []*rpc.IPNet {
 	return rpcSubnets
 }
 
-// GetTrafficAgentPods gets all pods that have a `traffic-agent` container
-// in them.
-func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*corev1.Pod, error) {
-	// We don't get agents if they explicitly say false
-	if agents == "None" {
-		return nil, nil
+func whereWeWatch(ns string) string {
+	if ns == "" {
+		return "cluster wide"
 	}
-	client := k8sapi.GetK8sInterface(ctx).CoreV1()
-	podList, err := client.Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	// This is useful to determine how many pods we *should* be
-	// getting logs for
-	dlog.Debugf(ctx, "Found %d pod that contain a traffic-agent", len(podList.Items))
-
-	var agentPods []*corev1.Pod
-	for _, pod := range podList.Items {
-		pod := pod
-		if agents != "all" && !strings.Contains(pod.Name, agents) {
-			continue
-		}
-		for _, container := range pod.Spec.Containers {
-			if container.Name == agentContainerName {
-				agentPods = append(agentPods, &pod)
-				break
-			}
-		}
-	}
-	return agentPods, nil
-}
-
-// GetTrafficManagerPods gets all pods in the manager's namespace that have
-// `traffic-manager` in the name.
-func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*corev1.Pod, error) {
-	client := k8sapi.GetK8sInterface(ctx).CoreV1()
-	env := managerutil.GetEnv(ctx)
-	podList, err := client.Pods(env.ManagerNamespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	// This is useful to determine how many pods we *should* be
-	// getting logs for
-	dlog.Debugf(ctx, "Found %d traffic-manager pods", len(podList.Items))
-
-	var tmPods []*corev1.Pod
-	for _, pod := range podList.Items {
-		pod := pod
-		if strings.Contains(pod.Name, managerAppName) {
-			tmPods = append(tmPods, &pod)
-		}
-	}
-	return tmPods, nil
+	return "in namespace " + ns
 }
