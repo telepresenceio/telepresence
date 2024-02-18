@@ -102,7 +102,7 @@ func findServicesSelecting(ctx context.Context, namespace string, lbs labels.Lab
 	var ms []k8sapi.Object
 	var scanned int
 	if f := informer.GetFactory(ctx, namespace); f != nil {
-		ss, err := f.Core().V1().Services().Lister().List(labels.Everything())
+		ss, err := f.Core().V1().Services().Lister().Services(namespace).List(labels.Everything())
 		if err != nil {
 			return nil, err
 		}
