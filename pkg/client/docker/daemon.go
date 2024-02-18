@@ -244,38 +244,38 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *api.Config) error {
 	cc := config.Contexts[config.CurrentContext]
 	cl := config.Clusters[cc.Cluster]
-	isKind := strings.HasPrefix(cc.Cluster, "kind-")
-	dlog.Debugf(ctx, "isKind %t", isKind)
-	isMinikube := false
-	if !isKind {
-		if ex, ok := cl.Extensions["cluster_info"].(*runtime2.Unknown); ok {
-			var data map[string]any
-			isMinikube = json.Unmarshal(ex.Raw, &data) == nil && data["provider"] == "minikube.sigs.k8s.io"
-		}
-	}
-	if !(isKind || isMinikube) {
-		return nil
-	}
-
 	server, err := url.Parse(cl.Server)
 	if err != nil {
 		return err
 	}
 	host, portStr, err := net.SplitHostPort(server.Host)
 	if err != nil {
-		return err
+		// Host doesn't have a port, so it's not a local k8s.
+		return nil
 	}
 	addr, err := netip.ParseAddr(host)
 	if err != nil {
 		if host == "localhost" {
 			addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
+			err = nil
 		}
 	}
+	if err != nil {
+		return nil
+	}
+	isMinikube := false
+	if ex, ok := cl.Extensions["cluster_info"].(*runtime2.Unknown); ok {
+		var data map[string]any
+		isMinikube = json.Unmarshal(ex.Raw, &data) == nil && data["provider"] == "minikube.sigs.k8s.io"
+	}
+	if !(addr.IsLoopback() || isMinikube) {
+		return nil
+	}
+
 	port, err := strconv.ParseUint(portStr, 10, 16)
 	if err != nil {
 		return err
 	}
-
 	addrPort := netip.AddrPortFrom(addr, uint16(port))
 
 	// Let's check if we have a container with port bindings for the
@@ -288,10 +288,10 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 
 	var hostPort netip.AddrPort
 	var network string
-	if isKind {
-		hostPort, network = detectKind(ctx, cjs, addrPort)
-	} else if isMinikube {
+	if isMinikube {
 		hostPort, network = detectMinikube(ctx, cjs, addrPort, cc.Cluster)
+	} else {
+		hostPort, network = detectKind(ctx, cjs, addrPort)
 	}
 	if hostPort.IsValid() {
 		dlog.Debugf(ctx, "hostPort %s, network %s", hostPort, network)
