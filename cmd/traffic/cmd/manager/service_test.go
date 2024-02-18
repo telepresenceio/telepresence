@@ -18,6 +18,7 @@ import (
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	fakeDiscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -27,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -300,6 +302,13 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 		GitVersion: "v1.17.0",
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
+	ctx = informer.WithFactory(ctx, "")
+	f := informer.GetFactory(ctx, "")
+	si := f.Core().V1().Services().Informer()
+	ci := f.Core().V1().ConfigMaps().Informer()
+	go si.Run(ctx.Done())
+	go ci.Run(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), si.HasSynced, ci.HasSynced)
 
 	env := managerutil.Env{
 		MaxReceiveSize:  resource.Quantity{},

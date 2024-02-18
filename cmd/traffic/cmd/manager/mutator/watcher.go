@@ -17,8 +17,10 @@ import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/watch"
+	informerCore "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -26,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -284,16 +287,12 @@ func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
 // regenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
 // and then, if any of the entries changed, it updates the map.
 func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorConfig) error {
-	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	cml, err := api.ConfigMaps(ns).List(ctx, meta.SingleObject(meta.ObjectMeta{
-		Name: agentconfig.ConfigMap,
-	}))
+	cml, err := tpAgentsConfigMap(ctx, ns).Lister().List(labels.Everything())
 	if err != nil {
 		return err
 	}
-	cms := cml.Items
-	for i := range cms {
-		cm := &cms[i]
+	api := k8sapi.GetK8sInterface(ctx).CoreV1()
+	for _, cm := range cml {
 		changed := false
 		ns := cm.Namespace
 		for n, d := range cm.Data {
@@ -328,17 +327,6 @@ func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorCo
 	return err
 }
 
-func NewWatcher(name string, namespaces ...string) Map {
-	w := &configWatcher{
-		name:           name,
-		namespaces:     namespaces,
-		data:           make(map[string]map[string]string),
-		configUpdaters: make(map[string]*configUpdater),
-	}
-	w.self = w
-	return w
-}
-
 type configWatcher struct {
 	sync.RWMutex
 	cancel     context.CancelFunc
@@ -350,8 +338,23 @@ type configWatcher struct {
 
 	configUpdatersLock sync.RWMutex
 	configUpdaters     map[string]*configUpdater
+	regHandles         map[string]cache.ResourceEventHandlerRegistration
 
 	self Map // For extension
+}
+
+func NewWatcher(name string, namespaces ...string) Map {
+	w := &configWatcher{
+		name:           name,
+		namespaces:     namespaces,
+		data:           make(map[string]map[string]string),
+		configUpdaters: make(map[string]*configUpdater),
+		regHandles:     make(map[string]cache.ResourceEventHandlerRegistration),
+		modCh:          make(chan entry),
+		delCh:          make(chan entry),
+	}
+	w.self = w
+	return w
 }
 
 type entry struct {
@@ -367,7 +370,9 @@ func (c *configWatcher) SetSelf(self Map) {
 
 func (c *configWatcher) Run(ctx context.Context) error {
 	ctx, c.cancel = context.WithCancel(ctx)
-	addCh, delCh, err := c.Start(ctx)
+	c.delCh = make(chan entry)
+	c.modCh = make(chan entry)
+	err := c.Start(ctx)
 	if err != nil {
 		return err
 	}
@@ -375,9 +380,9 @@ func (c *configWatcher) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case e := <-delCh:
+		case e := <-c.delCh:
 			c.handleDelete(ctx, e)
-		case e := <-addCh:
+		case e := <-c.modCh:
 			c.handleAdd(ctx, e)
 		}
 	}
@@ -482,8 +487,8 @@ func (c *configWatcher) Get(key, ns string) (agentconfig.SidecarExt, error) {
 // also update the current snapshot.
 // An attempt to delete a manually added config is a no-op.
 func (c *configWatcher) remove(ctx context.Context, name, namespace string) error {
-	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
-	cm, err := api.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
+	getter := tpAgentsConfigMap(ctx, namespace).Lister().ConfigMaps(namespace)
+	cm, err := getter.Get(agentconfig.ConfigMap)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
@@ -503,6 +508,7 @@ func (c *configWatcher) remove(ctx context.Context, name, namespace string) erro
 	}
 	delete(cm.Data, name)
 	dlog.Debugf(ctx, "Deleting %s from ConfigMap %s.%s", name, agentconfig.ConfigMap, namespace)
+	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
 	_, err = api.Update(ctx, cm, meta.UpdateOptions{})
 	return err
 }
@@ -612,11 +618,10 @@ func (c *configUpdater) updateConfigMap() error {
 		c.cw.configUpdatersLock.Unlock()
 	}()
 
-	api := k8sapi.GetK8sInterface(c.ctx).CoreV1().ConfigMaps(c.namespace)
-
+	getter := tpAgentsConfigMap(c.ctx, c.namespace).Lister().ConfigMaps(c.namespace)
 	create := false
 
-	cm, err := api.Get(c.ctx, agentconfig.ConfigMap, meta.GetOptions{})
+	cm, err := getter.Get(agentconfig.ConfigMap)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
@@ -676,6 +681,7 @@ func (c *configUpdater) updateConfigMap() error {
 
 	cm.Data = cmData
 
+	api := k8sapi.GetK8sInterface(c.ctx).CoreV1().ConfigMaps(c.namespace)
 	if create {
 		dlog.Debugf(c.ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
 		_, err = api.Create(c.ctx, cm, meta.CreateOptions{})
@@ -683,7 +689,6 @@ func (c *configUpdater) updateConfigMap() error {
 		dlog.Debugf(c.ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
 		_, err = api.Update(c.ctx, cm, meta.UpdateOptions{})
 	}
-
 	return err
 }
 
@@ -694,160 +699,174 @@ func whereWeWatch(ns string) string {
 	return "in namespace " + ns
 }
 
-func (c *configWatcher) watchConfigMap(ctx context.Context, ns string) {
-	dlog.Infof(ctx, "Started watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
-	defer dlog.Infof(ctx, "Ended watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
-
-	// The Watch will perform a http GET call to the kubernetes API server, and that connection will not remain open forever
-	// so when it closes, the watch must start over. This goes on until the context is cancelled.
-	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	for ctx.Err() == nil {
-		w, err := api.ConfigMaps(ns).Watch(ctx, meta.SingleObject(meta.ObjectMeta{
-			Name: agentconfig.ConfigMap,
-		}))
-		if err != nil {
-			dlog.Errorf(ctx, "unable to create configmap watcher: %v", err)
-			return
-		}
-		c.configMapEventHandler(ctx, w.ResultChan())
-	}
+func tpAgentsConfigMap(ctx context.Context, ns string) informerCore.ConfigMapInformer {
+	f := informer.GetFactory(ctx, ns)
+	cV1 := informerCore.New(f, ns, func(options *meta.ListOptions) {
+		options.FieldSelector = "metadata.name=" + agentconfig.ConfigMap
+	})
+	cms := cV1.ConfigMaps()
+	return cms
 }
 
-func (c *configWatcher) watchServices(ctx context.Context, ns string) {
-	dlog.Infof(ctx, "Started watcher for Services %s", whereWeWatch(ns))
-	defer dlog.Infof(ctx, "Ended watcher for Services %s", whereWeWatch(ns))
-
-	// The Watch will perform a http GET call to the kubernetes API server, and that connection will not remain open forever
-	// so when it closes, the watch must start over. This goes on until the context is cancelled.
-	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	for ctx.Err() == nil {
-		w, err := api.Services(ns).Watch(ctx, meta.ListOptions{})
-		if err != nil {
-			dlog.Errorf(ctx, "unable to create service watcher: %v", err)
-			return
+func (c *configWatcher) startConfigMap(ctx context.Context, ns string) cache.SharedIndexInformer {
+	ix := tpAgentsConfigMap(ctx, ns).Informer()
+	_ = ix.SetTransform(func(o any) (any, error) {
+		// Strip of the parts of the service that we don't care about
+		if cm, ok := o.(*core.ConfigMap); ok {
+			cm.ManagedFields = nil
+			cm.Finalizers = nil
+			cm.OwnerReferences = nil
 		}
-		c.svcEventHandler(ctx, w.ResultChan())
-	}
+		return o, nil
+	})
+	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		dlog.Errorf(ctx, "watcher for ConfigMap %s %s: %v", agentconfig.ConfigMap, whereWeWatch(ns), err)
+	})
+	go func() {
+		dlog.Infof(ctx, "Started watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
+		defer dlog.Infof(ctx, "Ended watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
+		ix.Run(ctx.Done())
+	}()
+	return ix
 }
 
-func (c *configWatcher) Start(ctx context.Context) (modCh <-chan entry, delCh <-chan entry, err error) {
-	c.Lock()
-	c.modCh = make(chan entry)
-	c.delCh = make(chan entry)
-	c.Unlock()
-	if len(c.namespaces) == 0 {
-		go c.watchConfigMap(ctx, "")
-		go c.watchServices(ctx, "")
-	} else {
-		for _, ns := range c.namespaces {
-			go c.watchConfigMap(ctx, ns)
-			go c.watchServices(ctx, ns)
-		}
-	}
-	return c.modCh, c.delCh, nil
-}
-
-func (c *configWatcher) configMapEventHandler(ctx context.Context, evCh <-chan watch.Event) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-evCh:
-			{
-				if !ok {
-					return // restart watcher
+func (c *configWatcher) watchConfigMap(ctx context.Context, ix cache.SharedIndexInformer) error {
+	_, err := ix.AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj any) {
+				if cm, ok := obj.(*core.ConfigMap); ok {
+					dlog.Debugf(ctx, "ADDED %s.%s", cm.Name, cm.Namespace)
+					c.update(ctx, cm.Namespace, cm.Data)
 				}
-				ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.configMapEventHandler",
-					trace.WithNewRoot(), // Because the watcher is long lived, if we put these spans under it there's a high chance they don't get collected.
-					trace.WithAttributes(
-						attribute.String("tel2.event-type", string(event.Type)),
-					))
-				switch event.Type {
-				case watch.Deleted:
-					if m, ok := event.Object.(*core.ConfigMap); ok {
-						span.SetAttributes(
-							attribute.String("tel2.cm-name", m.Name),
-							attribute.String("tel2.cm-namespace", m.Namespace),
-						)
-						dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
-						c.update(ctx, m.Namespace, nil)
-					}
-				case watch.Added, watch.Modified:
-					if m, ok := event.Object.(*core.ConfigMap); ok {
-						span.SetAttributes(
-							attribute.String("tel2.cm-name", m.Name),
-							attribute.String("tel2.cm-namespace", m.Namespace),
-						)
-						dlog.Debugf(ctx, "%s %s.%s", event.Type, m.Name, m.Namespace)
-						if m.Name != agentconfig.ConfigMap {
-							continue
-						}
-						c.update(ctx, m.Namespace, m.Data)
-					}
+			},
+			DeleteFunc: func(obj any) {
+				if cm, ok := obj.(*core.ConfigMap); ok {
+					dlog.Debugf(ctx, "DELETED %s.%s", cm.Name, cm.Namespace)
+					c.update(ctx, cm.Namespace, nil)
 				}
-				span.End()
-			}
-		}
-	}
+			},
+			UpdateFunc: func(oldObj, newObj any) {
+				if cm, ok := newObj.(*core.ConfigMap); ok {
+					dlog.Debugf(ctx, "UPDATED %s.%s", cm.Name, cm.Namespace)
+					c.update(ctx, cm.Namespace, cm.Data)
+				}
+			},
+		})
+	return err
 }
 
-func (c *configWatcher) configsAffectedBySvcUID(ctx context.Context, nsData map[string]string, uid types.UID) []agentconfig.SidecarExt {
-	references := func(ac *agentconfig.Sidecar, uid types.UID) bool {
+func (c *configWatcher) startServices(ctx context.Context, ns string) cache.SharedIndexInformer {
+	f := informer.GetFactory(ctx, ns)
+	ix := f.Core().V1().Services().Informer()
+	_ = ix.SetTransform(func(o any) (any, error) {
+		// Strip of the parts of the service that we don't care about
+		if svc, ok := o.(*core.Service); ok {
+			svc.ManagedFields = nil
+			svc.Status = core.ServiceStatus{}
+			svc.Finalizers = nil
+			svc.OwnerReferences = nil
+		}
+		return o, nil
+	})
+	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		dlog.Errorf(ctx, "watcher for Services %s: %v", whereWeWatch(ns), err)
+	})
+
+	go func() {
+		dlog.Infof(ctx, "Started watcher for Services %s", whereWeWatch(ns))
+		defer dlog.Infof(ctx, "Ended watcher for Services %s", whereWeWatch(ns))
+		ix.Run(ctx.Done())
+	}()
+	return ix
+}
+
+func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexInformer) error {
+	_, err := ix.AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj any) {
+				if svc, ok := obj.(*core.Service); ok {
+					c.updateSvc(ctx, svc, false)
+				}
+			},
+			DeleteFunc: func(obj any) {
+				if svc, ok := obj.(*core.Service); ok {
+					c.updateSvc(ctx, svc, true)
+				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
+					if svc, ok := dfsu.Obj.(*core.Service); ok {
+						c.updateSvc(ctx, svc, true)
+					}
+				}
+			},
+			UpdateFunc: func(oldObj, newObj any) {
+				if newSvc, ok := newObj.(*core.Service); ok {
+					c.updateSvc(ctx, newSvc, true)
+				}
+			},
+		})
+	return err
+}
+
+func (c *configWatcher) Start(ctx context.Context) error {
+	nss := c.namespaces
+	if len(nss) == 0 {
+		nss = []string{""}
+	}
+	for _, ns := range nss {
+		cm := c.startConfigMap(ctx, ns)
+		svs := c.startServices(ctx, ns)
+		cache.WaitForCacheSync(ctx.Done(), cm.HasSynced, svs.HasSynced)
+		if err := c.watchConfigMap(ctx, cm); err != nil {
+			return err
+		}
+		if err := c.watchServices(ctx, svs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type affectedConfig struct {
+	err error
+	wl  k8sapi.Workload // If a workload is retrieved, it will be cached here.
+	scx agentconfig.SidecarExt
+}
+
+func (c *configWatcher) configsAffectedBySvc(ctx context.Context, nsData map[string]string, svc *core.Service, trustUID bool) []affectedConfig {
+	references := func(ac *agentconfig.Sidecar) (k8sapi.Workload, error, bool) {
 		for _, cn := range ac.Containers {
 			for _, ic := range cn.Intercepts {
-				if ic.ServiceUID == uid {
-					return true
+				if ic.ServiceUID == svc.UID {
+					return nil, nil, true
 				}
 			}
 		}
-		return false
+		if trustUID {
+			// A deleted service will only affect configs that matches its UID
+			return nil, nil, false
+		}
+
+		// The config will be affected if a service is added or modified so that it now selects the pod for the workload.
+		wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+		if err != nil {
+			return nil, err, false
+		}
+		return wl, nil, labels.SelectorFromSet(svc.Spec.Selector).Matches(labels.Set(wl.GetPodTemplate().Labels))
 	}
 
-	var affected []agentconfig.SidecarExt
+	var affected []affectedConfig
 	for _, cfg := range nsData {
 		scx, err := agentconfig.UnmarshalYAML([]byte(cfg))
 		if err != nil {
 			dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", cfg)
-		} else if references(scx.AgentConfig(), uid) {
-			affected = append(affected, scx)
+		} else if wl, err, ok := references(scx.AgentConfig()); ok {
+			affected = append(affected, affectedConfig{scx: scx, wl: wl, err: err})
 		}
 	}
 	return affected
 }
 
-func (c *configWatcher) configsAffectedByWorkloads(ctx context.Context, nsData map[string]string, wls []k8sapi.Workload) []agentconfig.SidecarExt {
-	var affected []agentconfig.SidecarExt
-	for _, wl := range wls {
-		if nsd, ok := nsData[wl.GetName()]; ok {
-			scx, err := agentconfig.UnmarshalYAML([]byte(nsd))
-			if err != nil {
-				dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", nsd)
-			} else {
-				affected = append(affected, scx)
-			}
-		}
-	}
-	return affected
-}
-
-func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, isDelete bool) []agentconfig.SidecarExt {
+func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, trustUID bool) []affectedConfig {
 	ns := svc.Namespace
-
-	var wls []k8sapi.Workload
-	// Find workloads that the updated service is referencing.
-	selector := svc.Spec.Selector
-	if len(selector) > 0 {
-		if deps, err := k8sapi.Deployments(ctx, ns, selector); err == nil {
-			wls = append(wls, deps...)
-		}
-		if reps, err := k8sapi.ReplicaSets(ctx, ns, selector); err == nil {
-			wls = append(wls, reps...)
-		}
-		if stss, err := k8sapi.StatefulSets(ctx, ns, selector); err == nil {
-			wls = append(wls, stss...)
-		}
-	}
-
 	c.RLock()
 	defer c.RUnlock()
 	nsData, ok := c.data[ns]
@@ -855,15 +874,10 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 	if !ok || len(nsData) == 0 {
 		return nil
 	}
-
-	if isDelete {
-		return c.configsAffectedBySvcUID(ctx, nsData, svc.UID)
-	}
-
-	return c.configsAffectedByWorkloads(ctx, nsData, wls)
+	return c.configsAffectedBySvc(ctx, nsData, svc, trustUID)
 }
 
-func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDelete bool) {
+func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustUID bool) {
 	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
 	// If so, include them, or if workload for the config entry isn't found, delete that entry
 	img := managerutil.GetAgentImage(ctx)
@@ -875,19 +889,25 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		dlog.Error(ctx, err)
 		return
 	}
-	for _, scx := range c.affectedConfigs(ctx, svc, isDelete) {
-		ac := scx.AgentConfig()
-		wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-				if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
+	for _, ax := range c.affectedConfigs(ctx, svc, trustUID) {
+		ac := ax.scx.AgentConfig()
+		wl := ax.wl
+		if wl == nil {
+			err = ax.err
+			if err == nil {
+				wl, err = tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+			}
+			if err != nil {
+				if errors.IsNotFound(err) {
+					dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
+					if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
+						dlog.Error(ctx, err)
+					}
+				} else {
 					dlog.Error(ctx, err)
 				}
-			} else {
-				dlog.Error(ctx, err)
+				continue
 			}
-			continue
 		}
 		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
 		acn, err := cfg.Generate(ctx, wl, ac)
@@ -897,29 +917,6 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, isDele
 		}
 		if err = c.store(ctx, acn, false); err != nil {
 			dlog.Error(ctx, err)
-		}
-	}
-}
-
-func (c *configWatcher) svcEventHandler(ctx context.Context, evCh <-chan watch.Event) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-evCh:
-			if !ok {
-				return // restart watcher
-			}
-			switch event.Type {
-			case watch.Deleted:
-				if svc, ok := event.Object.(*core.Service); ok {
-					c.updateSvc(ctx, svc, true)
-				}
-			case watch.Added, watch.Modified:
-				if svc, ok := event.Object.(*core.Service); ok {
-					c.updateSvc(ctx, svc, false)
-				}
-			}
 		}
 	}
 }
