@@ -97,7 +97,6 @@ func MainWithEnv(ctx context.Context) (err error) {
 	// Ensure that the manager has access to shard informer factories for all relevant namespaces.
 	if len(env.ManagedNamespaces) == 0 {
 		ctx = informer.WithFactory(ctx, "")
-		ctx = informer.WithFactory(ctx, env.ManagerNamespace)
 	} else {
 		for _, ns := range env.ManagedNamespaces {
 			ctx = informer.WithFactory(ctx, ns)
