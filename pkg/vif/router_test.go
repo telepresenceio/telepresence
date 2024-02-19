@@ -263,7 +263,7 @@ func (s *RoutingSuite) Test_GetRoute() {
 	s.Require().Equal(device, route.Interface.Name)
 	s.Require().Equal(cidr, route.RoutedNet)
 	s.Require().False(route.Default)
-	s.Require().NotNil(route.Gateway)
+	// s.Require().NotNil(route.Gateway) there's no gateway when scope == link, and that's OK.
 	s.Require().Equal(cidr.IP, route.LocalIP)
 }
 

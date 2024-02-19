@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
 func getClusterIPs(cluster *api.Cluster) ([]net.IP, error) {
@@ -161,8 +162,29 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 func (s *notConnectedSuite) Test_ConflictingProxies() {
 	ctx := s.Context()
 
+	s.TelepresenceConnect(ctx)
+	st := itest.TelepresenceStatusOk(ctx)
+	itest.TelepresenceQuitOk(ctx)
+	rq := s.Require()
+	rq.True(len(st.RootDaemon.Subnets) > 0)
+	svcCIDR := st.RootDaemon.Subnets[0]
+	ones, bits := svcCIDR.Mask.Size()
+	if ones != 16 || bits != 32 {
+		s.T().Skip("test requires an IPv4 service subnet with a 16 bit mask")
+	}
+
+	base := svcCIDR.IP.Mask(svcCIDR.Mask)
+	largeCIDR := &net.IPNet{
+		IP:   base,
+		Mask: net.CIDRMask(24, 32),
+	}
+	smallCIDR := &net.IPNet{
+		IP:   base,
+		Mask: net.CIDRMask(28, 32),
+	}
+	// testIP is an IP that is covered by smallCIDR
 	testIP := &net.IPNet{
-		IP:   net.ParseIP("10.128.0.32"),
+		IP:   net.IP{base[0], base[1], 0, 4},
 		Mask: net.CIDRMask(32, 32),
 	}
 	// We don't really care if we can't route this with TP disconnected provided the result is the same once we connect
@@ -173,13 +195,13 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 		expectEq   bool
 	}{
 		"Never Proxy wins": {
-			alsoProxy:  []string{"10.128.0.0/16"},
-			neverProxy: []string{"10.128.0.0/24"},
+			alsoProxy:  []string{largeCIDR.String()},
+			neverProxy: []string{smallCIDR.String()},
 			expectEq:   true,
 		},
 		"Also Proxy wins": {
-			alsoProxy:  []string{"10.128.0.0/24"},
-			neverProxy: []string{"10.128.0.0/16"},
+			alsoProxy:  []string{smallCIDR.String()},
+			neverProxy: []string{largeCIDR.String()},
 			expectEq:   false,
 		},
 	} {
@@ -213,6 +235,32 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 			}, 30*time.Second, 200*time.Millisecond)
 		})
 	}
+}
+
+func (s *notConnectedSuite) Test_AlsoNeverProxyDocker() {
+	if s.IsCI() && !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64") {
+		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
+	}
+	alsoProxy := []string{"10.128.0.0/16"}
+	neverProxy := []string{"10.128.0.0/24"}
+	ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]any {
+		return map[string]any{
+			"never-proxy": neverProxy,
+			"also-proxy":  alsoProxy,
+		}
+	})
+	cidrsToStrings := func(cidrs []*iputil.Subnet) []string {
+		ss := make([]string, len(cidrs))
+		for i, cidr := range cidrs {
+			ss[i] = cidr.String()
+		}
+		return ss
+	}
+	s.TelepresenceConnect(ctx, "--context", "extra", "--docker")
+	defer itest.TelepresenceQuitOk(ctx)
+	st := itest.TelepresenceStatusOk(ctx)
+	s.True(slice.ContainsAll(cidrsToStrings(st.ContainerizedDaemon.AlsoProxy), alsoProxy))
+	s.True(slice.ContainsAll(cidrsToStrings(st.ContainerizedDaemon.NeverProxy), neverProxy))
 }
 
 func (s *notConnectedSuite) Test_DNSSuffixRules() {
