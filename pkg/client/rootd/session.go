@@ -762,11 +762,28 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		)
 	}
 
-	subnets = subnet.Unique(subnets)
-	dontProxy := slices.Clone(s.neverProxySubnets)
-	last := len(dontProxy) - 1
+	proxy, neverProxy, neverProxyOverrides := computeNeverProxyOverrides(ctx, subnets, s.neverProxySubnets)
+
+	// Fire and forget to send metrics out.
+	go func() {
+		scout.Report(ctx, "update_routes",
+			scout.Entry{Key: "subnets", Value: len(proxy)},
+			scout.Entry{Key: "allow_conflicting_subnets", Value: len(s.allowConflictingSubnets)},
+		)
+	}()
+	if s.tunVif == nil {
+		return nil
+	}
+	rt := s.tunVif.Router
+	rt.UpdateWhitelist(s.allowConflictingSubnets)
+	return rt.UpdateRoutes(ctx, proxy, neverProxy, neverProxyOverrides)
+}
+
+func computeNeverProxyOverrides(ctx context.Context, subnets, nvp []*net.IPNet) (proxy, neverProxy, neverProxyOverrides []*net.IPNet) {
+	neverProxy = slices.Clone(nvp)
+	last := len(neverProxy) - 1
 	for i := 0; i <= last; {
-		nps := dontProxy[i]
+		nps := neverProxy[i]
 		found := false
 		for _, ds := range subnets {
 			if subnet.Overlaps(ds, nps) {
@@ -778,28 +795,31 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			// This never-proxy is pointless because it's not a subnet that we are routing
 			dlog.Infof(ctx, "Dropping never-proxy %q because it is not routed", nps)
 			if last > i {
-				dontProxy[i] = dontProxy[last]
+				neverProxy[i] = neverProxy[last]
 			}
 			last--
 		} else {
 			i++
 		}
 	}
-	dontProxy = dontProxy[:last+1]
+	neverProxy = neverProxy[:last+1]
 
-	// Fire and forget to send metrics out.
-	go func() {
-		scout.Report(ctx, "update_routes",
-			scout.Entry{Key: "subnets", Value: len(subnets)},
-			scout.Entry{Key: "allow_conflicting_subnets", Value: len(s.allowConflictingSubnets)},
-		)
-	}()
-	if s.tunVif == nil {
-		return nil
-	}
-	rt := s.tunVif.Router
-	rt.UpdateWhitelist(s.allowConflictingSubnets)
-	return rt.UpdateRoutes(ctx, subnets, dontProxy)
+	proxy, neverProxyOverrides = subnet.Partition(subnets, func(i int, isn *net.IPNet) bool {
+		for r, rsn := range subnets {
+			if i == r {
+				continue
+			}
+			if subnet.Covers(rsn, isn) && !subnet.Equal(rsn, isn) {
+				for _, dsn := range neverProxy {
+					if subnet.Covers(dsn, isn) {
+						return false
+					}
+				}
+			}
+		}
+		return true
+	})
+	return subnet.Unique(proxy), neverProxy, neverProxyOverrides
 }
 
 func validateSubnets(name string, sns []*manager.IPNet, allowLoopback func() bool) ([]*net.IPNet, error) {

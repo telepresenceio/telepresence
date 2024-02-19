@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"net"
 
-	"go.opentelemetry.io/otel"
-
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 type Router struct {
@@ -19,8 +16,6 @@ type Router struct {
 	device Device
 	// The routing table that will be used to route packets
 	routingTable routing.Table
-	// Original routes for subnets configured not to be proxied
-	neverProxyRoutes []*routing.Route
 	// A list of never proxied routes that have already been added to routing table
 	staticOverrides []*routing.Route
 	// The subnets that are currently being routed
@@ -83,27 +78,15 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 	return nil
 }
 
-func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy []*net.IPNet) error {
+func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dontProxyOverrides []*net.IPNet) error {
 	// Don't never-proxy subnets that aren't routed
 	if err := rt.ValidateRoutes(ctx, pleaseProxy); err != nil {
 		return err
 	}
 
-	npRoutes := make([]*routing.Route, 0, len(dontProxy))
-	for _, n := range dontProxy {
-		r, err := routing.GetRoute(ctx, n)
-		if err != nil {
-			dlog.Error(ctx, err)
-		} else {
-			// Ensure the route we append is the one the user requested, not whatever is in the routing table.
-			// This is important because if, say, the route requested is 10.0.2.0/24 and the routing table has something like 10.0.0.0/8,
-			// we would end up routing all of 10.0.0.0/8 without meaning to.
-			r.RoutedNet = n
-			r.Default = false
-			npRoutes = append(npRoutes, r)
-		}
-	}
-	rt.neverProxyRoutes = npRoutes
+	// Remove all current static routes so that they don't affect the routes for subnets
+	// that we're about to add.
+	rt.dropStaticOverrides(ctx)
 
 	// Remove all no longer desired subnets from the routedSubnets
 	var removed []*net.IPNet
@@ -140,51 +123,60 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy []*ne
 			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
 		}
 	}
-
-	return rt.reconcileStaticOverrides(ctx)
+	return rt.addStaticOverrides(ctx, dontProxy, dontProxyOverrides)
 }
 
-func (rt *Router) reconcileStaticOverrides(ctx context.Context) (err error) {
-	var desired []*routing.Route
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "reconcileStaticRoutes")
-	defer tracing.EndAndRecord(span, err)
+func (rt *Router) addStaticOverrides(ctx context.Context, neverProxy, neverProxyOverrides []*net.IPNet) (err error) {
+	desired := make([]*routing.Route, 0, len(neverProxy)+len(neverProxyOverrides))
+	dr, err := routing.DefaultRoute(ctx)
+	if err != nil {
+		return err
+	}
+	for _, sn := range neverProxy {
+		// All subnets in neverProxy have been verified as being routed by the TUN-device, so we
+		// route them to the default route instead.
+		desired = append(desired, &routing.Route{
+			LocalIP:   dr.LocalIP,
+			RoutedNet: sn,
+			Interface: dr.Interface,
+			Gateway:   dr.Gateway,
+			Default:   false,
+		})
+	}
 
-	// We're not going to add static routes unless they're actually needed
-	// (i.e. unless the existing CIDRs overlap with the never-proxy subnets)
-	for _, r := range rt.neverProxyRoutes {
-		for _, s := range rt.routedSubnets {
-			if s.Contains(r.RoutedNet.IP) || r.Routes(s.IP) {
-				desired = append(desired, r)
-				break
-			}
+	for _, sn := range neverProxyOverrides {
+		r, err := routing.GetRoute(ctx, sn)
+		if err != nil {
+			dlog.Error(ctx, err)
+		} else {
+			desired = append(desired, &routing.Route{
+				LocalIP:   r.LocalIP,
+				RoutedNet: sn,
+				Interface: r.Interface,
+				Gateway:   r.Gateway,
+				Default:   r.Default,
+			})
 		}
 	}
 
-adding:
 	for _, r := range desired {
-		for _, c := range rt.staticOverrides {
-			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
-				continue adding
-			}
-		}
 		if err := rt.routingTable.Add(ctx, r); err != nil {
 			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
 		}
 	}
+	rt.staticOverrides = desired
+	return nil
+}
 
-removing:
+func (rt *Router) dropStaticOverrides(ctx context.Context) {
+	// Remove all current static routes so that they don't affect the routes for subnets
+	// that we're about to add.
 	for _, c := range rt.staticOverrides {
-		for _, r := range desired {
-			if subnet.Equal(r.RoutedNet, c.RoutedNet) {
-				continue removing
-			}
-		}
 		if err := rt.routingTable.Remove(ctx, c); err != nil {
 			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
 		}
 	}
-	rt.staticOverrides = desired
-	return nil
+	rt.staticOverrides = nil
 }
 
 func (rt *Router) Close(ctx context.Context) {
@@ -193,9 +185,5 @@ func (rt *Router) Close(ctx context.Context) {
 			dlog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
 		}
 	}
-	for _, r := range rt.staticOverrides {
-		if err := rt.routingTable.Remove(ctx, r); err != nil {
-			dlog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
-		}
-	}
+	rt.dropStaticOverrides(ctx)
 }
