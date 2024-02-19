@@ -22,7 +22,7 @@ func NewTunnelingDevice(ctx context.Context, tunnelStreamCreator tunnel.StreamCr
 	if err != nil {
 		return nil, err
 	}
-	dev, err := OpenTun(ctx, routingTable)
+	dev, err := OpenTun(ctx)
 	if err != nil {
 		return nil, err
 	}
