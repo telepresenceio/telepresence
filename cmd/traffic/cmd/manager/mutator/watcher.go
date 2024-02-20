@@ -38,7 +38,7 @@ type Map interface {
 	Get(string, string) (agentconfig.SidecarExt, error)
 	Run(context.Context) error
 	OnAdd(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
-	OnDelete(context.Context, k8sapi.Workload) error
+	OnDelete(context.Context, string, string) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
 
 	store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error
@@ -394,8 +394,7 @@ func (c *configWatcher) OnAdd(ctx context.Context, wl k8sapi.Workload, acx agent
 	return nil
 }
 
-func (c *configWatcher) OnDelete(ctx context.Context, wl k8sapi.Workload) error {
-	triggerRollout(ctx, wl, nil)
+func (c *configWatcher) OnDelete(context.Context, string, string) error {
 	return nil
 }
 
@@ -466,8 +465,11 @@ func (c *configWatcher) handleDelete(ctx context.Context, e entry) {
 			return
 		}
 	}
-	if err = c.self.OnDelete(ctx, wl); err != nil {
+	if err = c.self.OnDelete(ctx, e.name, e.namespace); err != nil {
 		dlog.Error(ctx, err)
+	}
+	if wl != nil {
+		triggerRollout(ctx, wl, nil)
 	}
 }
 
