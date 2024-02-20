@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "echo-one"
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-one
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "echo-one"
+  labels:
+    app: echo-one
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-one
+  template:
+    metadata:
+      labels:
+        app: echo-one
+    spec:
+      containers:
+        - name: echo-one
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

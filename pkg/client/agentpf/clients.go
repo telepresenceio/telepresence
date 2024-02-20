@@ -90,7 +90,7 @@ func newAgentClient(ctx context.Context, session *manager.SessionInfo, info *man
 }
 
 func (ac *client) busy() bool {
-	return atomic.LoadInt32(&ac.tunnelCount) > 0
+	return ac.info.Intercepted || atomic.LoadInt32(&ac.tunnelCount) > 0
 }
 
 func (ac *client) cancel() {
@@ -130,6 +130,7 @@ type Clients interface {
 	WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error
 	WaitForWorkload(ctx context.Context, timeout time.Duration, name string) error
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
+	SetProxyVia(workload string)
 }
 
 type clients struct {
@@ -137,6 +138,7 @@ type clients struct {
 	clients   *xsync.MapOf[string, *client]
 	ipWaiters *xsync.MapOf[iputil.IPKey, chan struct{}]
 	wlWaiters *xsync.MapOf[string, chan struct{}]
+	proxyVias *xsync.MapOf[string, struct{}]
 	disabled  atomic.Bool
 }
 
@@ -146,6 +148,7 @@ func NewClients(session *manager.SessionInfo) Clients {
 		clients:   xsync.NewMapOf[string, *client](),
 		ipWaiters: xsync.NewMapOf[iputil.IPKey, chan struct{}](),
 		wlWaiters: xsync.NewMapOf[string, chan struct{}](),
+		proxyVias: xsync.NewMapOf[string, struct{}](),
 	}
 }
 
@@ -194,6 +197,15 @@ func (s *clients) GetWorkloadClient(workload string) (pvd tunnel.Provider) {
 		return true
 	})
 	return
+}
+
+func (s *clients) SetProxyVia(workload string) {
+	s.proxyVias.Store(workload, struct{}{})
+}
+
+func (s *clients) isProxyVIA(info *manager.AgentPodInfo) bool {
+	_, isPV := s.proxyVias.Load(info.WorkloadName)
+	return isPV
 }
 
 func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error {
@@ -355,6 +367,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 		}
 		if len(aim) == 0 {
 			// The current traffic-manager injects old style clients that doesn't report a pod name.
+			dlog.Debugf(ctx, "disabling, because traffic-agent doesn't report pod name")
 			s.disabled.Store(true)
 			return nil
 		}
@@ -363,6 +376,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 	// Ensure that the clients still exists. Cancel the ones that don't.
 	s.clients.Range(func(k string, ac *client) bool {
 		if _, ok := aim[k]; !ok {
+			dlog.Debugf(ctx, "Deleting agent %s", k)
 			s.clients.Delete(k)
 			ac.cancel()
 		}
@@ -377,6 +391,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 				if ac.info.Intercepted {
 					continue
 				}
+				dlog.Debugf(ctx, "Agent %s changed to intercepted", k)
 				if err := ac.startDialWatcher(ctx); err != nil {
 					dlog.Errorf(ctx, "failed to start client watcher for %s: %v", k, err)
 				}
@@ -386,6 +401,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 					continue
 				}
 				// This agent is no longer intercepting. Stop the dial watcher
+				dlog.Debugf(ctx, "Agent %s changed to not intercepted", k)
 				ac.cancelDialWatch()
 			}
 		}
@@ -393,7 +409,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 
 	// Add clients for newly arrived intercepts
 	for k, ai := range aim {
-		if ai.Intercepted {
+		if ai.Intercepted || s.isProxyVIA(ai) {
 			if _, ok := s.clients.Load(k); !ok {
 				ac, err := newAgentClient(ctx, s.session, ai)
 				if err != nil {
@@ -410,7 +426,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 			return false
 		}
 		// Terminate all non-intercepting idle agents except the last one.
-		if !ac.info.Intercepted && !ac.busy() {
+		if !ac.busy() && !s.isProxyVIA(ac.info) {
 			s.clients.Delete(k)
 			ac.cancel()
 		}
