@@ -50,6 +50,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -1120,6 +1121,7 @@ func (s *Session) activateProxyViaWorkloads(ctx context.Context) error {
 	s.virtualIPs = xsync.NewMapOf[iputil.IPKey, agentVIP]()
 	s.localTranslationSubnets = make([]agentSubnet, sl)
 	for _, wlName := range s.consolidateProxyViaWorkloads(ctx) {
+		dlog.Debugf(ctx, "Ensuring proxy-via agent in %s", wlName)
 		_, err = s.managerClient.EnsureAgent(ctx, &manager.EnsureAgentRequest{
 			Session: s.session,
 			Name:    wlName,
@@ -1179,19 +1181,27 @@ func (s *Session) waitForProxyViaWorkloads(ctx context.Context) error {
 	}
 	to := client.GetConfig(ctx).Timeouts().Get(client.TimeoutIntercept)
 	waitCh := make(chan error)
+
+	// Need unique workload names
+	ws := make([]string, 0, len(s.subnetViaWorkloads))
 	for _, svw := range s.subnetViaWorkloads {
+		ws = slice.AppendUnique(ws, svw.Workload)
+	}
+	for _, wl := range ws {
+		dlog.Debugf(ctx, "Waiting for proxy-via agent in %s", wl)
 		go func(wl string) {
 			waitCh <- s.agentClients.WaitForWorkload(ctx, to, wl)
-		}(svw.Workload)
+		}(wl)
 	}
-	for dc := 0; dc < wc; dc++ {
+	for _, wl := range ws {
 		select {
 		case <-ctx.Done():
 			return nil
 		case err := <-waitCh:
 			if err != nil {
-				return err
+				return fmt.Errorf("proxy-via agent in %s failed: %w", wl, err)
 			}
+			dlog.Debugf(ctx, "Wait succeeded for proxy-via agent in %s", wl)
 		}
 	}
 	return nil

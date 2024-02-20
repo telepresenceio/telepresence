@@ -288,20 +288,58 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip net.I
 	if s.disabled.Load() {
 		return nil
 	}
-	waitOn, _ := s.ipWaiters.LoadOrCompute(iputil.IPKey(ip), func() chan struct{} {
-		return make(chan struct{})
+	waitOn, ok := s.ipWaiters.Compute(iputil.IPKey(ip), func(oldValue chan struct{}, loaded bool) (chan struct{}, bool) {
+		if loaded {
+			return oldValue, false
+		}
+		found := false
+		s.clients.Range(func(k string, ac *client) bool {
+			if ip.Equal(ac.info.PodIp) {
+				found = true
+				return false
+			}
+			return true
+		})
+		if found {
+			return nil, true
+		}
+		return make(chan struct{}), false
 	})
-	return s.waitWithTimeout(ctx, timeout, waitOn)
+	if ok {
+		return s.waitWithTimeout(ctx, timeout, waitOn)
+	}
+	// No chan created because the agent already exists
+	return nil
 }
 
 func (s *clients) WaitForWorkload(ctx context.Context, timeout time.Duration, name string) error {
 	if s.disabled.Load() {
 		return nil
 	}
-	waitOn, _ := s.wlWaiters.LoadOrCompute(name, func() chan struct{} {
-		return make(chan struct{})
+
+	// Create a channel to subscribe to, but only if the agent doesn't already exist.
+	waitOn, ok := s.wlWaiters.Compute(name, func(oldValue chan struct{}, loaded bool) (chan struct{}, bool) {
+		if loaded {
+			return oldValue, false
+		}
+		found := false
+		s.clients.Range(func(k string, ac *client) bool {
+			if ac.info.WorkloadName == name {
+				found = true
+				return false
+			}
+			return true
+		})
+		if found {
+			return nil, true
+		}
+		return make(chan struct{}), false
 	})
-	return s.waitWithTimeout(ctx, timeout, waitOn)
+	if ok {
+		return s.waitWithTimeout(ctx, timeout, waitOn)
+	}
+	// No chan created because the agent already exists
+	return nil
 }
 
 func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo) error {
