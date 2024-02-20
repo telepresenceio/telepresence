@@ -454,15 +454,16 @@ func (c *configWatcher) handleDelete(ctx context.Context, e entry) {
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			dlog.Error(ctx, err)
+			return
 		}
-		return
-	}
-	tracing.RecordWorkloadInfo(span, wl)
-	scx.RecordInSpan(span)
-	ac := scx.AgentConfig()
-	if ac.Create || ac.Manual {
-		// Deleted before it was generated or manually added, just ignore
-		return
+	} else {
+		tracing.RecordWorkloadInfo(span, wl)
+		scx.RecordInSpan(span)
+		ac := scx.AgentConfig()
+		if ac.Create || ac.Manual {
+			// Deleted before it was generated or manually added, just ignore
+			return
+		}
 	}
 	if err = c.self.OnDelete(ctx, wl); err != nil {
 		dlog.Error(ctx, err)
