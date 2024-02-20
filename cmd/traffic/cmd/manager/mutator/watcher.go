@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -913,7 +914,13 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
 		acn, err := cfg.Generate(ctx, wl, ac)
 		if err != nil {
-			dlog.Error(ctx, err)
+			if strings.Contains(err.Error(), "unable to find") {
+				if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
+					dlog.Error(ctx, err)
+				}
+			} else {
+				dlog.Error(ctx, err)
+			}
 			continue
 		}
 		if err = c.store(ctx, acn, false); err != nil {

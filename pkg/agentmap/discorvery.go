@@ -74,7 +74,7 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 		}
 		return nil, fmt.Errorf("unable to find services that selects pod %s.%s using labels %s", pod.Name, pod.Namespace, lbs)
 	default:
-		return nil, fmt.Errorf("unable to resolve a service using pod %s.%s because it has no labels", pod.Name, pod.Namespace)
+		return nil, fmt.Errorf("unable to find a service using pod %s.%s because it has no labels", pod.Name, pod.Namespace)
 	}
 }
 
@@ -83,6 +83,9 @@ type objectsStringer []k8sapi.Object
 func (os objectsStringer) String() string {
 	b := bytes.Buffer{}
 	l := len(os)
+	if l == 0 {
+		return "no services"
+	}
 	for i, o := range os {
 		if i > 0 {
 			if l != 2 {
