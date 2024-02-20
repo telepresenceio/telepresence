@@ -1188,6 +1188,7 @@ func (s *Session) waitForProxyViaWorkloads(ctx context.Context) error {
 		ws = slice.AppendUnique(ws, svw.Workload)
 	}
 	for _, wl := range ws {
+		s.agentClients.SetProxyVia(wl)
 		dlog.Debugf(ctx, "Waiting for proxy-via agent in %s", wl)
 		go func(wl string) {
 			waitCh <- s.agentClients.WaitForWorkload(ctx, to, wl)
