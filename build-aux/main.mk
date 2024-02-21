@@ -159,6 +159,16 @@ $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll:
 $(BINDIR)/wintun.dll: $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOHOSTARCH)/wintun.dll
 	mkdir -p $(@D)
 	cp $< $@
+
+wintun.dll: $(BINDIR)/wintun.dll
+
+winfsp.msi:
+	mkdir -p $(BUILDDIR)
+	curl --fail -L https://github.com/winfsp/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi -o $(BUILDDIR)/winfsp.msi
+
+sshfs-win.msi:
+	mkdir -p $(BUILDDIR)
+	curl --fail -L https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi -o $(BUILDDIR)/sshfs-win.msi
 endif
 
 $(TELEPRESENCE): build-deps FORCE

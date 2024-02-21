@@ -34,16 +34,42 @@ runs:
           brew install jq
         fi
     - if: runner.os == 'Windows'
-      name: install Windows dependencies
+      name: install make and zip
+      uses: nick-fields/retry/@v3
+      with:
+        max_attempts: 3
+        timeout_minutes: 1
+        shell: powershell
+        command: choco install make zip
+    - if: runner.os == 'Windows'
+      name: download winfsp
+      uses: nick-fields/retry/@v3
+      with:
+        max_attempts: 3
+        timeout_minutes: 1
+        shell: bash
+        command: make winfsp.msi
+    - if: runner.os == 'Windows'
+      name: download sshfs
+      uses: nick-fields/retry/@v3
+      with:
+        max_attempts: 3
+        timeout_minutes: 1
+        shell: bash
+        command: make sshfs-win.msi
+    - if: runner.os == 'Windows'
+      name: download sshfs
+      uses: nick-fields/retry/@v3
+      with:
+        max_attempts: 3
+        timeout_minutes: 1
+        shell: bash
+        command: make wintun.dll
+    - if: runner.os == 'Windows'
+      name: install winfsp and sshfs
       shell: powershell
       run: |
-        choco install make zip
-
-        # Download sshfs
-        curl -o winfsp.msi https://github.com/billziss-gh/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
-        curl -o sshfs-win.msi https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi
-
-        Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
-        Start-Process msiexec -Wait -verb runAs -Args "/i sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
+        Start-Process msiexec -Wait -verb runAs -Args "/i build-output/winfsp.msi /passive /qn /L*V winfsp-install.log"
+        Start-Process msiexec -Wait -verb runAs -Args "/i build-output/sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
 
         [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
