@@ -208,6 +208,16 @@ func (s *clients) isProxyVIA(info *manager.AgentPodInfo) bool {
 	return isPV
 }
 
+func (s *clients) hasWaiterFor(info *manager.AgentPodInfo) bool {
+	if _, isW := s.ipWaiters.Load(iputil.IPKey(info.PodIp)); isW {
+		return true
+	}
+	if _, isW := s.wlWaiters.Load(info.WorkloadName); isW {
+		return true
+	}
+	return false
+}
+
 func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error {
 	dlog.Debug(ctx, "WatchAgentPods starting")
 	defer func() {
@@ -409,7 +419,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 
 	// Add clients for newly arrived intercepts
 	for k, ai := range aim {
-		if ai.Intercepted || s.isProxyVIA(ai) {
+		if ai.Intercepted || s.isProxyVIA(ai) || s.hasWaiterFor(ai) {
 			if _, ok := s.clients.Load(k); !ok {
 				ac, err := newAgentClient(ctx, s.session, ai)
 				if err != nil {
@@ -421,12 +431,12 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 		}
 	}
 
+	// Terminate all non-intercepting idle agents except the last one.
 	s.clients.Range(func(k string, ac *client) bool {
 		if s.clients.Size() <= 1 {
 			return false
 		}
-		// Terminate all non-intercepting idle agents except the last one.
-		if !ac.busy() && !s.isProxyVIA(ac.info) {
+		if !ac.busy() && !s.isProxyVIA(ac.info) && !s.hasWaiterFor(ac.info) {
 			s.clients.Delete(k)
 			ac.cancel()
 		}
