@@ -30,8 +30,8 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.18.0
-    date: "2024-2-9"
+  - version: 2.18.1
+    date: (TBD)
     notes:
       - type: feature
         title: Add option to load the kubeconfig yaml from stdin during connect.
@@ -39,6 +39,30 @@ items:
           This allows another process with a kubeconfig already loaded in memory
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
+      - type: bugfix
+        title: Remove large number of requests when traffic-manager is used in large clusters.
+        body: >-
+          The traffic-manager would make a very large number of API requests during cluster start-up
+          or when many services were changed for other reasons. The logic that did this was refactored
+          and the number of queries were significantly reduced.
+      - type: bugfix
+        title: Don't patch probes on replaced containers.
+        body: >-
+          A container that is being replaced by a <code>telepresence intercept --replace</code>
+          invocation will have no liveness-, readiness, nor startup-probes. Telepresence didn't
+          take this into consideration when injecting the traffic-agent, but now it will refrain
+          from patching symbolic port names of those probes.
+      - type: bugfix
+        title: Don't rely on context name when deciding if a kind cluster is used.
+        body: >-
+          The code that auto-patches the kubeconfig when connecting to a kind cluster from within
+          a docker container, relied on the context name starting with "kind-", but although all
+          contexts created by kind have that name, the user is still free to rename it or to create
+          other contexts using the same connection properties. The logic was therefore changed
+          to instead look for a loopback service address.
+  - version: 2.18.0
+    date: "2024-2-9"
+    notes:
       - type: feature
         title: Include the image for the traffic-agent in the output of the version and status commands.
         body: >-
