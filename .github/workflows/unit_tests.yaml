@@ -29,12 +29,11 @@ jobs:
       - name: "Test amd64 build"
         run: make build
       - name: Run tests
-        uses: nick-fields/retry/@v2
+        uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
           timeout_minutes: 12
-          command: |
-            make check-unit
+          command: make check-unit
 
   windows:
     runs-on: windows-2019
@@ -47,22 +46,36 @@ jobs:
         with:
           go-version: stable
       - name: "Download winfsp"
-        shell: bash
-        run: |
-          curl -L -o winfsp.msi https://github.com/winfsp/winfsp/releases/download/v1.11/winfsp-1.11.22176.msi
+        uses: nick-fields/retry/@v3
+        with:
+          max_attempts: 5
+          timeout_minutes: 1
+          shell: bash
+          command: make winfsp.msi
+      - name: "Download wintun"
+        uses: nick-fields/retry/@v3
+        with:
+          max_attempts: 5
+          timeout_minutes: 1
+          shell: bash
+          command: make wintun.dll
+      - name: install make
+        uses: nick-fields/retry/@v3
+        with:
+          max_attempts: 5
+          timeout_minutes: 1
+          command: choco install make
       - name: "Install winfsp"
         shell: powershell
         run: |
-          Start-Process msiexec -Wait -verb runAs -Args "/i winfsp.msi /passive /qn /L*V winfsp-install.log"
+          Start-Process msiexec -Wait -verb runAs -Args "/i build-output/winfsp.msi /passive /qn /L*V winfsp-install.log"
           [Environment]::SetEnvironmentVariable("Path", "C:\\Program Files (x86)\\WinFsp\\inc\\fuse;$ENV:Path", "Machine")
-      - name: install make
-        run: choco install make
       - name: Build
         run: make build
       - name: Lint
         run: make lint
       - name: Run tests
-        uses: nick-fields/retry/@v2
+        uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
           timeout_minutes: 12
@@ -90,7 +103,7 @@ jobs:
       - name: "Test amd64 build"
         run: make build
       - name: Run tests
-        uses: nick-fields/retry/@v2
+        uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
           timeout_minutes: 10
@@ -116,7 +129,7 @@ jobs:
       - name: "Test arm64 build"
         run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
       - name: Run tests
-        uses: nick-fields/retry/@v2
+        uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
           timeout_minutes: 10
