@@ -69,7 +69,7 @@ runs:
       name: install winfsp and sshfs
       shell: powershell
       run: |
-        Start-Process msiexec -Wait -verb runAs -Args "/i build-output/winfsp.msi /passive /qn /L*V winfsp-install.log"
-        Start-Process msiexec -Wait -verb runAs -Args "/i build-output/sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
+        Start-Process msiexec -Wait -verb runAs -Args "/i build-output\\winfsp.msi /passive /qn /L*V winfsp-install.log"
+        Start-Process msiexec -Wait -verb runAs -Args "/i build-output\\sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
 
         [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")

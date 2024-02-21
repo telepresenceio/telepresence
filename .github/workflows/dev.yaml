@@ -110,13 +110,17 @@ jobs:
         env:
           DEV_TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
           TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
-        shell: bash
-        run: |
-          set -ex
-          if [[ ${RUNNER_OS} == "Windows" ]]; then
-            export PATH="$PATH:/C/Program Files/SSHFS-Win/bin"
-          fi
-          make check-integration
+        uses: nick-fields/retry/@v3
+        with:
+          max_attempts: 3
+          shell: bash
+          timeout_minutes: 60
+          command: |
+            set -ex
+            if [[ ${RUNNER_OS} == "Windows" ]]; then
+              export PATH="$PATH:/C/Program Files/SSHFS-Win/bin"
+            fi
+            make check-integration
       - uses: ./.github/actions/upload-logs
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"

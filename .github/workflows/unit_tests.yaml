@@ -68,7 +68,7 @@ jobs:
       - name: "Install winfsp"
         shell: powershell
         run: |
-          Start-Process msiexec -Wait -verb runAs -Args "/i build-output/winfsp.msi /passive /qn /L*V winfsp-install.log"
+          Start-Process msiexec -Wait -verb runAs -Args "/i build-output\\winfsp.msi /passive /qn /L*V winfsp-install.log"
           [Environment]::SetEnvironmentVariable("Path", "C:\\Program Files (x86)\\WinFsp\\inc\\fuse;$ENV:Path", "Machine")
       - name: Build
         run: make build
