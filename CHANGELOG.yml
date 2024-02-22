@@ -30,6 +30,14 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.19.0
+    date: (TBD)
+    notes:
+      - type: change
+        title: Tracing is no longer enabled by default.
+        body: >-
+          Tracing must now be enabled explicitly in order to use the <code>telepresence gather-traces</code>
+          command.
   - version: 2.18.1
     date: (TBD)
     notes:
