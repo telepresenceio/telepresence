@@ -57,7 +57,6 @@ type service struct {
 	rpc.UnsafeConnectorServer
 	srv           *grpc.Server
 	managerProxy  *mgrProxy
-	procName      string
 	timedLogLevel log.TimedLevel
 	ucn           int64
 	fuseFTPError  error
@@ -463,7 +462,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	s.rootSessionInProc = rootSessionInProc
 	s.daemonAddress = daemonAddress
 
-	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, s.procName); err != nil {
+	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, userd.ProcessName); err != nil {
 		return err
 	}
 

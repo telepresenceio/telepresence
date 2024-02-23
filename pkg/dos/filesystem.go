@@ -237,6 +237,11 @@ func getFS(ctx context.Context) FileSystem {
 	if f, ok := ctx.Value(fsKey{}).(FileSystem); ok {
 		return f
 	}
+	of := newOS(ctx)
+	return &of
+}
+
+func newOS(ctx context.Context) osFs {
 	of := osFs{}
 	if env, ok := LookupEnv(ctx, "TELEPRESENCE_UID"); ok {
 		of.tpUID, _ = strconv.Atoi(env)
@@ -244,7 +249,7 @@ func getFS(ctx context.Context) FileSystem {
 	if env, ok := LookupEnv(ctx, "TELEPRESENCE_GID"); ok {
 		of.tpGID, _ = strconv.Atoi(env)
 	}
-	return &of
+	return of
 }
 
 // Abs is like filepath.Abs but delegates to the context's FS.

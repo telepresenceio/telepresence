@@ -11,6 +11,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
+type statable interface {
+	Fd() uintptr
+	Name() string
+}
+
 type fileInfo struct {
 	size  int64
 	uid   int
@@ -21,7 +26,7 @@ type fileInfo struct {
 }
 
 func osFStat(dfile dos.File) (SysInfo, error) {
-	file, ok := dfile.(*os.File)
+	file, ok := dfile.(statable)
 	if !ok {
 		return nil, fmt.Errorf("files of type %T don't support Fstat", dfile)
 	}
@@ -58,7 +63,7 @@ func osFStat(dfile dos.File) (SysInfo, error) {
 	}, nil
 }
 
-func oldFStat(file *os.File) (SysInfo, error) {
+func oldFStat(file statable) (SysInfo, error) {
 	var stat unix.Stat_t
 	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
 		return nil, fmt.Errorf("failed to stat %s: %w", file.Name(), err)
