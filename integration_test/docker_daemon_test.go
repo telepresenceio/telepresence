@@ -2,11 +2,16 @@ package integration_test
 
 import (
 	"context"
+	"path/filepath"
 	goRuntime "runtime"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 type dockerDaemonSuite struct {
@@ -66,4 +71,30 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {
 	ctx := s.Context()
 	s.TelepresenceConnect(ctx, "--docker")
 	s.TelepresenceConnect(ctx)
+}
+
+func (s *dockerDaemonSuite) Test_DockerDaemon_cacheFiles() {
+	ctx := s.Context()
+	rq := s.Require()
+	cache := filelocation.AppUserCacheDir(ctx)
+
+	// Create a random file, just to get a dos-file handle with our own UID/GID
+	rf, err := dos.Create(ctx, filepath.Join(s.T().TempDir(), "random.file"))
+	rq.NoError(err)
+	rs, err := logging.FStat(rf)
+	_ = rf.Close()
+	rq.NoError(err)
+
+	lv := filepath.Join(cache, userd.ProcessName+".loglevel")
+	ctx = dos.WithLockedFs(ctx)
+	_ = dos.Remove(ctx, lv)
+	s.TelepresenceConnect(ctx, "--docker")
+	itest.TelepresenceOk(ctx, "loglevel", "trace")
+	defer itest.TelepresenceOk(ctx, "loglevel", "debug")
+	df, err := dos.Open(ctx, lv)
+	rq.NoError(err)
+	st, err := logging.FStat(df)
+	_ = df.Close()
+	rq.NoError(err)
+	rq.True(st.HaveSameOwnerAndGroup(rs))
 }

@@ -40,6 +40,12 @@ items:
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
       - type: bugfix
+        title: Containerized daemon created cache files owned by root
+        body: >-
+          When using <code>telepresence connect --docker</code> to create a containerized daemon, that
+          daemon would sometimes create files in the cache that were owned by root, which then caused
+          problems when connecting without the <code>--docker</code> flag.
+      - type: bugfix
         title: Remove large number of requests when traffic-manager is used in large clusters.
         body: >-
           The traffic-manager would make a very large number of API requests during cluster start-up

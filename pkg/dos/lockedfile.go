@@ -13,7 +13,7 @@ type lockedFs struct {
 }
 
 func WithLockedFs(ctx context.Context) context.Context {
-	return WithFS(ctx, &lockedFs{})
+	return WithFS(ctx, &lockedFs{osFs: newOS(ctx)})
 }
 
 func (fs *lockedFs) Create(name string) (File, error) {
