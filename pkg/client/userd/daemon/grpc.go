@@ -401,7 +401,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 			if request.Duration != nil {
 				duration = request.Duration.AsDuration()
 			}
-			if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
+			if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, userd.ProcessName); err != nil {
 				err = status.Error(codes.Internal, err.Error())
 			} else if !s.rootSessionInProc {
 				err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
