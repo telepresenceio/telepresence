@@ -118,15 +118,34 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 		}
 	}
 
+	var staticNets []*net.IPNet
+	var pr *routing.Route
 	for _, sn := range added {
-		if err := rt.device.AddSubnet(ctx, sn); err != nil {
+		var err error
+		ones, bits := sn.Mask.Size()
+		if bits == 32 && ones > 30 {
+			staticNets = append(staticNets, sn)
+			continue
+		}
+
+		if err = rt.device.AddSubnet(ctx, sn); err != nil {
 			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
+			continue
+		}
+
+		if pr == nil {
+			if pr, err = routing.GetRoute(ctx, sn); err == nil {
+				dlog.Errorf(ctx, "failed to retrieve route for subnet %s: %v", sn, err)
+			}
 		}
 	}
-	return rt.addStaticOverrides(ctx, dontProxy, dontProxyOverrides)
+	if len(staticNets) > 0 && pr == nil {
+		return fmt.Errorf("unable to route subnets %v, because there's no subnet with a mask smaller than 31 bits", staticNets)
+	}
+	return rt.addStaticOverrides(ctx, dontProxy, dontProxyOverrides, staticNets, pr)
 }
 
-func (rt *Router) addStaticOverrides(ctx context.Context, neverProxy, neverProxyOverrides []*net.IPNet) (err error) {
+func (rt *Router) addStaticOverrides(ctx context.Context, neverProxy, neverProxyOverrides, staticNets []*net.IPNet, primaryRoute *routing.Route) (err error) {
 	desired := make([]*routing.Route, 0, len(neverProxy)+len(neverProxyOverrides))
 	dr, err := routing.DefaultRoute(ctx)
 	if err != nil {
@@ -159,8 +178,19 @@ func (rt *Router) addStaticOverrides(ctx context.Context, neverProxy, neverProxy
 		}
 	}
 
+	for _, sn := range staticNets {
+		desired = append(desired, &routing.Route{
+			LocalIP:   primaryRoute.LocalIP,
+			RoutedNet: sn,
+			Interface: primaryRoute.Interface,
+			Gateway:   primaryRoute.Gateway,
+			Default:   false,
+		})
+	}
+
 	for _, r := range desired {
-		if err := rt.routingTable.Add(ctx, r); err != nil {
+		dlog.Debugf(ctx, "Adding static route %s", r)
+		if err = rt.routingTable.Add(ctx, r); err != nil {
 			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
 		}
 	}
