@@ -1,7 +1,10 @@
 package integration_test
 
 import (
+	"bufio"
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	goRuntime "runtime"
 	"strings"
@@ -65,6 +68,47 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonNoConflict() {
 	s.TelepresenceConnect(ctx)
 	_, _, err := itest.Telepresence(ctx, "connect", "--docker", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 	s.NoError(err)
+}
+
+func (s *dockerDaemonSuite) Test_DockerDaemon_alsoProxy32() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx, "--docker", "--also-proxy", "169.254.169.254/32", "--name", "a")
+	itest.TelepresenceOk(ctx, "loglevel", "trace")
+	defer itest.TelepresenceOk(ctx, "loglevel", "debug")
+
+	rq := s.Require()
+	logFile := filepath.Join(filelocation.AppUserLogDir(s.Context()), "connector.log")
+	rootLog, err := os.Open(logFile)
+	rq.NoError(err)
+	defer rootLog.Close()
+
+	// Figure out where the current end of the logfile is. This must be done before any
+	// of the tests run because the queries that the DNS resolver receives are dependent
+	// on how the system's DNS resolver handle search paths and caching.
+	st, err := rootLog.Stat()
+	rq.NoError(err)
+	pos := st.Size()
+
+	// Make an attempt to curl the also-proxied IP.
+	_, _ = itest.Output(ctx, "docker", "run", "--network", "container:tp-a", "--rm", "curlimages/curl", "--silent", "--max-time", "1", "169.254.169.254")
+
+	// Verify that the attempt is visible in the root log.
+	_, err = rootLog.Seek(pos, io.SeekStart)
+	rq.NoError(err)
+	scn := bufio.NewScanner(rootLog)
+	found := false
+
+	// mustHaveWanted caters for cases where the default behavior from the system's resolver
+	// is to not send unwanted queries to our resolver at all (based on search and routes).
+	// It is forced to true for inclusion tests.
+	for scn.Scan() {
+		txt := scn.Text()
+		if strings.Contains(txt, "169.254.169.254:80, code STREAM_INFO") {
+			found = true
+			break
+		}
+	}
+	s.Truef(found, "Unable to find %q", "169.254.169.254:80, code STREAM_INFO")
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {
