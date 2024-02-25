@@ -48,6 +48,13 @@ items:
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
       - type: bugfix
+        title: Get rid of telemount plugin stickiness
+        body: >-
+          The <code>datawire/telemount</code> that is automatically downloaded and installed, would never be
+          updated once the installation was made. Telepresence will now check for the latest release of the
+          plugin and cache the result of that check for 24 hours. If a new version arrives, it will be
+          installed and used.
+      - type: bugfix
         title: Use route instead of address for CIDRs with masks that don't allow "via"
         body: >-
           A CIDR with a mask that leaves less than two bits (/31 or /32 for IPv4)
