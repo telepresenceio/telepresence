@@ -16,9 +16,10 @@ import (
 	"github.com/blang/semver"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/volume"
-	"github.com/docker/docker/client"
+	dockerClient "github.com/docker/docker/client"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -36,14 +37,17 @@ func EnsureVolumePlugin(ctx context.Context) (string, error) {
 		return "", err
 	}
 	pluginName := telemountPlugin
-	if lv, err := latestPluginVersion(ctx); err == nil {
+	cfg := client.GetConfig(ctx)
+	if pt := cfg.Intercept().TelemountTag; pt != "" {
+		pluginName += "-" + pt
+	} else if lv, err := latestPluginVersion(ctx); err == nil {
 		pluginName += "-" + lv.String()
 	} else {
 		dlog.Warnf(ctx, "failed to get latest version of docker volume plugin %s: %v", pluginName, err)
 	}
 	pi, _, err := cli.PluginInspectWithRaw(ctx, pluginName)
 	if err != nil {
-		if !client.IsErrNotFound(err) {
+		if !dockerClient.IsErrNotFound(err) {
 			dlog.Errorf(ctx, "docker plugin inspect: %v", err)
 		}
 		return pluginName, installVolumePlugin(ctx, pluginName)
@@ -106,8 +110,9 @@ type repsResponse struct {
 
 func getLatestPluginVersion(ctx context.Context) (ver semver.Version, err error) {
 	dlog.Debugf(ctx, "Checking for latest version of %s", telemountPlugin)
+	cfg := client.GetConfig(ctx)
 	var rq *http.Request
-	rq, err = http.NewRequestWithContext(ctx, http.MethodGet, "https://hub.docker.com/v2/repositories/"+telemountRegistry+"/tags", nil)
+	rq, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://%s/v2/repositories/%s/tags", cfg.Intercept().DockerHub, telemountRegistry), nil)
 	if err != nil {
 		return ver, err
 	}
