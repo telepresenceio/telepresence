@@ -213,12 +213,13 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		if !(s.mountDisabled || s.info == nil) {
 			m := s.info.Mount
 			if m != nil {
-				if err := docker.EnsureVolumePlugin(ctx); err != nil {
+				pluginName, err := docker.EnsureVolumePlugin(ctx)
+				if err != nil {
 					ioutil.Printf(output.Err(ctx), "Remote mount disabled: %s\n", err)
 				}
 				container := s.env["TELEPRESENCE_CONTAINER"]
 				dlog.Infof(ctx, "Mounting %v from container %s", m.Mounts, container)
-				dr.volumes, dr.err = docker.StartVolumeMounts(ctx, daemonName, container, m.Port, m.Mounts, nil)
+				dr.volumes, dr.err = docker.StartVolumeMounts(ctx, pluginName, daemonName, container, m.Port, m.Mounts, nil)
 				if dr.err != nil {
 					return dr
 				}
