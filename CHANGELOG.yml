@@ -42,11 +42,24 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Make the telemount Docker Volume plugin configurable
+        body: >-
+          The <code>dockerHub</code> and <code>telemountTag</code> settings where added to the <code>intercept</code>
+          object in <code>config.yml</code> (or Helm value <code>client.intercept</code>), so that the automatic
+          download and installation of this plugin can be customised.
+      - type: feature
         title: Add option to load the kubeconfig yaml from stdin during connect.
         body: >-
           This allows another process with a kubeconfig already loaded in memory
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
+      - type: bugfix
+        title: Get rid of telemount plugin stickiness
+        body: >-
+          The <code>datawire/telemount</code> that is automatically downloaded and installed, would never be
+          updated once the installation was made. Telepresence will now check for the latest release of the
+          plugin and cache the result of that check for 24 hours. If a new version arrives, it will be
+          installed and used.
       - type: bugfix
         title: Use route instead of address for CIDRs with masks that don't allow "via"
         body: >-

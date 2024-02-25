@@ -23,7 +23,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hectane/go-acl v0.0.0-20230122075934-ca0b05cb1adb
-	github.com/klauspost/compress v1.17.6
+	github.com/klauspost/compress v1.17.7
 	github.com/miekg/dns v1.1.58
 	github.com/moby/term v0.5.0
 	github.com/pkg/sftp v1.13.6
@@ -38,26 +38,26 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/telepresenceio/telepresence/rpc/v2 v2.18.1-test.0
 	github.com/vishvananda/netlink v1.2.1-beta.2
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.48.0
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.48.0
-	go.opentelemetry.io/otel v1.23.1
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.23.1
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.23.1
-	go.opentelemetry.io/otel/sdk v1.23.1
-	go.opentelemetry.io/otel/trace v1.23.1
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0
+	go.opentelemetry.io/otel v1.24.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.24.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.24.0
+	go.opentelemetry.io/otel/sdk v1.24.0
+	go.opentelemetry.io/otel/trace v1.24.0
 	go.opentelemetry.io/proto/otlp v1.1.0
-	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a
+	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225
 	golang.org/x/net v0.21.0
 	golang.org/x/sync v0.6.0
 	golang.org/x/sys v0.17.0
 	golang.org/x/term v0.17.0
 	golang.zx2c4.com/wireguard v0.0.0-20231211153847-12269c276173
 	golang.zx2c4.com/wireguard/windows v0.5.3
-	google.golang.org/grpc v1.61.1
+	google.golang.org/grpc v1.62.0
 	google.golang.org/protobuf v1.32.0
 	gopkg.in/yaml.v3 v3.0.1
 	gvisor.dev/gvisor v0.0.0-20240216000150-e3cf008ab186
-	helm.sh/helm/v3 v3.14.1
+	helm.sh/helm/v3 v3.14.2
 	k8s.io/api v0.29.2
 	k8s.io/apimachinery v0.29.2
 	k8s.io/cli-runtime v0.29.2
@@ -94,7 +94,7 @@ require (
 	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/emicklei/go-restful/v3 v3.11.2 // indirect
+	github.com/emicklei/go-restful/v3 v3.11.3 // indirect
 	github.com/evanphx/json-patch v5.9.0+incompatible // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
@@ -152,8 +152,8 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_model v0.5.0 // indirect
-	github.com/prometheus/common v0.47.0 // indirect
+	github.com/prometheus/client_model v0.6.0 // indirect
+	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rubenv/sql-migrate v1.6.1 // indirect
@@ -165,7 +165,7 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
-	go.opentelemetry.io/otel/metric v1.23.1 // indirect
+	go.opentelemetry.io/otel/metric v1.24.0 // indirect
 	go.starlark.net v0.0.0-20240123142251-f86470692795 // indirect
 	golang.org/x/crypto v0.19.0 // indirect
 	golang.org/x/mod v0.15.0 // indirect
@@ -175,8 +175,8 @@ require (
 	golang.org/x/tools v0.18.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240213162025-012b6fc9bca9 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240213162025-012b6fc9bca9 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240221002015-b0ce06bbee7c // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240221002015-b0ce06bbee7c // indirect
 	gopkg.in/evanphx/json-patch.v5 v5.9.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
@@ -184,7 +184,7 @@ require (
 	k8s.io/apiserver v0.29.2 // indirect
 	k8s.io/component-base v0.29.2 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20240209001042-7a0d5b415232 // indirect
+	k8s.io/kube-openapi v0.0.0-20240224005224-582cce78233b // indirect
 	oras.land/oras-go v1.2.5 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.16.0 // indirect

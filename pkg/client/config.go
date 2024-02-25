@@ -793,16 +793,22 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 	}
 }
 
-const defaultInterceptDefaultPort = 8080
+const (
+	defaultInterceptDefaultPort = 8080
+	defaultInterceptDockerHub   = "hub.docker.com"
+)
 
 var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
 	DefaultPort: defaultInterceptDefaultPort,
+	DockerHub:   defaultInterceptDockerHub,
 }
 
 type Intercept struct {
 	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
 	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
 	UseFtp              bool                       `json:"useFtp,omitempty" yaml:"useFtp,omitempty"`
+	DockerHub           string                     `json:"dockerHub,omitempty" yaml:"dockerHub,omitempty"`
+	TelemountTag        string                     `json:"telemountTag,omitempty" yaml:"telemountTag,omitempty"`
 }
 
 func (ic *Intercept) merge(o *Intercept) {
@@ -814,6 +820,12 @@ func (ic *Intercept) merge(o *Intercept) {
 	}
 	if o.UseFtp {
 		ic.UseFtp = true
+	}
+	if o.DockerHub != defaultInterceptDockerHub {
+		ic.DockerHub = o.DockerHub
+	}
+	if o.TelemountTag != "" {
+		ic.TelemountTag = o.TelemountTag
 	}
 }
 
@@ -833,6 +845,12 @@ func (ic Intercept) MarshalYAML() (any, error) {
 	}
 	if ic.UseFtp {
 		im["useFtp"] = true
+	}
+	if ic.DockerHub != defaultInterceptDockerHub {
+		im["dockerHub"] = ic.DockerHub
+	}
+	if ic.TelemountTag != "" {
+		im["telemountTag"] = ic.TelemountTag
 	}
 	return im, nil
 }
