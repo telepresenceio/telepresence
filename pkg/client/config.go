@@ -793,22 +793,35 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 	}
 }
 
+var defaultTelemount = DockerImage{ //nolint:gochecknoglobals // constant
+	RegistryAPI: "hub.docker.com/v2",
+	Registry:    "docker.io",
+	Namespace:   "datawire",
+	Repository:  "telemount",
+}
+
 const (
 	defaultInterceptDefaultPort = 8080
-	defaultInterceptDockerHub   = "hub.docker.com"
 )
 
 var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
 	DefaultPort: defaultInterceptDefaultPort,
-	DockerHub:   defaultInterceptDockerHub,
+	Telemount:   defaultTelemount,
+}
+
+type DockerImage struct {
+	RegistryAPI string `json:"registryAPI,omitempty" yaml:"registryAPI,omitempty"`
+	Registry    string `json:"registry,omitempty" yaml:"registry,omitempty"`
+	Namespace   string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	Repository  string `json:"repository,omitempty" yaml:"repository,omitempty"`
+	Tag         string `json:"tag,omitempty" yaml:"tag,omitempty"`
 }
 
 type Intercept struct {
 	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
 	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
 	UseFtp              bool                       `json:"useFtp,omitempty" yaml:"useFtp,omitempty"`
-	DockerHub           string                     `json:"dockerHub,omitempty" yaml:"dockerHub,omitempty"`
-	TelemountTag        string                     `json:"telemountTag,omitempty" yaml:"telemountTag,omitempty"`
+	Telemount           DockerImage                `json:"telemount,omitempty" yaml:"telemount,omitempty"`
 }
 
 func (ic *Intercept) merge(o *Intercept) {
@@ -821,11 +834,8 @@ func (ic *Intercept) merge(o *Intercept) {
 	if o.UseFtp {
 		ic.UseFtp = true
 	}
-	if o.DockerHub != defaultInterceptDockerHub {
-		ic.DockerHub = o.DockerHub
-	}
-	if o.TelemountTag != "" {
-		ic.TelemountTag = o.TelemountTag
+	if o.Telemount != defaultTelemount {
+		ic.Telemount = o.Telemount
 	}
 }
 
@@ -846,11 +856,8 @@ func (ic Intercept) MarshalYAML() (any, error) {
 	if ic.UseFtp {
 		im["useFtp"] = true
 	}
-	if ic.DockerHub != defaultInterceptDockerHub {
-		im["dockerHub"] = ic.DockerHub
-	}
-	if ic.TelemountTag != "" {
-		im["telemountTag"] = ic.TelemountTag
+	if ic.Telemount != defaultTelemount {
+		im["telemount"] = ic.Telemount
 	}
 	return im, nil
 }

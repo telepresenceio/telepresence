@@ -36,9 +36,9 @@ items:
       - type: feature
         title: Make the telemount Docker Volume plugin configurable
         body: >-
-          The <code>dockerHub</code> and <code>telemountTag</code> settings where added to the <code>intercept</code>
-          object in <code>config.yml</code> (or Helm value <code>client.intercept</code>), so that the automatic
-          download and installation of this plugin can be customised.
+          A <code>telemount</code> object was added to the <code>intercept</code> object in <code>config.yml</code>
+          (or Helm value <code>client.intercept</code>), so that the automatic download and installation of this plugin can
+          be fully customised.
       - type: feature
         title: Add option to load the kubeconfig yaml from stdin during connect.
         body: >-
