@@ -24,11 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-const (
-	telemountRegistry = "datawire/telemount"
-	telemountPlugin   = telemountRegistry + ":" + runtime.GOARCH
-)
-
 // EnsureVolumePlugin checks if the datawire/telemount plugin is installed and installs it if that is
 // not the case. The plugin is also enabled.
 func EnsureVolumePlugin(ctx context.Context) (string, error) {
@@ -36,26 +31,31 @@ func EnsureVolumePlugin(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pluginName := telemountPlugin
-	cfg := client.GetConfig(ctx)
-	if pt := cfg.Intercept().TelemountTag; pt != "" {
-		pluginName += "-" + pt
-	} else if lv, err := latestPluginVersion(ctx); err == nil {
-		pluginName += "-" + lv.String()
+	cfg := client.GetConfig(ctx).Intercept().Telemount
+	pn := pluginName(ctx)
+	if pt := cfg.Tag; pt != "" {
+		pn += "-" + pt
+	} else if lv, err := latestPluginVersion(ctx, pn); err == nil {
+		pn += "-" + lv.String()
 	} else {
-		dlog.Warnf(ctx, "failed to get latest version of docker volume plugin %s: %v", pluginName, err)
+		dlog.Warnf(ctx, "failed to get latest version of docker volume plugin %s: %v", pn, err)
 	}
-	pi, _, err := cli.PluginInspectWithRaw(ctx, pluginName)
+	pi, _, err := cli.PluginInspectWithRaw(ctx, pn)
 	if err != nil {
 		if !dockerClient.IsErrNotFound(err) {
 			dlog.Errorf(ctx, "docker plugin inspect: %v", err)
 		}
-		return pluginName, installVolumePlugin(ctx, pluginName)
+		return pn, installVolumePlugin(ctx, pn)
 	}
 	if !pi.Enabled {
-		err = cli.PluginEnable(ctx, pluginName, types.PluginEnableOptions{Timeout: 5})
+		err = cli.PluginEnable(ctx, pn, types.PluginEnableOptions{Timeout: 5})
 	}
-	return pluginName, err
+	return pn, err
+}
+
+func pluginName(ctx context.Context) string {
+	tm := client.GetConfig(ctx).Intercept().Telemount
+	return fmt.Sprintf("%s/%s/%s:%s", tm.Registry, tm.Namespace, tm.Repository, runtime.GOARCH)
 }
 
 func installVolumePlugin(ctx context.Context, pluginName string) error {
@@ -75,7 +75,7 @@ type pluginInfo struct {
 
 const pluginInfoMaxAge = 24 * time.Hour
 
-func latestPluginVersion(ctx context.Context) (ver semver.Version, err error) {
+func latestPluginVersion(ctx context.Context, pluginName string) (ver semver.Version, err error) {
 	file := "volume-plugin-info.json"
 	pi := pluginInfo{}
 	if err = cache.LoadFromUserCache(ctx, &pi, file); err != nil {
@@ -87,14 +87,14 @@ func latestPluginVersion(ctx context.Context) (ver semver.Version, err error) {
 
 	now := time.Now().UnixNano()
 	if time.Duration(now-pi.LastCheck) > pluginInfoMaxAge {
-		ver, err = getLatestPluginVersion(ctx)
+		ver, err = getLatestPluginVersion(ctx, pluginName)
 		if err == nil {
 			pi.LatestVersion = ver.String()
 			pi.LastCheck = now
 			err = cache.SaveToUserCache(ctx, &pi, file, cache.Public)
 		}
 	} else {
-		dlog.Debugf(ctx, "Using cached version %s for %s", pi.LatestVersion, telemountPlugin)
+		dlog.Debugf(ctx, "Using cached version %s for %s", pi.LatestVersion, pluginName)
 		ver, err = semver.Parse(pi.LatestVersion)
 	}
 	return ver, err
@@ -108,11 +108,12 @@ type repsResponse struct {
 	Results []imgResult `json:"results"`
 }
 
-func getLatestPluginVersion(ctx context.Context) (ver semver.Version, err error) {
-	dlog.Debugf(ctx, "Checking for latest version of %s", telemountPlugin)
-	cfg := client.GetConfig(ctx)
+func getLatestPluginVersion(ctx context.Context, pluginName string) (ver semver.Version, err error) {
+	dlog.Debugf(ctx, "Checking for latest version of %s", pluginName)
+	cfg := client.GetConfig(ctx).Intercept().Telemount
+	url := fmt.Sprintf("https://%s/namespaces/%s/repositories/%s/tags", cfg.RegistryAPI, cfg.Namespace, cfg.Repository)
 	var rq *http.Request
-	rq, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://%s/v2/repositories/%s/tags", cfg.Intercept().DockerHub, telemountRegistry), nil)
+	rq, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return ver, err
 	}
@@ -147,7 +148,7 @@ func getLatestPluginVersion(ctx context.Context) (ver semver.Version, err error)
 			}
 		}
 	}
-	dlog.Debugf(ctx, "Found latest version of %s to be %s", telemountPlugin, ver)
+	dlog.Debugf(ctx, "Found latest version of %s to be %s", pluginName, ver)
 	return ver, err
 }
 
