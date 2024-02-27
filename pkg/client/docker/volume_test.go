@@ -20,7 +20,7 @@ func Test_getLatestPluginVersion(t *testing.T) {
 	require.NoError(t, err)
 	c = client.WithConfig(c, cfg)
 
-	ver, err := getLatestPluginVersion(c)
+	ver, err := getLatestPluginVersion(c, pluginName(c))
 	require.NoError(t, err)
 	require.True(t, semver.MustParse("0.1.3").LT(ver))
 }
