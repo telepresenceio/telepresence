@@ -38,6 +38,13 @@ items:
         body: >-
           Tracing must now be enabled explicitly in order to use the <code>telepresence gather-traces</code>
           command.
+      - type: change
+        title: Removal of timeouts that are no longer in use
+        body: >-
+          The <code>config.yml</code> values <code>timeouts.agentInstall</code> and <code>timeouts.apply</code> haven't
+          been in use since versions prior to 2.6.0, when the client was responsible for installing the traffic-agent.
+          These timeouts are now removed from the code-base, and a warning will be printed when attempts are made to use
+          them.
   - version: 2.18.1
     date: (TBD)
     notes:

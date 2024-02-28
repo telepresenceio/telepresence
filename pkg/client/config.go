@@ -175,10 +175,6 @@ type Timeouts struct {
 	// rid of those later cases, but let's not spend time doing that right now; and instead just
 	// make them easy to grep for (`grep Private`) later.
 
-	// PrivateAgentInstall is how long to wait for an agent to be installed (i.e. apply of service and deploy manifests)
-	PrivateAgentInstall time.Duration `json:"agentInstall" yaml:"agentInstall"`
-	// PrivateApply is how long to wait for a k8s manifest to be applied
-	PrivateApply time.Duration `json:"apply" yaml:"apply"`
 	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
 	PrivateClusterConnect time.Duration `json:"clusterConnect" yaml:"clusterConnect"`
 	// PrivateConnectivityCheck timeout used when checking if cluster is already proxied on the workstation
@@ -206,9 +202,7 @@ type Timeouts struct {
 type TimeoutID int
 
 const (
-	TimeoutAgentInstall TimeoutID = iota
-	TimeoutApply
-	TimeoutClusterConnect
+	TimeoutClusterConnect TimeoutID = iota
 	TimeoutConnectivityCheck
 	TimeoutEndpointDial
 	TimeoutHelm
@@ -243,10 +237,6 @@ func (ctx timeoutContext) Err() error {
 func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 	var timeoutVal time.Duration
 	switch timeoutID {
-	case TimeoutAgentInstall:
-		timeoutVal = t.PrivateAgentInstall
-	case TimeoutApply:
-		timeoutVal = t.PrivateApply
 	case TimeoutClusterConnect:
 		timeoutVal = t.PrivateClusterConnect
 	case TimeoutConnectivityCheck:
@@ -296,12 +286,6 @@ type timeoutError struct {
 func (e timeoutError) Error() string {
 	var yamlName, humanName string
 	switch e.timeoutID {
-	case TimeoutAgentInstall:
-		yamlName = "agentInstall"
-		humanName = "agent install"
-	case TimeoutApply:
-		yamlName = "apply"
-		humanName = "apply"
 	case TimeoutClusterConnect:
 		yamlName = "clusterConnect"
 		humanName = "cluster connect"
@@ -369,9 +353,8 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		var dp *time.Duration
 		switch kv {
 		case "agentInstall":
-			dp = &t.PrivateAgentInstall
-		case "apply":
-			dp = &t.PrivateApply
+			logrus.Warn(WithLoc(`unused key "timeouts.agentInstall". Use the Helm chart value "timeouts.agentArrival" to configure the traffic-manager`, ms[i]))
+			continue
 		case "clusterConnect":
 			dp = &t.PrivateClusterConnect
 		case "connectivityCheck":
@@ -395,7 +378,7 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 		case "ftpShutdown":
 			dp = &t.PrivateFtpShutdown
 		default:
-			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			logrus.Warn(WithLoc(fmt.Sprintf(`unknown key "timeouts.%s"`, kv), ms[i]))
 			continue
 		}
 
@@ -419,8 +402,6 @@ func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 }
 
 const (
-	defaultTimeoutsAgentInstall          = 120 * time.Second
-	defaultTimeoutsApply                 = 1 * time.Minute
 	defaultTimeoutsClusterConnect        = 20 * time.Second
 	defaultTimeoutsConnectivityCheck     = 500 * time.Millisecond
 	defaultTimeoutsEndpointDial          = 3 * time.Second
@@ -435,8 +416,6 @@ const (
 )
 
 var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
-	PrivateAgentInstall:          defaultTimeoutsAgentInstall,
-	PrivateApply:                 defaultTimeoutsApply,
 	PrivateClusterConnect:        defaultTimeoutsClusterConnect,
 	PrivateConnectivityCheck:     defaultTimeoutsConnectivityCheck,
 	PrivateEndpointDial:          defaultTimeoutsEndpointDial,
@@ -458,12 +437,6 @@ func (t Timeouts) IsZero() bool {
 // MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct.
 func (t Timeouts) MarshalYAML() (any, error) {
 	tm := make(map[string]string)
-	if t.PrivateAgentInstall != defaultTimeoutsAgentInstall {
-		tm["agentInstall"] = t.PrivateAgentInstall.String()
-	}
-	if t.PrivateApply != defaultTimeoutsApply {
-		tm["apply"] = t.PrivateApply.String()
-	}
 	if t.PrivateClusterConnect != 0 && t.PrivateClusterConnect != defaultTimeoutsClusterConnect {
 		tm["clusterConnect"] = t.PrivateClusterConnect.String()
 	}
@@ -502,12 +475,6 @@ func (t Timeouts) MarshalYAML() (any, error) {
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (t *Timeouts) merge(o *Timeouts) {
-	if o.PrivateAgentInstall != defaultTimeoutsAgentInstall {
-		t.PrivateAgentInstall = o.PrivateAgentInstall
-	}
-	if o.PrivateApply != defaultTimeoutsApply {
-		t.PrivateApply = o.PrivateApply
-	}
 	if o.PrivateClusterConnect != defaultTimeoutsClusterConnect {
 		t.PrivateClusterConnect = o.PrivateClusterConnect
 	}
