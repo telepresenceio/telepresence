@@ -46,6 +46,11 @@ items:
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
       - type: bugfix
+        title: "Security fix: Upgrade embedded Helm to 3.14.2"
+        body: >-
+          Helm 3.14.2 contains a security fix, and users are recommends to update.
+        docs: https://github.com/helm/helm/releases
+      - type: bugfix
         title: Get rid of telemount plugin stickiness
         body: >-
           The <code>datawire/telemount</code> that is automatically downloaded and installed, would never be
