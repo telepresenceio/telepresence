@@ -338,8 +338,6 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	config.LogLevels().RootDaemon = logrus.DebugLevel
 
 	to := config.Timeouts()
-	to.PrivateAgentInstall = PodCreateTimeout(c)
-	to.PrivateApply = PodCreateTimeout(c)
 	to.PrivateClusterConnect = 60 * time.Second
 	to.PrivateEndpointDial = 10 * time.Second
 	to.PrivateHelm = PodCreateTimeout(c)
