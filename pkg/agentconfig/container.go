@@ -327,7 +327,7 @@ func appendAppContainerVolumeMounts(
 	annotations map[string]string,
 	av semver.Version,
 ) ([]string, []core.VolumeMount) {
-	ignoredVolumeMounts := getIgnoredVolumeMounts(annotations)
+	ignoredVolumeMounts := GetIgnoredVolumeMounts(annotations)
 
 	// Older agents will error if we include /var/run/secrets/ volumes here, so we don't.
 	stripVarRunSecret := false
@@ -441,8 +441,8 @@ func appendAppContainerEnvFrom(app *core.Container, cc *Container, es []core.Env
 	return es
 }
 
-func getIgnoredVolumeMounts(annotations map[string]string) map[string]struct{} {
-	vmSlice := strings.Split(annotations["telepresence.getambassador.io/inject-ignore-volume-mounts"], ",")
+func GetIgnoredVolumeMounts(annotations map[string]string) map[string]struct{} {
+	vmSlice := strings.Split(annotations[InjectIgnoreVolumeMounts], ",")
 	ivms := make(map[string]struct{}, len(vmSlice))
 	for _, vm := range vmSlice {
 		ivms[strings.TrimSpace(vm)] = struct{}{}

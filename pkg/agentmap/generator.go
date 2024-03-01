@@ -138,6 +138,7 @@ func appendAgentContainerConfigs(
 	if err != nil {
 		return nil, err
 	}
+	ignoredVolumeMounts := agentconfig.GetIgnoredVolumeMounts(pod.ObjectMeta.Annotations)
 nextSvcPort:
 	for _, port := range ports {
 		cn, i := findContainerMatchingPort(&port, pod.Spec.Containers)
@@ -188,9 +189,11 @@ nextSvcPort:
 		}
 		var mounts []string
 		if l := len(cn.VolumeMounts); l > 0 {
-			mounts = make([]string, l)
-			for i, vm := range cn.VolumeMounts {
-				mounts[i] = vm.MountPath
+			mounts = make([]string, 0, l)
+			for _, vm := range cn.VolumeMounts {
+				if _, ok := ignoredVolumeMounts[vm.Name]; !ok {
+					mounts = append(mounts, vm.MountPath)
+				}
 			}
 		}
 		ccs = append(ccs, &agentconfig.Container{

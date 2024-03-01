@@ -46,6 +46,7 @@ const (
 
 	DomainPrefix                         = "telepresence.getambassador.io/"
 	InjectAnnotation                     = DomainPrefix + "inject-" + ContainerName
+	InjectIgnoreVolumeMounts             = DomainPrefix + "inject-ignore-volume-mounts"
 	TerminatingTLSSecretAnnotation       = DomainPrefix + "inject-terminating-tls-secret"
 	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
 	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
