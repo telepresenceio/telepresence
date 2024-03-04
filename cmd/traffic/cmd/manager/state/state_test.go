@@ -2,7 +2,6 @@ package state
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -29,7 +28,6 @@ func (s *suiteState) SetupTest() {
 		backgroundCtx:   s.ctx,
 		sessions:        xsync.NewMapOf[string, SessionState](),
 		agentsByName:    xsync.NewMapOf[string, *xsync.MapOf[string, *manager.AgentInfo]](),
-		cfgMapLocks:     xsync.NewMapOf[string, *sync.Mutex](),
 		interceptStates: xsync.NewMapOf[string, *interceptState](),
 		timedLogLevel:   log.NewTimedLevel("debug", log.SetLevel),
 		llSubs:          newLoglevelSubscribers(),
