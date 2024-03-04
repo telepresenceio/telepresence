@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/puzpuzpuz/xsync/v3"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/sync/errgroup"
-	v1 "k8s.io/api/apps/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,7 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	informerCore "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -35,30 +37,44 @@ import (
 )
 
 type Map interface {
-	Get(string, string) (agentconfig.SidecarExt, error)
-	Run(context.Context) error
+	Get(context.Context, string, string) (agentconfig.SidecarExt, error)
+	Start(context.Context)
+	Wait(context.Context) error
 	OnAdd(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
 	OnDelete(context.Context, string, string) error
 	DeleteMapsAndRolloutAll(ctx context.Context)
+	Blacklist(podName, namespace string)
+	Whitelist(podName, namespace string)
+	IsBlacklisted(podName, namespace string) bool
 
 	store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error
 	remove(ctx context.Context, name, namespace string) error
+
+	RegenerateAgentMaps(ctx context.Context, s string) error
+
+	Delete(ctx context.Context, namespace string, name string) error
+	Update(ctx context.Context, namespace string, updater func(cm *core.ConfigMap) (bool, error)) error
 }
 
 var NewWatcherFunc = NewWatcher //nolint:gochecknoglobals // extension point
 
-func Load(ctx context.Context) (m Map, err error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		if err != nil {
-			cancel()
-		}
-	}()
+type mapKey struct{}
 
-	env := managerutil.GetEnv(ctx)
-	ns := env.ManagedNamespaces
-	dlog.Infof(ctx, "Loading ConfigMaps from %v", ns)
-	return NewWatcherFunc(agentconfig.ConfigMap, ns...), nil
+func WithMap(ctx context.Context, m Map) context.Context {
+	return context.WithValue(ctx, mapKey{}, m)
+}
+
+func GetMap(ctx context.Context) Map {
+	if m, ok := ctx.Value(mapKey{}).(Map); ok {
+		return m
+	}
+	return nil
+}
+
+func Load(ctx context.Context) (m Map) {
+	cw := NewWatcherFunc(managerutil.GetEnv(ctx).ManagedNamespaces...)
+	cw.Start(ctx)
+	return cw
 }
 
 func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Workload, error) {
@@ -67,18 +83,26 @@ func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Wo
 		return nil, nil, fmt.Errorf("failed to decode ConfigMap entry %q into an agent config", e.value)
 	}
 	ac := scx.AgentConfig()
-	wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+	wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 	if err != nil {
 		return nil, nil, err
 	}
-	return ac, wl, nil
+	return scx, wl, nil
 }
 
 func agentContainer(pod *core.Pod) *core.Container {
+	return containerByName(pod, agentconfig.ContainerName)
+}
+
+func initContainer(pod *core.Pod) *core.Container {
+	return containerByName(pod, agentconfig.InitContainerName)
+}
+
+func containerByName(pod *core.Pod, name string) *core.Container {
 	cns := pod.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name == agentconfig.ContainerName {
+		if cn.Name == name {
 			return cn
 		}
 	}
@@ -97,7 +121,7 @@ func isPodRunning(pod *core.Pod) bool {
 
 // isRolloutNeeded checks if the agent's entry in telepresence-agents matches the actual state of the
 // pods. If it does, then there's no reason to trigger a rollout.
-func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) bool {
+func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) bool {
 	podLabels := wl.GetPodTemplate().GetObjectMeta().GetLabels()
 	if len(podLabels) == 0 {
 		// Have never seen this, but if it happens, then rollout only if an agent is desired
@@ -106,7 +130,12 @@ func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Si
 		return true
 	}
 
-	pods, err := k8sapi.Pods(ctx, wl.GetNamespace(), podLabels)
+	selector := labels.SelectorFromValidatedSet(podLabels)
+	podsAPI := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(wl.GetNamespace())
+	podList, err := podsAPI.List(ctx, meta.ListOptions{
+		LabelSelector: selector.String(),
+		FieldSelector: "status.phase==Running",
+	})
 	if err != nil {
 		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. Unable to retrieve current pods: %v",
 			wl.GetName(), wl.GetNamespace(), err)
@@ -114,13 +143,17 @@ func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Si
 	}
 
 	runningPods := 0
-	for _, podObj := range pods {
-		pod, ok := k8sapi.PodImpl(podObj)
-		if !(ok && isPodRunning(pod)) {
+	pods := podList.Items
+	for i := range pods {
+		pod := &pods[i]
+		if c.IsBlacklisted(pod.Name, pod.Namespace) {
+			dlog.Debugf(ctx, "Skipping blacklisted pod %s.%s", pod.Name, pod.Namespace)
+			continue
+		}
+		if !isPodRunning(pod) {
 			continue
 		}
 		runningPods++
-
 		podAc := agentContainer(pod)
 		if ac == nil {
 			if podAc == nil {
@@ -141,6 +174,20 @@ func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Si
 			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired agent is not equal to the existing agent in pod %s",
 				wl.GetName(), wl.GetNamespace(), pod.GetName())
 			return true
+		}
+		podIc := initContainer(pod)
+		if podIc == nil {
+			if needInitContainer(ac) {
+				dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An init-container is desired but the pod %s doesn't have one",
+					wl.GetName(), wl.GetNamespace(), pod.GetName())
+				return true
+			}
+		} else {
+			if needInitContainer(ac) {
+				dlog.Debugf(ctx, "Rollout of %s.%s is necessary. No init-container is desired but the pod %s has one",
+					wl.GetName(), wl.GetNamespace(), pod.GetName())
+				return true
+			}
 		}
 		for _, cn := range ac.Containers {
 			var found *core.Container
@@ -184,8 +231,8 @@ func isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Si
 	return false
 }
 
-func triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) {
-	if !isRolloutNeeded(ctx, wl, ac) {
+func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) {
+	if !c.isRolloutNeeded(ctx, wl, ac) {
 		return
 	}
 
@@ -212,7 +259,7 @@ func triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sid
 	dlog.Infof(ctx, "Successfully rolled out %s.%s", wl.GetName(), wl.GetNamespace())
 }
 
-func triggerRolloutReplicaSet(ctx context.Context, wl k8sapi.Workload, rs *v1.ReplicaSet, span trace.Span) {
+func triggerRolloutReplicaSet(ctx context.Context, wl k8sapi.Workload, rs *appsv1.ReplicaSet, span trace.Span) {
 	// Rollout of a replicatset will not recreate the pods. In order for that to happen, the
 	// set must be scaled down and then up again.
 	dlog.Debugf(ctx, "Performing ReplicaSet rollout of %s.%s using scaling", wl.GetName(), wl.GetNamespace())
@@ -268,17 +315,17 @@ func triggerRolloutReplicaSet(ctx context.Context, wl k8sapi.Workload, rs *v1.Re
 
 // RegenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
 // and then, if any of the entries changed, it updates the map.
-func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
+func (c *configWatcher) RegenerateAgentMaps(ctx context.Context, agentImage string) error {
 	gc, err := agentmap.GeneratorConfigFunc(agentImage)
 	if err != nil {
 		return err
 	}
 	nss := managerutil.GetEnv(ctx).ManagedNamespaces
 	if len(nss) == 0 {
-		return regenerateAgentMaps(ctx, "", gc)
+		return c.regenerateAgentMaps(ctx, "", gc)
 	}
 	for _, ns := range nss {
-		if err = regenerateAgentMaps(ctx, ns, gc); err != nil {
+		if err = c.regenerateAgentMaps(ctx, ns, gc); err != nil {
 			return err
 		}
 	}
@@ -287,72 +334,146 @@ func RegenerateAgentMaps(ctx context.Context, agentImage string) error {
 
 // regenerateAgentMaps load the telepresence-agents config map, regenerates all entries in it,
 // and then, if any of the entries changed, it updates the map.
-func regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorConfig) error {
-	cml, err := tpAgentsConfigMap(ctx, ns).Lister().List(labels.Everything())
+func (c *configWatcher) regenerateAgentMaps(ctx context.Context, ns string, gc agentmap.GeneratorConfig) error {
+	dlog.Debugf(ctx, "regenerate agent maps %s", whereWeWatch(ns))
+	lister := tpAgentsInformer(ctx, ns).Lister()
+	cml, err := lister.List(labels.Everything())
 	if err != nil {
 		return err
 	}
-	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	for _, cm := range cml {
+	dbpCmp := cmp.Comparer(func(a, b *durationpb.Duration) bool {
+		return a.AsDuration() == b.AsDuration()
+	})
+
+	n := len(cml)
+	for i := 0; i < n; i++ {
+		cm := cml[i]
 		changed := false
 		ns := cm.Namespace
-		for n, d := range cm.Data {
-			e := &entry{name: n, namespace: ns, value: d}
-			acx, wl, err := e.workload(ctx)
-			if err != nil {
-				if !errors.IsNotFound(err) {
-					return err
+		err = c.Update(ctx, ns, func(cm *core.ConfigMap) (bool, error) {
+			dlog.Debugf(ctx, "regenerate: checking namespace %s", ns)
+			data := maps.Copy(cm.Data)
+			for n, d := range data {
+				e := &entry{name: n, namespace: ns, value: d}
+				acx, wl, err := e.workload(ctx)
+				if err != nil {
+					if !errors.IsNotFound(err) {
+						return false, err
+					}
+					dlog.Debugf(ctx, "regenereate: no workload found %s", n)
+					delete(data, n) // Workload no longer exists
+					changed = true
+					continue
 				}
-				delete(cm.Data, n) // Workload no longer exists
+				ncx, err := gc.Generate(ctx, wl, acx)
+				if err != nil {
+					return false, err
+				}
+				if cmp.Equal(acx, ncx, dbpCmp) {
+					dlog.Debugf(ctx, "regenereate: agent %s is not modified", n)
+					continue
+				}
+				yml, err := ncx.Marshal()
+				if err != nil {
+					return false, err
+				}
+				dlog.Debugf(ctx, "%v != %v", acx, ncx)
+				dlog.Debugf(ctx, "regenereate: agent %s was regenerated", n)
+				data[n] = string(yml)
 				changed = true
-				continue
 			}
-			ncx, err := gc.Generate(ctx, wl, acx)
-			if err != nil {
-				return err
+			if changed {
+				dlog.Debugf(ctx, "regenereate: updating regenerated agents")
 			}
-			if cmp.Equal(acx, ncx) {
-				continue
-			}
-			yml, err := ncx.Marshal()
-			if err != nil {
-				return err
-			}
-			cm.Data[n] = string(yml)
-			changed = true
-		}
-		if changed {
-			_, err = api.ConfigMaps(ns).Update(ctx, cm, meta.UpdateOptions{})
-		}
+			return changed, nil
+		})
 	}
 	return err
 }
 
 type configWatcher struct {
-	sync.RWMutex
-	cancel     context.CancelFunc
-	name       string
-	namespaces []string
-	data       map[string]map[string]string
-	modCh      chan entry
-	delCh      chan entry
+	cancel          context.CancelFunc
+	nsLocks         *xsync.MapOf[string, *sync.RWMutex]
+	blacklistedPods *xsync.MapOf[string, time.Time]
 
-	configUpdatersLock sync.RWMutex
-	configUpdaters     map[string]*configUpdater
-	regHandles         map[string]cache.ResourceEventHandlerRegistration
+	cms []cache.SharedIndexInformer
+	svs []cache.SharedIndexInformer
 
 	self Map // For extension
 }
 
-func NewWatcher(name string, namespaces ...string) Map {
+// Blacklist will prevent the pod from being used when determining if a rollout is necessary, and
+// from participating in ReviewIntercept calls. This is needed because there's a lag between the
+// time when a pod is deleted and its agent announces its departure during which the pod must be
+// considered inactive.
+func (c *configWatcher) Blacklist(podName, namespace string) {
+	c.blacklistedPods.Store(podName+"."+namespace, time.Now())
+}
+
+func (c *configWatcher) Whitelist(podName, namespace string) {
+	c.blacklistedPods.Delete(podName + "." + namespace)
+}
+
+func (c *configWatcher) IsBlacklisted(podName, namespace string) bool {
+	_, ok := c.blacklistedPods.Load(podName + "." + namespace)
+	return ok
+}
+
+func (c *configWatcher) Delete(ctx context.Context, namespace string, name string) error {
+	return c.remove(ctx, name, namespace)
+}
+
+func (c *configWatcher) Update(ctx context.Context, namespace string, updater func(cm *core.ConfigMap) (bool, error)) error {
+	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				err = derror.PanicToError(r)
+				dlog.Errorf(ctx, "%+v", err)
+			}
+		}()
+		lock := c.getNamespaceLock(namespace)
+		lock.Lock()
+		defer lock.Unlock()
+		cm, err := tpAgentsConfigMap(ctx, namespace)
+		if err != nil {
+			return err
+		}
+		create := cm == nil
+		if create {
+			cm = &core.ConfigMap{
+				TypeMeta: meta.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: meta.ObjectMeta{
+					Name:      agentconfig.ConfigMap,
+					Namespace: namespace,
+				},
+			}
+		}
+
+		changed, err := updater(cm)
+		if err == nil && changed {
+			if create {
+				_, err = api.Create(ctx, cm, meta.CreateOptions{})
+			} else {
+				_, err = api.Update(ctx, cm, meta.UpdateOptions{})
+			}
+		}
+		return err
+	})
+}
+
+func NewWatcher(namespaces ...string) Map {
 	w := &configWatcher{
-		name:           name,
-		namespaces:     namespaces,
-		data:           make(map[string]map[string]string),
-		configUpdaters: make(map[string]*configUpdater),
-		regHandles:     make(map[string]cache.ResourceEventHandlerRegistration),
-		modCh:          make(chan entry),
-		delCh:          make(chan entry),
+		nsLocks:         xsync.NewMapOf[string, *sync.RWMutex](),
+		blacklistedPods: xsync.NewMapOf[string, time.Time](),
+	}
+	if len(namespaces) > 0 {
+		for _, ns := range namespaces {
+			w.getNamespaceLock(ns)
+		}
 	}
 	w.self = w
 	return w
@@ -362,35 +483,31 @@ type entry struct {
 	name      string
 	namespace string
 	value     string
-	link      trace.Link
+	oldValue  string
 }
 
 func (c *configWatcher) SetSelf(self Map) {
 	c.self = self
 }
 
-func (c *configWatcher) Run(ctx context.Context) error {
+func (c *configWatcher) Wait(ctx context.Context) error {
 	ctx, c.cancel = context.WithCancel(ctx)
-	c.delCh = make(chan entry)
-	c.modCh = make(chan entry)
-	err := c.Start(ctx)
-	if err != nil {
-		return err
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case e := <-c.delCh:
-			c.handleDelete(ctx, e)
-		case e := <-c.modCh:
-			c.handleAdd(ctx, e)
+	for _, si := range c.svs {
+		if err := c.watchServices(ctx, si); err != nil {
+			return err
 		}
 	}
+	for _, ci := range c.cms {
+		if err := c.watchConfigMap(ctx, ci); err != nil {
+			return err
+		}
+	}
+	<-ctx.Done()
+	return nil
 }
 
 func (c *configWatcher) OnAdd(ctx context.Context, wl k8sapi.Workload, acx agentconfig.SidecarExt) error {
-	triggerRollout(ctx, wl, acx.AgentConfig())
+	c.triggerRollout(ctx, wl, acx.AgentConfig())
 	return nil
 }
 
@@ -398,12 +515,7 @@ func (c *configWatcher) OnDelete(context.Context, string, string) error {
 	return nil
 }
 
-func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
-		trace.WithNewRoot(),
-		trace.WithLinks(e.link),
-	)
-	defer span.End()
+func (c *configWatcher) handleAddOrUpdateEntry(ctx context.Context, e entry) {
 	dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
 	scx, wl, err := e.workload(ctx)
 	if err != nil {
@@ -412,11 +524,8 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 		}
 		return
 	}
-	scx.RecordInSpan(span)
-	tracing.RecordWorkloadInfo(span, wl)
 	ac := scx.AgentConfig()
 	if ac.Manual {
-		span.SetAttributes(attribute.Bool("tel2.manual", ac.Manual))
 		// Manually added, just ignore
 		return
 	}
@@ -431,9 +540,9 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 			dlog.Error(ctx, err)
 			return
 		}
-		if acx, err := gc.Generate(ctx, wl, ac); err != nil {
+		if scx, err = gc.Generate(ctx, wl, ac); err != nil {
 			dlog.Error(ctx, err)
-		} else if err = c.store(ctx, acx, false); err != nil { // Calling store() will generate a new event, so we skip rollout here
+		} else if err = c.store(ctx, scx, false); err != nil { // Calling store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
 		}
 		return
@@ -443,12 +552,7 @@ func (c *configWatcher) handleAdd(ctx context.Context, e entry) {
 	}
 }
 
-func (c *configWatcher) handleDelete(ctx context.Context, e entry) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.handleAdd",
-		trace.WithNewRoot(),
-		trace.WithLinks(e.link),
-	)
-	defer span.End()
+func (c *configWatcher) handleDeleteEntry(ctx context.Context, e entry) {
 	dlog.Debugf(ctx, "del %s.%s", e.name, e.namespace)
 	scx, wl, err := e.workload(ctx)
 	if err != nil {
@@ -457,8 +561,6 @@ func (c *configWatcher) handleDelete(ctx context.Context, e entry) {
 			return
 		}
 	} else {
-		tracing.RecordWorkloadInfo(span, wl)
-		scx.RecordInSpan(span)
 		ac := scx.AgentConfig()
 		if ac.Create || ac.Manual {
 			// Deleted before it was generated or manually added, just ignore
@@ -469,18 +571,27 @@ func (c *configWatcher) handleDelete(ctx context.Context, e entry) {
 		dlog.Error(ctx, err)
 	}
 	if wl != nil {
-		triggerRollout(ctx, wl, nil)
+		c.triggerRollout(ctx, wl, nil)
 	}
 }
 
-func (c *configWatcher) Get(key, ns string) (agentconfig.SidecarExt, error) {
-	c.RLock()
-	var v string
-	vs, ok := c.data[ns]
-	if ok {
-		v, ok = vs[key]
+func (c *configWatcher) getNamespaceLock(ns string) *sync.RWMutex {
+	lock, _ := c.nsLocks.LoadOrCompute(ns, func() *sync.RWMutex {
+		return &sync.RWMutex{}
+	})
+	return lock
+}
+
+func (c *configWatcher) Get(ctx context.Context, key, ns string) (agentconfig.SidecarExt, error) {
+	lock := c.getNamespaceLock(ns)
+	lock.RLock()
+	defer lock.RUnlock()
+
+	data, err := data(ctx, ns)
+	if err != nil {
+		return nil, err
 	}
-	c.RUnlock()
+	v, ok := data[key]
 	if !ok {
 		return nil, nil
 	}
@@ -491,30 +602,22 @@ func (c *configWatcher) Get(key, ns string) (agentconfig.SidecarExt, error) {
 // also update the current snapshot.
 // An attempt to delete a manually added config is a no-op.
 func (c *configWatcher) remove(ctx context.Context, name, namespace string) error {
-	getter := tpAgentsConfigMap(ctx, namespace).Lister().ConfigMaps(namespace)
-	cm, err := getter.Get(agentconfig.ConfigMap)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
+	return c.Update(ctx, namespace, func(cm *core.ConfigMap) (bool, error) {
+		yml, ok := cm.Data[name]
+		if !ok {
+			return false, nil
 		}
-		return nil
-	}
-	yml, ok := cm.Data[name]
-	if !ok {
-		return nil
-	}
-	scx, err := agentconfig.UnmarshalYAML([]byte(yml))
-	if err != nil {
-		return err
-	}
-	if scx.AgentConfig().Manual {
-		return nil
-	}
-	delete(cm.Data, name)
-	dlog.Debugf(ctx, "Deleting %s from ConfigMap %s.%s", name, agentconfig.ConfigMap, namespace)
-	api := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(namespace)
-	_, err = api.Update(ctx, cm, meta.UpdateOptions{})
-	return err
+		scx, err := agentconfig.UnmarshalYAML([]byte(yml))
+		if err != nil {
+			return false, err
+		}
+		if scx.AgentConfig().Manual {
+			return false, nil
+		}
+		delete(cm.Data, name)
+		dlog.Debugf(ctx, "Deleting %s from ConfigMap %s.%s", name, agentconfig.ConfigMap, namespace)
+		return true, nil
+	})
 }
 
 // store an agent config in the agents ConfigMap for the given namespace. It will
@@ -522,178 +625,63 @@ func (c *configWatcher) remove(ctx context.Context, name, namespace string) erro
 // the rollout that otherwise occur when the ConfigMap is updated.
 func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error {
 	js, err := acx.Marshal()
+	yml := string(js)
 	if err != nil {
 		return err
 	}
-
 	ac := acx.AgentConfig()
-	yml := string(js)
 	ns := ac.Namespace
-	c.RLock()
-	var eq bool
-	if nm, ok := c.data[ns]; ok {
-		eq = nm[ac.AgentName] == yml
-	}
-	c.RUnlock()
-	if eq {
-		return nil
-	}
-
-	var cu *configUpdater
-
-	newGroup := false
-
-	for {
-		// Check if the group is in the pool.
-		c.configUpdatersLock.Lock()
-		if _, ok := c.configUpdaters[ns]; !ok {
-			cu = createConfigUpdater(ctx, c, ns)
-			c.configUpdaters[ns] = cu
-			newGroup = true
+	return c.Update(ctx, ns, func(cm *core.ConfigMap) (bool, error) {
+		if cm.Data == nil {
+			cm.Data = make(map[string]string)
 		} else {
-			cu = c.configUpdaters[ns]
+			if oldYml, ok := cm.Data[ac.AgentName]; ok {
+				if oldYml == yml {
+					dlog.Debugf(ctx, "skipping update agent %s in %s.%s because it was not modified", ac.AgentName, agentconfig.ConfigMap, ns)
+					return false, nil
+				}
+				scx, err := agentconfig.UnmarshalYAML([]byte(oldYml))
+				if err == nil && scx.AgentConfig().Manual {
+					dlog.Warnf(ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", ac.AgentName, ns)
+					return false, nil
+				}
+			}
+			if !updateSnapshot {
+				cm.Data = maps.Copy(cm.Data)
+			}
 		}
-		c.configUpdatersLock.Unlock()
-
-		cu.Lock()
-		// If the config updater already has updated the config map, this flag will be true, so drop it.
-		if cu.Updated {
-			cu.Unlock()
-			continue
-		}
-
-		cu.Config[ac.AgentName] = yml
-
-		if updateSnapshot {
-			cu.AddToSnapshot(ac.AgentName)
-		}
-
-		cu.Unlock()
-
-		break
-	}
-
-	if newGroup {
-		cu.Go(cu.updateConfigMap)
-	}
-
-	return cu.Wait()
+		cm.Data[ac.AgentName] = yml
+		dlog.Debugf(ctx, "updating agent %s in %s.%s", ac.AgentName, agentconfig.ConfigMap, ns)
+		return true, nil
+	})
 }
 
-func createConfigUpdater(ctx context.Context, configWatcher *configWatcher, namespace string) *configUpdater {
-	grp, grpCtx := errgroup.WithContext(ctx)
-	return &configUpdater{
-		Group: grp,
-		Mutex: &sync.Mutex{},
-		cw:    configWatcher,
-
-		ctx:           grpCtx,
-		namespace:     namespace,
-		addToSnapshot: map[string]struct{}{},
-
-		Config:  map[string]string{},
-		Updated: false,
-	}
+func tpAgentsInformer(ctx context.Context, ns string) informerCore.ConfigMapInformer {
+	f := informer.GetFactory(ctx, ns)
+	cV1 := informerCore.New(f, ns, func(options *meta.ListOptions) {
+		options.FieldSelector = "metadata.name=" + agentconfig.ConfigMap
+	})
+	cms := cV1.ConfigMaps()
+	return cms
 }
 
-type configUpdater struct {
-	*errgroup.Group
-	*sync.Mutex
-
-	cw *configWatcher
-
-	ctx           context.Context
-	namespace     string
-	addToSnapshot map[string]struct{}
-
-	Config  map[string]string
-	Updated bool
-}
-
-func (c *configUpdater) AddToSnapshot(agentName string) {
-	c.addToSnapshot[agentName] = struct{}{}
-}
-
-func (c *configUpdater) updateConfigMap() error {
-	// Any other update for this namespace will have to start a new group at this point.
-	defer func() {
-		c.cw.configUpdatersLock.Lock()
-		delete(c.cw.configUpdaters, c.namespace)
-		c.cw.configUpdatersLock.Unlock()
-	}()
-
-	getter := tpAgentsConfigMap(c.ctx, c.namespace).Lister().ConfigMaps(c.namespace)
-	create := false
-
-	cm, err := getter.Get(agentconfig.ConfigMap)
+func tpAgentsConfigMap(ctx context.Context, ns string) (*core.ConfigMap, error) {
+	cm, err := tpAgentsInformer(ctx, ns).Lister().ConfigMaps(ns).Get(agentconfig.ConfigMap)
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
+			return nil, fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
 		}
-		create = true
+		cm = nil
 	}
+	return cm, nil
+}
 
-	if create {
-		cm = &core.ConfigMap{
-			TypeMeta: meta.TypeMeta{
-				Kind:       "ConfigMap",
-				APIVersion: "v1",
-			},
-			ObjectMeta: meta.ObjectMeta{
-				Name:      agentconfig.ConfigMap,
-				Namespace: c.namespace,
-			},
-		}
+func data(ctx context.Context, ns string) (map[string]string, error) {
+	cm, err := tpAgentsConfigMap(ctx, ns)
+	if err != nil || cm == nil {
+		return nil, err
 	}
-
-	var cmData map[string]string
-
-	c.Lock() // Lock the config updater to avoid any addition to c.Config.
-	defer func() {
-		c.Updated = true
-		c.Unlock()
-	}()
-
-	cmData = maps.Copy(c.cw.data[c.namespace])
-
-	for agentName, yml := range c.Config {
-		// Ensure that we're not about to overwrite a manually added config entry
-		scx, err := agentconfig.UnmarshalYAML([]byte(yml))
-		if err == nil && scx.AgentConfig().Manual {
-			dlog.Warnf(c.ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", agentName, c.namespace)
-			continue
-		}
-
-		// Race condition. Snapshot isn't updated yet, or we wouldn't have gotten here.
-		if cm.Data[agentName] == yml {
-			continue
-		}
-
-		cmData[agentName] = yml
-
-		if _, updateSnapshotOK := c.addToSnapshot[agentName]; updateSnapshotOK {
-			c.cw.Lock()
-			nm, ok := c.cw.data[c.namespace]
-			if !ok {
-				c.cw.data[c.namespace] = make(map[string]string, len(cmData))
-				nm = c.cw.data[c.namespace]
-			}
-			nm[agentName] = yml
-			c.cw.Unlock()
-		}
-	}
-
-	cm.Data = cmData
-
-	api := k8sapi.GetK8sInterface(c.ctx).CoreV1().ConfigMaps(c.namespace)
-	if create {
-		dlog.Debugf(c.ctx, "Creating new ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
-		_, err = api.Create(c.ctx, cm, meta.CreateOptions{})
-	} else {
-		dlog.Debugf(c.ctx, "Updating ConfigMap %s.%s", agentconfig.ConfigMap, c.namespace)
-		_, err = api.Update(c.ctx, cm, meta.UpdateOptions{})
-	}
-	return err
+	return cm.Data, nil
 }
 
 func whereWeWatch(ns string) string {
@@ -703,17 +691,8 @@ func whereWeWatch(ns string) string {
 	return "in namespace " + ns
 }
 
-func tpAgentsConfigMap(ctx context.Context, ns string) informerCore.ConfigMapInformer {
-	f := informer.GetFactory(ctx, ns)
-	cV1 := informerCore.New(f, ns, func(options *meta.ListOptions) {
-		options.FieldSelector = "metadata.name=" + agentconfig.ConfigMap
-	})
-	cms := cV1.ConfigMaps()
-	return cms
-}
-
 func (c *configWatcher) startConfigMap(ctx context.Context, ns string) cache.SharedIndexInformer {
-	ix := tpAgentsConfigMap(ctx, ns).Informer()
+	ix := tpAgentsInformer(ctx, ns).Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		// Strip of the parts of the service that we don't care about
 		if cm, ok := o.(*core.ConfigMap); ok {
@@ -726,11 +705,6 @@ func (c *configWatcher) startConfigMap(ctx context.Context, ns string) cache.Sha
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		dlog.Errorf(ctx, "watcher for ConfigMap %s %s: %v", agentconfig.ConfigMap, whereWeWatch(ns), err)
 	})
-	go func() {
-		dlog.Infof(ctx, "Started watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
-		defer dlog.Infof(ctx, "Ended watcher for ConfigMap %s %s", agentconfig.ConfigMap, whereWeWatch(ns))
-		ix.Run(ctx.Done())
-	}()
 	return ix
 }
 
@@ -740,19 +714,21 @@ func (c *configWatcher) watchConfigMap(ctx context.Context, ix cache.SharedIndex
 			AddFunc: func(obj any) {
 				if cm, ok := obj.(*core.ConfigMap); ok {
 					dlog.Debugf(ctx, "ADDED %s.%s", cm.Name, cm.Namespace)
-					c.update(ctx, cm.Namespace, cm.Data)
+					c.getNamespaceLock(cm.Namespace)
+					c.handleAdd(ctx, cm)
 				}
 			},
 			DeleteFunc: func(obj any) {
 				if cm, ok := obj.(*core.ConfigMap); ok {
 					dlog.Debugf(ctx, "DELETED %s.%s", cm.Name, cm.Namespace)
-					c.update(ctx, cm.Namespace, nil)
+					c.getNamespaceLock(cm.Namespace)
+					c.handleDelete(ctx, cm)
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
 				if cm, ok := newObj.(*core.ConfigMap); ok {
 					dlog.Debugf(ctx, "UPDATED %s.%s", cm.Name, cm.Namespace)
-					c.update(ctx, cm.Namespace, cm.Data)
+					c.handleUpdate(ctx, oldObj.(*core.ConfigMap), cm)
 				}
 			},
 		})
@@ -775,12 +751,6 @@ func (c *configWatcher) startServices(ctx context.Context, ns string) cache.Shar
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		dlog.Errorf(ctx, "watcher for Services %s: %v", whereWeWatch(ns), err)
 	})
-
-	go func() {
-		dlog.Infof(ctx, "Started watcher for Services %s", whereWeWatch(ns))
-		defer dlog.Infof(ctx, "Ended watcher for Services %s", whereWeWatch(ns))
-		ix.Run(ctx.Done())
-	}()
 	return ix
 }
 
@@ -810,23 +780,46 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 	return err
 }
 
-func (c *configWatcher) Start(ctx context.Context) error {
-	nss := c.namespaces
+func (c *configWatcher) gcBlacklisted(now time.Time) {
+	const maxAge = time.Minute
+	maxCreated := now.Add(-maxAge)
+	c.blacklistedPods.Range(func(key string, created time.Time) bool {
+		if created.Before(maxCreated) {
+			c.blacklistedPods.Delete(key)
+		}
+		return true
+	})
+}
+
+func (c *configWatcher) Start(ctx context.Context) {
+	env := managerutil.GetEnv(ctx)
+	nss := env.ManagedNamespaces
 	if len(nss) == 0 {
 		nss = []string{""}
 	}
-	for _, ns := range nss {
-		cm := c.startConfigMap(ctx, ns)
-		svs := c.startServices(ctx, ns)
-		cache.WaitForCacheSync(ctx.Done(), cm.HasSynced, svs.HasSynced)
-		if err := c.watchConfigMap(ctx, cm); err != nil {
-			return err
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case now := <-ticker.C:
+				c.gcBlacklisted(now)
+			}
 		}
-		if err := c.watchServices(ctx, svs); err != nil {
-			return err
-		}
+	}()
+
+	c.svs = make([]cache.SharedIndexInformer, len(nss))
+	c.cms = make([]cache.SharedIndexInformer, len(nss))
+	for i, ns := range nss {
+		c.cms[i] = c.startConfigMap(ctx, ns)
+		c.svs[i] = c.startServices(ctx, ns)
+		f := informer.GetFactory(ctx, ns)
+		f.Start(ctx.Done())
+		f.WaitForCacheSync(ctx.Done())
 	}
-	return nil
 }
 
 type affectedConfig struct {
@@ -871,11 +864,11 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, nsData map[str
 
 func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, trustUID bool) []affectedConfig {
 	ns := svc.Namespace
-	c.RLock()
-	defer c.RUnlock()
-	nsData, ok := c.data[ns]
-
-	if !ok || len(nsData) == 0 {
+	nsData, err := data(ctx, ns)
+	if err != nil {
+		return nil
+	}
+	if len(nsData) == 0 {
 		return nil
 	}
 	return c.configsAffectedBySvc(ctx, nsData, svc, trustUID)
@@ -931,67 +924,66 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 	}
 }
 
-func writeToChan(ctx context.Context, es []entry, ch chan<- entry) {
-	for _, e := range es {
-		select {
-		case <-ctx.Done():
-			return
-		case ch <- e:
-		}
+func (c *configWatcher) handleAdd(ctx context.Context, cm *core.ConfigMap) {
+	ns := cm.Namespace
+	for n, yml := range cm.Data {
+		c.handleAddOrUpdateEntry(ctx, entry{
+			name:      n,
+			namespace: ns,
+			value:     yml,
+		})
 	}
 }
 
-func (c *configWatcher) update(ctx context.Context, ns string, m map[string]string) {
-	span := trace.SpanFromContext(ctx)
-	var dels []entry
-	c.Lock()
-	data, ok := c.data[ns]
-	if !ok {
-		data = make(map[string]string, len(m))
-		c.data[ns] = data
+func (c *configWatcher) handleDelete(ctx context.Context, cm *core.ConfigMap) {
+	ns := cm.Namespace
+	for n, yml := range cm.Data {
+		c.handleDeleteEntry(ctx, entry{
+			name:      n,
+			namespace: ns,
+			value:     yml,
+		})
 	}
-	for k, v := range data {
-		if _, ok := m[k]; !ok {
-			delete(data, k)
-			dels = append(dels, entry{name: k, namespace: ns, value: v, link: trace.LinkFromContext(ctx)})
-			span.AddEvent("tel2.cm-delete", trace.WithAttributes(
-				attribute.String("tel2.workload-name", k),
-				attribute.String("tel2.workload-namespace", ns),
-			))
+}
+
+func (c *configWatcher) handleUpdate(ctx context.Context, oldCm, newCm *core.ConfigMap) {
+	ns := newCm.Namespace
+	for n, newYml := range newCm.Data {
+		e := entry{
+			name:      n,
+			namespace: ns,
+			value:     newYml,
 		}
-	}
-	var mods []entry
-	for k, v := range m {
-		if ov, ok := data[k]; !ok || ov != v {
-			mods = append(mods, entry{name: k, namespace: ns, value: v, link: trace.LinkFromContext(ctx)})
-			data[k] = v
-			span.AddEvent("tel2.cm-mod", trace.WithAttributes(
-				attribute.String("tel2.workload-name", k),
-				attribute.String("tel2.workload-namespace", ns),
-			))
+		if oldYml, ok := oldCm.Data[n]; ok && oldYml != newYml {
+			e.oldValue = oldYml
 		}
+		c.handleAddOrUpdateEntry(ctx, e)
 	}
-	c.Unlock()
-	if len(dels) > 0 {
-		go writeToChan(ctx, dels, c.delCh)
-	}
-	if len(mods) > 0 {
-		go writeToChan(ctx, mods, c.modCh)
+	for n, oldYml := range oldCm.Data {
+		if _, ok := newCm.Data[n]; !ok {
+			c.handleDeleteEntry(ctx, entry{
+				name:      n,
+				namespace: ns,
+				value:     oldYml,
+			})
+		}
 	}
 }
 
 func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.DeleteMapsAndRolloutAll")
-	defer span.End()
 	c.cancel() // No more updates from watcher
-	c.RLock()
-	defer c.RUnlock()
-
 	now := meta.NewDeleteOptions(0)
 	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	for ns, wlm := range c.data {
+	c.nsLocks.Range(func(ns string, lock *sync.RWMutex) bool {
+		lock.Lock()
+		defer lock.Unlock()
+		wlm, err := data(ctx, ns)
+		if err != nil {
+			dlog.Errorf(ctx, "unable to get configmap %s.%s: %v", agentconfig.ConfigMap, ns, err)
+			return true
+		}
 		for k, v := range wlm {
-			e := &entry{name: k, namespace: ns, value: v, link: trace.LinkFromContext(ctx)}
+			e := &entry{name: k, namespace: ns, value: v}
 			scx, wl, err := e.workload(ctx)
 			if err != nil {
 				if !errors.IsNotFound(err) {
@@ -1004,10 +996,11 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 				// Deleted before it was generated or manually added, just ignore
 				continue
 			}
-			triggerRollout(ctx, wl, nil)
+			c.triggerRollout(ctx, wl, nil)
 		}
 		if err := api.ConfigMaps(ns).Delete(ctx, agentconfig.ConfigMap, *now); err != nil {
 			dlog.Errorf(ctx, "unable to delete ConfigMap %s-%s: %v", agentconfig.ConfigMap, ns, err)
 		}
-	}
+		return true
+	})
 }

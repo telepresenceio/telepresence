@@ -83,7 +83,7 @@ func NewService(ctx context.Context) (Service, *dgroup.Group, error) {
 		id:    uuid.New().String(),
 	}
 
-	ctx, err := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
+	ctx, err := WithAgentImageRetrieverFunc(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
 	}
@@ -186,6 +186,7 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 	}
 
 	sessionID := s.state.AddAgent(agent, s.clock.Now())
+	mutator.GetMap(ctx).Whitelist(agent.PodName, agent.Namespace)
 
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
@@ -683,6 +684,10 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	intercept := s.state.UpdateIntercept(ceptID, func(intercept *rpc.InterceptInfo) {
 		// Sanity check: The reviewing agent must be an agent for the intercept.
 		if intercept.Spec.Namespace != agent.Namespace || intercept.Spec.Agent != agent.Name {
+			return
+		}
+		if mutator.GetMap(ctx).IsBlacklisted(agent.PodName, agent.Namespace) {
+			dlog.Debugf(ctx, "Pod %s.%s is blacklisted", agent.PodName, agent.Namespace)
 			return
 		}
 
