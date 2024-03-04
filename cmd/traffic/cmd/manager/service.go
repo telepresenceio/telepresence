@@ -697,6 +697,7 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.Disposition = rIReq.Disposition
 			intercept.Message = rIReq.Message
 			intercept.PodIp = rIReq.PodIp
+			intercept.PodName = agent.PodName
 			intercept.FtpPort = rIReq.FtpPort
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MountPoint = rIReq.MountPoint
