@@ -201,6 +201,7 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.Da
 	}()
 
 	if !ic.shouldForward() && !ic.shouldMount() {
+		dlog.Debugf(ctx, "No mounts or port-forwards needed for %+v", fk)
 		return
 	}
 
@@ -210,6 +211,7 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.Da
 
 	// Already started?
 	if _, isLive := lpf.alivePods[fk]; isLive {
+		dlog.Debugf(ctx, "Mounts and port-forwards already active for %+v", fk)
 		return
 	}
 
@@ -340,17 +342,24 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, podIcepts *podInt
 		// Notify waiters for active intercepts
 		if aw != nil {
 			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
-			select {
-			case aw.waitCh <- interceptResult{
+			ir := interceptResult{
 				intercept:  ic,
 				err:        err,
 				mountsDone: podIcepts.getOrCreateMountsDone(ic),
-			}:
+			}
+			select {
+			case aw.waitCh <- ir:
+				if err != nil {
+					// Error logged by receiver
+					continue
+				}
 			default:
 				// Channel was closed
+				dlog.Debugf(ctx, "unable to propagate intercept id=%q", ii.Id)
 			}
 		}
 		if err != nil {
+			dlog.Error(ctx, err)
 			continue
 		}
 
