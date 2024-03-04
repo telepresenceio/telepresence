@@ -113,9 +113,8 @@ func NewInfo(ctx context.Context) Info {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = IDZero
-		dlog.Warnf(ctx,
-			"unable to get namespace \"default\", will use default clusterID: %s: %v. This is only necessary for compatibility with old licesnses.",
-			oi.clusterID, err)
+		dlog.Infof(ctx,
+			"unable to get namespace \"default\", but it is only necessary for compatibility with old licesnses: %v", err)
 	}
 
 	dummyIP := "1.1.1.1"

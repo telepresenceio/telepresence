@@ -148,8 +148,6 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		case scx == nil && isDelete:
 			return nil, nil
 		case scx == nil && ia != "enabled":
-			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or through %q annotation; skipping`,
-				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
 		case scx != nil && scx.AgentConfig().Manual:
 			if !isDelete {

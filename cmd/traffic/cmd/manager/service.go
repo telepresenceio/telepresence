@@ -194,7 +194,6 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 func (s *service) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) (*empty.Empty, error) {
-	dlog.Debug(ctx, "ReportMetrics called")
 	s.state.AddSessionConsumptionMetrics(metrics)
 	return &empty.Empty{}, nil
 }
