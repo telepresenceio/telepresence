@@ -150,14 +150,11 @@ func ServeMutator(ctx context.Context) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	cw, err := Load(ctx)
-	if err != nil {
-		return err
-	}
+	cw := GetMap(ctx)
 	ai = NewAgentInjectorFunc(ctx, cw)
 	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
 		dtime.SleepWithContext(ctx, time.Second) // Give the server some time to start
-		return cw.Run(ctx)
+		return cw.Wait(ctx)
 	})
 
 	wrapped := otelhttp.NewHandler(mux, "agent-injector", otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {

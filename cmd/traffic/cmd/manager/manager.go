@@ -106,6 +106,8 @@ func MainWithEnv(ctx context.Context) (err error) {
 		}
 	}
 
+	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
+
 	mgr, g, err := NewServiceFunc(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)

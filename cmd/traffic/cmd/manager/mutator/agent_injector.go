@@ -20,6 +20,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/strings/slices"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -90,6 +91,12 @@ func getPod(req *admission.AdmissionRequest, isDelete bool) (*core.Pod, error) {
 }
 
 func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequest) (p PatchOps, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = derror.PanicToError(r)
+			dlog.Errorf(ctx, "%+v", err)
+		}
+	}()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.inject")
 	defer tracing.EndAndRecord(span, err)
 
@@ -103,8 +110,12 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	if err != nil {
 		return nil, err
 	}
-	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
+	if isDelete {
+		a.agentConfigs.Blacklist(pod.Name, pod.Namespace)
+		return nil, nil
+	}
 
+	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
 	env := managerutil.GetEnv(ctx)
 
 	ia := pod.Annotations[agentconfig.InjectAnnotation]
@@ -138,21 +149,14 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		scx, err = a.findConfigMapValue(ctx, workloadCache, pod, nil)
 
 		if err != nil {
-			if isDelete {
-				err = nil
-			}
 			return nil, err
 		}
 
 		switch {
-		case scx == nil && isDelete:
-			return nil, nil
 		case scx == nil && ia != "enabled":
 			return nil, nil
 		case scx != nil && scx.AgentConfig().Manual:
-			if !isDelete {
-				dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
-			}
+			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			return nil, nil
 		}
 
@@ -161,18 +165,11 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			if k8sErrors.IsNotFound(err) {
 				err = nil
 				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
-				if isDelete && scx != nil {
-					config := scx.AgentConfig()
-					err = a.agentConfigs.remove(ctx, config.WorkloadName, config.Namespace)
-				}
 			}
 			return nil, err
 		}
 
 		tracing.RecordWorkloadInfo(span, wl)
-		if isDelete {
-			return nil, nil
-		}
 		var gc agentmap.GeneratorConfig
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
@@ -684,7 +681,7 @@ func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache ma
 	}
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			scx, err := a.agentConfigs.Get(or.Name, pod.GetNamespace())
+			scx, err := a.agentConfigs.Get(ctx, or.Name, pod.GetNamespace())
 			if err != nil {
 				return nil, err
 			}
