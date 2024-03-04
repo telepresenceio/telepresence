@@ -124,14 +124,11 @@ func ServeMutator(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		dlog.Debug(ctx, "Received webhook request...")
 		bytes, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
 		if err != nil {
 			dlog.Errorf(ctx, "error handling webhook request: %v", err)
 			w.WriteHeader(statusCode)
 			bytes = []byte(err.Error())
-		} else {
-			dlog.Debug(ctx, "Webhook request handled successfully")
 		}
 		if _, err = w.Write(bytes); err != nil {
 			dlog.Errorf(ctx, "could not write response: %v", err)

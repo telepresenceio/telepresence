@@ -48,11 +48,11 @@ func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.C
 		return nil, err
 	}
 	atomic.AddInt32(&ac.tunnelCount, 1)
-	dlog.Debugf(ctx, "%s have %d active tunnels", ac, ac.tunnelCount)
+	dlog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), ac.tunnelCount)
 	go func() {
 		<-ctx.Done()
 		atomic.AddInt32(&ac.tunnelCount, -1)
-		dlog.Debugf(ctx, "%s have %d active tunnels", ac, ac.tunnelCount)
+		dlog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), ac.tunnelCount)
 	}()
 	return tc, nil
 }
