@@ -30,21 +30,6 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.19.0
-    date: (TBD)
-    notes:
-      - type: change
-        title: Tracing is no longer enabled by default.
-        body: >-
-          Tracing must now be enabled explicitly in order to use the <code>telepresence gather-traces</code>
-          command.
-      - type: change
-        title: Removal of timeouts that are no longer in use
-        body: >-
-          The <code>config.yml</code> values <code>timeouts.agentInstall</code> and <code>timeouts.apply</code> haven't
-          been in use since versions prior to 2.6.0, when the client was responsible for installing the traffic-agent.
-          These timeouts are now removed from the code-base, and a warning will be printed when attempts are made to use
-          them.
   - version: 2.18.1
     date: (TBD)
     notes:
@@ -66,6 +51,13 @@ items:
           This allows another process with a kubeconfig already loaded in memory
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
+      - type: bugfix
+        title: Removal of timeouts that are no longer in use
+        body: >-
+          The <code>config.yml</code> values <code>timeouts.agentInstall</code> and <code>timeouts.apply</code> haven't
+          been in use since versions prior to 2.6.0, when the client was responsible for installing the traffic-agent.
+          These timeouts are now removed from the code-base, and a warning will be printed when attempts are made to use
+          them.
       - type: bugfix
         title: "Security fix: Upgrade embedded Helm to 3.14.2"
         body: >-
