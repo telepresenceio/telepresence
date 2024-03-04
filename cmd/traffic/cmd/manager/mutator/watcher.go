@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	informerCore "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -457,6 +458,13 @@ func (c *configWatcher) Update(ctx context.Context, namespace string, updater fu
 		if err == nil && changed {
 			if create {
 				_, err = api.Create(ctx, cm, meta.CreateOptions{})
+				if err != nil && errors.IsAlreadyExists(err) {
+					// Treat AlreadyExists as a Conflict so that this attempt is retried.
+					err = errors.NewConflict(schema.GroupResource{
+						Group:    "v1",
+						Resource: "ConfigMap",
+					}, cm.Name, err)
+				}
 			} else {
 				_, err = api.Update(ctx, cm, meta.UpdateOptions{})
 			}
