@@ -191,7 +191,7 @@ nextSvcPort:
 		if l := len(cn.VolumeMounts); l > 0 {
 			mounts = make([]string, 0, l)
 			for _, vm := range cn.VolumeMounts {
-				if _, ok := ignoredVolumeMounts[vm.Name]; !ok {
+				if !ignoredVolumeMounts.IsVolumeIgnored(vm.Name, vm.MountPath) {
 					mounts = append(mounts, vm.MountPath)
 				}
 			}
