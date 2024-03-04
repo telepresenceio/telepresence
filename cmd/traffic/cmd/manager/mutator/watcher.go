@@ -645,7 +645,6 @@ func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt, u
 		} else {
 			if oldYml, ok := cm.Data[ac.AgentName]; ok {
 				if oldYml == yml {
-					dlog.Debugf(ctx, "skipping update agent %s in %s.%s because it was not modified", ac.AgentName, agentconfig.ConfigMap, ns)
 					return false, nil
 				}
 				scx, err := agentconfig.UnmarshalYAML([]byte(oldYml))

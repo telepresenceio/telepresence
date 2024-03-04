@@ -186,9 +186,6 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}
 
-	// Create patch operations to add the traffic-agent sidecar
-	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
-
 	var patches PatchOps
 	config := scx.AgentConfig()
 	patches = disableAppContainer(ctx, pod, config, patches)
