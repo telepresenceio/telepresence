@@ -130,7 +130,6 @@ type state struct {
 	sessions                   *xsync.MapOf[string, SessionState]                         // info for all sessions, keyed by session id
 	agentsByName               *xsync.MapOf[string, *xsync.MapOf[string, *rpc.AgentInfo]] // indexed copy of `agents`
 	interceptStates            *xsync.MapOf[string, *interceptState]
-	cfgMapLocks                *xsync.MapOf[string, *sync.Mutex]
 	timedLogLevel              log.TimedLevel
 	llSubs                     *loglevelSubscribers
 	tunnelCounter              int32
@@ -153,7 +152,6 @@ func NewState(ctx context.Context) State {
 		backgroundCtx:   ctx,
 		sessions:        xsync.NewMapOf[string, SessionState](),
 		agentsByName:    xsync.NewMapOf[string, *xsync.MapOf[string, *rpc.AgentInfo]](),
-		cfgMapLocks:     xsync.NewMapOf[string, *sync.Mutex](),
 		interceptStates: xsync.NewMapOf[string, *interceptState](),
 		timedLogLevel:   log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:          newLoglevelSubscribers(),
