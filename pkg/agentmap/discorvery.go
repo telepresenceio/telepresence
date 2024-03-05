@@ -14,6 +14,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
@@ -196,4 +197,35 @@ func findContainerMatchingPort(port *core.ServicePort, cns []core.Container) (*c
 		}
 	}
 	return nil, 0
+}
+
+// IsPodRunning returns true if at least one container has state Running and a non-zero StartedAt.
+func IsPodRunning(pod *core.Pod) bool {
+	for _, cn := range pod.Status.ContainerStatuses {
+		if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+			// At least one container is running.
+			return true
+		}
+	}
+	return false
+}
+
+// AgentContainer returns the pod's traffic-agent container, or nil if the pod doesn't have a traffic-agent.
+func AgentContainer(pod *core.Pod) *core.Container {
+	return containerByName(agentconfig.ContainerName, pod.Spec.Containers)
+}
+
+// InitContainer returns the pod's tel-agent-init init-container, or nil if the pod doesn't have a tel-agent-init.
+func InitContainer(pod *core.Pod) *core.Container {
+	return containerByName(agentconfig.InitContainerName, pod.Spec.InitContainers)
+}
+
+func containerByName(name string, cns []core.Container) *core.Container {
+	for i := range cns {
+		cn := &cns[i]
+		if cn.Name == name {
+			return cn
+		}
+	}
+	return nil
 }
