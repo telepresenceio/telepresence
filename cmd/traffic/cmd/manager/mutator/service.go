@@ -10,6 +10,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -124,16 +126,17 @@ func ServeMutator(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		dlog.Debug(ctx, "Received webhook request...")
-		bytes, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
+		rsp, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
+		h := w.Header()
 		if err != nil {
 			dlog.Errorf(ctx, "error handling webhook request: %v", err)
 			w.WriteHeader(statusCode)
-			bytes = []byte(err.Error())
+			rsp = []byte(err.Error())
 		} else {
-			dlog.Debug(ctx, "Webhook request handled successfully")
+			h.Set("Content-Type", "application/json")
 		}
-		if _, err = w.Write(bytes); err != nil {
+		h.Set("Content-Length", strconv.Itoa(len(rsp)))
+		if _, err = w.Write(rsp); err != nil {
 			dlog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
@@ -153,14 +156,11 @@ func ServeMutator(ctx context.Context) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	cw, err := Load(ctx)
-	if err != nil {
-		return err
-	}
+	cw := GetMap(ctx)
 	ai = NewAgentInjectorFunc(ctx, cw)
 	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
 		dtime.SleepWithContext(ctx, time.Second) // Give the server some time to start
-		return cw.Run(ctx)
+		return cw.Wait(ctx)
 	})
 
 	wrapped := otelhttp.NewHandler(mux, "agent-injector", otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
@@ -168,7 +168,14 @@ func ServeMutator(ctx context.Context) error {
 	}))
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
 	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
-	lg.SetPrefix(fmt.Sprintf("agent-injector:%d", port))
+	lg.SetPrefix(fmt.Sprintf("%d/", port))
+
+	// Filter this message. It's harmless and caused by the kube-apiserver dropping the connection
+	// prematurely. It is always retried.
+	lg.SetOutput(&logFilter{
+		rx: regexp.MustCompile(`http: TLS handshake error from .*: EOF\s*\z`),
+		wr: lg.Writer(),
+	})
 	server := http.Server{
 		Handler:  wrapped,
 		ErrorLog: lg,
@@ -177,6 +184,18 @@ func ServeMutator(ctx context.Context) error {
 		},
 	}
 	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port))
+}
+
+type logFilter struct {
+	wr io.Writer
+	rx *regexp.Regexp
+}
+
+func (l *logFilter) Write(data []byte) (int, error) {
+	if l.rx.Match(data) {
+		return len(data), nil
+	}
+	return l.wr.Write(data)
 }
 
 func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
@@ -272,6 +291,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 	}
 
 	body, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
 	if err != nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("could not read request body: %w", err)
 	}

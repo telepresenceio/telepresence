@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -18,7 +19,6 @@ import (
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	fakeDiscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -26,6 +26,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
@@ -302,13 +303,15 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 		GitVersion: "v1.17.0",
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
+	ctx = agentmap.WithWorkloadCache(ctx, 30*time.Second)
+
 	ctx = informer.WithFactory(ctx, "")
 	f := informer.GetFactory(ctx, "")
-	si := f.Core().V1().Services().Informer()
-	ci := f.Core().V1().ConfigMaps().Informer()
-	go si.Run(ctx.Done())
-	go ci.Run(ctx.Done())
-	cache.WaitForCacheSync(ctx.Done(), si.HasSynced, ci.HasSynced)
+	f.Core().V1().Services().Informer()
+	f.Core().V1().ConfigMaps().Informer()
+	f.Core().V1().Pods().Informer()
+	f.Start(ctx.Done())
+	f.WaitForCacheSync(ctx.Done())
 
 	env := managerutil.Env{
 		MaxReceiveSize:  resource.Quantity{},
@@ -319,6 +322,7 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 		}},
 	}
 	ctx = managerutil.WithEnv(ctx, &env)
+	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
 
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

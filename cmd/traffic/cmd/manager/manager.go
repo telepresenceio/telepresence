@@ -94,7 +94,13 @@ func MainWithEnv(ctx context.Context) (err error) {
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, ki)
 
+	ctx = agentmap.WithWorkloadCache(ctx, 30*time.Second)
+
 	// Ensure that the manager has access to shard informer factories for all relevant namespaces.
+	//
+	// This will make the informers more verbose. Good for debugging
+	// l := klog.Level(6)
+	// _ = l.Set("6")
 	if len(env.ManagedNamespaces) == 0 {
 		ctx = informer.WithFactory(ctx, "")
 	} else {
@@ -105,6 +111,8 @@ func MainWithEnv(ctx context.Context) (err error) {
 			ctx = informer.WithFactory(ctx, env.ManagerNamespace)
 		}
 	}
+
+	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
 
 	mgr, g, err := NewServiceFunc(ctx)
 	if err != nil {

@@ -130,7 +130,6 @@ type state struct {
 	sessions                   *xsync.MapOf[string, SessionState]                         // info for all sessions, keyed by session id
 	agentsByName               *xsync.MapOf[string, *xsync.MapOf[string, *rpc.AgentInfo]] // indexed copy of `agents`
 	interceptStates            *xsync.MapOf[string, *interceptState]
-	cfgMapLocks                *xsync.MapOf[string, *sync.Mutex]
 	timedLogLevel              log.TimedLevel
 	llSubs                     *loglevelSubscribers
 	tunnelCounter              int32
@@ -153,7 +152,6 @@ func NewState(ctx context.Context) State {
 		backgroundCtx:   ctx,
 		sessions:        xsync.NewMapOf[string, SessionState](),
 		agentsByName:    xsync.NewMapOf[string, *xsync.MapOf[string, *rpc.AgentInfo]](),
-		cfgMapLocks:     xsync.NewMapOf[string, *sync.Mutex](),
 		interceptStates: xsync.NewMapOf[string, *interceptState](),
 		timedLogLevel:   log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:          newLoglevelSubscribers(),
@@ -262,6 +260,7 @@ func (s *state) RemoveSession(ctx context.Context, sessionID string) {
 		agent, isAgent := s.agents.LoadAndDelete(sessionID)
 		if isAgent {
 			// remove it from the agentsByName index (if necessary)
+			dlog.Debugf(ctx, "Agent session %s. Explicit removal", agent.PodName)
 			s.agentsByName.Compute(agent.Name, func(ag *xsync.MapOf[string, *rpc.AgentInfo], loaded bool) (*xsync.MapOf[string, *rpc.AgentInfo], bool) {
 				if loaded {
 					ag.Delete(sessionID)

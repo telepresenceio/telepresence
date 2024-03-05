@@ -83,7 +83,7 @@ func NewService(ctx context.Context) (Service, *dgroup.Group, error) {
 		id:    uuid.New().String(),
 	}
 
-	ctx, err := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
+	ctx, err := WithAgentImageRetrieverFunc(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
 	}
@@ -179,13 +179,14 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
 func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
-	dlog.Debug(ctx, "ArriveAsAgent called")
+	dlog.Debugf(ctx, "ArriveAsAgent %s called", agent.PodName)
 
 	if val := validateAgent(agent); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
 	sessionID := s.state.AddAgent(agent, s.clock.Now())
+	mutator.GetMap(ctx).Whitelist(agent.PodName, agent.Namespace)
 
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
@@ -194,7 +195,6 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 func (s *service) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) (*empty.Empty, error) {
-	dlog.Debug(ctx, "ReportMetrics called")
 	s.state.AddSessionConsumptionMetrics(metrics)
 	return &empty.Empty{}, nil
 }
@@ -546,7 +546,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 
 func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.Session)
-	dlog.Debugf(ctx, "PrepareIntercept called")
+	dlog.Debugf(ctx, "PrepareIntercept %s called", request.InterceptSpec.Name)
 
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
@@ -574,7 +574,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
-	dlog.Debug(ctx, "CreateIntercept called")
+	dlog.Debugf(ctx, "CreateIntercept %s called", ciReq.InterceptSpec.Name)
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, spec)
 
@@ -686,6 +686,10 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 		if intercept.Spec.Namespace != agent.Namespace || intercept.Spec.Agent != agent.Name {
 			return
 		}
+		if mutator.GetMap(ctx).IsBlacklisted(agent.PodName, agent.Namespace) {
+			dlog.Debugf(ctx, "Pod %s.%s is blacklisted", agent.PodName, agent.Namespace)
+			return
+		}
 
 		// Only update intercepts in the waiting state.  Agents race to review an intercept, but we
 		// expect they will always compatible answers.
@@ -693,6 +697,7 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.Disposition = rIReq.Disposition
 			intercept.Message = rIReq.Message
 			intercept.PodIp = rIReq.PodIp
+			intercept.PodName = agent.PodName
 			intercept.FtpPort = rIReq.FtpPort
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MountPoint = rIReq.MountPoint

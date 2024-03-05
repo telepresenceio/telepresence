@@ -46,11 +46,13 @@ const (
 
 	DomainPrefix                         = "telepresence.getambassador.io/"
 	InjectAnnotation                     = DomainPrefix + "inject-" + ContainerName
+	InjectIgnoreVolumeMounts             = DomainPrefix + "inject-ignore-volume-mounts"
 	TerminatingTLSSecretAnnotation       = DomainPrefix + "inject-terminating-tls-secret"
 	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
 	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
 	LegacyOriginatingTLSSecretAnnotation = "getambassador.io/inject-originating-tls-secret"
 	WorkloadNameLabel                    = "telepresence.io/workloadName"
+	WorkloadKindLabel                    = "telepresence.io/workloadKind"
 	WorkloadEnabledLabel                 = "telepresence.io/workloadEnabled"
 	K8SCreatedByLabel                    = "app.kubernetes.io/created-by"
 )

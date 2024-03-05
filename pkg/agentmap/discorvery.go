@@ -3,8 +3,8 @@ package agentmap
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"regexp"
 
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -14,32 +14,46 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
-func FindOwnerWorkload(ctx context.Context, workloadCache map[string]k8sapi.Workload, obj k8sapi.Object) (k8sapi.Workload, error) {
+var ReplicaSetNameRx = regexp.MustCompile(`\A(.+)-[a-f0-9]+\z`)
+
+func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload, error) {
+	dlog.Debugf(ctx, "FindOwnerWorkload(%s,%s,%s)", obj.GetName(), obj.GetNamespace(), obj.GetKind())
+	lbs := obj.GetLabels()
+	if wlName, ok := lbs[agentconfig.WorkloadNameLabel]; ok {
+		return GetWorkload(ctx, wlName, obj.GetNamespace(), lbs[agentconfig.WorkloadKindLabel])
+	}
 	refs := obj.GetOwnerReferences()
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			wl, err := tracing.GetWorkloadFromCache(ctx, workloadCache, or.Name, obj.GetNamespace(), or.Kind)
-			if err != nil {
-				var uwkErr k8sapi.UnsupportedWorkloadKindError
-				if errors.As(err, &uwkErr) {
-					// There can only be one managing controller. If it's of an unsupported
-					// type, then the object that it controls is considered the owner, unless
-					// it's a pod, in which case it has no owner.
-					break
+			if or.Kind == "ReplicaSet" {
+				// Try the common case first. Strip replicaset's generated hash and try to
+				// get the deployment. If this succeeds, we have saved us a replicaset
+				// lookup.
+				if m := ReplicaSetNameRx.FindStringSubmatch(or.Name); m != nil {
+					if wl, err := GetWorkload(ctx, m[1], obj.GetNamespace(), "Deployment"); err == nil {
+						return wl, nil
+					}
 				}
+			}
+			wl, err := GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
+			if err != nil {
 				return nil, err
 			}
-			return FindOwnerWorkload(ctx, workloadCache, wl)
+			return FindOwnerWorkload(ctx, wl)
 		}
 	}
 	if wl, ok := obj.(k8sapi.Workload); ok {
 		return wl, nil
 	}
 	return nil, fmt.Errorf("unable to find workload owner for %s.%s", obj.GetName(), obj.GetNamespace())
+}
+
+func GetWorkload(ctx context.Context, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
+	return GetWorkloadCache(ctx).GetWorkload(ctx, name, namespace, workloadKind)
 }
 
 func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {
@@ -51,7 +65,7 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 			svc, err = f.Core().V1().Services().Lister().Services(pod.Namespace).Get(svcName)
 		} else {
 			// This shouldn't happen really.
-			dlog.Debugf(ctx, "fetching service %s.%s using direct API call", pod.Namespace, svcName)
+			dlog.Debugf(ctx, "fetching service %s.%s using direct API call", svcName, pod.Namespace)
 			svc, err = k8sapi.GetK8sInterface(ctx).CoreV1().Services(pod.Namespace).Get(ctx, svcName, meta.GetOptions{})
 		}
 		if err != nil {
@@ -196,4 +210,35 @@ func findContainerMatchingPort(port *core.ServicePort, cns []core.Container) (*c
 		}
 	}
 	return nil, 0
+}
+
+// IsPodRunning returns true if at least one container has state Running and a non-zero StartedAt.
+func IsPodRunning(pod *core.Pod) bool {
+	for _, cn := range pod.Status.ContainerStatuses {
+		if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+			// At least one container is running.
+			return true
+		}
+	}
+	return false
+}
+
+// AgentContainer returns the pod's traffic-agent container, or nil if the pod doesn't have a traffic-agent.
+func AgentContainer(pod *core.Pod) *core.Container {
+	return containerByName(agentconfig.ContainerName, pod.Spec.Containers)
+}
+
+// InitContainer returns the pod's tel-agent-init init-container, or nil if the pod doesn't have a tel-agent-init.
+func InitContainer(pod *core.Pod) *core.Container {
+	return containerByName(agentconfig.InitContainerName, pod.Spec.InitContainers)
+}
+
+func containerByName(name string, cns []core.Container) *core.Container {
+	for i := range cns {
+		cn := &cns[i]
+		if cn.Name == name {
+			return cn
+		}
+	}
+	return nil
 }

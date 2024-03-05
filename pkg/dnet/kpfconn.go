@@ -81,7 +81,6 @@ type podAddress struct {
 // Dial dials a port of something in the cluster.  The address format is
 // "[objkind/]objname[.objnamespace]:port".
 func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
-	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.Dial(ctx, %q)", addr)
 	var pod *podAddress
 	if pod, err = pf.resolve(ctx, addr); err == nil {
 		if conn, err = pf.dial(pod); err == nil {

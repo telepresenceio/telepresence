@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx
+data:
+  default.conf.template: |
+    server {
+        listen       ${NGINX_PORT};
+        server_name  localhost;
+
+        location / {
+            root   /usr/share/nginx/html;
+            index  index.html index.htm;
+        }
+
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   /usr/share/nginx/html;
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-data-1
+data:
+  index.html: |
+    <html>
+      <body>
+        <p id="hello">Hello from volume 1!</p>
+       </body>
+    </html>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-data-2
+data:
+  index.html: |
+    <html>
+      <body>
+        <p id="hello">Hello from volume 2!</p>
+      </body>
+    </html>
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hello-secret-1
+type: kubernetes.io/basic-auth
+stringData:
+  username: "hello-1"
+  password: "hello-1"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hello-secret-2
+type: kubernetes.io/basic-auth
+stringData:
+  username: "hello-2"
+  password: "hello-2"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+spec:
+  type: ClusterIP
+  selector:
+    app: hello
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: http2
+      port: 81
+      targetPort: http2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  labels:
+    app: hello
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello
+  template:
+    metadata:
+      labels:
+        app: hello
+{{- with .Annotations }}
+      annotations:
+  {{- toYaml . | nindent 8 }}
+{{- end}}
+    spec:
+      serviceAccountName: mount-test-account
+      volumes:
+        - name: hello-data-volume-1
+          configMap:
+            name: hello-data-1
+        - name: hello-data-volume-2
+          configMap:
+            name: hello-data-2
+        - name: hello-secret-volume-1
+          secret:
+            secretName: hello-secret-1
+        - name: hello-secret-volume-2
+          secret:
+            secretName: hello-secret-2
+        - name: nginx-config
+          configMap:
+            name: nginx
+      containers:
+        - name: hello-container-1
+          image: nginx
+          env:
+            - name: NGINX_HOST
+              value: "hello-1.com"
+            - name: NGINX_PORT
+              value: "80"
+          ports:
+            - containerPort: 80
+              name: http
+          volumeMounts:
+            - mountPath: "/usr/share/nginx/html"
+              name: hello-data-volume-1
+            - mountPath: "/var/run/secrets/datawire.io/auth"
+              name: hello-secret-volume-1
+            - mountPath: /etc/nginx/templates/
+              name: nginx-config
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 3
+        - name: hello-container-2
+          image: nginx
+          env:
+            - name: NGINX_HOST
+              value: "hello-2.com"
+            - name: NGINX_PORT
+              value: "81"
+          ports:
+            - containerPort: 81
+              name: http2
+          volumeMounts:
+            - mountPath: "/usr/share/nginx/html"
+              name: hello-data-volume-2
+            - mountPath: "/var/run/secrets/datawire.io/auth"
+              name: hello-secret-volume-2
+            - mountPath: /etc/nginx/templates/
+              name: nginx-config

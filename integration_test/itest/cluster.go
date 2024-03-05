@@ -667,15 +667,19 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	type xClient struct {
 		Routing map[string][]string `json:"routing"`
 	}
+	type xTimeouts struct {
+		AgentArrival string `json:"agentArrival,omitempty"`
+	}
 	nsl := nss.UniqueList()
 	vx := struct {
-		LogLevel        string  `json:"logLevel"`
-		MetritonEnabled bool    `json:"metritonEnabled"`
-		Image           *Image  `json:"image,omitempty"`
-		Agent           *xAgent `json:"agent,omitempty"`
-		ClientRbac      xRbac   `json:"clientRbac"`
-		ManagerRbac     xRbac   `json:"managerRbac"`
-		Client          xClient `json:"client"`
+		LogLevel        string    `json:"logLevel"`
+		MetritonEnabled bool      `json:"metritonEnabled"`
+		Image           *Image    `json:"image,omitempty"`
+		Agent           *xAgent   `json:"agent,omitempty"`
+		ClientRbac      xRbac     `json:"clientRbac"`
+		ManagerRbac     xRbac     `json:"managerRbac"`
+		Client          xClient   `json:"client"`
+		Timeouts        xTimeouts `json:"timeouts,omitempty"`
 	}{
 		LogLevel:        "debug",
 		MetritonEnabled: false,
@@ -697,6 +701,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 				"allowConflictingSubnets": {"10.0.0.0/8"},
 			},
 		},
+		Timeouts: xTimeouts{AgentArrival: "60s"},
 	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {

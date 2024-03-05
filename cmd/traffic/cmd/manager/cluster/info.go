@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/blang/semver"
@@ -16,13 +15,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -113,9 +110,8 @@ func NewInfo(ctx context.Context) Info {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = IDZero
-		dlog.Warnf(ctx,
-			"unable to get namespace \"default\", will use default clusterID: %s: %v. This is only necessary for compatibility with old licesnses.",
-			oi.clusterID, err)
+		dlog.Infof(ctx,
+			"unable to get namespace \"default\", but it is only necessary for compatibility with old licesnses: %v", err)
 	}
 
 	dummyIP := "1.1.1.1"
@@ -313,59 +309,7 @@ func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV
 }
 
 func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	nsc := len(namespaces)
-	if nsc == 0 {
-		// Create one of lister and one informer that have cluster wide scope
-		namespaces = []string{""}
-		nsc = 1
-	}
-	podListers := make([]PodLister, nsc)
-	podInformers := make([]cache.SharedIndexInformer, nsc)
-	wg := sync.WaitGroup{}
-	wg.Add(nsc)
-	for i, ns := range namespaces {
-		f := informer.GetFactory(ctx, ns)
-		podController := f.Core().V1().Pods()
-		podListers[i] = podController.Lister()
-		pi := podController.Informer()
-		podInformers[i] = pi
-		_ = pi.SetTransform(func(o any) (any, error) {
-			if pod, ok := o.(*corev1.Pod); ok {
-				pod.ManagedFields = nil
-				pod.OwnerReferences = nil
-				pod.Finalizers = nil
-
-				ps := &pod.Status
-				// We're just interested in the podIP/podIPs
-				ps.Conditions = nil
-				ps.ContainerStatuses = nil
-				ps.EphemeralContainerStatuses = nil
-				ps.HostIPs = nil
-				ps.HostIP = ""
-				ps.InitContainerStatuses = nil
-				ps.Message = ""
-				ps.ResourceClaimStatuses = nil
-				ps.NominatedNodeName = ""
-				ps.Reason = ""
-				ps.Resize = ""
-			}
-			return o, nil
-		})
-		_ = pi.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-			dlog.Errorf(ctx, "Watcher for pods %s: %v", whereWeWatch(ns), err)
-		})
-		go func() {
-			defer wg.Done()
-			f.Start(ctx.Done())
-			f.WaitForCacheSync(ctx.Done())
-		}()
-	}
-	wg.Wait()
-
-	retriever := newPodWatcher(ctx, podListers, podInformers)
+	retriever := newPodWatcher(ctx, namespaces)
 	if !retriever.viable(ctx) {
 		dlog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
 		return
@@ -464,11 +408,4 @@ func subnetsToRPC(subnets []*net.IPNet) []*rpc.IPNet {
 		rpcSubnets[i] = iputil.IPNetToRPC(s)
 	}
 	return rpcSubnets
-}
-
-func whereWeWatch(ns string) string {
-	if ns == "" {
-		return "cluster wide"
-	}
-	return "in namespace " + ns
 }
