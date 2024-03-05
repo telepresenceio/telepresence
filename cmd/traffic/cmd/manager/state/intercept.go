@@ -61,7 +61,7 @@ func (s *state) PrepareIntercept(
 	}
 
 	spec := cr.InterceptSpec
-	wl, err := tracing.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
+	wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			err = errcat.User.New(err)
@@ -89,7 +89,7 @@ func (s *state) PrepareIntercept(
 }
 
 func (s *state) EnsureAgent(ctx context.Context, n, ns string) error {
-	wl, err := tracing.GetWorkload(ctx, n, ns, "")
+	wl, err := agentmap.GetWorkload(ctx, n, ns, "")
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			err = errcat.User.New(err)

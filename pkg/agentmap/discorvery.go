@@ -3,8 +3,8 @@ package agentmap
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"regexp"
 
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,31 +16,27 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
-	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 func FindOwnerWorkload(ctx context.Context, workloadCache map[string]k8sapi.Workload, obj k8sapi.Object) (k8sapi.Workload, error) {
 	refs := obj.GetOwnerReferences()
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			wl, err := tracing.GetWorkloadFromCache(ctx, workloadCache, or.Name, obj.GetNamespace(), or.Kind)
+			wl, err := GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
 			if err != nil {
-				var uwkErr k8sapi.UnsupportedWorkloadKindError
-				if errors.As(err, &uwkErr) {
-					// There can only be one managing controller. If it's of an unsupported
-					// type, then the object that it controls is considered the owner, unless
-					// it's a pod, in which case it has no owner.
-					break
-				}
 				return nil, err
 			}
-			return FindOwnerWorkload(ctx, workloadCache, wl)
+			return FindOwnerWorkload(ctx, wl)
 		}
 	}
 	if wl, ok := obj.(k8sapi.Workload); ok {
 		return wl, nil
 	}
 	return nil, fmt.Errorf("unable to find workload owner for %s.%s", obj.GetName(), obj.GetNamespace())
+}
+
+func GetWorkload(ctx context.Context, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
+	return GetWorkloadCache(ctx).GetWorkload(ctx, name, namespace, workloadKind)
 }
 
 func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {
