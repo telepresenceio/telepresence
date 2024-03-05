@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -167,7 +168,14 @@ func ServeMutator(ctx context.Context) error {
 	}))
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
 	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
-	lg.SetPrefix(fmt.Sprintf("agent-injector:%d", port))
+	lg.SetPrefix(fmt.Sprintf("%d/", port))
+
+	// Filter this message. It's harmless and caused by the kube-apiserver dropping the connection
+	// prematurely. It is always retried.
+	lg.SetOutput(&logFilter{
+		rx: regexp.MustCompile(`http: TLS handshake error from .*: EOF\s*\z`),
+		wr: lg.Writer(),
+	})
 	server := http.Server{
 		Handler:  wrapped,
 		ErrorLog: lg,
@@ -176,6 +184,18 @@ func ServeMutator(ctx context.Context) error {
 		},
 	}
 	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port))
+}
+
+type logFilter struct {
+	wr io.Writer
+	rx *regexp.Regexp
+}
+
+func (l *logFilter) Write(data []byte) (int, error) {
+	if l.rx.Match(data) {
+		return len(data), nil
+	}
+	return l.wr.Write(data)
 }
 
 func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
