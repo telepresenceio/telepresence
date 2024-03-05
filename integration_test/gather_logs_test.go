@@ -194,6 +194,9 @@ func cleanLogDir(ctx context.Context, require *itest.Requirements, nsRx, mgrName
 }
 
 func (s *multipleInterceptsSuite) svcRegex() string {
+	if s.ServiceCount() >= 10 {
+		return `hello-\d+`
+	}
 	return fmt.Sprintf("hello-[0-%d]", s.ServiceCount())
 }
 
