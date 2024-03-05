@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -24,20 +25,22 @@ type PodLister interface {
 }
 
 type podWatcher struct {
-	listers   []PodLister
-	informers []cache.SharedIndexInformer
-	ipsMap    map[iputil.IPKey]struct{}
-	timer     *time.Timer
-	notifyCh  chan subnet.Set
-	lock      sync.Mutex // Protects all access to ipsMap
+	ipsMap     map[iputil.IPKey]struct{}
+	timer      *time.Timer
+	namespaces []string
+	notifyCh   chan subnet.Set
+	lock       sync.Mutex // Protects all access to ipsMap
 }
 
-func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.SharedIndexInformer) *podWatcher {
+func newPodWatcher(ctx context.Context, nss []string) *podWatcher {
+	if len(nss) == 0 {
+		// Create one event handler for the global informer
+		nss = []string{""}
+	}
 	w := &podWatcher{
-		listers:   listers,
-		informers: informers,
-		ipsMap:    make(map[iputil.IPKey]struct{}),
-		notifyCh:  make(chan subnet.Set),
+		ipsMap:     make(map[iputil.IPKey]struct{}),
+		notifyCh:   make(chan subnet.Set),
+		namespaces: nss,
 	}
 
 	var oldSubnets subnet.Set
@@ -64,8 +67,9 @@ func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.S
 	}
 
 	w.timer = time.AfterFunc(time.Duration(math.MaxInt64), sendIfChanged)
-	for _, informer := range informers {
-		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	for _, ns := range nss {
+		inf := informer.GetFactory(ctx, ns).Core().V1().Pods().Informer()
+		_, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				if pod, ok := obj.(*corev1.Pod); ok {
 					w.onPodAdded(ctx, pod)
@@ -114,8 +118,15 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 	}
 
 	// Create the initial snapshot
-	for _, lister := range w.listers {
-		pods, err := lister.List(labels.Everything())
+	var pods []*corev1.Pod
+	var err error
+	for _, ns := range w.namespaces {
+		lister := informer.GetFactory(ctx, ns).Core().V1().Pods().Lister()
+		if ns != "" {
+			pods, err = lister.Pods(ns).List(labels.Everything())
+		} else {
+			pods, err = lister.List(labels.Everything())
+		}
 		if err != nil {
 			dlog.Errorf(ctx, "unable to list pods: %v", err)
 			return false
@@ -124,6 +135,7 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 			w.addLocked(podIPKeys(ctx, pod))
 		}
 	}
+
 	return true
 }
 

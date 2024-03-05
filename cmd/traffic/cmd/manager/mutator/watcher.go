@@ -132,11 +132,8 @@ func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload,
 	}
 
 	selector := labels.SelectorFromValidatedSet(podLabels)
-	podsAPI := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(wl.GetNamespace())
-	podList, err := podsAPI.List(ctx, meta.ListOptions{
-		LabelSelector: selector.String(),
-		FieldSelector: "status.phase==Running",
-	})
+	podsAPI := informer.GetFactory(ctx, wl.GetNamespace()).Core().V1().Pods().Lister().Pods(wl.GetNamespace())
+	pods, err := podsAPI.List(selector)
 	if err != nil {
 		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. Unable to retrieve current pods: %v",
 			wl.GetName(), wl.GetNamespace(), err)
@@ -144,9 +141,7 @@ func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload,
 	}
 
 	runningPods := 0
-	pods := podList.Items
-	for i := range pods {
-		pod := &pods[i]
+	for _, pod := range pods {
 		if c.IsBlacklisted(pod.Name, pod.Namespace) {
 			dlog.Debugf(ctx, "Skipping blacklisted pod %s.%s", pod.Name, pod.Namespace)
 			continue
@@ -787,6 +782,45 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 	return err
 }
 
+func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIndexInformer {
+	f := informer.GetFactory(ctx, ns)
+	ix := f.Core().V1().Pods().Informer()
+	_ = ix.SetTransform(func(o any) (any, error) {
+		if pod, ok := o.(*core.Pod); ok {
+			pod.ManagedFields = nil
+			pod.OwnerReferences = nil
+			pod.Finalizers = nil
+
+			ps := &pod.Status
+			// We're just interested in the podIP/podIPs
+			ps.Conditions = nil
+
+			// Strip everything but the State from the container statuses. We need
+			// the state to determine if a pod is running.
+			cns := pod.Status.ContainerStatuses
+			for i := range cns {
+				cns[i] = core.ContainerStatus{
+					State: cns[i].State,
+				}
+			}
+			ps.EphemeralContainerStatuses = nil
+			ps.HostIPs = nil
+			ps.HostIP = ""
+			ps.InitContainerStatuses = nil
+			ps.Message = ""
+			ps.ResourceClaimStatuses = nil
+			ps.NominatedNodeName = ""
+			ps.Reason = ""
+			ps.Resize = ""
+		}
+		return o, nil
+	})
+	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		dlog.Errorf(ctx, "Watcher for pods %s: %v", whereWeWatch(ns), err)
+	})
+	return ix
+}
+
 func (c *configWatcher) gcBlacklisted(now time.Time) {
 	const maxAge = time.Minute
 	maxCreated := now.Add(-maxAge)
@@ -823,6 +857,7 @@ func (c *configWatcher) Start(ctx context.Context) {
 	for i, ns := range nss {
 		c.cms[i] = c.startConfigMap(ctx, ns)
 		c.svs[i] = c.startServices(ctx, ns)
+		c.startPods(ctx, ns)
 		f := informer.GetFactory(ctx, ns)
 		f.Start(ctx.Done())
 		f.WaitForCacheSync(ctx.Done())
