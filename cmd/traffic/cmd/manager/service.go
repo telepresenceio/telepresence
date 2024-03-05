@@ -179,7 +179,7 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
 func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
-	dlog.Debug(ctx, "ArriveAsAgent called")
+	dlog.Debugf(ctx, "ArriveAsAgent %s called", agent.PodName)
 
 	if val := validateAgent(agent); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
@@ -546,7 +546,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 
 func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.Session)
-	dlog.Debugf(ctx, "PrepareIntercept called")
+	dlog.Debugf(ctx, "PrepareIntercept %s called", request.InterceptSpec.Name)
 
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
@@ -574,7 +574,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
-	dlog.Debug(ctx, "CreateIntercept called")
+	dlog.Debugf(ctx, "CreateIntercept %s called", ciReq.InterceptSpec.Name)
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, spec)
 

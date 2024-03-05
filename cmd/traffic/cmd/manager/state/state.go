@@ -260,6 +260,7 @@ func (s *state) RemoveSession(ctx context.Context, sessionID string) {
 		agent, isAgent := s.agents.LoadAndDelete(sessionID)
 		if isAgent {
 			// remove it from the agentsByName index (if necessary)
+			dlog.Debugf(ctx, "Agent session %s. Explicit removal", agent.PodName)
 			s.agentsByName.Compute(agent.Name, func(ag *xsync.MapOf[string, *rpc.AgentInfo], loaded bool) (*xsync.MapOf[string, *rpc.AgentInfo], bool) {
 				if loaded {
 					ag.Delete(sessionID)
