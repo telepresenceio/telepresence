@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -124,13 +125,17 @@ func ServeMutator(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		bytes, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
+		rsp, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
+		h := w.Header()
 		if err != nil {
 			dlog.Errorf(ctx, "error handling webhook request: %v", err)
 			w.WriteHeader(statusCode)
-			bytes = []byte(err.Error())
+			rsp = []byte(err.Error())
+		} else {
+			h.Set("Content-Type", "application/json")
 		}
-		if _, err = w.Write(bytes); err != nil {
+		h.Set("Content-Length", strconv.Itoa(len(rsp)))
+		if _, err = w.Write(rsp); err != nil {
 			dlog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
@@ -266,6 +271,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 	}
 
 	body, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
 	if err != nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("could not read request body: %w", err)
 	}
