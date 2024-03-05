@@ -18,10 +18,27 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
 
-func FindOwnerWorkload(ctx context.Context, workloadCache map[string]k8sapi.Workload, obj k8sapi.Object) (k8sapi.Workload, error) {
+var ReplicaSetNameRx = regexp.MustCompile(`\A(.+)-[a-f0-9]+\z`)
+
+func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload, error) {
+	dlog.Debugf(ctx, "FindOwnerWorkload(%s,%s,%s)", obj.GetName(), obj.GetNamespace(), obj.GetKind())
+	lbs := obj.GetLabels()
+	if wlName, ok := lbs[agentconfig.WorkloadNameLabel]; ok {
+		return GetWorkload(ctx, wlName, obj.GetNamespace(), lbs[agentconfig.WorkloadKindLabel])
+	}
 	refs := obj.GetOwnerReferences()
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
+			if or.Kind == "ReplicaSet" {
+				// Try the common case first. Strip replicaset's generated hash and try to
+				// get the deployment. If this succeeds, we have saved us a replicaset
+				// lookup.
+				if m := ReplicaSetNameRx.FindStringSubmatch(or.Name); m != nil {
+					if wl, err := GetWorkload(ctx, m[1], obj.GetNamespace(), "Deployment"); err == nil {
+						return wl, nil
+					}
+				}
+			}
 			wl, err := GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
 			if err != nil {
 				return nil, err
@@ -48,7 +65,7 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 			svc, err = f.Core().V1().Services().Lister().Services(pod.Namespace).Get(svcName)
 		} else {
 			// This shouldn't happen really.
-			dlog.Debugf(ctx, "fetching service %s.%s using direct API call", pod.Namespace, svcName)
+			dlog.Debugf(ctx, "fetching service %s.%s using direct API call", svcName, pod.Namespace)
 			svc, err = k8sapi.GetK8sInterface(ctx).CoreV1().Services(pod.Namespace).Get(ctx, svcName, meta.GetOptions{})
 		}
 		if err != nil {
