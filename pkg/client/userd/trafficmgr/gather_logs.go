@@ -19,6 +19,7 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 )
 
 // getPodLog obtains the log and optionally the YAML for a given pod and stores it in
@@ -26,7 +27,10 @@ import (
 // given exportDir directory. An entry with the relative filename as a key is created
 // in the result map. The entry will either contain the string "ok" or an error when
 // the log or yaml for some reason could not be written to the file.
-func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI typed.PodInterface, pod *core.Pod, container string, podYAML bool) {
+func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI typed.PodInterface, pod *core.Pod, container string, podYAML, agent bool) {
+	if !agentmap.IsPodRunning(pod) || agent && agentmap.AgentContainer(pod) == nil {
+		return
+	}
 	podLog := pod.Name + "." + pod.Namespace + ".log"
 	req := podsAPI.GetLogs(pod.Name, &core.PodLogOptions{Container: container})
 	logStream, err := req.Stream(ctx)
@@ -126,7 +130,7 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 		err := s.ForeachAgentPod(ctx, func(ctx context.Context, podsAPI typed.PodInterface, pod *core.Pod) {
 			podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
 			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
-			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ContainerName, request.GetPodYaml)
+			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ContainerName, request.GetPodYaml, true)
 		}, func(pod *core.Pod) bool {
 			return strings.EqualFold(request.Agents, "all") || strings.Contains(pod.Name, request.Agents)
 		})
@@ -156,7 +160,7 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 			pod := &podList.Items[0]
 			podAndNs := fmt.Sprintf("%s.%s", pod.Name, ns)
 			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
-			getPodLog(ctx, exportDir, &result, podsAPI, pod, "traffic-manager", request.GetPodYaml)
+			getPodLog(ctx, exportDir, &result, podsAPI, pod, "traffic-manager", request.GetPodYaml, false)
 		case len(podList.Items) > 1:
 			err = fmt.Errorf("multiple traffic managers found in namespace %s using selector %s", ns, selector.String())
 			dlog.Error(ctx, err)

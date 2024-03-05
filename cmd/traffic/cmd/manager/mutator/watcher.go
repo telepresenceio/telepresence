@@ -91,35 +91,6 @@ func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Wo
 	return scx, wl, nil
 }
 
-func agentContainer(pod *core.Pod) *core.Container {
-	return containerByName(pod, agentconfig.ContainerName)
-}
-
-func initContainer(pod *core.Pod) *core.Container {
-	return containerByName(pod, agentconfig.InitContainerName)
-}
-
-func containerByName(pod *core.Pod, name string) *core.Container {
-	cns := pod.Spec.Containers
-	for i := range cns {
-		cn := &cns[i]
-		if cn.Name == name {
-			return cn
-		}
-	}
-	return nil
-}
-
-func isPodRunning(pod *core.Pod) bool {
-	for _, cn := range pod.Status.ContainerStatuses {
-		if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
-			// At least one container is running.
-			return true
-		}
-	}
-	return false
-}
-
 // isRolloutNeeded checks if the agent's entry in telepresence-agents matches the actual state of the
 // pods. If it does, then there's no reason to trigger a rollout.
 func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) bool {
@@ -146,11 +117,11 @@ func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload,
 			dlog.Debugf(ctx, "Skipping blacklisted pod %s.%s", pod.Name, pod.Namespace)
 			continue
 		}
-		if !isPodRunning(pod) {
+		if !agentmap.IsPodRunning(pod) {
 			continue
 		}
 		runningPods++
-		podAc := agentContainer(pod)
+		podAc := agentmap.AgentContainer(pod)
 		if ac == nil {
 			if podAc == nil {
 				continue
@@ -171,7 +142,7 @@ func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload,
 				wl.GetName(), wl.GetNamespace(), pod.GetName())
 			return true
 		}
-		podIc := initContainer(pod)
+		podIc := agentmap.InitContainer(pod)
 		if podIc == nil {
 			if needInitContainer(ac) {
 				dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An init-container is desired but the pod %s doesn't have one",
