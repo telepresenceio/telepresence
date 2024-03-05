@@ -112,6 +112,8 @@ func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload,
 	}
 
 	runningPods := 0
+	okPods := 0
+	var rolloutReasons []string
 	for _, pod := range pods {
 		if c.IsBlacklisted(pod.Name, pod.Namespace) {
 			dlog.Debugf(ctx, "Skipping blacklisted pod %s.%s", pod.Name, pod.Namespace)
@@ -121,81 +123,93 @@ func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload,
 			continue
 		}
 		runningPods++
-		podAc := agentmap.AgentContainer(pod)
-		if ac == nil {
-			if podAc == nil {
-				continue
-			}
-			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. No agent is desired but the pod %s has one",
-				wl.GetName(), wl.GetNamespace(), pod.GetName())
-			return true
-		}
-		if podAc == nil {
-			// Rollout because an agent is desired but the pod doesn't have one
-			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An agent is desired but the pod %s doesn't have one",
-				wl.GetName(), wl.GetNamespace(), pod.GetName())
-			return true
-		}
-		desiredAc := agentconfig.AgentContainer(ctx, pod, ac)
-		if !containerEqual(podAc, desiredAc) {
-			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired agent is not equal to the existing agent in pod %s",
-				wl.GetName(), wl.GetNamespace(), pod.GetName())
-			return true
-		}
-		podIc := agentmap.InitContainer(pod)
-		if podIc == nil {
-			if needInitContainer(ac) {
-				dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An init-container is desired but the pod %s doesn't have one",
-					wl.GetName(), wl.GetNamespace(), pod.GetName())
-				return true
+		if ror := isRolloutNeededForPod(ctx, ac, wl.GetName(), wl.GetNamespace(), pod); ror != "" {
+			if !slices.Contains(rolloutReasons, ror) {
+				rolloutReasons = append(rolloutReasons, ror)
 			}
 		} else {
-			if needInitContainer(ac) {
-				dlog.Debugf(ctx, "Rollout of %s.%s is necessary. No init-container is desired but the pod %s has one",
-					wl.GetName(), wl.GetNamespace(), pod.GetName())
-				return true
-			}
-		}
-		for _, cn := range ac.Containers {
-			var found *core.Container
-			cns := pod.Spec.Containers
-			for i := range cns {
-				if cns[i].Name == cn.Name {
-					found = &cns[i]
-					break
-				}
-			}
-			if found == nil {
-				dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod should contain container %s",
-					wl.GetName(), wl.GetNamespace(), cn.Name)
-				return true
-			}
-			if cn.Replace {
-				// Ensure that the replaced container is disabled
-				if !(found.Image == sleeperImage && slices.Equal(found.Args, sleeperArgs)) {
-					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod's container %s should be disabled",
-						wl.GetName(), wl.GetNamespace(), cn.Name)
-					return true
-				}
-			} else {
-				// Ensure that the replaced container is not disabled
-				if found.Image == sleeperImage && slices.Equal(found.Args, sleeperArgs) {
-					dlog.Debugf(ctx, "Rollout of %s.%s is necessary. The desired pod's container %s should not be disabled",
-						wl.GetName(), wl.GetNamespace(), cn.Name)
-					return true
-				}
-			}
+			okPods++
 		}
 	}
 	// Rollout if there are no running pods
-	if runningPods == 0 && ac != nil {
-		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An agent is desired and there are no pods",
-			wl.GetName(), wl.GetNamespace())
+	if runningPods == 0 {
+		if ac != nil {
+			dlog.Debugf(ctx, "Rollout of %s.%s is necessary. An agent is desired and there are no pods",
+				wl.GetName(), wl.GetNamespace())
+			return true
+		}
+		return false
+	}
+	if okPods == 0 {
+		// Found no pods out there that matches the desired state
+		for _, ror := range rolloutReasons {
+			dlog.Debug(ctx, ror)
+		}
 		return true
 	}
-	dlog.Debugf(ctx, "Rollout of %s.%s is not necessary. All pods have the desired agent state",
+	dlog.Debugf(ctx, "Rollout of %s.%s is not necessary. At least one pod have the desired agent state",
 		wl.GetName(), wl.GetNamespace())
 	return false
+}
+
+func isRolloutNeededForPod(ctx context.Context, ac *agentconfig.Sidecar, name, namespace string, pod *core.Pod) string {
+	podAc := agentmap.AgentContainer(pod)
+	if ac == nil {
+		if podAc == nil {
+			return ""
+		}
+		return fmt.Sprintf("Rollout of %s.%s is necessary. No agent is desired but the pod %s has one", name, namespace, pod.GetName())
+	}
+	if podAc == nil {
+		// Rollout because an agent is desired but the pod doesn't have one
+		return fmt.Sprintf("Rollout of %s.%s is necessary. An agent is desired but the pod %s doesn't have one",
+			name, namespace, pod.GetName())
+	}
+	desiredAc := agentconfig.AgentContainer(ctx, pod, ac)
+	if !containerEqual(podAc, desiredAc) {
+		return fmt.Sprintf("Rollout of %s.%s is necessary. The desired agent is not equal to the existing agent in pod %s",
+			name, namespace, pod.GetName())
+	}
+	podIc := agentmap.InitContainer(pod)
+	if podIc == nil {
+		if needInitContainer(ac) {
+			return fmt.Sprintf("Rollout of %s.%s is necessary. An init-container is desired but the pod %s doesn't have one",
+				name, namespace, pod.GetName())
+		}
+	} else {
+		if !needInitContainer(ac) {
+			return fmt.Sprintf("Rollout of %s.%s is necessary. No init-container is desired but the pod %s has one",
+				name, namespace, pod.GetName())
+		}
+	}
+	for _, cn := range ac.Containers {
+		var found *core.Container
+		cns := pod.Spec.Containers
+		for i := range cns {
+			if cns[i].Name == cn.Name {
+				found = &cns[i]
+				break
+			}
+		}
+		if found == nil {
+			return fmt.Sprintf("Rollout of %s.%s is necessary. The desired pod should contain container %s",
+				name, namespace, cn.Name)
+		}
+		if cn.Replace {
+			// Ensure that the replaced container is disabled
+			if !(found.Image == sleeperImage && slices.Equal(found.Args, sleeperArgs)) {
+				return fmt.Sprintf("Rollout of %s.%s is necessary. The desired pod's container %s should be disabled",
+					name, namespace, cn.Name)
+			}
+		} else {
+			// Ensure that the replaced container is not disabled
+			if found.Image == sleeperImage && slices.Equal(found.Args, sleeperArgs) {
+				return fmt.Sprintf("Rollout of %s.%s is necessary. The desired pod's container %s should not be disabled",
+					name, namespace, cn.Name)
+			}
+		}
+	}
+	return ""
 }
 
 func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) {
