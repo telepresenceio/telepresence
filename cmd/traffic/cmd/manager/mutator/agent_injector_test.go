@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -785,6 +786,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	}
 
 	ctx = k8sapi.WithK8sInterface(ctx, clientset)
+	ctx = agentmap.WithWorkloadCache(ctx, time.Second)
 	for _, test := range tests {
 		test := test // pin it
 		agentmap.GeneratorConfigFunc = env.GeneratorConfig
@@ -881,6 +883,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 	podObjectMetaInjected := func(name string) meta.ObjectMeta {
 		meta := podObjectMeta(name)
 		meta.Labels[agentconfig.WorkloadNameLabel] = name
+		meta.Labels[agentconfig.WorkloadKindLabel] = "Deployment"
 		meta.Labels[agentconfig.WorkloadEnabledLabel] = "true"
 		return meta
 	}
@@ -1128,6 +1131,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 `,
 			"",
@@ -1219,6 +1223,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 - op: replace
   path: /spec/containers/0/env
@@ -1359,6 +1364,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 `,
 			"",
@@ -1461,6 +1467,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: numeric-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: numeric-port
 `,
 			"",
@@ -1567,6 +1574,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: numeric-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: numeric-port
 `,
 			"",
@@ -1791,6 +1799,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 `,
 			"",
@@ -1805,6 +1814,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx = managerutil.WithEnv(ctx, env)
 			agentmap.GeneratorConfigFunc = env.GeneratorConfig
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
+			ctx = agentmap.WithWorkloadCache(ctx, time.Second)
 			ctx = informer.WithFactory(ctx, "")
 			f := informer.GetFactory(ctx, "")
 			si := f.Core().V1().Services().Informer()
@@ -1877,8 +1887,7 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admissi
 }
 
 func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentmap.GeneratorConfig) (agentconfig.SidecarExt, error) {
-	workloadCache := make(map[string]k8sapi.Workload, 0)
-	wl, err := agentmap.FindOwnerWorkload(ctx, workloadCache, k8sapi.Pod(pod))
+	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err
 	}

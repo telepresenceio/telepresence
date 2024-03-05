@@ -84,7 +84,7 @@ func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Wo
 		return nil, nil, fmt.Errorf("failed to decode ConfigMap entry %q into an agent config", e.value)
 	}
 	ac := scx.AgentConfig()
-	wl, err := k8sapi.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+	wl, err := agentmap.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -905,7 +905,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 		if wl == nil {
 			err = ax.err
 			if err == nil {
-				wl, err = tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+				wl, err = agentmap.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 			}
 			if err != nil {
 				if errors.IsNotFound(err) {

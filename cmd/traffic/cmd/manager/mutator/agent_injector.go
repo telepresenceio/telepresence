@@ -145,9 +145,19 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 
-		workloadCache := make(map[string]k8sapi.Workload, 0)
-		scx, err = a.findConfigMapValue(ctx, workloadCache, pod, nil)
-
+		wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+		if err != nil {
+			uwkError := k8sapi.UnsupportedWorkloadKindError("")
+			switch {
+			case k8sErrors.IsNotFound(err):
+				dlog.Warnf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
+			case errors.As(err, &uwkError):
+				dlog.Debugf(ctx, "Workload owner with %s found for pod %s.%s", uwkError.Error(), pod.Name, pod.Namespace)
+				err = nil
+			}
+			return nil, err
+		}
+		scx, err = a.agentConfigs.Get(ctx, wl.GetName(), wl.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
@@ -158,15 +168,6 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		case scx != nil && scx.AgentConfig().Manual:
 			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			return nil, nil
-		}
-
-		wl, err := agentmap.FindOwnerWorkload(ctx, workloadCache, k8sapi.Pod(pod))
-		if err != nil {
-			if k8sErrors.IsNotFound(err) {
-				err = nil
-				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
-			}
-			return nil, err
 		}
 
 		tracing.RecordWorkloadInfo(span, wl)
@@ -652,6 +653,10 @@ func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarEx
 		changed = true
 		lm[agentconfig.WorkloadNameLabel] = config.AgentConfig().WorkloadName
 	}
+	if _, ok := pod.Labels[agentconfig.WorkloadKindLabel]; !ok {
+		changed = true
+		lm[agentconfig.WorkloadKindLabel] = config.AgentConfig().WorkloadKind
+	}
 	if _, ok := pod.Labels[agentconfig.WorkloadEnabledLabel]; !ok {
 		changed = true
 		lm[agentconfig.WorkloadEnabledLabel] = "true"
@@ -664,48 +669,6 @@ func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarEx
 		})
 	}
 	return patches
-}
-
-func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache map[string]k8sapi.Workload, pod *core.Pod, wl k8sapi.Workload) (agentconfig.SidecarExt, error) {
-	if a.agentConfigs == nil {
-		return nil, nil
-	}
-	var refs []meta.OwnerReference
-	if wl != nil {
-		refs = wl.GetOwnerReferences()
-	} else {
-		refs = pod.GetOwnerReferences()
-	}
-	for i := range refs {
-		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			scx, err := a.agentConfigs.Get(ctx, or.Name, pod.GetNamespace())
-			if err != nil {
-				return nil, err
-			}
-			if scx != nil {
-				ag := scx.AgentConfig()
-				if ag.WorkloadKind == "" || ag.WorkloadKind == or.Kind {
-					return scx, nil
-				}
-			}
-			wl, err = tracing.GetWorkloadFromCache(ctx, workloadCache, or.Name, pod.GetNamespace(), or.Kind)
-			if err != nil {
-				if k8sErrors.IsNotFound(err) {
-					return nil, nil
-				}
-				var uwkErr k8sapi.UnsupportedWorkloadKindError
-				if errors.As(err, &uwkErr) {
-					// There can only be one managing controller. If it's of an unsupported
-					// type, then there's currently no configMapValue for the object that it
-					// controls.
-					return nil, nil
-				}
-				return nil, err
-			}
-			return a.findConfigMapValue(ctx, workloadCache, pod, wl)
-		}
-	}
-	return nil, nil
 }
 
 const maxPortNameLen = 15
