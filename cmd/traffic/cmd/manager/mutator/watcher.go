@@ -33,7 +33,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
-	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
@@ -48,7 +47,7 @@ type Map interface {
 	Whitelist(podName, namespace string)
 	IsBlacklisted(podName, namespace string) bool
 
-	store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error
+	store(ctx context.Context, acx agentconfig.SidecarExt) error
 	remove(ctx context.Context, name, namespace string) error
 
 	RegenerateAgentMaps(ctx context.Context, s string) error
@@ -333,7 +332,7 @@ func (c *configWatcher) regenerateAgentMaps(ctx context.Context, ns string, gc a
 		ns := cm.Namespace
 		err = c.Update(ctx, ns, func(cm *core.ConfigMap) (bool, error) {
 			dlog.Debugf(ctx, "regenerate: checking namespace %s", ns)
-			data := maps.Copy(cm.Data)
+			data := cm.Data
 			for n, d := range data {
 				e := &entry{name: n, namespace: ns, value: d}
 				acx, wl, err := e.workload(ctx)
@@ -420,6 +419,7 @@ func (c *configWatcher) Update(ctx context.Context, namespace string, updater fu
 		if err != nil {
 			return err
 		}
+		cm = cm.DeepCopy() // Protect the cached cm from updates
 		create := cm == nil
 		if create {
 			cm = &core.ConfigMap{
@@ -530,7 +530,7 @@ func (c *configWatcher) handleAddOrUpdateEntry(ctx context.Context, e entry) {
 		}
 		if scx, err = gc.Generate(ctx, wl, ac); err != nil {
 			dlog.Error(ctx, err)
-		} else if err = c.store(ctx, scx, false); err != nil { // Calling store() will generate a new event, so we skip rollout here
+		} else if err = c.store(ctx, scx); err != nil { // Calling store() will generate a new event, so we skip rollout here
 			dlog.Error(ctx, err)
 		}
 		return
@@ -608,10 +608,8 @@ func (c *configWatcher) remove(ctx context.Context, name, namespace string) erro
 	})
 }
 
-// store an agent config in the agents ConfigMap for the given namespace. It will
-// also update the current snapshot if the updateSnapshot is true. This update will prevent
-// the rollout that otherwise occur when the ConfigMap is updated.
-func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt, updateSnapshot bool) error {
+// store an agent config in the agents ConfigMap for the given namespace.
+func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt) error {
 	js, err := acx.Marshal()
 	yml := string(js)
 	if err != nil {
@@ -632,9 +630,6 @@ func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt, u
 					dlog.Warnf(ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", ac.AgentName, ns)
 					return false, nil
 				}
-			}
-			if !updateSnapshot {
-				cm.Data = maps.Copy(cm.Data)
 			}
 		}
 		cm.Data[ac.AgentName] = yml
@@ -706,7 +701,13 @@ func (c *configWatcher) watchConfigMap(ctx context.Context, ix cache.SharedIndex
 				}
 			},
 			DeleteFunc: func(obj any) {
-				if cm, ok := obj.(*core.ConfigMap); ok {
+				cm, ok := obj.(*core.ConfigMap)
+				if !ok {
+					if dfu, isDfu := obj.(*cache.DeletedFinalStateUnknown); isDfu {
+						cm, ok = dfu.Obj.(*core.ConfigMap)
+					}
+				}
+				if ok {
 					dlog.Debugf(ctx, "DELETED %s.%s", cm.Name, cm.Namespace)
 					c.getNamespaceLock(cm.Namespace)
 					c.handleDelete(ctx, cm)
@@ -945,7 +946,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 			}
 			continue
 		}
-		if err = c.store(ctx, acn, false); err != nil {
+		if err = c.store(ctx, acn); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}

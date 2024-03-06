@@ -180,7 +180,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		}
 
 		scx.RecordInSpan(span)
-		if err = a.agentConfigs.store(ctx, scx, true); err != nil {
+		if err = a.agentConfigs.store(ctx, scx); err != nil {
 			return nil, err
 		}
 	default:
