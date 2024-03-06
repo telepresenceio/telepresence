@@ -146,7 +146,9 @@ func (r *runner) RunTests(c context.Context) { //nolint:gocognit
 					s := f(c)
 					if suiteEnabled(c, s) {
 						t.Run(s.SuiteName(), func(t *testing.T) {
-							suite.Run(t, f(c))
+							ts := f(c)
+							ts.setContext(ts.AmendSuiteContext(c))
+							suite.Run(t, ts)
 						})
 					}
 				}
