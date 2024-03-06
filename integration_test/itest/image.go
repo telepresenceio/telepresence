@@ -8,7 +8,7 @@ import (
 )
 
 type Image struct {
-	Name     string `json:"name"`
+	Name     string `json:"name,omitempty"`
 	Tag      string `json:"tag,omitempty"`
 	Registry string `json:"registry,omitempty"`
 }

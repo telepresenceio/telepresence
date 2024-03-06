@@ -55,6 +55,7 @@ func (h *harness) HarnessContext() context.Context {
 
 func (h *harness) RunSuite(s TestingSuite) {
 	if suiteEnabled(h.HarnessContext(), s) {
+		s.setContext(s.AmendSuiteContext(h.HarnessContext()))
 		h.HarnessT().Run(s.SuiteName(), func(t *testing.T) { suite.Run(t, s) })
 	}
 }

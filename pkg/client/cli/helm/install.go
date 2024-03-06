@@ -76,6 +76,13 @@ func GetValues(ctx context.Context) map[string]any {
 	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" {
 		image := make(map[string]any)
 		if wai != "" {
+			i := strings.LastIndexByte(wai, '/')
+			if i >= 0 {
+				if wr == "" {
+					wr = wai[:i]
+				}
+				wai = wai[i+1:]
+			}
 			parts := strings.Split(wai, ":")
 			name := wai
 			tag := ""

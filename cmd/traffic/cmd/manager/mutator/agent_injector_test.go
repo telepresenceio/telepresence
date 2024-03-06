@@ -1846,7 +1846,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				require.NoError(t, err)
 				var scx agentconfig.SidecarExt
 				if scx, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
-					actualErr = cw.store(ctx, scx, true)
+					actualErr = cw.store(ctx, scx)
 				}
 			}
 			if actualErr == nil {

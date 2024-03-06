@@ -9,19 +9,31 @@ import (
 type TestingSuite interface {
 	suite.TestingSuite
 	Harness
+	AmendSuiteContext(context.Context) context.Context
 	Context() context.Context
 	Assert() *Assertions
 	Require() *Requirements
 	SuiteName() string
+	setContext(ctx context.Context)
 }
 
 type Suite struct {
 	suite.Suite
 	Harness
+	ctx context.Context
+}
+
+func (s *Suite) AmendSuiteContext(ctx context.Context) context.Context {
+	return ctx
+}
+
+//nolint:unused // Linter is confused about this one.
+func (s *Suite) setContext(ctx context.Context) {
+	s.ctx = ctx
 }
 
 func (s *Suite) Context() context.Context {
-	return WithT(s.HarnessContext(), s.T())
+	return WithT(s.ctx, s.T())
 }
 
 func (s *Suite) Assert() *Assertions {
