@@ -67,13 +67,20 @@ rules:
   - "apps"
   resources:
   - deployments
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+- apiGroups:
+  - "apps"
+  resources:
   - replicasets
   - statefulsets
   verbs:
   - get
   - list
   - patch
-  - update {{/* Only needed for upgrade of older versions */}}
 - apiGroups:
     - "events.k8s.io"
   resources:
