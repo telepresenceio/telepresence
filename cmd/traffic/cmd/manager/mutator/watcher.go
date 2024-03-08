@@ -807,6 +807,25 @@ func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIn
 	return ix
 }
 
+func (c *configWatcher) startDeployments(ctx context.Context, ns string) cache.SharedIndexInformer {
+	f := informer.GetFactory(ctx, ns)
+	ix := f.Apps().V1().Deployments().Informer()
+	_ = ix.SetTransform(func(o any) (any, error) {
+		// Strip of the parts of the deployment that we don't care about. Saves memory
+		if dep, ok := o.(*appsv1.Deployment); ok {
+			dep.ManagedFields = nil
+			dep.Status = appsv1.DeploymentStatus{}
+			dep.Finalizers = nil
+			dep.OwnerReferences = nil
+		}
+		return o, nil
+	})
+	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		dlog.Errorf(ctx, "watcher for Deployments %s: %v", whereWeWatch(ns), err)
+	})
+	return ix
+}
+
 func (c *configWatcher) gcBlacklisted(now time.Time) {
 	const maxAge = time.Minute
 	maxCreated := now.Add(-maxAge)
@@ -843,6 +862,7 @@ func (c *configWatcher) Start(ctx context.Context) {
 	for i, ns := range nss {
 		c.cms[i] = c.startConfigMap(ctx, ns)
 		c.svs[i] = c.startServices(ctx, ns)
+		c.startDeployments(ctx, ns)
 		c.startPods(ctx, ns)
 		f := informer.GetFactory(ctx, ns)
 		f.Start(ctx.Done())
@@ -871,7 +891,7 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, nsData map[str
 		}
 
 		// The config will be affected if a service is added or modified so that it now selects the pod for the workload.
-		wl, err := tracing.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
+		wl, err := agentmap.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
 		if err != nil {
 			return nil, err, false
 		}
