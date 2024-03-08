@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
@@ -786,7 +784,15 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	}
 
 	ctx = k8sapi.WithK8sInterface(ctx, clientset)
-	ctx = agentmap.WithWorkloadCache(ctx, time.Second)
+	ctx = informer.WithFactory(ctx, "")
+	f := informer.GetFactory(ctx, "")
+	f.Core().V1().Services().Informer()
+	f.Core().V1().ConfigMaps().Informer()
+	f.Core().V1().Pods().Informer()
+	f.Apps().V1().Deployments().Informer()
+	f.Start(ctx.Done())
+	f.WaitForCacheSync(ctx.Done())
+
 	for _, test := range tests {
 		test := test // pin it
 		agentmap.GeneratorConfigFunc = env.GeneratorConfig
@@ -1814,14 +1820,14 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx = managerutil.WithEnv(ctx, env)
 			agentmap.GeneratorConfigFunc = env.GeneratorConfig
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
-			ctx = agentmap.WithWorkloadCache(ctx, time.Second)
 			ctx = informer.WithFactory(ctx, "")
 			f := informer.GetFactory(ctx, "")
-			si := f.Core().V1().Services().Informer()
-			ci := f.Core().V1().ConfigMaps().Informer()
-			go si.Run(ctx.Done())
-			go ci.Run(ctx.Done())
-			cache.WaitForCacheSync(ctx.Done(), si.HasSynced, ci.HasSynced)
+			f.Core().V1().Services().Informer()
+			f.Core().V1().ConfigMaps().Informer()
+			f.Core().V1().Pods().Informer()
+			f.Apps().V1().Deployments().Informer()
+			f.Start(ctx.Done())
+			f.WaitForCacheSync(ctx.Done())
 			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 			require.NoError(t, err)
 			if test.envAdditions != nil {

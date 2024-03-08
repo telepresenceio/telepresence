@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 
+	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,7 +54,43 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 }
 
 func GetWorkload(ctx context.Context, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
-	return GetWorkloadCache(ctx).GetWorkload(ctx, name, namespace, workloadKind)
+	dlog.Debugf(ctx, "GetWorkload(%s,%s,%s)", name, namespace, workloadKind)
+	switch workloadKind {
+	case "Deployment":
+		obj, err = getDeployment(ctx, name, namespace)
+	case "ReplicaSet":
+		obj, err = k8sapi.GetReplicaSet(ctx, name, namespace)
+	case "StatefulSet":
+		obj, err = k8sapi.GetStatefulSet(ctx, name, namespace)
+	case "":
+		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
+			if obj, err = GetWorkload(ctx, name, namespace, wk); err == nil {
+				return obj, nil
+			}
+			if !k8sErrors.IsNotFound(err) {
+				return nil, err
+			}
+		}
+		err = k8sErrors.NewNotFound(core.Resource("workload"), name+"."+namespace)
+	default:
+		return nil, k8sapi.UnsupportedWorkloadKindError(workloadKind)
+	}
+	return obj, err
+}
+
+func getDeployment(ctx context.Context, name, namespace string) (obj k8sapi.Workload, err error) {
+	if f := informer.GetFactory(ctx, namespace); f != nil {
+		var dep *appsv1.Deployment
+		dep, err = f.Apps().V1().Deployments().Lister().Deployments(namespace).Get(name)
+		if err == nil {
+			obj = k8sapi.Deployment(dep)
+		}
+		return obj, err
+	}
+
+	// This shouldn't happen really.
+	dlog.Debugf(ctx, "fetching deployment %s.%s using direct API call", name, namespace)
+	return k8sapi.GetDeployment(ctx, name, namespace)
 }
 
 func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {

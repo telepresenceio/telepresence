@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -303,13 +302,12 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 		GitVersion: "v1.17.0",
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
-	ctx = agentmap.WithWorkloadCache(ctx, 30*time.Second)
-
 	ctx = informer.WithFactory(ctx, "")
 	f := informer.GetFactory(ctx, "")
 	f.Core().V1().Services().Informer()
 	f.Core().V1().ConfigMaps().Informer()
 	f.Core().V1().Pods().Informer()
+	f.Apps().V1().Deployments().Informer()
 	f.Start(ctx.Done())
 	f.WaitForCacheSync(ctx.Done())
 
