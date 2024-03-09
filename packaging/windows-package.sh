@@ -46,11 +46,11 @@ cp "$( dirname -- "${BASH_SOURCE[0]}")/bundle.wxs" "${ZIPDIR}/bundle.wxs"
 cp "$( dirname -- "${BASH_SOURCE[0]}")/telepresence.wxs" "${ZIPDIR}/telepresence.wxs"
 cp "$( dirname -- "${BASH_SOURCE[0]}")/sidebar.png" "${ZIPDIR}/sidebar.png"
 
-dotnet tool install --global wix --version 4.0.0
+dotnet tool install --global wix --version 4.0.4
 
 cd "${ZIPDIR}"
 wix build -o telepresence.msi telepresence.wxs
-wix extension add -g WixToolset.Bal.wixext
-wix build -ext WixToolset.Bal.wixext -o ".${BINDIR}/telepresence-setup.exe" bundle.wxs
+wix extension add -g WixToolset.Bal.wixext/4.0.4
+wix build -ext WixToolset.Bal.wixext/4.0.4 -o ".${BINDIR}/telepresence-setup.exe" bundle.wxs
 
 rm -rf "${ZIPDIR}"
