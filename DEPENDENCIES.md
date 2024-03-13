@@ -161,7 +161,7 @@ following Free and Open Source software:
     google.golang.org/genproto/googleapis/api                                    v0.0.0-20240221002015-b0ce06bbee7c    Apache License 2.0
     google.golang.org/genproto/googleapis/rpc                                    v0.0.0-20240221002015-b0ce06bbee7c    Apache License 2.0
     google.golang.org/grpc                                                       v1.62.0                               Apache License 2.0
-    google.golang.org/protobuf                                                   v1.32.0                               3-clause BSD license
+    google.golang.org/protobuf                                                   v1.33.0                               3-clause BSD license
     gopkg.in/evanphx/json-patch.v5                                               v5.9.0                                3-clause BSD license
     gopkg.in/inf.v0                                                              v0.9.1                                3-clause BSD license
     gopkg.in/yaml.v2                                                             v2.4.0                                Apache License 2.0, MIT license
