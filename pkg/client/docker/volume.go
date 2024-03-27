@@ -97,8 +97,7 @@ func latestPluginVersion(ctx context.Context) (ver semver.Version, err error) {
 }
 
 type imgResult struct {
-	Name   string `json:"name"`
-	Status string `json:"tag_status"`
+	Name string `json:"name"`
 }
 type repsResponse struct {
 	Results []imgResult `json:"results"`
@@ -133,12 +132,10 @@ func getLatestPluginVersion(ctx context.Context) (ver semver.Version, err error)
 	}
 	pfx := runtime.GOARCH + "-"
 	for _, info := range infos.Results {
-		if info.Status == "active" {
-			if strings.HasPrefix(info.Name, pfx) {
-				iv, err := semver.Parse(strings.TrimPrefix(info.Name, pfx))
-				if err == nil && iv.GT(ver) {
-					ver = iv
-				}
+		if strings.HasPrefix(info.Name, pfx) {
+			iv, err := semver.Parse(strings.TrimPrefix(info.Name, pfx))
+			if err == nil && iv.GT(ver) {
+				ver = iv
 			}
 		}
 	}
