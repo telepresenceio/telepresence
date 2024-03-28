@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-
 	//nolint:depguard // This short script has no logging and no Contexts.
 	"os/exec"
 	"path/filepath"
@@ -104,19 +103,28 @@ func Main() error {
 		return nil
 	}
 
-	md5, err := dirMD5(".")
+	// Append a mangled md5 if the directory is dirty.
+	cmd = exec.Command("git", "status", "--short")
+	cmd.Stderr = os.Stderr
+	statusBytes, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("unable to compute MD5: %w", err)
+		return fmt.Errorf("unable to git rev-parse: %w", err)
 	}
+	if len(statusBytes) > 0 {
+		var md5Out []byte
+		md5Out, err = dirMD5(".")
+		if err != nil {
+			return fmt.Errorf("unable to compute MD5: %w", err)
+		}
 
-	b64 := base64.RawURLEncoding.EncodeToString(md5)
-	b64 = strings.ReplaceAll(b64, "_", "Z")
-	b64 = strings.ReplaceAll(b64, "-", "z")
-	if _, err := fmt.Printf("v%s-%s\n", gitDescVer, b64); err != nil {
-		return fmt.Errorf("unable to printf: %w", err)
+		b64 := base64.RawURLEncoding.EncodeToString(md5Out)
+		b64 = strings.ReplaceAll(b64, "_", "Z")
+		b64 = strings.ReplaceAll(b64, "-", "z")
+		_, err = fmt.Printf("v%s-%s\n", gitDescVer, b64)
+	} else {
+		_, err = fmt.Printf("v%s\n", gitDescVer)
 	}
-
-	return nil
+	return err
 }
 
 func main() {
