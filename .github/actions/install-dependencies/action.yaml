@@ -23,8 +23,16 @@ runs:
         HOMEBREW_NO_INSTALL_FROM_API: ""
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
       run: |
-        brew untap homebrew/core || true
-        brew untap homebrew/cask || true
+        brew untap homebrew/core || :
+        brew untap homebrew/cask || :
+
+        # Remove Python3 symlinks in /usr/local/bin as workaround to brew update issues
+        # https://github.com/actions/setup-python/issues/577
+        rm /usr/local/bin/2to3* || :
+        rm /usr/local/bin/idle3* || :
+        rm /usr/local/bin/pydoc* || :
+        rm /usr/local/bin/python3* || :
+
         brew update
         brew install --cask macfuse
         brew install gromgit/fuse/sshfs-mac
