@@ -164,7 +164,7 @@ func (d *device) dispatchToTun(ctx context.Context) {
 	buf := vifBuffer.NewData(0x10000)
 	for {
 		pb := d.ReadContext(ctx)
-		if pb.IsNil() {
+		if pb == nil {
 			break
 		}
 		buf.Resize(pb.Size())
