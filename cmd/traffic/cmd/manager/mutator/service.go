@@ -27,19 +27,14 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
-const (
-	tlsCertFile     = `tls.crt`
-	tlsKeyFile      = `tls.key`
-	jsonContentType = `application/json`
-)
+const jsonContentType = `application/json`
 
 var universalDeserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer() //nolint:gochecknoglobals // constant
 
-// JSON patch, see https://tools.ietf.org/html/rfc6902 .
+// PatchOperation is a JSON patch, see https://tools.ietf.org/html/rfc6902 .
 type PatchOperation struct {
 	Op    string `json:"op"`
 	Path  string `json:"path"`
@@ -61,6 +56,7 @@ type mutatorFunc func(context.Context, *admission.AdmissionRequest) (PatchOps, e
 type tlsListener struct {
 	sync.Mutex
 	ctx         context.Context
+	certGetter  InjectorCertGetter
 	cert        tls.Certificate
 	certPEM     []byte
 	keyPEM      []byte
@@ -95,7 +91,7 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 	_ = tcpConn.SetKeepAlive(true)
 	_ = tcpConn.SetKeepAlivePeriod(3 * time.Minute)
 
-	newCertPEM, newKeyPEM, err := loadCert(l.ctx)
+	newCertPEM, newKeyPEM, err := l.certGetter.LoadCert()
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +117,7 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 	return tls.Server(tcpConn, &tls.Config{Certificates: []tls.Certificate{cert}}), nil
 }
 
-func ServeMutator(ctx context.Context) error {
+func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) error {
 	var ai AgentInjector
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
@@ -183,7 +179,7 @@ func ServeMutator(ctx context.Context) error {
 			return ctx
 		},
 	}
-	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port))
+	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port), injectorCertGetter)
 }
 
 type logFilter struct {
@@ -198,8 +194,8 @@ func (l *logFilter) Write(data []byte) (int, error) {
 	return l.wr.Write(data)
 }
 
-func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
-	certPEM, keyPEM, err := loadCert(ctx)
+func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGetter InjectorCertGetter) error {
+	certPEM, keyPEM, err := certGetter.LoadCert()
 	if err != nil {
 		return err
 	}
@@ -225,6 +221,7 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
 	err = s.Serve(
 		&tlsListener{
 			ctx:         ctx,
+			certGetter:  certGetter,
 			cert:        cert,
 			certPEM:     certPEM,
 			keyPEM:      keyPEM,
@@ -236,17 +233,6 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string) error {
 	}
 
 	return <-errc
-}
-
-func loadCert(ctx context.Context) (cert, key []byte, err error) {
-	env := managerutil.GetEnv(ctx)
-	ns := env.ManagerNamespace
-	sn := env.AgentInjectorSecret
-	s, err := k8sapi.GetK8sInterface(ctx).CoreV1().Secrets(ns).Get(ctx, sn, meta.GetOptions{})
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to get %s.%s: %w", sn, ns, err)
-	}
-	return s.Data[tlsCertFile], s.Data[tlsKeyFile], nil
 }
 
 // Skip mutate requests in these namespaces.
