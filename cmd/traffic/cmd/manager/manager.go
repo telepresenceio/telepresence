@@ -99,6 +99,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 	// This will make the informers more verbose. Good for debugging
 	// l := klog.Level(6)
 	// _ = l.Set("6")
+	mgrFactory := false
 	if len(env.ManagedNamespaces) == 0 {
 		ctx = informer.WithFactory(ctx, "")
 	} else {
@@ -106,11 +107,22 @@ func MainWithEnv(ctx context.Context) (err error) {
 			ctx = informer.WithFactory(ctx, ns)
 		}
 		if !slices.Contains(env.ManagedNamespaces, env.ManagerNamespace) {
+			mgrFactory = true
 			ctx = informer.WithFactory(ctx, env.ManagerNamespace)
 		}
 	}
 
+	// The GetInjectorCertGetter and the mutator.Load both create SharedInformer instances
+	// from informer factories, so these calls must be placed here in order for the factories
+	// to start correctly.
+	injectorCertGetter := mutator.GetInjectorCertGetter(ctx)
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
+
+	if mgrFactory {
+		f := informer.GetFactory(ctx, env.ManagerNamespace)
+		f.Start(ctx.Done())
+		f.WaitForCacheSync(ctx.Done())
+	}
 
 	mgr, g, err := NewServiceFunc(ctx)
 	if err != nil {
@@ -128,7 +140,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 		if managerutil.GetAgentImageRetriever(ctx) == nil {
 			return nil
 		}
-		return mutator.ServeMutator(ctx)
+		return mutator.ServeMutator(ctx, injectorCertGetter)
 	})
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
