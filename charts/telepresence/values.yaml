@@ -140,6 +140,12 @@ agentInjector:
   certificate:
     regenerate: false
 
+    # The method used by the agent-injector to access the generated secret.
+    # Possible options: watch or mount
+    #
+    # Default watch
+    accessMethod: watch
+
     # The method used to generate the TLS certificate for the agent-injector.
     #
     # Possible options: helm or certmanager

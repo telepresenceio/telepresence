@@ -33,21 +33,14 @@ items:
   - version: 2.19.0
     date: (TBD)
     notes:
-      - type: change
-        title: Tracing is no longer enabled by default.
+      - type: feature
+        title: Add ability to mount a webhook secret.
         body: >-
-          Tracing must now be enabled explicitly in order to use the <code>telepresence gather-traces</code>
-          command.
-      - type: change
-        title: Removal of timeouts that are no longer in use
-        body: >-
-          The <code>config.yml</code> values <code>timeouts.agentInstall</code> and <code>timeouts.apply</code> haven't
-          been in use since versions prior to 2.6.0, when the client was responsible for installing the traffic-agent.
-          These timeouts are now removed from the code-base, and a warning will be printed when attempts are made to use
-          them.
-  - version: 2.18.1
-    date: (TBD)
-    notes:
+          A new Helm chart value <code>agentInjector.certificate.accessMethod</code> which can be set to <code>watch</code>
+          (the default) or <code>mount</code> has been added. The <code>mount</code> setting is intended for clusters with
+          policies that prevent containers from doing a <code>get</code>, <code>list</code> or <code>watch</code> of a
+          <code>Secret</code>, but where a latency of up to 90 seconds is acceptable between the time the secret is
+          regenerated and the agent-injector picks it up.
       - type: feature
         title: Make it possible to specify ignored volume mounts using path prefix.
         body: >-
@@ -66,6 +59,21 @@ items:
           This allows another process with a kubeconfig already loaded in memory
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
+      - type: change
+        title: Tracing is no longer enabled by default.
+        body: >-
+          Tracing must now be enabled explicitly in order to use the <code>telepresence gather-traces</code>
+          command.
+      - type: change
+        title: Removal of timeouts that are no longer in use
+        body: >-
+          The <code>config.yml</code> values <code>timeouts.agentInstall</code> and <code>timeouts.apply</code> haven't
+          been in use since versions prior to 2.6.0, when the client was responsible for installing the traffic-agent.
+          These timeouts are now removed from the code-base, and a warning will be printed when attempts are made to use
+          them.
+  - version: 2.18.1
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Get rid of telemount plugin stickiness
         body: >-
