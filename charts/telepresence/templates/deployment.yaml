@@ -56,7 +56,11 @@ spec:
           - name: MUTATOR_WEBHOOK_PORT
             value: {{ .agentInjector.webhook.port | quote }}
           - name: AGENT_INJECTOR_SECRET
+          {{- if eq .agentInjector.certificate.accessMethod "mount" }}
+            value: /var/run/secrets/tls
+          {{- else }}
             value: {{ .agentInjector.secret.name }}
+          {{- end }}
           {{- with .tracing }}
           {{- if .grpcPort }}
           - name: TRACING_GRPC_PORT
@@ -257,10 +261,20 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- if eq .agentInjector.certificate.accessMethod "mount" }}
+          volumeMounts:
+            - name: tls
+              mountPath: /var/run/secrets/tls
+              readOnly: true
+        {{- if and .trafficManager .trafficManager.mountsTemplate }}
+          {{- template "traffic-manager-mounts" . }}
+        {{- end }}
+      {{- else }}
         {{- if and .trafficManager .trafficManager.mountsTemplate }}
           volumeMounts:
           {{- template "traffic-manager-mounts" . }}
         {{- end }}
+      {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -276,10 +290,21 @@ spec:
       {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
+  {{- if eq .agentInjector.certificate.accessMethod "mount" }}
+      volumes:
+        - name: tls
+          secret:
+            defaultMode: 420
+            secretName: {{ .agentInjector.secret.name }}
+    {{- if and .trafficManager .trafficManager.volsTemplate }}
+      {{- template "traffic-manager-vols" . }}
+    {{- end }}
+  {{- else }}
     {{- if and .trafficManager .trafficManager.volsTemplate }}
       volumes:
       {{- template "traffic-manager-vols" . }}
     {{- end }}
+  {{- end }}
       serviceAccount: traffic-manager
       serviceAccountName: traffic-manager
 {{- end }}
