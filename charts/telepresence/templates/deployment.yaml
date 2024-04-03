@@ -190,6 +190,11 @@ spec:
           - name: SCOUT_DISABLE
             value: "1"
           {{- end }}
+          {{- /* to allow running with no security context, must check against nil - this allows specifying an empty dict for the value */}}
+          {{- if not (eq .agent.securityContext nil) }}
+          - name: AGENT_SECURITY_CONTEXT
+            value: '{{ toJson .agent.securityContext }}'
+          {{- end }}
         {{- /*
         Client configuration
         */}}

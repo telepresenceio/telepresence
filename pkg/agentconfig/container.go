@@ -153,13 +153,18 @@ func AgentContainer(
 		ac.Resources = *r
 	}
 
-	// Assign the security context of the first container to the traffic agent.
-	appSc, err := firstAppSecurityContext(pod, config)
-	if err != nil {
-		dlog.Error(ctx, err)
-		return nil
+	appSc := config.SecurityContext
+	if appSc == nil {
+		var err error
+		// Assign the security context of the first container to the traffic agent.
+		appSc, err = firstAppSecurityContext(pod, config)
+		if err != nil {
+			dlog.Error(ctx, err)
+			return nil
+		}
 	}
 	ac.SecurityContext = appSc
+
 	return ac
 }
 
