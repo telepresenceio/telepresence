@@ -231,7 +231,6 @@ func RandomIPv4Subnet(mask net.IPMask, avoid []*net.IPNet) (*net.IPNet, error) {
 		ip := ranges[i]
 
 		end := ranges[i+1]
-		inUse := false
 		for {
 			ip1 := make(net.IP, len(ip))
 			copy(ip1, ip)
@@ -240,6 +239,7 @@ func RandomIPv4Subnet(mask net.IPMask, avoid []*net.IPNet) (*net.IPNet, error) {
 				IP:   ip1,
 				Mask: mask,
 			}
+			inUse := false
 			for _, cidr := range cidrs {
 				if Overlaps(cidr, &sn) {
 					inUse = true
