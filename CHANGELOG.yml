@@ -71,6 +71,11 @@ items:
           been in use since versions prior to 2.6.0, when the client was responsible for installing the traffic-agent.
           These timeouts are now removed from the code-base, and a warning will be printed when attempts are made to use
           them.
+      - type: bugfix
+        title: Search all private subnets to find one open for dnsServerSubnet
+        body: >-
+          This resolves a bug that did not test all subnets in a private range, sometimes resulting in the warning,
+          "DNS doesn't seem to work properly."
   - version: 2.18.1
     date: (TBD)
     notes:
