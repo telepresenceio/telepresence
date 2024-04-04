@@ -164,6 +164,7 @@ agentInjector:
 
   injectPolicy: OnDemand
   webhook:
+    enable: true
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]
     servicePath: /traffic-agent
