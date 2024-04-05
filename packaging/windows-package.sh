@@ -50,8 +50,8 @@ zip -r -j "${BINDIR}/telepresence.zip" "${ZIPDIR}"
 # Generate installer
 cp "${SCRIPT_DIR}/sidebar.png" "${ZIPDIR}/sidebar.png"
 TELEPRESENCE_PLAIN_VERSION=${TELEPRESENCE_VERSION#"v"}
-sed s/TELEPRESENCE_VERSION/$TELEPRESENCE_PLAIN_VERSION/ "${SCRIPT_DIR}/telepresence.wxs.in" > "${ZIPDIR}/telepresence.wxs"
-sed s/TELEPRESENCE_VERSION/$TELEPRESENCE_PLAIN_VERSION/ "${SCRIPT_DIR}/bundle.wxs.in" > "${ZIPDIR}/bundle.wxs"
+sed s/TELEPRESENCE_VERSION/"$TELEPRESENCE_PLAIN_VERSION"/ "${SCRIPT_DIR}/telepresence.wxs.in" > "${ZIPDIR}/telepresence.wxs"
+sed s/TELEPRESENCE_VERSION/"$TELEPRESENCE_PLAIN_VERSION"/ "${SCRIPT_DIR}/bundle.wxs.in" > "${ZIPDIR}/bundle.wxs"
 
 WIX_VERSION=4.0.4
 dotnet tool install --global wix --version $WIX_VERSION
