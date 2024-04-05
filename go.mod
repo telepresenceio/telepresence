@@ -6,7 +6,7 @@ toolchain go1.22.2
 
 require (
 	github.com/Masterminds/sprig/v3 v3.2.3
-	github.com/blang/semver v3.5.1+incompatible
+	github.com/blang/semver/v4 v4.0.0
 	github.com/coreos/go-iptables v0.7.0
 	github.com/datawire/dlib v1.3.1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f

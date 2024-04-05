@@ -3,7 +3,7 @@ package scout
 import (
 	"context"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 )
 
 type sessionKey struct{}
