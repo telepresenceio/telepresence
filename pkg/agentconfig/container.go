@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
