@@ -47,7 +47,6 @@ type Request struct {
 	Implicit bool
 
 	kubeConfig              *genericclioptions.ConfigFlags
-	kubeFlagSet             *pflag.FlagSet
 	UserDaemonProfilingPort uint16
 	RootDaemonProfilingPort uint16
 
@@ -55,12 +54,17 @@ type Request struct {
 	proxyVia []string
 }
 
+type CobraRequest struct {
+	Request
+	kubeFlagSet *pflag.FlagSet
+}
+
 // InitRequest adds the networking flags and Kubernetes flags to the given command and
 // returns a Request and a FlagSet with the Kubernetes flags. The FlagSet is returned
 // here so that a map of flags that gets modified can be extracted using FlagMap once the flag
 // parsing has completed.
-func InitRequest(cmd *cobra.Command) *Request {
-	cr := Request{}
+func InitRequest(cmd *cobra.Command) *CobraRequest {
+	cr := CobraRequest{}
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
@@ -117,7 +121,7 @@ func InitRequest(cmd *cobra.Command) *Request {
 
 type requestKey struct{}
 
-func (cr *Request) CommitFlags(cmd *cobra.Command) error {
+func (cr *CobraRequest) CommitFlags(cmd *cobra.Command) error {
 	var err error
 	cr.kubeFlagSet.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
@@ -138,17 +142,26 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	cr.addKubeconfigEnv()
 	err = cr.setGlobalConnectFlags(cmd)
 	if err != nil {
 		return errcat.User.New(err)
 	}
+	ctx, err := cr.Commit(cmd.Context())
+	if err != nil {
+		return err
+	}
+	cmd.SetContext(ctx)
+	return nil
+}
+
+func (cr *Request) Commit(ctx context.Context) (context.Context, error) {
+	cr.addKubeconfigEnv()
+	var err error
 	cr.SubnetViaWorkloads, err = parseProxyVias(cr.proxyVia)
 	if err != nil {
-		return errcat.User.New(err)
+		return ctx, errcat.User.New(err)
 	}
-	cmd.SetContext(context.WithValue(cmd.Context(), requestKey{}, cr))
-	return nil
+	return context.WithValue(ctx, requestKey{}, cr), nil
 }
 
 type prefixViaWL struct {
@@ -327,7 +340,7 @@ func GetKubeStartingConfig(cmd *cobra.Command) (*api.Config, error) {
 	return pathOpts.GetStartingConfig()
 }
 
-func (cr *Request) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
+func (cr *CobraRequest) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
 	if err := cr.CommitFlags(cmd); err != nil {
 		return nil, err
 	}
@@ -351,7 +364,7 @@ func (cr *Request) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
 	return nss, nil
 }
 
-func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func (cr *CobraRequest) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()
 	nss, err := cr.GetAllNamespaces(cmd)
 	if err != nil {
@@ -368,7 +381,7 @@ func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toCompl
 	return nss, cobra.ShellCompDirectiveNoFileComp
 }
 
-func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func (cr *CobraRequest) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()
 	config, err := cr.GetConfig(cmd)
 	if err != nil {
@@ -392,7 +405,7 @@ func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplet
 	return cs, cobra.ShellCompDirectiveNoFileComp
 }
 
-func (cr *Request) GetConfig(cmd *cobra.Command) (*api.Config, error) {
+func (cr *CobraRequest) GetConfig(cmd *cobra.Command) (*api.Config, error) {
 	if err := cr.CommitFlags(cmd); err != nil {
 		return nil, err
 	}

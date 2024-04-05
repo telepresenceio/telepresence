@@ -9,7 +9,7 @@ import (
 )
 
 func connectCmd() *cobra.Command {
-	var request *daemon.Request
+	var request *daemon.CobraRequest
 
 	cmd := &cobra.Command{
 		Use:   "connect [flags] [-- <command to run while connected>]",

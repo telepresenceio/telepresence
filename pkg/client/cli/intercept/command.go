@@ -12,6 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -39,10 +41,11 @@ type Command struct {
 	DockerMount        string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 	Cmdline            []string // Command[1:]
 
-	Mechanism      string // --mechanism tcp
-	MechanismArgs  []string
-	ExtendedInfo   []byte
-	DetailedOutput bool
+	Mechanism       string // --mechanism tcp
+	MechanismArgs   []string
+	ExtendedInfo    []byte
+	FormattedOutput bool
+	DetailedOutput  bool
 }
 
 func (a *Command) AddFlags(cmd *cobra.Command) {
@@ -124,6 +127,7 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 	}
 	a.Name = positional[0]
 	a.Cmdline = positional[1:]
+	a.FormattedOutput = output.WantsFormatted(cmd)
 	if a.LocalOnly {
 		// Not actually intercepting anything -- check that the flags make sense for that
 		if a.AgentName != "" {
@@ -184,7 +188,9 @@ func (a *Command) Run(cmd *cobra.Command, positional []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
-	return NewState(cmd, a).Run(cmd.Context())
+	ctx := dos.WithStdio(cmd.Context(), cmd)
+	_, err := NewState(a).Run(ctx)
+	return err
 }
 
 func (a *Command) ValidateDockerArgs() error {

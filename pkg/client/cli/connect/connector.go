@@ -164,7 +164,7 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, kubeContext, name
 	}
 	info, err := daemon.LoadMatchingInfo(ctx, match)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) && !cr.Docker {
 			// Try dialing the host daemon using the well known socket.
 			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx)); sockErr == nil {
 				daemonID, err := daemon.NewIdentifier("", kubeContext, namespace, proc.RunningInContainer())
