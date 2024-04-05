@@ -246,7 +246,6 @@ func NewSession(
 		tmgr.managerConn.Close()
 		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
-	daemonStatus, err := tmgr.rootDaemon.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
@@ -255,21 +254,7 @@ func NewSession(
 	dlog.Debug(ctx, "Finished connecting to traffic manager")
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
-	info = &rpc.ConnectInfo{
-		Error:            rpc.ConnectInfo_UNSPECIFIED,
-		ClusterContext:   cluster.Kubeconfig.Context,
-		ClusterServer:    cluster.Kubeconfig.Server,
-		ClusterId:        cluster.GetClusterId(ctx),
-		ManagerInstallId: cluster.GetManagerInstallId(ctx),
-		SessionInfo:      tmgr.SessionInfo(),
-		ConnectionName:   tmgr.daemonID.Name,
-		KubeFlags:        tmgr.OriginalFlagMap,
-		Namespace:        cluster.Namespace,
-		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: tmgr.getCurrentInterceptInfos()},
-		ManagerNamespace: cluster.Kubeconfig.GetManagerNamespace(),
-		DaemonStatus:     daemonStatus,
-	}
-	return ctx, tmgr, info
+	return ctx, tmgr, tmgr.status(ctx, true)
 }
 
 // SetSelf is for internal use by extensions.
@@ -886,9 +871,12 @@ func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.C
 }
 
 func (s *session) Status(c context.Context) *rpc.ConnectInfo {
+	return s.status(c, false)
+}
+
+func (s *session) status(c context.Context, initial bool) *rpc.ConnectInfo {
 	cfg := s.Kubeconfig
 	ret := &rpc.ConnectInfo{
-		Error:              rpc.ConnectInfo_ALREADY_CONNECTED,
 		ClusterContext:     cfg.Context,
 		ClusterServer:      cfg.Server,
 		ClusterId:          s.GetClusterId(c),
@@ -898,6 +886,7 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 		KubeFlags:          s.OriginalFlagMap,
 		Namespace:          s.Namespace,
 		Intercepts:         &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
+		ManagerNamespace:   cfg.GetManagerNamespace(),
 		SubnetViaWorkloads: s.subnetViaWorkloads,
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
@@ -905,7 +894,9 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 			Executable: client.GetExe(c),
 			Name:       client.DisplayName,
 		},
-		ManagerNamespace: cfg.GetManagerNamespace(),
+	}
+	if !initial {
+		ret.Error = rpc.ConnectInfo_ALREADY_CONNECTED
 	}
 	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster().MappedNamespaces) > 0 {
 		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
