@@ -10,7 +10,7 @@ import (
 )
 
 type listNamespacesCommand struct {
-	rq *daemon.Request
+	rq *daemon.CobraRequest
 }
 
 func listNamespaces() *cobra.Command {
