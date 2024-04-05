@@ -285,8 +285,7 @@ func newUserDaemon(conn *grpc.ClientConn, daemonID *daemon.Identifier) *daemon.U
 	}
 }
 
-func EnsureUserDaemon(ctx context.Context, required bool) (context.Context, error) {
-	var err error
+func EnsureUserDaemon(ctx context.Context, required bool) (_ context.Context, err error) {
 	var ud *daemon.UserClient
 	defer func() {
 		if err == nil && required && !ud.Containerized() {
