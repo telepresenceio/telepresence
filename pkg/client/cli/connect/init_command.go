@@ -69,3 +69,20 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 	}
 	return nil
 }
+
+// Initializer ensures that the context is initialized with connection to the user daemon, and that
+// the root daemon is running if necessary.
+func Initializer(ctx context.Context) (context.Context, error) {
+	var err error
+	if cr := daemon.GetRequest(ctx); cr == nil {
+		cr = daemon.NewDefaultRequest()
+		ctx = daemon.WithRequest(ctx, cr)
+	}
+	if ctx, err = EnsureUserDaemon(ctx, true); err != nil {
+		return ctx, err
+	}
+	if err = ensureDaemonVersion(ctx); err != nil {
+		return ctx, err
+	}
+	return ctx, nil
+}

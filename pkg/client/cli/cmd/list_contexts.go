@@ -10,7 +10,7 @@ import (
 )
 
 type listContextsCommand struct {
-	rq *daemon.Request
+	rq *daemon.CobraRequest
 }
 
 func listContexts() *cobra.Command {
