@@ -61,6 +61,7 @@ type Env struct {
 	AgentInitResources       *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
 	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string"`
 	AgentInjectorSecret      string                      `env:"AGENT_INJECTOR_SECRET,    parser=nonempty-string"`
+	AgentSecurityContext     *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,   parser=json-security-context, default="`
 
 	ClientRoutingAlsoProxySubnets        []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets       []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
@@ -84,6 +85,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorCon
 		PullPolicy:          e.AgentImagePullPolicy,
 		PullSecrets:         e.AgentImagePullSecrets,
 		AppProtocolStrategy: e.AgentAppProtocolStrategy,
+		SecurityContext:     e.AgentSecurityContext,
 	}, nil
 }
 
@@ -210,6 +212,21 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 			},
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(*core.ResourceRequirements))) },
+	}
+	fhs[reflect.TypeOf(&core.SecurityContext{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"json-security-context": func(js string) (any, error) {
+				if js == "" {
+					return nil, nil
+				}
+				var rr *core.SecurityContext
+				if err := json.Unmarshal([]byte(js), &rr); err != nil {
+					return nil, err
+				}
+				return rr, nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(*core.SecurityContext))) },
 	}
 	return fhs
 }

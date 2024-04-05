@@ -191,6 +191,9 @@ type Sidecar struct {
 
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`
+
+	// SecurityContext for the sidecar
+	SecurityContext *core.SecurityContext `json:"securityContext,omitempty"`
 }
 
 func (s *Sidecar) AgentConfig() *Sidecar {

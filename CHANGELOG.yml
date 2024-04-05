@@ -59,6 +59,14 @@ items:
           This allows another process with a kubeconfig already loaded in memory
           to directly pass it to <code>telepresence connect</code> without needing a separate
           file. Simply use a dash "-" as the filename for the <code>--kubeconfig</code> flag.
+      - type: feature
+        title: Add ability to specify agent security context.
+        body: >-
+          A new Helm chart value <code>agent.securityContext</code> that will allow configuring the security context of
+          the injected traffic agent.  The value can be set to a valid Kubernetes securityContext object, or can be set
+          to an empty value (<code>{}</code>) to ensure the agent has no defined security context.  If no value is specified,
+          the traffic manager will set the agent's security context to the same as the first container's of the workload
+          being injected into.
       - type: change
         title: Tracing is no longer enabled by default.
         body: >-

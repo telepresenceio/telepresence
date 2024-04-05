@@ -48,6 +48,7 @@ type BasicGeneratorConfig struct {
 	PullPolicy          string
 	PullSecrets         []core.LocalObjectReference
 	AppProtocolStrategy k8sapi.AppProtocolStrategy
+	SecurityContext     *core.SecurityContext
 }
 
 func (cfg *BasicGeneratorConfig) Generate(
@@ -104,21 +105,22 @@ func (cfg *BasicGeneratorConfig) Generate(
 	}
 
 	ag := &agentconfig.Sidecar{
-		AgentImage:    cfg.QualifiedAgentImage,
-		AgentName:     wl.GetName(),
-		LogLevel:      cfg.LogLevel,
-		Namespace:     wl.GetNamespace(),
-		WorkloadName:  wl.GetName(),
-		WorkloadKind:  wl.GetKind(),
-		ManagerHost:   ManagerAppName + "." + cfg.ManagerNamespace,
-		ManagerPort:   cfg.ManagerPort,
-		APIPort:       cfg.APIPort,
-		TracingPort:   cfg.TracingPort,
-		Containers:    ccs,
-		InitResources: cfg.InitResources,
-		Resources:     cfg.Resources,
-		PullPolicy:    cfg.PullPolicy,
-		PullSecrets:   cfg.PullSecrets,
+		AgentImage:      cfg.QualifiedAgentImage,
+		AgentName:       wl.GetName(),
+		LogLevel:        cfg.LogLevel,
+		Namespace:       wl.GetNamespace(),
+		WorkloadName:    wl.GetName(),
+		WorkloadKind:    wl.GetKind(),
+		ManagerHost:     ManagerAppName + "." + cfg.ManagerNamespace,
+		ManagerPort:     cfg.ManagerPort,
+		APIPort:         cfg.APIPort,
+		TracingPort:     cfg.TracingPort,
+		Containers:      ccs,
+		InitResources:   cfg.InitResources,
+		Resources:       cfg.Resources,
+		PullPolicy:      cfg.PullPolicy,
+		PullSecrets:     cfg.PullSecrets,
+		SecurityContext: cfg.SecurityContext,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil
