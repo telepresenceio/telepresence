@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	ignore "github.com/sabhiram/go-gitignore"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"github.com/puzpuzpuz/xsync/v3"
 	core "k8s.io/api/core/v1"
 
