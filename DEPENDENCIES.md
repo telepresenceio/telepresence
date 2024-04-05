@@ -16,7 +16,7 @@ following Free and Open Source software:
     github.com/Microsoft/hcsshim                                                 v0.12.1                               MIT license
     github.com/asaskevich/govalidator                                            v0.0.0-20230301143203-a9d515a09cc2    MIT license
     github.com/beorn7/perks                                                      v1.0.1                                MIT license
-    github.com/blang/semver                                                      v3.5.1+incompatible                   MIT license
+    github.com/blang/semver/v4                                                   v4.0.0                                MIT license
     github.com/cenkalti/backoff/v4                                               v4.3.0                                MIT license
     github.com/cespare/xxhash/v2                                                 v2.2.0                                MIT license
     github.com/chai2010/gettext-go                                               v1.0.2                                3-clause BSD license

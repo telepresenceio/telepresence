@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"

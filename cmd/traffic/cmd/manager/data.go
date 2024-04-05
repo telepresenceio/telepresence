@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
