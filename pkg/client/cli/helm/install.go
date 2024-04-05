@@ -10,14 +10,21 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/cli/values"
+	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 const (
@@ -37,12 +44,78 @@ const (
 )
 
 type Request struct {
+	values.Options
 	Type        RequestType
 	ValuesJson  []byte
 	ReuseValues bool
 	ResetValues bool
 	Crds        bool
 	NoHooks     bool
+}
+
+func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) error {
+	if hr.ReuseValues && hr.ResetValues {
+		return errcat.User.New("--reset-values and --reuse-values are mutually exclusive")
+	}
+
+	if cr.ManagerNamespace == "" {
+		if ns, ok := cr.KubeFlags["namespace"]; ok {
+			cr.ManagerNamespace = ns
+		} else {
+			cr.ManagerNamespace = "ambassador"
+		}
+	}
+	dlog.Debugf(ctx, "using manager namespace %q", cr.ManagerNamespace)
+
+	allValues, err := hr.MergeValues(getter.All(cli.New()))
+	if err != nil {
+		return err
+	}
+
+	hr.ValuesJson, err = json.Marshal(allValues)
+	if err != nil {
+		return err
+	}
+
+	var config *client.Kubeconfig
+	config, err = client.DaemonKubeconfig(ctx, cr)
+	if err != nil {
+		return err
+	}
+
+	var cluster *k8s.Cluster
+	cluster, err = k8s.ConnectCluster(ctx, cr, config)
+	if err != nil {
+		return err
+	}
+
+	if hr.Type == Uninstall {
+		err = DeleteTrafficManager(ctx, cluster.Kubeconfig, cluster.GetManagerNamespace(), false, hr)
+	} else {
+		dlog.Debug(ctx, "ensuring that traffic-manager exists")
+		err = EnsureTrafficManager(cluster.WithK8sInterface(ctx), cluster.Kubeconfig, cluster.GetManagerNamespace(), hr)
+	}
+	if err != nil {
+		return err
+	}
+
+	var msg string
+	switch hr.Type {
+	case Install:
+		msg = "installed"
+	case Upgrade:
+		msg = "upgraded"
+	case Uninstall:
+		msg = "uninstalled"
+	}
+
+	updatedResource := "Traffic Manager"
+	if hr.Crds {
+		updatedResource = "Telepresence CRDs"
+	}
+
+	ioutil.Printf(dos.Stdout(ctx), "\n%s %s successfully\n", updatedResource, msg)
+	return nil
 }
 
 func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string) (*action.Configuration, error) {
