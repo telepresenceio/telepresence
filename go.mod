@@ -15,6 +15,7 @@ require (
 	github.com/datawire/go-fuseftp/rpc v0.4.4
 	github.com/datawire/k8sapi v0.1.4
 	github.com/datawire/metriton-go-client v0.1.1
+	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v26.0.0+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/godbus/dbus/v5 v5.1.0
@@ -86,7 +87,6 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/cli v26.0.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.8.1 // indirect
