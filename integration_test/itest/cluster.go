@@ -180,7 +180,11 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 		s.rootdPProf = uint16(port)
 	}
 	if s.prePushed {
-		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
+		exe := "telepresence"
+		if runtime.GOOS == "windows" {
+			exe = "telepresence.exe"
+		}
+		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", exe)
 	}
 	errs := make(chan error, 10)
 	wg := &sync.WaitGroup{}
