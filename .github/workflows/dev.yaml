@@ -86,11 +86,12 @@ jobs:
           TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
         run: make client-image
       - name: Create cluster
-        uses: datawire/infra-actions/provision-cluster@v0.2.6
+        uses: datawire/infra-actions/provision-cluster@v0.2.7
         with:
           kubeconfig: ${{ env.KUBECONFIG }}
           kubeceptionToken: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
           kubeceptionProfile: small
+          lifespan: 7200
           distribution: ${{ matrix.clusters.distribution }}
           version: ${{ matrix.clusters.version }}
           gkeCredentials: '{"project_id": "foo"}' # See https://github.com/datawire/infra-actions/issues/66
@@ -114,7 +115,7 @@ jobs:
         with:
           max_attempts: 3
           shell: bash
-          timeout_minutes: 60
+          timeout_minutes: 90
           command: |
             set -ex
             if [[ ${RUNNER_OS} == "Windows" ]]; then
