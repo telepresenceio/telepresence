@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
@@ -19,7 +18,6 @@ func (ic *intercept) shouldMount() bool {
 // startMount starts the mount for the given podInterceptKey.
 // It assumes that the user has called shouldMount and is sure that something will be started.
 func (ic *intercept) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGroup) {
-	var fuseftp rpc.FuseFTPClient
 	useFtp := client.GetConfig(ctx).Intercept().UseFtp
 	var port int32
 	mountCtx := ctx
@@ -34,10 +32,6 @@ func (ic *intercept) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 		}
 		// The FTP mounter survives multiple starts for the same intercept. It just resets the address
 		mountCtx = ic.ctx
-		if fuseftp = userd.GetService(ctx).FuseFTPMgr().GetFuseFTPClient(ctx); fuseftp == nil {
-			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
-			return
-		}
 		port = ic.FtpPort
 	} else {
 		if ic.SftpPort == 0 {
@@ -54,7 +48,7 @@ func (ic *intercept) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 			session := userd.GetSession(ctx)
 			m = remotefs.NewBridgeMounter(session.SessionInfo().SessionId, session.ManagerClient(), uint16(ic.localMountPort))
 		case useFtp:
-			m = remotefs.NewFTPMounter(fuseftp, iceptWG)
+			m = remotefs.NewFTPMounter(iceptWG)
 		default:
 			m = remotefs.NewSFTPMounter(iceptWG, podWG)
 		}

@@ -36,14 +36,11 @@ export DOCKER_BUILDKIT := 1
 .PHONY: FORCE
 FORCE:
 
-# Build with CGO_ENABLED=0 on all platforms to ensure that the binary is as
-# portable as possible, but we must make an exception for darwin, because
-# the Go implementation of the DNS resolver doesn't work properly there unless
-# it's using clib
-ifeq ($(GOOS),darwin)
-CGO_ENABLED=1
-else
+# FTP requires CGO on all platforms but windows.
+ifeq ($(GOOS),windows)
 CGO_ENABLED=0
+else
+CGO_ENABLED=1
 endif
 
 ifeq ($(GOOS),windows)
@@ -134,20 +131,7 @@ else
 	sdkroot=
 endif
 
-ifeq ($(DOCKER_BUILD),1)
 build-deps:
-else
-FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
-
-$(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
-	mkdir -p $(BUILDDIR)
-	curl --fail -L https://github.com/datawire/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
-
-pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
-	cp $< $@
-
-build-deps: pkg/client/remotefs/fuseftp.bits
-endif
 
 ifeq ($(GOHOSTOS),windows)
 WINTUN_VERSION=0.14.1

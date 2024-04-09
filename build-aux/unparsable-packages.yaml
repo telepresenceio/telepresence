@@ -10,6 +10,8 @@ sigs.k8s.io/json:
   - Apache-2.0
 sigs.k8s.io/json/internal/golang/encoding/json:
   - BSD-3-Clause
+github.com/winfsp/cgofuse/fuse:
+  - MIT
 github.com/fclairamb/go-log:
   - MIT
 github.com/fclairamb/go-log/noop:
