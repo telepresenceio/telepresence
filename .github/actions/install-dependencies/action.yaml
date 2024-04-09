@@ -16,6 +16,10 @@ runs:
         sudo apt-get update
         sudo apt-get install -y sshfs socat libfuse-dev make jq
         sudo sh -c 'echo user_allow_other >> /etc/fuse.conf'
+
+        if [[ ${RUNNER_ARCH} == "ARM64" ]]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+        fi
     - if: runner.os == 'macOS'
       name: install macOS dependencies
       shell: bash

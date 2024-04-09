@@ -11,17 +11,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - name: "Install dependencies"
-        env:
-          HOMEBREW_NO_INSTALL_FROM_API: ""
-        run: |
-          brew untap homebrew/core || true
-          brew untap homebrew/cask || true
-          brew update
-          brew install --cask macfuse
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
       - name: Lint
         run: make lint
       - name: "Test arm64 build"
@@ -42,34 +33,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - name: "Download winfsp"
-        uses: nick-fields/retry/@v3
-        with:
-          max_attempts: 5
-          timeout_minutes: 1
-          shell: bash
-          command: make winfsp.msi
-      - name: "Download wintun"
-        uses: nick-fields/retry/@v3
-        with:
-          max_attempts: 5
-          timeout_minutes: 1
-          shell: bash
-          command: make wintun.dll
-      - name: install make
-        uses: nick-fields/retry/@v3
-        with:
-          max_attempts: 5
-          timeout_minutes: 1
-          command: choco install make
-      - name: "Install winfsp"
-        shell: powershell
-        run: |
-          Start-Process msiexec -Wait -verb runAs -Args "/i build-output\\winfsp.msi /passive /qn /L*V winfsp-install.log"
-          [Environment]::SetEnvironmentVariable("Path", "C:\\Program Files (x86)\\WinFsp\\inc\\fuse;$ENV:Path", "Machine")
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
       - name: Build
         run: make build
       - name: Lint
@@ -80,8 +45,6 @@ jobs:
           max_attempts: 3
           timeout_minutes: 12
           command: |
-            $ENV:DTEST_KUBECONFIG = "${{ steps.kluster.outputs.kubeconfig }}"
-            $ENV:DTEST_REGISTRY = "docker.io/datawire"
             make check-unit
 
   linux-amd64:
@@ -91,13 +54,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y socat make jq
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
       - name: Lint
         run: make lint
       - name: "Test amd64 build"
@@ -117,17 +75,12 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y socat gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make jq
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
       - name: Lint
         run: make lint
       - name: "Test arm64 build"
-        run: GOARCH=arm64 CC=aarch64-linux-gnu-gcc make build
+        run: CC=aarch64-linux-gnu-gcc make build
       - name: Run tests
         uses: nick-fields/retry/@v3
         with:
