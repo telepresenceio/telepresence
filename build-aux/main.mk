@@ -54,6 +54,8 @@ BEXE=
 BZIP=
 endif
 
+EMBED_FUSEFTP=1
+
 # Generate: artifacts that get checked in to Git
 # ==============================================
 
@@ -137,6 +139,7 @@ endif
 ifeq ($(DOCKER_BUILD),1)
 build-deps:
 else
+ifeq ($(EMBED_FUSEFTP),1)
 FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
 
 $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
@@ -147,6 +150,9 @@ pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) F
 	cp $< $@
 
 build-deps: pkg/client/remotefs/fuseftp.bits
+else
+build-deps:
+endif
 endif
 
 ifeq ($(GOHOSTOS),windows)
@@ -180,7 +186,11 @@ ifeq ($(DOCKER_BUILD),1)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -tags docker -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 else
 # -buildmode=pie addresses https://github.com/datawire/telepresence2-proprietary/issues/315
+ifeq ($(EMBED_FUSEFTP),1)
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -tags embed_fuseftp -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+else
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+endif
 endif
 
 ifeq ($(GOOS),windows)

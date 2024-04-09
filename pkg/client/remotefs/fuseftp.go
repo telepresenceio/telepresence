@@ -1,15 +1,11 @@
 //go:build !docker
-// +build !docker
 
 package remotefs
 
 import (
 	"context"
 	_ "embed"
-	"errors"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"time"
 
@@ -19,12 +15,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/go-fuseftp/rpc"
-	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
-
-//go:embed fuseftp.bits
-var fuseftpBits []byte
 
 type fuseFtpMgr struct {
 	startFuseCh chan struct{}
@@ -91,23 +83,12 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	if runtime.GOOS == "windows" {
 		exe = "fuseftp.exe"
 	}
-	qn := filepath.Join(filelocation.AppUserCacheDir(ctx), exe)
-	var sz int
-	st, err := os.Stat(qn)
+	qn, err := getFuseFTPServer(ctx, exe)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		sz = 0
-	} else {
-		sz = int(st.Size())
+		dlog.Warnf(ctx, "no fuseftp server is installed in PATH %s, FTP mounts will be disabled: %v", os.Getenv("PATH"), err)
+		return err
 	}
-
-	if len(fuseftpBits) != sz {
-		if err = os.WriteFile(qn, fuseftpBits, 0o700); err != nil {
-			return err
-		}
-	}
+	dlog.Infof(ctx, "using FuseFTP server %s", qn)
 
 	sf, err := os.CreateTemp("", "fuseftp-*.socket")
 	if err != nil {
