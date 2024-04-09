@@ -34,9 +34,6 @@ tst-manager
 # The Chart directory
 !/charts/telepresence
 
-# Downloaded fuseftp bits
-fuseftp.bits
-
 # Needed to build on windows
 .wintools
 .gocache

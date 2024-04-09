@@ -28,7 +28,7 @@ following Free and Open Source software:
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f    Apache License 2.0
     github.com/datawire/envconfig                                                v0.0.0-20221012222025-09524dc7d59b    Apache License 2.0
     github.com/datawire/go-ftpserver                                             v0.1.3                                Apache License 2.0
-    github.com/datawire/go-fuseftp/rpc                                           v0.4.4                                Apache License 2.0
+    github.com/datawire/go-fuseftp                                               v0.4.4                                Apache License 2.0
     github.com/datawire/k8sapi                                                   v0.1.4                                Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                Apache License 2.0
     github.com/davecgh/go-spew                                                   v1.1.1                                ISC license
@@ -78,6 +78,7 @@ following Free and Open Source software:
     github.com/huandu/xstrings                                                   v1.4.0                                MIT license
     github.com/imdario/mergo                                                     v0.3.16                               3-clause BSD license
     github.com/inconshreveable/mousetrap                                         v1.1.0                                Apache License 2.0
+    github.com/jlaffaye/ftp                                                      v0.1.0                                ISC license
     github.com/jmoiron/sqlx                                                      v1.3.5                                MIT license
     github.com/josharian/intern                                                  v1.0.1-0.20211109044230-42b52b674af5  MIT license
     github.com/json-iterator/go                                                  v1.1.12                               MIT license
@@ -130,6 +131,7 @@ following Free and Open Source software:
     github.com/telepresenceio/telepresence/rpc/v2                                (modified)                            Apache License 2.0
     github.com/vishvananda/netlink                                               v1.2.1-beta.2                         Apache License 2.0
     github.com/vishvananda/netns                                                 v0.0.4                                Apache License 2.0
+    github.com/winfsp/cgofuse                                                    v1.5.0                                MIT license
     github.com/xeipuuv/gojsonpointer                                             v0.0.0-20190905194746-02993c407bfb    Apache License 2.0
     github.com/xeipuuv/gojsonreference                                           v0.0.0-20180127040603-bd5ef7bd5415    Apache License 2.0
     github.com/xeipuuv/gojsonschema                                              v1.2.0                                Apache License 2.0

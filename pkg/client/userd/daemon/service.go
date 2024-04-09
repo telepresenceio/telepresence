@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
@@ -79,8 +78,6 @@ type service struct {
 	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
 
-	fuseFtpMgr remotefs.FuseFTPManager
-
 	// Run root session in-process
 	rootSessionInProc bool
 
@@ -98,7 +95,6 @@ func NewService(ctx context.Context, _ *dgroup.Group, cfg client.Config, srv *gr
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
-		fuseFtpMgr:      remotefs.NewFuseFTPManager(),
 	}
 	s.self = s
 	if srv != nil {
@@ -134,10 +130,6 @@ func (s *service) ListenerAddress(ctx context.Context) string {
 
 func (s *service) SetSelf(self userd.Service) {
 	s.self = self
-}
-
-func (s *service) FuseFTPMgr() remotefs.FuseFTPManager {
-	return s.fuseFtpMgr
 }
 
 func (s *service) RootSessionInProcess() bool {
@@ -464,16 +456,6 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, userd.ProcessName); err != nil {
 		return err
-	}
-
-	if cfg.Intercept().UseFtp {
-		g.Go("fuseftp-server", func(c context.Context) error {
-			if err := s.fuseFtpMgr.DeferInit(c); err != nil {
-				dlog.Error(c, err)
-			}
-			<-c.Done()
-			return nil
-		})
 	}
 
 	g.Go("server-grpc", func(c context.Context) (err error) {
