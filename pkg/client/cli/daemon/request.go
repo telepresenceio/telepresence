@@ -161,6 +161,20 @@ func (cr *Request) Commit(ctx context.Context) (context.Context, error) {
 	if err != nil {
 		return ctx, errcat.User.New(err)
 	}
+	if len(cr.KubeconfigData) > 0 {
+		kc, err := clientcmd.Load(cr.KubeconfigData)
+		if err != nil {
+			return ctx, fmt.Errorf("unable to parse kubeconfig: %w", err)
+		}
+		if cr.KubeFlags == nil {
+			cr.KubeFlags = make(map[string]string)
+		}
+		if _, ok := cr.KubeFlags["context"]; !ok {
+			cr.KubeFlags["context"] = kc.CurrentContext
+		}
+		// kubernetes will not understand "-"
+		delete(cr.KubeFlags, "kubeconfig")
+	}
 	return context.WithValue(ctx, requestKey{}, cr), nil
 }
 
