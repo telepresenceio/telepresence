@@ -241,7 +241,7 @@ func NewSession(
 		}
 	}
 
-	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi)
+	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi, cr.IsPodDaemon)
 	if err != nil {
 		tmgr.managerConn.Close()
 		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
@@ -1104,13 +1104,13 @@ func (s *session) getOutboundInfo(ctx context.Context) *rootdRpc.OutboundInfo {
 	return info
 }
 
-func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundInfo) (rd rootdRpc.DaemonClient, err error) {
+func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundInfo, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
 	// establish a connection to the root daemon gRPC grpcService
 	dlog.Info(ctx, "Connecting to root daemon...")
 	svc := userd.GetService(ctx)
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
-		rootSession, err := rootd.NewInProcSession(ctx, oi, s.managerClient, s.managerVersion)
+		rootSession, err := rootd.NewInProcSession(ctx, oi, s.managerClient, s.managerVersion, isPodDaemon)
 		if err != nil {
 			return nil, err
 		}

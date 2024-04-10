@@ -121,9 +121,10 @@ func NewInProcSession(
 	mi *rpc.OutboundInfo,
 	mc manager.ManagerClient,
 	ver semver.Version,
+	isPodDaemon bool,
 ) (*InProcSession, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	session, err := newSession(ctx, mi, &userdToManagerShortcut{mc}, ver)
+	session, err := newSession(ctx, mi, &userdToManagerShortcut{mc}, ver, isPodDaemon)
 	if err != nil {
 		cancel()
 		return nil, err
