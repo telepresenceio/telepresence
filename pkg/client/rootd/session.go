@@ -390,7 +390,7 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 	dlog.Infof(c, "allow-conflicting subnets %v", s.allowConflictingSubnets)
 
 	s.dnsServer = dns.NewServer(mi.Dns, s.clusterLookup)
-	s.SetSearchPath(c, nil, nil)
+	s.SetTopLevelDomains(c, nil)
 	return s, nil
 }
 
@@ -1223,8 +1223,8 @@ func (s *Session) waitForProxyViaWorkloads(ctx context.Context) error {
 	return nil
 }
 
-func (s *Session) SetSearchPath(ctx context.Context, paths []string, namespaces []string) {
-	s.dnsServer.SetSearchPath(ctx, paths, namespaces)
+func (s *Session) SetTopLevelDomains(ctx context.Context, topLevelDomains []string) {
+	s.dnsServer.SetTopLevelDomainsAndSearchPath(ctx, topLevelDomains, s.namespace)
 }
 
 func (s *Session) SetExcludes(ctx context.Context, excludes []string) {

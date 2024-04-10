@@ -69,6 +69,11 @@ var DefaultExcludeSuffixes = []string{
 	".ru",
 }
 
+type nsAndDomains struct {
+	domains   []string
+	namespace string
+}
+
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface.
 type Server struct {
 	sync.RWMutex
@@ -96,8 +101,8 @@ type Server struct {
 	// used by the darwin resolver to keep track of files to add or remove.
 	domains map[string]struct{}
 
-	// searchPathCh receives requests to change the search path.
-	searchPathCh chan []string
+	// nsAndDomainsCh receives requests to change the top level domains and the search path.
+	nsAndDomainsCh chan nsAndDomains
 
 	includeSuffixes []string
 
@@ -176,7 +181,7 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 		remoteIP:        config.RemoteIp,
 		dropSuffixes:    []string{tel2SubDomainDot},
 		search:          []string{tel2SubDomain},
-		searchPathCh:    make(chan []string, 5),
+		nsAndDomainsCh:  make(chan nsAndDomains, 5),
 		clusterDomain:   defaultClusterDomain,
 		clusterLookup:   clusterLookup,
 		ready:           make(chan struct{}),
@@ -187,16 +192,20 @@ func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 	return s
 }
 
-// tel2SubDomain fixes a search-path problem when using Docker.
+// tel2SubDomain helps differentiate between single label and qualified DNS queries.
 //
-// Docker uses its own search-path for single label names. This means that the search path that is
-// declared in Telepresence DNS resolver is ignored, although the rest of the DNS-resolution works
-// OK. Since the search-path is likely to change during a session, a stable fake domain is needed
-// to emulate the search-path. That fake-domain can then be used in the search path declared in the
-// Docker config.
+// Dealing with single label names is tricky because what we really want is to receive the
+// name and then forward it verbatim to the DNS resolver in the cluster so that it can
+// add whatever search paths to it that it sees fit, but in order to receive single name
+// queries in the first place, our DNS resolver must have a search path that adds a domain
+// that the DNS system knows that we will handle.
 //
-// The tel2SubDomain fills this purpose and a request for "<single label name>.<tel2SubDomain>"
-// will be resolved as "<single label name>.<currently intercepted namespace>".
+// Example flow:
+// The user queries for the name "alpha". The DNS system on the host tries the search path
+// of our DNS resolver which contains "tel2-search" and creates the name "alpha.tel2-search".
+// The DNS system now discovers that our DNS resolver handles that domain, so we receive
+// the query. We then strip the "tel2-search" and send the original single label name to the
+// cluster, and we add it back before we forward the reply.
 const (
 	tel2SubDomain    = "tel2-search"
 	tel2SubDomainDot = tel2SubDomain + "."
@@ -412,23 +421,15 @@ func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
 	s.Unlock()
 }
 
-// SetSearchPath updates the DNS search path used by the resolver.
-func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) {
-	allPaths := make([]string, 0, len(paths)+len(namespaces)+1)
-	allPaths = append(allPaths, tel2SubDomain)
-	if len(namespaces) > 0 {
-		// Provide direct access to intercepted namespaces
-		s.RLock()
-		for _, ns := range namespaces {
-			paths = append(paths, ns+".svc."+s.clusterDomain)
-		}
-		s.RUnlock()
+// SetTopLevelDomainsAndSearchPath updates the DNS top level domains and the search path used by the resolver.
+func (s *Server) SetTopLevelDomainsAndSearchPath(ctx context.Context, domains []string, namespace string) {
+	das := nsAndDomains{
+		domains:   domains,
+		namespace: namespace,
 	}
-	allPaths = append(allPaths, paths...)
-
 	select {
 	case <-ctx.Done():
-	case s.searchPathCh <- allPaths:
+	case s.nsAndDomainsCh <- das:
 	}
 }
 
@@ -493,46 +494,38 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, vif.Device) error, dev vif.Device) {
 	g.Go("SearchPaths", func(c context.Context) error {
 		s.performRecursionCheck(c)
-		prevPaths := s.search
-		unchanged := func(paths []string) bool {
-			if len(paths) != len(prevPaths) {
-				return false
-			}
-			for i, path := range paths {
-				if path != prevPaths[i] {
-					return false
-				}
-			}
-			return true
+		prevDas := nsAndDomains{
+			domains:   []string{},
+			namespace: "",
+		}
+		unchanged := func(das nsAndDomains) bool {
+			return das.namespace == prevDas.namespace && slices.Equal(das.domains, prevDas.domains)
 		}
 
 		for {
 			select {
 			case <-c.Done():
 				return nil
-			case paths := <-s.searchPathCh:
+			case das := <-s.nsAndDomainsCh:
 				// Only interested in the last one, and only if it differs
-				if len(s.searchPathCh) > 0 || unchanged(paths) {
+				if len(s.nsAndDomainsCh) > 0 || unchanged(das) {
 					continue
 				}
+				prevDas = das
 
-				dlog.Debugf(c, "%v -> %v", prevPaths, paths)
-				prevPaths = make([]string, len(paths))
-				copy(prevPaths, paths)
-
-				routes := make(map[string]struct{})
-				search := make([]string, 0)
-				for _, path := range paths {
-					path = strings.ToLower(path)
-					if path == tel2SubDomain || strings.ContainsRune(path, '.') {
-						search = append(search, path)
-					} else if path != "" {
-						routes[path] = struct{}{}
+				routes := make(map[string]struct{}, len(das.domains))
+				for _, domain := range das.domains {
+					if domain != "" {
+						routes[domain] = struct{}{}
 					}
 				}
 				s.Lock()
 				s.routes = routes
-				s.search = search
+
+				// The connected namespace must be included as a search path for the cases
+				// where it's up to the traffic-manager to resolve. It cannot resolve a single
+				// label name intended for other namespaces.
+				s.search = []string{tel2SubDomain, das.namespace}
 				s.Unlock()
 
 				if err := processor(c, dev); err != nil {

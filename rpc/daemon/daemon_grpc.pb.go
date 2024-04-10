@@ -22,18 +22,18 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Daemon_Version_FullMethodName          = "/telepresence.daemon.Daemon/Version"
-	Daemon_Status_FullMethodName           = "/telepresence.daemon.Daemon/Status"
-	Daemon_Quit_FullMethodName             = "/telepresence.daemon.Daemon/Quit"
-	Daemon_Connect_FullMethodName          = "/telepresence.daemon.Daemon/Connect"
-	Daemon_Disconnect_FullMethodName       = "/telepresence.daemon.Daemon/Disconnect"
-	Daemon_GetNetworkConfig_FullMethodName = "/telepresence.daemon.Daemon/GetNetworkConfig"
-	Daemon_SetDnsSearchPath_FullMethodName = "/telepresence.daemon.Daemon/SetDnsSearchPath"
-	Daemon_SetDNSExcludes_FullMethodName   = "/telepresence.daemon.Daemon/SetDNSExcludes"
-	Daemon_SetDNSMappings_FullMethodName   = "/telepresence.daemon.Daemon/SetDNSMappings"
-	Daemon_SetLogLevel_FullMethodName      = "/telepresence.daemon.Daemon/SetLogLevel"
-	Daemon_WaitForNetwork_FullMethodName   = "/telepresence.daemon.Daemon/WaitForNetwork"
-	Daemon_WaitForAgentIP_FullMethodName   = "/telepresence.daemon.Daemon/WaitForAgentIP"
+	Daemon_Version_FullMethodName               = "/telepresence.daemon.Daemon/Version"
+	Daemon_Status_FullMethodName                = "/telepresence.daemon.Daemon/Status"
+	Daemon_Quit_FullMethodName                  = "/telepresence.daemon.Daemon/Quit"
+	Daemon_Connect_FullMethodName               = "/telepresence.daemon.Daemon/Connect"
+	Daemon_Disconnect_FullMethodName            = "/telepresence.daemon.Daemon/Disconnect"
+	Daemon_GetNetworkConfig_FullMethodName      = "/telepresence.daemon.Daemon/GetNetworkConfig"
+	Daemon_SetDNSTopLevelDomains_FullMethodName = "/telepresence.daemon.Daemon/SetDNSTopLevelDomains"
+	Daemon_SetDNSExcludes_FullMethodName        = "/telepresence.daemon.Daemon/SetDNSExcludes"
+	Daemon_SetDNSMappings_FullMethodName        = "/telepresence.daemon.Daemon/SetDNSMappings"
+	Daemon_SetLogLevel_FullMethodName           = "/telepresence.daemon.Daemon/SetLogLevel"
+	Daemon_WaitForNetwork_FullMethodName        = "/telepresence.daemon.Daemon/WaitForNetwork"
+	Daemon_WaitForAgentIP_FullMethodName        = "/telepresence.daemon.Daemon/WaitForAgentIP"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -52,8 +52,8 @@ type DaemonClient interface {
 	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetNetworkConfig returns the current network configuration
 	GetNetworkConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*NetworkConfig, error)
-	// SetDnsSearchPath sets a new search path.
-	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetDNSTopLevelDomains sets a new search path.
+	SetDNSTopLevelDomains(ctx context.Context, in *Domains, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SetDNSExcludes sets the excludes field of DNSConfig.
 	SetDNSExcludes(ctx context.Context, in *SetDNSExcludesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SetDNSMappings sets the Mappings field of DNSConfig.
@@ -128,9 +128,9 @@ func (c *daemonClient) GetNetworkConfig(ctx context.Context, in *emptypb.Empty, 
 	return out, nil
 }
 
-func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *daemonClient) SetDNSTopLevelDomains(ctx context.Context, in *Domains, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, Daemon_SetDnsSearchPath_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, Daemon_SetDNSTopLevelDomains_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -198,8 +198,8 @@ type DaemonServer interface {
 	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GetNetworkConfig returns the current network configuration
 	GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error)
-	// SetDnsSearchPath sets a new search path.
-	SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error)
+	// SetDNSTopLevelDomains sets a new search path.
+	SetDNSTopLevelDomains(context.Context, *Domains) (*emptypb.Empty, error)
 	// SetDNSExcludes sets the excludes field of DNSConfig.
 	SetDNSExcludes(context.Context, *SetDNSExcludesRequest) (*emptypb.Empty, error)
 	// SetDNSMappings sets the Mappings field of DNSConfig.
@@ -235,8 +235,8 @@ func (UnimplementedDaemonServer) Disconnect(context.Context, *emptypb.Empty) (*e
 func (UnimplementedDaemonServer) GetNetworkConfig(context.Context, *emptypb.Empty) (*NetworkConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNetworkConfig not implemented")
 }
-func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
+func (UnimplementedDaemonServer) SetDNSTopLevelDomains(context.Context, *Domains) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetDNSTopLevelDomains not implemented")
 }
 func (UnimplementedDaemonServer) SetDNSExcludes(context.Context, *SetDNSExcludesRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDNSExcludes not implemented")
@@ -374,20 +374,20 @@ func _Daemon_GetNetworkConfig_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Daemon_SetDnsSearchPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Paths)
+func _Daemon_SetDNSTopLevelDomains_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Domains)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DaemonServer).SetDnsSearchPath(ctx, in)
+		return srv.(DaemonServer).SetDNSTopLevelDomains(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Daemon_SetDnsSearchPath_FullMethodName,
+		FullMethod: Daemon_SetDNSTopLevelDomains_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).SetDnsSearchPath(ctx, req.(*Paths))
+		return srv.(DaemonServer).SetDNSTopLevelDomains(ctx, req.(*Domains))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -514,8 +514,8 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Daemon_GetNetworkConfig_Handler,
 		},
 		{
-			MethodName: "SetDnsSearchPath",
-			Handler:    _Daemon_SetDnsSearchPath_Handler,
+			MethodName: "SetDNSTopLevelDomains",
+			Handler:    _Daemon_SetDNSTopLevelDomains_Handler,
 		},
 		{
 			MethodName: "SetDNSExcludes",

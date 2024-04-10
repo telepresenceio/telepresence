@@ -29,8 +29,8 @@ service Daemon {
   // GetNetworkConfig returns the current network configuration
   rpc GetNetworkConfig(google.protobuf.Empty) returns (NetworkConfig);
 
-  // SetDnsSearchPath sets a new search path.
-  rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
+  // SetDNSTopLevelDomains sets a new search path.
+  rpc SetDNSTopLevelDomains(Domains) returns (google.protobuf.Empty);
 
   // SetDNSExcludes sets the excludes field of DNSConfig.
   rpc SetDNSExcludes(SetDNSExcludesRequest) returns (google.protobuf.Empty);
@@ -55,10 +55,8 @@ message DaemonStatus {
   reserved 2, 3;
 }
 
-message Paths {
-  repeated string paths = 1;
-
-  repeated string namespaces = 2;
+message Domains {
+  repeated string domains = 1;
 }
 
 message DNSMapping {

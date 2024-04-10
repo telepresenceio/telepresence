@@ -515,21 +515,16 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 // send it to the DNS-resolver in the daemon.
 func (s *session) updateDaemonNamespaces(c context.Context) {
 	s.wlWatcher.setNamespacesToWatch(c, s.GetCurrentNamespaces(true))
-	var namespaces []string
-	if s.Namespace != "" {
-		namespaces = []string{s.Namespace}
-	}
-	// Avoid being locked for the remainder of this function.
 
 	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
 	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
-	paths := s.GetCurrentNamespaces(false)
-	dlog.Debugf(c, "posting search paths %v and namespaces %v", paths, namespaces)
+	namespaces := s.GetCurrentNamespaces(false)
+	dlog.Debugf(c, "posting namespaces %v", namespaces)
 
-	if _, err := s.rootDaemon.SetDnsSearchPath(c, &rootdRpc.Paths{Paths: paths, Namespaces: namespaces}); err != nil {
-		dlog.Errorf(c, "error posting search paths %v and namespaces %v to root daemon: %v", paths, namespaces, err)
+	if _, err := s.rootDaemon.SetDNSTopLevelDomains(c, &rootdRpc.Domains{Domains: namespaces}); err != nil {
+		dlog.Errorf(c, "error posting namespaces %v to root daemon: %v", namespaces, err)
 	}
-	dlog.Debug(c, "search paths posted successfully")
+	dlog.Debug(c, "namespaces posted successfully")
 }
 
 func (s *session) Epilog(ctx context.Context) {
@@ -710,8 +705,6 @@ func (s *session) ensureWatchers(ctx context.Context,
 	wg.Add(len(namespaces))
 	for _, ns := range namespaces {
 		if ns == "" {
-			// Don't use tm.ActualNamespace here because the accessibility of the namespace
-			// is actually determined once the watcher starts
 			ns = s.Namespace
 		}
 		wgp := &wg
@@ -738,14 +731,8 @@ func (s *session) workloadInfoSnapshot(
 
 	var nss []string
 	if filter == rpc.ListRequest_INTERCEPTS {
-		// Special case, we don't care about namespaces in general. Instead, we use the intercepted namespaces
-		if s.Namespace != "" {
-			nss = []string{s.Namespace}
-		}
-		if len(nss) == 0 {
-			// No active intercepts
-			return &rpc.WorkloadInfoSnapshot{}, nil
-		}
+		// Special case, we don't care about namespaces in general. Instead, we use the connected namespace
+		nss = []string{s.Namespace}
 	} else {
 		nss = make([]string, 0, len(namespaces))
 		for _, ns := range namespaces {

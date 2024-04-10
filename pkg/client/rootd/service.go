@@ -165,9 +165,9 @@ func (s *Service) Quit(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, e
 	return &emptypb.Empty{}, nil
 }
 
-func (s *Service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*emptypb.Empty, error) {
+func (s *Service) SetDNSTopLevelDomains(ctx context.Context, domains *rpc.Domains) (*emptypb.Empty, error) {
 	err := s.WithSession(func(ctx context.Context, session *Session) error {
-		session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
+		session.SetTopLevelDomains(ctx, domains.Domains)
 		return nil
 	})
 	return &emptypb.Empty{}, err
