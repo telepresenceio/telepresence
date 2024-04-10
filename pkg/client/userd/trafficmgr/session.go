@@ -214,15 +214,17 @@ func NewSession(
 	ctx = dnet.WithPortForwardDialer(ctx, tmgr.pfDialer)
 
 	oi := tmgr.getOutboundInfo(ctx)
-	rootRunning := userd.GetService(ctx).RootSessionInProcess()
-	if !rootRunning {
+	if !userd.GetService(ctx).RootSessionInProcess() {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rootRunning, err = socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
+		rootRunning, err := socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
 		if err != nil {
 			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
+		if !rootRunning {
+			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("rot daemon is not running"))
+		}
 
-		if rootRunning && client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
+		if client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
 			// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 			// must be executed by the user, not by root.
 			konfig, err := patcher.CreateExternalKubeConfig(ctx, cluster.EffectiveFlagMap, func([]string) (string, string, error) {
@@ -239,19 +241,14 @@ func NewSession(
 		}
 	}
 
-	var daemonStatus *rootdRpc.DaemonStatus
-	if rootRunning {
-		tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi)
-		if err != nil {
-			tmgr.managerConn.Close()
-			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-		}
-		daemonStatus, err = tmgr.rootDaemon.Status(ctx, &empty.Empty{})
-		if err != nil {
-			return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-		}
-	} else {
-		dlog.Info(ctx, "Root daemon is not running")
+	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi)
+	if err != nil {
+		tmgr.managerConn.Close()
+		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+	}
+	daemonStatus, err := tmgr.rootDaemon.Status(ctx, &empty.Empty{})
+	if err != nil {
+		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
 
 	// Collect data on how long connection time took
@@ -533,9 +530,6 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 // send it to the DNS-resolver in the daemon.
 func (s *session) updateDaemonNamespaces(c context.Context) {
 	s.wlWatcher.setNamespacesToWatch(c, s.GetCurrentNamespaces(true))
-	if s.rootDaemon == nil {
-		return
-	}
 	var namespaces []string
 	if s.Namespace != "" {
 		namespaces = []string{s.Namespace}
@@ -554,9 +548,7 @@ func (s *session) updateDaemonNamespaces(c context.Context) {
 }
 
 func (s *session) Epilog(ctx context.Context) {
-	if s.rootDaemon != nil {
-		_, _ = s.rootDaemon.Disconnect(ctx, &empty.Empty{})
-	}
+	_, _ = s.rootDaemon.Disconnect(ctx, &empty.Empty{})
 	_ = s.pfDialer.Close()
 	dlog.Info(ctx, "-- Session ended")
 	close(s.done)
@@ -918,12 +910,10 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 	if len(s.MappedNamespaces) > 0 || len(s.sessionConfig.Cluster().MappedNamespaces) > 0 {
 		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
 	}
-	if s.rootDaemon != nil {
-		var err error
-		ret.DaemonStatus, err = s.rootDaemon.Status(c, &empty.Empty{})
-		if err != nil {
-			return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
-		}
+	var err error
+	ret.DaemonStatus, err = s.rootDaemon.Status(c, &empty.Empty{})
+	if err != nil {
+		return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
 	return ret
 }

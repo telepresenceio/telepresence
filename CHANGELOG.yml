@@ -30,6 +30,16 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.18.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Fix panic due to root daemon not running.
+        body: >-
+          If a <code>telepresence connect</code> was made at a time when the root daemon was not running (an abnormal
+          condition) and a subsequent intercept was then made, a panic would occur when the port-forward to the agent
+          was set up. This is now fixed so that the initial <code>telepresence connect</code> is refused unless the root
+          daemon is running.
   - version: 2.18.1
     date: (TBD)
     notes:
