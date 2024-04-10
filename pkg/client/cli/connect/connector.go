@@ -251,6 +251,25 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 			args = append(args, "--embed-network")
 			args = append(args, "--name", "docker-"+hn)
 		}
+		err = daemon.SaveInfo(ctx,
+			&daemon.Info{
+				InDocker:     cliInContainer,
+				DaemonPort:   0,
+				Name:         daemonID.Name,
+				KubeContext:  daemonID.KubeContext,
+				Namespace:    daemonID.Namespace,
+				ExposedPorts: cr.ExposedPorts,
+				Hostname:     cr.Hostname,
+			}, daemonID.InfoFileName())
+		if err != nil {
+			return ctx, nil, err
+		}
+		defer func() {
+			if err != nil {
+				_ = daemon.DeleteInfo(ctx, daemonID.InfoFileName())
+			}
+		}()
+
 		if err = proc.StartInBackground(false, args...); err != nil {
 			return ctx, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 		}
@@ -258,18 +277,6 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 			return ctx, nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
 		}
 		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
-		if err == nil {
-			err = daemon.SaveInfo(ctx,
-				&daemon.Info{
-					InDocker:     cliInContainer,
-					DaemonPort:   0,
-					Name:         daemonID.Name,
-					KubeContext:  daemonID.KubeContext,
-					Namespace:    daemonID.Namespace,
-					ExposedPorts: cr.ExposedPorts,
-					Hostname:     cr.Hostname,
-				}, daemonID.InfoFileName())
-		}
 	}
 	if err != nil {
 		return ctx, nil, err
