@@ -915,10 +915,7 @@ func (s *session) status(c context.Context, initial bool) *rpc.ConnectInfo {
 	return ret
 }
 
-// Uninstall parts or all of Telepresence from the cluster if the client has sufficient credentials to do so.
-//
-// Uninstalling everything requires that the client owns the helm chart installation and has permissions to run
-// a `helm uninstall traffic-manager`.
+// Uninstall one or all traffic-agents from the cluster if the client has sufficient credentials to do so.
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
 func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
