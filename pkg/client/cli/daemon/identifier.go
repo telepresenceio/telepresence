@@ -52,22 +52,26 @@ func (id *Identifier) ContainerName() string {
 // IdentifierFromFlags returns a unique name created from the name of the current context
 // and the active namespace denoted by the given flagMap.
 func IdentifierFromFlags(name string, flagMap map[string]string, containerized bool) (*Identifier, error) {
-	cld, err := client.ConfigLoader(flagMap)
-	if err != nil {
-		return nil, err
-	}
-	ns, _, err := cld.Namespace()
-	if err != nil {
-		return nil, err
-	}
-
-	config, err := cld.RawConfig()
-	if err != nil {
-		return nil, err
-	}
 	cc := flagMap["context"]
-	if cc == "" {
-		cc = config.CurrentContext
+	ns := flagMap["namespace"]
+	if cc == "" || ns == "" {
+		cld, err := client.ConfigLoader(flagMap)
+		if err != nil {
+			return nil, err
+		}
+		if ns == "" {
+			ns, _, err = cld.Namespace()
+			if err != nil {
+				return nil, err
+			}
+		}
+		if cc == "" {
+			config, err := cld.RawConfig()
+			if err != nil {
+				return nil, err
+			}
+			cc = config.CurrentContext
+		}
 	}
 	return NewIdentifier(name, cc, ns, containerized)
 }

@@ -172,6 +172,11 @@ func (cr *Request) Commit(ctx context.Context) (context.Context, error) {
 		if _, ok := cr.KubeFlags["context"]; !ok {
 			cr.KubeFlags["context"] = kc.CurrentContext
 		}
+		if _, ok := cr.KubeFlags["namespace"]; !ok {
+			if currCtx, ok := kc.Contexts[kc.CurrentContext]; ok {
+				cr.KubeFlags["namespace"] = currCtx.Namespace
+			}
+		}
 		// kubernetes will not understand "-"
 		delete(cr.KubeFlags, "kubeconfig")
 	}
