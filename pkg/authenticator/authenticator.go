@@ -17,7 +17,7 @@ func NewService(
 	}
 }
 
-//go:generate go run github.com/golang/mock/mockgen -package=mock_authenticator -destination=mocks/credentialsresolver_mock.go . ExecCredentialsResolver
+//go:generate go run go.uber.org/mock/mockgen -package=mock_authenticator -destination=mocks/credentialsresolver_mock.go . ExecCredentialsResolver
 type ExecCredentialsResolver interface {
 	Resolve(
 		ctx context.Context,
@@ -25,7 +25,7 @@ type ExecCredentialsResolver interface {
 	) ([]byte, error)
 }
 
-//go:generate go run github.com/golang/mock/mockgen -package=mock_authenticator -destination=mocks/clientconfig_mock.go k8s.io/client-go/tools/clientcmd ClientConfig
+//go:generate go run go.uber.org/mock/mockgen -package=mock_authenticator -destination=mocks/clientconfig_mock.go k8s.io/client-go/tools/clientcmd ClientConfig
 type Service struct {
 	kubeClientConfig        clientcmd.ClientConfig
 	execCredentialsResolver ExecCredentialsResolver

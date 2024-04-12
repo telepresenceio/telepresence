@@ -19,7 +19,7 @@ jobs:
           go-version: stable
       - name: "Install mockgen"
         shell: bash
-        run: go install github.com/golang/mock/mockgen@v1.6.0
+        run: go install go.uber.org/mock/mockgen@latest
       - name: "Generate dependency information"
         shell: bash
         run: make generate

@@ -110,6 +110,9 @@ func NewService(ctx context.Context, _ *dgroup.Group, cfg client.Config, srv *gr
 			return nil, err
 		}
 		common.RegisterTracingServer(srv, tracer)
+	} else {
+		s.rootSessionInProc = true
+		s.quit = func() {}
 	}
 	return s, nil
 }

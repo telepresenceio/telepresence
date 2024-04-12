@@ -193,6 +193,9 @@ type Session struct {
 	// done is closed when the session ends
 	done               chan struct{}
 	subnetViaWorkloads []*rpc.SubnetViaWorkload
+
+	// daemon runs as part of a pod-daemon setup.
+	podDaemon bool
 }
 
 type NewSessionFunc func(context.Context, *rpc.OutboundInfo) (context.Context, *Session, error)
@@ -328,7 +331,7 @@ func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Sess
 	if mc == nil || err != nil {
 		return c, nil, err
 	}
-	s, err := newSession(c, mi, mc, ver)
+	s, err := newSession(c, mi, mc, ver, false)
 	if err != nil {
 		return c, nil, err
 	}
@@ -340,7 +343,7 @@ func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Sess
 
 func nope() bool { return false }
 
-func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version) (*Session, error) {
+func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version, isPodDaemon bool) (*Session, error) {
 	cfg := client.GetDefaultConfig()
 	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
 	if err != nil {
@@ -366,6 +369,7 @@ func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerPro
 		vifReady:           make(chan error, 2),
 		config:             cfg,
 		done:               make(chan struct{}),
+		podDaemon:          isPodDaemon,
 	}
 	s.alsoProxySubnets, err = validateSubnets("also-proxy", mi.AlsoProxySubnets, s.alsoProxyVia)
 	if err != nil {
@@ -655,6 +659,9 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 		}
 		close(s.vifReady)
 	}()
+	if s.podDaemon {
+		return nil
+	}
 	s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
 	s.proxyClusterSvcs = s.checkSvcConnectivity(ctx, mgrInfo)
 	if ctx.Err() != nil {
@@ -668,6 +675,9 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 }
 
 func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo, span trace.Span) error {
+	if s.podDaemon {
+		return nil
+	}
 	dlog.Debugf(ctx, "WatchClusterInfo update")
 	if mgrInfo.Dns == nil {
 		// Older traffic-manager. Use deprecated mgrInfo fields for DNS
@@ -1005,14 +1015,16 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 	cancelDNSLock := sync.Mutex{}
 	cancelDNS := func() {}
 
-	g.Go("network", func(ctx context.Context) error {
-		defer func() {
-			cancelDNSLock.Lock()
-			cancelDNS()
-			cancelDNSLock.Unlock()
-		}()
-		return s.watchClusterInfo(ctx)
-	})
+	if !s.podDaemon {
+		g.Go("network", func(ctx context.Context) error {
+			defer func() {
+				cancelDNSLock.Lock()
+				cancelDNS()
+				cancelDNSLock.Unlock()
+			}()
+			return s.watchClusterInfo(ctx)
+		})
+	}
 
 	if rmc, ok := s.managerClient.(interface{ RealManagerClient() manager.ManagerClient }); ok {
 		clusterCfg := client.GetConfig(c).Cluster()
@@ -1029,6 +1041,9 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 				dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
 			}
 		}
+	}
+	if s.podDaemon {
+		return nil
 	}
 
 	if s.agentClients == nil && len(s.subnetViaWorkloads) > 0 {
