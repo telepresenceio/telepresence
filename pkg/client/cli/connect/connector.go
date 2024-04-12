@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -157,20 +157,16 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
-func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, kubeContext, namespace string) (*daemon.UserClient, error) {
+func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (*daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
 	if match == nil && !cr.Implicit {
-		match = regexp.MustCompile(regexp.QuoteMeta(kubeContext + "-" + namespace))
+		match = regexp.MustCompile(`\A` + regexp.QuoteMeta(daemonID.Name) + `\z`)
 	}
 	info, err := daemon.LoadMatchingInfo(ctx, match)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) && !cr.Docker {
 			// Try dialing the host daemon using the well known socket.
 			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx)); sockErr == nil {
-				daemonID, err := daemon.NewIdentifier("", kubeContext, namespace, proc.RunningInContainer())
-				if err != nil {
-					return nil, err
-				}
 				return newUserDaemon(conn, daemonID), nil
 			}
 		}
@@ -191,7 +187,7 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 	}
 
 	// Try dialing the host daemon using the well known socket.
-	ud, err := DiscoverDaemon(ctx, cr.Use, daemonID.KubeContext, daemonID.Namespace)
+	ud, err := DiscoverDaemon(ctx, cr.Use, daemonID)
 	if err == nil {
 		if ud.Containerized() && !cliInContainer {
 			ctx = docker.EnableClient(ctx)
@@ -251,6 +247,25 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 			args = append(args, "--embed-network")
 			args = append(args, "--name", "docker-"+hn)
 		}
+		err = daemon.SaveInfo(ctx,
+			&daemon.Info{
+				InDocker:     cliInContainer,
+				DaemonPort:   0,
+				Name:         daemonID.Name,
+				KubeContext:  daemonID.KubeContext,
+				Namespace:    daemonID.Namespace,
+				ExposedPorts: cr.ExposedPorts,
+				Hostname:     cr.Hostname,
+			}, daemonID.InfoFileName())
+		if err != nil {
+			return ctx, nil, err
+		}
+		defer func() {
+			if err != nil {
+				_ = daemon.DeleteInfo(ctx, daemonID.InfoFileName())
+			}
+		}()
+
 		if err = proc.StartInBackground(false, args...); err != nil {
 			return ctx, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 		}
@@ -258,18 +273,6 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 			return ctx, nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
 		}
 		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
-		if err == nil {
-			err = daemon.SaveInfo(ctx,
-				&daemon.Info{
-					InDocker:     cliInContainer,
-					DaemonPort:   0,
-					Name:         daemonID.Name,
-					KubeContext:  daemonID.KubeContext,
-					Namespace:    daemonID.Namespace,
-					ExposedPorts: cr.ExposedPorts,
-					Hostname:     cr.Hostname,
-				}, daemonID.InfoFileName())
-		}
 	}
 	if err != nil {
 		return ctx, nil, err

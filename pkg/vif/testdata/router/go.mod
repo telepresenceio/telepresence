@@ -12,7 +12,7 @@ require (
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
-	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b // indirect
 	github.com/datawire/k8sapi v0.1.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

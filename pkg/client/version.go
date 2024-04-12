@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )

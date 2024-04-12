@@ -54,6 +54,8 @@ BEXE=
 BZIP=
 endif
 
+EMBED_FUSEFTP=1
+
 # Generate: artifacts that get checked in to Git
 # ==============================================
 
@@ -137,6 +139,7 @@ endif
 ifeq ($(DOCKER_BUILD),1)
 build-deps:
 else
+ifeq ($(EMBED_FUSEFTP),1)
 FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/datawire/go-fuseftp/rpc)
 
 $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
@@ -147,6 +150,9 @@ pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) F
 	cp $< $@
 
 build-deps: pkg/client/remotefs/fuseftp.bits
+else
+build-deps:
+endif
 endif
 
 ifeq ($(GOHOSTOS),windows)
@@ -180,7 +186,11 @@ ifeq ($(DOCKER_BUILD),1)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -tags docker -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
 else
 # -buildmode=pie addresses https://github.com/datawire/telepresence2-proprietary/issues/315
+ifeq ($(EMBED_FUSEFTP),1)
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -tags embed_fuseftp -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+else
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+endif
 endif
 
 ifeq ($(GOOS),windows)
@@ -259,11 +269,7 @@ clobber: ## (Build) Remove all build artifacts and tools
 # ===========================================================
 
 .PHONY: prepare-release
-prepare-release: generate wix
-	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.OLD.md
-	rm -f CHANGELOG.OLD.md.bak
-	git add CHANGELOG.OLD.md
-
+prepare-release: generate
 	@# Check if the version is in the x.x.x format (GA release)
 	if echo "$(TELEPRESENCE_VERSION)" | grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
 		sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%m-%d')\"/" CHANGELOG.yml; \
@@ -277,13 +283,6 @@ prepare-release: generate wix
 	(cd pkg/vif/testdata/router && \
 	  go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION) && \
 	  git add go.mod)
-
-#sed -i.bak "s/^### (TBD).*/### $(TELEPRESENCE_VERSION)/" charts/telepresence/CHANGELOG.md
-#rm -f charts/telepresence/CHANGELOG.md.bak
-#git add charts/telepresence/CHANGELOG.md
-
-	git add packaging/telepresence.wxs
-	git add packaging/bundle.wxs
 
 	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 
@@ -430,12 +429,6 @@ private-registry: $(tools/helm) ## (Test) Add a private docker registry to the c
 	sleep 5
 	kubectl wait --for=condition=ready pod --all
 	kubectl port-forward daemonset/private-registry-proxy 5000:5000 > /dev/null &
-
-WIX_VERSION = $(shell echo $(TELEPRESENCE_VERSION) | sed 's/v//;s/-.*//')
-.PHONY: wix
-wix:
-	sed s/TELEPRESENCE_VERSION/$(WIX_VERSION)/ packaging/telepresence.wxs.in > packaging/telepresence.wxs
-	sed s/TELEPRESENCE_VERSION/$(WIX_VERSION)/ packaging/bundle.wxs.in > packaging/bundle.wxs
 
 # Aliases
 # =======

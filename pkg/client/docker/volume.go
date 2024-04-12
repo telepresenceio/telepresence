@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/volume"
 	dockerClient "github.com/docker/docker/client"

@@ -10,14 +10,21 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/cli/values"
+	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 const (
@@ -37,12 +44,78 @@ const (
 )
 
 type Request struct {
+	values.Options
 	Type        RequestType
 	ValuesJson  []byte
 	ReuseValues bool
 	ResetValues bool
 	Crds        bool
 	NoHooks     bool
+}
+
+func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) error {
+	if hr.ReuseValues && hr.ResetValues {
+		return errcat.User.New("--reset-values and --reuse-values are mutually exclusive")
+	}
+
+	if cr.ManagerNamespace == "" {
+		if ns, ok := cr.KubeFlags["namespace"]; ok {
+			cr.ManagerNamespace = ns
+		} else {
+			cr.ManagerNamespace = "ambassador"
+		}
+	}
+	dlog.Debugf(ctx, "using manager namespace %q", cr.ManagerNamespace)
+
+	allValues, err := hr.MergeValues(getter.All(cli.New()))
+	if err != nil {
+		return err
+	}
+
+	hr.ValuesJson, err = json.Marshal(allValues)
+	if err != nil {
+		return err
+	}
+
+	var config *client.Kubeconfig
+	config, err = client.DaemonKubeconfig(ctx, cr)
+	if err != nil {
+		return err
+	}
+
+	var cluster *k8s.Cluster
+	cluster, err = k8s.ConnectCluster(ctx, cr, config)
+	if err != nil {
+		return err
+	}
+
+	if hr.Type == Uninstall {
+		err = DeleteTrafficManager(ctx, cluster.Kubeconfig, cluster.GetManagerNamespace(), false, hr)
+	} else {
+		dlog.Debug(ctx, "ensuring that traffic-manager exists")
+		err = EnsureTrafficManager(cluster.WithK8sInterface(ctx), cluster.Kubeconfig, cluster.GetManagerNamespace(), hr)
+	}
+	if err != nil {
+		return err
+	}
+
+	var msg string
+	switch hr.Type {
+	case Install:
+		msg = "installed"
+	case Upgrade:
+		msg = "upgraded"
+	case Uninstall:
+		msg = "uninstalled"
+	}
+
+	updatedResource := "Traffic Manager"
+	if hr.Crds {
+		updatedResource = "Telepresence CRDs"
+	}
+
+	ioutil.Printf(dos.Stdout(ctx), "\n%s %s successfully\n", updatedResource, msg)
+	return nil
 }
 
 func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string) (*action.Configuration, error) {
@@ -140,7 +213,7 @@ func installNew(
 	req *Request,
 	values map[string]any,
 ) error {
-	dlog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, client.Version())
+	dlog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, getTrafficManagerVersion(values))
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -235,24 +308,13 @@ func isInstalled(ctx context.Context, clientGetter genericclioptions.RESTClientG
 func EnsureTrafficManager(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string, req *Request) error {
 	if req.Crds {
 		dlog.Debug(ctx, "loading build-in helm chart")
-		crdChart, err := loadCRDChart()
-		if err != nil {
-			return fmt.Errorf("unable to load built-in helm chart: %w", err)
-		}
-
-		err = ensureIsInstalled(ctx, clientGetter, crdChart, crdReleaseName, namespace, req)
+		err := ensureIsInstalled(ctx, clientGetter, true, crdReleaseName, namespace, req)
 		if err != nil {
 			return fmt.Errorf("failed to install traffic manager CRDs: %w", err)
 		}
 		return nil
 	}
-
-	coreChart, err := loadCoreChart()
-	if err != nil {
-		return fmt.Errorf("unable to load built-in helm chart: %w", err)
-	}
-
-	err = ensureIsInstalled(ctx, clientGetter, coreChart, trafficManagerReleaseName, namespace, req)
+	err := ensureIsInstalled(ctx, clientGetter, false, trafficManagerReleaseName, namespace, req)
 	if err != nil {
 		return fmt.Errorf("failed to install traffic manager: %w", err)
 	}
@@ -262,7 +324,7 @@ func EnsureTrafficManager(ctx context.Context, clientGetter genericclioptions.RE
 
 // EnsureTrafficManager ensures the traffic manager is installed.
 func ensureIsInstalled(
-	ctx context.Context, clientGetter genericclioptions.RESTClientGetter, chrt *chart.Chart,
+	ctx context.Context, clientGetter genericclioptions.RESTClientGetter, crd bool,
 	releaseName, namespace string, req *Request,
 ) error {
 	existing, helmConfig, err := isInstalled(ctx, clientGetter, releaseName, namespace)
@@ -306,6 +368,18 @@ func ensureIsInstalled(
 		vals = GetValuesFunc(ctx)
 	}
 
+	version := getTrafficManagerVersion(vals)
+
+	var chrt *chart.Chart
+	if crd {
+		chrt, err = loadCRDChart(version)
+	} else {
+		chrt, err = loadCoreChart(version)
+	}
+	if err != nil {
+		return fmt.Errorf("unable to load built-in helm chart: %w", err)
+	}
+
 	switch {
 	case existing == nil: // fresh install
 		// Only the traffic manager release has a legacy version.
@@ -324,7 +398,7 @@ func ensureIsInstalled(
 		err = installNew(ctx, chrt, helmConfig, releaseName, namespace, req, vals)
 	case req.Type == Upgrade: // replace existing install
 		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): replacing %s from %q to %q...",
-			namespace, releaseName, releaseVer(existing), strings.TrimPrefix(client.Version(), "v"))
+			namespace, releaseName, releaseVer(existing), version)
 		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, releaseName, namespace, req, vals)
 	default:
 		err = errcat.User.Newf(
@@ -384,4 +458,13 @@ func ensureIsDeleted(
 		return nil
 	}
 	return uninstallExisting(ctx, helmConfig, releaseName, namespace, req)
+}
+
+func getTrafficManagerVersion(values map[string]any) string {
+	if img, ok := values["image"].(map[string]any); ok {
+		if tag, ok := img["tag"].(string); ok {
+			return tag
+		}
+	}
+	return strings.TrimPrefix(client.Version(), "v")
 }
