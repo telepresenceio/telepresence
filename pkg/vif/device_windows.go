@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,10 +28,11 @@ import (
 // See: https://www.wintun.net/ for more info.
 type nativeDevice struct {
 	tun.Device
-	strategy       client.GSCStrategy
-	name           string
-	dns            net.IP
-	interfaceIndex int32
+	strategy            client.GSCStrategy
+	name                string
+	dns                 net.IP
+	interfaceIndex      int32
+	searchListAdditions map[string]struct{}
 }
 
 func openTun(ctx context.Context) (td *nativeDevice, err error) {
@@ -58,7 +60,9 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 	}
 	interfaceName := fmt.Sprintf(interfaceFmt, ifaceNumber)
 	dlog.Infof(ctx, "Creating interface %s", interfaceName)
-	td = &nativeDevice{}
+	td = &nativeDevice{
+		searchListAdditions: make(map[string]struct{}),
+	}
 	if td.Device, err = tun.CreateTUN(interfaceName, 0); err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
@@ -138,9 +142,9 @@ func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error 
 	return t.getLUID().DeleteIPAddress(prefixFromIPNet(subnet))
 }
 
-func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server net.IP, searchList []string) (err error) {
+func (t *nativeDevice) setDNS(ctx context.Context, _ string, server net.IP, searchList []string) (err error) {
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
-	dlog.Debugf(ctx, "SetDNS clusterDomain: %q, server: %s, searchList: %v", clusterDomain, server, searchList)
+	dlog.Debugf(ctx, "SetDNS server: %s, searchList: %v", server, searchList)
 	defer dlog.Debug(ctx, "SetDNS done")
 
 	parentCtx := ctx
@@ -197,44 +201,49 @@ func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server 
 	// Unless we also update the global DNS search path, the one for the device doesn't work on some platforms.
 	// This behavior is mainly observed on Windows Server editions.
 
-	// Retrieve the current global search paths so that paths that aren't related to
-	// the cluster domain (i.e. not managed by us) can be retained.
+	// Retrieve the current global search paths so that paths that aren't managed by us can be retained.
 	gss, err := getGlobalSearchList()
 	if err != nil {
 		return err
 	}
-	// Put our new search path in front of other entries. Then include those
-	// that don't end with our cluster domain (these are entries that aren't
-	// managed by Telepresence).
+	// Put our new search path in front of other entries.
 	uniq := make(map[string]int, len(searchList)+len(gss))
 	i := 0
 	for _, gs := range searchList {
 		gs = strings.TrimSuffix(gs, ".")
+		t.searchListAdditions[gs] = struct{}{}
 		if _, ok := uniq[gs]; !ok {
 			uniq[gs] = i
 			i++
 		}
 	}
-	clusterDomainDot := "." + clusterDomain
-	clusterDomain = strings.TrimSuffix(clusterDomainDot, ".")
-	ours := func(gs string) bool {
-		return strings.HasSuffix(gs, clusterDomain) || strings.HasSuffix(gs, clusterDomainDot) || gs == "tel2-search"
-	}
 
+	// Include entries that aren't managed by Telepresence.
 	for _, gs := range gss {
-		if !ours(gs) {
+		if _, ok := t.searchListAdditions[gs]; !ok {
 			if _, ok := uniq[gs]; !ok {
 				uniq[gs] = i
 				i++
 			}
 		}
 	}
+
 	gss = make([]string, len(uniq))
 	for gs, i := range uniq {
 		gss[i] = gs
 	}
 	t.dns = server
-	return t.setGlobalSearchList(ctx, gss)
+	if err := t.setGlobalSearchList(ctx, gss); err != nil {
+		return err
+	}
+
+	// Prune the list of additions using the current search path.
+	for gs := range t.searchListAdditions {
+		if !slices.Contains(gss, gs) {
+			delete(t.searchListAdditions, gs)
+		}
+	}
+	return nil
 }
 
 func psList(values []string) string {

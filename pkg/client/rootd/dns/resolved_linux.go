@@ -118,6 +118,9 @@ func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	// used as a filter that will direct queries for names ending with them to this resolver. Routes must be
 	// prefixed with "~".
 	for _, sfx := range s.includeSuffixes {
+		if !strings.HasSuffix(sfx, ".") {
+			sfx += "."
+		}
 		paths[i] = "~" + strings.TrimPrefix(sfx, ".")
 		i++
 	}
