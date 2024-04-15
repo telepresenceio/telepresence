@@ -44,7 +44,7 @@ type InProcSession struct {
 	cancel context.CancelFunc
 }
 
-func (rd *InProcSession) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
+func (rd *InProcSession) Version(context.Context, *empty.Empty, ...grpc.CallOption) (*common.VersionInfo, error) {
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
@@ -52,7 +52,7 @@ func (rd *InProcSession) Version(ctx context.Context, in *empty.Empty, opts ...g
 	}, nil
 }
 
-func (rd *InProcSession) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*rpc.DaemonStatus, error) {
+func (rd *InProcSession) Status(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	nc := rd.getNetworkConfig()
 	return &rpc.DaemonStatus{
 		Version: &common.VersionInfo{
@@ -65,52 +65,52 @@ func (rd *InProcSession) Status(ctx context.Context, in *empty.Empty, opts ...gr
 	}, nil
 }
 
-func (rd *InProcSession) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) Quit(context.Context, *empty.Empty, ...grpc.CallOption) (*empty.Empty, error) {
 	rd.cancel()
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) Connect(ctx context.Context, in *rpc.OutboundInfo, opts ...grpc.CallOption) (*rpc.DaemonStatus, error) {
+func (rd *InProcSession) Connect(ctx context.Context, _ *rpc.OutboundInfo, opts ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	return rd.Status(ctx, nil, opts...)
 }
 
-func (rd *InProcSession) Disconnect(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) Disconnect(context.Context, *empty.Empty, ...grpc.CallOption) (*empty.Empty, error) {
 	rd.cancel()
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) GetNetworkConfig(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*rpc.NetworkConfig, error) {
+func (rd *InProcSession) GetNetworkConfig(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.NetworkConfig, error) {
 	return rd.getNetworkConfig(), nil
 }
 
-func (rd *InProcSession) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths, opts ...grpc.CallOption) (*empty.Empty, error) {
-	rd.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
+func (rd *InProcSession) SetDNSTopLevelDomains(ctx context.Context, in *rpc.Domains, _ ...grpc.CallOption) (*empty.Empty, error) {
+	rd.SetTopLevelDomains(ctx, in.Domains)
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) SetDNSExcludes(ctx context.Context, in *rpc.SetDNSExcludesRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) SetDNSExcludes(ctx context.Context, in *rpc.SetDNSExcludesRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	rd.SetExcludes(ctx, in.Excludes)
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) SetDNSMappings(ctx context.Context, in *rpc.SetDNSMappingsRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) SetDNSMappings(ctx context.Context, in *rpc.SetDNSMappingsRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	rd.SetMappings(ctx, in.Mappings)
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) SetLogLevel(ctx context.Context, in *manager.LogLevelRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) SetLogLevel(context.Context, *manager.LogLevelRequest, ...grpc.CallOption) (*empty.Empty, error) {
 	// No loglevel when session runs in the same process as the user daemon.
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) WaitForNetwork(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) WaitForNetwork(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*empty.Empty, error) {
 	if err, ok := <-rd.networkReady(ctx); ok {
 		return &empty.Empty{}, status.Error(codes.Unavailable, err.Error())
 	}
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	return rd.waitForAgentIP(ctx, request)
 }
 
