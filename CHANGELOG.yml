@@ -33,6 +33,14 @@ items:
   - version: 2.19.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Include svc as a top-level domain in the DNS resolver.
+        body: ->
+          It's not uncommon that use-cases involving Kafka or other middleware use FQNs that end with
+          &quot;svc&quot;. The core-DNS resolver in Kubernetes can resolve such names. With this bugfix,
+          the Telepresence DNS resolver will also be able to resolve them, and thereby remove the need
+          to add &quot;.svc&quot; to the include-suffix list.
+        docs: https://github.com/telepresenceio/telepresence/issues/2814
       - type: feature
         title: Add ability to mount a webhook secret.
         body: >-

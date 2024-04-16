@@ -308,6 +308,10 @@ func (s *Server) isExcluded(name string) bool {
 	return false
 }
 
+func (s *Server) isDomainExcluded(name string) bool {
+	return slices.Contains(s.excludeSuffixes, "."+name)
+}
+
 func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
 	query := q.Name
 	if query == "localhost." {
@@ -515,9 +519,12 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 
 				routes := make(map[string]struct{}, len(das.domains))
 				for _, domain := range das.domains {
-					if domain != "" {
+					if domain != "" && !s.isDomainExcluded(domain) {
 						routes[domain] = struct{}{}
 					}
+				}
+				if !s.isDomainExcluded("svc") {
+					routes["svc"] = struct{}{}
 				}
 				s.Lock()
 				s.routes = routes
