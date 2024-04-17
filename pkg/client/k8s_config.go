@@ -175,17 +175,17 @@ func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, err
 }
 
 // ConfigLoader returns the name of the current Kubernetes context, and the context itself.
-func ConfigLoader(flagMap map[string]string) (clientcmd.ClientConfig, error) {
+func ConfigLoader(ctx context.Context, flagMap map[string]string, kubeConfigData []byte) (clientcmd.ClientConfig, error) {
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
 		return nil, err
 	}
-	return configFlags.ToRawKubeConfigLoader(), nil
+	return NewClientConfig(ctx, configFlags, kubeConfigData)
 }
 
 // CurrentContext returns the name of the current Kubernetes context, the active namespace, and the context itself.
-func CurrentContext(flagMap map[string]string) (string, string, *api.Context, error) {
-	cld, err := ConfigLoader(flagMap)
+func CurrentContext(ctx context.Context, flagMap map[string]string, configBytes []byte) (string, string, *api.Context, error) {
+	cld, err := ConfigLoader(ctx, flagMap, configBytes)
 	if err != nil {
 		return "", "", nil, err
 	}

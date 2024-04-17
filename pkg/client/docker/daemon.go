@@ -217,7 +217,11 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		// Been there, done that
 		return nil
 	}
-	config, err := patcher.CreateExternalKubeConfig(ctx, cr.KubeFlags,
+	loader, err := client.ConfigLoader(ctx, cr.KubeFlags, cr.KubeconfigData)
+	if err != nil {
+		return err
+	}
+	config, err := patcher.CreateExternalKubeConfig(ctx, loader, cr.KubeFlags["context"],
 		func(configFiles []string) (string, string, error) {
 			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
 			if err != nil {
