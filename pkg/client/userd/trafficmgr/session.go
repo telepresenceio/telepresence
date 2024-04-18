@@ -227,7 +227,7 @@ func NewSession(
 		if client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
 			// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 			// must be executed by the user, not by root.
-			konfig, err := patcher.CreateExternalKubeConfig(ctx, cluster.EffectiveFlagMap, func([]string) (string, string, error) {
+			konfig, err := patcher.CreateExternalKubeConfig(ctx, config.ClientConfig, cluster.Context, func([]string) (string, string, error) {
 				s := userd.GetService(ctx)
 				if _, ok := s.Server().GetServiceInfo()[authenticator.Authenticator_ServiceDesc.ServiceName]; !ok {
 					authGrpc.RegisterAuthenticatorServer(s.Server(), config.ClientConfig)

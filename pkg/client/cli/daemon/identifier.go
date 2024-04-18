@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -51,11 +52,11 @@ func (id *Identifier) ContainerName() string {
 
 // IdentifierFromFlags returns a unique name created from the name of the current context
 // and the active namespace denoted by the given flagMap.
-func IdentifierFromFlags(name string, flagMap map[string]string, containerized bool) (*Identifier, error) {
+func IdentifierFromFlags(ctx context.Context, name string, flagMap map[string]string, kubeConfigData []byte, containerized bool) (*Identifier, error) {
 	cc := flagMap["context"]
 	ns := flagMap["namespace"]
 	if cc == "" || ns == "" {
-		cld, err := client.ConfigLoader(flagMap)
+		cld, err := client.ConfigLoader(ctx, flagMap, kubeConfigData)
 		if err != nil {
 			return nil, err
 		}

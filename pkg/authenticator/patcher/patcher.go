@@ -12,7 +12,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -39,13 +38,13 @@ type (
 // context. It will then check if that context contains an Exec config, and if it does, replace that config with
 // an Exec config that instead runs a process that will use a gRPC call to the address returned by the given
 // authAddressFunc.
-func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, authAddressFunc AddressProvider, patcher Patcher) (*clientcmdapi.Config, error) {
-	configFlags, err := client.ConfigFlags(kubeFlags)
-	if err != nil {
-		return nil, err
-	}
-
-	loader := configFlags.ToRawKubeConfigLoader()
+func CreateExternalKubeConfig(
+	ctx context.Context,
+	loader clientcmd.ClientConfig,
+	kubeContext string,
+	authAddressFunc AddressProvider,
+	patcher Patcher,
+) (*clientcmdapi.Config, error) {
 	ns, _, err := loader.Namespace()
 	if err != nil {
 		return nil, err
@@ -53,14 +52,16 @@ func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, 
 
 	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
 	dlog.Debugf(ctx, "host kubeconfig = %v", configFiles)
-	config, err := loader.RawConfig()
+	origConfig, err := loader.RawConfig()
 	if err != nil {
 		return nil, err
 	}
+	var config clientcmdapi.Config
+	origConfig.DeepCopyInto(&config)
 
 	// Minify the config so that we only deal with the current context.
-	if cx := configFlags.Context; cx != nil && *cx != "" {
-		config.CurrentContext = *cx
+	if kubeContext != "" {
+		config.CurrentContext = kubeContext
 	}
 	if err = clientcmdapi.MinifyConfig(&config); err != nil {
 		return nil, err

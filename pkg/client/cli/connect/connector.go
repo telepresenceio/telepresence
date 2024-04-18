@@ -181,7 +181,7 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required bool) (context.Context, *daemon.UserClient, error) {
 	cr := daemon.GetRequest(ctx)
 	cliInContainer := proc.RunningInContainer()
-	daemonID, err := daemon.IdentifierFromFlags(cr.Name, cr.KubeFlags, cr.Docker || cliInContainer)
+	daemonID, err := daemon.IdentifierFromFlags(ctx, cr.Name, cr.KubeFlags, cr.KubeconfigData, cr.Docker || cliInContainer)
 	if err != nil {
 		return ctx, nil, err
 	}
