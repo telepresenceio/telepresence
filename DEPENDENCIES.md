@@ -35,7 +35,7 @@ following Free and Open Source software:
     github.com/distribution/reference                                            v0.6.0                                Apache License 2.0
     github.com/docker/cli                                                        v26.0.0+incompatible                  Apache License 2.0
     github.com/docker/distribution                                               v2.8.3+incompatible                   Apache License 2.0
-    github.com/docker/docker                                                     v26.0.0+incompatible                  Apache License 2.0
+    github.com/docker/docker                                                     v26.0.2+incompatible                  Apache License 2.0
     github.com/docker/docker-credential-helpers                                  v0.8.1                                MIT license
     github.com/docker/go-connections                                             v0.5.0                                Apache License 2.0
     github.com/docker/go-metrics                                                 v0.0.1                                Apache License 2.0
