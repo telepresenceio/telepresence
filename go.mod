@@ -15,7 +15,7 @@ require (
 	github.com/datawire/go-fuseftp/rpc v0.4.4
 	github.com/datawire/k8sapi v0.1.4
 	github.com/datawire/metriton-go-client v0.1.1
-	github.com/docker/docker v26.0.0+incompatible
+	github.com/docker/docker v26.0.2+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/golang/mock v1.7.0-rc.1
