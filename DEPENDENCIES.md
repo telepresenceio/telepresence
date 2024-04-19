@@ -147,7 +147,7 @@ following Free and Open Source software:
     golang.org/x/crypto                                                          v0.21.0                               3-clause BSD license
     golang.org/x/exp                                                             v0.0.0-20240325151524-a685a6edb6d8    3-clause BSD license
     golang.org/x/mod                                                             v0.16.0                               3-clause BSD license
-    golang.org/x/net                                                             v0.22.0                               3-clause BSD license
+    golang.org/x/net                                                             v0.23.0                               3-clause BSD license
     golang.org/x/oauth2                                                          v0.18.0                               3-clause BSD license
     golang.org/x/sync                                                            v0.6.0                                3-clause BSD license
     golang.org/x/sys                                                             v0.18.0                               3-clause BSD license
