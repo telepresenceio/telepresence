@@ -58,7 +58,7 @@ const (
 type Cluster interface {
 	CapturePodLogs(ctx context.Context, app, container, ns string)
 	CompatVersion() string
-	Executable() string
+	Executable() (string, error)
 	GeneralError() error
 	GlobalEnv(context.Context) dos.MapEnv
 	AgentVersion(context.Context) string
@@ -74,6 +74,7 @@ type Cluster interface {
 	UninstallTrafficManager(ctx context.Context, managerNamespace string, args ...string)
 	PackageHelmChart(ctx context.Context) (string, error)
 	GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string
+	GetSetArgsForHelm(ctx context.Context, values map[string]string, release bool) []string
 	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
 	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) error
 	UserdPProf() uint16
@@ -418,8 +419,8 @@ func (s *cluster) GlobalEnv(ctx context.Context) dos.MapEnv {
 	return globalEnv
 }
 
-func (s *cluster) Executable() string {
-	return s.executable
+func (s *cluster) Executable() (string, error) {
+	return s.executable, nil
 }
 
 func (s *cluster) GeneralError() error {
@@ -573,31 +574,44 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	return filename, nil
 }
 
+func (s *cluster) GetSetArgsForHelm(ctx context.Context, values map[string]string, release bool) []string {
+	settings := s.GetValuesForHelm(ctx, values, release)
+	args := make([]string, len(settings)*2)
+	n := 0
+	for _, s := range settings {
+		args[n] = "--set"
+		n++
+		args[n] = s
+		n++
+	}
+	return args
+}
+
 func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string {
 	nss := GetNamespaces(ctx)
 	settings := []string{
-		"--set", "logLevel=debug",
-		"--set", "client.routing.allowConflictingSubnets={10.0.0.0/8}",
+		"logLevel=debug",
+		"client.routing.allowConflictingSubnets={10.0.0.0/8}",
 	}
 	if len(nss.ManagedNamespaces) > 0 {
 		settings = append(settings,
-			"--set", fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
-			"--set", fmt.Sprintf("managerRbac.namespaces=%s", nss.HelmString()),
+			fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
+			fmt.Sprintf("managerRbac.namespaces=%s", nss.HelmString()),
 		)
 	}
 	agentImage := GetAgentImage(ctx)
 	if agentImage != nil {
 		settings = append(settings,
-			"--set", fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
-			"--set", fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
-			"--set", fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
+			fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
+			fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
+			fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
 	}
 	if !release {
-		settings = append(settings, "--set", fmt.Sprintf("image.registry=%s", s.self.Registry()))
+		settings = append(settings, fmt.Sprintf("image.registry=%s", s.self.Registry()))
 	}
 
 	for k, v := range values {
-		settings = append(settings, "--set", k+"="+v)
+		settings = append(settings, k+"="+v)
 	}
 	return settings
 }
@@ -625,7 +639,7 @@ func (s *cluster) InstallTrafficManagerVersion(ctx context.Context, version stri
 }
 
 func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]string) error {
-	settings := s.self.GetValuesForHelm(ctx, values, release)
+	settings := s.self.GetSetArgsForHelm(ctx, values, release)
 
 	ctx = WithWorkingDir(ctx, GetOSSRoot(ctx))
 	nss := GetNamespaces(ctx)
@@ -887,7 +901,8 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		}
 		args = append(args, rest...)
 	}
-	cmd := Command(ctx, gh.Executable(), args...)
+	exe, _ := gh.Executable()
+	cmd := Command(ctx, exe, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	return cmd
