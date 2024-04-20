@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/spinner"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -51,15 +52,17 @@ func (s *state) prepareDockerRun(ctx context.Context) error {
 	for i, opt := range s.DockerBuildOptions {
 		opts[i] = "--" + opt
 	}
+	spin := spinner.New(ctx, "building docker image")
 	imageID, err := docker.BuildImage(ctx, buildContext, opts)
 	if err != nil {
-		return err
+		return spin.Error(err)
 	}
 	if idx < 0 {
 		s.Cmdline = []string{imageID}
 	} else {
 		s.Cmdline[idx] = imageID
 	}
+	spin.DoneMsg("image built successfully")
 	return nil
 }
 
@@ -162,26 +165,30 @@ func (dr *dockerRun) wait(ctx context.Context) error {
 	return err
 }
 
-func (s *state) startInDocker(ctx context.Context, envFile string, args []string) *dockerRun {
+func (s *state) getContainerName(args []string) (string, []string, error) {
+	name, err := flags.GetUnparsedValue(args, "--name")
+	if err != nil {
+		return "", args, err
+	}
+	if name == "" {
+		name = fmt.Sprintf("intercept-%s-%d", s.Name(), s.localPort)
+		args = append([]string{"--name", name}, args...)
+	}
+	return name, args, nil
+}
+
+func (s *state) startInDocker(ctx context.Context, name, envFile string, args []string) *dockerRun {
 	ourArgs := []string{
 		"run",
 		"--env-file", envFile,
 	}
-	dr := &dockerRun{}
-	ud := daemon.GetUserClient(ctx)
+	dr := &dockerRun{name: name}
 
-	dr.name, dr.err = flags.GetUnparsedValue(args, "--name")
-	if dr.err != nil {
-		return dr
-	}
-	if dr.name == "" {
-		dr.name = fmt.Sprintf("intercept-%s-%d", s.Name(), s.localPort)
-		ourArgs = append(ourArgs, "--name", dr.name)
-	}
 	if s.DockerDebug != "" {
 		ourArgs = append(ourArgs, "--security-opt", "apparmor=unconfined", "--cap-add", "SYS_PTRACE")
 	}
 
+	ud := daemon.GetUserClient(ctx)
 	if !ud.Containerized() {
 		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
 		if s.dockerPort != 0 {
