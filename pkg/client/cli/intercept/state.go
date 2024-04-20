@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"sort"
@@ -25,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/spinner"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -253,7 +255,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		return true, nil
 	}
 	detailedOutput := s.DetailedOutput && s.FormattedOutput
-	if !detailedOutput {
+	if !s.Silent && !detailedOutput {
 		fmt.Fprintf(dos.Stdout(ctx), "Using %s %s\n", r.WorkloadKind, s.AgentName)
 	}
 	var intercept *manager.InterceptInfo
@@ -301,12 +303,14 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		mountError = volumeMountProblem.Error()
 	}
 	s.info = NewInfo(ctx, intercept, mountError)
-	if detailedOutput {
-		output.Object(ctx, s.info, true)
-	} else {
-		out := dos.Stdout(ctx)
-		_, _ = s.info.WriteTo(out)
-		_, _ = fmt.Fprintln(out)
+	if !s.Silent {
+		if detailedOutput {
+			output.Object(ctx, s.info, true)
+		} else {
+			out := dos.Stdout(ctx)
+			_, _ = s.info.WriteTo(out)
+			_, _ = fmt.Fprintln(out)
+		}
 	}
 	return true, nil
 }
@@ -362,11 +366,39 @@ func (s *state) runCommand(ctx context.Context) error {
 			dlog.Error(ctx)
 		}
 	}()
-	dr := s.startInDocker(ctx, envFile, s.Cmdline)
+
+	errRdr, errWrt := io.Pipe()
+	procCtx = dos.WithStderr(procCtx, errWrt)
+	outRdr, outWrt := io.Pipe()
+	procCtx = dos.WithStdout(procCtx, outWrt)
+
+	name, args, err := s.getContainerName(s.Cmdline)
+	if err != nil {
+		return errcat.User.New(err)
+	}
+
+	spin := spinner.New(ctx, "container "+name)
+	spin.Message("starting")
+	dr := s.startInDocker(procCtx, name, envFile, args)
 	if dr.err == nil {
 		dr.err = s.addInterceptorToDaemon(ctx, dr.cmd, dr.name)
+		spin.Message("started")
+		spin.DoneMsg("type <ctrl>-C to end...")
+	} else if spin != nil {
+		_ = spin.Error(dr.err)
 	}
-	return dr.wait(procCtx)
+	go func() {
+		_, _ = io.Copy(dos.Stdout(ctx), outRdr)
+	}()
+	go func() {
+		_, _ = io.Copy(dos.Stderr(ctx), errRdr)
+	}()
+
+	if err := dr.wait(procCtx); err != nil {
+		return spin.Error(err)
+	}
+	spin.Done()
+	return nil
 }
 
 func (s *state) addInterceptorToDaemon(ctx context.Context, cmd *dexec.Cmd, containerName string) error {

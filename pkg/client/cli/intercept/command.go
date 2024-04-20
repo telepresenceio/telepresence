@@ -46,6 +46,7 @@ type Command struct {
 	ExtendedInfo    []byte
 	FormattedOutput bool
 	DetailedOutput  bool
+	Silent          bool
 }
 
 func (a *Command) AddFlags(cmd *cobra.Command) {
