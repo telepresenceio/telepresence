@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/user"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -514,17 +515,20 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
 func (s *session) updateDaemonNamespaces(c context.Context) {
+	const svcDomain = "svc"
+
 	s.wlWatcher.setNamespacesToWatch(c, s.GetCurrentNamespaces(true))
 
-	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
-	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
-	namespaces := s.GetCurrentNamespaces(false)
-	dlog.Debugf(c, "posting namespaces %v", namespaces)
-
-	if _, err := s.rootDaemon.SetDNSTopLevelDomains(c, &rootdRpc.Domains{Domains: namespaces}); err != nil {
-		dlog.Errorf(c, "error posting namespaces %v to root daemon: %v", namespaces, err)
+	domains := s.GetCurrentNamespaces(false)
+	if !slices.Contains(domains, svcDomain) {
+		domains = append(domains, svcDomain)
 	}
-	dlog.Debug(c, "namespaces posted successfully")
+	dlog.Debugf(c, "posting top-level domains %v to root daemon", domains)
+
+	if _, err := s.rootDaemon.SetDNSTopLevelDomains(c, &rootdRpc.Domains{Domains: domains}); err != nil {
+		dlog.Errorf(c, "error posting domains %v to root daemon: %v", domains, err)
+	}
+	dlog.Debug(c, "domains posted successfully")
 }
 
 func (s *session) Epilog(ctx context.Context) {
