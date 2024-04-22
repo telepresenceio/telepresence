@@ -135,7 +135,7 @@ func TestUser(t *testing.T) {
 
 			// Then do...
 			actualHomePath := UserHomeDir(ctx)
-			actualCachePath := userCacheDir(ctx)
+			actualCachePath := UserCacheDir(ctx)
 			actualConfigPath := UserConfigDir(ctx)
 
 			// And expect...
