@@ -73,7 +73,7 @@ func UserHomeDir(ctx context.Context) string {
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func userCacheDir(ctx context.Context) string {
+func UserCacheDir(ctx context.Context) string {
 	var dir string
 
 	switch goos(ctx) {

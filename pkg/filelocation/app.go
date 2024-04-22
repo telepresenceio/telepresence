@@ -42,7 +42,7 @@ func AppUserCacheDir(ctx context.Context) string {
 	if cacheDir, ok := ctx.Value(cacheCtxKey{}).(string); ok && cacheDir != "" {
 		return cacheDir
 	}
-	return filepath.Join(userCacheDir(ctx), appName)
+	return filepath.Join(UserCacheDir(ctx), appName)
 }
 
 // AppUserConfigDir returns the directory to use for application-specific
