@@ -30,6 +30,15 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.18.3
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Creation of individual pods was blocked by the agent-injector webhook.
+        body: >-
+          An attempt to create a pod was blocked unless it was provided by a workload. Hence, commands like
+          <code>kubectl run -i busybox --rm --image=curlimages/curl --restart=Never -- curl echo-easy.default</code>
+          would be blocked from executing.
   - version: 2.18.2
     date: (TBD)
     notes:
