@@ -375,6 +375,7 @@ func (g *configGetter) GetDefaultFilename() string {
 		if err == nil {
 			g.destFile = destFile.Name()
 			_ = os.Remove(destFile.Name())
+			destFile.Close()
 		}
 	}
 	return g.destFile
