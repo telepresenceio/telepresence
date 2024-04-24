@@ -92,6 +92,15 @@ items:
         body: >-
           This resolves a bug that did not test all subnets in a private range, sometimes resulting in the warning,
           "DNS doesn't seem to work properly."
+  - version: 2.18.3
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Creation of individual pods was blocked by the agent-injector webhook.
+        body: >-
+          An attempt to create a pod was blocked unless it was provided by a workload. Hence, commands like
+          <code>kubectl run -i busybox --rm --image=curlimages/curl --restart=Never -- curl echo-easy.default</code>
+          would be blocked from executing.
   - version: 2.18.2
     date: (TBD)
     notes:

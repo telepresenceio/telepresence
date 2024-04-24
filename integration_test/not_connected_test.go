@@ -1,9 +1,11 @@
 package integration_test
 
 import (
+	"bufio"
 	"fmt"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -112,4 +114,18 @@ func (s *notConnectedSuite) Test_ReportsNotConnected() {
 	s.Regexp(fmt.Sprintf(`Root Daemon\s*: %s`, rxVer), stdout)
 	s.Regexp(fmt.Sprintf(`User Daemon\s*: %s`, rxVer), stdout)
 	s.Regexp(`Traffic Manager\s*: not connected`, stdout)
+}
+
+// Test_CreateAndRunIndividualPod tess that pods can be created without a workload.
+func (s *notConnectedSuite) Test_CreateAndRunIndividualPod() {
+	out := s.KubectlOk(s.Context(), "run", "-i", "busybox", "--rm", "--image", "curlimages/curl", "--restart", "Never", "--", "ls", "/etc")
+	lines := bufio.NewScanner(strings.NewReader(out))
+	hostsFound := false
+	for lines.Scan() {
+		if lines.Text() == "hosts" {
+			hostsFound = true
+			break
+		}
+	}
+	s.True(hostsFound, "remote ls command did not find /etc/hosts")
 }

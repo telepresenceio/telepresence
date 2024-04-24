@@ -150,12 +150,12 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			uwkError := k8sapi.UnsupportedWorkloadKindError("")
 			switch {
 			case k8sErrors.IsNotFound(err):
-				dlog.Warnf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
+				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
 			case errors.As(err, &uwkError):
 				dlog.Debugf(ctx, "Workload owner with %s found for pod %s.%s", uwkError.Error(), pod.Name, pod.Namespace)
-				err = nil
 			}
-			return nil, err
+			// Not an error. It just means that the pod is not eligible for intercepts.
+			return nil, nil
 		}
 		scx, err = a.agentConfigs.Get(ctx, wl.GetName(), wl.GetNamespace())
 		if err != nil {
