@@ -44,6 +44,7 @@ type Command struct {
 	Mechanism       string // --mechanism tcp
 	MechanismArgs   []string
 	ExtendedInfo    []byte
+	WaitMessage     string // Message printed when a containerized intercept handler is started and waiting for an interrupt
 	FormattedOutput bool
 	DetailedOutput  bool
 	Silent          bool
