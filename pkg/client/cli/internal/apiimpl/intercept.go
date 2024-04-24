@@ -43,12 +43,15 @@ func toInterceptCmd(rq *api.InterceptRequest, ih api.InterceptHandler) *intercep
 		cmd.Cmdline = append(cmd.Cmdline, ih.Arguments...)
 		cmd.Mount = strconv.FormatBool(ih.Mount)
 		cmd.MountSet = true
+		cmd.WaitMessage = "type <ctrl>-C to end..."
 	case api.DockerBuildInterceptHandler:
 		cmd.DockerRun = true
 		if ih.Debug {
 			cmd.DockerDebug = ih.Context
+			cmd.WaitMessage = "waiting for a debugger frontend to attach..."
 		} else {
 			cmd.DockerBuild = ih.Context
+			cmd.WaitMessage = "type <ctrl>-C to end..."
 		}
 		cmd.DockerBuildOptions = ih.BuildOptions
 		cmd.Cmdline = appendOptions(ih.Options, cmd.Cmdline)
