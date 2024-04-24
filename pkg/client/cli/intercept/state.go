@@ -316,10 +316,15 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 }
 
 func (s *state) leave(ctx context.Context) error {
-	r, err := daemon.GetUserClient(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: strings.TrimSpace(s.Name())})
+	n := strings.TrimSpace(s.Name())
+	dlog.Debugf(ctx, "Leaving intercept %s", n)
+	r, err := daemon.GetUserClient(ctx).RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: n})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
+	}
+	if err != nil {
+		dlog.Errorf(ctx, "Leaving intercept ended with error %v", err)
 	}
 	return Result(r, err)
 }
@@ -383,7 +388,7 @@ func (s *state) runCommand(ctx context.Context) error {
 	if dr.err == nil {
 		dr.err = s.addInterceptorToDaemon(ctx, dr.cmd, dr.name)
 		spin.Message("started")
-		spin.DoneMsg("type <ctrl>-C to end...")
+		spin.DoneMsg(s.WaitMessage)
 	} else if spin != nil {
 		_ = spin.Error(dr.err)
 	}
