@@ -43,6 +43,8 @@ type Info interface {
 	// SetAdditionalAlsoProxy assigns a slice that will be added to the Routing.AlsoProxySubnets slice
 	// when notifications are sent.
 	SetAdditionalAlsoProxy(ctx context.Context, subnets []*rpc.IPNet)
+
+	ClusterDomain() string
 }
 
 type subnetRetriever interface {
@@ -353,6 +355,10 @@ func (oi *info) ID() string {
 
 func (oi *info) ClusterID() string {
 	return oi.clusterID
+}
+
+func (oi *info) ClusterDomain() string {
+	return oi.Dns.ClusterDomain
 }
 
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
