@@ -476,15 +476,29 @@ func detectKind(ctx context.Context, cns []types.ContainerJSON, hostAddrPort net
 		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["io.x-k8s.kind.role"] == "control-plane" {
 			if port, isIPv6 := containerPort(hostAddrPort, ns); port != 0 {
 				for n, nw := range ns.Networks {
-					for _, alias := range nw.Aliases {
-						if strings.HasSuffix(alias, "-control-plane") {
-							addr, err := localAddr(ctx, cn.ID, nw.NetworkID, isIPv6)
-							if err != nil {
-								dlog.Error(ctx, err)
+					found := false
+					for _, names := range nw.DNSNames {
+						if strings.HasSuffix(names, "-control-plane") {
+							found = true
+							break
+						}
+					}
+					if !found {
+						// Aliases got deprecated in favor of DNSNames in Docker versions 25+
+						for _, alias := range nw.Aliases {
+							if strings.HasSuffix(alias, "-control-plane") {
+								found = true
 								break
 							}
-							return netip.AddrPortFrom(addr, port), n
 						}
+					}
+					if found {
+						addr, err := localAddr(ctx, cn.ID, nw.NetworkID, isIPv6)
+						if err != nil {
+							dlog.Error(ctx, err)
+							break
+						}
+						return netip.AddrPortFrom(addr, port), n
 					}
 				}
 			}

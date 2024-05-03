@@ -30,6 +30,16 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.18.4
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Docker aliases deprecation caused failure to detect Kind cluster.
+        body: >-
+          The logic for detecting if a cluster is a local Kind cluster, and therefore needs some special attention when
+          using <code>telepresence connect --docker</code>, relied on the presence of <code>Aliases</code> in the Docker
+          network that a Kind cluster sets up. In Docker versions from 26 and up, this value is no longer used, but the
+          corresponding info can instead be found in the new <code>DNSNames</code> field.
   - version: 2.18.3
     date: (TBD)
     notes:
