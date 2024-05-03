@@ -20,6 +20,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -49,6 +50,12 @@ func (s *state) PrepareIntercept(
 	ctx context.Context,
 	cr *managerrpc.CreateInterceptRequest,
 ) (pi *managerrpc.PreparedIntercept, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = derror.PanicToError(r)
+			dlog.Errorf(ctx, "%+v", err)
+		}
+	}()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
 	defer tracing.EndAndRecord(span, err)
 	span.SetAttributes(attribute.Stringer("request", cr))
@@ -57,6 +64,7 @@ func (s *state) PrepareIntercept(
 		if _, ok := status.FromError(err); ok {
 			return nil, err
 		}
+		dlog.Errorf(ctx, "PrepareIntercept error %v", err)
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
@@ -104,7 +112,17 @@ func (s *state) ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfi
 	return nil
 }
 
-func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, extended bool, spec *managerrpc.InterceptSpec) (*agentconfig.Sidecar, error) {
+func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, extended bool, spec *managerrpc.InterceptSpec) (ac *agentconfig.Sidecar, err error) {
+	if !managerutil.AgentInjectorEnabled(parentCtx) {
+		sce, err := mutator.GetMap(parentCtx).Get(parentCtx, wl.GetName(), wl.GetNamespace())
+		if err != nil {
+			return nil, err
+		}
+		if sce == nil {
+			return nil, errcat.User.Newf("agent-injector is disabled and no agent has been added manually for %s.%s", wl.GetName(), wl.GetNamespace())
+		}
+		return sce.AgentConfig(), nil
+	}
 	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
 	defer cancel()
 
@@ -117,7 +135,7 @@ func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	if err != nil {
 		return nil, err
 	}
-	ac := sce.AgentConfig()
+	ac = sce.AgentConfig()
 	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace, failedCreateCh); err != nil {
 		// If no agent arrives, then drop its entry from the configmap. This ensures that there
 		// are no false positives the next time an intercept is attempted.

@@ -6,8 +6,13 @@ import (
 	"strings"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
+
+func AgentInjectorEnabled(ctx context.Context) bool {
+	return GetEnv(ctx).AgentInjectPolicy != agentconfig.Never
+}
 
 type ImageRetriever interface {
 	GetImage() string

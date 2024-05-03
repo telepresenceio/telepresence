@@ -134,6 +134,7 @@ timeouts:
 ## Agent Injector Configuration
 ################################################################################
 agentInjector:
+  enabled: true
   name: agent-injector
   secret:
     name: mutator-webhook-tls
@@ -164,7 +165,6 @@ agentInjector:
 
   injectPolicy: OnDemand
   webhook:
-    enable: true
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]
     servicePath: /traffic-agent

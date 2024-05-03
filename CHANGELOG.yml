@@ -64,9 +64,9 @@ items:
       - type: feature
         title: Add ability to enable/disable the mutating webhook.
         body: >-
-          A new Helm chart value <code>agentInjector.webhook.enable</code> which can be set to <code>true</code>
-          (the default) or <code>false</code> has been added. This setting is intended for clusters that do not use some
-          telepresence fonctionnalities which require the webhook.
+          A new Helm chart boolean value <code>agentInjector.enable</code> has been added that controls the agent-injector
+          service and its associated mutating webhook. If set to <code>false</code>, the service, the webhook, and the
+          secrets and certificates associated with it, will no longer be installed.
       - type: feature
         title: Add ability to mount a webhook secret.
         body: >-

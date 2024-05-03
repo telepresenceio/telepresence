@@ -1,4 +1,4 @@
-{{- if and (not .Values.rbac.only) .Values.agentInjector.webhook.enable }}
+{{- if and (not .Values.rbac.only) .Values.agentInjector.enabled }}
 {{- $altNames := list ( printf "agent-injector.%s" (include "traffic-manager.namespace" .)) ( printf "agent-injector.%s.svc" (include "traffic-manager.namespace" .)) -}}
 {{- $genCA := genCA "agent-injector-ca" 365 -}}
 {{- $genCert := genSignedCert "agent-injector" nil $altNames 365 $genCA -}}
