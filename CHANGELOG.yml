@@ -33,6 +33,12 @@ items:
   - version: 2.19.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Improve how the traffic-manager resolves DNS when no agent is installed.
+        body: >-
+         The traffic-manager is typically installed into a namespace different from the one that clients are
+         connected to. It's therefore important that the traffic-manager adds the client's namespace when
+         resolving single label names in situations where there are any agents to dispatch the DNS query to.
       - type: change
         title: Removal of ability import legacy artifact into Helm.
         body: >-
