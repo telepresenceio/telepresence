@@ -33,6 +33,12 @@ items:
   - version: 2.19.0
     date: (TBD)
     notes:
+      - type: change
+        title: Removal of ability import legacy artifact into Helm.
+        body: >-
+          A helm install would make attempts to find manually installed artifacts and make them managed by
+          Helm by adding the necessary labels and annotations. This was important when the Helm chart was first
+          introduced but is far less so today, and this legacy import was therefore removed.
       - type: bugfix
         title: Docker aliases deprecation caused failure to detect Kind cluster.
         body: >-
