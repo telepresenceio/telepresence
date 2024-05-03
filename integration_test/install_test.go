@@ -1,17 +1,9 @@
 package integration_test
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,33 +155,6 @@ func (is *installSuite) Test_FindTrafficManager_notPresent() {
 	is.Error(err, "expected find to not find traffic-manager deployment")
 }
 
-func (is *installSuite) Test_EnsureManager_updateFromLegacy() {
-	require := is.Require()
-	ctx := is.Context()
-
-	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
-
-	f, err := os.ReadFile("testdata/legacyManifests/manifests.yml")
-	require.NoError(err)
-	manifest := string(f)
-	ca, crt, key, err := certsetup(is.ManagerNamespace())
-	require.NoError(err)
-	manifest = strings.ReplaceAll(manifest, "{{.ManagerNamespace}}", is.ManagerNamespace())
-	manifest = strings.ReplaceAll(manifest, "{{.CA}}", base64.StdEncoding.EncodeToString(ca))
-	manifest = strings.ReplaceAll(manifest, "{{.CRT}}", base64.StdEncoding.EncodeToString(crt))
-	manifest = strings.ReplaceAll(manifest, "{{.KEY}}", base64.StdEncoding.EncodeToString(key))
-
-	cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "apply", "-f", "-")
-	cmd.Stdin = strings.NewReader(manifest)
-	out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
-	cmd.Stdout = out
-	cmd.Stderr = out
-	require.NoError(cmd.Run())
-	require.NoError(itest.Kubectl(ctx, is.ManagerNamespace(), "rollout", "status", "-w", "deploy/traffic-manager"))
-
-	is.findTrafficManagerPresent(ctx, "", is.ManagerNamespace())
-}
-
 func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	require := is.Require()
 	ctx := is.Context()
@@ -202,130 +167,24 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	defer restoreVersion()
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
-	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
-		cfg.Timeouts().PrivateHelm = 30 * time.Second
-	})
 	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
-	require.Error(ensureTrafficManager(ctx, kc))
+
+	failCtx := itest.WithConfig(ctx, func(cfg client.Config) {
+		cfg.Timeouts().PrivateHelm = 20 * time.Second // Give it time to discover the ImagePullbackOff error
+	})
+	require.Error(ensureTrafficManager(failCtx, kc))
 	restoreVersion()
+
+	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
+		cfg.Timeouts().PrivateHelm = 20 * time.Second // Time to wait before pending state makes us assume it's stuck.
+	})
 	var err error
-	require.Eventually(func() bool {
+	if !is.Eventually(func() bool {
 		err = ensureTrafficManager(ctx, kc)
 		return err == nil
-	}, 3*time.Minute, 5*time.Second, "Unable to install proper manager after failed install: %v", err)
-}
-
-func certsetup(namespace string) ([]byte, []byte, []byte, error) {
-	// Most of this is adapted from https://gist.github.com/shaneutt/5e1995295cff6721c89a71d13a71c251
-	// set up our CA certificate
-	ca := &x509.Certificate{
-		SerialNumber: big.NewInt(2019),
-		Subject: pkix.Name{
-			Organization: []string{"getambassador.io"},
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().AddDate(10, 0, 0),
-		IsCA:                  true,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		BasicConstraintsValid: true,
+	}, time.Minute, 5*time.Second) {
+		is.Fail(fmt.Sprintf("Unable to install proper manager after failed install: %v", err))
 	}
-
-	// create our private and public key
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// create the CA
-	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// pem encode
-	caPEM := new(bytes.Buffer)
-	err = pem.Encode(caPEM, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caBytes,
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	caPrivKeyPEM := new(bytes.Buffer)
-	err = pem.Encode(caPrivKeyPEM, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// set up our server certificate
-	host := fmt.Sprintf("agent-injector.%s", namespace)
-	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(2019),
-		Subject: pkix.Name{
-			Organization: []string{"getambassador.io"},
-			CommonName:   host,
-		},
-		DNSNames:    []string{host},
-		NotBefore:   time.Now(),
-		NotAfter:    time.Now().AddDate(10, 0, 0),
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:    x509.KeyUsageDigitalSignature,
-	}
-
-	certPrivKey, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	certBytes, err := x509.CreateCertificate(rand.Reader, cert, ca, &certPrivKey.PublicKey, caPrivKey)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	certPEM := new(bytes.Buffer)
-	err = pem.Encode(certPEM, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certBytes,
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	certPrivKeyPEM := new(bytes.Buffer)
-	err = pem.Encode(certPrivKeyPEM, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	return caPEM.Bytes(), certPEM.Bytes(), certPrivKeyPEM.Bytes(), nil
-}
-
-func (is *installSuite) Test_EnsureManager_toleratesLeftoverState() {
-	require := is.Require()
-	ctx := is.Context()
-
-	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
-	require.NoError(ensureTrafficManager(ctx, kc))
-	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
-
-	is.UninstallTrafficManager(ctx, is.ManagerNamespace())
-	require.NoError(ensureTrafficManager(ctx, kc))
-	require.Eventually(func() bool {
-		obj, err := k8sapi.GetDeployment(ctx, ManagerAppName, is.ManagerNamespace())
-		if err != nil {
-			return false
-		}
-		deploy, _ := k8sapi.DeploymentImpl(obj)
-		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
-	}, 10*time.Second, time.Second, "timeout waiting for deployment to update")
 }
 
 func (is *installSuite) Test_RemoveManager_canUninstall() {

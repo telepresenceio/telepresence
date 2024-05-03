@@ -3,6 +3,7 @@ package helm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -261,7 +262,14 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, re
 	})
 }
 
-func isInstalled(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, releaseName, namespace string) (*release.Release, *action.Configuration, error) {
+var errStuck = errors.New("stuck in pending state") //nolint:gochecknoglobals // constant
+
+func isInstalled(
+	ctx context.Context,
+	timeout time.Duration,
+	clientGetter genericclioptions.RESTClientGetter,
+	releaseName, namespace string,
+) (*release.Release, *action.Configuration, error) {
 	dlog.Debug(ctx, "getHelmConfig")
 	helmConfig, err := getHelmConfig(ctx, clientGetter, namespace)
 	if err != nil {
@@ -271,7 +279,6 @@ func isInstalled(ctx context.Context, clientGetter genericclioptions.RESTClientG
 
 	var existing *release.Release
 	transitionStart := time.Now()
-	timeout := client.GetConfig(ctx).Timeouts().Get(client.TimeoutHelm)
 	for time.Since(transitionStart) < timeout {
 		dlog.Debugf(ctx, "getHelmRelease")
 		if existing, err = getHelmRelease(ctx, releaseName, helmConfig); err != nil {
@@ -300,26 +307,17 @@ func isInstalled(ctx context.Context, clientGetter genericclioptions.RESTClientG
 			namespace)
 		dtime.SleepWithContext(ctx, 1*time.Second)
 	}
-	dlog.Infof(ctx, "isInstalled(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); assuming it's stuck",
-		namespace, timeout)
-	return existing, helmConfig, nil
+	return existing, helmConfig, errStuck
 }
 
-func EnsureTrafficManager(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string, req *Request) error {
+func EnsureTrafficManager(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string, req *Request) (err error) {
 	if req.Crds {
 		dlog.Debug(ctx, "loading build-in helm chart")
-		err := ensureIsInstalled(ctx, clientGetter, true, crdReleaseName, namespace, req)
-		if err != nil {
-			return fmt.Errorf("failed to install traffic manager CRDs: %w", err)
-		}
-		return nil
+		err = ensureIsInstalled(ctx, clientGetter, true, crdReleaseName, namespace, req)
+	} else {
+		err = ensureIsInstalled(ctx, clientGetter, false, trafficManagerReleaseName, namespace, req)
 	}
-	err := ensureIsInstalled(ctx, clientGetter, false, trafficManagerReleaseName, namespace, req)
-	if err != nil {
-		return fmt.Errorf("failed to install traffic manager: %w", err)
-	}
-
-	return nil
+	return err
 }
 
 // EnsureTrafficManager ensures the traffic manager is installed.
@@ -327,9 +325,31 @@ func ensureIsInstalled(
 	ctx context.Context, clientGetter genericclioptions.RESTClientGetter, crd bool,
 	releaseName, namespace string, req *Request,
 ) error {
-	existing, helmConfig, err := isInstalled(ctx, clientGetter, releaseName, namespace)
+	cleanFailedState := func(helmConfig *action.Configuration) error {
+		urq := Request{
+			Type:    Uninstall,
+			NoHooks: true,
+		}
+		err := uninstallExisting(ctx, helmConfig, releaseName, namespace, &urq)
+		if err != nil {
+			err = fmt.Errorf("failed to clean up leftover release history: %w", err)
+		}
+		return err
+	}
+
+	timeout := client.GetConfig(ctx).Timeouts().Get(client.TimeoutHelm)
+	existing, helmConfig, err := isInstalled(ctx, timeout, clientGetter, releaseName, namespace)
 	if err != nil {
-		return fmt.Errorf("err detecting %s: %w", releaseName, err)
+		if !(errors.Is(err, errStuck) && req.Type == Install) {
+			return err
+		}
+		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); "+
+			"assuming it's stuck and will attempt uninstall", namespace, timeout)
+		err = cleanFailedState(helmConfig)
+		if err != nil {
+			return err
+		}
+		existing = nil
 	}
 
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
@@ -337,13 +357,9 @@ func ensureIsInstalled(
 	if existing != nil && (existing.Info.Status != release.StatusDeployed) {
 		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
 			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
-		urq := Request{
-			Type:    Uninstall,
-			NoHooks: true,
-		}
-		err = uninstallExisting(ctx, helmConfig, namespace, releaseName, &urq)
+		err = cleanFailedState(helmConfig)
 		if err != nil {
-			return fmt.Errorf("failed to clean up leftover release history: %w", err)
+			return err
 		}
 		existing = nil
 	}
@@ -352,7 +368,7 @@ func ensureIsInstalled(
 	var providedVals map[string]any
 	if len(req.ValuesJson) > 0 {
 		if err := json.Unmarshal(req.ValuesJson, &providedVals); err != nil {
-			return fmt.Errorf("unable to parse values JSON: %w", err)
+			return errcat.User.Newf("unable to parse values JSON: %w", err)
 		}
 	}
 
@@ -381,19 +397,9 @@ func ensureIsInstalled(
 	}
 
 	switch {
-	case existing == nil: // fresh install
-		// Only the traffic manager release has a legacy version.
-		if releaseName == trafficManagerReleaseName {
-			dlog.Debugf(ctx, "Importing legacy for namespace %s", namespace)
-			if err := importLegacy(ctx, releaseName, namespace); err != nil {
-				// Similarly to the error check for getHelmRelease, this could happen because of missing permissions,
-				// or a different k8s error. We don't want to block on permissions failures, so let's log and hope.
-				dlog.Errorf(ctx, "ensureIsInstalled(namespace=%q): unable to import existing k8s resources: %v. Assuming traffic-manager is setup and continuing...",
-					namespace, err)
-				return nil
-			}
-		}
-
+	case existing == nil && req.Type == Upgrade: // fresh install
+		err = errcat.User.Newf("%s is not installed, use 'telepresence helm install' to install it", releaseName)
+	case existing == nil:
 		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): performing fresh install...", namespace)
 		err = installNew(ctx, chrt, helmConfig, releaseName, namespace, req, vals)
 	case req.Type == Upgrade: // replace existing install
