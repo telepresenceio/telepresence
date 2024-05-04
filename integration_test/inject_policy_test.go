@@ -45,7 +45,7 @@ func (is *installSuite) injectPolicyTest(ctx context.Context, policy agentconfig
 		Namespace:         namespace,
 		ManagedNamespaces: []string{namespace},
 	})
-	is.NoError(is.TelepresenceHelmInstall(ctx, false, "--set", "agentInjector.injectPolicy="+policy.String()))
+	is.TelepresenceHelmInstallOK(ctx, false, "--set", "agentInjector.injectPolicy="+policy.String())
 	defer is.UninstallTrafficManager(ctx, namespace)
 
 	ctx = itest.WithUser(ctx, namespace+":"+itest.TestUser)

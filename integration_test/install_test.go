@@ -56,7 +56,7 @@ func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClien
 func (is *installSuite) Test_UpgradeRetainsValues() {
 	ctx := is.Context()
 	rq := is.Require()
-	rq.NoError(is.TelepresenceHelmInstall(ctx, false, "--set", "logLevel=debug"))
+	is.TelepresenceHelmInstallOK(ctx, false, "--set", "logLevel=debug")
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
 	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())

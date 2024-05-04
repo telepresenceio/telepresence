@@ -113,10 +113,10 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	itest.CreateNamespaces(ctx, otherTwo)
 	defer itest.DeleteNamespaces(ctx, otherTwo)
 
-	require.NoError(s.TelepresenceHelmInstall(itest.WithNamespaces(ctx, &itest.Namespaces{
+	s.TelepresenceHelmInstallOK(itest.WithNamespaces(ctx, &itest.Namespaces{
 		Namespace:         s.ManagerNamespace(),
 		ManagedNamespaces: []string{otherOne, otherTwo},
-	}), true))
+	}), true)
 	defer s.RollbackTM(ctx)
 
 	itest.TelepresenceDisconnectOk(ctx)

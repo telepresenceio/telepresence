@@ -56,7 +56,7 @@ const (
 )
 
 type Cluster interface {
-	CapturePodLogs(ctx context.Context, app, container, ns string)
+	CapturePodLogs(ctx context.Context, app, container, ns string) string
 	CompatVersion() string
 	Executable() string
 	GeneralError() error
@@ -75,7 +75,8 @@ type Cluster interface {
 	PackageHelmChart(ctx context.Context) (string, error)
 	GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string
 	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
-	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) error
+	TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, args ...string) string
+	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) (string, error)
 	UserdPProf() uint16
 	RootdPProf() uint16
 }
@@ -462,7 +463,7 @@ func (s *cluster) RootdPProf() uint16 {
 	return s.rootdPProf
 }
 
-func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
+func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) string {
 	var pods []string
 	for i := 0; ; i++ {
 		runningPods := RunningPods(ctx, app, ns)
@@ -490,7 +491,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		} else {
 			dlog.Errorf(ctx, "found no %s pods in namespace %s with a %s container", app, ns, container)
 		}
-		return
+		return ""
 	}
 	present := struct{}{}
 
@@ -502,7 +503,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		key += "/" + container
 	}
 	if _, ok := s.logCapturingPods.LoadOrStore(key, present); ok {
-		return
+		return ""
 	}
 
 	logFile, err := os.Create(
@@ -510,7 +511,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	if err != nil {
 		s.logCapturingPods.Delete(pod)
 		dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
-		return
+		return ""
 	}
 
 	args := []string{"--namespace", ns, "logs", "-f", pod}
@@ -521,7 +522,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	cmd := Command(context.WithoutCancel(ctx), "kubectl", args...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	ready := make(chan struct{})
+	ready := make(chan string, 1)
 	go func() {
 		defer func() {
 			_ = logFile.Close()
@@ -534,6 +535,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 			} else {
 				dlog.Infof(ctx, "Capturing logs for pod %s, container %s", pod, container)
 			}
+			ready <- logFile.Name()
 			close(ready)
 			err = cmd.Wait()
 		}
@@ -553,7 +555,9 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	select {
 	case <-ctx.Done():
 		dlog.Infof(ctx, "log capture for pod %s interrupted prior to start", pod)
-	case <-ready:
+		return ""
+	case file := <-ready:
+		return file
 	}
 }
 
@@ -643,7 +647,13 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 	return err
 }
 
-func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, settings ...string) error {
+func (s *cluster) TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, settings ...string) string {
+	logFile, err := s.TelepresenceHelmInstall(ctx, upgrade, settings...)
+	require.NoError(getT(ctx), err)
+	return logFile
+}
+
+func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, settings ...string) (string, error) {
 	nss := GetNamespaces(ctx)
 	subjectNames := []string{TestUser}
 	subjects := make([]rbac.Subject, len(subjectNames))
@@ -709,11 +719,11 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	valuesFile := filepath.Join(getT(ctx).TempDir(), "values.yaml")
 	if err := os.WriteFile(valuesFile, ss, 0o644); err != nil {
-		return err
+		return "", err
 	}
 
 	verb := "install"
@@ -724,13 +734,13 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	args = append(args, settings...)
 
 	if _, _, err = Telepresence(WithUser(ctx, "default"), args...); err != nil {
-		return err
+		return "", err
 	}
 	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager"); err != nil {
-		return err
+		return "", err
 	}
-	s.self.CapturePodLogs(ctx, "traffic-manager", "", nss.Namespace)
-	return nil
+	logFileName := s.self.CapturePodLogs(ctx, "traffic-manager", "", nss.Namespace)
+	return logFileName, nil
 }
 
 func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, error) {

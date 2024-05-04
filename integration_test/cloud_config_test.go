@@ -58,7 +58,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	ips, err := getClusterIPs(cluster)
 	require.NoError(err)
 
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/%d}", ip, mask)))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/%d}", ip, mask))
 	defer s.RollbackTM(ctx)
 
 	timeout := 20 * time.Second
@@ -132,7 +132,7 @@ func (s *notConnectedSuite) Test_CloudAllowConflicting() {
 
 	acs, err := netip.ParsePrefix("10.88.2.4/30")
 	require.NoError(err)
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.allowConflictingSubnets={%s}", acs)))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", fmt.Sprintf("client.routing.allowConflictingSubnets={%s}", acs))
 	defer s.RollbackTM(ctx)
 
 	timeout := 20 * time.Second
@@ -177,7 +177,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 		lines++
 	}
 	rootLog.Close()
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
 	defer s.RollbackTM(ctx)
 
 	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
@@ -264,7 +264,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	}
 	logF.Close()
 
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
 	defer s.RollbackTM(ctx)
 	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
 		cfg.LogLevels().UserDaemon = logrus.InfoLevel

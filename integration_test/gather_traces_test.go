@@ -53,7 +53,7 @@ func (s *gatherTracesSuite) SetupSuite() {
 
 	go func() {
 		defer wg.Done()
-		s.NoError(s.TelepresenceHelmInstall(ctx, false, "--set", "tracing.grpcPort=15766"))
+		s.TelepresenceHelmInstallOK(ctx, false, "--set", "tracing.grpcPort=15766")
 	}()
 	wg.Wait()
 }
@@ -112,7 +112,7 @@ func (s *gatherTracesSuite) Test_GatherTraces() {
 	outputFile := filepath.Join(outputDir, "traces.gz")
 	s.cleanLogDir(ctx)
 
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "tracing.grpcPort=15766"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "tracing.grpcPort=15766")
 	defer s.RollbackTM(ctx)
 
 	itest.TelepresenceOk(ctx, "gather-traces", "--output-file", outputFile)

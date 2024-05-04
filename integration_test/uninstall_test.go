@@ -38,9 +38,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	}, 30*time.Second, 3*time.Second)
 
 	stdout = itest.TelepresenceOk(ctx, "helm", "uninstall", "-n", s.ManagerNamespace())
-	defer func() {
-		require.NoError(s.TelepresenceHelmInstall(ctx, false))
-	}()
+	defer s.TelepresenceHelmInstallOK(ctx, false)
 	s.Contains(stdout, "Traffic Manager uninstalled successfully")
 
 	// Double check webhook agent is uninstalled
