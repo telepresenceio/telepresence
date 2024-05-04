@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,44 +18,39 @@ import (
 )
 
 func (s *connectedSuite) Test_ManualAgent() {
+	testManualAgent(&s.Suite, s.NamespacePair)
+}
+
+func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 	require := s.Require()
-	assert := s.Assert()
 	ctx := s.Context()
 
 	k8sDir := filepath.Join("testdata", "k8s")
-	require.NoError(itest.Kubectl(ctx, s.AppNamespace(), "apply", "-f", filepath.Join(k8sDir, "echo-manual-inject-svc.yaml")))
+	require.NoError(nsp.Kubectl(ctx, "apply", "-f", filepath.Join(k8sDir, "echo-manual-inject-svc.yaml")))
 
 	agentImage := s.Registry() + "/tel2:" + strings.TrimPrefix(s.TelepresenceVersion(), "v")
 	inputFile := filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml")
 	cfgEntry := itest.TelepresenceOk(ctx, "genyaml", "config",
 		"--agent-image", agentImage,
 		"--output", "-",
-		"--manager-namespace", s.ManagerNamespace(),
-		"--namespace", s.AppNamespace(),
+		"--manager-namespace", nsp.ManagerNamespace(),
+		"--namespace", nsp.AppNamespace(),
 		"--input", inputFile,
 		"--loglevel", "debug")
 	var ac agentconfig.Sidecar
 	require.NoError(yaml.Unmarshal([]byte(cfgEntry), &ac))
 
 	tmpDir := s.T().TempDir()
-	writeFile := func(file string, data []byte) {
-		f, err := os.Create(file)
-		require.NoError(err)
-		defer f.Close()
-		_, err = f.Write(data)
-		assert.NoError(err)
-	}
-
 	writeYaml := func(name string, data any) string {
 		yf := filepath.Join(tmpDir, name)
 		b, err := yaml.Marshal(data)
 		require.NoError(err)
-		writeFile(yf, b)
+		require.NoError(os.WriteFile(yf, b, 0o666))
 		return yf
 	}
 
 	configFile := filepath.Join(tmpDir, ac.WorkloadName)
-	writeFile(configFile, []byte(cfgEntry))
+	require.NoError(os.WriteFile(configFile, []byte(cfgEntry), 0o666))
 
 	stdout := itest.TelepresenceOk(ctx, "genyaml", "container",
 		"--output", "-",
@@ -100,7 +96,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 
 	// Add the configmap entry by first retrieving the current config map
 	var cfgMap *core.ConfigMap
-	origCfgYaml, err := s.KubectlOut(ctx, "get", "configmap", agentconfig.ConfigMap, "-o", "yaml")
+	origCfgYaml, err := nsp.KubectlOut(ctx, "get", "configmap", agentconfig.ConfigMap, "-o", "yaml")
 	if err != nil {
 		cfgMap = &core.ConfigMap{
 			TypeMeta: meta.TypeMeta{
@@ -109,7 +105,7 @@ func (s *connectedSuite) Test_ManualAgent() {
 			},
 			ObjectMeta: meta.ObjectMeta{
 				Name:      agentconfig.ConfigMap,
-				Namespace: s.AppNamespace(),
+				Namespace: nsp.AppNamespace(),
 			},
 		}
 		origCfgYaml = ""
@@ -122,39 +118,42 @@ func (s *connectedSuite) Test_ManualAgent() {
 	cfgMap.Data[ac.WorkloadName] = cfgEntry
 
 	cfgYaml := writeYaml(agentconfig.ConfigMap+".yaml", cfgMap)
-	require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml))
+	require.NoError(nsp.Kubectl(ctx, "apply", "-f", cfgYaml))
 	defer func() {
 		if origCfgYaml == "" {
-			require.NoError(s.Kubectl(ctx, "delete", "configmap", agentconfig.ConfigMap))
+			require.NoError(nsp.Kubectl(ctx, "delete", "configmap", agentconfig.ConfigMap))
 		} else {
 			// Restore original configmap
 			cfgMap.ObjectMeta = meta.ObjectMeta{
 				Name:      agentconfig.ConfigMap,
-				Namespace: s.AppNamespace(),
+				Namespace: nsp.AppNamespace(),
 			}
-			cleanMapYaml, err := yaml.Marshal(cfgMap)
-			require.NoError(err)
-			writeFile(cfgYaml, cleanMapYaml)
-			require.NoError(s.Kubectl(ctx, "apply", "-f", cfgYaml))
+			writeYaml(agentconfig.ConfigMap+".yaml", cfgMap)
 		}
 	}()
 
 	dplYaml := writeYaml("deployment.yaml", deploy)
-	require.NoError(s.Kubectl(ctx, "apply", "-f", dplYaml))
+	require.NoError(nsp.Kubectl(ctx, "apply", "-f", dplYaml))
 	defer func() {
-		require.NoError(s.Kubectl(ctx, "delete", "-f", dplYaml))
+		require.NoError(nsp.Kubectl(ctx, "delete", "-f", dplYaml))
 	}()
 
-	err = s.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName)
+	err = nsp.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName)
 	require.NoError(err)
 
 	stdout = itest.TelepresenceOk(ctx, "list")
 	require.Regexp(regexp.MustCompile(`.*`+ac.WorkloadName+`\s*:\s*ready to intercept \(traffic-agent already installed\).*`), stdout)
 
-	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--port", "9094")
+	svcPort, svcCancel := itest.StartLocalHttpEchoServer(ctx, ac.WorkloadName)
+	defer svcCancel()
+
+	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--port", strconv.Itoa(svcPort))
+	defer itest.TelepresenceOk(ctx, "leave", ac.WorkloadName)
+
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && strings.Contains(stdout, ac.WorkloadName+": intercepted")
 	}, 30*time.Second, 3*time.Second)
-	itest.TelepresenceOk(ctx, "leave", ac.WorkloadName)
+
+	itest.PingInterceptedEchoServer(ctx, ac.WorkloadName, "80")
 }
