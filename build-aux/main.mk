@@ -61,6 +61,10 @@ $(BUILDDIR)/go1%.src.tar.gz:
 	mkdir -p $(BUILDDIR)
 	curl -o $@ --fail -L https://dl.google.com/go/$(@F)
 
+.PHONY: clean
+clean:
+	rm -rf $(BUILDDIR)
+
 .PHONY: protoc-clean
 protoc-clean:
 	find ./rpc -name '*.go' -delete

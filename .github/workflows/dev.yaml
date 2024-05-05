@@ -49,9 +49,8 @@ jobs:
         runners:
           - ubuntu-latest
           - ubuntu-arm64
-          - macos-latest
+          - macos-latest # this runner uses arm64
           - windows-2019
-          - macOS-arm64
         clusters:
           - distribution: Kubeception
             version: "1.27"
