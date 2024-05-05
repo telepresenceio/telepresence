@@ -17,7 +17,6 @@ jobs:
           - ubuntu-latest
           - ubuntu-arm64
           - macos-latest
-          - macOS-arm64
           - windows-2019
     runs-on: ${{ matrix.runners }}
     steps:
@@ -32,6 +31,18 @@ jobs:
       - name: generate binaries
         run: make release-binary
       - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: build-output/release
+          retention-days: 1
+      - name: generate binaries darwin-amd64 # macos-latest is arm64, so we need an extra amd64 build
+        if: runner.os == 'macOS'
+        env:
+          GOARCH: amd64
+        run: make clean release-binary
+      - name: Upload binaries darwin-amd64
+        if: runner.os == 'macOS'
         uses: actions/upload-artifact@v3
         with:
           name: binaries

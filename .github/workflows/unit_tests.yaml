@@ -4,8 +4,16 @@ on:
 env:
   HOMEBREW_NO_INSTALL_FROM_API:
 jobs:
-  macos:
-    runs-on: macos-latest
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        runners:
+          - ubuntu-latest
+          - ubuntu-arm64
+          - macos-latest
+          - windows-2019
+    runs-on: ${{ matrix.runners }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -15,9 +23,7 @@ jobs:
         uses: ./.github/actions/install-dependencies
       - name: Lint
         run: make lint
-      - name: "Test arm64 build"
-        run: GOARCH=arm64 make build
-      - name: "Test amd64 build"
+      - name: Build
         run: make build
       - name: Run tests
         uses: nick-fields/retry/@v3
@@ -25,66 +31,3 @@ jobs:
           max_attempts: 3
           timeout_minutes: 12
           command: make check-unit
-
-  windows:
-    runs-on: windows-2019
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: "${{ github.event.pull_request.head.sha }}"
-      - name: install dependencies
-        uses: ./.github/actions/install-dependencies
-      - name: Build
-        run: make build
-      - name: Lint
-        run: make lint
-      - name: Run tests
-        uses: nick-fields/retry/@v3
-        with:
-          max_attempts: 3
-          timeout_minutes: 12
-          command: |
-            make check-unit
-
-  linux-amd64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: "${{ github.event.pull_request.head.sha }}"
-      - name: install dependencies
-        uses: ./.github/actions/install-dependencies
-      - name: Lint
-        run: make lint
-      - name: "Test amd64 build"
-        run: make build
-      - name: Run tests
-        uses: nick-fields/retry/@v3
-        with:
-          max_attempts: 3
-          timeout_minutes: 10
-          command: |
-            make check-unit
-
-  linux-arm64:
-    runs-on: ubuntu-arm64
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: "${{ github.event.pull_request.head.sha }}"
-      - name: install dependencies
-        uses: ./.github/actions/install-dependencies
-      - name: Lint
-        run: make lint
-      - name: "Test arm64 build"
-        run: CC=aarch64-linux-gnu-gcc make build
-      - name: Run tests
-        uses: nick-fields/retry/@v3
-        with:
-          max_attempts: 3
-          timeout_minutes: 10
-          command: |
-            make check-unit
