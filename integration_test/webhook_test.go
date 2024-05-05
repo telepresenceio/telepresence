@@ -52,8 +52,7 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 		cfg.Images().PrivateAgentImage = "imageFromConfig:0.0.1"
 	})
 
-	require := s.Require()
-	require.NoError(s.TelepresenceHelmInstall(itest.WithAgentImage(ctx, nil), true))
+	s.TelepresenceHelmInstallOK(itest.WithAgentImage(ctx, nil), true)
 	defer s.RollbackTM(ctx)
 
 	s.TelepresenceConnect(ctx)

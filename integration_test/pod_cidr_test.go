@@ -31,8 +31,7 @@ func (s *podCIDRSuite) Test_PodCIDRStrategy() {
 	ctx := s.Context()
 	connected := false
 
-	rq := s.Require()
-	rq.NoError(s.TelepresenceHelmInstall(ctx, false))
+	s.TelepresenceHelmInstallOK(ctx, false)
 	defer func() {
 		if connected {
 			itest.TelepresenceQuitOk(ctx)
@@ -80,7 +79,7 @@ func (s *podCIDRSuite) Test_PodCIDRStrategy() {
 			vy, err := yaml.Marshal(tt.values)
 			rq.NoError(err)
 			rq.NoError(os.WriteFile(vFile, vy, 0o644))
-			rq.NoError(s.TelepresenceHelmInstall(ctx, true, "--no-hooks", "-f", vFile))
+			s.TelepresenceHelmInstallOK(ctx, true, "--no-hooks", "-f", vFile)
 			s.TelepresenceConnect(ctx)
 			connected = true
 			si := itest.TelepresenceStatusOk(ctx)

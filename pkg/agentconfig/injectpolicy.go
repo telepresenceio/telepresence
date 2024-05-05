@@ -8,7 +8,7 @@ import (
 // a pod.
 type InjectPolicy int
 
-var epNames = [...]string{"OnDemand", "WhenEnabled"} //nolint:gochecknoglobals // constant names
+var epNames = [...]string{"OnDemand", "WhenEnabled", "Never"} //nolint:gochecknoglobals // constant names
 
 const (
 	// OnDemand tells the injector to inject the traffic-agent the first time someone makes an attempt
@@ -26,6 +26,9 @@ const (
 	// created or updated when the telepresence.getambassador.io/inject-traffic-agent annotation is
 	// present and set to "enabled".
 	WhenEnabled
+
+	// Never will disable the injector.
+	Never
 )
 
 func (aps InjectPolicy) String() string {

@@ -36,9 +36,9 @@ items:
       - type: bugfix
         title: Improve how the traffic-manager resolves DNS when no agent is installed.
         body: >-
-         The traffic-manager is typically installed into a namespace different from the one that clients are
-         connected to. It's therefore important that the traffic-manager adds the client's namespace when
-         resolving single label names in situations where there are any agents to dispatch the DNS query to.
+          The traffic-manager is typically installed into a namespace different from the one that clients are
+          connected to. It's therefore important that the traffic-manager adds the client's namespace when
+          resolving single label names in situations where there are any agents to dispatch the DNS query to.
       - type: change
         title: Removal of ability import legacy artifact into Helm.
         body: >-
@@ -61,6 +61,12 @@ items:
           the Telepresence DNS resolver will also be able to resolve them, and thereby remove the need
           to add &quot;.svc&quot; to the include-suffix list.
         docs: https://github.com/telepresenceio/telepresence/issues/2814
+      - type: feature
+        title: Add ability to enable/disable the mutating webhook.
+        body: >-
+          A new Helm chart boolean value <code>agentInjector.enable</code> has been added that controls the agent-injector
+          service and its associated mutating webhook. If set to <code>false</code>, the service, the webhook, and the
+          secrets and certificates associated with it, will no longer be installed.
       - type: feature
         title: Add ability to mount a webhook secret.
         body: >-
@@ -147,7 +153,7 @@ items:
           A CIDR with a mask that leaves less than two bits (/31 or /32 for IPv4)
           cannot be added as an address to the VIF, because such addresses must
           have bits allowing a "via" IP.
-          
+
           The logic was modified to allow such CIDRs to become static routes, using the
           VIF base address as their "via", rather than being VIF addresses in their own right.
       - type: bugfix
@@ -355,10 +361,10 @@ items:
       - type: feature
         title: Additional Prometheus metrics to track intercept/connect activity
         body: >-
-          This feature adds the following metrics to the Prometheus endpoint: <code>connect_count</code>, 
-          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code. 
-          These are labeled by client/install_id. 
-          Additionally, the <code>intercept_count</code> metric has been renamed to <code>active_intercept_count</code> 
+          This feature adds the following metrics to the Prometheus endpoint: <code>connect_count</code>,
+          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code.
+          These are labeled by client/install_id.
+          Additionally, the <code>intercept_count</code> metric has been renamed to <code>active_intercept_count</code>
           for clarity.
       - type: feature
         title: Make the Telepresence client docker image configurable.

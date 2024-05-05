@@ -23,6 +23,7 @@ spec:
 
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
+{{- if .Values.agentInjector.enabled }}
 ---
 apiVersion: v1
 kind: Service
@@ -39,6 +40,7 @@ spec:
     targetPort: https
   selector:
     {{- include "telepresence.selectorLabels" . | nindent 4 }}
+{{- end }}
 {{- if .Values.prometheus.port }} # 0 is false
 ---
 apiVersion: v1

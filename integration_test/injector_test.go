@@ -184,7 +184,7 @@ func (s *singleServiceSuite) Test_HelmUpgradeWebhookSecret() {
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 12*time.Second, 3*time.Second)
 
-	s.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "agentInjector.certificate.regenerate=true,agentInjector.certificate.accessMethod=watch,logLevel=debug"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "agentInjector.certificate.regenerate=true,agentInjector.certificate.accessMethod=watch,logLevel=debug")
 	time.Sleep(5 * time.Second)
 
 	// Check that the intercept is still active
@@ -226,7 +226,7 @@ func (s *singleServiceSuite) Test_HelmUpgradeMountedWebhookSecret() {
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 12*time.Second, 3*time.Second)
 
-	s.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "agentInjector.certificate.regenerate=true,agentInjector.certificate.accessMethod=mount,logLevel=debug"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "agentInjector.certificate.regenerate=true,agentInjector.certificate.accessMethod=mount,logLevel=debug")
 	time.Sleep(5 * time.Second)
 	defer func() {
 		itest.TelepresenceDisconnectOk(ctx)

@@ -69,7 +69,7 @@ func (s *notConnectedSuite) Test_ConnectingToOtherNamespace() {
 			Namespace:         mgrSpace2,
 			ManagedNamespaces: []string{appSpace2},
 		})
-		s.NoError(s.TelepresenceHelmInstall(ctx, false))
+		s.TelepresenceHelmInstallOK(ctx, false)
 	})
 
 	s.Run("Can be connected to with --manager-namespace-flag", func() {

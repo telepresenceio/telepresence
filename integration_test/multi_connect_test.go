@@ -80,7 +80,7 @@ func (s *multiConnectSuite) SetupSuite() {
 	require.NoError(err, "failed to create connect ServiceAccount")
 
 	ctx2 = itest.WithUser(ctx2, s.mgrSpace2+":"+itest.TestUser)
-	require.NoError(s.TelepresenceHelmInstall(ctx2, false))
+	s.TelepresenceHelmInstallOK(ctx2, false)
 	itest.TelepresenceQuitOk(ctx2)
 
 	s.handlerTag = "telepresence/echo-test"

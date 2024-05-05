@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -50,20 +51,20 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	if s.localIP == nil {
-		rf, err := readResolveFile("/etc/resolv.conf")
+		rf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
 		if err != nil {
 			return err
 		}
 		dlog.Debug(c, rf.String())
-		if len(rf.nameservers) > 0 {
-			ip := iputil.Parse(rf.nameservers[0])
+		if len(rf.Nameservers) > 0 {
+			ip := iputil.Parse(rf.Nameservers[0])
 			s.localIP = ip
 			dlog.Infof(c, "Automatically set -dns=%s", ip)
 		}
 
 		// The search entries in /etc/resolv.conf are not intended for this resolver so
 		// ensure that we strip them off when we send queries to the cluster.
-		for _, sp := range rf.search {
+		for _, sp := range rf.Search {
 			lsp := len(sp)
 			if lsp > 0 {
 				if sp[0] == '.' {

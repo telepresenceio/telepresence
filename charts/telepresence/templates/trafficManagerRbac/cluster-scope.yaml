@@ -44,12 +44,14 @@ rules:
   verbs:
   - get
   - list
+{{- if .Values.agentInjector.enabled }}
 - apiGroups:
   - ""
   resources:
   - configmaps
   verbs:
   - create
+{{- end }}
 - apiGroups:
   - ""
   resources:
@@ -58,8 +60,10 @@ rules:
   - list
   - get
   - watch
+{{- if .Values.agentInjector.enabled }}
   - update
   - delete
+{{- end }}
   resourceNames:
   - telepresence-agents
   - telepresence-intercept-env
@@ -71,7 +75,9 @@ rules:
   - get
   - list
   - watch
+{{- if .Values.agentInjector.enabled }}
   - patch
+{{- end }}
 - apiGroups:
   - "apps"
   resources:
@@ -80,7 +86,9 @@ rules:
   verbs:
   - get
   - list
+{{- if .Values.agentInjector.enabled }}
   - patch
+{{- end }}
 - apiGroups:
     - "events.k8s.io"
   resources:

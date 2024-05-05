@@ -26,8 +26,7 @@ func init() {
 func (s *interceptEnvSuite) Test_ExcludeVariables() {
 	// given
 	ctx := s.Context()
-	err := s.TelepresenceHelmInstall(ctx, false, "--set", "intercept.environment.excluded={DATABASE_HOST,DATABASE_PASSWORD}")
-	s.Require().NoError(err)
+	s.TelepresenceHelmInstallOK(ctx, false, "--set", "intercept.environment.excluded={DATABASE_HOST,DATABASE_PASSWORD}")
 	defer s.UninstallTrafficManager(ctx, s.ManagerNamespace())
 
 	s.ApplyApp(ctx, "echo_with_env", "deploy/echo-easy")

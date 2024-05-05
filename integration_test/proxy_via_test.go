@@ -66,8 +66,7 @@ func (s *proxyViaSuite) Test_ProxyViaLoopBack() {
 		})
 	}
 
-	err := s.TelepresenceHelmInstall(ctx, true, "--set", "client.dns.includeSuffixes={mydomain.local}")
-	s.Require().NoError(err)
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "client.dns.includeSuffixes={mydomain.local}")
 	defer s.RollbackTM(ctx)
 
 	if s.IsIPv6() {

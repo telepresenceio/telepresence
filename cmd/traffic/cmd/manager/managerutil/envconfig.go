@@ -39,7 +39,7 @@ type Env struct {
 	ManagerNamespace    string        `env:"MANAGER_NAMESPACE,        parser=string,      default="`
 	ManagedNamespaces   []string      `env:"MANAGED_NAMESPACES,       parser=split-trim,  default="`
 	APIPort             uint16        `env:"AGENT_REST_API_PORT,      parser=port-number, default=0"`
-	AgentArrivalTimeout time.Duration `env:"AGENT_ARRIVAL_TIMEOUT,    parser=time.ParseDuration"`
+	AgentArrivalTimeout time.Duration `env:"AGENT_ARRIVAL_TIMEOUT,    parser=time.ParseDuration, default=0"`
 
 	TracingGrpcPort uint16            `env:"TRACING_GRPC_PORT,     parser=port-number,default=0"`
 	MaxReceiveSize  resource.Quantity `env:"GRPC_MAX_RECEIVE_SIZE, parser=quantity"`
@@ -53,14 +53,14 @@ type Env struct {
 	AgentImageTag            string                      `env:"AGENT_IMAGE_TAG,          parser=string,         default="`
 	AgentImagePullPolicy     string                      `env:"AGENT_IMAGE_PULL_POLICY,  parser=string,         default="`
 	AgentImagePullSecrets    []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`
-	AgentInjectPolicy        agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
-	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
+	AgentInjectPolicy        agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy,  default=Never"`
+	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy, default=http2Probe"`
 	AgentLogLevel            string                      `env:"AGENT_LOG_LEVEL,          parser=logLevel,       defaultFrom=LogLevel"`
-	AgentPort                uint16                      `env:"AGENT_PORT,               parser=port-number"`
+	AgentPort                uint16                      `env:"AGENT_PORT,               parser=port-number,    default=0"`
 	AgentResources           *core.ResourceRequirements  `env:"AGENT_RESOURCES,          parser=json-resources, default="`
 	AgentInitResources       *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
-	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string"`
-	AgentInjectorSecret      string                      `env:"AGENT_INJECTOR_SECRET,    parser=nonempty-string"`
+	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string,         default="`
+	AgentInjectorSecret      string                      `env:"AGENT_INJECTOR_SECRET,    parser=string,         default="`
 	AgentSecurityContext     *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,   parser=json-security-context, default="`
 
 	ClientRoutingAlsoProxySubnets        []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`

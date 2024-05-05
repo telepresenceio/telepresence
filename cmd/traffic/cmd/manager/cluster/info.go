@@ -20,6 +20,7 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -117,12 +118,14 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	dummyIP := "1.1.1.1"
-	oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
-	if err != nil {
-		dlog.Warn(ctx, err)
-	} else if len(oi.InjectorSvcIp) == 16 {
-		// Must use an IPv6 IP to get the correct error message.
-		dummyIP = "1:1::1"
+	if managerutil.AgentInjectorEnabled(ctx) {
+		oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
+		if err != nil {
+			dlog.Warn(ctx, err)
+		} else if len(oi.InjectorSvcIp) == 16 {
+			// Must use an IPv6 IP to get the correct error message.
+			dummyIP = "1:1::1"
+		}
 	}
 
 	// make an attempt to create a service with ClusterIP that is out of range and then
@@ -243,27 +246,76 @@ func NewInfo(ctx context.Context) Info {
 }
 
 func getClusterDomain(ctx context.Context, svcIp net.IP, env *managerutil.Env) string {
-	desiredMatch := env.AgentInjectorName + "." + env.ManagerNamespace + ".svc."
-	addr := svcIp.String()
+	rcFile := "/etc/resolv.conf"
+	name, err := clusterDomainFromResolvConf(rcFile, env.ManagerNamespace)
+	if err == nil {
+		dlog.Infof(ctx, `Cluster domain derived from /etc/resolv.conf search path %q`, name)
+		return name
+	}
+	dlog.Infof(ctx, "Unable to extract cluster domain from %s: %v", rcFile, err)
 
-	for retry := 0; retry <= 2; retry++ {
-		if retry > 0 {
-			dlog.Debugf(ctx, "retry %d of reverse lookup of agent-injector", retry+1)
-		}
-		if names, err := net.LookupAddr(addr); err == nil {
-			for _, name := range names {
-				if strings.HasPrefix(name, desiredMatch) {
-					dlog.Infof(ctx, `Cluster domain derived from agent-injector reverse lookup %q`, name)
-					return name[len(desiredMatch):]
+	if managerutil.AgentInjectorEnabled(ctx) {
+		desiredMatch := env.AgentInjectorName + "." + env.ManagerNamespace + ".svc."
+		addr := svcIp.String()
+
+		for retry := 0; retry <= 2; retry++ {
+			if retry > 0 {
+				dlog.Debugf(ctx, "retry %d of reverse lookup of agent-injector", retry+1)
+			}
+			if names, err := net.LookupAddr(addr); err == nil {
+				for _, name := range names {
+					if strings.HasPrefix(name, desiredMatch) {
+						dlog.Infof(ctx, `Cluster domain derived from agent-injector reverse lookup %q`, name)
+						return name[len(desiredMatch):]
+					}
 				}
 			}
+			// If no reverse lookups are found containing the cluster domain, then that's probably because the
+			// DNS for the service isn't completely setup yet.
+			time.Sleep(300 * time.Millisecond)
 		}
-		// If no reverse lookups are found containing the cluster domain, then that's probably because the
-		// DNS for the service isn't completely setup yet.
-		time.Sleep(300 * time.Millisecond)
+		dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s"`, env.AgentInjectorName)
 	}
-	dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s"`, env.AgentInjectorName)
 	return "cluster.local."
+}
+
+// This code was shamelessly stolen from tailscale/cmd//k8s-operator/svc.go and rewritten to use
+// our ResolverFile and return error instead of just logging info.
+// Kudos to the authors at Tailscale!
+func clusterDomainFromResolvConf(confFile, namespace string) (string, error) {
+	conf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
+	if err != nil {
+		return "", err
+	}
+
+	if len(conf.Search) < 3 {
+		return "", fmt.Errorf("%s contains only %d search domains, at least three expected", confFile, len(conf.Search))
+	}
+	first := conf.Search[0]
+	if !strings.HasPrefix(first, namespace+".svc.") {
+		return "", fmt.Errorf("first search domain in %s is %s; expected %s", confFile, first, namespace+".svc.<cluster-domain>")
+	}
+	second := conf.Search[1]
+	if !strings.HasPrefix(second, "svc.") {
+		return "", fmt.Errorf("second search domain in %s is %s; expected 'svc.<cluster-domain>'", confFile, second)
+	}
+
+	probablyClusterDomain := strings.TrimPrefix(second, "svc.")
+	if !strings.HasSuffix(probablyClusterDomain, ".") {
+		probablyClusterDomain += "."
+	}
+
+	// Trim the trailing dot for backwards compatibility purposes as the
+	// cluster domain was previously hardcoded to 'cluster.local' without a
+	// trailing dot.
+	third := conf.Search[2]
+	if !strings.HasSuffix(third, ".") {
+		third += "."
+	}
+	if !strings.EqualFold(third, probablyClusterDomain) {
+		return "", fmt.Errorf("expected %s to contain serch domains <namespace>.svc.<cluster-domain>, svc.<cluster-domain>, <cluster-domain>; got %s", confFile, conf.Search)
+	}
+	return probablyClusterDomain, nil
 }
 
 func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {

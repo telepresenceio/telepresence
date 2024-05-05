@@ -1,17 +1,16 @@
 package dns
 
 import (
-	"bytes"
 	"context"
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -19,23 +18,6 @@ const (
 	maxRecursionTestRetries = 10
 	recursionTestTimeout    = 500 * time.Millisecond
 )
-
-func (r *resolveFile) equals(o *resolveFile) bool {
-	if r == nil || o == nil {
-		return r == o
-	}
-	return r.port == o.port &&
-		r.domain == o.domain &&
-		slices.Equal(r.nameservers, o.nameservers) &&
-		slices.Equal(r.search, o.search) &&
-		slices.Equal(r.options, o.options)
-}
-
-func (r *resolveFile) write(fileName string) error {
-	var buf bytes.Buffer
-	_, _ = r.WriteTo(&buf)
-	return os.WriteFile(fileName, buf.Bytes(), 0o644)
-}
 
 // Worker places a file under the /etc/resolver directory so that it is picked up by the
 // macOS resolver. The file is configured with a single nameserver that points to the local IP
@@ -114,16 +96,16 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName string, 
 
 	nameservers := []string{dnsAddr.IP.String()}
 	port := dnsAddr.Port
-	newDomainResolveFile := func(domain string) *resolveFile {
-		return &resolveFile{
-			port:        port,
-			domain:      domain,
-			nameservers: nameservers,
+	newDomainResolveFile := func(domain string) *dnsproxy.ResolveFile {
+		return &dnsproxy.ResolveFile{
+			Port:        port,
+			Domain:      domain,
+			Nameservers: nameservers,
 		}
 	}
 
 	// All routes and include suffixes become domains
-	domains := make(map[string]*resolveFile, len(s.routes)+len(s.includeSuffixes))
+	domains := make(map[string]*dnsproxy.ResolveFile, len(s.routes)+len(s.includeSuffixes))
 	for route := range s.routes {
 		domains[route] = newDomainResolveFile(route)
 	}
@@ -139,12 +121,12 @@ nextSearch:
 	for _, search := range s.search {
 		search = strings.TrimSuffix(search, ".")
 		if df, ok := domains[search]; ok {
-			df.search = append(df.search, search)
+			df.Search = append(df.Search, search)
 			continue
 		}
 		for domain, df := range domains {
 			if strings.HasSuffix(search, "."+domain) {
-				df.search = append(df.search, search)
+				df.Search = append(df.Search, search)
 				continue nextSearch
 			}
 		}
@@ -164,7 +146,7 @@ nextSearch:
 	for domain, rf := range domains {
 		nsFile := domainResolverFile(resolverDirName, domain)
 		if _, ok := s.domains[domain]; ok {
-			if oldRf, err := readResolveFile(nsFile); err != nil && rf.equals(oldRf) {
+			if oldRf, err := dnsproxy.ReadResolveFile(nsFile); err != nil && rf.Equals(oldRf) {
 				continue
 			}
 			dlog.Infof(c, "Regenerating %s", nsFile)
@@ -172,7 +154,7 @@ nextSearch:
 			s.domains[domain] = struct{}{}
 			dlog.Infof(c, "Generating %s", nsFile)
 		}
-		if err := rf.write(nsFile); err != nil {
+		if err := rf.Write(nsFile); err != nil {
 			dlog.Error(c, err)
 		}
 	}

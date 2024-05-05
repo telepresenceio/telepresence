@@ -112,10 +112,16 @@ func MainWithEnv(ctx context.Context) (err error) {
 		}
 	}
 
-	// The GetInjectorCertGetter and the mutator.Load both create SharedInformer instances
-	// from informer factories, so these calls must be placed here in order for the factories
-	// to start correctly.
-	injectorCertGetter := mutator.GetInjectorCertGetter(ctx)
+	var injectorCertGetter mutator.InjectorCertGetter
+	if managerutil.AgentInjectorEnabled(ctx) {
+		// The GetInjectorCertGetter and the mutator.Load both create SharedInformer instances
+		// from informer factories, so these calls must be placed here in order for the factories
+		// to start correctly.
+		injectorCertGetter = mutator.GetInjectorCertGetter(ctx)
+	}
+
+	// We load the Map regardless of if the agent-injector is enabled or not. Intercepts can still
+	// be added manually.
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
 
 	if mgrFactory {
@@ -136,12 +142,14 @@ func MainWithEnv(ctx context.Context) (err error) {
 
 	g.Go("prometheus", mgr.servePrometheus)
 
-	g.Go("agent-injector", func(ctx context.Context) error {
-		if managerutil.GetAgentImageRetriever(ctx) == nil {
-			return nil
-		}
-		return mutator.ServeMutator(ctx, injectorCertGetter)
-	})
+	if managerutil.AgentInjectorEnabled(ctx) {
+		g.Go("agent-injector", func(ctx context.Context) error {
+			if managerutil.GetAgentImageRetriever(ctx) == nil {
+				return nil
+			}
+			return mutator.ServeMutator(ctx, injectorCertGetter)
+		})
+	}
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
 

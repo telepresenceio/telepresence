@@ -1,4 +1,4 @@
-{{- if eq .Values.agentInjector.certificate.method "certmanager" }}
+{{- if and (eq .Values.agentInjector.certificate.method "certmanager") .Values.agentInjector.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
