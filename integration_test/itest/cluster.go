@@ -127,8 +127,8 @@ func (s *cluster) SetSelf(self Cluster) {
 }
 
 func (s *cluster) imagesFromEnv(ctx context.Context) context.Context {
-	v := s.TelepresenceVersion()[1:]
-	r := s.Registry()
+	v := s.self.TelepresenceVersion()[1:]
+	r := s.self.Registry()
 	if img := ImageFromEnv(ctx, "DEV_MANAGER_IMAGE", v, r); img != nil {
 		ctx = WithImage(ctx, img)
 	}
@@ -142,7 +142,7 @@ func (s *cluster) imagesFromEnv(ctx context.Context) context.Context {
 }
 
 func (s *cluster) AgentVersion(ctx context.Context) string {
-	return s.TelepresenceVersion()[1:]
+	return s.self.TelepresenceVersion()[1:]
 }
 
 func (s *cluster) Initialize(ctx context.Context) context.Context {
@@ -353,7 +353,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
 	images := config.Images()
-	images.PrivateRegistry = s.Registry()
+	images.PrivateRegistry = s.self.Registry()
 	if agentImage := GetAgentImage(c); agentImage != nil {
 		images.PrivateAgentImage = agentImage.FQName()
 		images.PrivateWebhookRegistry = agentImage.Registry
@@ -648,7 +648,7 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 }
 
 func (s *cluster) TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, settings ...string) string {
-	logFile, err := s.TelepresenceHelmInstall(ctx, upgrade, settings...)
+	logFile, err := s.self.TelepresenceHelmInstall(ctx, upgrade, settings...)
 	require.NoError(getT(ctx), err)
 	return logFile
 }
