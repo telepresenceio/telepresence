@@ -8,22 +8,28 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-// SessionConsumptionMetricsStaleTTL is the duration after which we consider the metrics to be staled, meaning
-// that they should not be updated anymore since the user doesn't really use Telepresence at the moment.
-const SessionConsumptionMetricsStaleTTL = 60 * time.Minute
+const (
+	ClientRemainTick = 5 * int64(time.Second)
+
+	// ConnectionStaleTimeout is the duration after which we consider the connection dormant
+	// and not currently used.
+	// The Remain call from the client arrives every 5 seconds, so if 15 seconds pass without such a call,
+	// then the connection has been interrupted (the user might have closed the lid on the laptop).
+	ConnectionStaleTimeout = ClientRemainTick * 6
+)
 
 func NewSessionConsumptionMetrics() *SessionConsumptionMetrics {
-	return &SessionConsumptionMetrics{
-		connectDuration: 0,
+	m := &SessionConsumptionMetrics{
 		FromClientBytes: tunnel.NewCounterProbe("FromClientBytes"),
 		ToClientBytes:   tunnel.NewCounterProbe("ToClientBytes"),
-		lastUpdate:      time.Now().UnixNano(),
 	}
+	m.lastUpdate.Store(time.Now().UnixNano())
+	return m
 }
 
 type SessionConsumptionMetrics struct {
-	connectDuration int64
-	lastUpdate      int64
+	connectDuration atomic.Int64
+	lastUpdate      atomic.Int64
 
 	// data from client to the traffic manager.
 	FromClientBytes *tunnel.CounterProbe
@@ -32,19 +38,26 @@ type SessionConsumptionMetrics struct {
 }
 
 func (m *SessionConsumptionMetrics) ConnectDuration() time.Duration {
-	return time.Duration(atomic.LoadInt64(&m.connectDuration))
+	return time.Duration(m.connectDuration.Load())
 }
 
-func (m *SessionConsumptionMetrics) SetConnectDuration(d time.Duration) {
-	atomic.StoreInt64(&m.connectDuration, int64(d))
+func (m *SessionConsumptionMetrics) AddTimeSpent() {
+	now := time.Now().UnixNano()
+	timeSpent := now - m.lastUpdate.Swap(now)
+	if timeSpent > ConnectionStaleTimeout {
+		// The Connection was idle for a long time, and is now back, but we don't count the idle time.
+		// Instead, we just use the time between two remain calls.
+		timeSpent = ClientRemainTick
+	}
+	m.connectDuration.Add(timeSpent)
 }
 
 func (m *SessionConsumptionMetrics) LastUpdate() time.Time {
-	return time.Unix(0, atomic.LoadInt64(&m.lastUpdate))
+	return time.Unix(0, m.lastUpdate.Load())
 }
 
 func (m *SessionConsumptionMetrics) SetLastUpdate(t time.Time) {
-	atomic.StoreInt64(&m.lastUpdate, t.UnixNano())
+	m.lastUpdate.Store(t.UnixNano())
 }
 
 func (s *state) GetSessionConsumptionMetrics(sessionID string) *SessionConsumptionMetrics {
@@ -80,14 +93,5 @@ func (s *state) RefreshSessionConsumptionMetrics(sessionID string) {
 	if !ok {
 		return
 	}
-	scm := css.ConsumptionMetrics()
-
-	// If last update is more than SessionConsumptionMetricsStaleTTL old, probably that the reporting was interrupted.
-	lu := scm.LastUpdate()
-	now := time.Now()
-	wasInterrupted := now.After(lu.Add(SessionConsumptionMetricsStaleTTL))
-	if !wasInterrupted { // If it wasn't stale, we want to count duration since last metric update.
-		scm.SetConnectDuration(now.Sub(lu))
-	}
-	scm.SetLastUpdate(now)
+	css.ConsumptionMetrics().AddTimeSpent()
 }
