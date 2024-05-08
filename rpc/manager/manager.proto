@@ -569,6 +569,64 @@ message TunnelMetrics {
   uint64 egress_bytes = 3;
 }
 
+// WorkloadInfo contains information about a workload (typically a
+// Deployment).
+message WorkloadInfo {
+  enum Kind {
+    UNSPECIFIED = 0;
+    DEPLOYMENT = 1;
+    REPLICASET = 2;
+    STATEFULSET = 3;
+  }
+
+  enum AgentState {
+    // Workload has never been intercepted, so no agent has been installed.
+    NO_AGENT_UNSPECIFIED = 0;
+
+    // An agent has been installed into workload's pods, but it is not currently intercepted.
+    INSTALLED   = 1;
+
+    // The workload (or rather its pods) is currently intercepted.
+    INTERCEPTED = 2;
+  }
+
+  Kind kind = 1;
+  string name = 2;
+  string namespace = 3;
+  AgentState agent_state = 4;
+}
+
+message WorkloadEvent {
+  enum Type {
+    ADDED_UNSPECIFIED = 0;
+    MODIFIED = 1;
+    DELETED = 2;
+  }
+
+  Type type = 1;
+  WorkloadInfo workload = 2;
+}
+// WorkloadEventDelta contains the changes made to the subscribed namespace since
+// the time given in the timestamp. A watcher can rely on that received deltas are
+// consecutive.
+message WorkloadEventsDelta {
+  // The timestamp from which this delta is computed. Typically
+  // equal to the time when the previous delta was sent.
+  google.protobuf.Timestamp since = 1;
+
+  repeated WorkloadEvent events = 2;
+}
+
+message WorkloadEventsRequest {
+  // The session_info identifies the client connection, and hence the
+  // namespace for the resulting watcher.
+  SessionInfo session_info = 1;
+
+  // The timestamp from which the first delta should be computed. Set to
+  // undefined to get a delta that contains everything.
+  google.protobuf.Timestamp since = 2;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -637,6 +695,10 @@ service Manager {
   // that session are watched.  If no session ID is given, then all
   // intercepts are watched.
   rpc WatchIntercepts(SessionInfo) returns (stream InterceptInfoSnapshot);
+
+  // WatchWorkloads notifies a client of the set of Workloads from the client
+  // connection's namespace.
+  rpc WatchWorkloads(WorkloadEventsRequest) returns (stream WorkloadEventsDelta);
 
   // WatchClusterInfo returns information needed when establishing
   // connectivity to the cluster.

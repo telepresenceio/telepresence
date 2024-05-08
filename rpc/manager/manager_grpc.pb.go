@@ -41,6 +41,7 @@ const (
 	Manager_WatchAgents_FullMethodName               = "/telepresence.manager.Manager/WatchAgents"
 	Manager_WatchAgentsNS_FullMethodName             = "/telepresence.manager.Manager/WatchAgentsNS"
 	Manager_WatchIntercepts_FullMethodName           = "/telepresence.manager.Manager/WatchIntercepts"
+	Manager_WatchWorkloads_FullMethodName            = "/telepresence.manager.Manager/WatchWorkloads"
 	Manager_WatchClusterInfo_FullMethodName          = "/telepresence.manager.Manager/WatchClusterInfo"
 	Manager_EnsureAgent_FullMethodName               = "/telepresence.manager.Manager/EnsureAgent"
 	Manager_PrepareIntercept_FullMethodName          = "/telepresence.manager.Manager/PrepareIntercept"
@@ -113,6 +114,9 @@ type ManagerClient interface {
 	// that session are watched.  If no session ID is given, then all
 	// intercepts are watched.
 	WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error)
+	// WatchWorkloads notifies a client of the set of Workloads from the client
+	// connection's namespace.
+	WatchWorkloads(ctx context.Context, in *WorkloadEventsRequest, opts ...grpc.CallOption) (Manager_WatchWorkloadsClient, error)
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error)
@@ -419,8 +423,40 @@ func (x *managerWatchInterceptsClient) Recv() (*InterceptInfoSnapshot, error) {
 	return m, nil
 }
 
+func (c *managerClient) WatchWorkloads(ctx context.Context, in *WorkloadEventsRequest, opts ...grpc.CallOption) (Manager_WatchWorkloadsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchWorkloads_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &managerWatchWorkloadsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Manager_WatchWorkloadsClient interface {
+	Recv() (*WorkloadEventsDelta, error)
+	grpc.ClientStream
+}
+
+type managerWatchWorkloadsClient struct {
+	grpc.ClientStream
+}
+
+func (x *managerWatchWorkloadsClient) Recv() (*WorkloadEventsDelta, error) {
+	m := new(WorkloadEventsDelta)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchClusterInfoClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchClusterInfo_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchClusterInfo_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +569,7 @@ func (c *managerClient) AgentLookupDNSResponse(ctx context.Context, in *DNSAgent
 }
 
 func (c *managerClient) WatchLookupDNS(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchLookupDNSClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchLookupDNS_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchLookupDNS_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +601,7 @@ func (x *managerWatchLookupDNSClient) Recv() (*DNSRequest, error) {
 }
 
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (Manager_WatchLogLevelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchLogLevel_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_WatchLogLevel_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -597,7 +633,7 @@ func (x *managerWatchLogLevelClient) Recv() (*LogLevelRequest, error) {
 }
 
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Manager_TunnelClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_Tunnel_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_Tunnel_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -637,7 +673,7 @@ func (c *managerClient) ReportMetrics(ctx context.Context, in *TunnelMetrics, op
 }
 
 func (c *managerClient) WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchDialClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_WatchDial_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], Manager_WatchDial_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -723,6 +759,9 @@ type ManagerServer interface {
 	// that session are watched.  If no session ID is given, then all
 	// intercepts are watched.
 	WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error
+	// WatchWorkloads notifies a client of the set of Workloads from the client
+	// connection's namespace.
+	WatchWorkloads(*WorkloadEventsRequest, Manager_WatchWorkloadsServer) error
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error
@@ -831,6 +870,9 @@ func (UnimplementedManagerServer) WatchAgentsNS(*AgentsRequest, Manager_WatchAge
 }
 func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchIntercepts not implemented")
+}
+func (UnimplementedManagerServer) WatchWorkloads(*WorkloadEventsRequest, Manager_WatchWorkloadsServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
 }
 func (UnimplementedManagerServer) WatchClusterInfo(*SessionInfo, Manager_WatchClusterInfoServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
@@ -1205,6 +1247,27 @@ type managerWatchInterceptsServer struct {
 }
 
 func (x *managerWatchInterceptsServer) Send(m *InterceptInfoSnapshot) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Manager_WatchWorkloads_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WorkloadEventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchWorkloads(m, &managerWatchWorkloadsServer{stream})
+}
+
+type Manager_WatchWorkloadsServer interface {
+	Send(*WorkloadEventsDelta) error
+	grpc.ServerStream
+}
+
+type managerWatchWorkloadsServer struct {
+	grpc.ServerStream
+}
+
+func (x *managerWatchWorkloadsServer) Send(m *WorkloadEventsDelta) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -1617,6 +1680,11 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchIntercepts",
 			Handler:       _Manager_WatchIntercepts_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchWorkloads",
+			Handler:       _Manager_WatchWorkloads_Handler,
 			ServerStreams: true,
 		},
 		{
