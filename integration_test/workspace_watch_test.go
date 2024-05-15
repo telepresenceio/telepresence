@@ -98,17 +98,15 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 		if !s.NoError(err) {
 			return
 		}
-		time.Sleep(time.Second)
+		time.Sleep(2 * time.Second)
 		_, err = client.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{
 			Session: clientSession,
 			Name:    spec.Name,
 		})
-		if !s.NoError(err) {
-			return
-		}
-		time.Sleep(time.Second)
+		s.NoError(err)
+		time.Sleep(2 * time.Second)
 		s.DeleteSvcAndWorkload(ctx, "deploy", "echo-easy")
-		time.Sleep(time.Second)
+		time.Sleep(2 * time.Second)
 	}()
 
 	wwStream, err := client.WatchWorkloads(ctx, &manager.WorkloadEventsRequest{
