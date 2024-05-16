@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/datawire/dlib/derror"
@@ -961,6 +962,8 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 	ticker := time.NewTicker(time.Duration(math.MaxInt64))
 	defer ticker.Stop()
 
+	var agentInfos map[string]*rpc.AgentInfo
+
 	start := time.Now()
 
 	sendEvents := func() {
@@ -1059,8 +1062,38 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 			if !ok {
 				return nil
 			}
-			agm := ass.State
-			for _, a := range agm {
+			oldAgentInfos := agentInfos
+			agentInfos = ass.State
+			for k, a := range oldAgentInfos {
+				if _, ok = agentInfos[k]; !ok {
+					name := a.Name
+					as := rpc.WorkloadInfo_NO_AGENT_UNSPECIFIED
+					dlog.Debugf(ctx, "AgentInfo %s.%s %s", a.Name, a.Namespace, as)
+					if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
+						wl := w.Workload
+						if wl.AgentState != as {
+							wl.AgentState = as
+							ticker.Reset(maxIdleTime)
+						}
+					} else if wl, err := agentmap.GetWorkload(ctx, name, a.Namespace, ""); err == nil {
+						addEvent(state.EventTypeUpdate, wl, as)
+					} else {
+						dlog.Debugf(ctx, "Unable to get workload %s.%s: %v", name, a.Namespace, err)
+						if errors.IsNotFound(err) {
+							workloadEvents[name] = &rpc.WorkloadEvent{
+								Type: rpc.WorkloadEvent_DELETED,
+								Workload: &rpc.WorkloadInfo{
+									Name:       name,
+									Namespace:  a.Namespace,
+									AgentState: as,
+								},
+							}
+							sendEvents()
+						}
+					}
+				}
+			}
+			for _, a := range agentInfos {
 				name := a.Name
 				as := rpc.WorkloadInfo_INSTALLED
 				if isIntercepted(name, a.Namespace) {
@@ -1085,7 +1118,23 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 			if !ok {
 				return nil
 			}
+			oldInterceptInfos := interceptInfos
 			interceptInfos = is.State
+			for k, ii := range oldInterceptInfos {
+				if _, ok = interceptInfos[k]; !ok {
+					name := ii.Spec.Agent
+					as := rpc.WorkloadInfo_INSTALLED
+					dlog.Debugf(ctx, "InterceptInfo %s.%s %s", name, ii.Spec.Namespace, as)
+					if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
+						if w.Workload.AgentState != as {
+							w.Workload.AgentState = as
+							ticker.Reset(maxIdleTime)
+						}
+					} else if wl, err := agentmap.GetWorkload(ctx, name, ii.Spec.Namespace, ""); err == nil {
+						addEvent(state.EventTypeUpdate, wl, as)
+					}
+				}
+			}
 			for _, ii := range interceptInfos {
 				name := ii.Spec.Agent
 				as := rpc.WorkloadInfo_INSTALLED

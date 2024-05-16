@@ -65,7 +65,6 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 	// 5. Remove the deployment
 	go func() {
 		defer cancel()
-		defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-easy")
 		s.ApplyApp(ctx, "echo-easy", "deploy/echo-easy")
 		ir := &manager.CreateInterceptRequest{
 			Session: clientSession,
