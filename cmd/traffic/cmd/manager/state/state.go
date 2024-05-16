@@ -49,10 +49,10 @@ type State interface {
 	CountTunnelIngress() uint64
 	CountTunnelEgress() uint64
 	ExpireSessions(context.Context, time.Time, time.Time)
-	GetAgent(string) *rpc.AgentInfo
-	GetActiveAgent(string) *rpc.AgentInfo
+	GetAgent(sessionID string) *rpc.AgentInfo
+	GetActiveAgent(sessionID string) *rpc.AgentInfo
 	GetAllClients() map[string]*rpc.ClientInfo
-	GetClient(string) *rpc.ClientInfo
+	GetClient(sessionID string) *rpc.ClientInfo
 	GetSession(string) SessionState
 	GetSessionConsumptionMetrics(string) *SessionConsumptionMetrics
 	GetAllSessionConsumptionMetrics() map[string]*SessionConsumptionMetrics
@@ -61,6 +61,7 @@ type State interface {
 	GetConnectActiveStatus() *prometheus.GaugeVec
 	GetInterceptCounter() *prometheus.CounterVec
 	GetInterceptActiveStatus() *prometheus.GaugeVec
+	HasAgent(name, namespace string) bool
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
@@ -89,6 +90,7 @@ type State interface {
 	WatchAgents(context.Context, func(sessionID string, agent *rpc.AgentInfo) bool) <-chan watchable.Snapshot[*rpc.AgentInfo]
 	WatchDial(sessionID string) <-chan *rpc.DialRequest
 	WatchIntercepts(context.Context, func(sessionID string, intercept *rpc.InterceptInfo) bool) <-chan watchable.Snapshot[*rpc.InterceptInfo]
+	WatchWorkloads(ctx context.Context, sessionID string) (ch <-chan []WorkloadEvent, err error)
 	WatchLookupDNS(string) <-chan *rpc.DNSRequest
 	ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
 }
@@ -132,6 +134,7 @@ type state struct {
 	interceptStates            *xsync.MapOf[string, *interceptState]
 	timedLogLevel              log.TimedLevel
 	llSubs                     *loglevelSubscribers
+	workloadWatchers           *xsync.MapOf[string, WorkloadWatcher] // workload watchers, created on demand and keyed by namespace
 	tunnelCounter              int32
 	tunnelIngressCounter       uint64
 	tunnelEgressCounter        uint64
@@ -149,12 +152,13 @@ var NewStateFunc = NewState //nolint:gochecknoglobals // extension point
 func NewState(ctx context.Context) State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	s := &state{
-		backgroundCtx:   ctx,
-		sessions:        xsync.NewMapOf[string, SessionState](),
-		agentsByName:    xsync.NewMapOf[string, *xsync.MapOf[string, *rpc.AgentInfo]](),
-		interceptStates: xsync.NewMapOf[string, *interceptState](),
-		timedLogLevel:   log.NewTimedLevel(loglevel, log.SetLevel),
-		llSubs:          newLoglevelSubscribers(),
+		backgroundCtx:    ctx,
+		sessions:         xsync.NewMapOf[string, SessionState](),
+		agentsByName:     xsync.NewMapOf[string, *xsync.MapOf[string, *rpc.AgentInfo]](),
+		interceptStates:  xsync.NewMapOf[string, *interceptState](),
+		workloadWatchers: xsync.NewMapOf[string, WorkloadWatcher](),
+		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
+		llSubs:           newLoglevelSubscribers(),
 	}
 	s.self = s
 	return s
@@ -451,6 +455,11 @@ func (s *state) getAllAgents() map[string]*rpc.AgentInfo {
 	return s.agents.LoadAll()
 }
 
+func (s *state) HasAgent(name, namespace string) bool {
+	_, ok := s.agentsByName.Load(name)
+	return ok
+}
+
 func (s *state) getAgentsByName(name, namespace string) map[string]*rpc.AgentInfo {
 	agn, ok := s.agentsByName.Load(name)
 	if !ok {
@@ -475,6 +484,22 @@ func (s *state) WatchAgents(
 	} else {
 		return s.agents.SubscribeSubset(ctx, filter)
 	}
+}
+
+func (s *state) WatchWorkloads(ctx context.Context, sessionID string) (ch <-chan []WorkloadEvent, err error) {
+	client := s.GetClient(sessionID)
+	if client == nil {
+		return nil, status.Errorf(codes.NotFound, "session %q not found", sessionID)
+	}
+	ns := client.Namespace
+	ww, _ := s.workloadWatchers.LoadOrCompute(ns, func() (ww WorkloadWatcher) {
+		ww, err = NewWorkloadWatcher(s.backgroundCtx, ns)
+		return ww
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ww.Subscribe(ctx), nil
 }
 
 // Intercepts //////////////////////////////////////////////////////////////////////////////////////
