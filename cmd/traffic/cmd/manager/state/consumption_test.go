@@ -14,15 +14,14 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 	s.state.sessions.Store("session-1", session1)
 	s.state.sessions.Store("session-2", &agentSessionState{})
 	s.state.sessions.Store("session-3", session3)
-	session1.consumptionMetrics = &SessionConsumptionMetrics{
-		connectDuration: int64(42 * time.Second),
-		lastUpdate:      now.Add(-time.Minute).UnixNano(),
-	}
+	session1.consumptionMetrics = &SessionConsumptionMetrics{}
+	session1.consumptionMetrics.connectDuration.Store(int64(42 * time.Second))
+	session1.consumptionMetrics.lastUpdate.Store(now.Add(-time.Minute).UnixNano())
+
 	// staled metric
-	session3.consumptionMetrics = &SessionConsumptionMetrics{
-		connectDuration: int64(36 * time.Second),
-		lastUpdate:      now.Add(-SessionConsumptionMetricsStaleTTL - time.Minute).UnixNano(),
-	}
+	session3.consumptionMetrics = &SessionConsumptionMetrics{}
+	session3.consumptionMetrics.connectDuration.Store(int64(36 * time.Second))
+	session3.consumptionMetrics.lastUpdate.Store(now.Add(time.Duration(-ConnectionStaleTimeout) - time.Minute).UnixNano())
 
 	// when
 	s.state.RefreshSessionConsumptionMetrics("session-1")
@@ -36,5 +35,5 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 
 	assert.Len(s.T(), s.state.GetAllSessionConsumptionMetrics(), 2)
 	assert.True(s.T(), ccs1.(*clientSessionState).ConsumptionMetrics().ConnectDuration() > 42*time.Second)
-	assert.Equal(s.T(), 36*time.Second, ccs3.(*clientSessionState).ConsumptionMetrics().ConnectDuration())
+	assert.Equal(s.T(), 41*time.Second, ccs3.(*clientSessionState).ConsumptionMetrics().ConnectDuration())
 }
