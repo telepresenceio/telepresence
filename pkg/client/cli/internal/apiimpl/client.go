@@ -84,7 +84,7 @@ func (c *impl) Version() semver.Version {
 	return version.Structured
 }
 
-func NewClient(ctx context.Context) api.Client {
+func NewClient(ctx context.Context, withNewLogger bool) api.Client {
 	env, err := client.LoadEnv()
 	if err != nil {
 		panic(err)
@@ -94,8 +94,10 @@ func NewClient(ctx context.Context) api.Client {
 		panic(fmt.Errorf("failed to load config: %w", err))
 	}
 	ctx = client.WithConfig(ctx, cfg)
-	if ctx, err = logging.InitContext(ctx, "cli", logging.RotateDaily, false); err != nil {
-		panic(err)
+	if withNewLogger {
+		if ctx, err = logging.InitContext(ctx, "cli", logging.RotateDaily, false); err != nil {
+			panic(err)
+		}
 	}
 	return &impl{Context: client.WithEnv(ctx, env)}
 }
