@@ -65,7 +65,7 @@ func (s *apiSuite) SetupSuite() {
 			},
 			Type: helm.Install,
 		}
-		s.Require().NoError(cli.NewClient(ctx).Helm(&hr, s.request()))
+		s.Require().NoError(cli.NewClient(ctx, false).Helm(&hr, s.request()))
 	}()
 	go func() {
 		defer wg.Done()
@@ -84,7 +84,7 @@ func (s *apiSuite) TearDownSuite() {
 	go func() {
 		defer wg.Done()
 		hr := helm.Request{Type: helm.Uninstall}
-		s.Require().NoError(cli.NewClient(s.Context()).Helm(&hr, s.request()))
+		s.Require().NoError(cli.NewClient(s.Context(), false).Helm(&hr, s.request()))
 	}()
 	wg.Wait()
 }
@@ -92,7 +92,7 @@ func (s *apiSuite) TearDownSuite() {
 func (s *apiSuite) Test_Connect() {
 	rq := s.Require()
 	ctx := s.Context()
-	client := cli.NewClient(ctx)
+	client := cli.NewClient(ctx, false)
 	conn, err := client.Connect(s.request())
 	rq.NoError(err)
 	defer func() {
@@ -104,7 +104,7 @@ func (s *apiSuite) Test_Connect() {
 func (s *apiSuite) Test_List() {
 	rq := s.Require()
 	ctx := s.Context()
-	client := cli.NewClient(ctx)
+	client := cli.NewClient(ctx, false)
 
 	conn, err := client.Connect(s.request())
 	rq.NoError(err)
@@ -122,7 +122,7 @@ func (s *apiSuite) Test_List() {
 func (s *apiSuite) Test_StartIntercept() {
 	rq := s.Require()
 	ctx := s.Context()
-	client := cli.NewClient(ctx)
+	client := cli.NewClient(ctx, false)
 
 	conn, err := client.Connect(s.request())
 	rq.NoError(err)
@@ -152,7 +152,7 @@ func (s *apiSuite) Test_RunIntercept() {
 	})
 
 	rq := s.Require()
-	client := cli.NewClient(ctx)
+	client := cli.NewClient(ctx, false)
 
 	cr := s.request()
 	cr.Docker = true
@@ -185,7 +185,7 @@ func (s *apiSuite) Test_Connections() {
 
 	// Establish two connections
 	rq := s.Require()
-	client := cli.NewClient(ctx)
+	client := cli.NewClient(ctx, false)
 	r1 := s.request()
 	r1.Name = "alpha"
 	r1.Docker = true
@@ -234,7 +234,7 @@ func (s *apiSuite) Test_Connections() {
 }
 
 func (s *apiSuite) Test_Version() {
-	client := cli.NewClient(s.Context())
+	client := cli.NewClient(s.Context(), false)
 	s.Equal(version.Structured, client.Version())
 }
 
