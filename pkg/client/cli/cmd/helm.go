@@ -83,6 +83,7 @@ func helmUpgrade() *cobra.Command {
 	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false, "when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
+	flags.BoolVarP(&ha.CreateNamespace, "create-namespace", "", true, "create the release namespace if not present")
 	ha.rq = daemon.InitRequest(cmd)
 	return cmd
 }

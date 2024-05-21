@@ -46,12 +46,13 @@ const (
 
 type Request struct {
 	values.Options
-	Type        RequestType
-	ValuesJson  []byte
-	ReuseValues bool
-	ResetValues bool
-	Crds        bool
-	NoHooks     bool
+	Type            RequestType
+	ValuesJson      []byte
+	ReuseValues     bool
+	ResetValues     bool
+	CreateNamespace bool
+	Crds            bool
+	NoHooks         bool
 }
 
 func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) error {
@@ -219,7 +220,7 @@ func installNew(
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
 	install.Atomic = true
-	install.CreateNamespace = true
+	install.CreateNamespace = req.CreateNamespace
 	install.DisableHooks = req.NoHooks
 	return timedRun(ctx, func(timeout time.Duration) error {
 		install.Timeout = timeout
