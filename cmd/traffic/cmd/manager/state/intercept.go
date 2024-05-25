@@ -420,7 +420,8 @@ func (s *state) waitForAgent(ctx context.Context, name, namespace string, failed
 					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
 					if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
 						strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
-						strings.Contains(msg, "skip schedule deleting pod")) {
+						strings.Contains(msg, "skip schedule deleting pod") ||
+						strings.Contains(msg, "nodes are available")) {
 						// This isn't fatal.
 						fes = append(fes, fe)
 						continue

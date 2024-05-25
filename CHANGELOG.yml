@@ -34,6 +34,13 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: FailedScheduling events mentioning node availability considered fatal when waiting for agent to arrive.
+        body: >-
+          The traffic-manager considers some events as fatal when waiting for a traffic-agent to arrive after an injection
+          has been initiated. This logic would trigger on events like &quot;Warning FailedScheduling 0/63 nodes are
+          available&quot; although those events indicate a recoverable condition and kill the wait. This is now fixed so
+          that the events are logged but the wait continues.
+      - type: bugfix
         title: Improve how the traffic-manager resolves DNS when no agent is installed.
         body: >-
           The traffic-manager is typically installed into a namespace different from the one that clients are
