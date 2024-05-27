@@ -168,7 +168,7 @@ func (s *service) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 
 // ArriveAsClient establishes a session between a client and the Manager.
 func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
-	dlog.Debug(ctx, "ArriveAsClient called")
+	dlog.Debugf(ctx, "ArriveAsClient called, namespace: %s", client.Namespace)
 
 	if val := validateClient(client); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
@@ -930,6 +930,44 @@ func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 	return s.clusterInfo.Watch(ctx, stream)
 }
 
+func rpcKind(s string) rpc.WorkloadInfo_Kind {
+	switch strings.ToLower(s) {
+	case "deployment":
+		return rpc.WorkloadInfo_DEPLOYMENT
+	case "replicaset":
+		return rpc.WorkloadInfo_REPLICASET
+	case "statefulset":
+		return rpc.WorkloadInfo_STATEFULSET
+	default:
+		return rpc.WorkloadInfo_UNSPECIFIED
+	}
+}
+
+func rpcWorkloadState(s mutator.WorkloadState) (state rpc.WorkloadInfo_State) {
+	switch s {
+	case mutator.WorkloadStateFailure:
+		state = rpc.WorkloadInfo_FAILURE
+	case mutator.WorkloadStateAvailable:
+		state = rpc.WorkloadInfo_AVAILABLE
+	case mutator.WorkloadStateProgressing:
+		state = rpc.WorkloadInfo_PROGRESSING
+	default:
+		state = rpc.WorkloadInfo_UNKNOWN_UNSPECIFIED
+	}
+	return state
+}
+
+func rpcWorkload(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) *rpc.WorkloadInfo {
+	return &rpc.WorkloadInfo{
+		Kind:             rpcKind(wl.GetKind()),
+		Name:             wl.GetName(),
+		Namespace:        wl.GetNamespace(),
+		State:            rpcWorkloadState(mutator.GetWorkloadState(wl)),
+		AgentState:       as,
+		InterceptClients: iClients,
+	}
+}
+
 //nolint:cyclop,gocyclo,gocognit // complex to avoid extremely specialized functions
 func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.Manager_WatchWorkloadsServer) (err error) {
 	ctx := managerutil.WithSessionInfo(stream.Context(), request.SessionInfo)
@@ -953,7 +991,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		return info.Namespace == ns
 	})
 	interceptsCh := s.state.WatchIntercepts(ctx, func(_ string, info *rpc.InterceptInfo) bool {
-		return info.ClientSession.SessionId == clientSession
+		return info.Spec.Namespace == ns
 	})
 	workloadsCh, err := s.state.WatchWorkloads(ctx, clientSession)
 	if err != nil {
@@ -966,26 +1004,15 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 	}
 
 	var interceptInfos map[string]*rpc.InterceptInfo
-	isIntercepted := func(name, namespace string) bool {
+	getIntercepts := func(name, namespace string) (iis []*rpc.WorkloadInfo_Intercept) {
 		for _, ii := range interceptInfos {
 			if name == ii.Spec.Agent && namespace == ii.Spec.Namespace && ii.Disposition == rpc.InterceptDispositionType_ACTIVE {
-				return true
+				iis = append(iis, &rpc.WorkloadInfo_Intercept{
+					Client: ii.Spec.Client,
+				})
 			}
 		}
-		return false
-	}
-
-	rpcKind := func(s string) rpc.WorkloadInfo_Kind {
-		switch strings.ToLower(s) {
-		case "deployment":
-			return rpc.WorkloadInfo_DEPLOYMENT
-		case "replicaset":
-			return rpc.WorkloadInfo_REPLICASET
-		case "statefulset":
-			return rpc.WorkloadInfo_STATEFULSET
-		default:
-			return rpc.WorkloadInfo_UNSPECIFIED
-		}
+		return iis
 	}
 
 	// Send events if we're idle longer than this, otherwise wait for more data
@@ -1029,19 +1056,10 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		start = time.Now()
 	}
 
-	rpcWorkload := func(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState) *rpc.WorkloadInfo {
-		return &rpc.WorkloadInfo{
-			Kind:       rpcKind(wl.GetKind()),
-			Name:       wl.GetName(),
-			Namespace:  wl.GetNamespace(),
-			AgentState: as,
-		}
-	}
-
-	addEvent := func(eventType state.EventType, wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState) {
+	addEvent := func(eventType state.EventType, wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) {
 		workloadEvents[wl.GetName()] = &rpc.WorkloadEvent{
 			Type:     rpc.WorkloadEvent_Type(eventType),
-			Workload: rpcWorkload(wl, as),
+			Workload: rpcWorkload(wl, as, iClients),
 		}
 		sendEvents()
 	}
@@ -1069,10 +1087,12 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 						ticker.Reset(maxIdleTime)
 					}
 				} else {
+					var iClients []*rpc.WorkloadInfo_Intercept
 					as := rpc.WorkloadInfo_NO_AGENT_UNSPECIFIED
 					if s.state.HasAgent(wl.GetName(), wl.GetNamespace()) {
-						if isIntercepted(wl.GetName(), wl.GetNamespace()) {
+						if iis := getIntercepts(wl.GetName(), wl.GetNamespace()); len(iis) > 0 {
 							as = rpc.WorkloadInfo_INTERCEPTED
+							iClients = iis
 						} else {
 							as = rpc.WorkloadInfo_INSTALLED
 						}
@@ -1082,12 +1102,13 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 					// we care about, then just skip it.
 					if we.Type == state.EventTypeUpdate {
 						lew, ok := lastEvents[wl.GetName()]
-						if ok && (lew.Type == rpc.WorkloadEvent_ADDED_UNSPECIFIED || lew.Type == rpc.WorkloadEvent_MODIFIED) && proto.Equal(lew.Workload, rpcWorkload(we.Workload, as)) {
+						if ok && (lew.Type == rpc.WorkloadEvent_ADDED_UNSPECIFIED || lew.Type == rpc.WorkloadEvent_MODIFIED) &&
+							proto.Equal(lew.Workload, rpcWorkload(we.Workload, as, iClients)) {
 							break
 						}
 					}
 					dlog.Debugf(ctx, "WorkloadEvent %d %s %s.%s %s", we.Type, wl.GetKind(), wl.GetName(), wl.GetNamespace(), as)
-					addEvent(we.Type, wl, as)
+					addEvent(we.Type, wl, as, iClients)
 				}
 			}
 
@@ -1110,7 +1131,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 							ticker.Reset(maxIdleTime)
 						}
 					} else if wl, err := agentmap.GetWorkload(ctx, name, a.Namespace, ""); err == nil {
-						addEvent(state.EventTypeUpdate, wl, as)
+						addEvent(state.EventTypeUpdate, wl, as, nil)
 					} else {
 						dlog.Debugf(ctx, "Unable to get workload %s.%s: %v", name, a.Namespace, err)
 						if errors.IsNotFound(err) {
@@ -1129,19 +1150,22 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 			}
 			for _, a := range agentInfos {
 				name := a.Name
+				var iClients []*rpc.WorkloadInfo_Intercept
 				as := rpc.WorkloadInfo_INSTALLED
-				if isIntercepted(name, a.Namespace) {
+				if iis := getIntercepts(name, a.Namespace); len(iis) > 0 {
 					as = rpc.WorkloadInfo_INTERCEPTED
+					iClients = iis
 				}
 				dlog.Debugf(ctx, "AgentInfo %s.%s %s", a.Name, a.Namespace, as)
 				if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
 					wl := w.Workload
 					if wl.AgentState != as {
 						wl.AgentState = as
+						wl.InterceptClients = iClients
 						ticker.Reset(maxIdleTime)
 					}
 				} else if wl, err := agentmap.GetWorkload(ctx, name, a.Namespace, ""); err == nil {
-					addEvent(state.EventTypeUpdate, wl, as)
+					addEvent(state.EventTypeUpdate, wl, as, iClients)
 				} else {
 					dlog.Debugf(ctx, "Unable to get workload %s.%s: %v", name, a.Namespace, err)
 				}
@@ -1162,27 +1186,35 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 					if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
 						if w.Workload.AgentState != as {
 							w.Workload.AgentState = as
+							w.Workload.InterceptClients = nil
 							ticker.Reset(maxIdleTime)
 						}
-					} else if wl, err := agentmap.GetWorkload(ctx, name, ii.Spec.Namespace, ""); err == nil {
-						addEvent(state.EventTypeUpdate, wl, as)
+					} else if wl, err := agentmap.GetWorkload(ctx, name, ns, ""); err == nil {
+						addEvent(state.EventTypeUpdate, wl, as, nil)
 					}
 				}
 			}
+			ipc := make(map[string][]*rpc.InterceptInfo)
 			for _, ii := range interceptInfos {
 				name := ii.Spec.Agent
-				as := rpc.WorkloadInfo_INSTALLED
 				if ii.Disposition == rpc.InterceptDispositionType_ACTIVE {
-					as = rpc.WorkloadInfo_INTERCEPTED
+					ipc[name] = append(ipc[name], ii)
 				}
-				dlog.Debugf(ctx, "InterceptInfo %s.%s %s", name, ii.Spec.Namespace, as)
+			}
+			for name, iis := range ipc {
+				iClients := make([]*rpc.WorkloadInfo_Intercept, len(iis))
+				as := rpc.WorkloadInfo_INTERCEPTED
+				for i, ii := range iis {
+					iClients[i] = &rpc.WorkloadInfo_Intercept{Client: ii.Spec.Client}
+				}
 				if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
 					if w.Workload.AgentState != as {
 						w.Workload.AgentState = as
+						w.Workload.InterceptClients = iClients
 						ticker.Reset(maxIdleTime)
 					}
-				} else if wl, err := agentmap.GetWorkload(ctx, name, ii.Spec.Namespace, ""); err == nil {
-					addEvent(state.EventTypeUpdate, wl, as)
+				} else if wl, err := agentmap.GetWorkload(ctx, name, ns, ""); err == nil {
+					addEvent(state.EventTypeUpdate, wl, as, iClients)
 				}
 			}
 		}

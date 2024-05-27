@@ -579,6 +579,24 @@ message WorkloadInfo {
     STATEFULSET = 3;
   }
 
+  enum State {
+    // The state of this workload is not known.
+    UNKNOWN_UNSPECIFIED = 0;
+
+    // Available means the deployment is available, ie. at least the minimum available
+    // replicas required are up and running for at least minReadySeconds.
+    AVAILABLE = 1;
+
+    // Progressing means the workload is progressing. Progress for a workload is
+    // considered when a new replica set is created or adopted, and when new pods scale
+    // up or old pods scale down. Progress is not estimated for paused workloads or
+    // when progressDeadlineSeconds is not specified.
+    PROGRESSING = 2;
+
+    // FAILURE means that one of its pods fails to be created or deleted.
+    FAILURE = 3;
+  }
+
   enum AgentState {
     // Workload has never been intercepted, so no agent has been installed.
     NO_AGENT_UNSPECIFIED = 0;
@@ -590,10 +608,19 @@ message WorkloadInfo {
     INTERCEPTED = 2;
   }
 
+  message Intercept {
+    // name of intercepting client
+    string client = 1;
+  }
+
   Kind kind = 1;
   string name = 2;
   string namespace = 3;
   AgentState agent_state = 4;
+
+  repeated Intercept intercept_clients = 5;
+
+  State state = 6;
 }
 
 message WorkloadEvent {
