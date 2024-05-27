@@ -37,7 +37,7 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
-	github.com/telepresenceio/telepresence/rpc/v2 v2.19.0-blackbird.12
+	github.com/telepresenceio/telepresence/rpc/v2 v2.19.0-blackbird.13
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.51.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.51.0
