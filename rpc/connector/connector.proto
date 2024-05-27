@@ -168,6 +168,8 @@ message ConnectRequest {
 
   // Kubeconfig YAML, if not to be loaded from file.
   optional bytes kubeconfig_data = 12;
+
+  string client_id = 13;
 }
 
 message ConnectInfo {

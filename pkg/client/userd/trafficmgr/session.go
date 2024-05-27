@@ -76,8 +76,8 @@ type session struct {
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
 
 	// local information
-	installID   string // telepresence's install ID
-	userAndHost string // "laptop-username@laptop-hostname"
+	installID string // telepresence's install ID
+	clientID  string // "laptop-username@laptop-hostname"
 
 	// Kubernetes Port Forward Dialer
 	pfDialer dnet.PortForwardDialer
@@ -316,16 +316,7 @@ func connectMgr(
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	userinfo, err := user.Current()
-	if err != nil {
-		return nil, fmt.Errorf("unable to obtain current user: %w", err)
-	}
-	host, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("unable to obtain hostname: %w", err)
-	}
-
-	err = CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
+	err := CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +335,19 @@ func connectMgr(
 		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
 	}
 
-	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
+	clientID := cr.ClientId
+	if clientID == "" {
+		userinfo, err := user.Current()
+		if err != nil {
+			return nil, fmt.Errorf("unable to obtain current user: %w", err)
+		}
+		host, err := os.Hostname()
+		if err != nil {
+			return nil, fmt.Errorf("unable to obtain hostname: %w", err)
+		}
+
+		clientID = fmt.Sprintf("%s@%s", userinfo.Username, host)
+	}
 
 	daemonID, err := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace, proc.RunningInContainer())
 	if err != nil {
@@ -364,16 +367,16 @@ func connectMgr(
 				// Call timed out, so the traffic-manager isn't responding at all
 				return nil, ctx.Err()
 			}
-			dlog.Debugf(ctx, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", userAndHost)
+			dlog.Debugf(ctx, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", clientID)
 		} else {
 			si = nil
 		}
 	}
 
 	if si == nil {
-		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
+		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", clientID)
 		si, err = mClient.ArriveAsClient(ctx, &manager.ClientInfo{
-			Name:      userAndHost,
+			Name:      clientID,
 			Namespace: cluster.Namespace,
 			InstallId: installID,
 			Product:   "telepresence",
@@ -423,7 +426,7 @@ func connectMgr(
 		Cluster:            cluster,
 		installID:          installID,
 		daemonID:           daemonID,
-		userAndHost:        userAndHost,
+		clientID:           clientID,
 		managerClient:      mClient,
 		managerConn:        conn,
 		pfDialer:           pfDialer,
