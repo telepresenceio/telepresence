@@ -122,6 +122,7 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 		"deleted":               false,
 	}
 
+	var interceptingClient string
 	for {
 		delta, err := wwStream.Recv()
 		if err != nil {
@@ -143,6 +144,9 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 					}
 				case manager.WorkloadInfo_INTERCEPTED:
 					expectations["agent intercepted"] = true
+					if ics := ev.Workload.InterceptClients; len(ics) == 1 {
+						interceptingClient = ics[0].Client
+					}
 				}
 			case manager.WorkloadEvent_DELETED:
 				expectations["deleted"] = true
@@ -152,6 +156,7 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 	for k, expect := range expectations {
 		s.True(expect, k)
 	}
+	s.Equal("telepresence@datawire.io", interceptingClient)
 }
 
 func (s *notConnectedSuite) trafficManagerConnection(ctx context.Context) (*grpc.ClientConn, error) {
