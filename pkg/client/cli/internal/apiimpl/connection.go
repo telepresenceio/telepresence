@@ -104,6 +104,7 @@ func toDaemonRequest(cr *api.ConnectRequest) *daemon.Request {
 	}
 	return &daemon.Request{
 		ConnectRequest: connector.ConnectRequest{
+			ClientId:                cr.ClientID,
 			KubeFlags:               cr.KubeFlags,
 			KubeconfigData:          cr.KubeConfigData,
 			Name:                    cr.Name,

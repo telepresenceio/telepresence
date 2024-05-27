@@ -84,6 +84,10 @@ type ConnectRequest struct {
 	// Name of this connection
 	Name string
 
+	// ClientID is the identifier of the client. Can be an arbitrary string. Defaults
+	// to <user>@<host>
+	ClientID string
+
 	// MappedNamespaces can be used to limit the namespaces that the DNS will
 	// treat as top level domain names.
 	MappedNamespaces []string
