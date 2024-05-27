@@ -590,10 +590,17 @@ message WorkloadInfo {
     INTERCEPTED = 2;
   }
 
+  message Intercept {
+    // name of intercepting client
+    string client = 1;
+  }
+
   Kind kind = 1;
   string name = 2;
   string namespace = 3;
   AgentState agent_state = 4;
+
+  repeated Intercept intercept_clients = 5;
 }
 
 message WorkloadEvent {
