@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -36,7 +35,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -89,8 +90,9 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier) ([]string, 
 	if cr.Hostname != "" {
 		opts = append(opts, "--hostname", cr.Hostname)
 	}
-	if runtime.GOOS == "linux" {
-		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
+	opts, err = proc.AppendOSSpecificContainerOpts(ctx, opts)
+	if err != nil {
+		return nil, nil, err
 	}
 	env := client.GetEnv(ctx)
 	if env.ScoutDisable {
@@ -231,7 +233,18 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 			// The telepresence command that will run in order to retrieve the credentials from the authenticator service
 			// will run in a container, so the first argument must be a path that finds the telepresence executable and
 			// the second must be an address that will find the host's port, not the container's localhost.
-			return "telepresence", fmt.Sprintf("host.docker.internal:%d", port), nil
+
+			// Default is localhost in caller, but it is overridden when using WSL because "host.docker.internal" will
+			// be the Windows host
+			kubeAuthHost := "host.docker.internal"
+			if proc.RunningInWSL() {
+				r, err := routing.DefaultRoute(ctx)
+				if err != nil {
+					return "", "", err
+				}
+				kubeAuthHost = r.LocalIP.String()
+			}
+			return "telepresence", iputil.JoinHostPort(kubeAuthHost, port), nil
 		},
 		func(config *api.Config) error {
 			return handleLocalK8s(ctx, daemonID, config)
