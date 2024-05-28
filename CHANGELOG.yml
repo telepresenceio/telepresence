@@ -34,6 +34,21 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Kubeconfig exec authentication failure when connecting with --docker from a WSL linux host
+        body: >-
+          Clusters like Amazon EKS often use a special authentication binary that is declared in the kubeconfig using an
+          <code>exec</code> authentication strategy. This binary is normally not available inside a container. Consequently,
+          a modified kubeconfig is used when <code>telepresence connect --docker</code> executes, appointing a <code>kubeauth
+          </code> binary which instead retrieves the authentication from a port on the Docker host that communicates with another
+          process outside of Docker. This process then executes the original <code>exec</code> command to retrieve the necessary
+          credentials.
+
+          This setup was problematic when using WSL, because even though <code>telepresence connect --docker</code> was executed on
+          a Linux host, the Docker host available from <code>host.docker.internal</code> that the <code>kubeauth</code> connected to
+          was the Windows host running Docker Desktop. The fix for this was to add the environment <code>TELEPRESENCE_KUBEAUTH_HOST
+          </code>. It will be set to the local IP of the default route when running under WSL, and when set, then the <code>kubeauth
+          </code> process will use that address instead of <code>host.docker.internal</code>.
+      - type: bugfix
         title: FailedScheduling events mentioning node availability considered fatal when waiting for agent to arrive.
         body: >-
           The traffic-manager considers some events as fatal when waiting for a traffic-agent to arrive after an injection
