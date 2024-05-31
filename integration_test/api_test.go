@@ -168,8 +168,10 @@ func (s *apiSuite) Test_RunIntercept() {
 			Port:         "8080",
 		},
 		api.DockerRunInterceptHandler{
-			Image:     "busybox",
-			Arguments: []string{"ls", "/var/run/secrets/kubernetes.io/serviceaccount"},
+			Image: "busybox",
+			DockerCommon: api.DockerCommon{
+				Arguments: []string{"ls", "/var/run/secrets/kubernetes.io/serviceaccount"},
+			},
 		})
 	rq.NoError(err)
 }

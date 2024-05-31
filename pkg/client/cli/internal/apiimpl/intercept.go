@@ -38,6 +38,11 @@ func toInterceptCmd(rq *api.InterceptRequest, ih api.InterceptHandler) *intercep
 		cmd.Mount, cmd.MountSet = toCmdMount(ih.MountPoint)
 	case api.DockerRunInterceptHandler:
 		cmd.DockerRun = true
+		if ih.Debug {
+			cmd.WaitMessage = "waiting for a debugger frontend to attach..."
+		} else {
+			cmd.WaitMessage = "type <ctrl>-C to end..."
+		}
 		cmd.Cmdline = appendOptions(ih.Options, cmd.Cmdline)
 		cmd.Cmdline = append(cmd.Cmdline, ih.Image)
 		cmd.Cmdline = append(cmd.Cmdline, ih.Arguments...)

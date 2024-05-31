@@ -85,38 +85,10 @@ func (CmdHandler) Type() InterceptHandlerType {
 	return CommandHandler
 }
 
-type DockerRunInterceptHandler struct {
+type DockerCommon struct {
 	// Mount if true, will cause the volumes of the remote container to be mounted using
 	// the telemount Docker volume plugin.
 	Mount bool
-
-	// Image is the image tag
-	Image string
-
-	// Options for the docker run command. Must be in the form <key>=<value> or just <key>
-	// for boolean options. Short form options are not supported so `-it` must be added as
-	// []string{"interactive", "tty"}
-	Options []string
-
-	// Arguments for to pass to the container
-	Arguments []string
-}
-
-func (DockerRunInterceptHandler) Type() InterceptHandlerType {
-	return DockerRunHandler
-}
-
-type DockerBuildInterceptHandler struct {
-	// Mount if true, will cause the volumes of the remote container to be mounted using
-	// the telemount Docker volume plugin.
-	Mount bool
-
-	// Context docker context, in the form of a path or a URL.
-	Context string
-
-	// Options for the docker build command. Must be in the form <key>=<value> or just <key>
-	// for boolean options. Short form options are not supported.
-	BuildOptions []string
 
 	// Options for the docker run command. Must be in the form <key>=<value> or just <key>
 	// for boolean options. Short form options are not supported so `-it` must be added as
@@ -129,6 +101,28 @@ type DockerBuildInterceptHandler struct {
 	// Debug uses relaxed security to allow a debugger run in the container.
 	// Mutually exclusive to DockerRun and DockerBuild.
 	Debug bool
+}
+
+type DockerRunInterceptHandler struct {
+	DockerCommon
+
+	// Image is the image tag
+	Image string
+}
+
+func (DockerRunInterceptHandler) Type() InterceptHandlerType {
+	return DockerRunHandler
+}
+
+type DockerBuildInterceptHandler struct {
+	DockerCommon
+
+	// Context docker context, in the form of a path or a URL.
+	Context string
+
+	// Options for the docker build command. Must be in the form <key>=<value> or just <key>
+	// for boolean options. Short form options are not supported.
+	BuildOptions []string
 }
 
 func (DockerBuildInterceptHandler) Type() InterceptHandlerType {
