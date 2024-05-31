@@ -34,6 +34,12 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Add --create-namespace flag to the telepresence helm install command.
+        body: >-
+          A <code>--create-namespace</code> (default <code>true</code>) flag was added to the <code>telepresence helm
+          install</code> command. No attempt will be made to create a namespace for the traffic-manager if it is explicitly
+          set to <code>false</code>. The command will then fail if the namespace is missing.
+      - type: feature
         title: Introduce DNS fallback on Windows.
         body: >-
           A <code>network.defaultDNSWithFallback</code> config option has been introduced on Windows. It will cause the
