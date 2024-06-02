@@ -83,7 +83,7 @@ type podAddress struct {
 // "[objkind/]objname[.objnamespace]:port".
 func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
 	var pod *podAddress
-	if pod, err = pf.resolve(ctx, addr); err == nil {
+	if pod, err = resolve(ctx, pf.k8sInterface, addr); err == nil {
 		if conn, err = pf.dial(ctx, pod); err == nil {
 			return conn, nil
 		}
@@ -112,7 +112,7 @@ func (pf *k8sPortForwardDialer) Close() error {
 	return nil
 }
 
-func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*podAddress, error) {
+func resolve(ctx context.Context, k8sInterface kubernetes.Interface, addr string) (*podAddress, error) {
 	var hostName, portName string
 	hostName, portName, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -136,7 +136,7 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*podA
 		objNamespace = objQName[dot+1:]
 	}
 
-	coreV1 := pf.k8sInterface.CoreV1()
+	coreV1 := k8sInterface.CoreV1()
 	if objKind == "svc" {
 		// Get the service.
 		svc, err := coreV1.Services(objNamespace).Get(ctx, objName, meta.GetOptions{})

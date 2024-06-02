@@ -116,11 +116,9 @@ func ConnectDaemon(ctx context.Context, address string) (conn *grpc.ClientConn, 
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		conn, err = grpc.DialContext(ctx, address,
+		conn, err = grpc.NewClient(address,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithNoProxy(),
-			grpc.WithBlock(),
-			grpc.FailOnNonTempDialError(true))
+			grpc.WithNoProxy())
 		if err != nil {
 			if i < 10 {
 				// It's likely that we were too quick. Let's take a nap and try again

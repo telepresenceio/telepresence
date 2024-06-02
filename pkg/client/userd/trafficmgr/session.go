@@ -1108,7 +1108,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 		rd = rootSession
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx),
+		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx), true,
 			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		)
 		if err != nil {

@@ -322,7 +322,7 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	ctx = managerutil.WithEnv(ctx, &env)
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
 
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
 	}

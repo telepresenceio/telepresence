@@ -7,14 +7,10 @@ import (
 	_ "embed"
 	"os"
 	"runtime"
-	"time"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/go-fuseftp/rpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -114,32 +110,14 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 }
 
 func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- rpc.FuseFTPClient) {
-	giveUp := time.After(3 * time.Second)
-	for {
-		select {
-		case <-ctx.Done():
-			close(cCh)
-			return
-		case <-giveUp:
-			close(cCh)
-			dlog.Error(ctx, "timeout waiting for fuseftp socket")
-			return
-		default:
-			conn, err := grpc.DialContext(ctx, "unix:"+socketName,
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithNoProxy(),
-				grpc.WithBlock(),
-				grpc.FailOnNonTempDialError(true),
-			)
-			if err != nil {
-				dtime.SleepWithContext(ctx, time.Millisecond)
-				continue
-			}
-			select {
-			case <-ctx.Done():
-			case cCh <- rpc.NewFuseFTPClient(conn):
-			}
-			return
-		}
+	conn, err := socket.Dial(ctx, socketName, true)
+	if err != nil {
+		dlog.Error(ctx, err)
+		close(cCh)
+		return
+	}
+	select {
+	case <-ctx.Done():
+	case cCh <- rpc.NewFuseFTPClient(conn):
 	}
 }

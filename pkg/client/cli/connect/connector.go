@@ -58,7 +58,7 @@ var QuitDaemonFuncs = []func(context.Context){
 }
 
 func quitHostConnector(ctx context.Context) {
-	if conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx)); err == nil {
+	if conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), false); err == nil {
 		if _, err = connector.NewConnectorClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
 			dlog.Errorf(ctx, "error when quitting user daemon: %v", err)
 		}
@@ -101,7 +101,7 @@ func DialDaemon(ctx context.Context, info *daemon.Info) (*grpc.ClientConn, error
 		conn, err = docker.ConnectDaemon(ctx, fmt.Sprintf(":%d", info.DaemonPort))
 	} else {
 		// Try dialing the host daemon using the well known socket.
-		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
+		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx), false)
 	}
 	return conn, err
 }
@@ -166,7 +166,7 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 	if err != nil {
 		if os.IsNotExist(err) && !cr.Docker {
 			// Try dialing the host daemon using the well known socket.
-			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx)); sockErr == nil {
+			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx), false); sockErr == nil {
 				return newUserDaemon(conn, daemonID), nil
 			}
 		}
@@ -269,10 +269,7 @@ func launchConnectorDaemon(ctx context.Context, connectorDaemon string, required
 		if err = proc.StartInBackground(false, args...); err != nil {
 			return ctx, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
 		}
-		if err = socket.WaitUntilAppears("connector", socket.UserDaemonPath(ctx), 10*time.Second); err != nil {
-			return ctx, nil, errcat.NoDaemonLogs.Newf("connector service did not start: %w", err)
-		}
-		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx))
+		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx), true)
 	}
 	if err != nil {
 		return ctx, nil, err
