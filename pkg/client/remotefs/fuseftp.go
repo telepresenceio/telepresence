@@ -98,16 +98,19 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	_ = sf.Close()
 	_ = os.Remove(socketName)
 
-	closeCh = false // closing the channel is now the responsibility of waitForSocketAndConnect
-	go waitForSocketAndConnect(ctx, socketName, cCh)
-
 	cmd := proc.CommandContext(ctx, qn, socketName)
 
-	// Rely on that these have been redirected to use our logger
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
+	cmd.Stderr = dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
+	cmd.Stdout = dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
 	cmd.DisableLogging = true
-	return cmd.Run()
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	closeCh = false // closing the channel is now the responsibility of waitForSocketAndConnect
+	waitForSocketAndConnect(ctx, socketName, cCh)
+	return cmd.Wait()
 }
 
 func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- rpc.FuseFTPClient) {
