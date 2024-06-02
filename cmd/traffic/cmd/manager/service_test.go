@@ -6,7 +6,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -40,7 +40,7 @@ func dumps(o any) string {
 func TestConnect(t *testing.T) {
 	dlog.SetFallbackLogger(dlog.WrapTB(t, false))
 	ctx := dlog.NewTestContext(t, true)
-	a := assert.New(t)
+	require := require.New(t)
 
 	testClients := testdata.GetTestClients(t)
 	testAgents := testdata.GetTestAgents(t)
@@ -53,134 +53,134 @@ func TestConnect(t *testing.T) {
 	client := rpc.NewManagerClient(conn)
 
 	ver, err := client.Version(ctx, &empty.Empty{})
-	a.NoError(err)
-	a.Equal(version.Version, ver.Version)
+	require.NoError(err)
+	require.Equal(version.Version, ver.Version)
 
 	// Alice arrives and departs
 
 	aliceSess1, err := client.ArriveAsClient(ctx, testClients["alice"])
-	a.NoError(err)
+	require.NoError(err)
 	t.Logf("aliceSess1: %v", aliceSess1)
 
 	_, err = client.Depart(ctx, aliceSess1)
-	a.NoError(err)
+	require.NoError(err)
 
 	// Alice arrives and sees no agents or intercepts
 
 	aliceSess2, err := client.ArriveAsClient(ctx, testClients["alice"])
-	a.NoError(err)
+	require.NoError(err)
 	t.Logf("aliceSess2: %v", aliceSess2)
 
 	t.Log("WatchAgents(aliceSess2)...")
 	aliceWA, err := client.WatchAgents(ctx, aliceSess2)
-	a.NoError(err)
+	require.NoError(err)
 
 	aSnapA, err := aliceWA.Recv()
-	a.NoError(err)
-	a.Len(aSnapA.Agents, 0)
+	require.NoError(err)
+	require.Len(aSnapA.Agents, 0)
 	t.Logf("=> client[alice] agent snapshot = %s", dumps(aSnapA))
 
 	t.Log("WatchIntercepts(aliceSess2)...")
 	aliceWI, err := client.WatchIntercepts(ctx, aliceSess2)
-	a.NoError(err)
+	require.NoError(err)
 
 	aSnapI, err := aliceWI.Recv()
-	a.NoError(err)
-	a.Len(aSnapI.Intercepts, 0)
+	require.NoError(err)
+	require.Len(aSnapI.Intercepts, 0)
 	t.Logf("=> client[alice] intercept snapshot = %s", dumps(aSnapI))
 
 	// Hello's agent arrives
 
 	helloSess, err := client.ArriveAsAgent(ctx, testAgents["hello"])
-	a.NoError(err)
+	require.NoError(err)
 	t.Logf("helloSess: %v", helloSess)
 
 	t.Log("WatchIntercepts(helloSess)...")
 	helloWI, err := client.WatchIntercepts(ctx, helloSess)
-	a.NoError(err)
+	require.NoError(err)
 
 	hSnapI, err := helloWI.Recv()
-	a.NoError(err)
-	a.Len(hSnapI.Intercepts, 0)
+	require.NoError(err)
+	require.Len(hSnapI.Intercepts, 0)
 	t.Logf("=> agent[hello] intercept snapshot = %s", dumps(hSnapI))
 
 	// Alice sees an agent
 
 	aSnapA, err = aliceWA.Recv()
-	a.NoError(err)
-	a.Len(aSnapA.Agents, 1)
-	a.True(proto.Equal(testAgents["hello"], aSnapA.Agents[0]))
+	require.NoError(err)
+	require.Len(aSnapA.Agents, 1)
+	require.True(proto.Equal(testAgents["hello"], aSnapA.Agents[0]))
 	t.Logf("=> client[alice] agent snapshot = %s", dumps(aSnapA))
 
 	// Demo Deployment comes up with two Pods
 
 	demo1Sess, err := client.ArriveAsAgent(ctx, testAgents["demo1"])
-	a.NoError(err)
+	require.NoError(err)
 	t.Logf("demo1Sess: %v", demo1Sess)
 
 	demo1WI, err := client.WatchIntercepts(ctx, demo1Sess)
-	a.NoError(err)
+	require.NoError(err)
 
 	d1SnapI, err := demo1WI.Recv()
-	a.NoError(err)
-	a.Len(d1SnapI.Intercepts, 0)
+	require.NoError(err)
+	require.Len(d1SnapI.Intercepts, 0)
 	t.Logf("=> agent[demo1] interface snapshot = %s", dumps(d1SnapI))
 
 	demo2Sess, err := client.ArriveAsAgent(ctx, testAgents["demo2"])
-	a.NoError(err)
+	require.NoError(err)
 	t.Logf("demo2Sess: %v", demo2Sess)
 
 	demo2WI, err := client.WatchIntercepts(ctx, demo2Sess)
-	a.NoError(err)
+	require.NoError(err)
 
 	d2SnapI, err := demo2WI.Recv()
-	a.NoError(err)
-	a.Len(d2SnapI.Intercepts, 0)
+	require.NoError(err)
+	require.Len(d2SnapI.Intercepts, 0)
 	t.Logf("=> agent[demo2] interface snapshot = %s", dumps(d2SnapI))
 
 	// Alice sees all the agents
 
 	aSnapA, err = aliceWA.Recv()
-	a.NoError(err)
+	require.NoError(err)
 	if len(aSnapA.Agents) == 2 {
 		t.Logf("=> client[alice] agent snapshot = %s", dumps(aSnapA))
 		t.Logf("=> client[alice] trying again...")
 		aSnapA, err = aliceWA.Recv()
-		a.NoError(err)
+		require.NoError(err)
 	}
-	a.Len(aSnapA.Agents, 3)
+	require.Len(aSnapA.Agents, 3)
 	t.Logf("=> client[alice] agent snapshot = %s", dumps(aSnapA))
 
 	// Alice remains
 
 	_, err = client.Remain(ctx, &rpc.RemainRequest{Session: aliceSess2})
-	a.NoError(err)
+	require.NoError(err)
 
 	// Hello Pro's agent arrives and departs
 
 	helloProSess, err := client.ArriveAsAgent(ctx, testAgents["helloPro"])
-	a.NoError(err)
+	require.NoError(err)
 	t.Logf("helloProSess: %v", helloProSess)
 
 	helloProWI, err := client.WatchIntercepts(ctx, helloProSess)
-	a.NoError(err)
+	require.NoError(err)
 
 	hPSnapI, err := helloProWI.Recv()
-	a.NoError(err)
-	a.Len(hPSnapI.Intercepts, 0)
+	require.NoError(err)
+	require.Len(hPSnapI.Intercepts, 0)
 	t.Logf("=> agent[helloPro] intercept snapshot = %s", dumps(hPSnapI))
 
 	aSnapA, err = aliceWA.Recv()
-	a.NoError(err)
-	a.Len(aSnapA.Agents, 4)
+	require.NoError(err)
+	require.Len(aSnapA.Agents, 4)
 	t.Logf("=> client[alice] agent snapshot = %s", dumps(aSnapA))
 
 	_, err = client.Depart(ctx, helloProSess)
-	a.NoError(err)
+	require.NoError(err)
 
 	aSnapA, err = aliceWA.Recv()
-	a.NoError(err)
-	a.Len(aSnapA.Agents, 3)
+	require.NoError(err)
+	require.Len(aSnapA.Agents, 3)
 	t.Logf("=> client[alice] agent snapshot = %s", dumps(aSnapA))
 
 	// Alice creates an intercept
@@ -199,20 +199,20 @@ func TestConnect(t *testing.T) {
 		Session:       aliceSess2,
 		InterceptSpec: spec,
 	})
-	a.NoError(err)
-	a.True(proto.Equal(spec, first.Spec))
+	require.NoError(err)
+	require.True(proto.Equal(spec, first.Spec))
 	t.Logf("=> intercept info: %s", dumps(first))
 
 	aSnapI, err = aliceWI.Recv()
-	a.NoError(err)
-	a.Len(aSnapI.Intercepts, 1)
-	a.Equal(rpc.InterceptDispositionType_WAITING, aSnapI.Intercepts[0].Disposition)
+	require.NoError(err)
+	require.Len(aSnapI.Intercepts, 1)
+	require.Equal(rpc.InterceptDispositionType_WAITING, aSnapI.Intercepts[0].Disposition)
 	t.Logf("=> client[alice] intercept snapshot = %s", dumps(aSnapI))
 
 	hSnapI, err = helloWI.Recv()
-	a.NoError(err)
-	a.Len(hSnapI.Intercepts, 1)
-	a.Equal(rpc.InterceptDispositionType_WAITING, hSnapI.Intercepts[0].Disposition)
+	require.NoError(err)
+	require.Len(hSnapI.Intercepts, 1)
+	require.Equal(rpc.InterceptDispositionType_WAITING, hSnapI.Intercepts[0].Disposition)
 	t.Logf("=> agent[hello] intercept snapshot = %s", dumps(hSnapI))
 
 	// Hello's agent reviews the intercept
@@ -223,30 +223,30 @@ func TestConnect(t *testing.T) {
 		Disposition: rpc.InterceptDispositionType_ACTIVE,
 		Message:     "okay!",
 	})
-	a.NoError(err)
+	require.NoError(err)
 
-	// Causing the intercept to go active with a port assigned
+	// Causing the intercept to go active with require port assigned
 
 	aSnapI, err = aliceWI.Recv()
-	a.NoError(err)
-	a.Len(aSnapI.Intercepts, 1)
-	a.Equal(rpc.InterceptDispositionType_ACTIVE, aSnapI.Intercepts[0].Disposition)
+	require.NoError(err)
+	require.Len(aSnapI.Intercepts, 1)
+	require.Equal(rpc.InterceptDispositionType_ACTIVE, aSnapI.Intercepts[0].Disposition)
 	t.Logf("=> client[alice] intercept snapshot = %s", dumps(aSnapI))
 
 	hSnapI, err = helloWI.Recv()
-	a.NoError(err)
-	a.Len(hSnapI.Intercepts, 1)
-	a.Equal(rpc.InterceptDispositionType_ACTIVE, hSnapI.Intercepts[0].Disposition)
+	require.NoError(err)
+	require.Len(hSnapI.Intercepts, 1)
+	require.Equal(rpc.InterceptDispositionType_ACTIVE, hSnapI.Intercepts[0].Disposition)
 	t.Logf("=> agent[hello] intercept snapshot = %s", dumps(hSnapI))
 
-	// Creating a duplicate intercept yields an error
+	// Creating require duplicate intercept yields an error
 
 	second, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
 		Session:       aliceSess2,
 		InterceptSpec: spec,
 	})
-	a.Error(err)
-	a.Nil(second)
+	require.Error(err)
+	require.Nil(second)
 	t.Logf("=> intercept info: %s", dumps(second))
 
 	// Alice removes the intercept
@@ -255,32 +255,32 @@ func TestConnect(t *testing.T) {
 		Session: aliceSess2,
 		Name:    spec.Name,
 	})
-	a.NoError(err)
+	require.NoError(err)
 	t.Logf("removed intercept")
 
 	aSnapI, err = aliceWI.Recv()
-	a.NoError(err)
-	a.Len(aSnapI.Intercepts, 0)
+	require.NoError(err)
+	require.Len(aSnapI.Intercepts, 0)
 	t.Logf("=> client[alice] intercept snapshot = %s", dumps(aSnapI))
 
 	hSnapI, err = helloWI.Recv()
-	a.NoError(err)
-	a.Len(hSnapI.Intercepts, 0)
+	require.NoError(err)
+	require.Len(hSnapI.Intercepts, 0)
 	t.Logf("=> agent[hello] intercept snapshot = %s", dumps(hSnapI))
 
 	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
-		Session: aliceSess1, // no longer a valid session, right?
+		Session: aliceSess1, // no longer require valid session, right?
 		Name:    spec.Name,  // doesn't matter...
 	})
-	a.Error(err)
+	require.Error(err)
 	_, err = client.Depart(ctx, aliceSess2)
-	a.NoError(err)
+	require.NoError(err)
 	_, err = client.Depart(ctx, helloSess)
-	a.NoError(err)
+	require.NoError(err)
 	_, err = client.Depart(ctx, demo1Sess)
-	a.NoError(err)
+	require.NoError(err)
 	_, err = client.Depart(ctx, demo2Sess)
-	a.NoError(err)
+	require.NoError(err)
 }
 
 func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
