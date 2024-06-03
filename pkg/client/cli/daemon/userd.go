@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/blang/semver/v4"
 	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -12,8 +13,11 @@ import (
 
 type UserClient struct {
 	connector.ConnectorClient
-	Conn     *grpc.ClientConn
-	DaemonID *Identifier
+	Conn       *grpc.ClientConn
+	DaemonID   *Identifier
+	Version    semver.Version
+	Executable string
+	Name       string
 }
 
 type Session struct {

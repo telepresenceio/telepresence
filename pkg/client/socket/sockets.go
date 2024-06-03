@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
@@ -37,8 +38,8 @@ func errNotExist(socketName string) error {
 }
 
 // Dial dials the given socket and returns the resulting connection.
-func Dial(ctx context.Context, socketName string, waitForReady bool, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	if waitForReady {
+func Dial(ctx context.Context, socketName string, waitForSocket bool, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	if waitForSocket {
 		err := WaitForSocket(ctx, socketName, 5*time.Second)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -56,11 +57,26 @@ func Dial(ctx context.Context, socketName string, waitForReady bool, opts ...grp
 		}
 	}
 
-	conn, err := grpc.NewClient("unix:"+socketName, append([]grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
-	}, opts...)...)
-	if err == nil && waitForReady {
+	b := backoff.ExponentialBackOff{
+		InitialInterval:     50 * time.Millisecond,
+		RandomizationFactor: backoff.DefaultRandomizationFactor,
+		Multiplier:          backoff.DefaultMultiplier,
+		MaxInterval:         500 * time.Millisecond,
+		MaxElapsedTime:      2 * time.Second,
+		Stop:                backoff.Stop,
+		Clock:               backoff.SystemClock,
+	}
+	b.Reset()
+	var conn *grpc.ClientConn
+	err := backoff.Retry(func() (err error) {
+		conn, err = grpc.NewClient("unix:"+socketName, append([]grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithNoProxy(),
+		}, opts...)...)
+		return err
+	}, &b)
+
+	if err == nil {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		err = waitUntilReady(ctx, conn)
 		cancel()
@@ -73,7 +89,7 @@ func Dial(ctx context.Context, socketName string, waitForReady bool, opts ...grp
 			if rmErr := os.Remove(socketName); rmErr != nil {
 				err = fmt.Errorf("%w; remove of unresponsive socket failed: %v", err, rmErr)
 			} else {
-				err = fmt.Errorf("%w; socket unresponsive and removed", err)
+				err = fmt.Errorf("%w; socket unresponsive and removed", errNotExist(socketName))
 			}
 			err = fmt.Errorf("%w; this usually means that the process has locked up", &net.OpError{
 				Op:  "dial",

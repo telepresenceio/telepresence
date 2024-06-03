@@ -142,12 +142,12 @@ func run(cmd *cobra.Command, _ []string) error {
 	if len(mdErr) > 0 {
 		sis = make([]ioutil.WriterTos, len(mdErr))
 		for i, info := range mdErr {
-			ud, err := connect.ExistingDaemon(ctx, info)
+			udCtx, err := connect.ExistingDaemon(ctx, info)
 			if err != nil {
 				return err
 			}
-			sis[i], err = getStatusInfo(daemon.WithUserClient(ctx, ud), info)
-			ud.Conn.Close()
+			sis[i], err = getStatusInfo(udCtx, info)
+			_ = daemon.GetUserClient(udCtx).Conn.Close()
 			if err != nil {
 				return err
 			}
@@ -254,13 +254,9 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 	us := &wt.UserDaemon
 	us.InstallID = scout.InstallID(ctx)
 	us.Running = true
-	v, err := userD.Version(ctx, &empty.Empty{})
-	if err != nil {
-		return nil, err
-	}
-	us.Version = v.Version
-	us.versionName = v.Name
-	us.Executable = v.Executable
+	us.Version = userD.Version.String()
+	us.versionName = userD.Name
+	us.Executable = userD.Executable
 	us.Name = userD.DaemonID.Name
 
 	if userD.Containerized() {

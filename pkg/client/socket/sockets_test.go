@@ -2,6 +2,7 @@ package socket_test
 
 import (
 	"context"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -63,7 +64,7 @@ func TestDialSocket(t *testing.T) {
 		assert.Nil(t, conn)
 		assert.Error(t, err)
 		t.Log(err)
-		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.ErrorIs(t, err, fs.ErrNotExist)
 		assert.Contains(t, err.Error(), "dial unix "+sockname)
 		assert.Contains(t, err.Error(), "this usually means that the process has locked up")
 	})
