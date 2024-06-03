@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -35,7 +36,8 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 		dlog.Infof(ctx, "Mounting FTP file system for intercept %q (address %s) at %q", id, addr, clientMountPoint)
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
 		rmp := strings.TrimPrefix(mountPoint, agentconfig.ExportsMountPoint)
-		mountId, err := m.client.Mount(ctx, &rpc.MountRequest{
+		cc, cancel := context.WithTimeout(ctx, 3*time.Second)
+		mountId, err := m.client.Mount(cc, &rpc.MountRequest{
 			MountPoint: clientMountPoint,
 			FtpServer: &rpc.AddressAndPort{
 				Ip:   podIP,
@@ -44,6 +46,7 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 			ReadTimeout: durationpb.New(cfg.Timeouts().Get(client.TimeoutFtpReadWrite)),
 			Directory:   rmp,
 		})
+		cancel()
 		if err != nil {
 			return err
 		}
@@ -61,6 +64,7 @@ func (m *ftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoint
 				dlog.Errorf(ctx, "Unmount of %s failed: %v", clientMountPoint, err)
 			}
 		}()
+		dlog.Infof(ctx, "File system for intercept %q (address %s) successfully mounted at %q", id, addr, clientMountPoint)
 		return nil
 	}
 

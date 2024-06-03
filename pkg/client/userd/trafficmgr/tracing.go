@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -105,7 +106,7 @@ func (*traceCollector) launchTraceWriter(ctx context.Context, destFile string) (
 }
 
 func (c *traceCollector) userdTraces(ctx context.Context, tCh chan<- []byte) error {
-	userdConn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	userdConn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), false, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return err
 	}
@@ -115,7 +116,7 @@ func (c *traceCollector) userdTraces(ctx context.Context, tCh chan<- []byte) err
 }
 
 func (c *traceCollector) rootdTraces(ctx context.Context, tCh chan<- []byte) error {
-	dConn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	dConn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return err
 	}
@@ -127,21 +128,18 @@ func (c *traceCollector) rootdTraces(ctx context.Context, tCh chan<- []byte) err
 func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session, tCh chan<- []byte, remotePort string) error {
 	span := trace.SpanFromContext(ctx)
 	host := "svc/traffic-manager." + sess.GetManagerNamespace()
-	grpcAddr := net.JoinHostPort(host, remotePort)
+	grpcAddr := dnet.K8sPFScheme + ":///" + net.JoinHostPort(host, remotePort)
 	span.SetAttributes(attribute.String("traffic-manager.host", host), attribute.String("traffic-manager.port", remotePort))
-	tc, tCancel := context.WithTimeout(ctx, 20*time.Second)
-	defer tCancel()
 
 	opts := []grpc.DialOption{
 		grpc.WithContextDialer(sess.pfDialer.Dial),
+		grpc.WithResolvers(dnet.NewResolver(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.WithReturnConnectionError(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	}
 
-	conn, err := grpc.DialContext(tc, grpcAddr, opts...)
+	conn, err := grpc.NewClient(grpcAddr, opts...)
 	if err != nil {
 		return err
 	}
@@ -152,7 +150,7 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 	return sess.ForeachAgentPod(ctx, func(ctx context.Context, pi typed.PodInterface, pod *core.Pod) {
 		span := trace.SpanFromContext(ctx)
 		name := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
-		addr := net.JoinHostPort(name, remotePort)
+		addr := "passthrough:///" + net.JoinHostPort(name, remotePort)
 		tc, tCancel := context.WithTimeout(ctx, 20*time.Second)
 		defer tCancel()
 
@@ -160,12 +158,10 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 			grpc.WithContextDialer(sess.pfDialer.Dial),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithNoProxy(),
-			grpc.WithBlock(),
-			grpc.WithReturnConnectionError(),
 			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		}
 
-		conn, err := grpc.DialContext(tc, addr, opts...)
+		conn, err := grpc.NewClient(addr, opts...)
 		if err != nil {
 			err := fmt.Errorf("error getting traffic-agent traces for %s: %v", name, err)
 			span.RecordError(err, trace.WithAttributes(

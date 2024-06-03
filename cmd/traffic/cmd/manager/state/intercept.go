@@ -180,7 +180,8 @@ func (s *state) RestoreAppContainer(ctx context.Context, ii *managerrpc.Intercep
 	defer func() {
 		tracing.EndAndRecord(span, err)
 	}()
-	return mutator.GetMap(ctx).Update(ctx, ns, func(cm *core.ConfigMap) (changed bool, err error) {
+	mm := mutator.GetMap(ctx)
+	return mm.Update(ctx, ns, func(cm *core.ConfigMap) (changed bool, err error) {
 		y, ok := cm.Data[n]
 		if !ok {
 			return false, nil
@@ -198,10 +199,11 @@ func (s *state) RestoreAppContainer(ctx context.Context, ii *managerrpc.Intercep
 		// The pods for this workload will be killed once the new updated sidecar
 		// reaches the configmap. We remove them now, so that they don't continue to
 		// review intercepts.
-		for sessionID := range s.getAgentsByName(n, ns) {
+		for sessionID, ai := range s.getAgentsByName(n, ns) {
 			if as, ok := s.GetSession(sessionID).(*agentSessionState); ok {
 				as.active.Store(false)
 			}
+			mm.Blacklist(ai.PodName, ns)
 		}
 		return updateSidecar(sce, cm, n)
 	})

@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
@@ -168,11 +169,13 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 	if err != nil {
 		return nil, err
 	}
+	ctx = k8sapi.WithK8sInterface(ctx, k8sApi)
 	dialer, err := dnet.NewK8sPortForwardDialer(ctx, cfg, k8sApi)
 	if err != nil {
 		return nil, err
 	}
-	return grpc.DialContext(ctx, fmt.Sprintf("svc/traffic-manager.%s:8081", managerNamespace),
+	return grpc.NewClient(fmt.Sprintf(dnet.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
+		grpc.WithResolvers(dnet.NewResolver(ctx)),
 		grpc.WithContextDialer(dialer.Dial),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

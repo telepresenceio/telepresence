@@ -31,6 +31,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -213,25 +214,16 @@ func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
 	panic("No User daemon Session creator has been registered")
 }
 
-func createPortForwardDialer(ctx context.Context, kubeFlags map[string]string, kubeData []byte) (dnet.PortForwardDialer, kubernetes.Interface, error) {
+func createK8sConfig(ctx context.Context, kubeFlags map[string]string, kubeData []byte) (*rest.Config, error) {
 	configFlags, err := client.ConfigFlags(kubeFlags)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	config, err := client.NewClientConfig(ctx, configFlags, kubeData)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	rs, err := config.ClientConfig()
-	if err != nil {
-		return nil, nil, err
-	}
-	cs, err := kubernetes.NewForConfig(rs)
-	if err != nil {
-		return nil, nil, err
-	}
-	pfDialer, err := dnet.NewK8sPortForwardDialer(ctx, rs, cs)
-	return pfDialer, cs, err
+	return config.ClientConfig()
 }
 
 // connectToManager connects to the traffic-manager and asserts that its version is compatible.
@@ -247,29 +239,38 @@ func connectToManager(
 	semver.Version,
 	error,
 ) {
-	if !client.GetConfig(ctx).Cluster().ConnectFromRootDaemon {
-		conn, mp, v, err := connectToUserDaemon(ctx)
-		return ctx, conn, mp, v, err
-	}
 	var mgrVer semver.Version
-	pfDialer, cs, err := createPortForwardDialer(ctx, kubeFlags, kubeData)
+	rc, err := createK8sConfig(ctx, kubeFlags, kubeData)
+	if err != nil {
+		return ctx, nil, nil, mgrVer, err
+	}
+	cs, err := kubernetes.NewForConfig(rc)
 	if err != nil {
 		return ctx, nil, nil, mgrVer, err
 	}
 	ctx = k8sapi.WithK8sInterface(ctx, cs)
 
 	clientConfig := client.GetConfig(ctx)
-	tos := clientConfig.Timeouts()
+	if !clientConfig.Cluster().ConnectFromRootDaemon {
+		conn, mp, v, err := connectToUserDaemon(ctx)
+		return ctx, conn, mp, v, err
+	}
 
-	timedCtx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	tos := clientConfig.Timeouts()
+	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
-	conn, mc, ver, err := k8sclient.ConnectToManager(timedCtx, namespace, pfDialer.Dial)
+	pfDialer, err := dnet.NewK8sPortForwardDialer(tc, rc, cs)
+	if err != nil {
+		return ctx, nil, nil, mgrVer, err
+	}
+
+	conn, mc, ver, err := k8sclient.ConnectToManager(tc, namespace, pfDialer.Dial)
 	if err != nil {
 		return ctx, nil, nil, mgrVer, err
 	}
 
 	verStr := strings.TrimPrefix(ver.Version, "v")
-	dlog.Infof(ctx, "Connected to Manager %s", verStr)
+	dlog.Infof(tc, "Connected to Manager %s", verStr)
 	mgrVer, err = semver.Parse(verStr)
 	if err != nil {
 		conn.Close()
@@ -288,7 +289,7 @@ func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.Manager
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err := socket.Dial(tc, socket.UserDaemonPath(c),
+	conn, err := socket.Dial(tc, socket.UserDaemonPath(c), true,
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	var mgrVer semver.Version
@@ -967,7 +968,7 @@ func (s *Session) checkPodConnectivity(ctx context.Context, info *manager.Cluste
 	tCtx, tCancel := context.WithTimeout(ctx, ct)
 	defer tCancel()
 	dlog.Debugf(ctx, "Performing pod connectivity check on IP %s with timeout %s", ip, ct)
-	conn, err := grpc.DialContext(tCtx, net.JoinHostPort(ip, strconv.Itoa(int(port))), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.NewClient(net.JoinHostPort(ip, strconv.Itoa(int(port))), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		if ctx.Err() != nil {
 			return false // parent context cancelled

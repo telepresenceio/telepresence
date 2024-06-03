@@ -2,7 +2,6 @@ package rootd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -20,9 +19,25 @@ func (s *Session) isForDNS(ip net.IP, port uint16) bool {
 	return s.remoteDnsIP != nil && port == 53 && s.remoteDnsIP.Equal(ip)
 }
 
+// checkRecursion checks that the given IP is not contained in any of the subnets
+// that the VIF is configured with. When that's the case, the VIF is somehow receiving
+// requests that originate from the cluster and dispatching it leads to infinite recursion.
+func checkRecursion(p int, ip net.IP, sn *net.IPNet) (err error) {
+	if sn.Contains(ip) && !ip.Equal(sn.IP.Mask(sn.Mask)) {
+		err = fmt.Errorf("refusing recursive %s %s dispatch from pod subnet %s", ipproto.String(p), ip, sn)
+	}
+	return err
+}
+
 func (s *Session) streamCreator() tunnel.StreamCreator {
 	return func(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
 		p := id.Protocol()
+		srcIp := id.Source()
+		for _, podSn := range s.podSubnets {
+			if err := checkRecursion(p, srcIp, podSn); err != nil {
+				return nil, err
+			}
+		}
 		if p == ipproto.UDP {
 			if s.isForDNS(id.Destination(), id.DestinationPort()) {
 				pipeId := tunnel.NewConnID(p, id.Source(), s.dnsLocalAddr.IP, id.SourcePort(), uint16(s.dnsLocalAddr.Port))
@@ -30,17 +45,6 @@ func (s *Session) streamCreator() tunnel.StreamCreator {
 				from, to := tunnel.NewPipe(pipeId, s.session.SessionId)
 				tunnel.NewDialerTTL(to, func() {}, dnsConnTTL, nil, nil).Start(c)
 				return from, nil
-			}
-			if id.SourcePort() == 53 {
-				srcIp := id.Source()
-				for _, sn := range s.podSubnets {
-					if sn.Contains(srcIp) && !srcIp.Equal(sn.IP.Mask(sn.Mask)) {
-						// This is call was made by the cluster's DNS service. Typically, seen when
-						// running a Kind cluster locally. Letting it through causes recursion and
-						// poor performance.
-						return nil, errors.New("refusing recursive DNS dispatch")
-					}
-				}
 			}
 		}
 

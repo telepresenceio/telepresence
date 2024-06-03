@@ -50,11 +50,9 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, address,
+	conn, err := grpc.NewClient(address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-	)
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return err
 	}

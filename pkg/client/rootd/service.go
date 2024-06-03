@@ -350,7 +350,7 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 
 	ctx, cancel := context.WithCancel(ctx)
 	ctx, session, err := GetNewSessionFunc(ctx)(ctx, oi)
-	if ctx.Err() != nil || err != nil {
+	if session == nil || ctx.Err() != nil || err != nil {
 		cancel()
 		if err == nil {
 			err = ctx.Err()
@@ -380,6 +380,11 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 	wg.Add(1)
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				s.sessionLock.TryLock()
+				s.sessionLock.Unlock()
+				dlog.Errorf(ctx, "%+v", derror.PanicToError(r))
+			}
 			s.sessionLock.Lock()
 			s.session = nil
 			s.sessionCancel = nil

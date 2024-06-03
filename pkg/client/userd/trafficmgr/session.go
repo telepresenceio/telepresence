@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -139,11 +140,17 @@ func NewSession(
 	ctx context.Context,
 	cr *rpc.ConnectRequest,
 	config *client.Kubeconfig,
-) (_ context.Context, _ userd.Session, info *connector.ConnectInfo) {
+) (rc context.Context, _ userd.Session, info *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 
 	connectStart := time.Now()
 	defer func() {
+		if r := recover(); r != nil {
+			rc = ctx
+			err := derror.PanicToError(r)
+			dlog.Errorf(ctx, "%+v", err)
+			info = connectError(connector.ConnectInfo_DAEMON_FAILED, err)
+		}
 		if info.Error == connector.ConnectInfo_UNSPECIFIED {
 			scout.Report(ctx, "connect",
 				scout.Entry{
@@ -802,7 +809,7 @@ func (s *session) remainLoop(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			if err := s.Remain(c); err != nil {
+			if err := s.self.Remain(c); err != nil {
 				return err
 			}
 		}
@@ -1101,7 +1108,7 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 		rd = rootSession
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx),
+		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx), true,
 			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		)
 		if err != nil {
@@ -1116,7 +1123,10 @@ func (s *session) connectRootDaemon(ctx context.Context, oi *rootdRpc.OutboundIn
 
 		for attempt := 1; ; attempt++ {
 			var rootStatus *rootdRpc.DaemonStatus
-			if rootStatus, err = rd.Connect(ctx, oi); err != nil {
+			tCtx, tCancel := context.WithTimeout(ctx, 15*time.Second)
+			rootStatus, err = rd.Connect(tCtx, oi)
+			tCancel()
+			if err != nil {
 				return nil, fmt.Errorf("failed to connect to root daemon: %w", err)
 			}
 			oc := rootStatus.OutboundConfig

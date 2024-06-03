@@ -236,7 +236,8 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	sessionID := session.GetSessionId()
 	dlog.Debug(ctx, "Depart called")
 
-	s.state.RemoveSession(ctx, sessionID)
+	// There's reason for the caller to wait for this removal to complete.
+	go s.state.RemoveSession(context.WithoutCancel(ctx), sessionID)
 	return &empty.Empty{}, nil
 }
 

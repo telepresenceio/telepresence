@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -72,14 +71,14 @@ func ensureRootDaemonRunning(ctx context.Context) error {
 	if err = launchDaemon(ctx, cr); err != nil {
 		return fmt.Errorf("failed to launch the daemon service: %w", err)
 	}
-	if err = socket.WaitUntilRunning(ctx, "daemon", socket.RootDaemonPath(ctx), 10*time.Second); err != nil {
+	if err = socket.WaitUntilRunning(ctx, socket.RootDaemonPath(ctx)); err != nil {
 		return fmt.Errorf("daemon service did not start: %w", err)
 	}
 	return nil
 }
 
 func quitRootDaemon(ctx context.Context) {
-	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
+	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false); err == nil {
 		if _, err = rootDaemon.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
 			dlog.Errorf(ctx, "error when quitting root daemon: %v", err)
 		}

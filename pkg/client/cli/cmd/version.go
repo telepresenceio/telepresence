@@ -55,31 +55,26 @@ func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 	}
 
 	if userD != nil {
-		vi, err := userD.Version(ctx, &empty.Empty{})
-		if err == nil {
+		kvf.Add(userD.Name, "v"+userD.Version.String())
+		vi, err := managerVersion(ctx)
+		switch {
+		case err == nil:
 			kvf.Add(vi.Name, vi.Version)
-			vi, err = managerVersion(ctx)
-			switch {
-			case err == nil:
-				kvf.Add(vi.Name, vi.Version)
-				af, err := trafficAgentFQN(ctx)
-				switch status.Code(err) {
-				case codes.OK:
-					kvf.Add("Traffic Agent", af.FQN)
-				case codes.Unimplemented:
-					kvf.Add("Traffic Agent", "not reported by traffic-manager")
-				case codes.Unavailable:
-					kvf.Add("Traffic Agent", "not currently available")
-				default:
-					kvf.Add("Traffic Agent", fmt.Sprintf("error: %v", err))
-				}
-			case status.Code(err) == codes.Unavailable:
-				kvf.Add("Traffic Manager", "not connected")
+			af, err := trafficAgentFQN(ctx)
+			switch status.Code(err) {
+			case codes.OK:
+				kvf.Add("Traffic Agent", af.FQN)
+			case codes.Unimplemented:
+				kvf.Add("Traffic Agent", "not reported by traffic-manager")
+			case codes.Unavailable:
+				kvf.Add("Traffic Agent", "not currently available")
 			default:
-				kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
+				kvf.Add("Traffic Agent", fmt.Sprintf("error: %v", err))
 			}
-		} else {
-			kvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
+		case status.Code(err) == codes.Unavailable:
+			kvf.Add("Traffic Manager", "not connected")
+		default:
+			kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
 		}
 	} else {
 		kvf.Add("User Daemon", "not running")
@@ -105,11 +100,12 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 				Indent:    kvf.Indent,
 				Separator: kvf.Separator,
 			}
-			ud, err := connect.ExistingDaemon(ctx, info)
+			udCtx, err := connect.ExistingDaemon(ctx, info)
 			if err != nil {
 				subKvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
 			}
-			addDaemonVersions(daemon.WithUserClient(ctx, ud), subKvf)
+			addDaemonVersions(udCtx, subKvf)
+			ud := daemon.GetUserClient(udCtx)
 			kvf.Add("Connection "+ud.DaemonID.Name, "\n"+subKvf.String())
 			ud.Conn.Close()
 		}
@@ -122,7 +118,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
+	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false); err == nil {
 		defer conn.Close()
 		return daemonRpc.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}
