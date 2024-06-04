@@ -973,9 +973,13 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 			dlog.Errorf(ctx, "WatchWorkloads panic: %+v", err)
 			err = status.Errorf(codes.Internal, err.Error())
 		}
+		dlog.Debugf(ctx, "WatchWorkloads ended")
 	}()
 	dlog.Debugf(ctx, "WatchWorkloads called")
 
+	if request.SessionInfo == nil {
+		return status.Error(codes.InvalidArgument, "SessionInfo is required")
+	}
 	clientSession := request.SessionInfo.SessionId
 	clientInfo := s.state.GetClient(clientSession)
 	if clientInfo == nil {
@@ -1064,6 +1068,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		select {
 		case <-sessionDone:
 			// The Manager believes this session has ended.
+			dlog.Debug(ctx, "WatchWorkloads session ended")
 			return nil
 
 		case <-ticker.C:
@@ -1072,6 +1077,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		// All events arriving at the workload channel are significant
 		case wes, ok := <-workloadsCh:
 			if !ok {
+				dlog.Debug(ctx, "Workloads channel closed")
 				return nil
 			}
 			for _, we := range wes {
@@ -1111,6 +1117,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		// Events that arrive at the agent channel should be counted as modifications.
 		case ass, ok := <-agentsCh:
 			if !ok {
+				dlog.Debug(ctx, "Agents channel closed")
 				return nil
 			}
 			oldAgentInfos := agentInfos
@@ -1170,6 +1177,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		// Events that arrive at the intercept channel should be counted as modifications.
 		case is, ok := <-interceptsCh:
 			if !ok {
+				dlog.Debug(ctx, "Intercepts channel closed")
 				return nil
 			}
 			oldInterceptInfos := interceptInfos
