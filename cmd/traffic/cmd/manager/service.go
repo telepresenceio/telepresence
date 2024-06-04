@@ -170,7 +170,7 @@ func (s *service) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 
 // ArriveAsClient establishes a session between a client and the Manager.
 func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
-	dlog.Debug(ctx, "ArriveAsClient called")
+	dlog.Debugf(ctx, "ArriveAsClient called, namespace: %s", client.Namespace)
 
 	if val := validateClient(client); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
@@ -991,7 +991,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		return info.Namespace == ns
 	})
 	interceptsCh := s.state.WatchIntercepts(ctx, func(_ string, info *rpc.InterceptInfo) bool {
-		return info.ClientSession.SessionId == clientSession
+		return info.Spec.Namespace == ns
 	})
 	workloadsCh, err := s.state.WatchWorkloads(ctx, clientSession)
 	if err != nil {
