@@ -16,6 +16,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -897,6 +899,71 @@ func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 	return s.clusterInfo.Watch(ctx, stream)
 }
 
+func rpcKind(s string) rpc.WorkloadInfo_Kind {
+	switch strings.ToLower(s) {
+	case "deployment":
+		return rpc.WorkloadInfo_DEPLOYMENT
+	case "replicaset":
+		return rpc.WorkloadInfo_REPLICASET
+	case "statefulset":
+		return rpc.WorkloadInfo_STATEFULSET
+	default:
+		return rpc.WorkloadInfo_UNSPECIFIED
+	}
+}
+
+func rpcDeploymentState(d *apps.Deployment) rpc.WorkloadInfo_State {
+	for _, c := range d.Status.Conditions {
+		switch c.Type {
+		case apps.DeploymentProgressing:
+			if c.Status == core.ConditionTrue {
+				return rpc.WorkloadInfo_PROGRESSING
+			}
+		case apps.DeploymentAvailable:
+			if c.Status == core.ConditionTrue {
+				return rpc.WorkloadInfo_AVAILABLE
+			}
+		case apps.DeploymentReplicaFailure:
+			if c.Status == core.ConditionTrue {
+				return rpc.WorkloadInfo_FAILURE
+			}
+		}
+	}
+	return rpc.WorkloadInfo_UNKNOWN_UNSPECIFIED
+}
+
+func rpcReplicasetState(d *apps.ReplicaSet) rpc.WorkloadInfo_State {
+	for _, c := range d.Status.Conditions {
+		if c.Type == apps.ReplicaSetReplicaFailure && c.Status == core.ConditionTrue {
+			return rpc.WorkloadInfo_FAILURE
+		}
+	}
+	return rpc.WorkloadInfo_AVAILABLE
+}
+
+func rpcStatefulsetState(d *apps.StatefulSet) rpc.WorkloadInfo_State {
+	return rpc.WorkloadInfo_AVAILABLE
+}
+
+func rpcWorkload(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) *rpc.WorkloadInfo {
+	state := rpc.WorkloadInfo_UNKNOWN_UNSPECIFIED
+	if d, ok := k8sapi.DeploymentImpl(wl); ok {
+		state = rpcDeploymentState(d)
+	} else if r, ok := k8sapi.ReplicaSetImpl(wl); ok {
+		state = rpcReplicasetState(r)
+	} else if s, ok := k8sapi.StatefulSetImpl(wl); ok {
+		state = rpcStatefulsetState(s)
+	}
+	return &rpc.WorkloadInfo{
+		Kind:             rpcKind(wl.GetKind()),
+		Name:             wl.GetName(),
+		Namespace:        wl.GetNamespace(),
+		State:            state,
+		AgentState:       as,
+		InterceptClients: iClients,
+	}
+}
+
 //nolint:cyclop,gocyclo,gocognit // complex to avoid extremely specialized functions
 func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.Manager_WatchWorkloadsServer) (err error) {
 	ctx := managerutil.WithSessionInfo(stream.Context(), request.SessionInfo)
@@ -944,19 +1011,6 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		return iis
 	}
 
-	rpcKind := func(s string) rpc.WorkloadInfo_Kind {
-		switch strings.ToLower(s) {
-		case "deployment":
-			return rpc.WorkloadInfo_DEPLOYMENT
-		case "replicaset":
-			return rpc.WorkloadInfo_REPLICASET
-		case "statefulset":
-			return rpc.WorkloadInfo_STATEFULSET
-		default:
-			return rpc.WorkloadInfo_UNSPECIFIED
-		}
-	}
-
 	// Send events if we're idle longer than this, otherwise wait for more data
 	const maxIdleTime = 5 * time.Millisecond
 	workloadEvents := make(map[string]*rpc.WorkloadEvent)
@@ -996,16 +1050,6 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		lastEvents = workloadEvents
 		workloadEvents = make(map[string]*rpc.WorkloadEvent)
 		start = time.Now()
-	}
-
-	rpcWorkload := func(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) *rpc.WorkloadInfo {
-		return &rpc.WorkloadInfo{
-			Kind:             rpcKind(wl.GetKind()),
-			Name:             wl.GetName(),
-			Namespace:        wl.GetNamespace(),
-			AgentState:       as,
-			InterceptClients: iClients,
-		}
 	}
 
 	addEvent := func(eventType state.EventType, wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) {
@@ -1054,7 +1098,8 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 					// we care about, then just skip it.
 					if we.Type == state.EventTypeUpdate {
 						lew, ok := lastEvents[wl.GetName()]
-						if ok && (lew.Type == rpc.WorkloadEvent_ADDED_UNSPECIFIED || lew.Type == rpc.WorkloadEvent_MODIFIED) && proto.Equal(lew.Workload, rpcWorkload(we.Workload, as, iClients)) {
+						if ok && (lew.Type == rpc.WorkloadEvent_ADDED_UNSPECIFIED || lew.Type == rpc.WorkloadEvent_MODIFIED) &&
+							proto.Equal(lew.Workload, rpcWorkload(we.Workload, as, iClients)) {
 							break
 						}
 					}

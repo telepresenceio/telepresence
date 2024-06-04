@@ -117,6 +117,8 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 	// This map contains a key for each expected event from the workload watcher
 	expectations := map[string]bool{
 		"added":                 false,
+		"progressing":           false,
+		"available":             false,
 		"agent installed":       false,
 		"agent intercepted":     false,
 		"agent installed again": false,
@@ -135,7 +137,19 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 			switch ev.Type {
 			case manager.WorkloadEvent_ADDED_UNSPECIFIED:
 				expectations["added"] = true
+				switch ev.Workload.State {
+				case manager.WorkloadInfo_PROGRESSING:
+					expectations["progressing"] = true
+				case manager.WorkloadInfo_AVAILABLE:
+					expectations["available"] = true
+				}
 			case manager.WorkloadEvent_MODIFIED:
+				switch ev.Workload.State {
+				case manager.WorkloadInfo_PROGRESSING:
+					expectations["progressing"] = true
+				case manager.WorkloadInfo_AVAILABLE:
+					expectations["available"] = true
+				}
 				switch ev.Workload.AgentState {
 				case manager.WorkloadInfo_INSTALLED:
 					if expectations["agent intercepted"] {

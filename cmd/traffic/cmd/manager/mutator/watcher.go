@@ -811,10 +811,9 @@ func (c *configWatcher) startDeployments(ctx context.Context, ns string) cache.S
 	f := informer.GetFactory(ctx, ns)
 	ix := f.Apps().V1().Deployments().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
-		// Strip of the parts of the deployment that we don't care about. Saves memory
+		// Strip the parts of the deployment that we don't care about to save memory
 		if dep, ok := o.(*appsv1.Deployment); ok {
 			dep.ManagedFields = nil
-			dep.Status = appsv1.DeploymentStatus{}
 			dep.Finalizers = nil
 			dep.OwnerReferences = nil
 		}
