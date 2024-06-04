@@ -91,21 +91,29 @@ func (w *wlWatcher) addEventHandler(ctx context.Context, ns string) error {
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				if d, ok := obj.(*apps.Deployment); ok {
-					w.handleEvent(WorkloadEvent{Type: EventTypeAdd, Workload: k8sapi.Deployment(d)})
+					if d.Namespace == ns {
+						w.handleEvent(WorkloadEvent{Type: EventTypeAdd, Workload: k8sapi.Deployment(d)})
+					}
 				}
 			},
 			DeleteFunc: func(obj any) {
 				if d, ok := obj.(*apps.Deployment); ok {
-					w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: k8sapi.Deployment(d)})
+					if d.Namespace == ns {
+						w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: k8sapi.Deployment(d)})
+					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
 					if d, ok := dfsu.Obj.(*apps.Deployment); ok {
-						w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: k8sapi.Deployment(d)})
+						if d.Namespace == ns {
+							w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: k8sapi.Deployment(d)})
+						}
 					}
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
 				if d, ok := newObj.(*apps.Deployment); ok {
-					w.handleEvent(WorkloadEvent{Type: EventTypeUpdate, Workload: k8sapi.Deployment(d)})
+					if d.Namespace == ns {
+						w.handleEvent(WorkloadEvent{Type: EventTypeUpdate, Workload: k8sapi.Deployment(d)})
+					}
 				}
 			},
 		})
