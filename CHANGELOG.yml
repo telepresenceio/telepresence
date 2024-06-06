@@ -33,6 +33,11 @@ items:
   - version: 2.19.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Add scheduler name to PODs templates.
+        body: >-
+          A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are 
+          able to define some particular schedulers from Kubernetes to apply some different strategies to allocate resources.
       - type: bugfix
         title: Kubeconfig exec authentication failure when connecting with --docker from a WSL linux host
         body: >-
