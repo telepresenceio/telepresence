@@ -66,6 +66,8 @@ tolerations: []
 
 affinity: {}
 
+schedulerName: ~
+
 ## @param priorityClassName Name of the existing priority class to be used
 ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 ##

@@ -58,6 +58,9 @@ spec:
         - name: secret-volume
           secret:
             secretName: {{ .Values.agentInjector.secret.name }}
+      {{- with .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
