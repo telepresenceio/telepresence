@@ -287,7 +287,7 @@ spec:
         {{- end }}
       {{- end }}
       {{- with .schedulerName }}
-      schedulerName: {{ .schedulerName }}
+      schedulerName: {{ . }}
       {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:

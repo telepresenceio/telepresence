@@ -59,7 +59,7 @@ spec:
           secret:
             secretName: {{ .Values.agentInjector.secret.name }}
       {{- with .Values.schedulerName }}
-      schedulerName: {{ .Values.schedulerName }}
+      schedulerName: {{ . }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
