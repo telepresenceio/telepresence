@@ -875,15 +875,19 @@ func (s *session) Status(c context.Context) *rpc.ConnectInfo {
 func (s *session) status(c context.Context, initial bool) *rpc.ConnectInfo {
 	cfg := s.Kubeconfig
 	ret := &rpc.ConnectInfo{
-		ClusterContext:     cfg.Context,
-		ClusterServer:      cfg.Server,
-		ClusterId:          s.GetClusterId(c),
-		ManagerInstallId:   s.GetManagerInstallId(c),
-		SessionInfo:        s.SessionInfo(),
-		ConnectionName:     s.daemonID.Name,
-		KubeFlags:          s.OriginalFlagMap,
-		Namespace:          s.Namespace,
-		Intercepts:         &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
+		ClusterContext:   cfg.Context,
+		ClusterServer:    cfg.Server,
+		ClusterId:        s.GetClusterId(c),
+		ManagerInstallId: s.GetManagerInstallId(c),
+		SessionInfo:      s.SessionInfo(),
+		ConnectionName:   s.daemonID.Name,
+		KubeFlags:        s.OriginalFlagMap,
+		Namespace:        s.Namespace,
+		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
+		ManagerVersion: &manager.VersionInfo2{
+			Name:    s.managerName,
+			Version: "v" + s.managerVersion.String(),
+		},
 		ManagerNamespace:   cfg.GetManagerNamespace(),
 		SubnetViaWorkloads: s.subnetViaWorkloads,
 		Version: &common.VersionInfo{

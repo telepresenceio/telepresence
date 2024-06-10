@@ -33,6 +33,14 @@ items:
   - version: 2.19.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Warn when an Open Source Client connects to an Enterprise Traffic Manager.
+        body: >-
+          The difference between the OSS and the Enterprise offering is not well understood, and OSS users often install
+          a traffic-manager using the Helm chart published at getambassador.io. This Helm chart installs an enterprise
+          traffic-manager, which is probably not what the user would expect. Telepresence will now warn when an OSS client
+          connects to an enterprise traffic-manager and suggest switching to an enterprise client, or use
+          <code>telepresence helm install</code> to install an OSS traffic-manager.
       - type: bugfix
         title: Kubeconfig exec authentication failure when connecting with --docker from a WSL linux host
         body: >-
