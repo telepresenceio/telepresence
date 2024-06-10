@@ -218,6 +218,8 @@ message ConnectInfo {
 
   telepresence.manager.SessionInfo session_info = 10;
 
+  telepresence.manager.VersionInfo2 manager_version = 19;
+
   // cluster_id
   // deprecated. Use manager_install_id
   string cluster_id = 11;
