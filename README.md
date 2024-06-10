@@ -2,6 +2,8 @@
 
 [<img src="https://cncf-branding.netlify.app/img/projects/telepresence/horizontal/color/telepresence-horizontal-color.png" width="80"/>](https://cncf-branding.netlify.app/img/projects/telepresence/horizontal/color/telepresence-horizontal-color.png)
 
+[![Artifact HUB](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/telepresence)](https://artifacthub.io/packages/helm/datawire/telepresence)
+
 Telepresence gives developers infinite scale development environments for Kubernetes.
 
 Docs:
