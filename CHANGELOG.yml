@@ -34,6 +34,12 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Fix bug in workload cache, causing endless recursion when a workload uses the same name as its owner.
+        body: >-
+          The workload cache was keyed by name and namespace, but not by kind, so a workload named the same as its
+          owner workload would be found using the same key. This led to the workload finding itself when looking up
+          its owner, which in turn resulted in an endless recursion when searching for the topmost owner.
+      - type: bugfix
         title: FailedScheduling events mentioning node availability considered fatal when waiting for agent to arrive.
         body: >-
           The traffic-manager considers some events as fatal when waiting for a traffic-agent to arrive after an injection
