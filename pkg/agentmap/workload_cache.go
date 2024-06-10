@@ -13,6 +13,7 @@ import (
 type workloadKey struct {
 	name      string
 	namespace string
+	kind      string
 }
 
 type workloadValue struct {
@@ -71,7 +72,7 @@ func (w workloadCache) gc(ctx context.Context) {
 
 func (w workloadCache) GetWorkload(c context.Context, name, namespace, workloadKind string) (k8sapi.Workload, error) {
 	dlog.Debugf(c, "GetWorkload(%s,%s,%s)", name, namespace, workloadKind)
-	wv, _ := w.Compute(workloadKey{name: name, namespace: namespace}, func(wv workloadValue, loaded bool) (workloadValue, bool) {
+	wv, _ := w.Compute(workloadKey{name: name, namespace: namespace, kind: workloadKind}, func(wv workloadValue, loaded bool) (workloadValue, bool) {
 		now := time.Now().UnixNano()
 		if loaded && wv.cTime >= now-int64(w.maxAge) {
 			return wv, false
