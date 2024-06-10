@@ -28,7 +28,7 @@ A few quick ways to start using Telepresence
 
 * **Telepresence Quick Start:** [Quick Start](https://www.getambassador.io/docs/telepresence/latest/quick-start/)
 * **Install Telepresence:** [Install](https://www.getambassador.io/docs/telepresence/latest/install/)
-* **Contributor's Guide:** [Guide](https://github.com/telepresenceio/telepresence/blob/release/v2/DEVELOPING.md)
+* **Contributor's Guide:** [Guide](https://github.com/telepresenceio/telepresence/blob/release/v2/CONTRIBUTING.md)
 * **Meetings:** Check out our community [meeting schedule](https://github.com/telepresenceio/telepresence/blob/release/v2/MEETING_SCHEDULE.md) for opportunities to interact with Telepresence developers
 
 ## Walkthrough
@@ -296,10 +296,10 @@ Containers:
       /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-svf4h (ro)
 Conditions:
   Type              Status
-  Initialized       True 
-  Ready             True 
-  ContainersReady   True 
-  PodScheduled      True 
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
 Volumes:
   kube-api-access-svf4h:
     Type:                    Projected (a volume that contains injected data from multiple sources)
@@ -317,11 +317,11 @@ Volumes:
     Optional:  false
   export-volume:
     Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
-    Medium:     
+    Medium:
     SizeLimit:  <unset>
   tel-agent-tmp:
     Type:        EmptyDir (a temporary directory that shares a pod's lifetime)
-    Medium:      
+    Medium:
     SizeLimit:   <unset>
 QoS Class:       BestEffort
 Node-Selectors:  <none>
@@ -342,10 +342,10 @@ Events:
   Normal  Started    7m39s  kubelet            Started container traffic-agent
 ```
 
-Telepresence keeps track of all possible intercepts for containers that have an agent installed in the configmap `telepresence-agents`.  
+Telepresence keeps track of all possible intercepts for containers that have an agent installed in the configmap `telepresence-agents`.
 
 ```console
-$ kubectl describe configmap telepresence-agents 
+$ kubectl describe configmap telepresence-agents
 Name:         telepresence-agents
 Namespace:    default
 Labels:       app.kubernetes.io/created-by=traffic-manager
