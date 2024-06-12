@@ -55,6 +55,15 @@ items:
           a Linux host, the Docker host available from <code>host.docker.internal</code> that the <code>kubeauth</code> connected to
           was the Windows host running Docker Desktop. The fix for this was to use the local IP of the default route instead of
           <code>host.docker.internal</code> when running under WSL..
+  - version: 2.18.6
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Fix bug in workload cache, causing endless recursion when a workload uses the same name as its owner.
+        body: >-
+          The workload cache was keyed by name and namespace, but not by kind, so a workload named the same as its
+          owner workload would be found using the same key. This led to the workload finding itself when looking up
+          its owner, which in turn resulted in an endless recursion when searching for the topmost owner.
       - type: bugfix
         title: FailedScheduling events mentioning node availability considered fatal when waiting for agent to arrive.
         body: >-
@@ -62,6 +71,9 @@ items:
           has been initiated. This logic would trigger on events like &quot;Warning FailedScheduling 0/63 nodes are
           available&quot; although those events indicate a recoverable condition and kill the wait. This is now fixed so
           that the events are logged but the wait continues.
+  - version: 2.18.5
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Improve how the traffic-manager resolves DNS when no agent is installed.
         body: >-
