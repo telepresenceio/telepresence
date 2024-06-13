@@ -20,7 +20,7 @@ webhooks:
 {{- end }}
   clientConfig:
 {{- if not (eq .Values.agentInjector.certificate.method "certmanager") }}
-{{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
+{{- if and ($secretData) (or (not .Values.agentInjector.certificate.regenerate) (eq .Values.agentInjector.certificate.method "supplied") )}}
     caBundle: {{ or (get $secretData "ca.crt") (get $secretData "ca.pem") }}
 {{- else }}
     caBundle: {{ $genCA.Cert | b64enc }}
