@@ -65,6 +65,7 @@ webhooks:
 {{- end }}
 {{- if not (eq .Values.agentInjector.certificate.method "certmanager") }}
 ---
+{{- if ne .Values.agentInjector.certificate.method "supplied" -}}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -81,6 +82,7 @@ data:
   ca.crt: {{ $genCA.Cert | b64enc }}
   tls.crt: {{ $genCert.Cert | b64enc }}
   tls.key: {{ $genCert.Key | b64enc }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}
