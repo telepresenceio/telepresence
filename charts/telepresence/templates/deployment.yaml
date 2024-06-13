@@ -286,6 +286,9 @@ spec:
           {{- template "traffic-manager-mounts" . }}
         {{- end }}
       {{- end }}
+      {{- with .schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
