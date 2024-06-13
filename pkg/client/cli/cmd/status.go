@@ -350,10 +350,10 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		}
 	}
 
-	if v, err := userD.TrafficManagerVersion(ctx, &empty.Empty{}); err == nil {
+	if mv := status.ManagerVersion; mv != nil {
 		tm := &wt.TrafficManager
-		tm.Name = v.Name
-		tm.Version = v.Version
+		tm.Name = mv.Name
+		tm.Version = mv.Version
 		if af, err := userD.AgentImageFQN(ctx, &empty.Empty{}); err == nil {
 			tm.TrafficAgent = af.FQN
 		}

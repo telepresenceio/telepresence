@@ -62,7 +62,6 @@ func dialClusterGRPC(ctx context.Context, address string, grpcDialer dnet.Dialer
 	return grpc.NewClient(dnet.K8sPFScheme+":///"+address, grpc.WithContextDialer(grpcDialer),
 		grpc.WithResolvers(dnet.NewResolver(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 }
 

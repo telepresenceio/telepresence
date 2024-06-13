@@ -135,7 +135,6 @@ func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session
 		grpc.WithContextDialer(sess.pfDialer.Dial),
 		grpc.WithResolvers(dnet.NewResolver(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	}
 
@@ -157,7 +156,6 @@ func (c *traceCollector) agentTraces(ctx context.Context, sess *session, tCh cha
 		opts := []grpc.DialOption{
 			grpc.WithContextDialer(sess.pfDialer.Dial),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithNoProxy(),
 			grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		}
 

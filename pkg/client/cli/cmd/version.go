@@ -126,6 +126,13 @@ func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 }
 
 func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
+	if s := daemon.GetSession(ctx); s != nil {
+		mv := s.Info.ManagerVersion
+		return &common.VersionInfo{
+			Version: mv.Version,
+			Name:    mv.Name,
+		}, nil
+	}
 	if userD := daemon.GetUserClient(ctx); userD != nil {
 		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
 	}

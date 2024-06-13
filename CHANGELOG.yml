@@ -34,11 +34,21 @@ items:
     date: (TBD)
     notes:
       - type: feature
+<<<<<<< feature/add-scheduler-name
         title: Add scheduler name to PODs templates.
         body: >-
           A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are 
           able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources, 
           including the Traffic Manager and hooks pods.
+=======
+        title: Warn when an Open Source Client connects to an Enterprise Traffic Manager.
+        body: >-
+          The difference between the OSS and the Enterprise offering is not well understood, and OSS users often install
+          a traffic-manager using the Helm chart published at getambassador.io. This Helm chart installs an enterprise
+          traffic-manager, which is probably not what the user would expect. Telepresence will now warn when an OSS client
+          connects to an enterprise traffic-manager and suggest switching to an enterprise client, or use
+          <code>telepresence helm install</code> to install an OSS traffic-manager.
+>>>>>>> release/v2
       - type: bugfix
         title: Kubeconfig exec authentication failure when connecting with --docker from a WSL linux host
         body: >-
@@ -53,6 +63,15 @@ items:
           a Linux host, the Docker host available from <code>host.docker.internal</code> that the <code>kubeauth</code> connected to
           was the Windows host running Docker Desktop. The fix for this was to use the local IP of the default route instead of
           <code>host.docker.internal</code> when running under WSL..
+  - version: 2.18.6
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Fix bug in workload cache, causing endless recursion when a workload uses the same name as its owner.
+        body: >-
+          The workload cache was keyed by name and namespace, but not by kind, so a workload named the same as its
+          owner workload would be found using the same key. This led to the workload finding itself when looking up
+          its owner, which in turn resulted in an endless recursion when searching for the topmost owner.
       - type: bugfix
         title: FailedScheduling events mentioning node availability considered fatal when waiting for agent to arrive.
         body: >-
@@ -60,6 +79,9 @@ items:
           has been initiated. This logic would trigger on events like &quot;Warning FailedScheduling 0/63 nodes are
           available&quot; although those events indicate a recoverable condition and kill the wait. This is now fixed so
           that the events are logged but the wait continues.
+  - version: 2.18.5
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Improve how the traffic-manager resolves DNS when no agent is installed.
         body: >-

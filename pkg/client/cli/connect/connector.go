@@ -399,15 +399,12 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		}
 	}
 
-	// warn if version diff between cli and manager is > 3
-	warnMngrVersion := func() error {
-		version, err := userD.TrafficManagerVersion(ctx, &emptypb.Empty{})
-		if err != nil {
-			return err
-		}
+	// warn if the version diff between cli and manager is > 3 or if there's an OSS/Enterprise mismatch.
+	warnMngrVersion := func(ci *connector.ConnectInfo) error {
+		mv := ci.ManagerVersion
 
 		// remove leading v from semver
-		mSemver, err := semver.Parse(strings.TrimPrefix(version.Version, "v"))
+		mSemver, err := semver.Parse(strings.TrimPrefix(mv.Version, "v"))
 		if err != nil {
 			return err
 		}
@@ -425,7 +422,16 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		if diff > maxDiff {
 			ioutil.Printf(output.Info(ctx),
 				"The Traffic Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.\n",
-				version.Version, maxDiff, client.Version())
+				mv.Version, maxDiff, client.Version())
+		}
+
+		cv := ci.Version
+		if strings.HasPrefix(cv.Name, "OSS ") && !strings.HasPrefix(mv.Name, "OSS ") {
+			ioutil.Printf(output.Info(ctx),
+				"You are using the OSS client %s to connect to an enterprise traffic manager %s. Please consider installing an\n"+
+					"enterprise client from getambassador.io, or use \"telepresence helm install\" to install an OSS traffic-manager\n",
+				cv.Version,
+				mv.Version)
 		}
 		return nil
 	}
@@ -436,7 +442,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 		switch ci.Error {
 		case connector.ConnectInfo_UNSPECIFIED:
 			ioutil.Printf(output.Info(ctx), "Connected to context %s, namespace %s (%s)\n", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
-			err := warnMngrVersion()
+			err := warnMngrVersion(ci)
 			if err != nil {
 				dlog.Error(ctx, err)
 			}
