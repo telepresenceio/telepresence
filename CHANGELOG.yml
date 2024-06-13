@@ -33,16 +33,6 @@ items:
   - version: 2.19.0
     date: (TBD)
     notes:
-
-      - type: feature
-        title: Add ability to mount a webhook secret.
-        body: >-
-          A new Helm chart value <code>agentInjector.certificate.accessMethod</code> which can be set to <code>watch</code>
-          (the default) or <code>mount</code> has been added. The <code>mount</code> setting is intended for clusters with
-          policies that prevent containers from doing a <code>get</code>, <code>list</code> or <code>watch</code> of a
-          <code>Secret</code>, but where a latency of up to 90 seconds is acceptable between the time the secret is
-          regenerated and the agent-injector picks it up.
-
       - type: feature
         title: Add ability to provide an externally-provisioned webhook secret
         body: >-
