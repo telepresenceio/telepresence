@@ -34,13 +34,11 @@ items:
     date: (TBD)
     notes:
       - type: feature
-<<<<<<< feature/add-scheduler-name
         title: Add scheduler name to PODs templates.
         body: >-
-          A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are 
-          able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources, 
+          A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are
+          able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources,
           including the Traffic Manager and hooks pods.
-=======
         title: Warn when an Open Source Client connects to an Enterprise Traffic Manager.
         body: >-
           The difference between the OSS and the Enterprise offering is not well understood, and OSS users often install
@@ -48,7 +46,6 @@ items:
           traffic-manager, which is probably not what the user would expect. Telepresence will now warn when an OSS client
           connects to an enterprise traffic-manager and suggest switching to an enterprise client, or use
           <code>telepresence helm install</code> to install an OSS traffic-manager.
->>>>>>> release/v2
       - type: bugfix
         title: Kubeconfig exec authentication failure when connecting with --docker from a WSL linux host
         body: >-
