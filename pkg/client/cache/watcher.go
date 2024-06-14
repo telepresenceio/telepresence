@@ -40,8 +40,13 @@ func WatchUserCache(ctx context.Context, subDir string, onChange func(context.Co
 	// The delay timer will initially sleep forever. It's reset to a very short
 	// delay when the file is modified.
 	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
-		if err := onChange(ctx); err != nil {
-			dlog.Error(ctx, err)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if err := onChange(ctx); err != nil {
+				dlog.Error(ctx, err)
+			}
 		}
 	})
 	defer delay.Stop()
