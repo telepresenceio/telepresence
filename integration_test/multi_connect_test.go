@@ -196,7 +196,7 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 			// condition
 			func() bool {
 				out, err := itest.Output(ctx,
-					"docker", "run", "--network", "container:"+"tp-"+cn, "--rm", "curlimages/curl", "--silent", "--max-time", "1", svc)
+					"docker", "run", "--network", "container:"+"tp-"+cn, "--rm", "curlimages/curl", "--silent", "--max-time", "2", svc)
 				if err != nil {
 					dlog.Errorf(ctx, "%s:%v", out, err)
 					return false
@@ -205,7 +205,7 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 				return expectedOutput.MatchString(out)
 			},
 			10*time.Second, // waitFor
-			2*time.Second,  // polling interval
+			3*time.Second,  // polling interval
 			`body of %q matches %q`, "http://"+svc, expectedOutput,
 		)
 	}

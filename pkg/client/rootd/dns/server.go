@@ -918,11 +918,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		msg.SetReply(r)
 		msg.Answer = answer
 		msg.Authoritative = true
-		// mac dns seems to fallback if you don't
-		// support recursion, if you have more than a
-		// single dns server, this will prevent us
-		// from intercepting all queries
-		msg.RecursionAvailable = true
+		msg.RecursionAvailable = s.fallbackPool != nil
 		txt = func() string { return answer.String() }
 		return
 	}
@@ -945,17 +941,20 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			}
 		}
 		msg.SetRcode(r, rCode)
-		return
+	} else {
+		// Use the original query name when sending things to the fallback resolver.
+		q.Name = origName
+		pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
+		msg, txt = s.fallbackExchange(c, msg, r)
 	}
+}
 
-	// Use original query name when sending things to the fallback resolver.
-	q.Name = origName
-	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
+func (s *Server) fallbackExchange(c context.Context, msg, r *dns.Msg) (*dns.Msg, func() string) {
 	dc := &dns.Client{Net: "udp", Timeout: s.lookupTimeout}
-	var poolMsg *dns.Msg
-	poolMsg, _, err = s.fallbackPool.Exchange(c, dc, r)
+	poolMsg, _, err := s.fallbackPool.Exchange(c, dc, r)
+	var txt func() string
 	if err != nil {
-		rCode = dns.RcodeServerFailure
+		rCode := dns.RcodeServerFailure
 		txt = err.Error
 		if netErr, ok := err.(net.Error); ok {
 			switch {
@@ -969,8 +968,10 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		msg.SetRcode(r, rCode)
 	} else {
 		msg = poolMsg
+		msg.RecursionAvailable = true
 		txt = func() string { return dnsproxy.RRs(msg.Answer).String() }
 	}
+	return msg, txt
 }
 
 var errNoMapping = errors.New("no mapping") //nolint:gochecknoglobals // constant

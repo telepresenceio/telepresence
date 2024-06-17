@@ -79,6 +79,7 @@ func (ac *client) connect(ctx context.Context, deleteMe func()) {
 	defer close(ac.ready)
 	pfDialer := dnet.GetPortForwardDialer(ctx)
 	if pfDialer == nil {
+		ac.ready <- errors.New("no port-forward dialer configured for context")
 		return
 	}
 
