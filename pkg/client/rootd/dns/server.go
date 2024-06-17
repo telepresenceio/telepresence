@@ -876,28 +876,46 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	}
 
-	if strings.Contains(q.Name, tel2SubDomainDot) {
-		// This is a bogus name because it has some domain after
-		// the tel2-search domain. Should normally never happen, but
-		// will happen if someone queries for the tel2-search domain
-		// as a single label name.
-		msg.SetRcode(r, dns.RcodeNameError)
-		return
-	}
+	var answer dnsproxy.RRs
+	var rCode int
+	var err error
 
-	// try and resolve any mappings before consulting the cache, so that mapping hits don't
-	// end up in the cache.
-	answer, rCode, err := s.resolveMapping(q)
-	if err == errNoMapping {
+	switch q.Qtype {
+	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME:
+		if strings.Contains(q.Name, tel2SubDomainDot) {
+			// This is a bogus name because it has some domain after
+			// the tel2-search domain. Should normally never happen, but
+			// will happen if someone queries for the tel2-search domain
+			// as a single label name.
+			msg.SetRcode(r, dns.RcodeNameError)
+			return
+		}
+
+		// try and resolve any mappings before consulting the cache, so that mapping hits don't
+		// end up in the cache.
+		answer, rCode, err = s.resolveMapping(q)
+		if err == errNoMapping {
+			answer, rCode, err = s.resolveWithRecursionCheck(q)
+		}
+	case dns.TypePTR:
+		// Respond with cluster domain if the queried IP is the IP of this DNS server.
+		if ip, err := dnsproxy.PtrAddress(q.Name); err == nil && ip.Equal(s.remoteIP) {
+			answer = dnsproxy.RRs{
+				&dns.PTR{
+					Hdr: dnsproxy.NewHeader(q.Name, q.Qtype),
+					Ptr: s.clusterDomain,
+				},
+			}
+			rCode = dns.RcodeSuccess
+			break
+		}
+		fallthrough
+	default:
 		answer, rCode, err = s.resolveWithRecursionCheck(q)
 	}
 
 	if err == nil && rCode == dns.RcodeSuccess {
-		if rCode != dns.RcodeSuccess {
-			msg.SetRcode(r, rCode)
-		} else {
-			msg.SetReply(r)
-		}
+		msg.SetReply(r)
 		msg.Answer = answer
 		msg.Authoritative = true
 		// mac dns seems to fallback if you don't
@@ -918,9 +936,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		strings.HasPrefix(q.Name, recursionCheck2) ||
 		strings.HasSuffix(q.Name, cd) ||
 		strings.HasSuffix(origName, tel2SubDomainDot) {
-		if err == nil {
-			rCode = dns.RcodeNameError
-		} else {
+		if err != nil {
 			rCode = dns.RcodeServerFailure
 			if errors.Is(err, context.DeadlineExceeded) {
 				txt = func() string { return "timeout" }
