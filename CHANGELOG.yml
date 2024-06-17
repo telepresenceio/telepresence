@@ -31,7 +31,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.19.0
-    date: (TBD)
+    date: "2024-06-15"
     notes:
       - type: feature
         title: Warn when an Open Source Client connects to an Enterprise Traffic Manager.
@@ -241,7 +241,7 @@ items:
           other contexts using the same connection properties. The logic was therefore changed
           to instead look for a loopback service address.
   - version: 2.18.0
-    date: "2024-2-9"
+    date: "2024-02-09"
     notes:
       - type: feature
         title: Include the image for the traffic-agent in the output of the version and status commands.
