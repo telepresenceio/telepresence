@@ -84,13 +84,18 @@ func (p *progressBar) monitorProgress(ctx context.Context) {
 	}
 }
 
-func (p *progressBar) renderCurrentTest(_ decor.Statistics) string {
+func (p *progressBar) renderCurrentTest(s decor.Statistics) string {
 	p.RLock()
-	defer p.RUnlock()
-	if p.currentTest == "" {
-		return " starting... "
+	ct := p.currentTest
+	p.RUnlock()
+	if ct == "" {
+		return " starting… "
 	}
-	return " " + p.currentTest
+	// Truncate to the left.
+	if of := len(ct) + 1 - s.AvailableWidth; of > 0 {
+		ct = "…" + ct[of+1:]
+	}
+	return " " + ct
 }
 
 func (p *progressBar) renderResults(_ decor.Statistics) string {

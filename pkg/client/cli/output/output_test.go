@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func TestWithOutput(t *testing.T) {
@@ -23,8 +24,8 @@ func TestWithOutput(t *testing.T) {
 	re := func(cmd *cobra.Command, args []string) error {
 		stdout := cmd.OutOrStdout()
 		stderr := cmd.ErrOrStderr()
-		fmt.Fprint(stdout, expectedREStdout)
-		fmt.Fprint(stderr, expectedREStderr)
+		ioutil.Print(stdout, expectedREStdout)
+		ioutil.Print(stderr, expectedREStderr)
 		return nil
 	}
 
