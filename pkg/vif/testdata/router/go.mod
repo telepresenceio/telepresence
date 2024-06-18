@@ -7,7 +7,7 @@ toolchain go1.22.2
 require (
 	github.com/datawire/dlib v1.3.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/telepresenceio/telepresence/v2 v2.13.3
+	github.com/telepresenceio/telepresence/v2 v2.19.0
 )
 
 require (
@@ -52,7 +52,7 @@ require (
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.18.1-test.0 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.19.0 // indirect
 	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect

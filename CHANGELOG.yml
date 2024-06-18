@@ -31,7 +31,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.19.0
-    date: (TBD)
+    date: "2024-06-15"
     notes:
       - type: feature
         title: Add ability to provide an externally-provisioned webhook secret
@@ -53,6 +53,12 @@ items:
           traffic-manager, which is probably not what the user would expect. Telepresence will now warn when an OSS client
           connects to an enterprise traffic-manager and suggest switching to an enterprise client, or use
           <code>telepresence helm install</code> to install an OSS traffic-manager.
+      - type: feature
+        title: Add scheduler name to PODs templates.
+        body: >-
+          A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are 
+          able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources, 
+          including the Traffic Manager and hooks pods.
       - type: bugfix
         title: Kubeconfig exec authentication failure when connecting with --docker from a WSL linux host
         body: >-
@@ -247,7 +253,7 @@ items:
           other contexts using the same connection properties. The logic was therefore changed
           to instead look for a loopback service address.
   - version: 2.18.0
-    date: "2024-2-9"
+    date: "2024-02-09"
     notes:
       - type: feature
         title: Include the image for the traffic-agent in the output of the version and status commands.

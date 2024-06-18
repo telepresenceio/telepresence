@@ -780,6 +780,39 @@ func (s *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDi
 	}
 }
 
+// hasDomainSuffix checks if the given name is suffixed with the given suffix. The following
+// rules apply:
+//
+//   - The name must end with a dot.
+//   - The suffix may optionally end with a dot.
+//   - The suffix may not be empty.
+//   - The suffix match must follow after a dot in the name, or match the whole name.
+func hasDomainSuffix(name, suffix string) bool {
+	sl := len(suffix)
+	if sl == 0 {
+		return false
+	}
+	nl := len(name)
+	sfp := nl - sl
+	if sfp < 0 {
+		return false
+	}
+	if name[nl-1] != '.' {
+		return false
+	}
+	if suffix[sl-1] != '.' {
+		if sfp == 0 {
+			return false
+		}
+		sfp--
+		name = name[0 : nl-1]
+	}
+	if sfp == 0 {
+		return name == suffix
+	}
+	return name[sfp-1] == '.' && name[sfp:] == suffix
+}
+
 func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.DNSResponse, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	qType := uint16(request.Type)
@@ -816,8 +849,8 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.
 		dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s", name)
 		rrs, rCode, err = dnsproxy.Lookup(ctx, qType, name)
 		if err != nil {
-			// Could still be x.y.<client namespace>
-			if client != nil && nDots > 1 && client.Namespace != tmNamespace && !strings.HasSuffix(name, s.ClusterInfo().ClusterDomain()) {
+			// Could still be x.y.<client namespace>, but let's avoid x.<cluster domain>.<client namespace> and x.<client-namespace>.<client namespace>
+			if client != nil && nDots > 1 && client.Namespace != tmNamespace && !hasDomainSuffix(name, s.ClusterInfo().ClusterDomain()) && !hasDomainSuffix(name, client.Namespace) {
 				name += client.Namespace + "."
 				restoreName = true
 				dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s", name)
