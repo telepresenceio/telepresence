@@ -1,4 +1,4 @@
-package manager_test
+package manager
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
@@ -329,7 +328,7 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	agentmap.GeneratorConfigFunc = env.GeneratorConfig
 
 	s := grpc.NewServer()
-	mgr, g, err := manager.NewServiceFunc(ctx)
+	mgr, g, err := NewServiceFunc(ctx)
 	if err != nil {
 		t.Fatalf("failed to build manager: %v", err)
 	}
@@ -352,4 +351,75 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 		}
 	})
 	return conn
+}
+
+func Test_hasDomainSuffix(t *testing.T) {
+	tests := []struct {
+		name   string
+		qn     string
+		suffix string
+		want   bool
+	}{
+		{
+			"empty suffix",
+			"aa.bb.",
+			"",
+			false,
+		},
+		{
+			"suffix with dot",
+			"aa.bb.",
+			"bb.",
+			true,
+		},
+		{
+			"suffix without dot",
+			"aa.bb.",
+			"bb",
+			true,
+		},
+		{
+			"suffix partial match",
+			"aa.bb.",
+			"b.",
+			false,
+		},
+		{
+			"suffix partial match no dot",
+			"foo.bar.",
+			"b",
+			false,
+		},
+		{
+			"name without dot",
+			"aa.bb",
+			"bb",
+			false,
+		},
+		{
+			"equal",
+			"a.",
+			"a.",
+			true,
+		},
+		{
+			"equal no dot",
+			"a.",
+			"a",
+			true,
+		},
+		{
+			"empty qn",
+			".",
+			"a",
+			false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasDomainSuffix(tt.qn, tt.suffix); got != tt.want {
+				t.Errorf("hasDomainSuffix() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
