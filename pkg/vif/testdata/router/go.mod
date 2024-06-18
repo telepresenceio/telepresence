@@ -7,7 +7,7 @@ toolchain go1.22.2
 require (
 	github.com/datawire/dlib v1.3.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/telepresenceio/telepresence/v2 v2.13.3
+	github.com/telepresenceio/telepresence/v2 v2.19.0
 )
 
 require (
