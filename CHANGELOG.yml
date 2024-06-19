@@ -30,8 +30,8 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
-  - version: 2.19.0
-    date: "2024-06-15"
+  - version: 2.19.1
+    date: (TBD)
     notes:
       - type: feature
         title: Add ability to provide an externally-provisioned webhook secret
@@ -41,11 +41,20 @@ items:
           pre-existing secret named <code>agentInjector.secret.name</code>. Previously, the install would fail when it
           attempted to create or update the externally-managed secret.
       - type: feature
+        title: Let PTR query for DNS server return the cluster domain.
+        body: >-
+          The <code>nslookup</code> program on Windows uses a PTR query to retrieve its displayed "Server" property.
+          This Telepresence DNS resolver will now return the cluster domain on such a query.
+      - type: feature
         title: Add scheduler name to PODs templates.
         body: >-
           A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are
           able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources,
           including the Traffic Manager and hooks pods.
+  - version: 2.19.0
+    date: "2024-06-15"
+    notes:
+      - type: feature
         title: Warn when an Open Source Client connects to an Enterprise Traffic Manager.
         body: >-
           The difference between the OSS and the Enterprise offering is not well understood, and OSS users often install
@@ -59,6 +68,12 @@ items:
           A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are 
           able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources, 
           including the Traffic Manager and hooks pods.
+      - type: bugfix
+        title: Improve traffic-manager performance in very large clusters.
+        body: ->
+          The traffic-manager will now use a shared-informer when keeping track of deployments. This will significantly
+          reduce the load on the Kublet in large clusters and therefore lessen the risk for the traffic-manager being
+          throttled, which can lead to other problems.
       - type: bugfix
         title: Kubeconfig exec authentication failure when connecting with --docker from a WSL linux host
         body: >-
