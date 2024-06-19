@@ -13,10 +13,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-// WatchUserCache uses a file system watcher that receives events when the file changes
+// WatchUserCache uses a file system watcher that receives events when one of the given files changes
 // and calls the given function when that happens.
-func WatchUserCache(ctx context.Context, subdir string, onChange func(context.Context) error, files ...string) error {
-	dir := filepath.Join(filelocation.AppUserCacheDir(ctx), subdir)
+// All files in the given subDir are watched when the list of files is empty.
+func WatchUserCache(ctx context.Context, subDir string, onChange func(context.Context) error, files ...string) error {
+	dir := filepath.Join(filelocation.AppUserCacheDir(ctx), subDir)
 
 	// Ensure that the user cache directory exists.
 	if err := dos.MkdirAll(ctx, dir, 0o755); err != nil {
@@ -39,22 +40,30 @@ func WatchUserCache(ctx context.Context, subdir string, onChange func(context.Co
 	// The delay timer will initially sleep forever. It's reset to a very short
 	// delay when the file is modified.
 	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
-		if err := onChange(ctx); err != nil {
-			dlog.Error(ctx, err)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if err := onChange(ctx); err != nil {
+				dlog.Error(ctx, err)
+			}
 		}
 	})
 	defer delay.Stop()
 
-	for i := range files {
-		files[i] = filepath.Join(dir, files[i])
-	}
-	isOfInterest := func(s string) bool {
-		for _, file := range files {
-			if s == file {
-				return true
-			}
+	isOfInterest := func(string) bool { return true }
+	if len(files) > 0 {
+		for i := range files {
+			files[i] = filepath.Join(dir, files[i])
 		}
-		return false
+		isOfInterest = func(s string) bool {
+			for _, file := range files {
+				if s == file {
+					return true
+				}
+			}
+			return false
+		}
 	}
 	for {
 		select {
