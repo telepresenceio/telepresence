@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -74,6 +75,7 @@ func (s *state) PrepareIntercept(
 		if k8sErrors.IsNotFound(err) {
 			err = errcat.User.New(err)
 		}
+		dlog.Error(ctx, err)
 		return interceptError(err)
 	}
 
@@ -385,7 +387,10 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 }
 
 func (s *state) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
-	snapshotCh := s.WatchAgents(ctx, nil)
+	dlog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
+	snapshotCh := s.WatchAgents(ctx, func(sessionID string, agent *managerrpc.AgentInfo) bool {
+		return agent.Name == name && agent.Namespace == namespace
+	})
 	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + namespace)
 	// fes collects events from the failedCreatedCh and is included in the error message in case
 	// the waitForAgent call times out.
@@ -393,62 +398,63 @@ func (s *state) waitForAgent(ctx context.Context, name, namespace string, failed
 	for {
 		select {
 		case fe, ok := <-failedCreateCh:
-			if ok {
-				msg := fe.Note
-				// Terminate directly on known fatal events. No need for the user to wait for a timeout
-				// when one of these are encountered.
-				switch fe.Reason {
-				case "BackOff":
-					// The traffic-agent container was injected, but it fails to start
-					if rr := failedContainerRx.FindStringSubmatch(msg); rr != nil {
-						cn := rr[1]
-						pod := rr[2]
-						rq := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).GetLogs(pod, &core.PodLogOptions{
-							Container: cn,
-						})
-						if rs, err := rq.Stream(ctx); err == nil {
-							if log, err := io.ReadAll(rs); err == nil {
-								dlog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
-							} else {
-								dlog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
-							}
-							_ = rs.Close()
+			if !ok {
+				return errors.New("failed create channel closed")
+			}
+			msg := fe.Note
+			// Terminate directly on known fatal events. No need for the user to wait for a timeout
+			// when one of these are encountered.
+			switch fe.Reason {
+			case "BackOff":
+				// The traffic-agent container was injected, but it fails to start
+				if rr := failedContainerRx.FindStringSubmatch(msg); rr != nil {
+					cn := rr[1]
+					pod := rr[2]
+					rq := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).GetLogs(pod, &core.PodLogOptions{
+						Container: cn,
+					})
+					if rs, err := rq.Stream(ctx); err == nil {
+						if log, err := io.ReadAll(rs); err == nil {
+							dlog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
 						} else {
-							dlog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
+							dlog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
 						}
+						_ = rs.Close()
+					} else {
+						dlog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
 					}
-					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
-				case "Failed", "FailedCreate", "FailedScheduling":
-					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
-					if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
-						strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
-						strings.Contains(msg, "skip schedule deleting pod") ||
-						strings.Contains(msg, "nodes are available")) {
-						// This isn't fatal.
-						fes = append(fes, fe)
-						continue
-					}
-					msg = fmt.Sprintf(
-						"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
-						msg)
-				default:
-					// Something went wrong, but it might not be fatal. There are several events logged that are just
-					// warnings where the action will be retried and eventually succeed.
+				}
+				msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
+			case "Failed", "FailedCreate", "FailedScheduling":
+				// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
+				if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
+					strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
+					strings.Contains(msg, "skip schedule deleting pod") ||
+					strings.Contains(msg, "nodes are available")) {
+					// This isn't fatal.
 					fes = append(fes, fe)
 					continue
 				}
-				return errcat.User.New(msg)
+				msg = fmt.Sprintf(
+					"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
+					msg)
+			default:
+				// Something went wrong, but it might not be fatal. There are several events logged that are just
+				// warnings where the action will be retried and eventually succeed.
+				fes = append(fes, fe)
+				continue
 			}
+			return errcat.User.New(msg)
 		case snapshot, ok := <-snapshotCh:
 			if !ok {
 				// The request has been canceled.
 				return status.Error(codes.Canceled, fmt.Sprintf("channel closed while waiting for agent %s.%s to arrive", name, namespace))
 			}
 			for _, a := range snapshot.State {
-				if a.Namespace == namespace && a.Name == name {
-					return nil
-				}
+				dlog.Debugf(ctx, "Agent %s.%s is ready", a.Name, a.Namespace)
+				return nil
 			}
+			dlog.Debugf(ctx, "Got empty snapshot while waiting for agent %s.%s", name, namespace)
 		case <-ctx.Done():
 			v := "canceled"
 			if ctx.Err() == context.DeadlineExceeded {
