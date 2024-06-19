@@ -34,6 +34,18 @@ items:
     date: "2024-06-15"
     notes:
       - type: feature
+        title: Add ability to provide an externally-provisioned webhook secret
+        body: >-
+          Added <code>supplied</code> as a new option for <code>agentInjector.certificate.method</code>.
+          This fully disables the generation of the Mutating Webhook's secret, allowing the chart to use the values of a
+          pre-existing secret named <code>agentInjector.secret.name</code>. Previously, the install would fail when it
+          attempted to create or update the externally-managed secret.
+      - type: feature
+        title: Add scheduler name to PODs templates.
+        body: >-
+          A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are
+          able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources,
+          including the Traffic Manager and hooks pods.
         title: Warn when an Open Source Client connects to an Enterprise Traffic Manager.
         body: >-
           The difference between the OSS and the Enterprise offering is not well understood, and OSS users often install

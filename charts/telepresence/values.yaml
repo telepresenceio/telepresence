@@ -151,7 +151,13 @@ agentInjector:
 
     # The method used to generate the TLS certificate for the agent-injector.
     #
-    # Possible options: helm or certmanager
+    # Possible options: helm, supplied, or certmanager.
+    #
+    # If set to `supplied`, ensure your Secret is in the same namespace as the traffic-manager,
+    # and that `.agentInjector.secret.name` is set to its name.
+    # See the Secret in `agentInjectorWebhook.yaml` for the expected structure of the data.
+    # NOTE: If the Secret values update, the helm chart MUST be re-applied to ensure the
+    # MutatingWebhookConfiguration uses the new values.
     #
     # Default: helm
     method: helm
