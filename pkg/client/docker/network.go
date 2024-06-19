@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/network"
 	dockerClient "github.com/docker/docker/client"
 
@@ -19,7 +18,7 @@ func EnsureNetwork(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	resource, err := cli.NetworkInspect(ctx, name, types.NetworkInspectOptions{})
+	resource, err := cli.NetworkInspect(ctx, name, network.InspectOptions{})
 	if err != nil {
 		if !dockerClient.IsErrNotFound(err) {
 			return fmt.Errorf("docker network inspect failed: %w", err)
@@ -39,11 +38,11 @@ func EnsureNetwork(ctx context.Context, name string) error {
 
 	// Make an attempt to create the network with IPv6 enabled. This will fail unless the user has enabled
 	// IPv6 in /etc/docker/daemon.json.
-	rsp, err := cli.NetworkCreate(ctx, name, types.NetworkCreate{
-		CheckDuplicate: false,
-		Driver:         "bridge",
-		Scope:          "local",
-		EnableIPv6:     true,
+	enableIPv6 := true
+	rsp, err := cli.NetworkCreate(ctx, name, network.CreateOptions{
+		Driver:     "bridge",
+		Scope:      "local",
+		EnableIPv6: &enableIPv6,
 	})
 
 	if err == nil {
@@ -66,16 +65,16 @@ func EnsureNetwork(ctx context.Context, name string) error {
 	// when no IPv6 is enabled in /etc/docker/daemon.yaml
 
 	// First, create a dummy network without IPv6 so that we get a proper IPAM config
-	dummyNet, err := cli.NetworkCreate(ctx, fmt.Sprintf("tp-dummy-%08x", rand.Int31()), types.NetworkCreate{
-		CheckDuplicate: false,
-		Driver:         "bridge",
-		Scope:          "local",
-		EnableIPv6:     false,
+	disableIPv6 := false
+	dummyNet, err := cli.NetworkCreate(ctx, fmt.Sprintf("tp-dummy-%08x", rand.Int31()), network.CreateOptions{
+		Driver:     "bridge",
+		Scope:      "local",
+		EnableIPv6: &disableIPv6,
 	})
 	if err != nil {
 		return nil
 	}
-	resource, err = cli.NetworkInspect(ctx, dummyNet.ID, types.NetworkInspectOptions{})
+	resource, err = cli.NetworkInspect(ctx, dummyNet.ID, network.InspectOptions{})
 	if dummyErr := cli.NetworkRemove(ctx, dummyNet.ID); dummyErr != nil {
 		dlog.Warnf(ctx, "failed to remove network %s: %v", dummyNet.ID, dummyErr)
 	}
@@ -101,12 +100,11 @@ func EnsureNetwork(ctx context.Context, name string) error {
 		}
 
 		// Create the IPv6 enabled network
-		_, err = cli.NetworkCreate(ctx, name, types.NetworkCreate{
-			CheckDuplicate: false,
-			Driver:         "bridge",
-			Scope:          "local",
-			EnableIPv6:     true,
-			IPAM:           ipam,
+		_, err = cli.NetworkCreate(ctx, name, network.CreateOptions{
+			Driver:     "bridge",
+			Scope:      "local",
+			EnableIPv6: &enableIPv6,
+			IPAM:       ipam,
 		})
 		if err == nil {
 			return nil

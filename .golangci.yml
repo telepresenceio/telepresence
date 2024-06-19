@@ -93,7 +93,6 @@ linters:
     - durationcheck
     - errcheck
     - errname
-    - execinquery
     - exportloopref
     - forbidigo
     - gochecknoglobals
@@ -112,7 +111,7 @@ linters:
     - importas
     - ineffassign
     - lll
-    - logrlint
+    - loggercheck
     - makezero
     - misspell
     - nakedret
@@ -140,7 +139,7 @@ linters:
     - gci
     - gochecknoinits
     - goconst
-    - goerr113
+    - err113
     - godox
     - goimports
     - gomnd

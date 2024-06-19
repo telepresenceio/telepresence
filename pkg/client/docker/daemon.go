@@ -19,6 +19,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	dockerClient "github.com/docker/docker/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -440,7 +441,7 @@ func localAddr(ctx context.Context, cnID, nwID string, isIPv6 bool) (addr netip.
 	if err != nil {
 		return addr, err
 	}
-	nw, err := cli.NetworkInspect(ctx, nwID, types.NetworkInspectOptions{})
+	nw, err := cli.NetworkInspect(ctx, nwID, network.InspectOptions{})
 	if err != nil {
 		return addr, err
 	}
