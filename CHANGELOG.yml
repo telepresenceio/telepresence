@@ -439,6 +439,11 @@ items:
           The telepresence helm installer will no longer discover and convert workloads that were modified by versions
           prior to 2.6.0. The traffic manager will and no longer support the muxed tunnels used in versions prior to
           2.5.0.
+      - type: feature
+        title: Brew now supports MacOS (amd64/arm64) / Linux (amd64)
+        body: >-
+          The brew formula can now dynamically support MacOS (amd64/arm64) / Linux (amd64) in a single formula
+        docs: https://github.com/datawire/homebrew-blackbird/issues/19
   - version: 2.17.0
     date: "2023-11-14"
     notes:
