@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	dns2 "github.com/miekg/dns"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -50,11 +50,9 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, address,
+	conn, err := grpc.NewClient(address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-	)
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 	if err != nil {
 		return err
 	}
@@ -82,7 +80,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 
-	state.SetManager(session, manager, mgrVer)
+	state.SetManager(ctx, session, manager, mgrVer)
 
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'

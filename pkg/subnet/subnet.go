@@ -151,15 +151,15 @@ func Equal(a, b *net.IPNet) bool {
 
 // Covers answers the question if network range a contains the full network range b.
 func Covers(a, b *net.IPNet) bool {
-	return a.Contains(b.IP) && a.Contains(maxIP(b))
+	return a.Contains(b.IP) && a.Contains(MaxIP(b))
 }
 
 // Overlaps answers the question if there is an overlap between network range a and b.
 func Overlaps(a, b *net.IPNet) bool {
-	return a.Contains(b.IP) || a.Contains(maxIP(b)) || b.Contains(a.IP) || b.Contains(maxIP(a))
+	return a.Contains(b.IP) || a.Contains(MaxIP(b)) || b.Contains(a.IP) || b.Contains(MaxIP(a))
 }
 
-func maxIP(cidr *net.IPNet) net.IP {
+func MaxIP(cidr *net.IPNet) net.IP {
 	// create max IP in range b using its mask
 	ones, _ := cidr.Mask.Size()
 	l := len(cidr.IP)
@@ -231,7 +231,6 @@ func RandomIPv4Subnet(mask net.IPMask, avoid []*net.IPNet) (*net.IPNet, error) {
 		ip := ranges[i]
 
 		end := ranges[i+1]
-		inUse := false
 		for {
 			ip1 := make(net.IP, len(ip))
 			copy(ip1, ip)
@@ -240,6 +239,7 @@ func RandomIPv4Subnet(mask net.IPMask, avoid []*net.IPNet) (*net.IPNet, error) {
 				IP:   ip1,
 				Mask: mask,
 			}
+			inUse := false
 			for _, cidr := range cidrs {
 				if Overlaps(cidr, &sn) {
 					inUse = true

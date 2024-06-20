@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/puzpuzpuz/xsync/v3"
+	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dcontext"
@@ -23,20 +25,25 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 type Resolver func(context.Context, *dns.Question) (dnsproxy.RRs, int, error)
 
-// recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
-// is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
-// recursively. This is common when the cluster is running on the local host (k3s in docker for instance).
-const recursionCheck = "tel2-recursion-check.kube-system."
+const (
+	// defaultClusterDomain used unless traffic-manager reports otherwise.
+	defaultClusterDomain = "cluster.local."
 
-// defaultClusterDomain used unless traffic-manager reports otherwise.
-const defaultClusterDomain = "cluster.local."
+	// sanityCheck is the query used when verifying that a DNS query reaches our DNS server. It should result
+	// in an increase of the requestCount but always yield an NXDOMAIN reply.
+	santiyCheck    = "jhfweoitnkgyeta." + tel2SubDomain
+	santiyCheckDot = santiyCheck + "."
+
+	// dnsTTL is the number of seconds that a found DNS record should be allowed to live in the callers cache. We
+	// keep this low to avoid such caching.
+	dnsTTL = 4
+)
 
 type FallbackPool interface {
 	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
@@ -47,37 +54,67 @@ type FallbackPool interface {
 
 const (
 	_ = int32(iota)
+	recursionQueryNotYetReceived
+	recursionQueryReceived
 	recursionNotDetected
 	recursionDetected
-	recursionTestInProgress
 )
+
+//nolint:gochecknoglobals // constant
+var DefaultExcludeSuffixes = []string{
+	".com",
+	".io",
+	".net",
+	".org",
+	".ru",
+}
+
+type nsAndDomains struct {
+	domains   []string
+	namespace string
+}
 
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface.
 type Server struct {
+	sync.RWMutex
 	ctx          context.Context // necessary to make logging work in ServeDNS function
 	fallbackPool FallbackPool
 	resolve      Resolver
 	requestCount int64
-	cache        sync.Map
+	cache        *xsync.MapOf[cacheKey, *cacheEntry]
 	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
-	cacheResolve func(*dns.Question) (dnsproxy.RRs, int, error)
-	dropSuffixes []string //nolint:unused // only used on linux
 
-	// Namespaces, accessible using <service-name>.<namespace-name>
-	namespaces map[string]struct{}
-	domains    map[string]struct{}
-	search     []string
+	// Suffixes to immediately drop from the query before processing. This list will always contain the tel2Search domain.
+	// The overriding resolver will also add the search path found in /etc/resolv.conf, because that search path is not
+	// intended for this resolver and will get reapplied when passing things on to the fallback resolver.
+	dropSuffixes []string
 
-	// The domainsLock locks usage of namespaces, domains, and search
-	domainsLock sync.RWMutex
+	// routes are typically namespaces, accessible using <service-name>.<namespace-name>.
+	routes map[string]struct{}
 
-	// searchPathCh receives requests to change the search path.
-	searchPathCh chan []string
+	// search are appended to a query to form new names that are then dispatched to the
+	// DNS resolver. The act of appending is not performed by this server, but rather
+	// by the system's DNS resolver before calling on this server.
+	search []string
 
-	config *rpc.DNSConfig
+	// domains contains the sum of the include-suffixes and routes. It is currently only
+	// used by the darwin resolver to keep track of files to add or remove.
+	domains map[string]struct{}
 
-	// configLock ensures thread safety for the DNS config for certain fields that can be modified remotely.
-	configLock sync.RWMutex
+	// nsAndDomainsCh receives requests to change the top level domains and the search path.
+	nsAndDomainsCh chan nsAndDomains
+
+	includeSuffixes []string
+
+	excludeSuffixes []string
+
+	excludes []string
+	mappings map[string]string
+
+	lookupTimeout time.Duration
+
+	localIP  net.IP
+	remoteIP net.IP
 
 	// clusterDomain reported by the traffic-manager
 	clusterDomain string
@@ -85,9 +122,7 @@ type Server struct {
 	// Function that sends a lookup request to the traffic-manager
 	clusterLookup Resolver
 
-	// onlyNames is set to true when using a legacy traffic-manager incapable of
-	// using query types
-	onlyNames bool
+	error string
 
 	// ready is closed when the DNS server is fully configured
 	ready chan struct{}
@@ -116,49 +151,61 @@ func (dv *cacheEntry) close() {
 	}
 }
 
+func sliceToLower(ss []string) []string {
+	for i, s := range ss {
+		ss[i] = strings.ToLower(s)
+	}
+	return ss
+}
+
 // NewServer returns a new dns.Server.
-func NewServer(config *rpc.DNSConfig, clusterLookup Resolver, onlyNames bool) *Server {
+func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
 	if config == nil {
 		config = &rpc.DNSConfig{}
 	}
 	if len(config.ExcludeSuffixes) == 0 {
-		config.ExcludeSuffixes = []string{
-			".com",
-			".io",
-			".net",
-			".org",
-			".ru",
-		}
+		config.ExcludeSuffixes = DefaultExcludeSuffixes
 	}
 	if config.LookupTimeout.AsDuration() <= 0 {
 		config.LookupTimeout = durationpb.New(8 * time.Second)
 	}
 	s := &Server{
-		config:        config,
-		configLock:    sync.RWMutex{},
-		namespaces:    make(map[string]struct{}),
-		domains:       make(map[string]struct{}),
-		search:        []string{""},
-		searchPathCh:  make(chan []string, 5),
-		clusterDomain: defaultClusterDomain,
-		clusterLookup: clusterLookup,
-		onlyNames:     onlyNames,
-		ready:         make(chan struct{}),
+		cache:           xsync.NewMapOf[cacheKey, *cacheEntry](),
+		routes:          make(map[string]struct{}),
+		domains:         make(map[string]struct{}),
+		excludes:        sliceToLower(config.Excludes),
+		excludeSuffixes: sliceToLower(config.ExcludeSuffixes),
+		includeSuffixes: sliceToLower(config.IncludeSuffixes),
+		mappings:        mappingsMap(config.Mappings),
+		localIP:         config.LocalIp,
+		remoteIP:        config.RemoteIp,
+		dropSuffixes:    []string{tel2SubDomainDot},
+		search:          []string{tel2SubDomain},
+		nsAndDomainsCh:  make(chan nsAndDomains, 5),
+		clusterDomain:   defaultClusterDomain,
+		clusterLookup:   clusterLookup,
+		ready:           make(chan struct{}),
 	}
-	s.cacheResolve = s.resolveWithRecursionCheck
+	if lt := config.LookupTimeout; lt != nil {
+		s.lookupTimeout = lt.AsDuration()
+	}
 	return s
 }
 
-// tel2SubDomain fixes a search-path problem when using Docker.
+// tel2SubDomain helps differentiate between single label and qualified DNS queries.
 //
-// Docker uses its own search-path for single label names. This means that the search path that is
-// declared in Telepresence DNS resolver is ignored, although the rest of the DNS-resolution works
-// OK. Since the search-path is likely to change during a session, a stable fake domain is needed
-// to emulate the search-path. That fake-domain can then be used in the search path declared in the
-// Docker config.
+// Dealing with single label names is tricky because what we really want is to receive the
+// name and then forward it verbatim to the DNS resolver in the cluster so that it can
+// add whatever search paths to it that it sees fit, but in order to receive single name
+// queries in the first place, our DNS resolver must have a search path that adds a domain
+// that the DNS system knows that we will handle.
 //
-// The tel2SubDomain fills this purpose and a request for "<single label name>.<tel2SubDomain>"
-// will be resolved as "<single label name>.<currently intercepted namespace>".
+// Example flow:
+// The user queries for the name "alpha". The DNS system on the host tries the search path
+// of our DNS resolver which contains "tel2-search" and creates the name "alpha.tel2-search".
+// The DNS system now discovers that our DNS resolver handles that domain, so we receive
+// the query. We then strip the "tel2-search" and send the original single label name to the
+// cluster, and we add it back before we forward the reply.
 const (
 	tel2SubDomain    = "tel2-search"
 	tel2SubDomainDot = tel2SubDomain + "."
@@ -172,83 +219,101 @@ var (
 	localhostIPv6 = net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1} //nolint:gochecknoglobals // constant
 )
 
-func (s *Server) tel2SubDomainHostname(query string) string {
-	// Has to be trimmed since value for an unqualified hostname can be :
-	// - <hostname>.tel2-search.cluster.local
-	uqHostSuffix := "." + tel2SubDomainDot + s.clusterDomain
-	if strings.HasSuffix(query, uqHostSuffix) {
-		return strings.TrimSuffix(query, uqHostSuffix) + "."
-	}
-	return ""
-}
-
 func (s *Server) shouldDoClusterLookup(query string) bool {
+	name := query[:len(query)-1] // skip last dot
 	if strings.HasPrefix(query, wpadDot) {
 		// Reject "wpad.*"
-		return false
-	}
-	if strings.HasSuffix(query, "."+s.clusterDomain) && strings.Count(query, ".") < 4 {
-		// Reject "<label>.cluster.local."
+		dlog.Debugf(s.ctx, `Cluster DNS excluded by exclude-prefix "wpad." for name %q`, name)
 		return false
 	}
 
-	if s.isExcluded(query) {
+	if s.isExcluded(name) {
 		// Reject any host explicitly added to the exclude list.
+		dlog.Debugf(s.ctx, "Cluster DNS explicitly excluded for name %q", name)
 		return false
 	}
 
-	query = query[:len(query)-1] // skip last dot
-
-	if strings.Contains(query, "."+tel2SubDomainDot) {
-		// Reject "xxx.tel2-search.xxx" (we know it doesn't end with tel2SubDomain because we just removed the last dot)
-		// Addresses like that can come into existence if the daemon runs in a docker container
-		// with --dns-search tel2-search and docker in turn uses a DNS server from a VPN that
-		// applies search paths to multi-label names.
-		// Example when using Tailscape: hello.default.tel2-search.tailbfa9e.ts.net.
-		return false
+	if !strings.ContainsRune(name, '.') {
+		// Single label names are always included.
+		dlog.Debugf(s.ctx, "Cluster DNS included for single label name %q", name)
+		return true
 	}
 
-	// Always include configured includeSuffixes
-	for _, sfx := range s.config.IncludeSuffixes {
-		if strings.HasSuffix(query, sfx) {
+	// Skip configured exclude-suffixes unless also matched by an include-suffix
+	// that is longer (i.e. more specific).
+	for _, es := range s.excludeSuffixes {
+		if strings.HasSuffix(name, es) {
+			// Exclude unless more specific include.
+			for _, is := range s.includeSuffixes {
+				if len(is) >= len(es) && strings.HasSuffix(name, is) {
+					dlog.Debugf(s.ctx,
+						"Cluster DNS included by include-suffix %q (overriding exclude-suffix %q) for name %q", is, es, name)
+					return true
+				}
+			}
+			dlog.Debugf(s.ctx, "Cluster DNS excluded by exclude-suffix %q for name %q", es, name)
+			return false
+		}
+	}
+
+	// Always include configured search paths
+	for _, sfx := range s.search {
+		if strings.HasSuffix(name, sfx) {
+			dlog.Debugf(s.ctx, "Cluster DNS included by search %q of name %q", sfx, name)
 			return true
 		}
 	}
 
-	// Skip configured excludeSuffixes
-	for _, sfx := range s.config.ExcludeSuffixes {
-		if strings.HasSuffix(query, sfx) {
-			return false
+	// Always include configured routes
+	for sfx := range s.routes {
+		if strings.HasSuffix(name, sfx) {
+			dlog.Debugf(s.ctx, "Cluster DNS included by namespace %q of name %q", sfx, name)
+			return true
 		}
 	}
-	return true
+
+	// Always include queries for the cluster domain.
+	if strings.HasSuffix(query, "."+s.clusterDomain) {
+		dlog.Debugf(s.ctx, "Cluster DNS included by cluster domain %q of name %q", s.clusterDomain, name)
+		return true
+	}
+
+	// Always include configured includeSuffixes
+	for _, sfx := range s.includeSuffixes {
+		if strings.HasSuffix(name, sfx) {
+			dlog.Debugf(s.ctx,
+				"Cluster DNS included by include-suffix %q for name %q", sfx, name)
+			return true
+		}
+	}
+
+	// Pass any queries for the cluster domain.
+	dlog.Debugf(s.ctx, "Cluster DNS excluded for name %q. No inclusion rule was matched", name)
+	return false
 }
 
-func (s *Server) isExcluded(query string) bool {
-	s.configLock.RLock()
-	defer s.configLock.RUnlock()
-
-	if slice.Contains(s.config.Excludes, query[:len(query)-1]) {
+func (s *Server) isExcluded(name string) bool {
+	if slice.Contains(s.excludes, name) {
 		return true
 	}
 
 	// When intercepting, this function will potentially receive the hostname of any search param, so their
 	// unqualified hostname should be evaluated too.
+	qLen := len(name)
 	for _, sp := range s.search {
-		if strings.HasSuffix(query, sp) && slice.Contains(s.config.Excludes, query[:len(query)-len(sp)-1]) {
+		if strings.HasSuffix(name, "."+sp) && slice.Contains(s.excludes, name[:qLen-len(sp)-1]) {
 			return true
 		}
 	}
-
 	return false
 }
 
-func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
-	origQuery := q.Name
-	query := strings.ToLower(origQuery)
-	query = strings.TrimSuffix(query, tel2SubDomainDot)
-	q.Name = query
+func (s *Server) isDomainExcluded(name string) bool {
+	return slices.Contains(s.excludeSuffixes, "."+name)
+}
 
+func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
+	query := q.Name
 	if query == "localhost." {
 		// BUG(lukeshu): I have no idea why a lookup
 		// for localhost even makes it to here on my
@@ -257,17 +322,24 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 		// But it does, so I need this in order to be
 		// productive at home.  We should really
 		// root-cause this, because it's weird.
+		hdr := dns.RR_Header{
+			Name:   q.Name,
+			Rrtype: q.Qtype,
+			Class:  q.Qclass,
+		}
 		switch q.Qtype {
 		case dns.TypeA:
 			return dnsproxy.RRs{&dns.A{
-				Hdr: dns.RR_Header{},
+				Hdr: hdr,
 				A:   localhostIPv4,
 			}}, dns.RcodeSuccess, nil
 		case dns.TypeAAAA:
 			return dnsproxy.RRs{&dns.AAAA{
-				Hdr:  dns.RR_Header{},
+				Hdr:  hdr,
 				AAAA: localhostIPv6,
 			}}, dns.RcodeSuccess, nil
+		default:
+			return nil, dns.RcodeNameError, nil
 		}
 	}
 
@@ -276,52 +348,51 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	}
 
 	// Give the cluster lookup a reasonable timeout.
-	c, cancel := context.WithTimeout(c, s.config.LookupTimeout.AsDuration())
+	c, cancel := context.WithTimeout(c, s.lookupTimeout)
 	defer cancel()
 
 	result, rCode, err = s.clusterLookup(c, q)
 	if err != nil {
 		return nil, rCode, client.CheckTimeout(c, err)
 	}
+
 	// Keep the TTLs of requests resolved in the cluster low. We
 	// cache them locally anyway, but our cache is flushed when things are
 	// intercepted or the namespaces change.
 	for _, rr := range result {
 		if h := rr.Header(); h != nil {
-			if h.Name == query {
-				h.Name = origQuery
-			}
 			h.Ttl = dnsTTL
 		}
 	}
 	return result, rCode, nil
 }
 
-func (s *Server) ResolveMappingAlias(query string) *string {
-	s.configLock.RLock()
-	defer s.configLock.RUnlock()
-	for i := range s.config.Mappings {
-		mappingName := s.config.Mappings[i].Name + "."
-		if mappingName == query {
-			dotName := s.config.Mappings[i].AliasFor + "."
-			return &dotName
+func (s *Server) GetConfig() *rpc.DNSConfig {
+	s.RLock()
+	c := rpc.DNSConfig{
+		LocalIp:         s.localIP,
+		RemoteIp:        s.remoteIP,
+		ExcludeSuffixes: s.excludeSuffixes,
+		IncludeSuffixes: s.includeSuffixes,
+		Excludes:        s.excludes,
+		Error:           s.error,
+	}
+	if s.lookupTimeout != 0 {
+		c.LookupTimeout = durationpb.New(s.lookupTimeout)
+	}
+	if len(s.mappings) > 0 {
+		ns := maps.Keys(s.mappings)
+		slices.Sort(ns)
+		c.Mappings = make([]*rpc.DNSMapping, len(s.mappings))
+		for i, n := range ns {
+			c.Mappings[i] = &rpc.DNSMapping{
+				Name:     strings.TrimSuffix(n, "."),
+				AliasFor: strings.TrimSuffix(s.mappings[n], "."),
+			}
 		}
 	}
-	return nil
-}
-
-func (s *Server) GetConfig() *rpc.DNSConfig {
-	sc := s.config
-	return &rpc.DNSConfig{
-		LocalIp:         sc.LocalIp,
-		RemoteIp:        sc.RemoteIp,
-		ExcludeSuffixes: sc.ExcludeSuffixes,
-		IncludeSuffixes: sc.IncludeSuffixes,
-		Excludes:        sc.Excludes,
-		Mappings:        sc.Mappings,
-		LookupTimeout:   sc.LookupTimeout,
-		Error:           sc.Error,
-	}
+	s.RUnlock()
+	return &c
 }
 
 func (s *Server) Ready() <-chan struct{} {
@@ -338,46 +409,31 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
-	s.clusterDomain = dns.ClusterDomain
-	if s.config == nil {
-		s.config = &rpc.DNSConfig{}
+	s.Lock()
+	if s.remoteIP == nil {
+		s.remoteIP = remoteIP
 	}
-	if s.config.RemoteIp == nil {
-		s.config.RemoteIp = remoteIP
-	}
-	contains := func(s []string, a string) bool {
-		for _, x := range s {
-			if x == a {
-				return true
-			}
+	if dns != nil {
+		if slices.Equal(s.excludeSuffixes, DefaultExcludeSuffixes) && len(dns.ExcludeSuffixes) > 0 {
+			s.excludeSuffixes = sliceToLower(dns.ExcludeSuffixes)
 		}
-		return false
-	}
-	appendUnique := func(a, b []string) []string {
-		for _, x := range b {
-			if !contains(a, x) {
-				a = append(a, x)
-			}
+		if len(s.includeSuffixes) == 0 {
+			s.includeSuffixes = sliceToLower(dns.IncludeSuffixes)
 		}
-		return a
+		s.clusterDomain = strings.ToLower(dns.ClusterDomain)
 	}
-	s.config.ExcludeSuffixes = appendUnique(s.config.ExcludeSuffixes, dns.ExcludeSuffixes)
-	s.config.IncludeSuffixes = appendUnique(s.config.IncludeSuffixes, dns.IncludeSuffixes)
+	s.Unlock()
 }
 
-// SetSearchPath updates the DNS search path used by the resolver.
-func (s *Server) SetSearchPath(ctx context.Context, paths, namespaces []string) {
-	if len(namespaces) > 0 {
-		// Provide direct access to intercepted namespaces
-		for _, ns := range namespaces {
-			paths = append(paths, ns+".svc."+s.clusterDomain)
-		}
-		paths = append(paths, tel2SubDomain)
+// SetTopLevelDomainsAndSearchPath updates the DNS top level domains and the search path used by the resolver.
+func (s *Server) SetTopLevelDomainsAndSearchPath(ctx context.Context, domains []string, namespace string) {
+	das := nsAndDomains{
+		domains:   domains,
+		namespace: namespace,
 	}
-
 	select {
 	case <-ctx.Done():
-	case s.searchPathCh <- paths:
+	case s.nsAndDomainsCh <- das:
 	}
 }
 
@@ -386,34 +442,52 @@ func (s *Server) purgeRecordsFromCache(keyName string) {
 	for _, qType := range []uint16{dns.TypeA, dns.TypeAAAA} {
 		toDeleteKey := cacheKey{name: keyName, qType: qType}
 		if old, ok := s.cache.LoadAndDelete(toDeleteKey); ok {
-			old.(*cacheEntry).close()
+			old.close()
 		}
 	}
 }
 
 // SetExcludes sets the excludes list in the config.
 func (s *Server) SetExcludes(excludes []string) {
-	s.configLock.Lock()
-	toFlush := excludes
-	toFlush = append(toFlush, s.config.Excludes...)
-
-	// Flush the excludes
-	for i := range toFlush {
-		s.purgeRecordsFromCache(toFlush[i])
+	for i, e := range excludes {
+		excludes[i] = strings.ToLower(e)
 	}
-	s.config.Excludes = excludes
-	s.configLock.Unlock()
+	s.Lock()
+	oldExcludes := s.excludes
+	s.excludes = excludes
+	s.Unlock()
+
+	for _, e := range slice.AppendUnique(oldExcludes, excludes...) {
+		s.purgeRecordsFromCache(e)
+	}
+}
+
+func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
+	if l := len(mappings); l > 0 {
+		mm := make(map[string]string, l)
+		for _, m := range mappings {
+			al := m.AliasFor
+			if ip := iputil.Parse(al); ip == nil {
+				al += "."
+			}
+			mm[strings.ToLower(m.Name+".")] = strings.ToLower(al)
+		}
+		return mm
+	}
+	return nil
 }
 
 // SetMappings sets the Mappings list in the config.
 func (s *Server) SetMappings(mappings []*rpc.DNSMapping) {
-	s.configLock.Lock()
+	mm := mappingsMap(mappings)
+	s.Lock()
+	s.mappings = mm
+	s.Unlock()
+
 	// Flush the mappings.
-	for i := range s.config.Mappings {
-		s.purgeRecordsFromCache(s.config.Mappings[i].Name)
+	for n := range mm {
+		s.purgeRecordsFromCache(n)
 	}
-	s.config.Mappings = mappings
-	s.configLock.Unlock()
 }
 
 func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
@@ -421,47 +495,48 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
 }
 
-func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, []string, vif.Device) error, dev vif.Device) {
-	g.Go("RecursionCheck", func(c context.Context) error {
-		_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, []string{tel2SubDomain})
-		if runtime.GOOS == "windows" {
-			// Give the DNS setting some time to take effect.
-			dtime.SleepWithContext(c, 500*time.Millisecond)
-		}
-		s.performRecursionCheck(c)
-		return nil
-	})
-
+func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, vif.Device) error, dev vif.Device) {
 	g.Go("SearchPaths", func(c context.Context) error {
-		var prevPaths []string
-		unchanged := func(paths []string) bool {
-			if len(paths) != len(prevPaths) {
-				return false
-			}
-			for i, path := range paths {
-				if path != prevPaths[i] {
-					return false
-				}
-			}
-			return true
+		s.performRecursionCheck(c)
+		prevDas := nsAndDomains{
+			domains:   []string{},
+			namespace: "",
+		}
+		unchanged := func(das nsAndDomains) bool {
+			return das.namespace == prevDas.namespace && slices.Equal(das.domains, prevDas.domains)
 		}
 
 		for {
 			select {
 			case <-c.Done():
 				return nil
-			case paths := <-s.searchPathCh:
-				if len(s.searchPathCh) > 0 {
-					// Only interested in the last one
+			case das := <-s.nsAndDomainsCh:
+				// Only interested in the last one, and only if it differs
+				if len(s.nsAndDomainsCh) > 0 || unchanged(das) {
 					continue
 				}
-				if !unchanged(paths) {
-					dlog.Debugf(c, "%v -> %v", prevPaths, paths)
-					prevPaths = make([]string, len(paths))
-					copy(prevPaths, paths)
-					if err := processor(c, paths, dev); err != nil {
-						return err
+				prevDas = das
+
+				routes := make(map[string]struct{}, len(das.domains))
+				for _, domain := range das.domains {
+					if domain != "" && !s.isDomainExcluded(domain) {
+						routes[domain] = struct{}{}
 					}
+				}
+				if !s.isDomainExcluded("svc") {
+					routes["svc"] = struct{}{}
+				}
+				s.Lock()
+				s.routes = routes
+
+				// The connected namespace must be included as a search path for the cases
+				// where it's up to the traffic-manager to resolve. It cannot resolve a single
+				// label name intended for other namespaces.
+				s.search = []string{tel2SubDomain, das.namespace}
+				s.Unlock()
+
+				if err := processor(c, dev); err != nil {
+					return err
 				}
 			}
 		}
@@ -469,9 +544,9 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 }
 
 func (s *Server) flushDNS() {
-	s.cache.Range(func(key, _ any) bool {
+	s.cache.Range(func(key cacheKey, _ *cacheEntry) bool {
 		if old, ok := s.cache.LoadAndDelete(key); ok {
-			old.(*cacheEntry).close()
+			old.close()
 		}
 		return true
 	})
@@ -510,93 +585,125 @@ type cacheKey struct {
 	qType uint16
 }
 
+func (c *cacheKey) String() string {
+	return fmt.Sprintf("%s %s", dns.TypeToString[c.qType], c.name)
+}
+
+const (
+	// recursionCheck is a special host name in a well known namespace that isn't expected to exist. It
+	// is used once for determining if the cluster's DNS resolver will call the Telepresence DNS resolver
+	// recursively. This is common when the cluster is running on the local host (k3s in docker for instance).
+	//
+	// The check is performed using the following steps.
+	// 1. A lookup is made for "tel-recursion-check
+	// 2. When our DNS-resolver receives this lookup, it modifies the name to "tel2-recursion-check.kube-system."
+	//    and sends that on to the cluster.
+	// 3. If our DNS-resolver now encounters a query for the "tel2-recursion-check.kube-system.", then we know
+	//    that a recursion took place.
+	// 4. If no request for "tel2-recursion-check.kube-system." is received, then it's assumed that the resolver
+	//    is not recursive.
+	recursionCheck  = "tel2-recursion-check."
+	recursionCheck2 = "tel2-recursion-check.kube-system."
+)
+
+func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, error) {
+	if strings.HasPrefix(q.Name, recursionCheck) {
+		if strings.HasPrefix(q.Name, recursionCheck2) {
+			if atomic.CompareAndSwapInt32(&s.recursive, recursionQueryReceived, recursionDetected) {
+				dlog.Debug(s.ctx, "DNS resolver is recursive")
+			}
+			return nil, dns.RcodeNameError, nil
+		}
+
+		if atomic.CompareAndSwapInt32(&s.recursive, recursionQueryNotYetReceived, recursionQueryReceived) {
+			tc, cancel := context.WithTimeout(s.ctx, recursionTestTimeout)
+			go func() {
+				defer cancel()
+				nq := *q // by value copy
+				nq.Name = recursionCheck2
+				_, _, _ = s.resolveInCluster(s.ctx, &nq) // We really don't care about the reply here.
+			}()
+			<-tc.Done()
+
+			// When we've gotten the reply from the cluster, we know if recursion did occur.
+			if atomic.CompareAndSwapInt32(&s.recursive, recursionQueryReceived, recursionNotDetected) {
+				dlog.Debug(s.ctx, "DNS resolver is not recursive")
+			}
+		}
+		return localHostReply(q), dns.RcodeSuccess, nil
+	}
+
+	answer, rCode, err := s.resolveThruCache(q)
+	if err != nil || rCode != dns.RcodeSuccess {
+		// For A and AAAA queries, we check if we have a successful counterpart in the cache. If we
+		// do, then this query must return NOERROR EMPTY
+		ck := cacheKey{name: q.Name, qType: dns.TypeNone}
+		switch q.Qtype {
+		case dns.TypeA:
+			ck.qType = dns.TypeAAAA
+		case dns.TypeAAAA:
+			ck.qType = dns.TypeA
+		}
+		if ck.qType != dns.TypeNone {
+			if ce, ok := s.cache.Load(ck); ok {
+				<-ce.wait
+				if !ce.expired() && ce.rCode == dns.RcodeSuccess && atomic.LoadInt32(&ce.currentQType) == int32(ck.qType) {
+					dlog.Debugf(s.ctx, "found counterpart for %s %s", dns.TypeToString[uint16(ce.currentQType)], ce.answer)
+					err = nil
+					rCode = dns.RcodeSuccess
+				}
+			}
+		}
+	}
+	return answer, rCode, err
+}
+
 // resolveThruCache resolves the given query by first performing a cache lookup. If a cached
 // entry is found that hasn't expired, it's returned. If not, this function will call
 // resolveQuery() to resolve and store in the case.
-func (s *Server) resolveThruCache(q *dns.Question) (dnsproxy.RRs, int, error) {
-	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
+func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode int, err error) {
+	dv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
 	key := cacheKey{name: q.Name, qType: q.Qtype}
-	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
-		oldDv := v.(*cacheEntry)
+	if oldDv, loaded := s.cache.LoadOrStore(key, dv); loaded {
 		if atomic.LoadInt32(&s.recursive) == recursionDetected && atomic.LoadInt32(&oldDv.currentQType) == int32(q.Qtype) {
 			// We have to assume that this is a recursion from the cluster.
+			dlog.Debugf(s.ctx, "returning error for query %q: assumed to be recursive", key.String())
 			return nil, dns.RcodeNameError, nil
 		}
 		<-oldDv.wait
 		if !oldDv.expired() {
-			copyQType := q.Qtype
-			// If answer is a mapping, the copy type should be a CNAME.
-			if len(oldDv.answer) == 1 && oldDv.answer[0].Header().Rrtype == dns.TypeCNAME {
-				copyQType = dns.TypeCNAME
+			qTypes := []uint16{q.Qtype}
+			if q.Qtype != dns.TypeCNAME {
+				// Allow additional CNAME records if they are present.
+				for _, rr := range oldDv.answer {
+					if rr.Header().Rrtype == dns.TypeCNAME {
+						qTypes = append(qTypes, dns.TypeCNAME)
+						break
+					}
+				}
 			}
-			return copyRRs(oldDv.answer, []uint16{copyQType}), oldDv.rCode, nil
+			return copyRRs(oldDv.answer, qTypes), oldDv.rCode, nil
 		}
-		s.cache.Store(key, newDv)
-	}
-	return s.resolveQuery(q, newDv)
-}
-
-func (s *Server) resolveThruCacheWithUnqualifiedHostName(q *dns.Question) (dnsproxy.RRs, int, error) {
-	// Only DNS aliases result in queries belonging to the tel2-search subdomain, which isn't a real one, so we
-	// strip so we can process it later
-	// Example:
-	//	 my-alias.tel2-search.cluster.local -> my-alias.
-	//
-	// Other unqualified hostname generally refer to a specific subdomain associated with an intercept running in
-	// a namespace, so they won't be stripped.
-	// Example:
-	//	 my-svc.blue.cluster.local -> <empty>
-	uhm := s.tel2SubDomainHostname(q.Name)
-	originalName := q.Name
-	if uhm != "" {
-		q.Name = uhm
+		s.cache.Store(key, dv)
 	}
 
-	rrs, rCode, err := s.resolveThruCache(q)
-
-	// Restore the original query name which was stripped before, or the response won't be formed correctly.
-	if uhm != "" {
-		q.Name = originalName
-		if len(rrs) > 0 {
-			rrs[0].Header().Name = originalName
-		}
-	}
-
-	return rrs, rCode, err
-}
-
-// resolveWithRecursionCheck is a special version of resolveThruCache which is only used until the
-// recursionCheck query has completed, and it has been determined whether a query that is propagated
-// to the cluster will recurse back to this resolver or not.
-func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, error) {
-	newDv := &cacheEntry{wait: make(chan struct{}), created: time.Now()}
-	key := cacheKey{name: q.Name, qType: q.Qtype}
-	if v, loaded := s.cache.LoadOrStore(key, newDv); loaded {
-		oldDv := v.(*cacheEntry)
-		if strings.HasPrefix(q.Name, recursionCheck) {
-			atomic.StoreInt32(&s.recursive, recursionDetected)
-		}
-		if atomic.LoadInt32(&s.recursive) == recursionDetected {
-			return nil, dns.RcodeNameError, nil
-		}
-		<-oldDv.wait
-		if !oldDv.expired() {
-			return copyRRs(oldDv.answer, []uint16{q.Qtype}), oldDv.rCode, nil
-		}
-		s.cache.Store(key, newDv)
-	}
-
-	answer, rCode, err := s.resolveQuery(q, newDv)
-	if strings.HasPrefix(q.Name, recursionCheck) {
-		if atomic.LoadInt32(&s.recursive) == recursionDetected {
-			dlog.Debug(s.ctx, "DNS resolver is recursive")
+	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
+	defer func() {
+		if rCode != dns.RcodeSuccess {
+			s.cache.Delete(key) // Don't cache unless the lookup succeeded.
 		} else {
-			atomic.StoreInt32(&s.recursive, recursionNotDetected)
-			dlog.Debug(s.ctx, "DNS resolver is not recursive")
+			dv.answer = answer
+			dv.rCode = rCode
+
+			// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
+			// also be empty if no RRs were found for the given query type and that is OK.
+			// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
+			answer = copyRRs(answer, []uint16{q.Qtype})
 		}
-		s.cacheResolve = s.resolveThruCacheWithUnqualifiedHostName
-	}
-	return answer, rCode, err
+		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
+		dv.close()
+	}()
+	return s.resolve(s.ctx, q)
 }
 
 // dfs is a func that implements the fmt.Stringer interface. Used in log statements to ensure
@@ -609,132 +716,223 @@ func (d dfs) String() string {
 }
 
 func (s *Server) performRecursionCheck(c context.Context) {
-	defer close(s.ready)
-	defer dlog.Debug(c, "Recursion check finished")
-	var rc string
-	if runtime.GOOS != "darwin" {
-		rc = recursionCheck + tel2SubDomain
-	} else {
-		rc = recursionCheck + s.clusterDomain
+	s.Lock()
+	if _, ok := s.routes["kube-system"]; !ok {
+		s.routes["kube-system"] = struct{}{}
+		nl := len(s.routes)
+		defer func() {
+			s.Lock()
+			if nl == len(s.routes) {
+				delete(s.routes, "kube-system")
+			}
+			s.Unlock()
+		}()
 	}
+	s.Unlock()
+	defer func() {
+		dlog.Debug(c, "Recursion check finished")
+		close(s.ready)
+	}()
+	rc := recursionCheck + tel2SubDomain
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
-	atomic.StoreInt32(&s.recursive, recursionTestInProgress)
-	for ; i < maxRecursionTestRetries && atomic.LoadInt32(&s.recursive) == recursionTestInProgress; i++ {
-		// Recursion is typically very fast (all on the same host) so let's
-		// use short timeouts
-		if i > 0 {
-			dlog.Debug(c, "retrying recursion check")
-		}
-		tc, cancel := context.WithTimeout(c, recursionTestTimeout)
-		_, err := net.DefaultResolver.LookupIP(tc, "ip4", rc)
-		cancel()
-		if err != nil {
-			if derr, ok := err.(*net.DNSError); ok {
-				if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
-					if derr.IsTimeout || derr.IsNotFound {
-						return
-					}
-				}
-				if derr.IsTimeout {
-					dtime.SleepWithContext(c, 200*time.Millisecond)
-					continue
-				}
-			}
-			dlog.Errorf(c, "unexpected error during recursion check: %v", err)
-		}
-		if atomic.LoadInt32(&s.recursive) != recursionTestInProgress {
-			return
-		}
-		// Check didn't hit our resolver. Try again
-		dtime.SleepWithContext(c, 100*time.Millisecond)
+	atomic.StoreInt32(&s.recursive, recursionQueryNotYetReceived)
+	for ; c.Err() == nil && i < maxRecursionTestRetries && atomic.LoadInt32(&s.recursive) == recursionQueryNotYetReceived; i++ {
+		go func() {
+			_, _ = net.DefaultResolver.LookupIP(c, "ip4", rc)
+		}()
+		time.Sleep(500 * time.Millisecond)
 	}
 	if i == maxRecursionTestRetries {
-		s.config.Error = "DNS doesn't seem to work properly"
+		msg := "DNS doesn't seem to work properly"
+		dlog.Error(c, msg)
+		s.Lock()
+		s.error = msg
+		s.Unlock()
+		return
+	}
+	// Await result
+	for c.Err() == nil {
+		rc := atomic.LoadInt32(&s.recursive)
+		if rc == recursionDetected || rc == recursionNotDetected {
+			break
+		}
+		dtime.SleepWithContext(c, 10*time.Millisecond)
+	}
+}
+
+func localHostReply(q *dns.Question) dnsproxy.RRs {
+	switch q.Qtype {
+	case dns.TypeA:
+		return dnsproxy.RRs{&dns.A{
+			Hdr: dns.RR_Header{
+				Name:   q.Name,
+				Rrtype: q.Qtype,
+				Class:  q.Qclass,
+			},
+			A: localhostIPv4,
+		}}
+	case dns.TypeAAAA:
+		return dnsproxy.RRs{&dns.AAAA{
+			Hdr: dns.RR_Header{
+				Name:   q.Name,
+				Rrtype: q.Qtype,
+				Class:  q.Qclass,
+			},
+			AAAA: localhostIPv6,
+		}}
+	default:
+		return nil
 	}
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	c := s.ctx
+	atomic.AddInt64(&s.requestCount, 1)
+
+	q := &r.Question[0]
+	qts := dns.TypeToString[q.Qtype]
+	dlog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
+
+	msg := new(dns.Msg)
+	var pfx dfs = func() string { return "" }
+	var txt dfs = func() string { return "" }
+	var rct dfs = func() string { return dns.RcodeToString[msg.Rcode] }
+
 	defer func() {
+		dlog.Debugf(c, "%s%5d %-6s %s -> %s %s", pfx, r.Id, qts, q.Name, rct, txt)
+		_ = w.WriteMsg(msg)
+
 		// Closing the response tells the DNS service to terminate
 		if c.Err() != nil {
 			_ = w.Close()
 		}
 	}()
 
-	q := &r.Question[0]
-	qts := dns.TypeToString[q.Qtype]
-	dlog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
+	// The sanity-check query is sent during the configuration phase of the DNS server and then
+	// never again. It must reply with localhost.
+	//
+	// NOTE! The sanity-check will always use the tel2-search subdomain, so the check made here
+	//       must be made before the tel2-search is removed.
+	if q.Name == santiyCheckDot {
+		answer := localHostReply(q)
+		if answer == nil {
+			msg.SetRcode(r, dns.RcodeNotImplemented)
+			return
+		}
+		msg.SetReply(r)
+		msg.Answer = answer
+		msg.Authoritative = true
+		txt = func() string { return answer.String() }
+		dlog.Debug(c, "sanity-check OK")
+		return
+	}
 
-	atomic.AddInt64(&s.requestCount, 1)
+	if !dnsproxy.SupportedType(q.Qtype) {
+		msg.SetRcode(r, dns.RcodeNotImplemented)
+		return
+	}
 
-	var err error
-	var rCode int
-	var answer dnsproxy.RRs
-
-	var pfx dfs = func() string { return "" }
-	var txt dfs = func() string { return "" }
-	var rct dfs = func() string { return dns.RcodeToString[rCode] }
-
-	var msg *dns.Msg
-
+	// We make changes to the query name, so we better restore it prior to writing an
+	// answer back, or the caller will get confused.
+	origName := q.Name
 	defer func() {
-		dlog.Debugf(c, "%s%5d %-6s %s -> %s %s", pfx, r.Id, qts, q.Name, rct, txt)
-		_ = w.WriteMsg(msg)
+		qs := msg.Question
+		if len(qs) > 0 {
+			mq := &qs[0] // Important to use a pointer here. We don't want to change a by-value copied struct.
+			if mq.Name == q.Name {
+				mq.Name = origName
+			}
+		}
+		for _, rr := range msg.Answer {
+			h := rr.Header()
+			if h.Name == q.Name {
+				h.Name = origName
+			}
+		}
+		q.Name = origName
 	}()
 
-	if s.onlyNames {
-		switch q.Qtype {
-		case dns.TypeA:
-			answer, rCode, err = s.cacheResolve(q)
-		case dns.TypeAAAA:
-			if atomic.LoadInt32(&s.recursive) == recursionDetected || q.Name == recursionCheck {
-				rCode = dns.RcodeNameError
+	// We're all about lowercase in here
+	q.Name = strings.ToLower(origName)
+
+	// The tel2SubDomain serves one purpose and one purpose alone. It's there to coerce the
+	// system DNS resolver to direct requests to this resolver. The system configuration to
+	// make this happen vary depending on OS, but the purpose is always the same. Given that,
+	// the first step in the resolution is to remove this domain-suffix if it exists.
+	ln := len(q.Name)
+	for _, dropSuffix := range s.dropSuffixes {
+		if strings.HasSuffix(q.Name, dropSuffix) {
+			// Remove the suffix and ensure that the name still ends
+			// with a dot after the removal. If it doesn't, then this
+			// was not really a domain suffix but rather a partial
+			// domain name.
+			n := q.Name[:ln-len(dropSuffix)]
+			if last := len(n) - 1; last > 0 && n[last] == '.' {
+				q.Name = n
 				break
 			}
-			q.Qtype = dns.TypeA
-			answer, rCode, err = s.cacheResolve(q)
-			q.Qtype = dns.TypeAAAA
-			if rCode == dns.RcodeSuccess {
-				// return EMPTY to indicate that dns.TypeA exists
-				answer = nil
+		}
+	}
+
+	var answer dnsproxy.RRs
+	var rCode int
+	var err error
+
+	switch q.Qtype {
+	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME:
+		if strings.Contains(q.Name, tel2SubDomainDot) {
+			// This is a bogus name because it has some domain after
+			// the tel2-search domain. Should normally never happen, but
+			// will happen if someone queries for the tel2-search domain
+			// as a single label name.
+			msg.SetRcode(r, dns.RcodeNameError)
+			return
+		}
+
+		// try and resolve any mappings before consulting the cache, so that mapping hits don't
+		// end up in the cache.
+		answer, rCode, err = s.resolveMapping(q)
+		if err == errNoMapping {
+			answer, rCode, err = s.resolveWithRecursionCheck(q)
+		}
+	case dns.TypePTR:
+		// Respond with cluster domain if the queried IP is the IP of this DNS server.
+		if ip, err := dnsproxy.PtrAddress(q.Name); err == nil && ip.Equal(s.remoteIP) {
+			answer = dnsproxy.RRs{
+				&dns.PTR{
+					Hdr: dnsproxy.NewHeader(q.Name, q.Qtype),
+					Ptr: s.clusterDomain,
+				},
 			}
-		default:
-			msg = new(dns.Msg)
-			msg.SetRcode(r, dns.RcodeNotImplemented)
-			return
+			rCode = dns.RcodeSuccess
+			break
 		}
-	} else {
-		if !dnsproxy.SupportedType(q.Qtype) {
-			msg = new(dns.Msg)
-			msg.SetRcode(r, dns.RcodeNotImplemented)
-			return
-		}
-		answer, rCode, err = s.cacheResolve(q)
+		fallthrough
+	default:
+		answer, rCode, err = s.resolveWithRecursionCheck(q)
 	}
 
 	if err == nil && rCode == dns.RcodeSuccess {
-		msg = new(dns.Msg)
-		msg.SetRcode(r, rCode)
+		msg.SetReply(r)
 		msg.Answer = answer
 		msg.Authoritative = true
-		// mac dns seems to fallback if you don't
-		// support recursion, if you have more than a
-		// single dns server, this will prevent us
-		// from intercepting all queries
-		msg.RecursionAvailable = true
+		msg.RecursionAvailable = s.fallbackPool != nil
 		txt = func() string { return answer.String() }
 		return
 	}
 
 	// The recursion check query, or queries that end with the cluster domain name, are not dispatched to the
 	// fallback DNS-server.
-	if s.fallbackPool == nil || strings.HasPrefix(q.Name, recursionCheck) || strings.HasSuffix(q.Name, s.clusterDomain) {
-		if err == nil {
-			rCode = dns.RcodeNameError
-		} else {
+	s.RLock()
+	cd := s.clusterDomain
+	s.RUnlock()
+	if s.fallbackPool == nil ||
+		strings.HasPrefix(q.Name, recursionCheck2) ||
+		strings.HasSuffix(q.Name, cd) ||
+		strings.HasSuffix(origName, tel2SubDomainDot) {
+		if err != nil {
 			rCode = dns.RcodeServerFailure
 			if errors.Is(err, context.DeadlineExceeded) {
 				txt = func() string { return "timeout" }
@@ -742,97 +940,94 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 				txt = err.Error
 			}
 		}
-		msg = new(dns.Msg)
 		msg.SetRcode(r, rCode)
-		return
+	} else {
+		// Use the original query name when sending things to the fallback resolver.
+		q.Name = origName
+		pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
+		msg, txt = s.fallbackExchange(c, msg, r)
 	}
+}
 
-	pfx = func() string { return fmt.Sprintf("(%s) ", s.fallbackPool.RemoteAddr()) }
-	dc := &dns.Client{Net: "udp", Timeout: s.config.LookupTimeout.AsDuration()}
-	msg, _, err = s.fallbackPool.Exchange(c, dc, r)
+func (s *Server) fallbackExchange(c context.Context, msg, r *dns.Msg) (*dns.Msg, func() string) {
+	dc := &dns.Client{Net: "udp", Timeout: s.lookupTimeout}
+	poolMsg, _, err := s.fallbackPool.Exchange(c, dc, r)
+	var txt func() string
 	if err != nil {
-		msg = new(dns.Msg)
-		rCode = dns.RcodeServerFailure
+		rCode := dns.RcodeServerFailure
 		txt = err.Error
-		if err, ok := err.(net.Error); ok {
+		if netErr, ok := err.(net.Error); ok {
 			switch {
-			case err.Timeout():
+			case netErr.Timeout():
 				txt = func() string { return "timeout" }
-			case err.Temporary(): //nolint:staticcheck // err.Temporary is deprecated
+			case netErr.Temporary(): //nolint:staticcheck // err.Temporary is deprecated
 				rCode = dns.RcodeRefused
 			default:
 			}
 		}
 		msg.SetRcode(r, rCode)
 	} else {
-		rCode = msg.Rcode
+		msg = poolMsg
+		msg.RecursionAvailable = true
 		txt = func() string { return dnsproxy.RRs(msg.Answer).String() }
-		// When the fallback fails an AAAA, we must look for a successful A, and vice versa. If a hit of
-		// the other type is found, then the returned value must be EMPTY here instead of an NXNAME
-		if rCode == dns.RcodeNameError {
-			var counterType uint16
-			switch q.Qtype {
-			case dns.TypeA:
-				counterType = dns.TypeAAAA
-			case dns.TypeAAAA:
-				counterType = dns.TypeA
-			default:
-				return
-			}
-			if _, ok := s.cache.Load(cacheKey{name: q.Name, qType: counterType}); ok {
-				rCode = dns.RcodeSuccess
-				msg.Rcode = rCode
-				msg.Answer = []dns.RR{}
-				txt = func() string { return "EMPTY" }
-			}
-		}
 	}
+	return msg, txt
 }
 
-// dnsTTL is the number of seconds that a found DNS record should be allowed to live in the callers cache. We
-// keep this low to avoid such caching.
-const dnsTTL = 4
+var errNoMapping = errors.New("no mapping") //nolint:gochecknoglobals // constant
 
-func (s *Server) resolveQuery(q *dns.Question, dv *cacheEntry) (dnsproxy.RRs, int, error) {
-	atomic.StoreInt32(&dv.currentQType, int32(q.Qtype))
-	defer func() {
-		atomic.StoreInt32(&dv.currentQType, int32(dns.TypeNone))
-		dv.close()
-	}()
+func (s *Server) resolveMapping(q *dns.Question) (dnsproxy.RRs, int, error) {
+	switch q.Qtype {
+	case dns.TypeA, dns.TypeAAAA, dns.TypeCNAME:
+	default:
+		return nil, dns.RcodeNameError, errNoMapping
+	}
 
-	// Returns a CNAME pointing to the mapping when there is a hit.
-	if mappingAlias := s.ResolveMappingAlias(q.Name); mappingAlias != nil {
-		dv.answer = dnsproxy.RRs{&dns.CNAME{
-			Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
-			Target: *mappingAlias,
-		}}
-		// On Windows, or in a Linux container, just returning the cname isn't enough, and the DNS resolver won't try
-		// to get the record with a subsequent request, so we need to resolve the record until we get a better solution.
-		if runtime.GOOS == "windows" || proc.RunningInContainer() {
-			answer, rCode, err := s.resolve(s.ctx, &dns.Question{
-				Name:   *mappingAlias,
-				Qtype:  q.Qtype,
-				Qclass: q.Qclass,
-			})
-			if err == nil && rCode == dns.RcodeSuccess && len(answer) > 0 {
-				dv.answer = append(dv.answer, answer[0])
-			}
+	s.RLock()
+	mappingAlias, ok := s.mappings[q.Name]
+	s.RUnlock()
+
+	if !ok {
+		return nil, dns.RcodeNameError, errNoMapping
+	}
+	if ip := iputil.Parse(mappingAlias); ip != nil {
+		// The name resolves to an A or AAAA record known by this DNS server.
+		var rrs dnsproxy.RRs
+		if q.Qtype == dns.TypeA && len(ip) == 4 {
+			rrs = dnsproxy.RRs{&dns.A{
+				Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: dnsTTL},
+				A:   ip,
+			}}
+		} else if q.Qtype == dns.TypeAAAA && len(ip) == 16 {
+			rrs = dnsproxy.RRs{&dns.AAAA{
+				Hdr:  dns.RR_Header{Name: q.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: dnsTTL},
+				AAAA: ip,
+			}}
 		}
-		dv.rCode = dns.RcodeSuccess
-		return copyRRs(dv.answer, []uint16{dns.TypeCNAME, q.Qtype}), dv.rCode, nil
+		return rrs, dns.RcodeSuccess, nil
 	}
 
-	var err error
-	dv.answer, dv.rCode, err = s.resolve(s.ctx, q)
-	if err != nil || dv.rCode != dns.RcodeSuccess {
-		s.cache.Delete(cacheKey{name: q.Name, qType: q.Qtype}) // Don't cache unless the lookup succeeded.
-		return nil, dv.rCode, err
+	cnameRRs := dnsproxy.RRs{&dns.CNAME{
+		Hdr:    dns.RR_Header{Name: q.Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: dnsTTL},
+		Target: mappingAlias,
+	}}
+
+	if q.Qtype == dns.TypeCNAME {
+		// A query for the CNAME must only return the CNAME.
+		return cnameRRs, dns.RcodeSuccess, nil
 	}
 
-	// Return a result for the correct query type. The result will be nil (nxdomain) if nothing was found. It might
-	// also be empty if no RRs were found for the given query type and that is OK.
-	// See https://datatracker.ietf.org/doc/html/rfc4074#section-3
-	return copyRRs(dv.answer, []uint16{q.Qtype}), dv.rCode, err
+	// A query for an A or AAAA must resolve the CNAME and then return both the result and the
+	// CNAME that resolved to it.
+	answer, rCode, err := s.resolveWithRecursionCheck(&dns.Question{
+		Name:   mappingAlias,
+		Qtype:  q.Qtype,
+		Qclass: q.Qclass,
+	})
+	if err == nil {
+		answer = append(cnameRRs, answer...)
+	}
+	return answer, rCode, err
 }
 
 // Run starts the DNS server(s) and waits for them to end.

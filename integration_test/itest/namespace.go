@@ -150,7 +150,7 @@ func (s *nsPair) RollbackTM(ctx context.Context) {
 	t := getT(ctx)
 	require.NoError(t, err)
 	require.NoError(t, RolloutStatusWait(ctx, s.Namespace, "deploy/traffic-manager"))
-	s.CapturePodLogs(ctx, "app=traffic-manager", "", s.Namespace)
+	s.CapturePodLogs(ctx, "traffic-manager", "", s.Namespace)
 }
 
 func (s *nsPair) AppNamespace() string {

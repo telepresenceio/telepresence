@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"github.com/puzpuzpuz/xsync/v3"
 	core "k8s.io/api/core/v1"
 
@@ -29,7 +29,7 @@ type State interface {
 	ManagerVersion() semver.Version
 	SessionInfo() *manager.SessionInfo
 	SetFileSharingPorts(ftp uint16, sftp uint16)
-	SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
+	SetManager(ctx context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
 }
@@ -151,6 +151,9 @@ func (s *simpleState) HandleIntercepts(ctx context.Context, iis []*manager.Inter
 }
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
+	if containerPort == 0 && len(s.interceptStates) == 1 {
+		containerPort = s.interceptStates[0].Target().ContainerPort()
+	}
 	for _, is := range s.interceptStates {
 		ic := is.Target()
 		if containerPort == ic.ContainerPort() && ic.Protocol() == core.ProtocolTCP {
@@ -161,7 +164,7 @@ func (s *state) InterceptInfo(ctx context.Context, callerID, path string, contai
 	return &restapi.InterceptInfo{}, nil
 }
 
-func (s *state) SetManager(sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
+func (s *state) SetManager(_ context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
 	s.manager = manager
 	s.sessionInfo = sessionInfo
 	s.mgrVer = version

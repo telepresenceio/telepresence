@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"encoding/json"
 	"reflect"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -45,25 +46,41 @@ const (
 
 	DomainPrefix                         = "telepresence.getambassador.io/"
 	InjectAnnotation                     = DomainPrefix + "inject-" + ContainerName
+	InjectIgnoreVolumeMounts             = DomainPrefix + "inject-ignore-volume-mounts"
 	TerminatingTLSSecretAnnotation       = DomainPrefix + "inject-terminating-tls-secret"
 	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
 	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
 	LegacyOriginatingTLSSecretAnnotation = "getambassador.io/inject-originating-tls-secret"
 	WorkloadNameLabel                    = "telepresence.io/workloadName"
+	WorkloadKindLabel                    = "telepresence.io/workloadKind"
 	WorkloadEnabledLabel                 = "telepresence.io/workloadEnabled"
 	K8SCreatedByLabel                    = "app.kubernetes.io/created-by"
 )
 
-type ReplacePolicy int
+type ReplacePolicy bool
 
-const (
-	// --replace is false.
-	ReplacePolicyNever ReplacePolicy = iota
-	// --replace is true, the intercept is active.
-	ReplacePolicyActive
-	// --replace is true, the intercept is inactive.
-	ReplacePolicyInactive
-)
+func (r *ReplacePolicy) UnmarshalJSON(data []byte) error {
+	var i int
+	if err := json.Unmarshal(data, &i); err != nil {
+		// Allow true/false too.
+		var v bool
+		if boolErr := json.Unmarshal(data, &v); boolErr != nil {
+			return err
+		}
+		*r = ReplacePolicy(v)
+	} else {
+		*r = i == 1
+	}
+	return nil
+}
+
+func (r ReplacePolicy) MarshalJSON() ([]byte, error) {
+	i := 0
+	if r {
+		i = 1
+	}
+	return json.Marshal(&i)
+}
 
 // Intercept describes the mapping between a service port and an intercepted container port.
 type Intercept struct {
@@ -116,7 +133,7 @@ type Container struct {
 	MountPoint string `json:"mountPoint,omitempty"`
 
 	// Mounts are the actual mount points that are mounted by this container
-	Mounts []string
+	Mounts []string `json:"Mounts,omitempty"`
 
 	// Replace is whether the agent should replace the intercepted container
 	Replace ReplacePolicy `json:"replace,omitempty"`
@@ -174,6 +191,9 @@ type Sidecar struct {
 
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`
+
+	// SecurityContext for the sidecar
+	SecurityContext *core.SecurityContext `json:"securityContext,omitempty"`
 }
 
 func (s *Sidecar) AgentConfig() *Sidecar {

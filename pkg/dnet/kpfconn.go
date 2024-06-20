@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -81,10 +82,9 @@ type podAddress struct {
 // Dial dials a port of something in the cluster.  The address format is
 // "[objkind/]objname[.objnamespace]:port".
 func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net.Conn, err error) {
-	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.Dial(ctx, %q)", addr)
 	var pod *podAddress
-	if pod, err = pf.resolve(ctx, addr); err == nil {
-		if conn, err = pf.dial(pod); err == nil {
+	if pod, err = resolve(ctx, pf.k8sInterface, addr); err == nil {
+		if conn, err = pf.dial(ctx, pod); err == nil {
 			return conn, nil
 		}
 	}
@@ -92,8 +92,8 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net
 	return nil, err
 }
 
-func (pf *k8sPortForwardDialer) DialPod(_ context.Context, name, namespace string, podPortNumber uint16) (net.Conn, error) {
-	conn, err := pf.dial(&podAddress{name: name, namespace: namespace, port: podPortNumber})
+func (pf *k8sPortForwardDialer) DialPod(ctx context.Context, name, namespace string, podPortNumber uint16) (net.Conn, error) {
+	conn, err := pf.dial(ctx, &podAddress{name: name, namespace: namespace, port: podPortNumber})
 	if err != nil {
 		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
 	}
@@ -112,7 +112,7 @@ func (pf *k8sPortForwardDialer) Close() error {
 	return nil
 }
 
-func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*podAddress, error) {
+func resolve(ctx context.Context, k8sInterface kubernetes.Interface, addr string) (*podAddress, error) {
 	var hostName, portName string
 	hostName, portName, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -136,7 +136,7 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*podA
 		objNamespace = objQName[dot+1:]
 	}
 
-	coreV1 := pf.k8sInterface.CoreV1()
+	coreV1 := k8sInterface.CoreV1()
 	if objKind == "svc" {
 		// Get the service.
 		svc, err := coreV1.Services(objNamespace).Get(ctx, objName, meta.GetOptions{})
@@ -200,7 +200,7 @@ func (pf *k8sPortForwardDialer) resolve(ctx context.Context, addr string) (*podA
 	}, nil
 }
 
-func (pf *k8sPortForwardDialer) spdyStream(pod *podAddress) (httpstream.Connection, error) {
+func (pf *k8sPortForwardDialer) spdyStream(ctx context.Context, pod *podAddress) (httpstream.Connection, error) {
 	cacheKey := pod.name + "." + pod.namespace
 	pf.spdyStreamsMu.Lock()
 	defer pf.spdyStreamsMu.Unlock()
@@ -225,7 +225,25 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *podAddress) (httpstream.Connecti
 
 	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.spdyDial(ctx, Pod./%s.%s)", pod.name, pod.namespace)
 
-	spdyStream, _, err := spdyDialer.Dial(portforward.PortForwardProtocolV1Name)
+	bc := backoff.ExponentialBackOff{
+		InitialInterval:     500 * time.Millisecond,
+		RandomizationFactor: backoff.DefaultRandomizationFactor,
+		Multiplier:          backoff.DefaultMultiplier,
+		MaxInterval:         5 * time.Second,
+		MaxElapsedTime:      30 * time.Second,
+		Clock:               backoff.SystemClock,
+	}
+	bc.Reset()
+	var spdyStream httpstream.Connection
+	err := backoff.Retry(func() (err error) {
+		select {
+		case <-ctx.Done():
+			err = backoff.Permanent(ctx.Err())
+		default:
+			spdyStream, _, err = spdyDialer.Dial(portforward.PortForwardProtocolV1Name)
+		}
+		return err
+	}, &bc)
 	if err != nil {
 		return nil, err
 	}
@@ -241,14 +259,14 @@ func (pf *k8sPortForwardDialer) spdyStream(pod *podAddress) (httpstream.Connecti
 	return spdyStream, nil
 }
 
-func (pf *k8sPortForwardDialer) dial(pod *podAddress) (conn *kpfConn, err error) {
+func (pf *k8sPortForwardDialer) dial(ctx context.Context, pod *podAddress) (conn *kpfConn, err error) {
 	dlog.Debugf(pf.logCtx, "k8sPortForwardDialer.dial(ctx, Pod./%s.%s, %d)",
 		pod.name,
 		pod.namespace,
 		pod.port)
 
 	// All port-forwards to the same Pod get multiplexed over the same SPDY stream.
-	spdyStream, err := pf.spdyStream(pod)
+	spdyStream, err := pf.spdyStream(ctx, pod)
 	if err != nil {
 		return nil, err
 	}

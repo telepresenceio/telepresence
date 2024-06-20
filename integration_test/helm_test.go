@@ -109,7 +109,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 		})
 		s.NoError(itest.Kubectl(ctx, s.mgrSpace2, "apply", "-f", filepath.Join("testdata", "k8s", "client_sa.yaml")))
 		itest.TelepresenceDisconnectOk(ctx)
-		s.NoError(s.TelepresenceHelmInstall(ctx, false))
+		s.TelepresenceHelmInstallOK(ctx, false)
 	})
 
 	s.Run("Can be connected to", func() {
@@ -118,7 +118,7 @@ func (s *helmSuite) Test_HelmMultipleInstalls() {
 		s.Contains(stdout, "Connected to context")
 		s.Eventually(func() bool {
 			return itest.Run(ctx, "curl", "--silent", "--connect-timeout", "1", fmt.Sprintf("%s.%s", svc, s.appSpace2)) == nil
-		}, 15*time.Second, 3*time.Second)
+		}, 30*time.Second, 3*time.Second)
 	})
 
 	s.Run("Can intercept", func() {
@@ -145,5 +145,6 @@ func (s *helmSuite) Test_CollidingInstalls() {
 		Namespace:         s.AppNamespace(),
 		ManagedNamespaces: []string{s.appSpace2},
 	})
-	s.Error(s.TelepresenceHelmInstall(ctx, false))
+	_, err := s.TelepresenceHelmInstall(ctx, false)
+	s.Error(err)
 }

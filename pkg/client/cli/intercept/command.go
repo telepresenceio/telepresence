@@ -12,6 +12,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -23,6 +25,8 @@ type Command struct {
 	Address        string // --address // only valid if !localOnly
 	LocalOnly      bool   // --local-only
 	LocalMountPort uint16 // --local-mount-port
+
+	Replace bool // whether --replace was passed
 
 	EnvFile  string   // --env-file
 	EnvJSON  string   // --env-json
@@ -37,10 +41,11 @@ type Command struct {
 	DockerMount        string   // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
 	Cmdline            []string // Command[1:]
 
-	Mechanism      string // --mechanism tcp
-	MechanismArgs  []string
-	ExtendedInfo   []byte
-	DetailedOutput bool
+	Mechanism       string // --mechanism tcp
+	MechanismArgs   []string
+	ExtendedInfo    []byte
+	FormattedOutput bool
+	DetailedOutput  bool
 }
 
 func (a *Command) AddFlags(cmd *cobra.Command) {
@@ -105,6 +110,10 @@ func (a *Command) AddFlags(cmd *cobra.Command) {
 	flagSet.Uint16Var(&a.LocalMountPort, "local-mount-port", 0,
 		`Do not mount remote directories. Instead, expose this port on localhost to an external mounter`)
 
+	flagSet.BoolVarP(&a.Replace, "replace", "", false,
+		`Indicates if the traffic-agent should replace application containers in workload pods. `+
+			`The default behavior is for the agent sidecar to be installed alongside existing containers.`)
+
 	// Hide these flags. They are still functional but deprecated. Using them will yield a deprecation message.
 	flagSet.Lookup("local-only").Hidden = true
 	flagSet.Lookup("namespace").Hidden = true
@@ -118,6 +127,7 @@ func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
 	}
 	a.Name = positional[0]
 	a.Cmdline = positional[1:]
+	a.FormattedOutput = output.WantsFormatted(cmd)
 	if a.LocalOnly {
 		// Not actually intercepting anything -- check that the flags make sense for that
 		if a.AgentName != "" {
@@ -178,7 +188,9 @@ func (a *Command) Run(cmd *cobra.Command, positional []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
-	return NewState(cmd, a).Run(cmd.Context())
+	ctx := dos.WithStdio(cmd.Context(), cmd)
+	_, err := NewState(a).Run(ctx)
+	return err
 }
 
 func (a *Command) ValidateDockerArgs() error {

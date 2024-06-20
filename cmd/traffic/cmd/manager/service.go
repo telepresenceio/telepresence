@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -12,9 +13,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -24,7 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
@@ -44,8 +49,8 @@ type Service interface {
 	ClusterID() string
 	MakeInterceptID(context.Context, string, string) (string, error)
 	RegisterServers(*grpc.Server)
-	TrafficManagerConfig() []byte
 	State() state.State
+	ClusterInfo() cluster.Info
 
 	// unexported methods.
 	runConfigWatcher(context.Context) error
@@ -84,9 +89,12 @@ func NewService(ctx context.Context) (Service, *dgroup.Group, error) {
 		id:    uuid.New().String(),
 	}
 
-	ctx, err := WithAgentImageRetrieverFunc(ctx, mutator.RegenerateAgentMaps)
-	if err != nil {
-		dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
+	if managerutil.AgentInjectorEnabled(ctx) {
+		var err error
+		ctx, err = WithAgentImageRetrieverFunc(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
+		if err != nil {
+			dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
+		}
 	}
 	ret.configWatcher = config.NewWatcher(managerutil.GetEnv(ctx).ManagerNamespace)
 	ret.ctx = ctx
@@ -125,10 +133,6 @@ func (s *service) ClusterID() string {
 	return s.clusterInfo.ClusterID()
 }
 
-func (s *service) TrafficManagerConfig() []byte {
-	return s.configWatcher.GetTrafficManagerConfigYaml()
-}
-
 func (s *service) runConfigWatcher(ctx context.Context) error {
 	return s.configWatcher.Run(ctx)
 }
@@ -136,6 +140,12 @@ func (s *service) runConfigWatcher(ctx context.Context) error {
 // Version returns the version information of the Manager.
 func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
+}
+
+func (s *service) GetAgentImageFQN(ctx context.Context, _ *empty.Empty) (*rpc.AgentImageFQN, error) {
+	return &rpc.AgentImageFQN{
+		FQN: managerutil.GetAgentImage(ctx),
+	}, nil
 }
 
 func (s *service) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
@@ -178,13 +188,14 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
 func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
-	dlog.Debug(ctx, "ArriveAsAgent called")
+	dlog.Debugf(ctx, "ArriveAsAgent %s called", agent.PodName)
 
 	if val := validateAgent(agent); val != "" {
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
 	sessionID := s.state.AddAgent(agent, s.clock.Now())
+	mutator.GetMap(ctx).Whitelist(agent.PodName, agent.Namespace)
 
 	return &rpc.SessionInfo{
 		SessionId: sessionID,
@@ -193,7 +204,6 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 func (s *service) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) (*empty.Empty, error) {
-	dlog.Debug(ctx, "ReportMetrics called")
 	s.state.AddSessionConsumptionMetrics(metrics)
 	return &empty.Empty{}, nil
 }
@@ -226,7 +236,8 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	sessionID := session.GetSessionId()
 	dlog.Debug(ctx, "Depart called")
 
-	s.state.RemoveSession(ctx, sessionID)
+	// There's reason for the caller to wait for this removal to complete.
+	go s.state.RemoveSession(context.WithoutCancel(ctx), sessionID)
 	return &empty.Empty{}, nil
 }
 
@@ -280,11 +291,12 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 			i := 0
 			for _, a := range agm {
 				agents[i] = &rpc.AgentPodInfo{
-					PodName:     a.PodName,
-					Namespace:   a.Namespace,
-					PodIp:       iputil.Parse(a.PodIp),
-					ApiPort:     a.ApiPort,
-					Intercepted: isIntercepted(a.Name, a.Namespace),
+					WorkloadName: a.Name,
+					PodName:      a.PodName,
+					Namespace:    a.Namespace,
+					PodIp:        iputil.Parse(a.PodIp),
+					ApiPort:      a.ApiPort,
+					Intercepted:  isIntercepted(a.Name, a.Namespace),
 				}
 				agentNames[i] = a.Name
 				i++
@@ -542,18 +554,34 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 }
 
-func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
+func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (pi *rpc.PreparedIntercept, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = derror.PanicToError(r)
+			dlog.Errorf(ctx, "%+v", err)
+		}
+	}()
 	ctx = managerutil.WithSessionInfo(ctx, request.Session)
-	dlog.Debugf(ctx, "PrepareIntercept called")
-
+	dlog.Debugf(ctx, "PrepareIntercept %s called", request.InterceptSpec.Name)
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, request.InterceptSpec)
+	return s.state.PrepareIntercept(ctx, request)
+}
 
-	replacePolicy := agentconfig.ReplacePolicyNever
-	if request.InterceptSpec.Replace {
-		replacePolicy = agentconfig.ReplacePolicyInactive
+func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*empty.Empty, error) {
+	session := request.GetSession()
+	ctx = managerutil.WithSessionInfo(ctx, session)
+	dlog.Debugf(ctx, "EnsureAgent called")
+	sessionID := session.GetSessionId()
+	client := s.state.GetClient(sessionID)
+	if client == nil {
+		return &empty.Empty{}, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
-	return s.state.PrepareIntercept(ctx, request, replacePolicy)
+	err := s.state.EnsureAgent(ctx, request.Name, client.Namespace)
+	if err != nil {
+		err = status.Errorf(codes.Internal, "failed to ensure agent for workload %s: %v", request.Name, err)
+	}
+	return &empty.Empty{}, err
 }
 
 // CreateIntercept lets a client create an intercept.
@@ -561,7 +589,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
-	dlog.Debug(ctx, "CreateIntercept called")
+	dlog.Debugf(ctx, "CreateIntercept %s called", ciReq.InterceptSpec.Name)
 	span := trace.SpanFromContext(ctx)
 	tracing.RecordInterceptSpec(span, spec)
 
@@ -570,7 +598,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	if ciReq.InterceptSpec.Replace {
-		_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyActive)
+		_, err := s.state.PrepareIntercept(ctx, ciReq)
 		if err != nil {
 			return nil, err
 		}
@@ -585,12 +613,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	if ciReq.InterceptSpec.Replace {
-		err := s.state.AddInterceptFinalizer(interceptInfo.Id, func(ctx context.Context, info *rpc.InterceptInfo) error {
-			dlog.Debugf(ctx, "Restoring app container for %s", info.Id)
-			ciReq.InterceptSpec.Replace = false
-			_, err := s.state.PrepareIntercept(ctx, ciReq, agentconfig.ReplacePolicyInactive)
-			return err
-		})
+		err := s.state.AddInterceptFinalizer(interceptInfo.Id, s.state.RestoreAppContainer)
 		if err != nil {
 			// The intercept's been created but we can't finalize it...
 			dlog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptInfo.Id, err)
@@ -631,11 +654,11 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	ctx = managerutil.WithSessionInfo(ctx, riReq.GetSession())
 	sessionID := riReq.GetSession().GetSessionId()
 	name := riReq.Name
-	client := s.state.GetClient(sessionID)
 
 	dlog.Debugf(ctx, "RemoveIntercept called: %s", name)
 
-	if s.state.GetClient(sessionID) == nil {
+	client := s.state.GetClient(sessionID)
+	if client == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
@@ -666,9 +689,9 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 	dlog.Debugf(ctx, "ReviewIntercept called: %s - %s", ceptID, rIReq.Disposition)
 
-	agent := s.state.GetAgent(sessionID)
+	agent := s.state.GetActiveAgent(sessionID)
 	if agent == nil {
-		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
+		return &empty.Empty{}, nil
 	}
 
 	rIReq.Environment = s.removeExcludedEnvVars(ctx, rIReq.Environment)
@@ -678,6 +701,10 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 		if intercept.Spec.Namespace != agent.Namespace || intercept.Spec.Agent != agent.Name {
 			return
 		}
+		if mutator.GetMap(ctx).IsBlacklisted(agent.PodName, agent.Namespace) {
+			dlog.Debugf(ctx, "Pod %s.%s is blacklisted", agent.PodName, agent.Namespace)
+			return
+		}
 
 		// Only update intercepts in the waiting state.  Agents race to review an intercept, but we
 		// expect they will always compatible answers.
@@ -685,6 +712,7 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.Disposition = rIReq.Disposition
 			intercept.Message = rIReq.Message
 			intercept.PodIp = rIReq.PodIp
+			intercept.PodName = agent.PodName
 			intercept.FtpPort = rIReq.FtpPort
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MountPoint = rIReq.MountPoint
@@ -752,6 +780,39 @@ func (s *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDi
 	}
 }
 
+// hasDomainSuffix checks if the given name is suffixed with the given suffix. The following
+// rules apply:
+//
+//   - The name must end with a dot.
+//   - The suffix may optionally end with a dot.
+//   - The suffix may not be empty.
+//   - The suffix match must follow after a dot in the name, or match the whole name.
+func hasDomainSuffix(name, suffix string) bool {
+	sl := len(suffix)
+	if sl == 0 {
+		return false
+	}
+	nl := len(name)
+	sfp := nl - sl
+	if sfp < 0 {
+		return false
+	}
+	if name[nl-1] != '.' {
+		return false
+	}
+	if suffix[sl-1] != '.' {
+		if sfp == 0 {
+			return false
+		}
+		sfp--
+		name = name[0 : nl-1]
+	}
+	if sfp == 0 {
+		return name == suffix
+	}
+	return name[sfp-1] == '.' && name[sfp:] == suffix
+}
+
 func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.DNSResponse, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	qType := uint16(request.Type)
@@ -769,14 +830,46 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.
 		}
 	}
 	if rCode == state.RcodeNoAgents {
-		rrs, rCode, err = dnsproxy.Lookup(ctx, qType, request.Name)
+		tmNamespace := managerutil.GetEnv(ctx).ManagerNamespace
+		client := s.state.GetClient(request.GetSession().GetSessionId())
+		name := request.Name
+		restoreName := false
+		nDots := 0
+		if client != nil {
+			for _, c := range name {
+				if c == '.' {
+					nDots++
+				}
+			}
+			if nDots == 1 && client.Namespace != tmNamespace {
+				name += client.Namespace + "."
+				restoreName = true
+			}
+		}
+		dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s", name)
+		rrs, rCode, err = dnsproxy.Lookup(ctx, qType, name)
 		if err != nil {
-			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s %s", request.Name, qtn, dns2.RcodeToString[rCode], err)
-			return nil, err
+			// Could still be x.y.<client namespace>, but let's avoid x.<cluster domain>.<client namespace> and x.<client-namespace>.<client namespace>
+			if client != nil && nDots > 1 && client.Namespace != tmNamespace && !hasDomainSuffix(name, s.ClusterInfo().ClusterDomain()) && !hasDomainSuffix(name, client.Namespace) {
+				name += client.Namespace + "."
+				restoreName = true
+				dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s", name)
+				rrs, rCode, err = dnsproxy.Lookup(ctx, qType, name)
+			}
+			if err != nil {
+				dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s %s", request.Name, qtn, dns2.RcodeToString[rCode], err)
+				return nil, err
+			}
 		}
 		if len(rrs) == 0 {
 			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
 		} else {
+			if restoreName {
+				dlog.Debugf(ctx, "LookupDNS on traffic-manager: restore %s to %s", name, request.Name)
+				for _, rr := range rrs {
+					rr.Header().Name = request.Name
+				}
+			}
 			dlog.Debugf(ctx, "LookupDNS on traffic-manager: %s %s -> %s", request.Name, qtn, rrs)
 		}
 	}
@@ -835,6 +928,265 @@ func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	dlog.Debugf(ctx, "WatchClusterInfo called")
 	return s.clusterInfo.Watch(ctx, stream)
+}
+
+//nolint:cyclop,gocyclo,gocognit // complex to avoid extremely specialized functions
+func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.Manager_WatchWorkloadsServer) (err error) {
+	ctx := managerutil.WithSessionInfo(stream.Context(), request.SessionInfo)
+	defer func() {
+		if r := recover(); r != nil {
+			err = derror.PanicToError(r)
+			dlog.Errorf(ctx, "WatchWorkloads panic: %+v", err)
+			err = status.Errorf(codes.Internal, err.Error())
+		}
+	}()
+	dlog.Debugf(ctx, "WatchWorkloads called")
+
+	clientSession := request.SessionInfo.SessionId
+	clientInfo := s.state.GetClient(clientSession)
+	if clientInfo == nil {
+		return status.Errorf(codes.NotFound, "Client session %q not found", clientSession)
+	}
+	ns := clientInfo.Namespace
+
+	agentsCh := s.state.WatchAgents(ctx, func(_ string, info *rpc.AgentInfo) bool {
+		return info.Namespace == ns
+	})
+	interceptsCh := s.state.WatchIntercepts(ctx, func(_ string, info *rpc.InterceptInfo) bool {
+		return info.ClientSession.SessionId == clientSession
+	})
+	workloadsCh, err := s.state.WatchWorkloads(ctx, clientSession)
+	if err != nil {
+		return err
+	}
+
+	sessionDone, err := s.state.SessionDone(clientSession)
+	if err != nil {
+		return err
+	}
+
+	var interceptInfos map[string]*rpc.InterceptInfo
+	isIntercepted := func(name, namespace string) bool {
+		for _, ii := range interceptInfos {
+			if name == ii.Spec.Agent && namespace == ii.Spec.Namespace && ii.Disposition == rpc.InterceptDispositionType_ACTIVE {
+				return true
+			}
+		}
+		return false
+	}
+
+	rpcKind := func(s string) rpc.WorkloadInfo_Kind {
+		switch strings.ToLower(s) {
+		case "deployment":
+			return rpc.WorkloadInfo_DEPLOYMENT
+		case "replicaset":
+			return rpc.WorkloadInfo_REPLICASET
+		case "statefulset":
+			return rpc.WorkloadInfo_STATEFULSET
+		default:
+			return rpc.WorkloadInfo_UNSPECIFIED
+		}
+	}
+
+	// Send events if we're idle longer than this, otherwise wait for more data
+	const maxIdleTime = 5 * time.Millisecond
+	workloadEvents := make(map[string]*rpc.WorkloadEvent)
+	var lastEvents map[string]*rpc.WorkloadEvent
+
+	ticker := time.NewTicker(time.Duration(math.MaxInt64))
+	defer ticker.Stop()
+
+	var agentInfos map[string]*rpc.AgentInfo
+
+	start := time.Now()
+
+	sendEvents := func() {
+		// Time to send what we have
+		ticker.Reset(time.Duration(math.MaxInt64))
+		evs := make([]*rpc.WorkloadEvent, 0, len(workloadEvents))
+		for k, rew := range workloadEvents {
+			if lew, ok := lastEvents[k]; ok {
+				if proto.Equal(lew, rew) {
+					continue
+				}
+			}
+			evs = append(evs, rew)
+		}
+		if len(evs) == 0 {
+			return
+		}
+		dlog.Debugf(ctx, "Sending %d WorkloadEvents", len(evs))
+		err = stream.Send(&rpc.WorkloadEventsDelta{
+			Since:  timestamppb.New(start),
+			Events: evs,
+		})
+		if err != nil {
+			dlog.Warnf(ctx, "failed to send workload events delta: %v", err)
+			return
+		}
+		lastEvents = workloadEvents
+		workloadEvents = make(map[string]*rpc.WorkloadEvent)
+		start = time.Now()
+	}
+
+	rpcWorkload := func(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState) *rpc.WorkloadInfo {
+		return &rpc.WorkloadInfo{
+			Kind:       rpcKind(wl.GetKind()),
+			Name:       wl.GetName(),
+			Namespace:  wl.GetNamespace(),
+			AgentState: as,
+		}
+	}
+
+	addEvent := func(eventType state.EventType, wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState) {
+		workloadEvents[wl.GetName()] = &rpc.WorkloadEvent{
+			Type:     rpc.WorkloadEvent_Type(eventType),
+			Workload: rpcWorkload(wl, as),
+		}
+		sendEvents()
+	}
+
+	for {
+		select {
+		case <-sessionDone:
+			// The Manager believes this session has ended.
+			return nil
+
+		case <-ticker.C:
+			sendEvents()
+
+		// All events arriving at the workload channel are significant
+		case wes, ok := <-workloadsCh:
+			if !ok {
+				return nil
+			}
+			for _, we := range wes {
+				wl := we.Workload
+				if w, ok := workloadEvents[wl.GetName()]; ok {
+					if we.Type == state.EventTypeDelete && w.Type != rpc.WorkloadEvent_DELETED {
+						w.Type = rpc.WorkloadEvent_DELETED
+						dlog.Debugf(ctx, "WorkloadEvent DELETED %s.%s", wl.GetName(), wl.GetNamespace())
+						ticker.Reset(maxIdleTime)
+					}
+				} else {
+					as := rpc.WorkloadInfo_NO_AGENT_UNSPECIFIED
+					if s.state.HasAgent(wl.GetName(), wl.GetNamespace()) {
+						if isIntercepted(wl.GetName(), wl.GetNamespace()) {
+							as = rpc.WorkloadInfo_INTERCEPTED
+						} else {
+							as = rpc.WorkloadInfo_INSTALLED
+						}
+					}
+
+					// If we've sent an ADDED event for this workload, and this is a MODIFIED event without any changes that
+					// we care about, then just skip it.
+					if we.Type == state.EventTypeUpdate {
+						lew, ok := lastEvents[wl.GetName()]
+						if ok && (lew.Type == rpc.WorkloadEvent_ADDED_UNSPECIFIED || lew.Type == rpc.WorkloadEvent_MODIFIED) && proto.Equal(lew.Workload, rpcWorkload(we.Workload, as)) {
+							break
+						}
+					}
+					dlog.Debugf(ctx, "WorkloadEvent %d %s %s.%s %s", we.Type, wl.GetKind(), wl.GetName(), wl.GetNamespace(), as)
+					addEvent(we.Type, wl, as)
+				}
+			}
+
+		// Events that arrive at the agent channel should be counted as modifications.
+		case ass, ok := <-agentsCh:
+			if !ok {
+				return nil
+			}
+			oldAgentInfos := agentInfos
+			agentInfos = ass.State
+			for k, a := range oldAgentInfos {
+				if _, ok = agentInfos[k]; !ok {
+					name := a.Name
+					as := rpc.WorkloadInfo_NO_AGENT_UNSPECIFIED
+					dlog.Debugf(ctx, "AgentInfo %s.%s %s", a.Name, a.Namespace, as)
+					if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
+						wl := w.Workload
+						if wl.AgentState != as {
+							wl.AgentState = as
+							ticker.Reset(maxIdleTime)
+						}
+					} else if wl, err := agentmap.GetWorkload(ctx, name, a.Namespace, ""); err == nil {
+						addEvent(state.EventTypeUpdate, wl, as)
+					} else {
+						dlog.Debugf(ctx, "Unable to get workload %s.%s: %v", name, a.Namespace, err)
+						if errors.IsNotFound(err) {
+							workloadEvents[name] = &rpc.WorkloadEvent{
+								Type: rpc.WorkloadEvent_DELETED,
+								Workload: &rpc.WorkloadInfo{
+									Name:       name,
+									Namespace:  a.Namespace,
+									AgentState: as,
+								},
+							}
+							sendEvents()
+						}
+					}
+				}
+			}
+			for _, a := range agentInfos {
+				name := a.Name
+				as := rpc.WorkloadInfo_INSTALLED
+				if isIntercepted(name, a.Namespace) {
+					as = rpc.WorkloadInfo_INTERCEPTED
+				}
+				dlog.Debugf(ctx, "AgentInfo %s.%s %s", a.Name, a.Namespace, as)
+				if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
+					wl := w.Workload
+					if wl.AgentState != as {
+						wl.AgentState = as
+						ticker.Reset(maxIdleTime)
+					}
+				} else if wl, err := agentmap.GetWorkload(ctx, name, a.Namespace, ""); err == nil {
+					addEvent(state.EventTypeUpdate, wl, as)
+				} else {
+					dlog.Debugf(ctx, "Unable to get workload %s.%s: %v", name, a.Namespace, err)
+				}
+			}
+
+		// Events that arrive at the intercept channel should be counted as modifications.
+		case is, ok := <-interceptsCh:
+			if !ok {
+				return nil
+			}
+			oldInterceptInfos := interceptInfos
+			interceptInfos = is.State
+			for k, ii := range oldInterceptInfos {
+				if _, ok = interceptInfos[k]; !ok {
+					name := ii.Spec.Agent
+					as := rpc.WorkloadInfo_INSTALLED
+					dlog.Debugf(ctx, "InterceptInfo %s.%s %s", name, ii.Spec.Namespace, as)
+					if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
+						if w.Workload.AgentState != as {
+							w.Workload.AgentState = as
+							ticker.Reset(maxIdleTime)
+						}
+					} else if wl, err := agentmap.GetWorkload(ctx, name, ii.Spec.Namespace, ""); err == nil {
+						addEvent(state.EventTypeUpdate, wl, as)
+					}
+				}
+			}
+			for _, ii := range interceptInfos {
+				name := ii.Spec.Agent
+				as := rpc.WorkloadInfo_INSTALLED
+				if ii.Disposition == rpc.InterceptDispositionType_ACTIVE {
+					as = rpc.WorkloadInfo_INTERCEPTED
+				}
+				dlog.Debugf(ctx, "InterceptInfo %s.%s %s", name, ii.Spec.Namespace, as)
+				if w, ok := workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
+					if w.Workload.AgentState != as {
+						w.Workload.AgentState = as
+						ticker.Reset(maxIdleTime)
+					}
+				} else if wl, err := agentmap.GetWorkload(ctx, name, ii.Spec.Namespace, ""); err == nil {
+					addEvent(state.EventTypeUpdate, wl, as)
+				}
+			}
+		}
+	}
 }
 
 const agentSessionTTL = 15 * time.Second

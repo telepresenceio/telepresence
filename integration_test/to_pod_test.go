@@ -64,7 +64,7 @@ func (s *connectedSuite) Test_ToPodUDPPortForwarding() {
 	require.Contains(stdout, svc+": intercepted")
 	itest.TelepresenceOk(ctx, "loglevel", "trace")
 	defer itest.TelepresenceOk(ctx, "loglevel", "debug")
-	s.CapturePodLogs(ctx, "app="+svc, "traffic-agent", s.AppNamespace())
+	s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 
 	conn, err := net.Dial("udp", "localhost:8080")
 	require.NoError(err)

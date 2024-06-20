@@ -22,6 +22,7 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -72,7 +73,9 @@ const keepAliveCount = 9
 type idStringer stack.TransportEndpointID
 
 func (i idStringer) String() string {
-	return fmt.Sprintf("%s:%d -> %s:%d", i.RemoteAddress, i.RemotePort, i.LocalAddress, i.LocalPort)
+	return fmt.Sprintf("%s -> %s",
+		iputil.JoinIpPort(i.RemoteAddress.AsSlice(), i.RemotePort),
+		iputil.JoinIpPort(i.LocalAddress.AsSlice(), i.LocalPort))
 }
 
 func setDefaultOptions(s *stack.Stack) error {
@@ -125,8 +128,8 @@ func forwardTCP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *tcp
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "TCPHandler",
 		trace.WithNewRoot(),
 		trace.WithAttributes(
-			attribute.String("tel2.remote-ip", id.RemoteAddress.To4().String()),
-			attribute.String("tel2.local-ip", id.LocalAddress.To4().String()),
+			attribute.String("tel2.remote-ip", id.RemoteAddress.String()),
+			attribute.String("tel2.local-ip", id.LocalAddress.String()),
 			attribute.Int("tel2.local-port", int(id.LocalPort)),
 			attribute.Int("tel2.remote-port", int(id.RemotePort)),
 		))
@@ -204,7 +207,7 @@ var blockedUDPPorts = map[uint16]bool{ //nolint:gochecknoglobals // constant
 	139: true, // NETBIOS
 }
 
-func forwardUDP(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator, fr *udp.ForwarderRequest) {
+func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp.ForwarderRequest) {
 	id := fr.ID()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "UDPHandler",
 		trace.WithNewRoot(),
@@ -230,18 +233,17 @@ func forwardUDP(ctx context.Context, s *stack.Stack, streamCreator tunnel.Stream
 		dlog.Errorf(ctx, msg)
 		return
 	}
-	dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(s, &wq, ep), streamCreator)
+	dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(&wq, ep), streamCreator)
 }
 
 func setUDPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator) {
 	f := udp.NewForwarder(s, func(fr *udp.ForwarderRequest) {
-		forwardUDP(ctx, s, streamCreator, fr)
+		forwardUDP(ctx, streamCreator, fr)
 	})
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, f.HandlePacket)
 }
 
 func newConnID(proto tcpip.TransportProtocolNumber, id stack.TransportEndpointID) tunnel.ConnID {
-	id.RemoteAddress.AsSlice()
 	return tunnel.NewConnID(int(proto), id.RemoteAddress.AsSlice(), id.LocalAddress.AsSlice(), id.RemotePort, id.LocalPort)
 }
 

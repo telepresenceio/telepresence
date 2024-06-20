@@ -68,7 +68,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: hello
+    app: hello
   ports:
     - name: http
       port: 80
@@ -82,17 +82,16 @@ kind: Deployment
 metadata:
   name: hello
   labels:
-    service: hello
+    app: hello
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: hello
+      app: hello
   template:
     metadata:
       labels:
         app: hello
-        service: hello
     spec:
       serviceAccountName: mount-test-account
       volumes:
@@ -129,6 +128,12 @@ spec:
               name: hello-secret-volume-1
             - mountPath: /etc/nginx/templates/
               name: nginx-config
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 3
         - name: hello-container-2
           image: nginx
           env:

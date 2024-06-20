@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func (s *notConnectedSuite) Test_CloudNeverProxy() {
@@ -27,12 +31,22 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	itest.ApplyEchoService(ctx, svcName, s.AppNamespace(), 8080)
 	defer itest.DeleteSvcAndWorkload(ctx, "deploy", svcName, s.AppNamespace())
 
-	ip, err := itest.Output(ctx, "kubectl",
+	ipStr, err := itest.Output(ctx, "kubectl",
 		"--namespace", s.AppNamespace(),
 		"get", "svc", svcName,
 		"-o",
 		"jsonpath={.spec.clusterIP}")
 	require.NoError(err)
+	ip := iputil.Parse(ipStr)
+	require.NotNil(ip)
+	if ip.IsLoopback() {
+		s.T().Skipf("test can't run on host with a loopback cluster IP %s", ip)
+	}
+
+	mask := 32
+	if s.IsIPv6() {
+		mask = 128
+	}
 
 	kc := itest.KubeConfig(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
@@ -44,7 +58,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 	ips, err := getClusterIPs(cluster)
 	require.NoError(err)
 
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/32}", ip)))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", fmt.Sprintf("client.routing.neverProxySubnets={%s/%d}", ip, mask))
 	defer s.RollbackTM(ctx)
 
 	timeout := 20 * time.Second
@@ -68,8 +82,15 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
-		// The cluster's IP address will also be never proxied, so we gotta account for that.
-		neverProxiedCount := len(ips) + 1
+		neverProxiedCount := 1
+
+		// The cluster's IP address will be never proxied unless it's a loopback, so we gotta account for that.
+		for _, cip := range ips {
+			if !cip.IsLoopback() {
+				neverProxiedCount++
+			}
+		}
+
 		stdout, stderr, err = itest.Telepresence(ctx, "status")
 		dlog.Infof(ctx, "stdout: %q", stdout)
 		dlog.Infof(ctx, "stderr: %q", stderr)
@@ -77,7 +98,8 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			dlog.Error(ctx, err)
 			return false
 		}
-		if !strings.Contains(stdout, fmt.Sprintf("Never Proxy: (%d subnets)", neverProxiedCount)) {
+		m := regexp.MustCompile(`Never Proxy\s*:\s*\((\d+) subnets\)`).FindStringSubmatch(stdout)
+		if m == nil || m[1] != strconv.Itoa(neverProxiedCount) {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets", neverProxiedCount)
 			return false
 		}
@@ -94,7 +116,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
-		if itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip) == nil {
+		if itest.Run(ctx, "curl", "--silent", "--max-time", "0.5", ip.String()) == nil {
 			dlog.Errorf(ctx, "never-proxied IP %s is reachable", ip)
 			return false
 		}
@@ -102,6 +124,41 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		dlog.Infof(ctx, "Success! Never-proxied IP %s is not reachable", ip)
 		return true
 	}, timeout, 5*time.Second, "never-proxy not updated in %s", timeout)
+}
+
+func (s *notConnectedSuite) Test_CloudAllowConflicting() {
+	require := s.Require()
+	ctx := s.Context()
+
+	acs, err := netip.ParsePrefix("10.88.2.4/30")
+	require.NoError(err)
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", fmt.Sprintf("client.routing.allowConflictingSubnets={%s}", acs))
+	defer s.RollbackTM(ctx)
+
+	timeout := 20 * time.Second
+	if runtime.GOOS == "windows" {
+		timeout *= 5
+	}
+	s.Eventuallyf(func() bool {
+		defer func() {
+			stdout, stderr, err := itest.Telepresence(ctx, "quit")
+			dlog.Infof(ctx, "stdout: %q", stdout)
+			dlog.Infof(ctx, "stderr: %q", stderr)
+			if err != nil {
+				dlog.Error(ctx, err)
+			}
+		}()
+		s.TelepresenceConnect(ctx)
+		sr, err := itest.TelepresenceStatus(ctx)
+		if err != nil {
+			return false
+		}
+		ac := sr.RootDaemon.AllowConflicting
+		if len(ac) != 1 {
+			return false
+		}
+		return len(ac) == 1 && netip.MustParsePrefix(ac[0].String()) == acs
+	}, timeout, 5*time.Second, "allow-conflicting-subnets not updated in %s", timeout)
 }
 
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
@@ -120,7 +177,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 		lines++
 	}
 	rootLog.Close()
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
 	defer s.RollbackTM(ctx)
 
 	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
@@ -207,7 +264,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	}
 	logF.Close()
 
-	require.NoError(s.TelepresenceHelmInstall(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
 	defer s.RollbackTM(ctx)
 	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
 		cfg.LogLevels().UserDaemon = logrus.InfoLevel

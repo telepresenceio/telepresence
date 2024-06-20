@@ -103,9 +103,9 @@ func (f *tcp) forwardConn(clientConn *net.TCPConn) error {
 		return f.interceptConn(ctx, clientConn, intercept)
 	}
 
-	targetAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort))
+	targetAddr, err := net.ResolveTCPAddr("tcp", iputil.JoinHostPort(targetHost, targetPort))
 	if err != nil {
-		return fmt.Errorf("error on resolve(%s:%d): %w", targetHost, targetPort, err)
+		return fmt.Errorf("error on resolve(%s): %w", iputil.JoinHostPort(targetHost, targetPort), err)
 	}
 
 	span.SetAttributes(

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -13,8 +12,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
@@ -39,13 +38,13 @@ type (
 // context. It will then check if that context contains an Exec config, and if it does, replace that config with
 // an Exec config that instead runs a process that will use a gRPC call to the address returned by the given
 // authAddressFunc.
-func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, authAddressFunc AddressProvider, patcher Patcher) (*clientcmdapi.Config, error) {
-	configFlags, err := client.ConfigFlags(kubeFlags)
-	if err != nil {
-		return nil, err
-	}
-
-	loader := configFlags.ToRawKubeConfigLoader()
+func CreateExternalKubeConfig(
+	ctx context.Context,
+	loader clientcmd.ClientConfig,
+	kubeContext string,
+	authAddressFunc AddressProvider,
+	patcher Patcher,
+) (*clientcmdapi.Config, error) {
 	ns, _, err := loader.Namespace()
 	if err != nil {
 		return nil, err
@@ -53,14 +52,16 @@ func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, 
 
 	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
 	dlog.Debugf(ctx, "host kubeconfig = %v", configFiles)
-	config, err := loader.RawConfig()
+	origConfig, err := loader.RawConfig()
 	if err != nil {
 		return nil, err
 	}
+	var config clientcmdapi.Config
+	origConfig.DeepCopyInto(&config)
 
 	// Minify the config so that we only deal with the current context.
-	if cx := configFlags.Context; cx != nil && *cx != "" {
-		config.CurrentContext = *cx
+	if kubeContext != "" {
+		config.CurrentContext = kubeContext
 	}
 	if err = clientcmdapi.MinifyConfig(&config); err != nil {
 		return nil, err
@@ -95,7 +96,7 @@ func CreateExternalKubeConfig(ctx context.Context, kubeFlags map[string]string, 
 	}
 
 	// Store the file using its context name under the <telepresence cache>/kube directory
-	kubeConfigFile := strings.ReplaceAll(config.CurrentContext, "/", "-")
+	kubeConfigFile := ioutil.SafeName(config.CurrentContext)
 	kubeConfigDir := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeConfigs)
 	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
 		return nil, err
@@ -145,7 +146,7 @@ func needsStubbedExec(rawConfig *clientcmdapi.Config) bool {
 // AnnotateConnectRequest is used when the CLI connects to a containerized user-daemon. It adds a ContainerKubeFlagOverrides
 // to the given ConnectRequest containing the path to the modified kubeconfig file to be used in the container.
 func AnnotateConnectRequest(cr *connector.ConnectRequest, cacheDir, kubeContext string) {
-	kubeConfigFile := strings.ReplaceAll(kubeContext, "/", "-")
+	kubeConfigFile := ioutil.SafeName(kubeContext)
 	if cr.ContainerKubeFlagOverrides == nil {
 		cr.ContainerKubeFlagOverrides = make(map[string]string)
 	}
@@ -160,7 +161,7 @@ func AnnotateConnectRequest(cr *connector.ConnectRequest, cacheDir, kubeContext 
 // AnnotateOutboundInfo is used when a non-containerized user-daemon connects to the root-daemon. The KubeFlags
 // are modified to contain the path to the modified kubeconfig file.
 func AnnotateOutboundInfo(ctx context.Context, oi *daemon.OutboundInfo, kubeContext string) {
-	kubeConfigFile := strings.ReplaceAll(kubeContext, "/", "-")
+	kubeConfigFile := ioutil.SafeName(kubeContext)
 	if oi.KubeFlags == nil {
 		oi.KubeFlags = make(map[string]string)
 	} else {

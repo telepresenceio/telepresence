@@ -26,12 +26,8 @@ func WithTrafficManager(np NamespacePair, f func(ctx context.Context, ch Namespa
 func (th *trafficManager) setup(ctx context.Context) bool {
 	t := getT(ctx)
 	TelepresenceQuitOk(ctx)
-	assert.NoError(t, th.TelepresenceHelmInstall(ctx, false))
-	if t.Failed() {
-		return false
-	}
-	th.CapturePodLogs(ctx, "app=traffic-manager", "", th.ManagerNamespace())
-	return true
+	_, err := th.TelepresenceHelmInstall(ctx, false)
+	return assert.NoError(t, err)
 }
 
 func (th *trafficManager) tearDown(ctx context.Context) {

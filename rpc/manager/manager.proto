@@ -290,6 +290,11 @@ message CreateInterceptRequest {
   string api_key = 3;
 }
 
+message EnsureAgentRequest {
+  SessionInfo session = 1;
+  string name = 2;
+}
+
 message PreparedIntercept {
   string error = 1;
   int32 error_category = 2;
@@ -410,6 +415,8 @@ message VersionInfo2 {
 message License {
   string license = 1;
   string host = 2;
+
+  // cluster_id is really the id of the namespace where the traffic-manager is installed.
   string cluster_id = 3;
   string err_msg = 4;
 }
@@ -535,12 +542,17 @@ message CLIConfig {
   bytes config_yaml = 1;
 }
 
+message AgentImageFQN {
+  string f_q_n = 1;
+}
+
 message AgentPodInfo {
   string pod_name = 1;
   string namespace = 2;
   bytes pod_ip = 3;
   int32 api_port = 4;
   bool intercepted = 5;
+  string workload_name = 6;
 }
 
 message AgentPodInfoSnapshot {
@@ -557,9 +569,70 @@ message TunnelMetrics {
   uint64 egress_bytes = 3;
 }
 
+// WorkloadInfo contains information about a workload (typically a
+// Deployment).
+message WorkloadInfo {
+  enum Kind {
+    UNSPECIFIED = 0;
+    DEPLOYMENT = 1;
+    REPLICASET = 2;
+    STATEFULSET = 3;
+  }
+
+  enum AgentState {
+    // Workload has never been intercepted, so no agent has been installed.
+    NO_AGENT_UNSPECIFIED = 0;
+
+    // An agent has been installed into workload's pods, but it is not currently intercepted.
+    INSTALLED   = 1;
+
+    // The workload (or rather its pods) is currently intercepted.
+    INTERCEPTED = 2;
+  }
+
+  Kind kind = 1;
+  string name = 2;
+  string namespace = 3;
+  AgentState agent_state = 4;
+}
+
+message WorkloadEvent {
+  enum Type {
+    ADDED_UNSPECIFIED = 0;
+    MODIFIED = 1;
+    DELETED = 2;
+  }
+
+  Type type = 1;
+  WorkloadInfo workload = 2;
+}
+// WorkloadEventDelta contains the changes made to the subscribed namespace since
+// the time given in the timestamp. A watcher can rely on that received deltas are
+// consecutive.
+message WorkloadEventsDelta {
+  // The timestamp from which this delta is computed. Typically
+  // equal to the time when the previous delta was sent.
+  google.protobuf.Timestamp since = 1;
+
+  repeated WorkloadEvent events = 2;
+}
+
+message WorkloadEventsRequest {
+  // The session_info identifies the client connection, and hence the
+  // namespace for the resulting watcher.
+  SessionInfo session_info = 1;
+
+  // The timestamp from which the first delta should be computed. Set to
+  // undefined to get a delta that contains everything.
+  google.protobuf.Timestamp since = 2;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
+
+  // GetAgentImageFQN returns fully qualified name of the image that is injected into intercepted pods.
+  rpc GetAgentImageFQN(google.protobuf.Empty) returns (AgentImageFQN);
 
   // GetLicense returns the License information (the license itself and
   // domain that granted it) known to the manager.
@@ -623,9 +696,16 @@ service Manager {
   // intercepts are watched.
   rpc WatchIntercepts(SessionInfo) returns (stream InterceptInfoSnapshot);
 
+  // WatchWorkloads notifies a client of the set of Workloads from the client
+  // connection's namespace.
+  rpc WatchWorkloads(WorkloadEventsRequest) returns (stream WorkloadEventsDelta);
+
   // WatchClusterInfo returns information needed when establishing
   // connectivity to the cluster.
   rpc WatchClusterInfo(SessionInfo) returns (stream ClusterInfo);
+
+  // EnsureAgent ensures that an agent is injected to the pods of a workload
+  rpc EnsureAgent(EnsureAgentRequest) returns (google.protobuf.Empty);
 
   // Request that the traffic-manager makes the preparations necessary to
   // create the given intercept.

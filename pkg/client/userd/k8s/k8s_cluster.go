@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
@@ -121,10 +121,7 @@ func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 }
 
 func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []string) (*Cluster, error) {
-	rs, err := kubeFlags.ConfigFlags.ToRESTConfig()
-	if err != nil {
-		return nil, err
-	}
+	rs := kubeFlags.RestConfig
 	cs, err := kubernetes.NewForConfig(rs)
 	if err != nil {
 		return nil, err
@@ -238,6 +235,11 @@ func (kc *Cluster) GetCurrentNamespaces(forClientAccess bool) []string {
 func (kc *Cluster) GetClusterId(ctx context.Context) string {
 	clusterID, _ := k8sapi.GetClusterID(ctx)
 	return clusterID
+}
+
+func (kc *Cluster) GetManagerInstallId(ctx context.Context) string {
+	managerID, _ := k8sapi.GetNamespaceID(ctx, kc.GetManagerNamespace())
+	return managerID
 }
 
 func (kc *Cluster) WithK8sInterface(c context.Context) context.Context {

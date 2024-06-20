@@ -66,6 +66,8 @@ tolerations: []
 
 affinity: {}
 
+schedulerName: ~
+
 ## @param priorityClassName Name of the existing priority class to be used
 ## Ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
 ##
@@ -95,6 +97,9 @@ grpc:
 
 # podCIDRs is the verbatim list of CIDRs used when the podCIDRStrategy is set to environment
 podCIDRs: []
+
+# Enable/disable metriton reporting to ambassador
+metritonEnabled: true
 
 # podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
 # CIDRs the cluster is using for its pods. Valid values are:
@@ -131,15 +136,28 @@ timeouts:
 ## Agent Injector Configuration
 ################################################################################
 agentInjector:
+  enabled: true
   name: agent-injector
   secret:
     name: mutator-webhook-tls
   certificate:
     regenerate: false
 
+    # The method used by the agent-injector to access the generated secret.
+    # Possible options: watch or mount
+    #
+    # Default watch
+    accessMethod: watch
+
     # The method used to generate the TLS certificate for the agent-injector.
     #
-    # Possible options: helm or certmanager
+    # Possible options: helm, supplied, or certmanager.
+    #
+    # If set to `supplied`, ensure your Secret is in the same namespace as the traffic-manager,
+    # and that `.agentInjector.secret.name` is set to its name.
+    # See the Secret in `agentInjectorWebhook.yaml` for the expected structure of the data.
+    # NOTE: If the Secret values update, the helm chart MUST be re-applied to ensure the
+    # MutatingWebhookConfiguration uses the new values.
     #
     # Default: helm
     method: helm
@@ -182,7 +200,7 @@ agent:
   appProtocolStrategy: http2Probe
   port: 9900
   image:
-    registry: docker.io/datawire
+    registry:
     name:
     tag:
     pullSecrets: []
@@ -200,10 +218,12 @@ telepresenceAPI:
 ################################################################################
 ## Tracing configuration
 ################################################################################
-tracing:
+tracing: {}
   # The port on which a grpc server will be exposed for traces
-  # To disable, set tracing to an empty object ("tracing: {}")
-  grpcPort: 15766
+  # To enable, set tracing to
+  #
+  # tracing:
+  #   grpcPort: 15766
 
 ################################################################################
 ## Prometheus Server Configuration

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -33,14 +35,7 @@ func version() *cobra.Command {
 	}
 }
 
-func printVersion(cmd *cobra.Command, _ []string) error {
-	if err := connect.InitCommand(cmd); err != nil {
-		return err
-	}
-	kvf := ioutil.DefaultKeyValueFormatter()
-	kvf.Add(client.DisplayName, client.Version())
-	ctx := cmd.Context()
-
+func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 	remote := false
 	userD := daemon.GetUserClient(ctx)
 	if userD != nil {
@@ -60,30 +55,70 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	if userD != nil {
-		version, err := userD.Version(ctx, &empty.Empty{})
-		if err == nil {
-			kvf.Add(version.Name, version.Version)
-			version, err = managerVersion(ctx)
-			switch {
-			case err == nil:
-				kvf.Add(version.Name, version.Version)
-			case status.Code(err) == codes.Unavailable:
-				kvf.Add("Traffic Manager", "not connected")
+		kvf.Add(userD.Name, "v"+userD.Version.String())
+		vi, err := managerVersion(ctx)
+		switch {
+		case err == nil:
+			kvf.Add(vi.Name, vi.Version)
+			af, err := trafficAgentFQN(ctx)
+			switch status.Code(err) {
+			case codes.OK:
+				kvf.Add("Traffic Agent", af.FQN)
+			case codes.Unimplemented:
+				kvf.Add("Traffic Agent", "not reported by traffic-manager")
+			case codes.Unavailable:
+				kvf.Add("Traffic Agent", "not currently available")
 			default:
-				kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
+				kvf.Add("Traffic Agent", fmt.Sprintf("error: %v", err))
 			}
-		} else {
-			kvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
+		case status.Code(err) == codes.Unavailable:
+			kvf.Add("Traffic Manager", "not connected")
+		default:
+			kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
 		}
 	} else {
 		kvf.Add("User Daemon", "not running")
 	}
+}
+
+func printVersion(cmd *cobra.Command, _ []string) error {
+	kvf := ioutil.DefaultKeyValueFormatter()
+	kvf.Add(client.DisplayName, client.Version())
+
+	var mdErr daemon.MultipleDaemonsError
+	err := connect.InitCommand(cmd)
+	if err != nil {
+		if !errors.As(err, &mdErr) {
+			return err
+		}
+	}
+	ctx := cmd.Context()
+
+	if len(mdErr) > 0 {
+		for _, info := range mdErr {
+			subKvf := &ioutil.KeyValueFormatter{
+				Indent:    kvf.Indent,
+				Separator: kvf.Separator,
+			}
+			udCtx, err := connect.ExistingDaemon(ctx, info)
+			if err != nil {
+				subKvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
+			}
+			addDaemonVersions(udCtx, subKvf)
+			ud := daemon.GetUserClient(udCtx)
+			kvf.Add("Connection "+ud.DaemonID.Name, "\n"+subKvf.String())
+			ud.Conn.Close()
+		}
+	} else {
+		addDaemonVersions(ctx, kvf)
+	}
+
 	kvf.Println(cmd.OutOrStdout())
 	return nil
 }
 
 func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx)); err == nil {
+	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false); err == nil {
 		defer conn.Close()
 		return daemonRpc.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}
@@ -91,8 +126,22 @@ func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
 }
 
 func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
+	if s := daemon.GetSession(ctx); s != nil {
+		mv := s.Info.ManagerVersion
+		return &common.VersionInfo{
+			Version: mv.Version,
+			Name:    mv.Name,
+		}, nil
+	}
 	if userD := daemon.GetUserClient(ctx); userD != nil {
 		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
+	}
+	return nil, connect.ErrNoUserDaemon
+}
+
+func trafficAgentFQN(ctx context.Context) (*manager.AgentImageFQN, error) {
+	if userD := daemon.GetUserClient(ctx); userD != nil {
+		return userD.AgentImageFQN(ctx, &empty.Empty{})
 	}
 	return nil, connect.ErrNoUserDaemon
 }

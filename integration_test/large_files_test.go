@@ -118,7 +118,7 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 			require.NotNil(info.Mount)
 			s.mountPoint[i] = info.Mount.LocalDir
 			s.NoError(itest.RolloutStatusWait(ctx, s.AppNamespace(), "deploy/"+svc))
-			s.CapturePodLogs(ctx, "service="+svc, "traffic-agent", s.AppNamespace())
+			s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		}(i)
 	}
 	wg.Wait()

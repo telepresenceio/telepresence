@@ -42,10 +42,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -54,25 +56,27 @@ const (
 )
 
 type Cluster interface {
-	CapturePodLogs(ctx context.Context, app, container, ns string)
+	CapturePodLogs(ctx context.Context, app, container, ns string) string
 	CompatVersion() string
 	Executable() string
 	GeneralError() error
-	GlobalEnv() dos.MapEnv
+	GlobalEnv(context.Context) dos.MapEnv
 	AgentVersion(context.Context) string
 	Initialize(context.Context) context.Context
 	InstallTrafficManager(ctx context.Context, values map[string]string) error
 	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error
 	IsCI() bool
+	IsIPv6() bool
 	Registry() string
 	SetGeneralError(error)
 	Suffix() string
 	TelepresenceVersion() string
-	UninstallTrafficManager(ctx context.Context, managerNamespace string)
+	UninstallTrafficManager(ctx context.Context, managerNamespace string, args ...string)
 	PackageHelmChart(ctx context.Context) (string, error)
 	GetValuesForHelm(ctx context.Context, values map[string]string, release bool) []string
 	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
-	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) error
+	TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, args ...string) string
+	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) (string, error)
 	UserdPProf() uint16
 	RootdPProf() uint16
 }
@@ -87,6 +91,7 @@ type cluster struct {
 	suffix           string
 	isCI             bool
 	prePushed        bool
+	ipv6             bool
 	executable       string
 	testVersion      string
 	compatVersion    string
@@ -122,8 +127,8 @@ func (s *cluster) SetSelf(self Cluster) {
 }
 
 func (s *cluster) imagesFromEnv(ctx context.Context) context.Context {
-	v := s.TelepresenceVersion()[1:]
-	r := s.Registry()
+	v := s.self.TelepresenceVersion()[1:]
+	r := s.self.Registry()
 	if img := ImageFromEnv(ctx, "DEV_MANAGER_IMAGE", v, r); img != nil {
 		ctx = WithImage(ctx, img)
 	}
@@ -137,7 +142,7 @@ func (s *cluster) imagesFromEnv(ctx context.Context) context.Context {
 }
 
 func (s *cluster) AgentVersion(ctx context.Context) string {
-	return s.TelepresenceVersion()[1:]
+	return s.self.TelepresenceVersion()[1:]
 }
 
 func (s *cluster) Initialize(ctx context.Context) context.Context {
@@ -176,7 +181,11 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 		s.rootdPProf = uint16(port)
 	}
 	if s.prePushed {
-		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", "telepresence")
+		exe := "telepresence"
+		if runtime.GOOS == "windows" {
+			exe = "telepresence.exe"
+		}
+		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", exe)
 	}
 	errs := make(chan error, 10)
 	wg := &sync.WaitGroup{}
@@ -188,6 +197,19 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	close(errs)
 	for err := range errs {
 		assert.NoError(t, err)
+	}
+
+	if ipv6, err := strconv.ParseBool("DEV_IPV6_CLUSTER"); err == nil {
+		s.ipv6 = ipv6
+	} else {
+		output, err := Output(ctx, "kubectl", "--namespace", "kube-system", "get", "svc", "kube-dns", "-o", "jsonpath={.spec.clusterIP}")
+		if err == nil {
+			ip := iputil.Parse(strings.TrimSpace(output))
+			if len(ip) == 16 {
+				dlog.Info(ctx, "Using IPv6 because the kube-dns.kube-system has an IPv6 IP")
+				s.ipv6 = true
+			}
+		}
 	}
 
 	s.ensureQuit(ctx)
@@ -321,8 +343,6 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	config.LogLevels().RootDaemon = logrus.DebugLevel
 
 	to := config.Timeouts()
-	to.PrivateAgentInstall = PodCreateTimeout(c)
-	to.PrivateApply = PodCreateTimeout(c)
 	to.PrivateClusterConnect = 60 * time.Second
 	to.PrivateEndpointDial = 10 * time.Second
 	to.PrivateHelm = PodCreateTimeout(c)
@@ -333,12 +353,10 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	to.PrivateTrafficManagerConnect = 180 * time.Second
 
 	images := config.Images()
-	images.PrivateRegistry = s.Registry()
+	images.PrivateRegistry = s.self.Registry()
 	if agentImage := GetAgentImage(c); agentImage != nil {
 		images.PrivateAgentImage = agentImage.FQName()
 		images.PrivateWebhookRegistry = agentImage.Registry
-	} else {
-		images.PrivateWebhookRegistry = s.Registry()
 	}
 	if clientImage := GetClientImage(c); clientImage != nil {
 		images.PrivateClientImage = clientImage.FQName()
@@ -358,12 +376,13 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	return c
 }
 
-func (s *cluster) GlobalEnv() dos.MapEnv {
+func (s *cluster) GlobalEnv(ctx context.Context) dos.MapEnv {
 	globalEnv := dos.MapEnv{
 		"KUBECONFIG": s.kubeConfig,
 	}
 	yes := struct{}{}
 	includeEnv := map[string]struct{}{
+		"SCOUT_DISABLE":             yes,
 		"HOME":                      yes,
 		"PATH":                      yes,
 		"LOGNAME":                   yes,
@@ -389,7 +408,7 @@ func (s *cluster) GlobalEnv() dos.MapEnv {
 		includeEnv["USERNAME"] = yes
 		includeEnv["windir"] = yes
 	}
-	for _, env := range os.Environ() {
+	for _, env := range dos.Environ(ctx) {
 		if eqIdx := strings.IndexByte(env, '='); eqIdx > 0 {
 			key := env[:eqIdx]
 			if _, ok := includeEnv[key]; ok {
@@ -410,6 +429,10 @@ func (s *cluster) GeneralError() error {
 
 func (s *cluster) IsCI() bool {
 	return s.isCI
+}
+
+func (s *cluster) IsIPv6() bool {
+	return s.ipv6
 }
 
 func (s *cluster) Registry() string {
@@ -440,62 +463,101 @@ func (s *cluster) RootdPProf() uint16 {
 	return s.rootdPProf
 }
 
-func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) {
-	var pods string
+func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) string {
+	var pods []string
 	for i := 0; ; i++ {
-		var err error
-		pods, err = KubectlOut(ctx, ns, "get", "pods", "--field-selector", "status.phase=Running", "-l", app, "-o", "jsonpath={.items[*].metadata.name}")
-		if err != nil {
-			dlog.Errorf(ctx, "failed to get %s pod in namespace %s: %v", app, ns, err)
-			return
+		runningPods := RunningPods(ctx, app, ns)
+		if len(runningPods) > 0 {
+			if container == "" {
+				pods = runningPods
+			} else {
+				for _, pod := range runningPods {
+					cns, err := KubectlOut(ctx, ns, "get", "pods", pod, "-o", "jsonpath={.spec.containers[*].name}")
+					if err == nil && slice.Contains(strings.Split(cns, " "), container) {
+						pods = append(pods, pod)
+					}
+				}
+			}
 		}
-		pods = strings.TrimSpace(pods)
-		if pods != "" || i == 5 {
+		if len(pods) > 0 || i == 5 {
 			break
 		}
 		dtime.SleepWithContext(ctx, 2*time.Second)
 	}
-	if pods == "" {
-		dlog.Errorf(ctx, "found no %s pods in namespace %s", app, ns)
-		return
+
+	if len(pods) == 0 {
+		if container == "" {
+			dlog.Errorf(ctx, "found no %s pods in namespace %s", app, ns)
+		} else {
+			dlog.Errorf(ctx, "found no %s pods in namespace %s with a %s container", app, ns, container)
+		}
+		return ""
 	}
-
-	// Let command die when the pod that it logs die
-	ctx = context.WithoutCancel(ctx)
-
 	present := struct{}{}
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
-	dlog.Infof(ctx, "Capturing logs for pods %q", pods)
-	for _, pod := range strings.Split(pods, " ") {
-		if _, ok := s.logCapturingPods.LoadOrStore(pod, present); ok {
-			continue
-		}
-		logFile, err := os.Create(
-			filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
-		if err != nil {
-			s.logCapturingPods.Delete(pod)
-			dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
-			return
-		}
+	pod := pods[0]
+	key := pod
+	if container != "" {
+		key += "/" + container
+	}
+	if _, ok := s.logCapturingPods.LoadOrStore(key, present); ok {
+		return ""
+	}
 
-		args := []string{"--namespace", ns, "logs", "-f", pod}
-		if container != "" {
-			args = append(args, "-c", container)
-		}
-		cmd := Command(ctx, "kubectl", args...)
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
-		go func(pod string) {
-			defer func() {
-				_ = logFile.Close()
-				s.logCapturingPods.Delete(pod)
-			}()
-			if err := cmd.Run(); err != nil {
-				dlog.Errorf(ctx, "log capture failed: %v", err)
+	logFile, err := os.Create(
+		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
+	if err != nil {
+		s.logCapturingPods.Delete(pod)
+		dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
+		return ""
+	}
+
+	args := []string{"--namespace", ns, "logs", "-f", pod}
+	if container != "" {
+		args = append(args, "-c", container)
+	}
+	// Let command die when the pod that it logs die
+	cmd := Command(context.WithoutCancel(ctx), "kubectl", args...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	ready := make(chan string, 1)
+	go func() {
+		defer func() {
+			_ = logFile.Close()
+			s.logCapturingPods.Delete(pod)
+		}()
+		err := cmd.Start()
+		if err == nil {
+			if container == "" {
+				dlog.Infof(ctx, "Capturing logs for pod %s", pod)
+			} else {
+				dlog.Infof(ctx, "Capturing logs for pod %s, container %s", pod, container)
 			}
-		}(pod)
+			ready <- logFile.Name()
+			close(ready)
+			err = cmd.Wait()
+		}
+		if err != nil {
+			if container == "" {
+				dlog.Errorf(ctx, "log capture for pod %s failed: %v", pod, err)
+			} else {
+				dlog.Errorf(ctx, "log capture for pod %s, container %s failed: %v", pod, container, err)
+			}
+			select {
+			case <-ready:
+			default:
+				close(ready)
+			}
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		dlog.Infof(ctx, "log capture for pod %s interrupted prior to start", pod)
+		return ""
+	case file := <-ready:
+		return file
 	}
 }
 
@@ -579,13 +641,19 @@ func (s *cluster) installChart(ctx context.Context, release bool, chartFilename 
 	if err == nil {
 		err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager")
 		if err == nil {
-			s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
+			s.self.CapturePodLogs(ctx, "traffic-manager", "", nss.Namespace)
 		}
 	}
 	return err
 }
 
-func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, settings ...string) error {
+func (s *cluster) TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, settings ...string) string {
+	logFile, err := s.self.TelepresenceHelmInstall(ctx, upgrade, settings...)
+	require.NoError(getT(ctx), err)
+	return logFile
+}
+
+func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, settings ...string) (string, error) {
 	nss := GetNamespaces(ctx)
 	subjectNames := []string{TestUser}
 	subjects := make([]rbac.Subject, len(subjectNames))
@@ -613,18 +681,24 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	type xClient struct {
 		Routing map[string][]string `json:"routing"`
 	}
+	type xTimeouts struct {
+		AgentArrival string `json:"agentArrival,omitempty"`
+	}
 	nsl := nss.UniqueList()
 	vx := struct {
-		LogLevel    string  `json:"logLevel"`
-		Image       *Image  `json:"image,omitempty"`
-		Agent       *xAgent `json:"agent,omitempty"`
-		ClientRbac  xRbac   `json:"clientRbac"`
-		ManagerRbac xRbac   `json:"managerRbac"`
-		Client      xClient `json:"client"`
+		LogLevel        string    `json:"logLevel"`
+		MetritonEnabled bool      `json:"metritonEnabled"`
+		Image           *Image    `json:"image,omitempty"`
+		Agent           *xAgent   `json:"agent,omitempty"`
+		ClientRbac      xRbac     `json:"clientRbac"`
+		ManagerRbac     xRbac     `json:"managerRbac"`
+		Client          xClient   `json:"client"`
+		Timeouts        xTimeouts `json:"timeouts,omitempty"`
 	}{
-		LogLevel: "debug",
-		Image:    GetImage(ctx),
-		Agent:    agent,
+		LogLevel:        "debug",
+		MetritonEnabled: false,
+		Image:           GetImage(ctx),
+		Agent:           agent,
 		ClientRbac: xRbac{
 			Create:     true,
 			Namespaced: len(nss.ManagedNamespaces) > 0,
@@ -641,32 +715,32 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 				"allowConflictingSubnets": {"10.0.0.0/8"},
 			},
 		},
+		Timeouts: xTimeouts{AgentArrival: "60s"},
 	}
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	valuesFile := filepath.Join(getT(ctx).TempDir(), "values.yaml")
 	if err := os.WriteFile(valuesFile, ss, 0o644); err != nil {
-		return err
+		return "", err
 	}
 
 	verb := "install"
 	if upgrade {
 		verb = "upgrade"
-		settings = append(settings, "--reuse-values")
 	}
 	args := []string{"helm", verb, "-n", nss.Namespace, "-f", valuesFile}
 	args = append(args, settings...)
 
 	if _, _, err = Telepresence(WithUser(ctx, "default"), args...); err != nil {
-		return err
+		return "", err
 	}
 	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager"); err != nil {
-		return err
+		return "", err
 	}
-	s.self.CapturePodLogs(ctx, "app=traffic-manager", "", nss.Namespace)
-	return nil
+	logFileName := s.self.CapturePodLogs(ctx, "traffic-manager", "", nss.Namespace)
+	return logFileName, nil
 }
 
 func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, error) {
@@ -683,10 +757,10 @@ func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, er
 	return filepath.Join(dir, fmt.Sprintf("telepresence-%s.tgz", version)), nil
 }
 
-func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string) {
+func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string, args ...string) {
 	t := getT(ctx)
 	ctx = WithUser(ctx, "default")
-	TelepresenceOk(ctx, "helm", "uninstall", "--manager-namespace", managerNamespace)
+	TelepresenceOk(ctx, append([]string{"helm", "uninstall", "--manager-namespace", managerNamespace}, args...)...)
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
 	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
@@ -758,7 +832,7 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 }
 
 func EnvironMap(ctx context.Context) dos.MapEnv {
-	env := GetGlobalHarness(ctx).GlobalEnv()
+	env := GetGlobalHarness(ctx).GlobalEnv(ctx)
 	maps.Merge(env, getEnv(ctx))
 	return env
 }
@@ -768,7 +842,7 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	t := getT(ctx)
 	t.Helper()
 	stdout, stderr, err := Telepresence(ctx, args...)
-	assert.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
+	require.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
 	if err == nil {
 		if strings.HasPrefix(stderr, "Warning:") && !strings.ContainsRune(stderr, '\n') {
 			// Accept warnings, but log them.
@@ -837,9 +911,7 @@ func TelepresenceDisconnectOk(ctx context.Context, args ...string) {
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
-	assert.True(t, strings.Contains(stdout, "Telepresence Daemons disconnecting...done") ||
-		strings.Contains(stdout, "Telepresence Daemons are already disconnected") ||
-		strings.Contains(stdout, "Telepresence Daemons have already quit"))
+	assert.True(t, strings.Contains(stdout, "Disconnected") || strings.Contains(stdout, "Not connected"))
 	if t.Failed() {
 		t.Logf("Disconnect output was %q", stdout)
 	}
@@ -926,62 +998,6 @@ func KubectlOut(ctx context.Context, namespace string, args ...string) (string, 
 	return Output(ctx, "kubectl", ks...)
 }
 
-func ApplyEchoService(ctx context.Context, name, namespace string, port int) {
-	ApplyService(ctx, name, namespace, "jmalloc/echo-server:0.1.0", port, 8080)
-}
-
-func ApplyService(ctx context.Context, name, namespace, image string, port, targetPort int) {
-	t := getT(ctx)
-	t.Helper()
-	require.NoError(t, Kubectl(ctx, namespace, "create", "deploy", name, "--image", image), "failed to create deployment %s", name)
-	require.NoError(t, Kubectl(ctx, namespace, "expose", "deploy", name, "--port", strconv.Itoa(port), "--target-port", strconv.Itoa(targetPort)),
-		"failed to expose deployment %s", name)
-	require.NoError(t, Kubectl(ctx, namespace, "rollout", "status", "-w", "deployment/"+name), "failed to deploy %s", name)
-}
-
-func DeleteSvcAndWorkload(ctx context.Context, workload, name, namespace string) {
-	assert.NoError(getT(ctx), Kubectl(ctx, namespace, "delete", "--ignore-not-found", "--grace-period", "3", "svc,"+workload, name),
-		"failed to delete service and %s %s", workload, name)
-}
-
-// ApplyApp calls kubectl apply -n <namespace> -f on the given app + .yaml found in testdata/k8s relative
-// to the directory returned by GetWorkingDir.
-func ApplyApp(ctx context.Context, name, namespace, workload string) {
-	t := getT(ctx)
-	t.Helper()
-	manifest := filepath.Join("testdata", "k8s", name+".yaml")
-	require.NoError(t, Kubectl(ctx, namespace, "apply", "-f", manifest), "failed to apply %s", manifest)
-	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
-}
-
-func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
-	ctx, cancel := context.WithTimeout(ctx, PodCreateTimeout(ctx))
-	defer cancel()
-	switch {
-	case strings.HasPrefix(workload, "pod/"):
-		return Kubectl(ctx, namespace, "wait", workload, "--for", "condition=ready")
-	case strings.HasPrefix(workload, "replicaset/"), strings.HasPrefix(workload, "statefulset/"):
-		for {
-			status := struct {
-				ReadyReplicas int `json:"readyReplicas,omitempty"`
-				Replicas      int `json:"replicas,omitempty"`
-			}{}
-			stdout, err := KubectlOut(ctx, namespace, "get", workload, "-o", "jsonpath={..status}")
-			if err != nil {
-				return err
-			}
-			if err = json.Unmarshal([]byte(stdout), &status); err != nil {
-				return err
-			}
-			if status.ReadyReplicas == status.Replicas {
-				return nil
-			}
-			dtime.SleepWithContext(ctx, 3*time.Second)
-		}
-	}
-	return Kubectl(ctx, namespace, "rollout", "status", "-w", workload)
-}
-
 func CreateNamespaces(ctx context.Context, namespaces ...string) {
 	t := getT(ctx)
 	t.Helper()
@@ -1003,6 +1019,11 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
 	for _, ns := range namespaces {
+		if t.Failed() {
+			if out, err := KubectlOut(ctx, ns, "get", "events", "--field-selector", "type!=Normal"); err == nil {
+				dlog.Debugf(ctx, "Events where type != Normal from namespace %s\n%s", ns, out)
+			}
+		}
 		go func(ns string) {
 			defer wg.Done()
 			assert.NoError(t, Kubectl(ctx, "", "delete", "namespace", "--wait=false", ns))
@@ -1023,7 +1044,12 @@ func StartLocalHttpEchoServerWithHost(ctx context.Context, name string, host str
 				fmt.Fprintf(w, "%s from intercept at %s", name, r.URL.Path)
 			}),
 		}
-		_ = sc.Serve(ctx, l)
+		err := sc.Serve(ctx, l)
+		if err != nil {
+			dlog.Errorf(ctx, "http server on %s exited with error: %v", host, err)
+		} else {
+			dlog.Errorf(ctx, "http server on %s exited", host)
+		}
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
 }
@@ -1037,10 +1063,15 @@ func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.Ca
 // PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
 // that an intercept is active for the given svc and svcPort that will redirect to that local server.
 func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers ...string) {
-	expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+	wl := svc
+	if slashIdx := strings.IndexByte(svc, '/'); slashIdx > 0 {
+		wl = svc[slashIdx+1:]
+		svc = svc[:slashIdx]
+	}
+	expectedOutput := fmt.Sprintf("%s from intercept at /", wl)
 	require.Eventually(getT(ctx), func() bool {
 		// condition
-		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", svc)
+		ips, err := net.DefaultResolver.LookupIP(ctx, "ip", svc)
 		if err != nil {
 			dlog.Info(ctx, err)
 			return false

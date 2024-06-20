@@ -1,4 +1,4 @@
-{{- if not .Values.rbac.only }}
+{{- if and (not .Values.rbac.only) .Values.agentInjector.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -58,6 +58,9 @@ spec:
         - name: secret-volume
           secret:
             secretName: {{ .Values.agentInjector.secret.name }}
+      {{- with .Values.schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dgroup"
@@ -25,7 +24,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	if err != nil {
 		return err
 	}
-	configureDNS(s.config.RemoteIp, dnsAddr)
+	configureDNS(s.remoteIP, dnsAddr)
 
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
@@ -33,33 +32,24 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		// No need to close listener. It's closed by the dns server.
 		defer func() {
 			c, cancel := context.WithTimeout(context.WithoutCancel(c), 5*time.Second)
-			_ = dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, nil)
+			s.Lock()
+			_ = dev.SetDNS(c, s.clusterDomain, s.remoteIP, nil)
+			s.Unlock()
 			cancel()
 		}()
+		if err := s.updateRouterDNS(c, dev); err != nil {
+			return err
+		}
 		s.processSearchPaths(g, s.updateRouterDNS, dev)
 		return s.Run(c, make(chan struct{}), []net.PacketConn{listener}, nil, s.resolveInCluster)
 	})
 	return g.Wait()
 }
 
-func (s *Server) updateRouterDNS(c context.Context, paths []string, dev vif.Device) error {
-	namespaces := make(map[string]struct{})
-	search := []string{
-		tel2SubDomain + "." + s.clusterDomain,
-	}
-
-	for _, path := range paths {
-		if strings.ContainsRune(path, '.') {
-			search = append(search, path)
-		} else if path != "" {
-			namespaces[path] = struct{}{}
-		}
-	}
-	s.domainsLock.Lock()
-	s.namespaces = namespaces
-	s.search = search
-	s.domainsLock.Unlock()
-	err := dev.SetDNS(c, s.clusterDomain, s.config.RemoteIp, search)
+func (s *Server) updateRouterDNS(c context.Context, dev vif.Device) error {
+	s.Lock()
+	err := dev.SetDNS(c, s.clusterDomain, s.remoteIP, s.search)
+	s.Unlock()
 	s.flushDNS()
 	if err != nil {
 		return fmt.Errorf("failed to set DNS: %w", err)

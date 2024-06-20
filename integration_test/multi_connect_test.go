@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type multiConnectSuite struct {
@@ -39,7 +40,7 @@ func init() {
 }
 
 func (s *multiConnectSuite) SetupSuite() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
+	if s.IsCI() && !(goRuntime.GOOS == "linux" && goRuntime.GOARCH == "amd64") {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 	}
 	s.Suite.SetupSuite()
@@ -51,15 +52,27 @@ func (s *multiConnectSuite) SetupSuite() {
 	itest.CreateNamespaces(ctx, s.appSpace2, s.mgrSpace2)
 
 	const svc = "echo"
+	appData := itest.AppData{
+		AppName: svc,
+		Image:   "jmalloc/echo-server:0.1.0",
+		Ports: []itest.AppPort{
+			{
+				ServicePortNumber: 80,
+				TargetPortName:    "http",
+				TargetPortNumber:  8080,
+			},
+		},
+		Env: map[string]string{"PORT": "8080"},
+	}
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		itest.ApplyEchoService(ctx, svc, s.AppNamespace(), 80)
+		itest.ApplyAppTemplate(ctx, s.AppNamespace(), &appData)
 	}()
 	go func() {
 		defer wg.Done()
-		itest.ApplyEchoService(ctx, svc, s.appSpace2, 80)
+		itest.ApplyAppTemplate(ctx, s.appSpace2, &appData)
 	}()
 
 	ctx2 := itest.WithNamespaces(ctx, &itest.Namespaces{Namespace: s.mgrSpace2, ManagedNamespaces: []string{s.appSpace2}})
@@ -67,7 +80,7 @@ func (s *multiConnectSuite) SetupSuite() {
 	require.NoError(err, "failed to create connect ServiceAccount")
 
 	ctx2 = itest.WithUser(ctx2, s.mgrSpace2+":"+itest.TestUser)
-	require.NoError(s.TelepresenceHelmInstall(ctx2, false))
+	s.TelepresenceHelmInstallOK(ctx2, false)
 	itest.TelepresenceQuitOk(ctx2)
 
 	s.handlerTag = "telepresence/echo-test"
@@ -75,6 +88,9 @@ func (s *multiConnectSuite) SetupSuite() {
 	_, err = itest.Output(ctx, "docker", "build", "-t", s.handlerTag, testDir)
 	require.NoError(err)
 	wg.Wait()
+	if s.T().Failed() {
+		s.T().FailNow()
+	}
 }
 
 func (s *multiConnectSuite) TearDownSuite() {
@@ -95,7 +111,7 @@ func (s *multiConnectSuite) Test_MultipleConnect() {
 	kc := itest.KubeConfig(ctx)
 	cfg, err := clientcmd.LoadFromFile(kc)
 	require.NoError(err)
-	ctxName := daemon.SafeContainerName(cfg.CurrentContext)
+	ctxName := ioutil.SafeName(cfg.CurrentContext)
 	s.doubleConnectCheck(ctx, ctx2, ctxName+"-"+s.AppNamespace()+"-cn", ctxName+"-"+s.appSpace2+"-cn", s.AppNamespace(), s.appSpace2, "")
 }
 
@@ -137,11 +153,11 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 
 	st := itest.TelepresenceStatusOk(ctx1, "--use", n1)
 	require.Equal(st.UserDaemon.Namespace, ns1)
-	name1 := st.UserDaemon.ConnectionName
+	name1 := st.UserDaemon.Name
 
 	st = itest.TelepresenceStatusOk(ctx1, "--use", n2)
 	require.Equal(st.UserDaemon.Namespace, ns2)
-	name2 := st.UserDaemon.ConnectionName
+	name2 := st.UserDaemon.Name
 
 	cacheDir := filelocation.AppUserCacheDir(ctx1)
 	var di daemon.Info
@@ -180,7 +196,7 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 			// condition
 			func() bool {
 				out, err := itest.Output(ctx,
-					"docker", "run", "--network", "container:"+"tp-"+cn, "--rm", "curlimages/curl", "--silent", "--max-time", "1", svc)
+					"docker", "run", "--network", "container:"+"tp-"+cn, "--rm", "curlimages/curl", "--silent", "--max-time", "2", svc)
 				if err != nil {
 					dlog.Errorf(ctx, "%s:%v", out, err)
 					return false
@@ -189,7 +205,7 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 				return expectedOutput.MatchString(out)
 			},
 			10*time.Second, // waitFor
-			2*time.Second,  // polling interval
+			3*time.Second,  // polling interval
 			`body of %q matches %q`, "http://"+svc, expectedOutput,
 		)
 	}

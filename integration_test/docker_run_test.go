@@ -15,7 +15,7 @@ import (
 )
 
 func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
+	if s.IsCI() && !(goRuntime.GOOS == "linux" && goRuntime.GOARCH == "amd64") {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 	}
 	require := s.Require()
@@ -138,7 +138,7 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 }
 
 func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
-	if s.IsCI() && goRuntime.GOOS != "linux" {
+	if s.IsCI() && !(goRuntime.GOOS == "linux" && goRuntime.GOARCH == "amd64") {
 		s.T().Skip("CI can't run linux docker containers inside non-linux runners")
 	}
 	svc := "echo"
@@ -177,7 +177,6 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		}, 30*time.Second, 3*time.Second)
 
-		// Response contains env variables TELEPRESENCE_CONTAINER and TELEPRESENCE_INTERCEPT_ID
 		expectedOutput := regexp.MustCompile(`Intercept id [0-9a-f-]+:` + svc)
 		s.Eventually(
 			// condition
@@ -261,4 +260,23 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		s.TelepresenceConnect(ctx, "--docker")
 		assertNotIntercepted(ctx)
 	})
+}
+
+func (s *dockerDaemonSuite) Test_DockerRun_VolumePresent() {
+	ctx := s.Context()
+	s.KubectlOk(ctx, "create", "serviceaccount", testIamServiceAccount)
+	defer s.KubectlOk(ctx, "delete", "serviceaccount", testIamServiceAccount)
+
+	s.ApplyApp(ctx, "hello-w-volumes", "deploy/hello")
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", "hello")
+
+	s.TelepresenceConnect(ctx, "--docker")
+	defer itest.TelepresenceQuitOk(ctx)
+
+	stdout, stderr, err := itest.Telepresence(ctx, "intercept", "--docker-run", "hello", "-p", "8080:http", "--",
+		"--rm", "busybox", "ls", "/var/run/secrets/datawire.io/auth")
+	s.NoError(err)
+	s.Empty(stderr)
+	dlog.Infof(ctx, "stdout = %s", stdout)
+	s.True(strings.HasSuffix(stdout, "\nusername"))
 }

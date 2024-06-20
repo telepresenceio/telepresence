@@ -2,13 +2,17 @@ package managerutil
 
 import (
 	"context"
-	"fmt"
 	"runtime/debug"
 	"strings"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
+
+func AgentInjectorEnabled(ctx context.Context) bool {
+	return GetEnv(ctx).AgentInjectPolicy != agentconfig.Never
+}
 
 type ImageRetriever interface {
 	GetImage() string
@@ -31,11 +35,16 @@ type irKey struct{}
 // variable is empty.
 func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context, string) error) (context.Context, error) {
 	env := GetEnv(ctx)
-	var img string
-	if env.AgentImage == "" {
-		env.AgentImage = fmt.Sprintf("tel2:%s", strings.TrimPrefix(version.Version, "v"))
+	if env.AgentImageName == "" {
+		env.AgentImageName = "tel2"
 	}
-	img = env.QualifiedAgentImage()
+	if env.AgentImageTag == "" {
+		env.AgentImageTag = strings.TrimPrefix(version.Version, "v")
+	}
+	if env.AgentRegistry == "" {
+		env.AgentRegistry = env.Registry
+	}
+	img := env.QualifiedAgentImage()
 	ctx = WithResolvedAgentImageRetriever(ctx, ImageFromEnv(img))
 	if img != "" {
 		LogAgentImageInfo(ctx, img)

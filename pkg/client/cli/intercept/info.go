@@ -109,7 +109,7 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, mountError string) 
 		TargetHost:    spec.TargetHost,
 		TargetPort:    spec.TargetPort,
 		Mount:         NewMount(ctx, ii, mountError),
-		ServicePortID: spec.ServicePortName,
+		ServicePortID: spec.ServicePortIdentifier,
 		Environment:   ii.Environment,
 		FilterDesc:    ii.MechanismArgsDesc,
 		Metadata:      ii.Metadata,

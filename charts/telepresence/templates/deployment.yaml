@@ -41,6 +41,10 @@ spec:
           env:
           - name: LOG_LEVEL
             value: {{ .logLevel }}
+          {{- with .image }}
+          - name: REGISTRY
+            value: "{{ .registry }}"
+          {{- end }}
           - name: SERVER_PORT
             value: {{ .apiPort | quote }}
           - name: POD_CIDR_STRATEGY
@@ -49,8 +53,16 @@ spec:
           - name: POD_CIDRS
             value: "{{ join " " . }}"
           {{- end }}
+          {{- if .agentInjector.enabled }}
           - name: MUTATOR_WEBHOOK_PORT
             value: {{ .agentInjector.webhook.port | quote }}
+          - name: AGENT_INJECTOR_SECRET
+          {{- if eq .agentInjector.certificate.accessMethod "mount" }}
+            value: /var/run/secrets/tls
+          {{- else }}
+            value: {{ .agentInjector.secret.name }}
+          {{- end }}
+          {{- end }}
           {{- with .tracing }}
           {{- if .grpcPort }}
           - name: TRACING_GRPC_PORT
@@ -69,11 +81,12 @@ spec:
             value: {{ .grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
-          - name: AGENT_ARRIVAL_TIMEOUT
-            value: {{ quote (default "30s" .timeouts.agentArrival) }}
+      {{- if .agentInjector.enabled }}
         {{- /*
         Traffic agent injector configuration
         */}}
+          - name: AGENT_ARRIVAL_TIMEOUT
+            value: {{ quote (default "30s" .timeouts.agentArrival) }}
           {{- with .agentInjector }}
           - name: AGENT_INJECT_POLICY
             value: {{ .injectPolicy }}
@@ -122,19 +135,28 @@ spec:
           {{- end }}
           {{- end }}
           {{- /* replaced by agent.image.name Retained for backward compatibility */}}
-          {{- if $.Values.agentInjector.agentImage.name }}
-          - name: AGENT_IMAGE
-            value: "{{ $.Values.agentInjector.agentImage.name }}:{{ $.Values.agentInjector.agentImage.tag | default $.Chart.AppVersion }}"
+          {{- if .agentInjector.agentImage.name }}
+          - name: AGENT_IMAGE_NAME
+            value: {{ .agentInjector.agentImage.name }}
           {{- else }}
           {{- if .agent.image.name }}
-          - name: AGENT_IMAGE
-            value: "{{ .agent.image.name }}:{{ .agent.image.tag | default $.Chart.AppVersion }}"
+          - name: AGENT_IMAGE_NAME
+            value: {{ .agent.image.name }}
+          {{- end }}
+          {{- end }}
+          {{- if .agentInjector.agentImage.tag }}
+          - name: AGENT_IMAGE_TAG
+            value: {{ .agentInjector.agentImage.tag }}
+          {{- else }}
+          {{- if .agent.image.tag }}
+          - name: AGENT_IMAGE_TAG
+            value: {{ .agent.image.tag }}
           {{- end }}
           {{- end }}
           {{- /* replaced by agent.image.registry Retained for backward compatibility */}}
-          {{- if $.Values.agentInjector.agentImage.registry }}
+          {{- if .agentInjector.agentImage.registry }}
           - name: AGENT_REGISTRY
-            value: {{ $.Values.agentInjector.agentImage.registry }}
+            value: {{ .agentInjector.agentImage.registry }}
           {{- else }}
           {{- if .agent.image.registry }}
           - name: AGENT_REGISTRY
@@ -148,6 +170,12 @@ spec:
           - name: AGENT_IMAGE_PULL_POLICY
             value: {{ .agent.image.pullPolicy }}
           {{- if .prometheus.port }}  # 0 is false
+          {{- /* to allow running with no security context, must check against nil - this allows specifying an empty dict for the value */}}
+          {{- if not (eq .agent.securityContext nil) }}
+          - name: AGENT_SECURITY_CONTEXT
+            value: '{{ toJson .agent.securityContext }}'
+          {{- end }}
+      {{- end }}
           - name: PROMETHEUS_PORT
             value: "{{ .prometheus.port }}"
           {{- end }}
@@ -166,6 +194,10 @@ spec:
           - name: MANAGED_NAMESPACES
             value: "{{ join " " . }}"
           {{- end }}
+          {{- end }}
+          {{- if not .metritonEnabled }}  # 0 is false
+          - name: SCOUT_DISABLE
+            value: "1"
           {{- end }}
         {{- /*
         Client configuration
@@ -238,13 +270,25 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- if eq .agentInjector.certificate.accessMethod "mount" }}
           volumeMounts:
-          - name: tls
-            mountPath: /var/run/secrets/tls
-            readOnly: true
+          {{- if .agentInjector.enabled }}
+            - name: tls
+              mountPath: /var/run/secrets/tls
+              readOnly: true
+          {{- end }}
         {{- if and .trafficManager .trafficManager.mountsTemplate }}
           {{- template "traffic-manager-mounts" . }}
         {{- end }}
+      {{- else }}
+        {{- if and .trafficManager .trafficManager.mountsTemplate }}
+          volumeMounts:
+          {{- template "traffic-manager-mounts" . }}
+        {{- end }}
+      {{- end }}
+      {{- with .schedulerName }}
+      schedulerName: {{ . }}
+      {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -260,14 +304,23 @@ spec:
       {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
+  {{- if eq .agentInjector.certificate.accessMethod "mount" }}
       volumes:
-      - name: tls
-        secret:
-          defaultMode: 420
-          secretName: {{ .agentInjector.secret.name }}
+        {{- if .agentInjector.enabled }}
+        - name: tls
+          secret:
+            defaultMode: 420
+            secretName: {{ .agentInjector.secret.name }}
+        {{- end }}
     {{- if and .trafficManager .trafficManager.volsTemplate }}
       {{- template "traffic-manager-vols" . }}
     {{- end }}
+  {{- else }}
+    {{- if and .trafficManager .trafficManager.volsTemplate }}
+      volumes:
+      {{- template "traffic-manager-vols" . }}
+    {{- end }}
+  {{- end }}
       serviceAccount: traffic-manager
       serviceAccountName: traffic-manager
 {{- end }}

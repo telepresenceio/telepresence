@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
 
 const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -49,7 +50,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 		ManagerNamespace: "default",
 		AgentRegistry:    "docker.io/datawire",
-		AgentImage:       "tel2:2.14.0",
+		AgentImageName:   "tel2",
+		AgentImageTag:    "2.14.0",
 		AgentPort:        9900,
 	}
 	ctx := dlog.NewTestContext(t, false)
@@ -132,6 +134,23 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 					Ports: []core.ContainerPort{
 						{
 							ContainerPort: 8899,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	podGRPCPort := core.Pod{
+		ObjectMeta: podObjectMeta("grpc-port", "app"),
+		Spec: core.PodSpec{
+			AutomountServiceAccountToken: &no,
+			Containers: []core.Container{
+				{
+					Name: "some-container",
+					Ports: []core.ContainerPort{
+						{
+							ContainerPort: 8443,
 						},
 					},
 				},
@@ -320,6 +339,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	}
 	namedPortUID := makeUID()
 	numericPortUID := makeUID()
+	grpcPortUID := makeUID()
 	unnamedNumericPortUID := makeUID()
 	multiPortUID := makeUID()
 
@@ -420,24 +440,52 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				},
 			},
 		},
+		&core.Service{
+			TypeMeta: meta.TypeMeta{
+				Kind:       "Service",
+				APIVersion: "v1",
+			},
+			ObjectMeta: meta.ObjectMeta{
+				Name:      "grpc-port",
+				Namespace: "some-ns",
+				UID:       grpcPortUID,
+			},
+			Spec: core.ServiceSpec{
+				Ports: []core.ServicePort{
+					{
+						Protocol:   "TCP",
+						Name:       "grpc",
+						Port:       443,
+						TargetPort: intstr.FromInt32(8443),
+					},
+				},
+				Selector: map[string]string{
+					"app": "grpc-port",
+				},
+			},
+		},
 		&podNamedPort,
 		&podNumericPort,
+		&podGRPCPort,
 		&podNamedAndNumericPort,
 		&podMultiPort,
 		&podMultiSplitPort,
 		deployment(&podNamedPort),
 		deployment(&podNumericPort),
+		deployment(&podGRPCPort),
 		deployment(&podUnnamedNumericPort),
 		deployment(&podNamedAndNumericPort),
 		deployment(&podMultiPort),
 		deployment(&podMultiSplitPort),
 	)
-	tests := []struct {
+	type testInput struct {
 		name           string
 		request        *core.Pod
 		expectedConfig *agentconfig.Sidecar
 		expectedError  string
-	}{
+	}
+
+	tests := []testInput{
 		{
 			"Error Precondition: No port specified",
 			&core.Pod{
@@ -719,25 +767,78 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			"",
 		},
 	}
+
+	runFunc := func(t *testing.T, ctx context.Context, test *testInput) {
+		gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
+		require.NoError(t, err)
+		actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
+		requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
+		if actualConfig == nil {
+			actualConfig = &agentconfig.Sidecar{}
+		}
+		expectedConfig := test.expectedConfig
+		if expectedConfig == nil {
+			expectedConfig = &agentconfig.Sidecar{}
+		}
+		assert.Equal(t, expectedConfig, actualConfig, "configs differ")
+	}
+
+	ctx = k8sapi.WithK8sInterface(ctx, clientset)
+	ctx = informer.WithFactory(ctx, "")
+	f := informer.GetFactory(ctx, "")
+	f.Core().V1().Services().Informer()
+	f.Core().V1().ConfigMaps().Informer()
+	f.Core().V1().Pods().Informer()
+	f.Apps().V1().Deployments().Informer()
+	f.Start(ctx.Done())
+	f.WaitForCacheSync(ctx.Done())
+
 	for _, test := range tests {
 		test := test // pin it
-		ctx := k8sapi.WithK8sInterface(ctx, clientset)
 		agentmap.GeneratorConfigFunc = env.GeneratorConfig
 		t.Run(test.name, func(t *testing.T) {
-			gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
-			require.NoError(t, err)
-			actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
-			requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
-			if actualConfig == nil {
-				actualConfig = &agentconfig.Sidecar{}
-			}
-			expectedConfig := test.expectedConfig
-			if expectedConfig == nil {
-				expectedConfig = &agentconfig.Sidecar{}
-			}
-			assert.Equal(t, expectedConfig, actualConfig, "configs differ")
+			runFunc(t, ctx, &test)
 		})
 	}
+
+	env.AgentAppProtocolStrategy = k8sapi.PortName
+	test := testInput{
+		"AppProtocolStrategy named and named grpc port without appProtocol",
+		&podGRPCPort,
+		&agentconfig.Sidecar{
+			AgentName:    "grpc-port",
+			AgentImage:   "docker.io/datawire/tel2:2.13.3",
+			Namespace:    "some-ns",
+			WorkloadName: "grpc-port",
+			WorkloadKind: "Deployment",
+			ManagerHost:  "traffic-manager.default",
+			ManagerPort:  8081,
+			Containers: []*agentconfig.Container{
+				{
+					Name: "some-container",
+					Intercepts: []*agentconfig.Intercept{
+						{
+							ServiceName:       "grpc-port",
+							ServiceUID:        grpcPortUID,
+							ServicePortName:   "grpc",
+							ServicePort:       443,
+							Protocol:          core.ProtocolTCP,
+							AgentPort:         9900,
+							ContainerPort:     8443,
+							AppProtocol:       "grpc",
+							TargetPortNumeric: true,
+						},
+					},
+					EnvPrefix:  "A_",
+					MountPoint: "/tel_app_mounts/some-container",
+				},
+			},
+		},
+		"",
+	}
+	t.Run(test.name, func(t *testing.T) {
+		runFunc(t, ctx, &test)
+	})
 }
 
 func TestTrafficAgentInjector(t *testing.T) {
@@ -747,7 +848,8 @@ func TestTrafficAgentInjector(t *testing.T) {
 
 		ManagerNamespace:  "default",
 		AgentRegistry:     "docker.io/datawire",
-		AgentImage:        "tel2:2.13.3",
+		AgentImageName:    "tel2",
+		AgentImageTag:     "2.13.3",
 		AgentPort:         9900,
 		AgentInjectPolicy: agentconfig.WhenEnabled,
 	}
@@ -787,6 +889,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 	podObjectMetaInjected := func(name string) meta.ObjectMeta {
 		meta := podObjectMeta(name)
 		meta.Labels[agentconfig.WorkloadNameLabel] = name
+		meta.Labels[agentconfig.WorkloadKindLabel] = "Deployment"
 		meta.Labels[agentconfig.WorkloadEnabledLabel] = "true"
 		return meta
 	}
@@ -1034,6 +1137,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 `,
 			"",
@@ -1125,6 +1229,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 - op: replace
   path: /spec/containers/0/env
@@ -1265,6 +1370,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 `,
 			"",
@@ -1290,6 +1396,12 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
   - args:
     - agent-init
+    env:
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.podIP
     image: docker.io/datawire/tel2:2.13.3
     name: tel-agent-init
     resources: {}
@@ -1361,6 +1473,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: numeric-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: numeric-port
 `,
 			"",
@@ -1390,6 +1503,12 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     args:
     - agent-init
+    env:
+    - name: POD_IP
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.podIP
     image: docker.io/datawire/tel2:2.13.3
     name: tel-agent-init
     resources: {}
@@ -1461,6 +1580,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: numeric-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: numeric-port
 `,
 			"",
@@ -1473,7 +1593,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				Spec: core.PodSpec{
 					InitContainers: []core.Container{{
 						Name:  agentconfig.InitContainerName,
-						Image: env.AgentRegistry + "/" + env.AgentImage,
+						Image: env.AgentRegistry + "/" + env.AgentImageName + ":" + env.AgentImageTag,
 						Args:  []string{"agent-init"},
 						VolumeMounts: []core.VolumeMount{{
 							Name:      agentconfig.ConfigVolumeName,
@@ -1685,6 +1805,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   value:
     service: named-port
     telepresence.io/workloadEnabled: "true"
+    telepresence.io/workloadKind: Deployment
     telepresence.io/workloadName: named-port
 `,
 			"",
@@ -1699,6 +1820,14 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx = managerutil.WithEnv(ctx, env)
 			agentmap.GeneratorConfigFunc = env.GeneratorConfig
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
+			ctx = informer.WithFactory(ctx, "")
+			f := informer.GetFactory(ctx, "")
+			f.Core().V1().Services().Informer()
+			f.Core().V1().ConfigMaps().Informer()
+			f.Core().V1().Pods().Informer()
+			f.Apps().V1().Deployments().Informer()
+			f.Start(ctx.Done())
+			f.WaitForCacheSync(ctx.Done())
 			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 			require.NoError(t, err)
 			if test.envAdditions != nil {
@@ -1723,7 +1852,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				require.NoError(t, err)
 				var scx agentconfig.SidecarExt
 				if scx, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
-					actualErr = cw.Store(ctx, scx, true)
+					actualErr = cw.store(ctx, scx)
 				}
 			}
 			if actualErr == nil {
@@ -1764,8 +1893,7 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admissi
 }
 
 func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentmap.GeneratorConfig) (agentconfig.SidecarExt, error) {
-	workloadCache := make(map[string]k8sapi.Workload, 0)
-	wl, err := agentmap.FindOwnerWorkload(ctx, workloadCache, k8sapi.Pod(pod))
+	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 	if err != nil {
 		return nil, err
 	}
@@ -1786,5 +1914,5 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentma
 	default:
 		t.Fatalf("bad workload type %T", wi)
 	}
-	return gc.Generate(ctx, wl, 0, nil)
+	return gc.Generate(ctx, wl, nil)
 }

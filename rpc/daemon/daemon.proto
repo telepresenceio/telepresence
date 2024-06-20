@@ -29,8 +29,8 @@ service Daemon {
   // GetNetworkConfig returns the current network configuration
   rpc GetNetworkConfig(google.protobuf.Empty) returns (NetworkConfig);
 
-  // SetDnsSearchPath sets a new search path.
-  rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
+  // SetDNSTopLevelDomains sets a new search path.
+  rpc SetDNSTopLevelDomains(Domains) returns (google.protobuf.Empty);
 
   // SetDNSExcludes sets the excludes field of DNSConfig.
   rpc SetDNSExcludes(SetDNSExcludesRequest) returns (google.protobuf.Empty);
@@ -49,15 +49,14 @@ service Daemon {
 }
 
 message DaemonStatus {
+  repeated manager.IPNet subnets = 1;
   OutboundInfo outbound_config = 4;
   telepresence.common.VersionInfo version = 5;
-  reserved 1, 2, 3;
+  reserved 2, 3;
 }
 
-message Paths {
-  repeated string paths = 1;
-
-  repeated string namespaces = 2;
+message Domains {
+  repeated string domains = 1;
 }
 
 message DNSMapping {
@@ -96,6 +95,14 @@ message DNSConfig {
   reserved 5;
 }
 
+message SubnetViaWorkload {
+  // The remote IP that the DNS resolver translates into a Virtual IP to use locally.
+  string subnet = 1;
+
+  // The workload that the virtual IP will be routed to.
+  string workload = 2;
+}
+
 // OutboundInfo contains all information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
 message OutboundInfo {
@@ -107,6 +114,9 @@ message OutboundInfo {
 
   // DNS configuration
   DNSConfig dns = 3;
+
+  // Route subnets via given workload using virtual IPs
+  repeated SubnetViaWorkload subnet_via_workloads = 4;
 
   // also_proxy are user-added subnets.
   repeated manager.IPNet also_proxy_subnets = 5;
@@ -129,7 +139,8 @@ message OutboundInfo {
   // Kubernetes flags
   map<string, string> kube_flags = 9;
 
-  reserved 4;
+  // Kubeconfig YAML, if not to be loaded from file.
+  optional bytes kubeconfig_data = 12;
 }
 
 message NetworkConfig {

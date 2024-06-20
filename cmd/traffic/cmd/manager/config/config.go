@@ -17,9 +17,8 @@ import (
 )
 
 const (
-	clientConfigFileName         = "client.yaml"
-	trafficManagerConfigFileName = "traffic-manager.yaml"
-	cfgConfigMapName             = "traffic-manager"
+	clientConfigFileName = "client.yaml"
+	cfgConfigMapName     = "traffic-manager"
 )
 
 type WatcherCallback func(watch.EventType, runtime.Object) error
@@ -27,15 +26,13 @@ type WatcherCallback func(watch.EventType, runtime.Object) error
 type Watcher interface {
 	Run(ctx context.Context) error
 	GetClientConfigYaml() []byte
-	GetTrafficManagerConfigYaml() []byte
 }
 
 type config struct {
 	sync.RWMutex
 	namespace string
 
-	clientYAML         []byte
-	trafficManagerYAML []byte
+	clientYAML []byte
 }
 
 func NewWatcher(namespace string) Watcher {
@@ -111,27 +108,12 @@ func (c *config) refreshFile(ctx context.Context, data map[string]string) {
 		c.clientYAML = nil
 		dlog.Debugf(ctx, "Cleared client config")
 	}
-
-	if yml, ok := data[trafficManagerConfigFileName]; ok {
-		c.trafficManagerYAML = []byte(yml)
-		dlog.Debugf(ctx, "Refreshed traffic-manager config: %s", yml)
-	} else {
-		c.trafficManagerYAML = nil
-		dlog.Debugf(ctx, "Cleared traffic-manager config")
-	}
 	c.Unlock()
 }
 
 func (c *config) GetClientConfigYaml() (ret []byte) {
 	c.RLock()
 	ret = c.clientYAML
-	c.RUnlock()
-	return
-}
-
-func (c *config) GetTrafficManagerConfigYaml() (ret []byte) {
-	c.RLock()
-	ret = c.trafficManagerYAML
 	c.RUnlock()
 	return
 }

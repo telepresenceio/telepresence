@@ -20,6 +20,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/strings/slices"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -90,6 +91,12 @@ func getPod(req *admission.AdmissionRequest, isDelete bool) (*core.Pod, error) {
 }
 
 func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequest) (p PatchOps, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = derror.PanicToError(r)
+			dlog.Errorf(ctx, "%+v", err)
+		}
+	}()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "mutator.inject")
 	defer tracing.EndAndRecord(span, err)
 
@@ -103,8 +110,12 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	if err != nil {
 		return nil, err
 	}
-	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
+	if isDelete {
+		a.agentConfigs.Blacklist(pod.Name, pod.Namespace)
+		return nil, nil
+	}
 
+	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
 	env := managerutil.GetEnv(ctx)
 
 	ia := pod.Annotations[agentconfig.InjectAnnotation]
@@ -134,69 +145,51 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 
-		workloadCache := make(map[string]k8sapi.Workload, 0)
-		scx, err = a.findConfigMapValue(ctx, workloadCache, pod, nil)
-
+		wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
 		if err != nil {
-			if isDelete {
-				err = nil
+			uwkError := k8sapi.UnsupportedWorkloadKindError("")
+			switch {
+			case k8sErrors.IsNotFound(err):
+				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
+			case errors.As(err, &uwkError):
+				dlog.Debugf(ctx, "Workload owner with %s found for pod %s.%s", uwkError.Error(), pod.Name, pod.Namespace)
 			}
+			// Not an error. It just means that the pod is not eligible for intercepts.
+			return nil, nil
+		}
+		scx, err = a.agentConfigs.Get(ctx, wl.GetName(), wl.GetNamespace())
+		if err != nil {
 			return nil, err
 		}
 
 		switch {
-		case scx == nil && isDelete:
-			return nil, nil
 		case scx == nil && ia != "enabled":
-			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q configmap or through %q annotation; skipping`,
-				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.ConfigMap, agentconfig.InjectAnnotation)
 			return nil, nil
 		case scx != nil && scx.AgentConfig().Manual:
-			if !isDelete {
-				dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
-			}
+			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			return nil, nil
-		}
-
-		wl, err := agentmap.FindOwnerWorkload(ctx, workloadCache, k8sapi.Pod(pod))
-		if err != nil {
-			if k8sErrors.IsNotFound(err) {
-				err = nil
-				dlog.Debugf(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
-				if isDelete && scx != nil {
-					config := scx.AgentConfig()
-					err = a.agentConfigs.Delete(ctx, config.WorkloadName, config.Namespace)
-				}
-			}
-			return nil, err
 		}
 
 		tracing.RecordWorkloadInfo(span, wl)
-		if isDelete {
-			return nil, nil
-		}
 		var gc agentmap.GeneratorConfig
 		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
 			return nil, err
 		}
-		if scx, err = gc.Generate(ctx, wl, 0, scx); err != nil {
+		if scx, err = gc.Generate(ctx, wl, scx); err != nil {
 			return nil, err
 		}
 
 		scx.RecordInSpan(span)
-		if err = a.agentConfigs.Store(ctx, scx, true); err != nil {
+		if err = a.agentConfigs.store(ctx, scx); err != nil {
 			return nil, err
 		}
 	default:
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}
 
-	// Create patch operations to add the traffic-agent sidecar
-	dlog.Infof(ctx, "Injecting %s into pod %s.%s", agentconfig.ContainerName, pod.Name, pod.Namespace)
-
 	var patches PatchOps
 	config := scx.AgentConfig()
-	patches = deleteAppContainer(ctx, pod, config, patches)
+	patches = disableAppContainer(ctx, pod, config, patches)
 	patches = addInitContainer(pod, config, patches)
 	patches = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
@@ -237,16 +230,51 @@ func needInitContainer(config *agentconfig.Sidecar) bool {
 	return false
 }
 
-func deleteAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
+const sleeperImage = "alpine:latest"
+
+var sleeperArgs = []string{"sleep", "infinity"} //nolint:gochecknoglobals // constant
+
+func disableAppContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
 podContainers:
 	for i, pc := range pod.Spec.Containers {
 		for _, cc := range config.Containers {
-			if cc.Name == pc.Name && cc.Replace == agentconfig.ReplacePolicyActive {
+			if cc.Name == pc.Name && cc.Replace {
+				if pc.Image == sleeperImage && slices.Equal(pc.Args, sleeperArgs) {
+					continue podContainers
+				}
 				patches = append(patches, PatchOperation{
-					Op:   "remove",
-					Path: fmt.Sprintf("/spec/containers/%d", i),
+					Op:    "replace",
+					Path:  fmt.Sprintf("/spec/containers/%d/image", i),
+					Value: sleeperImage,
 				})
-				dlog.Debugf(ctx, "Deleted container %s", pc.Name)
+				argsOp := "add"
+				if len(pc.Args) > 0 {
+					argsOp = "replace"
+				}
+				patches = append(patches, PatchOperation{
+					Op:    argsOp,
+					Path:  fmt.Sprintf("/spec/containers/%d/args", i),
+					Value: sleeperArgs,
+				})
+				if pc.StartupProbe != nil {
+					patches = append(patches, PatchOperation{
+						Op:   "remove",
+						Path: fmt.Sprintf("/spec/containers/%d/startupProbe", i),
+					})
+				}
+				if pc.LivenessProbe != nil {
+					patches = append(patches, PatchOperation{
+						Op:   "remove",
+						Path: fmt.Sprintf("/spec/containers/%d/livenessProbe", i),
+					})
+				}
+				if pc.ReadinessProbe != nil {
+					patches = append(patches, PatchOperation{
+						Op:   "remove",
+						Path: fmt.Sprintf("/spec/containers/%d/readinessProbe", i),
+					})
+				}
+				dlog.Debugf(ctx, "Disabled container %s", pc.Name)
 				continue podContainers
 			}
 		}
@@ -530,7 +558,7 @@ func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) Pat
 				// Rely on iptables mapping instead of port renames
 				continue
 			}
-			patches = hideContainerPorts(pod, app, ic.ContainerPortName, patches)
+			patches = hideContainerPorts(pod, app, bool(cc.Replace), ic.ContainerPortName, patches)
 		}
 	})
 	return patches
@@ -538,7 +566,7 @@ func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) Pat
 
 // hideContainerPorts  will replace the symbolic name of a container port with a generated name. It will perform
 // the same replacement on all references to that port from the probes of the container.
-func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, patches PatchOps) PatchOps {
+func hideContainerPorts(pod *core.Pod, app *core.Container, isReplace bool, portName string, patches PatchOps) PatchOps {
 	cns := pod.Spec.Containers
 	var containerPath string
 	for i := range cns {
@@ -564,18 +592,22 @@ func hideContainerPorts(pod *core.Pod, app *core.Container, portName string, pat
 		}
 	}
 
-	probes := []*core.Probe{app.LivenessProbe, app.ReadinessProbe, app.StartupProbe}
-	probeNames := []string{"livenessProbe/", "readinessProbe/", "startupProbe/"}
+	// A replacing intercept will swap the app-container for one that doesn't have any
+	// probes, so the patch must not contain renames for those.
+	if !isReplace {
+		probes := []*core.Probe{app.LivenessProbe, app.ReadinessProbe, app.StartupProbe}
+		probeNames := []string{"livenessProbe/", "readinessProbe/", "startupProbe/"}
 
-	for i, probe := range probes {
-		if probe == nil {
-			continue
-		}
-		if h := probe.HTTPGet; h != nil && h.Port.StrVal == portName {
-			hidePort(probeNames[i] + "httpGet/port")
-		}
-		if t := probe.TCPSocket; t != nil && t.Port.StrVal == portName {
-			hidePort(probeNames[i] + "tcpSocket/port")
+		for i, probe := range probes {
+			if probe == nil {
+				continue
+			}
+			if h := probe.HTTPGet; h != nil && h.Port.StrVal == portName {
+				hidePort(probeNames[i] + "httpGet/port")
+			}
+			if t := probe.TCPSocket; t != nil && t.Port.StrVal == portName {
+				hidePort(probeNames[i] + "tcpSocket/port")
+			}
 		}
 	}
 	return patches
@@ -621,6 +653,10 @@ func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarEx
 		changed = true
 		lm[agentconfig.WorkloadNameLabel] = config.AgentConfig().WorkloadName
 	}
+	if _, ok := pod.Labels[agentconfig.WorkloadKindLabel]; !ok {
+		changed = true
+		lm[agentconfig.WorkloadKindLabel] = config.AgentConfig().WorkloadKind
+	}
 	if _, ok := pod.Labels[agentconfig.WorkloadEnabledLabel]; !ok {
 		changed = true
 		lm[agentconfig.WorkloadEnabledLabel] = "true"
@@ -633,48 +669,6 @@ func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarEx
 		})
 	}
 	return patches
-}
-
-func (a *agentInjector) findConfigMapValue(ctx context.Context, workloadCache map[string]k8sapi.Workload, pod *core.Pod, wl k8sapi.Workload) (agentconfig.SidecarExt, error) {
-	if a.agentConfigs == nil {
-		return nil, nil
-	}
-	var refs []meta.OwnerReference
-	if wl != nil {
-		refs = wl.GetOwnerReferences()
-	} else {
-		refs = pod.GetOwnerReferences()
-	}
-	for i := range refs {
-		if or := &refs[i]; or.Controller != nil && *or.Controller {
-			scx, err := a.agentConfigs.Get(or.Name, pod.GetNamespace())
-			if err != nil {
-				return nil, err
-			}
-			if scx != nil {
-				ag := scx.AgentConfig()
-				if ag.WorkloadKind == "" || ag.WorkloadKind == or.Kind {
-					return scx, nil
-				}
-			}
-			wl, err = tracing.GetWorkloadFromCache(ctx, workloadCache, or.Name, pod.GetNamespace(), or.Kind)
-			if err != nil {
-				if k8sErrors.IsNotFound(err) {
-					return nil, nil
-				}
-				var uwkErr k8sapi.UnsupportedWorkloadKindError
-				if errors.As(err, &uwkErr) {
-					// There can only be one managing controller. If it's of an unsupported
-					// type, then there's currently no configMapValue for the object that it
-					// controls.
-					return nil, nil
-				}
-				return nil, err
-			}
-			return a.findConfigMapValue(ctx, workloadCache, pod, wl)
-		}
-	}
-	return nil, nil
 }
 
 const maxPortNameLen = 15

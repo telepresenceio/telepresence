@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/miekg/dns"
-
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -26,7 +24,10 @@ import (
 
 const (
 	maxRecursionTestRetries = 10
-	recursionTestTimeout    = 500 * time.Millisecond
+
+	// We use a fairly short delay here because if DNS recursion is a thing, then the cluster's DNS-server
+	// has access to the caller host's network, so it runs locally in a Docker container or similar.
+	recursionTestTimeout = 200 * time.Millisecond
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
@@ -48,93 +49,38 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	return err
 }
 
-// shouldApplySearch returns true if search path should be applied.
-func (s *Server) shouldApplySearch(query string) bool {
-	if len(s.search) == 0 {
-		return false
-	}
-
-	if query == "localhost." {
-		return false
-	}
-
-	// Don't apply search paths to the kubernetes zone
-	if strings.HasSuffix(query, "."+s.clusterDomain) {
-		return false
-	}
-
-	// Don't apply search paths if one is already there
-	for _, s := range s.search {
-		if strings.HasSuffix(query, s) {
-			return false
-		}
-	}
-
-	// Don't apply search path to namespaces or "svc".
-	query = query[:len(query)-1]
-	if lastDot := strings.LastIndexByte(query, '.'); lastDot >= 0 {
-		tld := query[lastDot+1:]
-		if _, ok := s.namespaces[tld]; ok || tld == "svc" {
-			return false
-		}
-	}
-	return true
-}
-
-// resolveInSearch is only used by the overriding resolver. It is needed because unlike other resolvers, this
-// resolver does not hook into a DNS system that handles search paths prior to the arrival of the request.
-//
-// TODO: With the DNS lookups now being done in the cluster, there's only one reason left to have a search path,
-// and that's the local-only intercepts which means that using search-paths really should be limited to that
-// use-case.
-func (s *Server) resolveInSearch(c context.Context, q *dns.Question) (dnsproxy.RRs, int, error) {
-	query := strings.ToLower(q.Name)
-
-	// Drop all known search path suffixes before sending the query to the cluster. The
-	// cluster has its own DNS resolver and its own set of search paths.
-	query = strings.TrimSuffix(query, tel2SubDomainDot)
-	for _, sfx := range s.dropSuffixes {
-		query = strings.TrimSuffix(query, sfx)
-	}
-
-	if !s.shouldDoClusterLookup(query) {
-		return nil, dns.RcodeNameError, nil
-	}
-
-	if s.shouldApplySearch(query) {
-		origQuery := q.Name
-		for _, sp := range s.search {
-			q.Name = query + sp
-			if rrs, rCode, err := s.resolveInCluster(c, q); err != nil || len(rrs) > 0 {
-				q.Name = origQuery
-				return rrs, rCode, err
-			}
-		}
-		q.Name = origQuery
-	}
-	return s.resolveInCluster(c, q)
-}
-
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
-	if s.config.LocalIp == nil {
-		rf, err := readResolveFile("/etc/resolv.conf")
+	if s.localIP == nil {
+		rf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
 		if err != nil {
 			return err
 		}
 		dlog.Debug(c, rf.String())
-		if len(rf.nameservers) > 0 {
-			ip := iputil.Parse(rf.nameservers[0])
-			s.config.LocalIp = ip
+		if len(rf.Nameservers) > 0 {
+			ip := iputil.Parse(rf.Nameservers[0])
+			s.localIP = ip
 			dlog.Infof(c, "Automatically set -dns=%s", ip)
 		}
 
-		// The search entries in /etc/resolv.conf is not intended for this resolver so
+		// The search entries in /etc/resolv.conf are not intended for this resolver so
 		// ensure that we strip them off when we send queries to the cluster.
-		for _, sp := range rf.search {
-			s.dropSuffixes = append(s.dropSuffixes, sp+".")
+		for _, sp := range rf.Search {
+			lsp := len(sp)
+			if lsp > 0 {
+				if sp[0] == '.' {
+					sp = sp[1:]
+					lsp--
+				}
+				if lsp > 0 {
+					if sp[lsp-1] != '.' {
+						sp += "."
+					}
+					s.dropSuffixes = append(s.dropSuffixes, strings.ToLower(sp))
+				}
+			}
 		}
 	}
-	if s.config.LocalIp == nil {
+	if s.localIP == nil {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
@@ -151,7 +97,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	pool, err := NewConnPool(net.IP(s.config.LocalIp).String(), 10)
+	pool, err := NewConnPool(s.localIP.String(), 10)
 	if err != nil {
 		return err
 	}
@@ -165,24 +111,11 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
 		// Server will close the listener, so no need to close it here.
-		s.processSearchPaths(g, func(c context.Context, paths []string, _ vif.Device) error {
-			namespaces := make(map[string]struct{})
-			search := make([]string, 0)
-			for _, path := range paths {
-				if strings.ContainsRune(path, '.') {
-					search = append(search, path)
-				} else if path != "" {
-					namespaces[path] = struct{}{}
-				}
-			}
-			s.domainsLock.Lock()
-			s.namespaces = namespaces
-			s.search = search
-			s.domainsLock.Unlock()
+		s.processSearchPaths(g, func(c context.Context, _ vif.Device) error {
 			s.flushDNS()
 			return nil
 		}, dev)
-		return s.Run(c, serverStarted, listeners, pool, s.resolveInSearch)
+		return s.Run(c, serverStarted, listeners, pool, s.resolveInCluster)
 	})
 
 	if proc.RunningInContainer() {
@@ -215,7 +148,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.config.LocalIp, dnsResolverAddr, pool.LocalAddrs())
+			err := routeDNS(c, s.localIP, dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {
 				return err
 			}
@@ -319,7 +252,7 @@ func runNatTableCmd(c context.Context, args ...string) error {
 	// want to leave things in a half-cleaned-up state.
 	args = append([]string{"-t", "nat"}, args...)
 	cmd := dexec.CommandContext(c, "iptables", args...)
-	cmd.DisableLogging = true
+	cmd.DisableLogging = dlog.MaxLogLevel(c) < dlog.LogLevelDebug
 	dlog.Debug(c, shellquote.ShellString("iptables", args))
 	return cmd.Run()
 }

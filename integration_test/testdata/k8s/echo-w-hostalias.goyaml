@@ -1,0 +1,46 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo
+spec:
+  type: ClusterIP
+  selector:
+    app: echo
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo
+  labels:
+    app: echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo
+  template:
+    metadata:
+      labels:
+        app: echo
+    spec:
+      hostAliases:
+        - ip: "{{ .AliasIP }}"
+          hostnames:
+            {{- range .Aliases }}
+            - {{ . }}
+            {{- end }}
+      containers:
+        - name: echo
+          image: jmalloc/echo-server
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

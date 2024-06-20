@@ -17,7 +17,7 @@ jobs:
       is_prepare_release: ${{ steps.check.outputs.is_prepare_release }}
       telepresence_version: ${{ steps.check.outputs.telepresence_version }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Check commit

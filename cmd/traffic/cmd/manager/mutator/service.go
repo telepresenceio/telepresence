@@ -1,14 +1,18 @@
 package mutator
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
-	"os"
-	"path/filepath"
+	"regexp"
+	"strconv"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -18,24 +22,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
-const (
-	tlsDir          = `/var/run/secrets/tls`
-	tlsCertFile     = `tls.crt`
-	tlsKeyFile      = `tls.key`
-	jsonContentType = `application/json`
-)
+const jsonContentType = `application/json`
 
 var universalDeserializer = serializer.NewCodecFactory(runtime.NewScheme()).UniversalDeserializer() //nolint:gochecknoglobals // constant
 
-// JSON patch, see https://tools.ietf.org/html/rfc6902 .
+// PatchOperation is a JSON patch, see https://tools.ietf.org/html/rfc6902 .
 type PatchOperation struct {
 	Op    string `json:"op"`
 	Path  string `json:"path"`
@@ -51,40 +50,89 @@ func (p PatchOps) String() string {
 
 type mutatorFunc func(context.Context, *admission.AdmissionRequest) (PatchOps, error)
 
-func ServeMutator(ctx context.Context) error {
-	certPath := filepath.Join(tlsDir, tlsCertFile)
-	keyPath := filepath.Join(tlsDir, tlsKeyFile)
-	missing := ""
-	if _, err := os.Stat(certPath); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		missing = certPath
-	} else if _, err = os.Stat(keyPath); err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		missing = keyPath
+// tlsListener rereads the certificate from the mutator-webhook secret every time
+// it creates a TLS connection, thereby ensuring that it uses a certificate that
+// is up-to-date with the one used by the webhook caller.
+type tlsListener struct {
+	sync.Mutex
+	ctx         context.Context
+	certGetter  InjectorCertGetter
+	cert        tls.Certificate
+	certPEM     []byte
+	keyPEM      []byte
+	tcpListener net.Listener
+}
+
+func (l *tlsListener) Accept() (net.Conn, error) {
+	conn, err := l.tcpListener.Accept()
+	if err != nil {
+		return conn, err
 	}
-	if missing != "" {
-		dlog.Infof(ctx, "%q is not present so mutator service is disabled", missing)
-		return nil
+	return l.tlsConn(conn)
+}
+
+func (l *tlsListener) Close() error {
+	return l.tcpListener.Close()
+}
+
+func (l *tlsListener) Addr() net.Addr {
+	return l.tcpListener.Addr()
+}
+
+func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
+	// Because Listener is a convenience function, help out with
+	// this too.  This is not possible for the caller to set once
+	// we return a *tcp.Conn wrapping an inaccessible net.Conn.
+	// If callers don't want this, they can do things the manual
+	// way and tweak as needed. But this is what net/http does
+	// itself, so copy that. If net/http changes, we can change
+	// here too.
+	tcpConn := conn.(*net.TCPConn)
+	_ = tcpConn.SetKeepAlive(true)
+	_ = tcpConn.SetKeepAlivePeriod(3 * time.Minute)
+
+	newCertPEM, newKeyPEM, err := l.certGetter.LoadCert()
+	if err != nil {
+		return nil, err
 	}
 
+	var cert tls.Certificate
+	l.Lock()
+	if !(bytes.Equal(newCertPEM, l.certPEM) && bytes.Equal(newKeyPEM, l.keyPEM)) {
+		dlog.Debug(l.ctx, "Replacing certificate")
+		cert, err = tls.X509KeyPair(newCertPEM, newKeyPEM)
+		if err == nil {
+			l.cert = cert
+			l.certPEM = newCertPEM
+			l.keyPEM = newKeyPEM
+		}
+	} else {
+		cert = l.cert
+	}
+	l.Unlock()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create X509 key pair: %v", err)
+	}
+	return tls.Server(tcpConn, &tls.Config{Certificates: []tls.Certificate{cert}}), nil
+}
+
+func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) error {
 	var ai AgentInjector
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		dlog.Debug(ctx, "Received webhook request...")
-		bytes, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
+		rsp, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
+		h := w.Header()
 		if err != nil {
 			dlog.Errorf(ctx, "error handling webhook request: %v", err)
 			w.WriteHeader(statusCode)
-			bytes = []byte(err.Error())
+			rsp = []byte(err.Error())
 		} else {
-			dlog.Debug(ctx, "Webhook request handled successfully")
+			h.Set("Content-Type", "application/json")
 		}
-		if _, err = w.Write(bytes); err != nil {
+		h.Set("Content-Length", strconv.Itoa(len(rsp)))
+		if _, err = w.Write(rsp); err != nil {
 			dlog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
@@ -104,28 +152,87 @@ func ServeMutator(ctx context.Context) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	cw, err := Load(ctx)
-	if err != nil {
-		return err
-	}
+	cw := GetMap(ctx)
 	ai = NewAgentInjectorFunc(ctx, cw)
 	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
 		dtime.SleepWithContext(ctx, time.Second) // Give the server some time to start
-		return cw.Run(ctx)
+		return cw.Wait(ctx)
 	})
 
 	wrapped := otelhttp.NewHandler(mux, "agent-injector", otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 		return operation + r.URL.Path
 	}))
-	server := &dhttp.ServerConfig{Handler: wrapped}
-	addr := fmt.Sprintf(":%d", managerutil.GetEnv(ctx).MutatorWebhookPort)
+	port := managerutil.GetEnv(ctx).MutatorWebhookPort
+	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
+	lg.SetPrefix(fmt.Sprintf("%d/", port))
 
-	dlog.Infof(ctx, "Mutating webhook service is listening on %v", addr)
-	defer dlog.Info(ctx, "Mutating webhook service stopped")
-	if err = server.ListenAndServeTLS(ctx, addr, certPath, keyPath); err != nil {
-		return fmt.Errorf("mutating webhook service stopped. %w", err)
+	// Filter this message. It's harmless and caused by the kube-apiserver dropping the connection
+	// prematurely. It is always retried.
+	lg.SetOutput(&logFilter{
+		rx: regexp.MustCompile(`http: TLS handshake error from .*: EOF\s*\z`),
+		wr: lg.Writer(),
+	})
+	server := http.Server{
+		Handler:  wrapped,
+		ErrorLog: lg,
+		BaseContext: func(n net.Listener) context.Context {
+			return ctx
+		},
 	}
-	return nil
+	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port), injectorCertGetter)
+}
+
+type logFilter struct {
+	wr io.Writer
+	rx *regexp.Regexp
+}
+
+func (l *logFilter) Write(data []byte) (int, error) {
+	if l.rx.Match(data) {
+		return len(data), nil
+	}
+	return l.wr.Write(data)
+}
+
+func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGetter InjectorCertGetter) error {
+	certPEM, keyPEM, err := certGetter.LoadCert()
+	if err != nil {
+		return err
+	}
+	defer dlog.Debug(ctx, "service stopped")
+	dlog.Debug(ctx, "service started")
+
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("failed to create TLS listener: %v", err)
+	}
+	lc := net.ListenConfig{}
+	tcpListener, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		<-ctx.Done()
+		errc <- s.Shutdown(dcontext.HardContext(ctx))
+	}()
+
+	err = s.Serve(
+		&tlsListener{
+			ctx:         ctx,
+			certGetter:  certGetter,
+			cert:        cert,
+			certPEM:     certPEM,
+			keyPEM:      keyPEM,
+			tcpListener: tcpListener,
+		},
+	)
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("failed to serve: %v", err)
+	}
+
+	return <-errc
 }
 
 // Skip mutate requests in these namespaces.
@@ -170,6 +277,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 	}
 
 	body, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
 	if err != nil {
 		return nil, http.StatusBadRequest, fmt.Errorf("could not read request body: %w", err)
 	}

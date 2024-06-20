@@ -33,7 +33,7 @@ func authenticateContext(cmd *cobra.Command, args []string) (err error) {
 		}
 	}()
 	var conn *grpc.ClientConn
-	if conn, err = grpc.Dial(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
+	if conn, err = grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
 		return fmt.Errorf("failed to dial GRPC server %s: %w", serverAddr, err)
 	}
 	defer conn.Close()

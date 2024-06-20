@@ -34,7 +34,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	if err != nil {
 		return err
 	}
-	dnsIP := net.IP(s.config.RemoteIp)
+	dnsIP := s.remoteIP
 	configureDNS(dnsIP, dnsResolverAddr)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
@@ -61,11 +61,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 			}
 			// No need to close listeners here. They are closed by the dnsServer
 		}()
-		// Some installation have default DNS configured with ~. routing path.
-		// If two interfaces with DefaultRoute: yes present, the one with the
-		// routing key used and SanityCheck fails. Hence, tel2SubDomain
-		// must be used as a routing key.
-		if err = s.updateLinkDomains(c, []string{tel2SubDomain}, dev); err != nil {
+		if err = s.updateLinkDomains(c, dev); err != nil {
 			dlog.Error(c, err)
 			initDone <- struct{}{}
 			return errResolveDNotConfigured
@@ -83,43 +79,54 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 		cmdC, cmdCancel := context.WithTimeout(c, 2*time.Second)
 		defer cmdCancel()
 		for cmdC.Err() == nil {
-			_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta."+tel2SubDomain)
-			if s.RequestCount() > 0 {
-				// The query went all way through. Start processing search paths systemd-resolved style
-				// and return nil for successful validation.
-				s.processSearchPaths(g, s.updateLinkDomains, dev)
-				return nil
-			}
-			s.flushDNS()
-			dtime.SleepWithContext(cmdC, 100*time.Millisecond)
+			go func() {
+				dlog.Debug(cmdC, "sanity-check lookup")
+				_, _ = net.DefaultResolver.LookupHost(cmdC, santiyCheck)
+				if s.RequestCount() > 0 {
+					cmdCancel()
+				}
+			}()
+			dtime.SleepWithContext(cmdC, 200*time.Millisecond)
 		}
+		<-cmdC.Done()
+		if s.RequestCount() > 0 {
+			// The query went all way through. Start processing search paths systemd-resolved style
+			// and return nil for successful validation.
+			s.processSearchPaths(g, s.updateLinkDomains, dev)
+			return nil
+		}
+		s.flushDNS()
 		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
 		return errResolveDNotConfigured
 	})
 	return g.Wait()
 }
 
-func (s *Server) updateLinkDomains(c context.Context, paths []string, dev vif.Device) error {
-	namespaces := make(map[string]struct{})
-	search := make([]string, 0)
-	for i, path := range paths {
-		if strings.ContainsRune(path, '.') {
-			search = append(search, path)
-		} else {
-			namespaces[path] = struct{}{}
-			// Turn namespace into a route
-			paths[i] = "~" + path
-		}
-	}
-	for _, sfx := range s.config.IncludeSuffixes {
-		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
-	}
-	paths = append(paths, "~"+s.clusterDomain, tel2SubDomainDot+s.clusterDomain)
+func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
+	s.Lock()
+	paths := make([]string, len(s.search)+len(s.routes)+len(s.includeSuffixes)+1)
 
-	s.domainsLock.Lock()
-	s.namespaces = namespaces
-	s.search = search
-	s.domainsLock.Unlock()
+	// Namespaces are copied verbatim. Entries that aren't prefixed with "~" are considered search path entries.
+	copy(paths, s.search)
+	i := len(s.search)
+	for ns := range s.routes {
+		paths[i] = "~" + ns
+		i++
+	}
+
+	// Include-suffixes are routes, i.e. in contrast to search paths, they are never appended to the name, but
+	// used as a filter that will direct queries for names ending with them to this resolver. Routes must be
+	// prefixed with "~".
+	for _, sfx := range s.includeSuffixes {
+		if !strings.HasSuffix(sfx, ".") {
+			sfx += "."
+		}
+		paths[i] = "~" + strings.TrimPrefix(sfx, ".")
+		i++
+	}
+	paths[i] = "~" + s.clusterDomain
+	s.Unlock()
+
 	if err := dbus.SetLinkDomains(dcontext.HardContext(c), int(dev.Index()), paths...); err != nil {
 		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
 	}

@@ -401,7 +401,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 			if request.Duration != nil {
 				duration = request.Duration.AsDuration()
 			}
-			if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, s.procName); err != nil {
+			if err = logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, userd.ProcessName); err != nil {
 				err = status.Error(codes.Internal, err.Error())
 			} else if !s.rootSessionInProc {
 				err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
@@ -512,7 +512,7 @@ func (s *service) GatherTraces(ctx context.Context, request *rpc.TracesRequest) 
 }
 
 func (s *service) TrafficManagerVersion(ctx context.Context, _ *empty.Empty) (vi *common.VersionInfo, err error) {
-	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "TrafficManagerVersion", func(ctx context.Context, session userd.Session) error {
 		vi = &common.VersionInfo{Name: session.ManagerName(), Version: "v" + session.ManagerVersion().String()}
 		return nil
 	})
@@ -527,10 +527,18 @@ func (s *service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi
 	return vi, err
 }
 
+func (s *service) AgentImageFQN(ctx context.Context, empty *emptypb.Empty) (fqn *manager.AgentImageFQN, err error) {
+	err = s.WithSession(ctx, "AgentImageFQN", func(ctx context.Context, session userd.Session) error {
+		fqn, err = session.ManagerClient().GetAgentImageFQN(ctx, empty)
+		return err
+	})
+	return fqn, err
+}
+
 func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rpc.ClusterSubnets, err error) {
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}
-	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "GetClusterSubnets", func(ctx context.Context, session userd.Session) error {
 		// The manager can sometimes send the different subnets in different Sends,
 		// but after 5 seconds of listening to it, we should expect to have everything
 		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
@@ -560,7 +568,7 @@ func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rp
 }
 
 func (s *service) GetIntercept(ctx context.Context, request *manager.GetInterceptRequest) (ii *manager.InterceptInfo, err error) {
-	err = s.WithSession(ctx, "GatherTraces", func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(ctx, "GetIntercept", func(ctx context.Context, session userd.Session) error {
 		ii = session.GetInterceptInfo(request.Name)
 		if ii == nil {
 			return status.Errorf(codes.NotFound, "found no intercept named %s", request.Name)
@@ -571,18 +579,26 @@ func (s *service) GetIntercept(ctx context.Context, request *manager.GetIntercep
 }
 
 func (s *service) SetDNSExcludes(ctx context.Context, req *daemon.SetDNSExcludesRequest) (*emptypb.Empty, error) {
-	return s.session.RootDaemon().SetDNSExcludes(ctx, req)
+	err := s.WithSession(ctx, "SetDNSExcludes", func(ctx context.Context, session userd.Session) error {
+		_, err := session.RootDaemon().SetDNSExcludes(ctx, req)
+		return err
+	})
+	return &empty.Empty{}, err
 }
 
 func (s *service) SetDNSMappings(ctx context.Context, req *daemon.SetDNSMappingsRequest) (*emptypb.Empty, error) {
-	return s.session.RootDaemon().SetDNSMappings(ctx, req)
+	err := s.WithSession(ctx, "SetDNSMappings", func(ctx context.Context, session userd.Session) error {
+		_, err := session.RootDaemon().SetDNSMappings(ctx, req)
+		return err
+	})
+	return &empty.Empty{}, err
 }
 
 func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
 	if s.rootSessionInProc {
 		return status.Error(codes.Unavailable, "root daemon is embedded")
 	}
-	conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx))
+	conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false)
 	if err == nil {
 		defer conn.Close()
 		err = f(ctx, daemon.NewDaemonClient(conn))

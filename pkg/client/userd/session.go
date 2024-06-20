@@ -3,7 +3,7 @@ package userd
 import (
 	"context"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	"google.golang.org/grpc"
 	core "k8s.io/api/core/v1"
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"

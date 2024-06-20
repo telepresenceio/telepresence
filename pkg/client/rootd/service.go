@@ -53,9 +53,10 @@ func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
 }
 
 const (
-	ProcessName = "daemon"
-	titleName   = "Daemon"
-	pprofFlag   = "pprof"
+	ProcessName         = "daemon"
+	titleName           = "Daemon"
+	pprofFlag           = "pprof"
+	metritonDisableFlag = "disable-metriton"
 )
 
 func help() string {
@@ -118,6 +119,7 @@ func Command() *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
+	flags.Bool(metritonDisableFlag, false, "disable metriton reporting")
 	return cmd
 }
 
@@ -140,7 +142,9 @@ func (s *Service) Status(_ context.Context, _ *emptypb.Empty) (*rpc.DaemonStatus
 		},
 	}
 	if s.session != nil {
-		r.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+		nc := s.session.getNetworkConfig()
+		r.Subnets = nc.Subnets
+		r.OutboundConfig = nc.OutboundInfo
 	}
 	return r, nil
 }
@@ -161,9 +165,9 @@ func (s *Service) Quit(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, e
 	return &emptypb.Empty{}, nil
 }
 
-func (s *Service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*emptypb.Empty, error) {
+func (s *Service) SetDNSTopLevelDomains(ctx context.Context, domains *rpc.Domains) (*emptypb.Empty, error) {
 	err := s.WithSession(func(ctx context.Context, session *Session) error {
-		session.SetSearchPath(ctx, paths.Paths, paths.Namespaces)
+		session.SetTopLevelDomains(ctx, domains.Domains)
 		return nil
 	})
 	return &emptypb.Empty{}, err
@@ -346,7 +350,7 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 
 	ctx, cancel := context.WithCancel(ctx)
 	ctx, session, err := GetNewSessionFunc(ctx)(ctx, oi)
-	if ctx.Err() != nil || err != nil {
+	if session == nil || ctx.Err() != nil || err != nil {
 		cancel()
 		if err == nil {
 			err = ctx.Err()
@@ -376,6 +380,11 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 	wg.Add(1)
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				s.sessionLock.TryLock()
+				s.sessionLock.Unlock()
+				dlog.Errorf(ctx, "%+v", derror.PanicToError(r))
+			}
 			s.sessionLock.Lock()
 			s.session = nil
 			s.sessionCancel = nil
@@ -459,6 +468,9 @@ func run(cmd *cobra.Command, args []string) error {
 				dlog.Error(c, err)
 			}
 		}()
+	}
+	if disableMetriton, _ := flags.GetBool(metritonDisableFlag); disableMetriton {
+		_ = os.Setenv("SCOUT_DISABLE", "1")
 	}
 
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)

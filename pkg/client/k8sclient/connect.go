@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -21,14 +23,15 @@ func ConnectToManager(ctx context.Context, namespace string, grpcDialer dnet.Dia
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
 	conn, err := dialClusterGRPC(ctx, grpcAddr, grpcDialer)
 	if err != nil {
-		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
+		return nil, nil, nil, err
 	}
 	mClient := manager.NewManagerClient(conn)
 	vi, err := getVersion(ctx, mClient)
 	if err != nil {
+		err = client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
 		conn.Close()
 	}
-	return conn, mClient, vi, nil
+	return conn, mClient, vi, err
 }
 
 type versionAPI interface {
@@ -44,35 +47,43 @@ func ConnectToAgent(
 	grpcAddr := fmt.Sprintf("pod/%s.%s:%d", podName, namespace, port)
 	conn, err := dialClusterGRPC(ctx, grpcAddr, grpcDialer)
 	if err != nil {
-		return nil, nil, nil, client.CheckTimeout(ctx, fmt.Errorf("dial agent: %w", err))
+		return nil, nil, nil, err
 	}
 	mClient := agent.NewAgentClient(conn)
 	vi, err := getVersion(ctx, mClient)
 	if err != nil {
+		err = client.CheckTimeout(ctx, fmt.Errorf("dial agent: %w", err))
 		conn.Close()
 	}
-	return conn, mClient, vi, nil
+	return conn, mClient, vi, err
 }
 
 func dialClusterGRPC(ctx context.Context, address string, grpcDialer dnet.DialerFunc) (*grpc.ClientConn, error) {
-	return grpc.DialContext(ctx, address, grpc.WithContextDialer(grpcDialer),
+	return grpc.NewClient(dnet.K8sPFScheme+":///"+address, grpc.WithContextDialer(grpcDialer),
+		grpc.WithResolvers(dnet.NewResolver(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy(),
-		grpc.WithBlock(),
-		grpc.WithReturnConnectionError(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
 }
 
 func getVersion(ctx context.Context, gc versionAPI) (*manager.VersionInfo2, error) {
 	// At this point, we are connected to the traffic-manager. We use the shorter API timeout
 	tos := client.GetConfig(ctx).Timeouts()
-	ctx, cancelAPI := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
-	defer cancelAPI()
-
-	vi, err := gc.Version(ctx, &empty.Empty{})
-	if err != nil {
-		err = client.CheckTimeout(ctx, fmt.Errorf("get version: %w", err))
-	} else {
+	b := backoff.ExponentialBackOff{
+		InitialInterval:     500 * time.Millisecond,
+		RandomizationFactor: backoff.DefaultRandomizationFactor,
+		Multiplier:          backoff.DefaultMultiplier,
+		MaxInterval:         2 * time.Second,
+		MaxElapsedTime:      tos.Get(client.TimeoutTrafficManagerAPI),
+		Stop:                backoff.Stop,
+		Clock:               backoff.SystemClock,
+	}
+	b.Reset()
+	var vi *manager.VersionInfo2
+	err := backoff.Retry(func() (err error) {
+		vi, err = gc.Version(ctx, &empty.Empty{})
+		return err
+	}, &b)
+	if err == nil {
 		dlog.Infof(ctx, "Connected to %s %s", vi.Name, vi.Version)
 	}
 	return vi, err

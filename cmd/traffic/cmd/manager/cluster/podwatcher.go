@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -23,23 +25,51 @@ type PodLister interface {
 }
 
 type podWatcher struct {
-	listers   []PodLister
-	informers []cache.SharedIndexInformer
-	ipsMap    map[iputil.IPKey]struct{}
-	subnets   subnet.Set
-	changed   time.Time
-	lock      sync.Mutex // Protects all access to ipsMap
+	ipsMap     map[iputil.IPKey]struct{}
+	timer      *time.Timer
+	namespaces []string
+	notifyCh   chan subnet.Set
+	lock       sync.Mutex // Protects all access to ipsMap
 }
 
-func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.SharedIndexInformer) *podWatcher {
-	w := &podWatcher{
-		listers:   listers,
-		informers: informers,
-		ipsMap:    make(map[iputil.IPKey]struct{}),
-		subnets:   make(subnet.Set),
+func newPodWatcher(ctx context.Context, nss []string) *podWatcher {
+	if len(nss) == 0 {
+		// Create one event handler for the global informer
+		nss = []string{""}
 	}
-	for _, informer := range informers {
-		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	w := &podWatcher{
+		ipsMap:     make(map[iputil.IPKey]struct{}),
+		notifyCh:   make(chan subnet.Set),
+		namespaces: nss,
+	}
+
+	var oldSubnets subnet.Set
+	sendIfChanged := func() {
+		w.lock.Lock()
+		ips := make(iputil.IPs, len(w.ipsMap))
+		i := 0
+		for ip := range w.ipsMap {
+			ips[i] = ip.IP()
+			i++
+		}
+		w.lock.Unlock()
+
+		newSubnets := subnet.NewSet(subnet.CoveringCIDRs(ips))
+		if !newSubnets.Equals(oldSubnets) {
+			dlog.Debugf(ctx, "podWatcher calling updateSubnets with %v", newSubnets)
+			select {
+			case <-ctx.Done():
+				return
+			case w.notifyCh <- newSubnets:
+				oldSubnets = newSubnets
+			}
+		}
+	}
+
+	w.timer = time.AfterFunc(time.Duration(math.MaxInt64), sendIfChanged)
+	for _, ns := range nss {
+		inf := informer.GetFactory(ctx, ns).Core().V1().Pods().Informer()
+		_, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				if pod, ok := obj.(*corev1.Pod); ok {
 					w.onPodAdded(ctx, pod)
@@ -70,67 +100,42 @@ func newPodWatcher(ctx context.Context, listers []PodLister, informers []cache.S
 }
 
 func (w *podWatcher) changeNotifier(ctx context.Context, updateSubnets func(set subnet.Set)) {
-	// Check for changes every 5 second
-	const podReviewPeriod = 5 * time.Second
-
-	// The time we wait from when the first change arrived until we actually do something. This
-	// so that more changes can arrive (hopefully all of them) before everything is recalculated.
-	const podCollectTime = 3 * time.Second
-
-	ticker := time.NewTicker(podReviewPeriod)
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-		}
-		w.lock.Lock()
-		if w.changed.IsZero() || time.Since(w.changed) < podCollectTime {
-			w.lock.Unlock()
-			continue
-		}
-		w.changed = time.Time{}
-		ips := make(iputil.IPs, len(w.ipsMap))
-		i := 0
-		for ip := range w.ipsMap {
-			ips[i] = ip.IP()
-			i++
-		}
-		w.lock.Unlock()
-		subnets := subnet.NewSet(subnet.CoveringCIDRs(ips))
-		if !subnets.Equals(w.subnets) {
-			w.subnets = subnets
+		case subnets := <-w.notifyCh:
 			updateSubnets(subnets)
 		}
-		dlog.Debugf(ctx, "podWatcher calling updateSubnets with %v", subnets)
 	}
 }
 
 func (w *podWatcher) viable(ctx context.Context) bool {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	if len(w.ipsMap) > 0 {
 		return true
 	}
-	if !w.changed.IsZero() {
-		// Tested before but errored
-		return false
-	}
-	w.lock.Lock()
-	defer w.lock.Unlock()
 
 	// Create the initial snapshot
-	for _, lister := range w.listers {
-		pods, err := lister.List(labels.Everything())
+	var pods []*corev1.Pod
+	var err error
+	for _, ns := range w.namespaces {
+		lister := informer.GetFactory(ctx, ns).Core().V1().Pods().Lister()
+		if ns != "" {
+			pods, err = lister.Pods(ns).List(labels.Everything())
+		} else {
+			pods, err = lister.List(labels.Everything())
+		}
 		if err != nil {
 			dlog.Errorf(ctx, "unable to list pods: %v", err)
-			w.changed = time.Now()
 			return false
 		}
 		for _, pod := range pods {
 			w.addLocked(podIPKeys(ctx, pod))
 		}
 	}
+
 	return true
 }
 
@@ -159,46 +164,28 @@ func (w *podWatcher) onPodUpdated(ctx context.Context, oldPod, newPod *corev1.Po
 	}
 }
 
+const podWatcherSendDelay = 10 * time.Millisecond
+
 func (w *podWatcher) add(ips []iputil.IPKey) {
 	w.lock.Lock()
-	if w.addLocked(ips) {
-		// If this was the first change since the last subnet calculation, then store
-		// its timestamp. Subsequent changes will not change that timestamp until it's
-		// reset by the subnet compute worker.
-		if w.changed.IsZero() {
-			w.changed = time.Now()
-		}
-	}
+	w.addLocked(ips)
 	w.lock.Unlock()
 }
 
 func (w *podWatcher) drop(ips []iputil.IPKey) {
 	w.lock.Lock()
-	if w.dropLocked(ips) {
-		// If this was the first change since the last subnet calculation, then store
-		// its timestamp. Subsequent changes will not change that timestamp until it's
-		// reset by the subnet compute worker.
-		if w.changed.IsZero() {
-			w.changed = time.Now()
-		}
-	}
+	w.dropLocked(ips)
 	w.lock.Unlock()
 }
 
 func (w *podWatcher) update(dropped, added []iputil.IPKey) {
 	w.lock.Lock()
-	if w.dropLocked(dropped) || w.addLocked(added) {
-		// If this was the first change since the last subnet calculation, then store
-		// its timestamp. Subsequent changes will not change that timestamp until it's
-		// reset by the subnet compute worker.
-		if w.changed.IsZero() {
-			w.changed = time.Now()
-		}
-	}
+	w.dropLocked(dropped)
+	w.addLocked(added)
 	w.lock.Unlock()
 }
 
-func (w *podWatcher) addLocked(ips []iputil.IPKey) bool {
+func (w *podWatcher) addLocked(ips []iputil.IPKey) {
 	if w.ipsMap == nil {
 		w.ipsMap = make(map[iputil.IPKey]struct{}, 100)
 	}
@@ -211,10 +198,12 @@ func (w *podWatcher) addLocked(ips []iputil.IPKey) bool {
 			changed = true
 		}
 	}
-	return changed
+	if changed {
+		w.timer.Reset(podWatcherSendDelay)
+	}
 }
 
-func (w *podWatcher) dropLocked(ips []iputil.IPKey) bool {
+func (w *podWatcher) dropLocked(ips []iputil.IPKey) {
 	changed := false
 	for _, ip := range ips {
 		if _, ok := w.ipsMap[ip]; ok {
@@ -222,7 +211,9 @@ func (w *podWatcher) dropLocked(ips []iputil.IPKey) bool {
 			changed = true
 		}
 	}
-	return changed
+	if changed {
+		w.timer.Reset(podWatcherSendDelay)
+	}
 }
 
 // getIPsDelta returns the difference between the old and new IPs.

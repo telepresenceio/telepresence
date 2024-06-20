@@ -2,13 +2,19 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/netip"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -16,6 +22,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
@@ -30,6 +37,9 @@ type Request struct {
 	// Ports exposed by a containerized daemon. Only valid when Docker == true
 	ExposedPorts []string
 
+	// Hostname used by a containerized daemon. Only valid when Docker == true
+	Hostname string
+
 	// Match expression to use when finding an existing connection by name
 	Use *regexp.Regexp
 
@@ -37,17 +47,24 @@ type Request struct {
 	Implicit bool
 
 	kubeConfig              *genericclioptions.ConfigFlags
-	kubeFlagSet             *pflag.FlagSet
 	UserDaemonProfilingPort uint16
 	RootDaemonProfilingPort uint16
+
+	// proxyVia holds the string version for the --proxy-via flag values.
+	proxyVia []string
+}
+
+type CobraRequest struct {
+	Request
+	kubeFlagSet *pflag.FlagSet
 }
 
 // InitRequest adds the networking flags and Kubernetes flags to the given command and
 // returns a Request and a FlagSet with the Kubernetes flags. The FlagSet is returned
 // here so that a map of flags that gets modified can be extracted using FlagMap once the flag
 // parsing has completed.
-func InitRequest(cmd *cobra.Command) *Request {
-	cr := Request{}
+func InitRequest(cmd *cobra.Command) *CobraRequest {
+	cr := CobraRequest{}
 	flags := cmd.Flags()
 
 	nwFlags := pflag.NewFlagSet("Telepresence networking flags", 0)
@@ -56,22 +73,31 @@ func InitRequest(cmd *cobra.Command) *Request {
 		"mapped-namespaces", nil, ``+
 			`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
 			`Defaults to all namespaces`)
+	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
+		`Overrides any other manager namespace set in config`)
 	nwFlags.StringSliceVar(&cr.AlsoProxy,
 		"also-proxy", nil, ``+
 			`Additional comma separated list of CIDR to proxy`)
-
 	nwFlags.StringSliceVar(&cr.NeverProxy,
 		"never-proxy", nil, ``+
 			`Comma separated list of CIDR to never proxy`)
-	nwFlags.StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
-		`Overrides any other manager namespace set in config`)
+	nwFlags.StringSliceVar(&cr.proxyVia,
+		"proxy-via", nil, ``+
+			`Locally translate cluster DNS responses matching CIDR to virtual IPs that are routed (with reverse `+
+			`translation) via WORKLOAD. Must be in the form CIDR=WORKLOAD. CIDR can be substituted for the symblic name "service", "pods", "also", or "all".`)
+	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
+		"allow-conflicting-subnets", nil, ``+
+			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
+
+	// Docker flags
 	nwFlags.Bool(global.FlagDocker, false, "Start, or connect to, daemon in a docker container")
 	nwFlags.StringArrayVar(&cr.ExposedPorts,
 		"expose", nil, ``+
 			`Port that a containerized daemon will expose. See docker run -p for more info. Can be repeated`)
-	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
-		"allow-conflicting-subnets", nil, ``+
-			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
+	nwFlags.StringVar(&cr.Hostname,
+		"hostname", "", ``+
+			`Hostname used by a containerized daemon`)
+
 	flags.AddFlagSet(nwFlags)
 
 	dbgFlags := pflag.NewFlagSet("Debug and Profiling flags", 0)
@@ -95,7 +121,8 @@ func InitRequest(cmd *cobra.Command) *Request {
 
 type requestKey struct{}
 
-func (cr *Request) CommitFlags(cmd *cobra.Command) error {
+func (cr *CobraRequest) CommitFlags(cmd *cobra.Command) error {
+	var err error
 	cr.kubeFlagSet.VisitAll(func(flag *pflag.Flag) {
 		if flag.Changed {
 			var v string
@@ -103,16 +130,146 @@ func (cr *Request) CommitFlags(cmd *cobra.Command) error {
 				v = slice.AsCSV(sv.GetSlice())
 			} else {
 				v = flag.Value.String()
+				if flag.Name == "kubeconfig" && v == "-" {
+					// Read kubeconfig from stdin
+					cr.KubeconfigData, err = io.ReadAll(cmd.InOrStdin())
+					return // kubernetes will not understand "-"
+				}
 			}
 			cr.KubeFlags[flag.Name] = v
 		}
 	})
-	cr.addKubeconfigEnv()
-	if err := cr.setGlobalConnectFlags(cmd); err != nil {
+	if err != nil {
 		return err
 	}
-	cmd.SetContext(context.WithValue(cmd.Context(), requestKey{}, cr))
+	err = cr.setGlobalConnectFlags(cmd)
+	if err != nil {
+		return errcat.User.New(err)
+	}
+	ctx, err := cr.Commit(cmd.Context())
+	if err != nil {
+		return err
+	}
+	cmd.SetContext(ctx)
 	return nil
+}
+
+func (cr *Request) Commit(ctx context.Context) (context.Context, error) {
+	cr.addKubeconfigEnv()
+	var err error
+	cr.SubnetViaWorkloads, err = parseProxyVias(cr.proxyVia)
+	if err != nil {
+		return ctx, errcat.User.New(err)
+	}
+	if len(cr.KubeconfigData) > 0 {
+		kc, err := clientcmd.Load(cr.KubeconfigData)
+		if err != nil {
+			return ctx, fmt.Errorf("unable to parse kubeconfig: %w", err)
+		}
+		if cr.KubeFlags == nil {
+			cr.KubeFlags = make(map[string]string)
+		}
+		if _, ok := cr.KubeFlags["context"]; !ok {
+			cr.KubeFlags["context"] = kc.CurrentContext
+		}
+		if _, ok := cr.KubeFlags["namespace"]; !ok {
+			if currCtx, ok := kc.Contexts[kc.CurrentContext]; ok {
+				cr.KubeFlags["namespace"] = currCtx.Namespace
+			}
+		}
+		// kubernetes will not understand "-"
+		delete(cr.KubeFlags, "kubeconfig")
+	}
+	return context.WithValue(ctx, requestKey{}, cr), nil
+}
+
+type prefixViaWL struct {
+	subnet   netip.Prefix
+	symbolic string
+	workload string
+}
+
+func parseProxyVias(proxyVia []string) ([]*daemon.SubnetViaWorkload, error) {
+	l := len(proxyVia)
+	if l == 0 {
+		return nil, nil
+	}
+	pvs := make([]prefixViaWL, 0, l)
+	for _, dps := range proxyVia {
+		dp, err := parseSubnetViaWorkload(dps)
+		if err != nil {
+			return nil, err
+		}
+		lastPvs := len(pvs) - 1
+		switch dp.symbolic {
+		case "":
+			for pi := lastPvs; pi >= 0; pi-- {
+				pv := pvs[pi]
+				if pv.symbolic == "" && pv.subnet.Overlaps(dp.subnet) {
+					return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pv.subnet, dp.subnet)
+				}
+			}
+			pvs = append(pvs, dp)
+		case "all":
+			for pi := lastPvs; pi >= 0; pi-- {
+				pv := pvs[pi]
+				if pv.symbolic != "" {
+					return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pv.symbolic, dp.symbolic)
+				}
+			}
+			// Normalize by replacing "all" with "also", "pods", and "service"
+			for _, sym := range []string{"also", "pods", "service"} {
+				pvs = append(pvs,
+					prefixViaWL{
+						symbolic: sym,
+						workload: dp.workload,
+					})
+			}
+		default:
+			for pi := lastPvs; pi >= 0; pi-- {
+				pv := pvs[pi]
+				if pv.symbolic == dp.symbolic {
+					return nil, fmt.Errorf("CIDRs %s and %s are overlapping", pv.symbolic, dp.symbolic)
+				}
+			}
+			pvs = append(pvs, dp)
+		}
+	}
+	svs := make([]*daemon.SubnetViaWorkload, len(pvs))
+	for i, pv := range pvs {
+		n := pv.symbolic
+		if n == "" {
+			n = pv.subnet.String()
+		}
+		svs[i] = &daemon.SubnetViaWorkload{
+			Subnet:   n,
+			Workload: pv.workload,
+		}
+	}
+	return svs, nil
+}
+
+func parseSubnetViaWorkload(dps string) (prefixViaWL, error) {
+	var pv prefixViaWL
+	eqIdx := strings.IndexByte(dps, '=')
+	if eqIdx <= 0 {
+		return pv, fmt.Errorf("--proxy-via %q is not in the format CIDR=WORKLOAD", dps)
+	}
+	lhs := dps[:eqIdx]
+	rhs := dps[eqIdx+1:]
+	if errs := validation.IsDNS1123Label(rhs); len(errs) > 0 {
+		return pv, errors.New(errs[0])
+	}
+	if sn, err := netip.ParsePrefix(lhs); err != nil {
+		if !(lhs == "all" || lhs == "also" || lhs == "pods" || lhs == "service") {
+			return pv, err
+		}
+		pv.symbolic = lhs
+	} else {
+		pv.subnet = sn
+	}
+	pv.workload = rhs
+	return pv, nil
 }
 
 func (cr *Request) addKubeconfigEnv() {
@@ -202,7 +359,7 @@ func GetKubeStartingConfig(cmd *cobra.Command) (*api.Config, error) {
 	return pathOpts.GetStartingConfig()
 }
 
-func (cr *Request) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
+func (cr *CobraRequest) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
 	if err := cr.CommitFlags(cmd); err != nil {
 		return nil, err
 	}
@@ -226,7 +383,7 @@ func (cr *Request) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
 	return nss, nil
 }
 
-func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func (cr *CobraRequest) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()
 	nss, err := cr.GetAllNamespaces(cmd)
 	if err != nil {
@@ -243,7 +400,7 @@ func (cr *Request) autocompleteNamespace(cmd *cobra.Command, _ []string, toCompl
 	return nss, cobra.ShellCompDirectiveNoFileComp
 }
 
-func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func (cr *CobraRequest) autocompleteCluster(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()
 	config, err := cr.GetConfig(cmd)
 	if err != nil {
@@ -267,7 +424,7 @@ func (cr *Request) autocompleteCluster(cmd *cobra.Command, _ []string, toComplet
 	return cs, cobra.ShellCompDirectiveNoFileComp
 }
 
-func (cr *Request) GetConfig(cmd *cobra.Command) (*api.Config, error) {
+func (cr *CobraRequest) GetConfig(cmd *cobra.Command) (*api.Config, error) {
 	if err := cr.CommitFlags(cmd); err != nil {
 		return nil, err
 	}

@@ -93,9 +93,9 @@ func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager
 // target host:port of this forwarder using a connection that will use the reply address
 // from the read as the destination for packages going in the other direction.
 func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
-	targetAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", f.targetHost, f.targetPort))
+	targetAddr, err := net.ResolveUDPAddr("udp", iputil.JoinHostPort(f.targetHost, f.targetPort))
 	if err != nil {
-		return fmt.Errorf("error on resolve(%s:%d): %w", f.targetHost, f.targetPort, err)
+		return fmt.Errorf("error on resolve(%s): %w", iputil.JoinHostPort(f.targetHost, f.targetPort), err)
 	}
 	return ForwardUDP(ctx, conn, targetAddr)
 }

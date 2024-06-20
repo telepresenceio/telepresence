@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -160,10 +162,16 @@ func mountVRS(ctx context.Context, ag *agentconfig.Container, cnMountPoint strin
 		}
 		return false
 	}
+	anns, err := readAnnotations(ctx)
+	if err != nil {
+		dlog.Warnf(ctx, "failed to read annotations: %v", err)
+	}
+
+	ignored := agentconfig.GetIgnoredVolumeMounts(anns)
 	for _, vr := range vrs {
 		if vr.IsDir() {
 			subDir := filepath.Join(vrsDir, vr.Name())
-			if !hasMount(subDir) {
+			if !hasMount(subDir) && !ignored.IsVolumeIgnored("", subDir) {
 				ag.Mounts = append(ag.Mounts, subDir)
 				vrsMounts = append(vrsMounts, subDir)
 			}
@@ -184,4 +192,25 @@ func mountVRS(ctx context.Context, ag *agentconfig.Container, cnMountPoint strin
 		}
 	}
 	return nil
+}
+
+func readAnnotations(ctx context.Context) (map[string]string, error) {
+	af, err := dos.Open(ctx, filepath.Join(agentconfig.AnnotationMountPoint, "annotations"))
+	if err != nil {
+		return nil, err
+	}
+	defer af.Close()
+	r := bufio.NewScanner(af)
+	m := make(map[string]string)
+	for r.Scan() {
+		vs := strings.SplitN(r.Text(), "=", 2)
+		if len(vs) == 2 {
+			av := vs[1]
+			if uq, err := strconv.Unquote(av); err == nil {
+				av = uq
+			}
+			m[vs[0]] = av
+		}
+	}
+	return m, nil
 }

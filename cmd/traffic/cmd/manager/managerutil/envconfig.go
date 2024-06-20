@@ -29,6 +29,7 @@ import (
 // The Env is responsible for all parsing of the environment strings. No parsing of such
 // strings should be made elsewhere in the code.
 type Env struct {
+	Registry            string        `env:"REGISTRY,                 parser=nonempty-string"`
 	LogLevel            string        `env:"LOG_LEVEL,                parser=logLevel"`
 	User                string        `env:"USER,                     parser=string,      default="`
 	ServerHost          string        `env:"SERVER_HOST,              parser=string,      default="`
@@ -38,7 +39,7 @@ type Env struct {
 	ManagerNamespace    string        `env:"MANAGER_NAMESPACE,        parser=string,      default="`
 	ManagedNamespaces   []string      `env:"MANAGED_NAMESPACES,       parser=split-trim,  default="`
 	APIPort             uint16        `env:"AGENT_REST_API_PORT,      parser=port-number, default=0"`
-	AgentArrivalTimeout time.Duration `env:"AGENT_ARRIVAL_TIMEOUT,    parser=time.ParseDuration"`
+	AgentArrivalTimeout time.Duration `env:"AGENT_ARRIVAL_TIMEOUT,    parser=time.ParseDuration, default=0"`
 
 	TracingGrpcPort uint16            `env:"TRACING_GRPC_PORT,     parser=port-number,default=0"`
 	MaxReceiveSize  resource.Quantity `env:"GRPC_MAX_RECEIVE_SIZE, parser=quantity"`
@@ -47,17 +48,20 @@ type Env struct {
 	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
 	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
 
-	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=nonempty-string"`
-	AgentImage               string                      `env:"AGENT_IMAGE,              parser=string,         default="`
+	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=string,         default="`
+	AgentImageName           string                      `env:"AGENT_IMAGE_NAME,         parser=string,         default="`
+	AgentImageTag            string                      `env:"AGENT_IMAGE_TAG,          parser=string,         default="`
 	AgentImagePullPolicy     string                      `env:"AGENT_IMAGE_PULL_POLICY,  parser=string,         default="`
 	AgentImagePullSecrets    []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS, parser=json-local-refs,default="`
-	AgentInjectPolicy        agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy"`
-	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy"`
+	AgentInjectPolicy        agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,      parser=enable-policy,  default=Never"`
+	AgentAppProtocolStrategy k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY, parser=app-proto-strategy, default=http2Probe"`
 	AgentLogLevel            string                      `env:"AGENT_LOG_LEVEL,          parser=logLevel,       defaultFrom=LogLevel"`
-	AgentPort                uint16                      `env:"AGENT_PORT,               parser=port-number"`
+	AgentPort                uint16                      `env:"AGENT_PORT,               parser=port-number,    default=0"`
 	AgentResources           *core.ResourceRequirements  `env:"AGENT_RESOURCES,          parser=json-resources, default="`
 	AgentInitResources       *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,     parser=json-resources, default="`
-	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string"`
+	AgentInjectorName        string                      `env:"AGENT_INJECTOR_NAME,      parser=string,         default="`
+	AgentInjectorSecret      string                      `env:"AGENT_INJECTOR_SECRET,    parser=string,         default="`
+	AgentSecurityContext     *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,   parser=json-security-context, default="`
 
 	ClientRoutingAlsoProxySubnets        []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets       []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
@@ -80,15 +84,21 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorCon
 		Resources:           e.AgentResources,
 		PullPolicy:          e.AgentImagePullPolicy,
 		PullSecrets:         e.AgentImagePullSecrets,
+		AppProtocolStrategy: e.AgentAppProtocolStrategy,
+		SecurityContext:     e.AgentSecurityContext,
 	}, nil
 }
 
 func (e *Env) QualifiedAgentImage() string {
-	img := e.AgentImage
+	img := e.AgentImageName
 	if img == "" {
 		return ""
 	}
-	return e.AgentRegistry + "/" + img
+	img = e.AgentRegistry + "/" + img
+	if e.AgentImageTag != "" {
+		img += ":" + e.AgentImageTag
+	}
+	return img
 }
 
 func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
@@ -202,6 +212,21 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 			},
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(*core.ResourceRequirements))) },
+	}
+	fhs[reflect.TypeOf(&core.SecurityContext{})] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"json-security-context": func(js string) (any, error) {
+				if js == "" {
+					return nil, nil
+				}
+				var rr *core.SecurityContext
+				if err := json.Unmarshal([]byte(js), &rr); err != nil {
+					return nil, err
+				}
+				return rr, nil
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(*core.SecurityContext))) },
 	}
 	return fhs
 }

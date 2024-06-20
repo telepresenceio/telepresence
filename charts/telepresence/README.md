@@ -10,19 +10,15 @@ their services.
 
 ## Install
 
+The telepresence binary embeds the helm chart, so the easiest way to install is:
+
 ```sh
-helm repo add datawire https://app.getambassador.io
-helm install traffic-manager -n ambassador datawire/telepresence \
---create-namespace \
+$ telepresence helm install [--set x=y | --values &lt;values file&gt;]
 ```
-
-## Changelog
-
-Notable chart changes are listed in the [CHANGELOG](./CHANGELOG.md)
 
 ## Configuration
 
-The following tables lists the configurable parameters of the Ambassador chart and their default values.
+The following tables lists the configurable parameters of the Telepresence chart and their default values.
 
 | Parameter                                            | Description                                                                                                                 | Default                                                                     |
 |------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
@@ -38,6 +34,7 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | podCIDRStrategy                                      | Define the strategy that the traffic-manager uses to discover what CIDRs the cluster uses for pods                          | `auto`                                                                      |
 | podSecurityContext                                   | The Kubernetes SecurityContext for the `Pod`                                                                                | `{}`                                                                        |
 | securityContext                                      | The Kubernetes SecurityContext for the `Deployment`                                                                         | `{"readOnlyRootFilesystem": true, "runAsNonRoot": true, "runAsUser": 1000}` |
+| schedulerName                                        | Specify a scheduler for Traffic Manager `Pod` and hooks `Pod`.                                                              |                                                                             |
 | nodeSelector                                         | Define which `Node`s you want to the Traffic Manager to be deployed to.                                                     | `{}`                                                                        |
 | tolerations                                          | Define tolerations for the Traffic Manager to ignore `Node` taints.                                                         | `[]`                                                                        |
 | affinity                                             | Define the `Node` Affinity and Anti-Affinity for the Traffic Manager.                                                       | `{}`                                                                        |
@@ -52,13 +49,16 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | agent.logLevel                                       | The logging level for the traffic-agent                                                                                     | defaults to logLevel                                                        |
 | agent.resources                                      | The resources for the injected agent container                                                                              |                                                                             |
 | agent.initResources                                  | The resources for the injected init container                                                                               |                                                                             |
+| agent.securityContext                                | The security context to use for the injected agent container                                                                | defaults to the securityContext of the first container of the app           |
 | agent.image.registry                                 | The registry for the injected agent image                                                                                   | `docker.io/datawire`                                                        |
 | agent.image.name                                     | The name of the injected agent image                                                                                        | `""`                                                                        |
 | agent.image.tag                                      | The tag for the injected agent image                                                                                        | `""` (Defined in `appVersion` Chart.yaml)                                   |
 | agent.image.pullPolicy                               | Pull policy in the webhook for the traffic agent image                                                                      | `IfNotPresent`                                                              |
 | agentInjector.name                                   | Name to use with objects associated with the agent-injector.                                                                | `agent-injector`                                                            |
-| agentInjector.certificate.regenerate                 | Define whether you want to regenerate certificate used for mutating webhook.                                                | `false`                                                                     |
-| agentInjector.certificate.method                     | Define which method to use to generate certificate used for mutating webhook. (helm of certmanager)                         | `helm`                                                                      |
+| agentInjector.enabled                                | Enable/Disable the agent-injector and its webhook.                                                                          | `true`                                                                      |
+| agentInjector.certificate.regenerate                 | Whether the certificate used for the mutating webhook should be regenerated.                                                | `false`                                                                     |
+| agentInjector.certificate.accessMethod               | Method used by the agent injector to access the certificate (watch or mount).                                               | `watch`                                                                     |
+| agentInjector.certificate.method                     | Method used when generating the certificate used for mutating webhook (helm, supplied, or certmanager).                     | `helm`                                                                      |
 | agentInjector.certificate.certmanager.commonName     | The common name of the generated Certmanager certificate.                                                                   | `agent-injector`                                                            |
 | agentInjector.certificate.certmanager.duration       | The certificate validity duration. (optional value)                                                                         | `2160h0m0s`                                                                 |
 | agentInjector.certificate.certmanager.issuerRef.name | The Issuer name to use to generate the self signed certificate.                                                             | `telepresence`                                                              |
@@ -102,7 +102,7 @@ The following tables lists the configurable parameters of the Ambassador chart a
 | client.dns.excludeSuffixes                           | Suffixes for which the client DNS resolver will always fail (or fallback in case of the overriding resolver)                | `[".com", ".io", ".net", ".org", ".ru"]`                                    |
 | client.dns.includeSuffixes                           | Suffixes for which the client DNS resolver will always attempt to do a lookup. Includes have higher priority than excludes. | `[]`                                                                        |
 
-## RBAC
+### RBAC
 
 Telepresence requires a cluster for installation but restricted RBAC roles can
 be used to give users access to create intercepts if they are not cluster
@@ -114,7 +114,7 @@ give access to the entire cluster or restrict to certain namespaces.
 You can also create a separate release for managing RBAC by setting
 `Values.rbac.only: true`.
 
-## Namespace-scoped traffic manager
+### Namespace-scoped traffic manager
 
 Telepresence's Helm chart supports installing a Traffic Manager at the namespace scope.
 You might want to do this if you have multiple namespaces, say representing multiple different environments, and would like their Traffic Managers to be isolated from one another.
@@ -122,7 +122,7 @@ To do this, set `managerRbac.namespaced=true` and `managerRbac.namespaces={a,b,c
 
 **NOTE** Do not install namespace-scoped traffic managers and a cluster-scoped traffic manager in the same cluster!
 
-### Namespace collision detection
+#### Namespace collision detection
 
 The Telepresence Helm chart will try to prevent namespace-scoped Traffic Managers from managing the same namespaces.
 It will do this by creating a ConfigMap, called `traffic-manager-claim`, in each namespace that a given install manages.
@@ -130,13 +130,13 @@ It will do this by creating a ConfigMap, called `traffic-manager-claim`, in each
 So, for example, suppose you install one Traffic Manager to manage namespaces `a` and `b`, as:
 
 ```bash
-helm install traffic-manager --namespace a datawire/telepresence --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={a,b}'
+$ telepresence helm install --namespace a --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={a,b}'
 ```
 
 You might then attempt to install another Traffic Manager to manage namespaces `b` and `c`:
 
 ```bash
-helm install traffic-manager --namespace c datawire/telepresence --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={b,c}'
+$ telepresence helm install --namespace c --set 'managerRbac.namespaced=true' --set 'managerRbac.namespaces={b,c}'
 ```
 
 This would fail with an error:
@@ -147,7 +147,7 @@ Error: rendered manifests contain a resource that already exists. Unable to cont
 
 To fix this error, fix the overlap either by removing `b` from the first install, or from the second.
 
-## Pod CIDRs
+#### Pod CIDRs
 
 The traffic manager is responsible for keeping track of what CIDRs the cluster uses for the pods. The Telepresence client uses this
 information to configure the network so that it provides access to the pods. In some cases, the traffic-manager will not be able to retrieve

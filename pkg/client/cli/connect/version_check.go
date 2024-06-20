@@ -2,11 +2,8 @@ package connect
 
 import (
 	"context"
-	"fmt"
 	"regexp"
-	"strings"
 
-	"github.com/blang/semver"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -16,18 +13,15 @@ import (
 
 var validPrerelRx = regexp.MustCompile(`^[a-z]+\.\d+$`)
 
-func versionCheck(ctx context.Context, daemonBinary string, userD *daemon.UserClient) error {
+func versionCheck(ctx context.Context, daemonBinary string) error {
 	// Ensure that the already running daemons have the correct version
-	vu, err := userD.Version(ctx, &empty.Empty{})
-	if err != nil {
-		return fmt.Errorf("unable to retrieve version of User Daemon: %w", err)
-	}
+	userD := daemon.GetUserClient(ctx)
+	uv := userD.Version
 	if userD.Containerized() {
 		// The user-daemon is remote (in a docker container, most likely). Compare the major, minor, and patch. Only
 		// compare pre-release if it's rc.X or test.X, and don't check if the binaries match.
 		cv := version.Structured
-		uv, err := semver.Parse(strings.TrimPrefix(vu.Version, "v"))
-		if err == nil && cv.Major == uv.Major && cv.Minor == uv.Minor && cv.Patch == uv.Patch {
+		if cv.Major == uv.Major && cv.Minor == uv.Minor && cv.Patch == uv.Patch {
 			if len(cv.Pre) != 1 {
 				// Prerelease does not consist of exactly one element, so it either doesn't exist or we don't care about it.
 				return nil
@@ -37,16 +31,16 @@ func versionCheck(ctx context.Context, daemonBinary string, userD *daemon.UserCl
 				return nil
 			}
 		}
-		return errcat.User.Newf("version mismatch. Client %s != remote user daemon %s", version.Version, vu.Version)
+		return errcat.User.Newf("version mismatch. Client %s != remote user daemon %s", version.Version, uv)
 	}
-	if version.Version != vu.Version {
+	if !version.Structured.EQ(uv) {
 		// OSS Version mismatch. We never allow this
 		return errcat.User.Newf("version mismatch. Client %s != user daemon %s, please run 'telepresence quit -s' and reconnect",
-			version.Version, vu.Version)
+			version.Version, uv)
 	}
-	if daemonBinary != "" && vu.Executable != daemonBinary {
+	if daemonBinary != "" && userD.Executable != daemonBinary {
 		return errcat.User.Newf("executable mismatch. Connector using %s, configured to use %s, please run 'telepresence quit -s' and reconnect",
-			vu.Executable, daemonBinary)
+			userD.Executable, daemonBinary)
 	}
 	vr, err := userD.RootDaemonVersion(ctx, &empty.Empty{})
 	if err == nil && version.Version != vr.Version {

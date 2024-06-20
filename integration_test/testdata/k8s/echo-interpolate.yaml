@@ -1,0 +1,60 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: interpolate-config
+data:
+  SOME_NAME: "hello"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-interpolate
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-interpolate
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-interpolate
+  labels:
+    app: echo-interpolate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-interpolate
+  template:
+    metadata:
+      labels:
+        app: echo-interpolate
+    spec:
+      containers:
+        - name: echo-interpolate
+          image: jmalloc/echo-server
+          envFrom:
+            - configMapRef:
+                name: interpolate-config
+          env:
+            - name: OTHER_NAME
+              value: "hi"
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - mountPath: /var/log/my-volume
+              name: my-volume
+              subPathExpr: $(SOME_NAME)_$(OTHER_NAME)
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+      volumes:
+        - emptyDir: {}
+          name: my-volume

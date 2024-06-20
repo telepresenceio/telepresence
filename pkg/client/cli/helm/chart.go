@@ -7,20 +7,19 @@ import (
 	"helm.sh/helm/v3/pkg/chart/loader"
 
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
-	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func loadCoreChart() (*chart.Chart, error) {
+func loadCoreChart(version string) (*chart.Chart, error) {
 	var buf bytes.Buffer
-	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, &buf, "telepresence", version.Version); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, &buf, "telepresence", version); err != nil {
 		return nil, err
 	}
 	return loader.LoadArchive(&buf)
 }
 
-func loadCRDChart() (*chart.Chart, error) {
+func loadCRDChart(version string) (*chart.Chart, error) {
 	var buf bytes.Buffer
-	if err := telcharts.WriteChart(telcharts.DirTypeTelepresenceCRDs, &buf, "telepresence-crds", version.Version); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresenceCRDs, &buf, "telepresence-crds", version); err != nil {
 		return nil, err
 	}
 	return loader.LoadArchive(&buf)

@@ -38,6 +38,10 @@ const (
 	GSCPowershell = "powershell"
 
 	defaultGlobalDNSSearchConfigStrategy = GSCAuto
+
+	// defaultVirtualIPSubnet is an IP that, on windows, is built from 16 class C subnets which were chosen randomly,
+	// hoping that they don't collide with another subnet.
+	defaultVirtualIPSubnet = "211.55.48.0/20"
 )
 
 type Network struct {

@@ -1,30 +1,18 @@
 //go:build !docker
-// +build !docker
 
 package remotefs
 
 import (
 	"context"
 	_ "embed"
-	"errors"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
-	"time"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/go-fuseftp/rpc"
-	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
-
-//go:embed fuseftp.bits
-var fuseftpBits []byte
 
 type fuseFtpMgr struct {
 	startFuseCh chan struct{}
@@ -91,23 +79,12 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	if runtime.GOOS == "windows" {
 		exe = "fuseftp.exe"
 	}
-	qn := filepath.Join(filelocation.AppUserCacheDir(ctx), exe)
-	var sz int
-	st, err := os.Stat(qn)
+	qn, err := getFuseFTPServer(ctx, exe)
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		sz = 0
-	} else {
-		sz = int(st.Size())
+		dlog.Warnf(ctx, "no fuseftp server is installed in PATH %s, FTP mounts will be disabled: %v", os.Getenv("PATH"), err)
+		return err
 	}
-
-	if len(fuseftpBits) != sz {
-		if err = os.WriteFile(qn, fuseftpBits, 0o700); err != nil {
-			return err
-		}
-	}
+	dlog.Infof(ctx, "using FuseFTP server %s", qn)
 
 	sf, err := os.CreateTemp("", "fuseftp-*.socket")
 	if err != nil {
@@ -117,45 +94,30 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	_ = sf.Close()
 	_ = os.Remove(socketName)
 
-	closeCh = false // closing the channel is now the responsibility of waitForSocketAndConnect
-	go waitForSocketAndConnect(ctx, socketName, cCh)
-
 	cmd := proc.CommandContext(ctx, qn, socketName)
 
-	// Rely on that these have been redirected to use our logger
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
+	cmd.Stderr = dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
+	cmd.Stdout = dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
 	cmd.DisableLogging = true
-	return cmd.Run()
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	closeCh = false // closing the channel is now the responsibility of waitForSocketAndConnect
+	waitForSocketAndConnect(ctx, socketName, cCh)
+	return cmd.Wait()
 }
 
 func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- rpc.FuseFTPClient) {
-	giveUp := time.After(3 * time.Second)
-	for {
-		select {
-		case <-ctx.Done():
-			close(cCh)
-			return
-		case <-giveUp:
-			close(cCh)
-			dlog.Error(ctx, "timeout waiting for fuseftp socket")
-			return
-		default:
-			conn, err := grpc.DialContext(ctx, "unix:"+socketName,
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithNoProxy(),
-				grpc.WithBlock(),
-				grpc.FailOnNonTempDialError(true),
-			)
-			if err != nil {
-				dtime.SleepWithContext(ctx, time.Millisecond)
-				continue
-			}
-			select {
-			case <-ctx.Done():
-			case cCh <- rpc.NewFuseFTPClient(conn):
-			}
-			return
-		}
+	conn, err := socket.Dial(ctx, socketName, true)
+	if err != nil {
+		dlog.Error(ctx, err)
+		close(cCh)
+		return
+	}
+	select {
+	case <-ctx.Done():
+	case cCh <- rpc.NewFuseFTPClient(conn):
 	}
 }

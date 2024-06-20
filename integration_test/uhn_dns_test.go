@@ -3,7 +3,6 @@ package integration_test
 import (
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type unqualifiedHostNameDNSSuite struct {
@@ -55,12 +55,11 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 
 	// when
 	s.TelepresenceConnect(ctx, "--context", "extra")
-	itest.TelepresenceOk(ctx, "intercept", serviceName, "--port", strconv.Itoa(port))
 
 	// then
 	for _, excluded := range excludes {
 		s.Eventually(func() bool {
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", excluded, port), 5000*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", iputil.JoinHostPort(excluded, uint16(port)), 5000*time.Millisecond)
 			if err == nil {
 				_ = conn.Close()
 			}
@@ -80,6 +79,9 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 	itest.ApplyEchoService(ctx, serviceName, s.AppNamespace(), port)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", serviceName)
 
+	localPort, cancel := itest.StartLocalHttpEchoServer(ctx, "my-hello")
+	defer cancel()
+
 	aliasedService := fmt.Sprintf("%s.%s", serviceName, s.AppNamespace())
 	dnsMappings := client.DNSMappings{
 		{
@@ -91,11 +93,15 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 			AliasFor: aliasedService,
 		},
 		{
-			Name:     "my-alias.some-fantasist-root-domain.cluster.local",
+			Name:     "my-alias.vx-root-domain.cluster.local",
 			AliasFor: aliasedService,
 		},
+		{
+			Name:     "my-hello",
+			AliasFor: "127.0.0.1",
+		},
 	}
-	mappings := make([]map[string]string, 3)
+	mappings := make([]map[string]string, len(dnsMappings))
 	for i, dm := range dnsMappings {
 		mappings[i] = map[string]string{"name": dm.Name, "aliasFor": dm.AliasFor}
 	}
@@ -110,8 +116,12 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNMappings() {
 
 	// then
 	for _, mapping := range dnsMappings {
+		dialPort := port
+		if mapping.Name == "my-hello" {
+			dialPort = localPort
+		}
 		s.Eventually(func() bool {
-			conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", mapping.Name, port), 5000*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", iputil.JoinHostPort(mapping.Name, uint16(dialPort)), 5000*time.Millisecond)
 			if err == nil {
 				_ = conn.Close()
 			}

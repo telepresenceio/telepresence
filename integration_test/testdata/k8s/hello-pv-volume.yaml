@@ -34,7 +34,7 @@ metadata:
 spec:
   type: ClusterIP
   selector:
-    service: {{ .Name }}
+    app: {{ .Name }}
   ports:
     - name: proxied
       port: 80
@@ -45,16 +45,16 @@ kind: Deployment
 metadata:
   name: {{ .Name }}
   labels:
-    service: {{ .Name }}
+    app: {{ .Name }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: {{ .Name }}
+      app: {{ .Name }}
   template:
     metadata:
       labels:
-        service: {{ .Name }}
+        app: {{ .Name }}
     spec:
       volumes:
         - name: scratch-volume

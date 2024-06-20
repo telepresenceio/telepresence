@@ -13,27 +13,27 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
-func (s *installSuite) limitedRangeTest() {
+func (is *installSuite) limitedRangeTest() {
 	const svc = "echo"
-	ctx := itest.WithUser(s.Context(), s.ManagerNamespace()+":"+itest.TestUser)
-	s.TelepresenceConnect(ctx)
+	ctx := itest.WithUser(is.Context(), is.ManagerNamespace()+":"+itest.TestUser)
+	is.TelepresenceConnect(ctx)
 	itest.TelepresenceOk(ctx, "loglevel", "debug")
 
-	require := s.Require()
-	itest.ApplyEchoService(ctx, svc, s.AppNamespace(), 8083)
+	require := is.Require()
+	itest.ApplyEchoService(ctx, svc, is.AppNamespace(), 8083)
 	defer func() {
-		s.NoError(itest.Kubectl(ctx, s.AppNamespace(), "delete", "svc,deploy", svc))
-		s.Eventually(func() bool { return len(itest.RunningPods(ctx, svc, s.AppNamespace())) == 0 }, 2*time.Minute, 6*time.Second)
+		is.NoError(itest.Kubectl(ctx, is.AppNamespace(), "delete", "svc,deploy", svc))
+		is.Eventually(func() bool { return len(itest.RunningPods(ctx, svc, is.AppNamespace())) == 0 }, 2*time.Minute, 6*time.Second)
 	}()
 
 	_, _, err := itest.Telepresence(ctx, "intercept", "--mount", "false", svc)
 	if err != nil {
-		if out, err := itest.KubectlOut(ctx, s.AppNamespace(), "get", "pod", "-o", "yaml", "-l", "app="+svc); err == nil {
+		if out, err := itest.KubectlOut(ctx, is.AppNamespace(), "get", "pod", "-o", "yaml", "-l", "app="+svc); err == nil {
 			dlog.Info(ctx, out)
 		}
 	}
 	require.NoError(err)
-	s.Eventually(
+	is.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
@@ -44,7 +44,7 @@ func (s *installSuite) limitedRangeTest() {
 	itest.TelepresenceOk(ctx, "leave", svc)
 
 	// Ensure that LimitRange is injected into traffic-agent
-	out, err := itest.KubectlOut(ctx, s.AppNamespace(), "get", "pods", "-l", "app="+svc, "-o",
+	out, err := itest.KubectlOut(ctx, is.AppNamespace(), "get", "pods", "-l", "app="+svc, "-o",
 		`jsonpath={range .items.*.spec.containers[?(@.name=='traffic-agent')]}{.resources}{","}{end}`)
 	require.NoError(err)
 	dlog.Infof(ctx, "resources = %s", out)
@@ -60,28 +60,28 @@ func (s *installSuite) limitedRangeTest() {
 	require.True(m != nil && m.Equal(oneGig))
 }
 
-func (s *installSuite) TestLimitRange() {
-	ctx := s.Context()
-	require := s.Require()
-	require.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "apply", "-f", filepath.Join("testdata", "k8s", "client_sa.yaml")))
+func (is *installSuite) TestLimitRange() {
+	ctx := is.Context()
+	require := is.Require()
+	require.NoError(itest.Kubectl(ctx, is.ManagerNamespace(), "apply", "-f", filepath.Join("testdata", "k8s", "client_sa.yaml")))
 	defer func() {
-		require.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "delete", "-f", filepath.Join("testdata", "k8s", "client_sa.yaml")))
+		require.NoError(itest.Kubectl(ctx, is.ManagerNamespace(), "delete", "-f", filepath.Join("testdata", "k8s", "client_sa.yaml")))
 	}()
 
-	defer s.UninstallTrafficManager(ctx, s.ManagerNamespace())
+	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
-	require.NoError(itest.Kubectl(ctx, s.AppNamespace(), "apply", "-f", filepath.Join("testdata", "k8s", "memory-constraints.yaml")))
+	require.NoError(itest.Kubectl(ctx, is.AppNamespace(), "apply", "-f", filepath.Join("testdata", "k8s", "memory-constraints.yaml")))
 	defer func() {
-		require.NoError(itest.Kubectl(ctx, s.AppNamespace(), "delete", "-f", filepath.Join("testdata", "k8s", "memory-constraints.yaml")))
+		require.NoError(itest.Kubectl(ctx, is.AppNamespace(), "delete", "-f", filepath.Join("testdata", "k8s", "memory-constraints.yaml")))
 	}()
 
-	s.Run("Never", func() {
-		s.NoError(s.TelepresenceHelmInstall(s.Context(), false, "--set", "agentInjector.webhook.reinvocationPolicy=Never"))
-		s.limitedRangeTest()
+	is.Run("Never", func() {
+		is.TelepresenceHelmInstallOK(is.Context(), false, "--set", "agentInjector.webhook.reinvocationPolicy=Never")
+		is.limitedRangeTest()
 	})
 
-	s.Run("IfNeeded", func() {
-		s.NoError(s.TelepresenceHelmInstall(s.Context(), true, "--set", "agentInjector.webhook.reinvocationPolicy=IfNeeded"))
-		s.limitedRangeTest()
+	is.Run("IfNeeded", func() {
+		is.TelepresenceHelmInstallOK(is.Context(), true, "--set", "agentInjector.webhook.reinvocationPolicy=IfNeeded")
+		is.limitedRangeTest()
 	})
 }

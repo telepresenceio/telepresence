@@ -29,7 +29,6 @@ type GeneratorConfig interface {
 	Generate(
 		ctx context.Context,
 		wl k8sapi.Workload,
-		replaceContainers agentconfig.ReplacePolicy,
 		existingConfig agentconfig.SidecarExt,
 	) (sc agentconfig.SidecarExt, err error)
 }
@@ -48,12 +47,13 @@ type BasicGeneratorConfig struct {
 	Resources           *core.ResourceRequirements
 	PullPolicy          string
 	PullSecrets         []core.LocalObjectReference
+	AppProtocolStrategy k8sapi.AppProtocolStrategy
+	SecurityContext     *core.SecurityContext
 }
 
 func (cfg *BasicGeneratorConfig) Generate(
 	ctx context.Context,
 	wl k8sapi.Workload,
-	replaceContainers agentconfig.ReplacePolicy,
 	existingConfig agentconfig.SidecarExt,
 ) (sc agentconfig.SidecarExt, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "agentmap.Generate")
@@ -96,7 +96,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
-		if ccs, err = appendAgentContainerConfigs(svcImpl, pod, portNumber, ccs, replaceContainers, existingConfig); err != nil {
+		if ccs, err = appendAgentContainerConfigs(ctx, svcImpl, pod, portNumber, ccs, existingConfig, cfg.AppProtocolStrategy); err != nil {
 			return nil, err
 		}
 	}
@@ -105,39 +105,42 @@ func (cfg *BasicGeneratorConfig) Generate(
 	}
 
 	ag := &agentconfig.Sidecar{
-		AgentImage:    cfg.QualifiedAgentImage,
-		AgentName:     wl.GetName(),
-		LogLevel:      cfg.LogLevel,
-		Namespace:     wl.GetNamespace(),
-		WorkloadName:  wl.GetName(),
-		WorkloadKind:  wl.GetKind(),
-		ManagerHost:   ManagerAppName + "." + cfg.ManagerNamespace,
-		ManagerPort:   cfg.ManagerPort,
-		APIPort:       cfg.APIPort,
-		TracingPort:   cfg.TracingPort,
-		Containers:    ccs,
-		InitResources: cfg.InitResources,
-		Resources:     cfg.Resources,
-		PullPolicy:    cfg.PullPolicy,
-		PullSecrets:   cfg.PullSecrets,
+		AgentImage:      cfg.QualifiedAgentImage,
+		AgentName:       wl.GetName(),
+		LogLevel:        cfg.LogLevel,
+		Namespace:       wl.GetNamespace(),
+		WorkloadName:    wl.GetName(),
+		WorkloadKind:    wl.GetKind(),
+		ManagerHost:     ManagerAppName + "." + cfg.ManagerNamespace,
+		ManagerPort:     cfg.ManagerPort,
+		APIPort:         cfg.APIPort,
+		TracingPort:     cfg.TracingPort,
+		Containers:      ccs,
+		InitResources:   cfg.InitResources,
+		Resources:       cfg.Resources,
+		PullPolicy:      cfg.PullPolicy,
+		PullSecrets:     cfg.PullSecrets,
+		SecurityContext: cfg.SecurityContext,
 	}
 	ag.RecordInSpan(span)
 	return ag, nil
 }
 
 func appendAgentContainerConfigs(
+	ctx context.Context,
 	svc *core.Service,
 	pod *core.PodTemplateSpec,
 	portNumber func(int32) uint16,
 	ccs []*agentconfig.Container,
-	replaceContainers agentconfig.ReplacePolicy,
 	existingConfig agentconfig.SidecarExt,
+	aps k8sapi.AppProtocolStrategy,
 ) ([]*agentconfig.Container, error) {
 	portNameOrNumber := pod.Annotations[ServicePortAnnotation]
 	ports, err := filterServicePorts(svc, portNameOrNumber)
 	if err != nil {
 		return nil, err
 	}
+	ignoredVolumeMounts := agentconfig.GetIgnoredVolumeMounts(pod.ObjectMeta.Annotations)
 nextSvcPort:
 	for _, port := range ports {
 		cn, i := findContainerMatchingPort(&port, pod.Spec.Containers)
@@ -154,10 +157,6 @@ nextSvcPort:
 		} else {
 			appPort = cn.Ports[i]
 		}
-		var appProto string
-		if port.AppProtocol != nil {
-			appProto = *port.AppProtocol
-		}
 
 		ic := &agentconfig.Intercept{
 			ServiceName:       svc.Name,
@@ -166,17 +165,18 @@ nextSvcPort:
 			ServicePort:       uint16(port.Port),
 			TargetPortNumeric: port.TargetPort.Type == intstr.Int,
 			Protocol:          port.Protocol,
-			AppProtocol:       appProto,
+			AppProtocol:       k8sapi.GetAppProto(ctx, aps, &port),
 			AgentPort:         portNumber(appPort.ContainerPort),
 			ContainerPortName: appPort.Name,
 			ContainerPort:     uint16(appPort.ContainerPort),
 		}
 
 		// Validate that we're not being asked to clobber an existing configuration
+		var replaceContainer agentconfig.ReplacePolicy
 		if existingConfig != nil {
 			for _, cc := range existingConfig.AgentConfig().Containers {
 				if cc.Name == cn.Name {
-					replaceContainers = cc.Replace
+					replaceContainer = cc.Replace
 					break
 				}
 			}
@@ -191,9 +191,11 @@ nextSvcPort:
 		}
 		var mounts []string
 		if l := len(cn.VolumeMounts); l > 0 {
-			mounts = make([]string, l)
-			for i, vm := range cn.VolumeMounts {
-				mounts[i] = vm.MountPath
+			mounts = make([]string, 0, l)
+			for _, vm := range cn.VolumeMounts {
+				if !ignoredVolumeMounts.IsVolumeIgnored(vm.Name, vm.MountPath) {
+					mounts = append(mounts, vm.MountPath)
+				}
 			}
 		}
 		ccs = append(ccs, &agentconfig.Container{
@@ -202,7 +204,7 @@ nextSvcPort:
 			MountPoint: agentconfig.MountPrefixApp + "/" + cn.Name,
 			Mounts:     mounts,
 			Intercepts: []*agentconfig.Intercept{ic},
-			Replace:    replaceContainers,
+			Replace:    replaceContainer,
 		})
 	}
 	return ccs, nil

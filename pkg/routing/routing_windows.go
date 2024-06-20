@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 
 type table struct{}
 
-func rowAsRoute(ctx context.Context, row *winipcfg.MibIPforwardRow2, localIP net.IP) (*Route, error) {
+func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP net.IP) (*Route, error) {
 	dst := row.DestinationPrefix.Prefix()
 	if !dst.IsValid() {
 		return nil, nil
@@ -74,7 +75,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	}
 	routes := []*Route{}
 	for _, row := range table {
-		r, err := rowAsRoute(ctx, &row, nil)
+		r, err := rowAsRoute(&row, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +86,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	return routes, nil
 }
 
-func getRouteForIP(ctx context.Context, localIP net.IP) (*Route, error) {
+func getRouteForIP(localIP net.IP) (*Route, error) {
 retryInconsistent:
 	for i := 0; i < maxInconsistentRetries; i++ {
 		table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
@@ -98,7 +99,7 @@ retryInconsistent:
 				if addrs, err := iface.Addrs(); err == nil {
 					for _, addr := range addrs {
 						if ip, _, err := net.ParseCIDR(addr.String()); err == nil && ip.Equal(localIP) {
-							r, err := rowAsRoute(ctx, &row, ip)
+							r, err := rowAsRoute(&row, ip)
 							if err != nil {
 								if err == errInconsistentRT {
 									time.Sleep(inconsistentRetryDelay)
@@ -144,7 +145,7 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	if localIP == nil {
 		return nil, fmt.Errorf("unable to parse local IP from %q", string(out))
 	}
-	return getRouteForIP(ctx, localIP)
+	return getRouteForIP(localIP)
 }
 
 func maskToIP(mask net.IPMask) (ip net.IP) {
@@ -154,14 +155,15 @@ func maskToIP(mask net.IPMask) (ip net.IP) {
 }
 
 func (r *Route) addStatic(ctx context.Context) error {
-	mask := maskToIP(r.RoutedNet.Mask)
 	cmd := proc.CommandContext(ctx,
 		"route",
 		"ADD",
 		r.RoutedNet.IP.String(),
 		"MASK",
-		mask.String(),
+		maskToIP(r.RoutedNet.Mask).String(),
 		r.Gateway.String(),
+		"IF",
+		strconv.Itoa(r.Interface.Index),
 	)
 	cmd.DisableLogging = true
 	out, err := cmd.Output()

@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
@@ -70,8 +71,9 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 	extCc := cc.DeepCopy()
 	extCc.AuthInfo = extAuthInfo
 
-	// Create a new Context that uses the new AuthInfo.
-	extContext := cfg.CurrentContext + "-exec"
+	// Create a new Context that uses the new AuthInfo. We use a nasty name here to ensure
+	// that it is correctly converted to a usable name.
+	extContext := "abc:def/xyz$32-#1?efd"
 	rq.Nil(cfg.Contexts[extContext])
 
 	cfg.Contexts[extContext] = extCc
@@ -79,17 +81,14 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 
 	connectWithExec := func(connectFromUserDaemon, useDocker bool) {
 		if useDocker && s.IsCI() {
-			if runtime.GOOS != "linux" {
+			if !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64") {
 				s.T().Skip("CI can't run linux docker containers inside non-linux runners")
-			}
-			if runtime.GOARCH == "arm64" {
-				// rootless docker install doesn't permit access to host network (so no docker.host.internal)
-				s.T().Skip("CI can't run this test on arm64 because it uses a rootless docker install")
 			}
 		}
 
 		// Retrieve the current size of the connector.lgo so that we can scan the messages that appear after connect
 		ctx := s.Context()
+		rq := s.Require()
 		logSize := int64(0)
 		logName := "connector.log"
 		if useDocker {
@@ -136,6 +135,18 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 			rq.Falsef(found, "did not expect a GetContextExecCredentials in the %s", logName)
 		} else {
 			rq.Truef(found, "unable to find expected GetContextExecCredentials in the %s", logName)
+		}
+
+		modifiedKubeConfig := filepath.Join(filelocation.AppUserCacheDir(ctx), "kube", ioutil.SafeName(extContext))
+		modCfg, err := clientcmd.LoadFromFile(modifiedKubeConfig)
+		if connectFromUserDaemon {
+			rq.ErrorIsf(err, os.ErrNotExist, "did not expect to find modified kubeconfig %s", modifiedKubeConfig)
+		} else {
+			rq.NoError(err)
+			defer func() {
+				_ = os.Remove(modifiedKubeConfig)
+			}()
+			rq.Equal(modCfg.CurrentContext, extContext)
 		}
 	}
 	s.Run("root-daemon", func() { connectWithExec(false, false) })

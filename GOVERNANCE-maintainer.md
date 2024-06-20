@@ -1,9 +1,9 @@
 # Telepresence Project Governance
 
-The goal of the Telepresence project is to accelerate the "developer inner loop" for cloud-native application 
-development on Kubernetes. 
+The goal of the Telepresence project is to accelerate the "developer inner loop" for cloud-native application
+development on Kubernetes.
 
-Telepresence achieves this by creating a dynamic network bridge between a local development environment (e.g., a laptop) 
+Telepresence achieves this by creating a dynamic network bridge between a local development environment (e.g., a laptop)
 and a remote Kubernetes cluster.
 
 This governance explains how the project is run.
@@ -70,21 +70,21 @@ is the governing body for the project.
 
 ### Becoming a Maintainer
 
-* Express interest to the current maintainers (see [MAINTAINERS.md](MAINTAINERS.md)) that your organization is 
-interested in becoming a maintainer. Becoming a maintainer generally means that you are going to be spending 
+* Express interest to the current maintainers (see [MAINTAINERS.md](MAINTAINERS.md)) that your organization is
+interested in becoming a maintainer. Becoming a maintainer generally means that you are going to be spending
 substantial time on Telepresence for the foreseeable future.
 * We will expect you to start contributing increasingly complicated PRs, under the guidance of the existing maintainers.
 * We may ask you to do some PRs from our backlog.
-* As you gain experience with the code base and our standards, we will ask you to do code reviews for incoming PRs. 
+* As you gain experience with the code base and our standards, we will ask you to do code reviews for incoming PRs.
 All maintainers are expected to shoulder a proportional share of community reviews.
-* After a period of approximately 2-3 months of working together and making sure we see eye to eye, the existing 
-maintainers will confer and decide whether to grant maintainer status or not. 
+* After a period of approximately 2-3 months of working together and making sure we see eye to eye, the existing
+maintainers will confer and decide whether to grant maintainer status or not.
 We make no guarantees on the length of time this will take, but 2-3 months is the goal.
 
-A new Maintainer can apply by sending a message in our [slack workspace](https://datawire-oss.slack.com/),
-in the [#telepresence-dev channel](https://datawire-oss.slack.com/archives/CC5D1UTTN).
+A new Maintainer can apply by sending a message in our [OSS Slack workspace](https://communityinviter.com/apps/cloud-native/cncf),
+in the [#telepresence-oss](https://cloud-native.slack.com/archives/C06B36KJ85P) channel.
 
-A simple majority vote of existing Maintainers approves the application.  
+A simple majority vote of existing Maintainers approves the application.
 
 Maintainers nominations will be evaluated without prejudice
 to employer or demographics.
@@ -111,7 +111,7 @@ and can be rapidly returned to Maintainer status if their availability changes.
 ## Meetings
 
 Time zones permitting, Maintainers are expected to participate in the public
-developer meeting. 
+developer meeting.
 
 Details can be found [here](./MEETING_SCHEDULE.md#monthly-contributors-meeting).
 
@@ -151,13 +151,13 @@ holes and breaches according to the [security policy](./SECURITY.md).
 
 ## Voting
 
-In general, we prefer that technical issues and maintainer membership are amicably worked out between the persons 
-involved. If a dispute cannot be decided independently, the maintainers can be called in to decide an issue. If the 
-maintainers themselves cannot decide an issue, the issue will be resolved by voting. 
+In general, we prefer that technical issues and maintainer membership are amicably worked out between the persons
+involved. If a dispute cannot be decided independently, the maintainers can be called in to decide an issue. If the
+maintainers themselves cannot decide an issue, the issue will be resolved by voting.
 The voting process is a simple majority in which each maintainer receives one vote.
 
 A vote can be taken on [#telepresence-dev](https://datawire-oss.slack.com/archives/CC5D1UTTN) or
-[#telepresence-dev-private](https://datawire-oss.slack.com/archives/C061Q45SU4F) for security or conduct matters.  
+[#telepresence-dev-private](https://datawire-oss.slack.com/archives/C061Q45SU4F) for security or conduct matters.
 
 Any Maintainer may demand a vote be taken.
 
@@ -172,8 +172,8 @@ a 2/3 vote of the Maintainers.
 
 ## Adding new projects to the Telepresence GitHub organization
 
-New projects will be added to the Telepresence organization via GitHub issue discussion in one of the existing projects 
-in the organization. Once sufficient discussion has taken place (~3-5 business days but depending on the volume 
-of conversation), the maintainers of *the project where the issue was opened* (since different projects in the 
-organization may have different maintainers) will decide whether the new project should be added. See the section 
+New projects will be added to the Telepresence organization via GitHub issue discussion in one of the existing projects
+in the organization. Once sufficient discussion has taken place (~3-5 business days but depending on the volume
+of conversation), the maintainers of *the project where the issue was opened* (since different projects in the
+organization may have different maintainers) will decide whether the new project should be added. See the section
 above on voting if the maintainers cannot easily decide.

@@ -11,6 +11,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -53,21 +54,44 @@ func (m *sftpMounter) Start(ctx context.Context, id, clientMountPoint, mountPoin
 				// connection settings
 				"-C", // compression
 				"-oConnectTimeout=10",
-				"-o", fmt.Sprintf("directport=%d", port),
 
 				// mount directives
 				"-o", "follow_symlinks",
 				"-o", "allow_root", // needed to make --docker-run work as docker runs as root
-				fmt.Sprintf("%s:%s", podIP.String(), mountPoint), // what to mount
-				clientMountPoint, // where to mount it
 			}
+
+			useIPv6 := len(podIP) == 16
+			if useIPv6 {
+				// Must use stdin/stdout because sshfs is not capable of connecting with IPv6
+				sshfsArgs = append(sshfsArgs,
+					"-o", "slave",
+					fmt.Sprintf("localhost:%s", mountPoint),
+					clientMountPoint, // where to mount it
+				)
+			} else {
+				sshfsArgs = append(sshfsArgs,
+					"-o", fmt.Sprintf("directport=%d", port),
+					fmt.Sprintf("%s:%s", podIP.String(), mountPoint), // what to mount
+					clientMountPoint, // where to mount it
+				)
+			}
+
 			exe := "sshfs"
 			if runtime.GOOS == "windows" {
 				// Use sshfs-win to launch the sshfs
 				sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
 				exe = "sshfs-win"
 			}
-			err := proc.Run(ctx, nil, exe, sshfsArgs...)
+			var err error
+			if useIPv6 {
+				var conn net.Conn
+				if conn, err = net.Dial("tcp6", iputil.JoinIpPort(podIP, port)); err == nil {
+					defer conn.Close()
+					err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
+				}
+			} else {
+				err = proc.Run(ctx, nil, exe, sshfsArgs...)
+			}
 			time.Sleep(time.Second)
 
 			// sshfs sometimes leave the mount point in a bad state. This will clean it up

@@ -2,7 +2,10 @@ package state
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -14,12 +17,11 @@ import (
 	"google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
 	events "k8s.io/api/events/v1"
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/watch"
-	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -29,7 +31,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
-	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 // PrepareIntercept ensures that the given request can be matched against the intercept configuration of
@@ -49,10 +50,13 @@ import (
 func (s *state) PrepareIntercept(
 	ctx context.Context,
 	cr *managerrpc.CreateInterceptRequest,
-	replacePolicy agentconfig.ReplacePolicy,
 ) (pi *managerrpc.PreparedIntercept, err error) {
-	ctx, cancel := context.WithTimeout(ctx, managerutil.GetEnv(ctx).AgentArrivalTimeout)
-	defer cancel()
+	defer func() {
+		if r := recover(); r != nil {
+			err = derror.PanicToError(r)
+			dlog.Errorf(ctx, "%+v", err)
+		}
+	}()
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.PrepareIntercept")
 	defer tracing.EndAndRecord(span, err)
 	span.SetAttributes(attribute.Stringer("request", cr))
@@ -61,37 +65,30 @@ func (s *state) PrepareIntercept(
 		if _, ok := status.FromError(err); ok {
 			return nil, err
 		}
+		dlog.Errorf(ctx, "PrepareIntercept error %v", err)
 		return &managerrpc.PreparedIntercept{Error: err.Error(), ErrorCategory: int32(errcat.GetCategory(err))}, nil
 	}
 
 	spec := cr.InterceptSpec
-	wl, err := tracing.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
+	wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, spec.WorkloadKind)
 	if err != nil {
-		if errors2.IsNotFound(err) {
+		if k8sErrors.IsNotFound(err) {
 			err = errcat.User.New(err)
 		}
+		dlog.Error(ctx, err)
 		return interceptError(err)
 	}
 
-	failedCreateCh, err := watchFailedInjectionEvents(ctx, spec.Agent, spec.Namespace)
+	ac, err := s.ensureAgent(ctx, wl, s.isExtended(spec), spec)
 	if err != nil {
 		return interceptError(err)
 	}
-
-	sce, err := s.getOrCreateAgentConfig(ctx, wl, spec, replacePolicy)
-	if err != nil {
-		return interceptError(err)
-	}
-	ac := sce.AgentConfig()
 	_, ic, err := findIntercept(ac, spec)
 	if err != nil {
 		return interceptError(err)
 	}
-	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace, failedCreateCh); err != nil {
-		return interceptError(err)
-	}
 	return &managerrpc.PreparedIntercept{
-		Namespace:       spec.Namespace,
+		Namespace:       ac.Namespace,
 		ServiceUid:      string(ic.ServiceUID),
 		ServiceName:     ic.ServiceName,
 		ServicePortName: ic.ServicePortName,
@@ -99,6 +96,57 @@ func (s *state) PrepareIntercept(
 		AgentImage:      ac.AgentImage,
 		WorkloadKind:    ac.WorkloadKind,
 	}, nil
+}
+
+func (s *state) EnsureAgent(ctx context.Context, n, ns string) error {
+	wl, err := agentmap.GetWorkload(ctx, n, ns, "")
+	if err != nil {
+		if k8sErrors.IsNotFound(err) {
+			err = errcat.User.New(err)
+		}
+		return err
+	}
+	_, err = s.ensureAgent(ctx, wl, false, nil)
+	return err
+}
+
+func (s *state) ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error {
+	return nil
+}
+
+func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, extended bool, spec *managerrpc.InterceptSpec) (ac *agentconfig.Sidecar, err error) {
+	if !managerutil.AgentInjectorEnabled(parentCtx) {
+		sce, err := mutator.GetMap(parentCtx).Get(parentCtx, wl.GetName(), wl.GetNamespace())
+		if err != nil {
+			return nil, err
+		}
+		if sce == nil {
+			return nil, errcat.User.Newf("agent-injector is disabled and no agent has been added manually for %s.%s", wl.GetName(), wl.GetNamespace())
+		}
+		return sce.AgentConfig(), nil
+	}
+	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
+	defer cancel()
+
+	failedCreateCh, err := watchFailedInjectionEvents(ctx, wl.GetName(), wl.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	sce, err := s.getOrCreateAgentConfig(ctx, wl, extended, spec)
+	if err != nil {
+		return nil, err
+	}
+	ac = sce.AgentConfig()
+	if err = s.waitForAgent(ctx, ac.AgentName, ac.Namespace, failedCreateCh); err != nil {
+		// If no agent arrives, then drop its entry from the configmap. This ensures that there
+		// are no false positives the next time an intercept is attempted.
+		if dropErr := s.dropAgentConfig(parentCtx, wl); dropErr != nil {
+			dlog.Errorf(ctx, "failed to remove configmap entry for %s.%s: %v", wl.GetName(), wl.GetNamespace(), dropErr)
+		}
+		return nil, err
+	}
+	return ac, nil
 }
 
 func (s *state) isExtended(spec *managerrpc.InterceptSpec) bool {
@@ -115,84 +163,78 @@ func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error)
 	return err
 }
 
+func (s *state) dropAgentConfig(
+	ctx context.Context,
+	wl k8sapi.Workload,
+) error {
+	return mutator.GetMap(ctx).Delete(ctx, wl.GetNamespace(), wl.GetName())
+}
+
+func (s *state) RestoreAppContainer(ctx context.Context, ii *managerrpc.InterceptInfo) (err error) {
+	dlog.Debugf(ctx, "Restoring app container for %s", ii.Id)
+	spec := ii.Spec
+	n := spec.Agent
+	ns := spec.Namespace
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.RestoreAppContainer", trace.WithAttributes(
+		attribute.String("tel2.name", n),
+		attribute.String("tel2.namespace", ns),
+	))
+	defer func() {
+		tracing.EndAndRecord(span, err)
+	}()
+	mm := mutator.GetMap(ctx)
+	return mm.Update(ctx, ns, func(cm *core.ConfigMap) (changed bool, err error) {
+		y, ok := cm.Data[n]
+		if !ok {
+			return false, nil
+		}
+		sce, err := unmarshalConfigMapEntry(y, n, ns)
+		if err != nil {
+			return false, err
+		}
+		cn, _, err := findIntercept(sce.AgentConfig(), spec)
+		if !(err == nil && cn.Replace) {
+			return false, nil
+		}
+		cn.Replace = false
+
+		// The pods for this workload will be killed once the new updated sidecar
+		// reaches the configmap. We remove them now, so that they don't continue to
+		// review intercepts.
+		for sessionID, ai := range s.getAgentsByName(n, ns) {
+			if as, ok := s.GetSession(sessionID).(*agentSessionState); ok {
+				as.active.Store(false)
+			}
+			mm.Blacklist(ai.PodName, ns)
+		}
+		return updateSidecar(sce, cm, n)
+	})
+}
+
+func updateSidecar(sce agentconfig.SidecarExt, cm *core.ConfigMap, n string) (bool, error) {
+	yml, err := sce.Marshal()
+	if err != nil {
+		return false, err
+	}
+	oldYaml := cm.Data[n]
+	newYaml := string(yml)
+	if oldYaml != newYaml {
+		cm.Data[n] = newYaml
+		return true, nil
+	}
+	return false, nil
+}
+
 func (s *state) getOrCreateAgentConfig(
 	ctx context.Context,
 	wl k8sapi.Workload,
+	extended bool,
 	spec *managerrpc.InterceptSpec,
-	replacePolicy agentconfig.ReplacePolicy,
-) (sc agentconfig.SidecarExt, err error) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.getOrCreateAgentConfig")
-	defer tracing.EndAndRecord(span, err)
-
-	ns := wl.GetNamespace()
-	cl, _ := s.cfgMapLocks.LoadOrCompute(ns, func() *sync.Mutex {
-		return &sync.Mutex{}
-	})
-	cl.Lock()
-	defer cl.Unlock()
-
-	cmAPI := k8sapi.GetK8sInterface(ctx).CoreV1().ConfigMaps(ns)
-	cm, err := loadConfigMap(ctx, cmAPI, ns)
-	if err != nil {
-		return nil, err
-	}
-	return s.loadAgentConfig(ctx, cmAPI, cm, wl, spec, replacePolicy)
-}
-
-func loadConfigMap(ctx context.Context, cmAPI typed.ConfigMapInterface, namespace string) (cm *core.ConfigMap, err error) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadConfigMap")
-	defer tracing.EndAndRecord(span, err)
-
-	cm, err = cmAPI.Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
-	if err == nil {
-		span.SetAttributes(attribute.Bool("tel2.cm-found", true))
-		return cm, nil
-	}
-	if !errors2.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to get ConfigMap %s.%s: %w", agentconfig.ConfigMap, namespace, err)
-	}
-	span.SetAttributes(attribute.Bool("tel2.cm-found", false))
-	cm, err = cmAPI.Create(ctx, &core.ConfigMap{
-		TypeMeta: meta.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: "v1",
-		},
-		ObjectMeta: meta.ObjectMeta{
-			Name:      agentconfig.ConfigMap,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/name":       agentconfig.ConfigMap,
-				"app.kubernetes.io/created-by": "traffic-manager",
-				"app.kubernetes.io/version":    strings.TrimPrefix(version.Version, "v"),
-			},
-		},
-	}, meta.CreateOptions{})
-	if err != nil {
-		err = fmt.Errorf("failed to create ConfigMap %s.%s: %w", agentconfig.ConfigMap, namespace, err)
-	}
-	return cm, err
-}
-
-func (s *state) loadAgentConfig(
-	ctx context.Context,
-	cmAPI typed.ConfigMapInterface,
-	cm *core.ConfigMap,
-	wl k8sapi.Workload,
-	spec *managerrpc.InterceptSpec,
-	replacePolicy agentconfig.ReplacePolicy,
-) (sc agentconfig.SidecarExt, err error) {
-	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig")
-	defer tracing.EndAndRecord(span, err)
-
-	extended := s.isExtended(spec)
+) (sce agentconfig.SidecarExt, err error) {
 	enabled, err := checkInterceptAnnotations(wl)
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(
-		attribute.Bool("tel2.enabled", enabled),
-		attribute.Bool("tel2.extended", extended),
-	)
 	if !enabled {
 		return nil, errcat.User.Newf("%s %s.%s is not interceptable", wl.GetKind(), wl.GetName(), wl.GetNamespace())
 	}
@@ -201,89 +243,64 @@ func (s *state) loadAgentConfig(
 	if err = s.self.ValidateAgentImage(agentImage, extended); err != nil {
 		return nil, err
 	}
-	span.SetAttributes(
-		attribute.String("tel2.agent-image", agentImage),
-	)
-
-	update := func(sce agentconfig.SidecarExt) (err error) {
-		ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "state.loadAgentConfig.update", trace.WithAttributes(
-			attribute.String("tel2.workload-name", wl.GetName()),
-			attribute.String("tel2.cm-name", agentconfig.ConfigMap),
-			attribute.String("tel2.cm-namespace", wl.GetNamespace()),
-		))
-		defer tracing.EndAndRecord(span, err)
-		yml, err := sce.Marshal()
-		if err != nil {
-			return err
-		}
-		cm.Data[wl.GetName()] = string(yml)
-		if _, err := cmAPI.Update(ctx, cm, meta.UpdateOptions{}); err != nil {
-			return fmt.Errorf("failed update entry for %s in ConfigMap %s.%s: %w", wl.GetName(), agentconfig.ConfigMap, wl.GetNamespace(), err)
-		}
-		return err
-	}
-
-	var sce agentconfig.SidecarExt
-	if y, ok := cm.Data[wl.GetName()]; ok {
-		span.AddEvent("workload-config-found")
-		if sce, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
-			return nil, err
-		}
-		ac := sce.AgentConfig()
-		if ac.Create {
-			// This may happen if someone else is doing the initial intercept at the exact (well, more or less) same time
-			if sce, err = waitForConfigMapUpdate(ctx, cmAPI, wl.GetName(), wl.GetNamespace()); err != nil {
-				return nil, err
-			}
-			ac = sce.AgentConfig()
-		}
+	err = mutator.GetMap(ctx).Update(ctx, wl.GetNamespace(), func(cm *core.ConfigMap) (changed bool, err error) {
 		doUpdate := false
-		// If the agentImage has changed, and the extended image is requested, then update
-		if ac.AgentImage != agentImage && extended {
-			span.AddEvent("agent-image-changed")
-			ac.AgentImage = agentImage
+		y, cmFound := cm.Data[wl.GetName()]
+		if cmFound {
+			if sce, err = unmarshalConfigMapEntry(y, wl.GetName(), wl.GetNamespace()); err != nil {
+				return false, err
+			}
+			ac := sce.AgentConfig()
+			// If the agentImage has changed, and the extended image is requested, then update
+			if ac.AgentImage != agentImage && extended {
+				ac.AgentImage = agentImage
+				doUpdate = true
+			}
+		} else {
+			if cm.Data == nil {
+				cm.Data = make(map[string]string)
+			}
+			var gc agentmap.GeneratorConfig
+			if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
+				return false, err
+			}
+			if sce, err = gc.Generate(ctx, wl, nil); err != nil {
+				return false, err
+			}
 			doUpdate = true
 		}
-		for _, cn := range ac.Containers {
-			if cn.Replace != replacePolicy {
-				span.AddEvent("container-replace-changed")
-				if (cn.Replace == agentconfig.ReplacePolicyActive && replacePolicy == agentconfig.ReplacePolicyInactive) ||
-					(cn.Replace == agentconfig.ReplacePolicyInactive && replacePolicy == agentconfig.ReplacePolicyActive) {
-					span.AddEvent("container-replace-accepted")
-					cn.Replace = replacePolicy
-					doUpdate = true
-				} else {
-					span.AddEvent("container-replace-rejected")
-					flagValue := cn.Replace != agentconfig.ReplacePolicyNever
-					return nil, errcat.User.Newf("intercept %s.%s has the --replace flag"+
-						" set to %t, please use 'telepresence uninstall --agent %s'"+
-						" then 'telepresence intercept' again to change it",
-						spec.Agent, spec.Namespace, flagValue, spec.Agent)
-				}
+
+		ac := sce.AgentConfig()
+		if spec != nil {
+			cn, _, err := findIntercept(ac, spec)
+			if err != nil {
+				return false, err
+			}
+			if cn.Replace != agentconfig.ReplacePolicy(spec.Replace) {
+				cn.Replace = agentconfig.ReplacePolicy(spec.Replace)
+				doUpdate = true
 			}
 		}
 		if doUpdate {
-			if err = update(sce); err != nil {
-				return nil, err
+			if cmFound {
+				// The pods for this workload be killed once the new updated sidecar
+				// reaches the configmap. We remove them now, so that they don't continue to
+				// review intercepts.
+				for sessionID := range s.getAgentsByName(wl.GetName(), wl.GetNamespace()) {
+					if as, ok := s.GetSession(sessionID).(*agentSessionState); ok {
+						as.active.Store(false)
+					}
+				}
+			} else {
+				if err = s.self.ValidateCreateAgent(ctx, wl, sce); err != nil {
+					return false, err
+				}
 			}
+			return updateSidecar(sce, cm, wl.GetName())
 		}
-	} else {
-		span.AddEvent("workload-config-not-found")
-		if cm.Data == nil {
-			cm.Data = make(map[string]string)
-		}
-		var gc agentmap.GeneratorConfig
-		if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
-			return nil, err
-		}
-		if sce, err = gc.Generate(ctx, wl, replacePolicy, nil); err != nil {
-			return nil, err
-		}
-		if err = update(sce); err != nil {
-			return nil, err
-		}
-	}
-	return sce, nil
+		return false, nil
+	})
+	return sce, err
 }
 
 func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
@@ -328,50 +345,6 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 	return true, nil
 }
 
-// Wait for the cluster's mutating webhook injector to do its magic. It will update the
-// configMap once it's done.
-func waitForConfigMapUpdate(ctx context.Context, cmAPI typed.ConfigMapInterface, agentName, namespace string) (agentconfig.SidecarExt, error) {
-	wi, err := cmAPI.Watch(ctx, meta.SingleObject(meta.ObjectMeta{
-		Name:      agentconfig.ConfigMap,
-		Namespace: namespace,
-	}))
-	if err != nil {
-		return nil, fmt.Errorf("watch of ConfigMap  %s failed: %w", agentconfig.ConfigMap, ctx.Err())
-	}
-	defer wi.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			v := "canceled"
-			c := codes.Canceled
-			if ctx.Err() == context.DeadlineExceeded {
-				v = "timed out"
-				c = codes.DeadlineExceeded
-			}
-			return nil, status.Error(c, fmt.Sprintf("watch of ConfigMap %s[%s]: request %s", agentconfig.ConfigMap, agentName, v))
-		case ev, ok := <-wi.ResultChan():
-			if !ok {
-				return nil, status.Error(codes.Canceled, fmt.Sprintf("watch of ConfigMap  %s[%s]: channel closed", agentconfig.ConfigMap, agentName))
-			}
-			if !(ev.Type == watch.Added || ev.Type == watch.Modified) {
-				continue
-			}
-			if m, ok := ev.Object.(*core.ConfigMap); ok {
-				if y, ok := m.Data[agentName]; ok {
-					scx, err := unmarshalConfigMapEntry(y, agentName, namespace)
-					if err != nil {
-						return nil, err
-					}
-					if !scx.AgentConfig().Create {
-						return scx, nil
-					}
-				}
-			}
-		}
-	}
-}
-
 func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-chan *events.Event, error) {
 	// A timestamp with second granularity is needed here, because that's what the event creation time uses.
 	// Finer granularity will result in relevant events seemingly being created before this timestamp because
@@ -414,52 +387,74 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 }
 
 func (s *state) waitForAgent(ctx context.Context, name, namespace string, failedCreateCh <-chan *events.Event) error {
-	snapshotCh := s.WatchAgents(ctx, nil)
-
+	dlog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
+	snapshotCh := s.WatchAgents(ctx, func(sessionID string, agent *managerrpc.AgentInfo) bool {
+		return agent.Name == name && agent.Namespace == namespace
+	})
+	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + namespace)
 	// fes collects events from the failedCreatedCh and is included in the error message in case
 	// the waitForAgent call times out.
 	var fes []*events.Event
 	for {
 		select {
 		case fe, ok := <-failedCreateCh:
-			if ok {
-				msg := fe.Note
-				// Terminate directly on known fatal events. No need for the user to wait for a timeout
-				// when one of these are encountered.
-				switch fe.Reason {
-				case "BackOff":
-					// The traffic-agent container was injected, but it fails to start
-					msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
-				case "FailedCreate", "FailedScheduling":
-					// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
-					if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
-						strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
-						strings.Contains(msg, "skip schedule deleting pod")) {
-						// This isn't fatal.
-						fes = append(fes, fe)
-						continue
+			if !ok {
+				return errors.New("failed create channel closed")
+			}
+			msg := fe.Note
+			// Terminate directly on known fatal events. No need for the user to wait for a timeout
+			// when one of these are encountered.
+			switch fe.Reason {
+			case "BackOff":
+				// The traffic-agent container was injected, but it fails to start
+				if rr := failedContainerRx.FindStringSubmatch(msg); rr != nil {
+					cn := rr[1]
+					pod := rr[2]
+					rq := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).GetLogs(pod, &core.PodLogOptions{
+						Container: cn,
+					})
+					if rs, err := rq.Stream(ctx); err == nil {
+						if log, err := io.ReadAll(rs); err == nil {
+							dlog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
+						} else {
+							dlog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
+						}
+						_ = rs.Close()
+					} else {
+						dlog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
 					}
-					msg = fmt.Sprintf(
-						"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
-						msg)
-				default:
-					// Something went wrong, but it might not be fatal. There are several events logged that are just
-					// warnings where the action will be retried and eventually succeed.
+				}
+				msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
+			case "Failed", "FailedCreate", "FailedScheduling":
+				// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
+				if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
+					strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
+					strings.Contains(msg, "skip schedule deleting pod") ||
+					strings.Contains(msg, "nodes are available")) {
+					// This isn't fatal.
 					fes = append(fes, fe)
 					continue
 				}
-				return errcat.User.New(msg)
+				msg = fmt.Sprintf(
+					"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
+					msg)
+			default:
+				// Something went wrong, but it might not be fatal. There are several events logged that are just
+				// warnings where the action will be retried and eventually succeed.
+				fes = append(fes, fe)
+				continue
 			}
+			return errcat.User.New(msg)
 		case snapshot, ok := <-snapshotCh:
 			if !ok {
 				// The request has been canceled.
 				return status.Error(codes.Canceled, fmt.Sprintf("channel closed while waiting for agent %s.%s to arrive", name, namespace))
 			}
 			for _, a := range snapshot.State {
-				if a.Namespace == namespace && a.Name == name {
-					return nil
-				}
+				dlog.Debugf(ctx, "Agent %s.%s is ready", a.Name, a.Namespace)
+				return nil
 			}
+			dlog.Debugf(ctx, "Got empty snapshot while waiting for agent %s.%s", name, namespace)
 		case <-ctx.Done():
 			v := "canceled"
 			if ctx.Err() == context.DeadlineExceeded {

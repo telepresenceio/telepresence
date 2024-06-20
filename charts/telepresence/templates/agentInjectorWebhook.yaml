@@ -1,4 +1,4 @@
-{{- if not .Values.rbac.only }}
+{{- if and (not .Values.rbac.only) .Values.agentInjector.enabled }}
 {{- $altNames := list ( printf "agent-injector.%s" (include "traffic-manager.namespace" .)) ( printf "agent-injector.%s.svc" (include "traffic-manager.namespace" .)) -}}
 {{- $genCA := genCA "agent-injector-ca" 365 -}}
 {{- $genCert := genSignedCert "agent-injector" nil $altNames 365 $genCA -}}
@@ -20,7 +20,7 @@ webhooks:
 {{- end }}
   clientConfig:
 {{- if not (eq .Values.agentInjector.certificate.method "certmanager") }}
-{{- if and ($secretData) (not .Values.agentInjector.certificate.regenerate) }}
+{{- if and ($secretData) (or (not .Values.agentInjector.certificate.regenerate) (eq .Values.agentInjector.certificate.method "supplied") )}}
     caBundle: {{ or (get $secretData "ca.crt") (get $secretData "ca.pem") }}
 {{- else }}
     caBundle: {{ $genCA.Cert | b64enc }}
@@ -65,6 +65,7 @@ webhooks:
 {{- end }}
 {{- if not (eq .Values.agentInjector.certificate.method "certmanager") }}
 ---
+{{- if ne .Values.agentInjector.certificate.method "supplied" -}}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -81,6 +82,7 @@ data:
   ca.crt: {{ $genCA.Cert | b64enc }}
   tls.crt: {{ $genCert.Cert | b64enc }}
   tls.key: {{ $genCert.Key | b64enc }}
+{{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

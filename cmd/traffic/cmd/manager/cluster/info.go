@@ -1,25 +1,26 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -40,13 +41,11 @@ type Info interface {
 	// clusterID of the cluster
 	ClusterID() string
 
-	// GetTrafficManagerPods acquires all pods that have `traffic-manager` in
-	// their name
-	GetTrafficManagerPods(context.Context) ([]*corev1.Pod, error)
+	// SetAdditionalAlsoProxy assigns a slice that will be added to the Routing.AlsoProxySubnets slice
+	// when notifications are sent.
+	SetAdditionalAlsoProxy(ctx context.Context, subnets []*rpc.IPNet)
 
-	// GetTrafficAgentPods acquires all pods that have a `traffic-agent`
-	// container in their spec
-	GetTrafficAgentPods(context.Context, string) ([]*corev1.Pod, error)
+	ClusterDomain() string
 }
 
 type subnetRetriever interface {
@@ -58,8 +57,12 @@ type info struct {
 	rpc.ClusterInfo
 	ciSubs *clusterInfoSubscribers
 
-	// namespaceID is the UID of the manager's namespace
-	namespaceID string
+	// addAlsoProxy are extra subnets that will be added to the also-proxy slice
+	// when sending notifications to the client.
+	addAlsoProxy []*rpc.IPNet
+
+	// installID is the UID of the manager's namespace
+	installID string
 
 	// clusterID is the UID of the default namespace
 	clusterID string
@@ -96,23 +99,33 @@ func NewInfo(ctx context.Context) Info {
 	}
 
 	client := ki.CoreV1()
-	if oi.namespaceID, err = GetIDFunc(ctx, client, env.ManagerNamespace); err != nil {
+	if oi.installID, err = GetInstallIDFunc(ctx, client, env.ManagerNamespace); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
-		oi.namespaceID = IDZero
-		dlog.Warnf(ctx, "unable to get namespace \"%s\", will use default clusterID: %s: %v",
-			env.ManagerNamespace, oi.namespaceID, err)
+		oi.installID = IDZero
+		dlog.Warnf(ctx, "unable to get namespace \"%s\", will use default installID: %s: %v",
+			env.ManagerNamespace, oi.installID, err)
 	}
 
 	// backwards compat
 	// TODO delete after default ns licenses expire
-	if oi.clusterID, err = GetIDFunc(ctx, client, "default"); err != nil {
+	if oi.clusterID, err = GetInstallIDFunc(ctx, client, "default"); err != nil {
 		// We use a default clusterID because we don't want to fail if
 		// the traffic-manager doesn't have the ability to get the namespace
 		oi.clusterID = IDZero
-		dlog.Warnf(ctx,
-			"unable to get namespace \"default\", will use default clusterID: %s: %v. This is only necessary for compatibility with old licesnses.",
-			oi.clusterID, err)
+		dlog.Infof(ctx,
+			"unable to get namespace \"default\", but it is only necessary for compatibility with old licesnses: %v", err)
+	}
+
+	dummyIP := "1.1.1.1"
+	if managerutil.AgentInjectorEnabled(ctx) {
+		oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
+		if err != nil {
+			dlog.Warn(ctx, err)
+		} else if len(oi.InjectorSvcIp) == 16 {
+			// Must use an IPv6 IP to get the correct error message.
+			dummyIP = "1:1::1"
+		}
 	}
 
 	// make an attempt to create a service with ClusterIP that is out of range and then
@@ -130,9 +143,10 @@ func NewInfo(ctx context.Context) Info {
 		},
 		Spec: corev1.ServiceSpec{
 			Ports:     []corev1.ServicePort{{Port: 443}},
-			ClusterIP: "1.1.1.1",
+			ClusterIP: dummyIP,
 		},
 	}
+
 	if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, metav1.CreateOptions{}); err != nil {
 		svcCIDRrx := regexp.MustCompile(`range of valid IPs is (.*)$`)
 		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
@@ -151,22 +165,17 @@ func NewInfo(ctx context.Context) Info {
 	if err != nil {
 		dlog.Warn(ctx, err)
 	}
-	if oi.ServiceSubnet == nil {
+	if oi.ServiceSubnet == nil && len(oi.InjectorSvcIp) > 0 {
 		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
 		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
-		// from the traffic-manager service IP. This is cheating but a cluster may only have one service subnet
-		// and the mask is unlikely to cover less than half the bits.
-		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", "traffic-manager")
-		if err != nil || len(ips) == 0 {
-			dlog.Warn(ctx, "traffic manager is not able to resolve the IP of its own service")
-		} else {
-			ip := ips[0]
-			dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of traffic-manager.%s)", ip, env.ManagerNamespace)
-			bits := len(ip) * 8
-			ones := bits / 2
-			mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
-			oi.ServiceSubnet = &rpc.IPNet{Ip: ip.Mask(mask), Mask: int32(ones)}
-		}
+		// from the agent-injector service IP (the traffic-manager has clusterIP=None). This is cheating but
+		// a cluster may only have one service subnet and the mask is unlikely to cover less than half the bits.
+		ip := net.IP(oi.InjectorSvcIp)
+		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of agent-injector.%s)", ip, env.ManagerNamespace)
+		bits := len(ip) * 8
+		ones := bits / 2
+		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
+		oi.ServiceSubnet = &rpc.IPNet{Ip: ip.Mask(mask), Mask: int32(ones)}
 	}
 
 	podCIDRStrategy := env.PodCIDRStrategy
@@ -174,10 +183,6 @@ func NewInfo(ctx context.Context) Info {
 
 	oi.ManagerPodIp = env.PodIP
 	oi.ManagerPodPort = int32(env.ServerPort)
-	oi.InjectorSvcIp, oi.InjectorSvcPort, err = getInjectorSvcIP(ctx, env, client)
-	if err != nil {
-		dlog.Warnf(ctx, "failed to detect injector service ClusterIP; service connectivity check will be disabled in clients: %s", err)
-	}
 	oi.InjectorSvcHost = fmt.Sprintf("%s.%s", env.AgentInjectorName, env.ManagerNamespace)
 
 	alsoProxy := env.ClientRoutingAlsoProxySubnets
@@ -241,27 +246,76 @@ func NewInfo(ctx context.Context) Info {
 }
 
 func getClusterDomain(ctx context.Context, svcIp net.IP, env *managerutil.Env) string {
-	desiredMatch := env.AgentInjectorName + "." + env.ManagerNamespace + ".svc."
-	addr := svcIp.String()
+	rcFile := "/etc/resolv.conf"
+	name, err := clusterDomainFromResolvConf(rcFile, env.ManagerNamespace)
+	if err == nil {
+		dlog.Infof(ctx, `Cluster domain derived from /etc/resolv.conf search path %q`, name)
+		return name
+	}
+	dlog.Infof(ctx, "Unable to extract cluster domain from %s: %v", rcFile, err)
 
-	for retry := 0; retry <= 2; retry++ {
-		if retry > 0 {
-			dlog.Debugf(ctx, "retry %d of reverse lookup of agent-injector", retry+1)
-		}
-		if names, err := net.LookupAddr(addr); err == nil {
-			for _, name := range names {
-				if strings.HasPrefix(name, desiredMatch) {
-					dlog.Infof(ctx, `Cluster domain derived from agent-injector reverse lookup %q`, name)
-					return name[len(desiredMatch):]
+	if managerutil.AgentInjectorEnabled(ctx) {
+		desiredMatch := env.AgentInjectorName + "." + env.ManagerNamespace + ".svc."
+		addr := svcIp.String()
+
+		for retry := 0; retry <= 2; retry++ {
+			if retry > 0 {
+				dlog.Debugf(ctx, "retry %d of reverse lookup of agent-injector", retry+1)
+			}
+			if names, err := net.LookupAddr(addr); err == nil {
+				for _, name := range names {
+					if strings.HasPrefix(name, desiredMatch) {
+						dlog.Infof(ctx, `Cluster domain derived from agent-injector reverse lookup %q`, name)
+						return name[len(desiredMatch):]
+					}
 				}
 			}
+			// If no reverse lookups are found containing the cluster domain, then that's probably because the
+			// DNS for the service isn't completely setup yet.
+			time.Sleep(300 * time.Millisecond)
 		}
-		// If no reverse lookups are found containing the cluster domain, then that's probably because the
-		// DNS for the service isn't completely setup yet.
-		time.Sleep(300 * time.Millisecond)
+		dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s"`, env.AgentInjectorName)
 	}
-	dlog.Infof(ctx, `Unable to determine cluster domain from CNAME of %s"`, env.AgentInjectorName)
 	return "cluster.local."
+}
+
+// This code was shamelessly stolen from tailscale/cmd//k8s-operator/svc.go and rewritten to use
+// our ResolverFile and return error instead of just logging info.
+// Kudos to the authors at Tailscale!
+func clusterDomainFromResolvConf(confFile, namespace string) (string, error) {
+	conf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
+	if err != nil {
+		return "", err
+	}
+
+	if len(conf.Search) < 3 {
+		return "", fmt.Errorf("%s contains only %d search domains, at least three expected", confFile, len(conf.Search))
+	}
+	first := conf.Search[0]
+	if !strings.HasPrefix(first, namespace+".svc.") {
+		return "", fmt.Errorf("first search domain in %s is %s; expected %s", confFile, first, namespace+".svc.<cluster-domain>")
+	}
+	second := conf.Search[1]
+	if !strings.HasPrefix(second, "svc.") {
+		return "", fmt.Errorf("second search domain in %s is %s; expected 'svc.<cluster-domain>'", confFile, second)
+	}
+
+	probablyClusterDomain := strings.TrimPrefix(second, "svc.")
+	if !strings.HasSuffix(probablyClusterDomain, ".") {
+		probablyClusterDomain += "."
+	}
+
+	// Trim the trailing dot for backwards compatibility purposes as the
+	// cluster domain was previously hardcoded to 'cluster.local' without a
+	// trailing dot.
+	third := conf.Search[2]
+	if !strings.HasSuffix(third, ".") {
+		third += "."
+	}
+	if !strings.EqualFold(third, probablyClusterDomain) {
+		return "", fmt.Errorf("expected %s to contain serch domains <namespace>.svc.<cluster-domain>, svc.<cluster-domain>, <cluster-domain>; got %s", confFile, conf.Search)
+	}
+	return probablyClusterDomain, nil
 }
 
 func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
@@ -309,37 +363,7 @@ func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV
 }
 
 func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	nsc := len(namespaces)
-	if nsc == 0 {
-		// Create one of lister and one informer that have cluster wide scope
-		namespaces = []string{""}
-		nsc = 1
-	}
-	podListers := make([]PodLister, nsc)
-	podInformers := make([]cache.SharedIndexInformer, nsc)
-	wg := sync.WaitGroup{}
-	wg.Add(nsc)
-	for i, ns := range namespaces {
-		var opts []informers.SharedInformerOption
-		if ns != "" {
-			opts = []informers.SharedInformerOption{informers.WithNamespace(ns)}
-		}
-		informerFactory := informers.NewSharedInformerFactoryWithOptions(k8sapi.GetK8sInterface(ctx), 0, opts...)
-		podController := informerFactory.Core().V1().Pods()
-		podListers[i] = podController.Lister()
-		podInformers[i] = podController.Informer()
-		go func() {
-			defer wg.Done()
-			informerFactory.Start(ctx.Done())
-			informerFactory.WaitForCacheSync(ctx.Done())
-		}()
-	}
-	wg.Wait()
-
-	retriever := newPodWatcher(ctx, podListers, podInformers)
+	retriever := newPodWatcher(ctx, namespaces)
 	if !retriever.viable(ctx) {
 		dlog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
 		return
@@ -352,6 +376,7 @@ func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 	subnets := managerutil.GetEnv(ctx).PodCIDRs
 	if len(subnets) > 0 {
 		oi.PodSubnets = subnetsToRPC(subnets)
+		oi.ciSubs.notify(ctx, oi.clusterInfo())
 		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
 		return true
 	}
@@ -364,15 +389,49 @@ func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfo
 	return oi.ciSubs.subscriberLoop(ctx, oiStream)
 }
 
+// SetAdditionalAlsoProxy assigns a slice that will be added to the Routing.AlsoProxySubnets slice
+// when notifications are sent.
+func (oi *info) SetAdditionalAlsoProxy(ctx context.Context, subnets []*rpc.IPNet) {
+	eq := func(a, b *rpc.IPNet) bool {
+		return a.Mask == b.Mask && bytes.Equal(a.Ip, b.Ip)
+	}
+	if !slices.EqualFunc(oi.addAlsoProxy, subnets, eq) {
+		oi.addAlsoProxy = subnets
+		oi.ciSubs.notify(ctx, oi.clusterInfo())
+	}
+}
+
 func (oi *info) ID() string {
-	return oi.namespaceID
+	return oi.installID
 }
 
 func (oi *info) ClusterID() string {
 	return oi.clusterID
 }
 
+func (oi *info) ClusterDomain() string {
+	return oi.Dns.ClusterDomain
+}
+
 func (oi *info) clusterInfo() *rpc.ClusterInfo {
+	rt := oi.Routing
+	if len(oi.addAlsoProxy) > 0 {
+		aps := rt.AlsoProxySubnets
+		cps := append(make([]*rpc.IPNet, 0, len(aps)+len(oi.addAlsoProxy)), aps...)
+		for _, s := range oi.addAlsoProxy {
+			if !slices.ContainsFunc(cps, func(a *rpc.IPNet) bool {
+				return a.Mask == s.Mask && bytes.Equal(a.Ip, s.Ip)
+			}) {
+				cps = append(cps, s)
+			}
+		}
+		rt = &rpc.Routing{
+			AlsoProxySubnets:        cps,
+			NeverProxySubnets:       rt.NeverProxySubnets,
+			AllowConflictingSubnets: rt.AllowConflictingSubnets,
+		}
+	}
+
 	ci := &rpc.ClusterInfo{
 		ServiceSubnet:   oi.ServiceSubnet,
 		PodSubnets:      make([]*rpc.IPNet, len(oi.PodSubnets)),
@@ -381,7 +440,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		InjectorSvcIp:   oi.InjectorSvcIp,
 		InjectorSvcPort: oi.InjectorSvcPort,
 		InjectorSvcHost: oi.InjectorSvcHost,
-		Routing:         oi.Routing,
+		Routing:         rt,
 		Dns:             oi.Dns,
 		KubeDnsIp:       oi.Dns.KubeIp,
 		ClusterDomain:   oi.Dns.ClusterDomain,
@@ -407,61 +466,4 @@ func subnetsToRPC(subnets []*net.IPNet) []*rpc.IPNet {
 		rpcSubnets[i] = iputil.IPNetToRPC(s)
 	}
 	return rpcSubnets
-}
-
-// GetTrafficAgentPods gets all pods that have a `traffic-agent` container
-// in them.
-func (oi *info) GetTrafficAgentPods(ctx context.Context, agents string) ([]*corev1.Pod, error) {
-	// We don't get agents if they explicitly say false
-	if agents == "None" {
-		return nil, nil
-	}
-	client := k8sapi.GetK8sInterface(ctx).CoreV1()
-	podList, err := client.Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	// This is useful to determine how many pods we *should* be
-	// getting logs for
-	dlog.Debugf(ctx, "Found %d pod that contain a traffic-agent", len(podList.Items))
-
-	var agentPods []*corev1.Pod
-	for _, pod := range podList.Items {
-		pod := pod
-		if agents != "all" && !strings.Contains(pod.Name, agents) {
-			continue
-		}
-		for _, container := range pod.Spec.Containers {
-			if container.Name == agentContainerName {
-				agentPods = append(agentPods, &pod)
-				break
-			}
-		}
-	}
-	return agentPods, nil
-}
-
-// GetTrafficManagerPods gets all pods in the manager's namespace that have
-// `traffic-manager` in the name.
-func (oi *info) GetTrafficManagerPods(ctx context.Context) ([]*corev1.Pod, error) {
-	client := k8sapi.GetK8sInterface(ctx).CoreV1()
-	env := managerutil.GetEnv(ctx)
-	podList, err := client.Pods(env.ManagerNamespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	// This is useful to determine how many pods we *should* be
-	// getting logs for
-	dlog.Debugf(ctx, "Found %d traffic-manager pods", len(podList.Items))
-
-	var tmPods []*corev1.Pod
-	for _, pod := range podList.Items {
-		pod := pod
-		if strings.Contains(pod.Name, managerAppName) {
-			tmPods = append(tmPods, &pod)
-		}
-	}
-	return tmPods, nil
 }

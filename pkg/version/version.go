@@ -5,7 +5,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/blang/semver"
+	"github.com/blang/semver/v4"
 )
 
 // Version is a "vSEMVER" string, and is either populated at build-time using `--ldflags -X`, or at

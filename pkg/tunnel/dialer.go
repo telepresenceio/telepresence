@@ -123,7 +123,7 @@ func (h *dialer) Start(ctx context.Context) {
 
 			dlog.Tracef(ctx, "   CONN %s, dialing", id)
 			d := net.Dialer{Timeout: h.stream.DialTimeout()}
-			conn, err := d.DialContext(ctx, id.ProtocolString(), id.DestinationAddr().String())
+			conn, err := d.DialContext(ctx, id.DestinationProtocolString(), id.DestinationAddr().String())
 			if err != nil {
 				dlog.Errorf(ctx, "!! CONN %s, failed to establish connection: %v", id, err)
 				span.SetStatus(codes.Error, err.Error())

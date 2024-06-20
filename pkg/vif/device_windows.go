@@ -7,19 +7,16 @@ import (
 	"io"
 	"net"
 	"net/netip"
-	"os"
+	"slices"
 	"strings"
-	"time"
 
 	"golang.org/x/sys/windows"
-	"golang.org/x/sys/windows/registry"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
@@ -27,10 +24,11 @@ import (
 // See: https://www.wintun.net/ for more info.
 type nativeDevice struct {
 	tun.Device
-	strategy       client.GSCStrategy
-	name           string
-	dns            net.IP
-	interfaceIndex int32
+	strategy            client.GSCStrategy
+	name                string
+	dns                 net.IP
+	interfaceIndex      int32
+	searchListAdditions map[string]struct{}
 }
 
 func openTun(ctx context.Context) (td *nativeDevice, err error) {
@@ -58,7 +56,9 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 	}
 	interfaceName := fmt.Sprintf(interfaceFmt, ifaceNumber)
 	dlog.Infof(ctx, "Creating interface %s", interfaceName)
-	td = &nativeDevice{}
+	td = &nativeDevice{
+		searchListAdditions: make(map[string]struct{}),
+	}
 	if td.Device, err = tun.CreateTUN(interfaceName, 0); err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
@@ -97,7 +97,7 @@ func (t *nativeDevice) Close() error {
 	// Send something to the TUN device so that the Read
 	// unlocks the NativeTun.closing mutex and let the actual
 	// Close call continue
-	conn, err := net.Dial("udp", t.dns.String()+":53")
+	conn, err := net.Dial("udp", net.JoinHostPort(t.dns.String(), "53"))
 	if err == nil {
 		_, _ = conn.Write([]byte("bogus"))
 	}
@@ -140,188 +140,42 @@ func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error 
 
 func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server net.IP, searchList []string) (err error) {
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
-	dlog.Debugf(ctx, "SetDNS clusterDomain: %q, server: %s, searchList: %v", clusterDomain, server, searchList)
+	dlog.Debugf(ctx, "SetDNS server: %s, searchList: %v, domain: %q", server, searchList, clusterDomain)
 	defer dlog.Debug(ctx, "SetDNS done")
 
-	parentCtx := ctx
-	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	defer cancel()
-
-	go func() {
-		<-parentCtx.Done()
-		// Give this function some time to complete its task after the parentCtx is done. Configuring DSN on windows is slow
-		// and we don't want to interrupt it.
-		time.AfterFunc(10*time.Second, cancel)
-	}()
-
-	ipFamily := func(ip net.IP) winipcfg.AddressFamily {
-		f := winipcfg.AddressFamily(windows.AF_INET6)
-		if ip4 := ip.To4(); ip4 != nil {
-			f = windows.AF_INET
-		}
-		return f
-	}
-	family := ipFamily(server)
 	luid := t.getLUID()
+	family := addressFamily(server)
 	if t.dns != nil {
-		if oldFamily := ipFamily(t.dns); oldFamily != family {
+		if oldFamily := addressFamily(t.dns); oldFamily != family {
 			_ = luid.FlushDNS(oldFamily)
 		}
 	}
-	serverStr := server.String()
-	servers16, err := windows.UTF16PtrFromString(serverStr)
-	if err != nil {
-		return err
-	}
-	searchList16, err := windows.UTF16PtrFromString(strings.Join(searchList, ","))
-	if err != nil {
-		return err
-	}
-	guid, err := luid.GUID()
-	if err != nil {
-		return err
-	}
-	dnsInterfaceSettings := &winipcfg.DnsInterfaceSettings{
-		Version:    winipcfg.DnsInterfaceSettingsVersion1,
-		Flags:      winipcfg.DnsInterfaceSettingsFlagNameserver | winipcfg.DnsInterfaceSettingsFlagSearchList,
-		NameServer: servers16,
-		SearchList: searchList16,
-	}
-	if family == windows.AF_INET6 {
-		dnsInterfaceSettings.Flags |= winipcfg.DnsInterfaceSettingsFlagIPv6
-	}
-	if err = winipcfg.SetInterfaceDnsSettings(*guid, dnsInterfaceSettings); err != nil {
-		return err
-	}
-
-	// Unless we also update the global DNS search path, the one for the device doesn't work on some platforms.
-	// This behavior is mainly observed on Windows Server editions.
-
-	// Retrieve the current global search paths so that paths that aren't related to
-	// the cluster domain (i.e. not managed by us) can be retained.
-	gss, err := getGlobalSearchList()
-	if err != nil {
-		return err
-	}
-	// Put our new search path in front of other entries. Then include those
-	// that don't end with our cluster domain (these are entries that aren't
-	// managed by Telepresence).
-	uniq := make(map[string]int, len(searchList)+len(gss))
-	i := 0
-	for _, gs := range searchList {
-		gs = strings.TrimSuffix(gs, ".")
-		if _, ok := uniq[gs]; !ok {
-			uniq[gs] = i
-			i++
-		}
-	}
-	clusterDomainDot := "." + clusterDomain
-	clusterDomain = strings.TrimSuffix(clusterDomainDot, ".")
-	ours := func(gs string) bool {
-		return strings.HasSuffix(gs, clusterDomain) || strings.HasSuffix(gs, clusterDomainDot) || gs == "tel2-search"
-	}
-
-	for _, gs := range gss {
-		if !ours(gs) {
-			if _, ok := uniq[gs]; !ok {
-				uniq[gs] = i
-				i++
-			}
-		}
-	}
-	gss = make([]string, len(uniq))
-	for gs, i := range uniq {
-		gss[i] = gs
-	}
 	t.dns = server
-	return t.setGlobalSearchList(ctx, gss)
+	svcAddr, ok := netip.AddrFromSlice(server)
+	if !ok {
+		return fmt.Errorf("%s is not a valid address", server)
+	}
+	clusterDomain = strings.TrimSuffix(clusterDomain, ".")
+	cdi := slices.Index(searchList, clusterDomain)
+	switch cdi {
+	case 0:
+		// clusterDomain is already in first position
+	case -1:
+		// clusterDomain is not included in the list
+		searchList = slices.Insert(searchList, 0, clusterDomain)
+	default:
+		// put clusterDomain first in list, but retain the order of remaining elements
+		searchList = slices.Insert(slices.Delete(searchList, cdi, cdi+1), 0, clusterDomain)
+	}
+	return luid.SetDNS(family, []netip.Addr{svcAddr}, searchList)
 }
 
-func psList(values []string) string {
-	var sb strings.Builder
-	sb.WriteString("@(")
-	for i, gs := range values {
-		if i > 0 {
-			sb.WriteByte(',')
-		}
-		sb.WriteByte('"')
-		sb.WriteString(gs)
-		sb.WriteByte('"')
+func addressFamily(ip net.IP) winipcfg.AddressFamily {
+	f := winipcfg.AddressFamily(windows.AF_INET6)
+	if ip4 := ip.To4(); ip4 != nil {
+		f = windows.AF_INET
 	}
-	sb.WriteByte(')')
-	return sb.String()
-}
-
-const (
-	tcpParamKey   = `System\CurrentControlSet\Services\Tcpip\Parameters`
-	searchListKey = `SearchList`
-)
-
-func getGlobalSearchList() ([]string, error) {
-	rk, err := registry.OpenKey(registry.LOCAL_MACHINE, tcpParamKey, registry.QUERY_VALUE)
-	if err != nil {
-		if os.IsNotExist(err) {
-			err = nil
-		}
-		return nil, err
-	}
-	defer rk.Close()
-	csv, _, err := rk.GetStringValue(searchListKey)
-	if err != nil {
-		if os.IsNotExist(err) {
-			err = nil
-		}
-		return nil, err
-	}
-	if csv == "" {
-		return nil, nil
-	}
-	return strings.Split(csv, ","), nil
-}
-
-func (t *nativeDevice) setGlobalSearchList(ctx context.Context, gss []string) error {
-	var err error
-	if t.strategy == client.GSCAuto || t.strategy == client.GSCRegistry {
-		// Try setting the DNS directly in the registry. It's known to work in some situations where powershell fails.
-		err = t.setRegistryGlobalSearchList(ctx, gss)
-		if err != nil {
-			if t.strategy != client.GSCAuto {
-				dlog.Errorf(ctx, "setting DNS using the registry value failed: %v", err)
-				return err
-			}
-			dlog.Warnf(ctx, `setting DNS by setting the registry value %s\%s directly failed. Will attempt using powershell`, tcpParamKey, searchListKey)
-			t.strategy = client.GSCPowershell
-		}
-	}
-	if t.strategy == client.GSCPowershell {
-		cmd := proc.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "Set-DnsClientGlobalSetting", "-SuffixSearchList", psList(gss))
-		if _, err = proc.CaptureErr(cmd); err != nil {
-			dlog.Errorf(ctx, "setting DNS using Powershell failed: %v", err)
-		}
-	}
-	if err == nil {
-		cmd := proc.CommandContext(ctx, "ipconfig.exe", "/flushdns")
-		if _, flushErr := proc.CaptureErr(cmd); flushErr != nil {
-			dlog.Errorf(ctx, "flushing DNS cache failed: %v", flushErr)
-		}
-	}
-	return err
-}
-
-func (t *nativeDevice) setRegistryGlobalSearchList(ctx context.Context, gss []string) error {
-	// Try setting the DNS directly in the registry. It's known to work in some situations.
-	rk, _, err := registry.CreateKey(registry.LOCAL_MACHINE, tcpParamKey, registry.SET_VALUE)
-	if err != nil {
-		dlog.Errorf(ctx, `creating/opening registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
-	} else {
-		defer rk.Close()
-		rv := strings.Join(gss, ",")
-		dlog.Debugf(ctx, `setting registry value %s\%s to %s`, tcpParamKey, searchListKey, rv)
-		if err = rk.SetStringValue(searchListKey, rv); err != nil {
-			dlog.Errorf(ctx, `setting registry value %s\%s failed: %v`, tcpParamKey, searchListKey, err)
-		}
-	}
-	return err
+	return f
 }
 
 func (t *nativeDevice) setMTU(int) error {

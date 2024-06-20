@@ -2,22 +2,13 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/cli/values"
-	"helm.sh/helm/v3/pkg/getter"
 
-	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func helmCmd() *cobra.Command {
@@ -29,10 +20,9 @@ func helmCmd() *cobra.Command {
 }
 
 type HelmCommand struct {
-	values.Options
 	helm.Request
 	AllValues map[string]any
-	rq        *daemon.Request
+	rq        *daemon.CobraRequest
 }
 
 var (
@@ -142,23 +132,11 @@ func (ha *HelmCommand) Type() helm.RequestType {
 	return ha.Request.Type
 }
 
-func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
-	if ha.ReuseValues && ha.ResetValues {
-		return errcat.User.New("--reset-values and --reuse-values are mutually exclusive")
-	}
-	var err error
-	if ha.AllValues, err = ha.MergeValues(getter.All(cli.New())); err != nil {
-		return err
-	}
+func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) (err error) {
 	if err = ha.rq.CommitFlags(cmd); err != nil {
 		return err
 	}
 	ctx := cmd.Context()
-	if ns, ok := ha.rq.KubeFlags["namespace"]; ok {
-		dlog.Debugf(ctx, "using manager namespace %q", ns)
-		ha.rq.ManagerNamespace = ns
-	}
-
 	ctx = scout.NewReporter(ctx, "cli")
 	defer func() {
 		if err == nil {
@@ -181,50 +159,5 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
-
-	ha.ValuesJson, err = json.Marshal(ha.AllValues)
-	if err != nil {
-		return err
-	}
-
-	cr := &ha.rq.ConnectRequest
-	var config *client.Kubeconfig
-	config, err = client.DaemonKubeconfig(ctx, cr)
-	if err != nil {
-		return err
-	}
-
-	var cluster *k8s.Cluster
-	cluster, err = k8s.ConnectCluster(ctx, cr, config)
-	if err != nil {
-		return err
-	}
-
-	if ha.Type() == helm.Uninstall {
-		err = helm.DeleteTrafficManager(ctx, cluster.ConfigFlags, cluster.GetManagerNamespace(), false, &ha.Request)
-	} else {
-		dlog.Debug(ctx, "ensuring that traffic-manager exists")
-		err = helm.EnsureTrafficManager(cluster.WithK8sInterface(ctx), cluster.ConfigFlags, cluster.GetManagerNamespace(), &ha.Request)
-	}
-	if err != nil {
-		return err
-	}
-
-	var msg string
-	switch ha.Type() {
-	case helm.Install:
-		msg = "installed"
-	case helm.Upgrade:
-		msg = "upgraded"
-	case helm.Uninstall:
-		msg = "uninstalled"
-	}
-
-	updatedResource := "Traffic Manager"
-	if ha.Crds {
-		updatedResource = "Telepresence CRDs"
-	}
-
-	ioutil.Printf(cmd.OutOrStdout(), "\n%s %s successfully\n", updatedResource, msg)
-	return nil
+	return ha.Run(ctx, &ha.rq.Request.ConnectRequest)
 }

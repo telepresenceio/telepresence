@@ -11,6 +11,8 @@ require less permissions in clientRbac.yaml
 {{- fail (printf "Namespace %s must be included in managerRbac.namespaces (managerRbac.namespaces contains: %s)" (include "traffic-manager.namespace" .) (join "," .Values.managerRbac.namespaces)) }}
 {{- end }}
 
+{{- $interceptEnabled := .Values.agentInjector.enabled }}
+
 {{- range .Values.managerRbac.namespaces }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -39,9 +41,17 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods/log
+  verbs:
+  - get
+{{- if $interceptEnabled }}
+- apiGroups:
+  - ""
+  resources:
   - configmaps
   verbs:
   - create
+{{- end }}
 - apiGroups:
   - ""
   resources:
@@ -50,8 +60,10 @@ rules:
   - list
   - get
   - watch
+{{- if $interceptEnabled }}
   - update
   - delete
+{{- end }}
   resourceNames:
   - telepresence-agents
   - telepresence-intercept-env
@@ -59,13 +71,24 @@ rules:
   - "apps"
   resources:
   - deployments
+  verbs:
+  - get
+  - list
+  - watch
+{{- if $interceptEnabled }}
+  - patch
+{{- end }}
+- apiGroups:
+  - "apps"
+  resources:
   - replicasets
   - statefulsets
   verbs:
   - get
   - list
+{{- if $interceptEnabled }}
   - patch
-  - update {{/* Only needed for upgrade of older versions */}}
+{{- end }}
 - apiGroups:
     - "events.k8s.io"
   resources:

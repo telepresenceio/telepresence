@@ -20,8 +20,6 @@ import (
 func TestGetConfig(t *testing.T) {
 	configs := []string{
 		/* sys1 */ `
-timeouts:
-  agentInstall: 2m10s
 logLevels:
   userDaemon: info
   rootDaemon: debug
@@ -30,7 +28,6 @@ cluster:
 `,
 		/* sys2 */ `
 timeouts:
-  apply: 33s
   connectivityCheck: 0ms
 logLevels:
   userDaemon: debug
@@ -51,6 +48,8 @@ intercept:
   appProtocolStrategy: portName
   defaultPort: 9080
   useFtp: true
+cluster:
+  virtualIPSubnet: 192.169.0.0/16
 `,
 	}
 
@@ -76,11 +75,9 @@ intercept:
 
 	cfg = GetConfig(c)
 	to := cfg.Timeouts()
-	assert.Equal(t, 2*time.Minute+10*time.Second, to.PrivateAgentInstall) // from sys1
-	assert.Equal(t, 33*time.Second, to.PrivateApply)                      // from sys2
-	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)             // from user
-	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)                  // from user
-	assert.Equal(t, time.Duration(0), to.PrivateConnectivityCheck)        // from sys2
+	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)      // from user
+	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)           // from user
+	assert.Equal(t, time.Duration(0), to.PrivateConnectivityCheck) // from sys2
 
 	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels().UserDaemon) // from sys2
 	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels().RootDaemon) // from user
@@ -93,6 +90,7 @@ intercept:
 	assert.Equal(t, 9080, cfg.Intercept().DefaultPort)                                           // from user
 	assert.True(t, cfg.Intercept().UseFtp)                                                       // from user
 	assert.Equal(t, cfg.Cluster().DefaultManagerNamespace, "hello")                              // from sys1
+	assert.Equal(t, cfg.Cluster().VirtualIPSubnet, "192.169.0.0/16")                             // from user
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {

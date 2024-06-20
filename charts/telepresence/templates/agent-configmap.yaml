@@ -1,7 +1,9 @@
-{{- if not .Values.rbac.only }}
+{{- if .Values.agentInjector.enabled }}
+{{- if and (not .Values.rbac.only) .Values.agentInjector.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: telepresence-agents
   namespace:  {{ include "traffic-manager.namespace" . }}
+{{- end }}
 {{- end }}

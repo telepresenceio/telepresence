@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/spf13/cobra"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -36,16 +35,14 @@ import (
 )
 
 type State interface {
-	Cmd() *cobra.Command
 	CreateRequest(context.Context) (*connector.CreateInterceptRequest, error)
 	Name() string
-	Run(context.Context) error
+	Run(context.Context) (*Info, error)
 	RunAndLeave() bool
 }
 
 type state struct {
 	*Command
-	cmd           *cobra.Command
 	env           map[string]string
 	mountDisabled bool
 	mountPoint    string // if non-empty, this the final mount point of a successful mount
@@ -59,12 +56,10 @@ type state struct {
 }
 
 func NewState(
-	cmd *cobra.Command,
 	args *Command,
 ) State {
 	s := &state{
 		Command: args,
-		cmd:     cmd,
 	}
 	s.self = s
 	return s
@@ -74,13 +69,10 @@ func (s *state) SetSelf(self State) {
 	s.self = self
 }
 
-func (s *state) Cmd() *cobra.Command {
-	return s.cmd
-}
-
 func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	spec := &manager.InterceptSpec{
-		Name: s.Name(),
+		Name:    s.Name(),
+		Replace: s.Replace,
 	}
 	ir := &connector.CreateInterceptRequest{
 		Spec:         spec,
@@ -186,23 +178,30 @@ func (s *state) RunAndLeave() bool {
 	return len(s.Cmdline) > 0 || s.DockerRun
 }
 
-func (s *state) Run(ctx context.Context) error {
+func (s *state) Run(ctx context.Context) (*Info, error) {
 	ctx = scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 	defer scout.Close(ctx)
 
 	if !s.RunAndLeave() {
-		// start and retain the intercept
-		return client.WithEnsuredState(ctx, s.create, nil, nil)
+		err := client.WithEnsuredState(ctx, s.create, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		return s.info, nil
 	}
 
 	// start intercept, run command, then leave the intercept
 	if s.DockerRun {
 		if err := s.prepareDockerRun(docker.EnableClient(ctx)); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return client.WithEnsuredState(ctx, s.create, s.runCommand, s.leave)
+	err := client.WithEnsuredState(ctx, s.create, s.runCommand, s.leave)
+	if err != nil {
+		return nil, err
+	}
+	return s.info, nil
 }
 
 func (s *state) create(ctx context.Context) (acquired bool, err error) {
@@ -214,6 +213,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 
 	// Add whatever metadata we already have to scout
 	scout.SetMetadatum(ctx, "service_name", s.AgentName)
+	scout.SetMetadatum(ctx, "manager_install_id", s.status.ManagerInstallId)
 	scout.SetMetadatum(ctx, "cluster_id", s.status.ClusterId)
 	scout.SetMetadatum(ctx, "intercept_mechanism", s.Mechanism)
 	scout.SetMetadatum(ctx, "intercept_mechanism_numargs", len(s.MechanismArgs))
@@ -252,9 +252,9 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		// local-only
 		return true, nil
 	}
-	detailedOutput := s.DetailedOutput && output.WantsFormatted(s.cmd)
+	detailedOutput := s.DetailedOutput && s.FormattedOutput
 	if !detailedOutput {
-		fmt.Fprintf(s.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, s.AgentName)
+		fmt.Fprintf(dos.Stdout(ctx), "Using %s %s\n", r.WorkloadKind, s.AgentName)
 	}
 	var intercept *manager.InterceptInfo
 
@@ -304,7 +304,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	if detailedOutput {
 		output.Object(ctx, s.info, true)
 	} else {
-		out := s.cmd.OutOrStdout()
+		out := dos.Stdout(ctx)
 		_, _ = s.info.WriteTo(out)
 		_, _ = fmt.Fprintln(out)
 	}
@@ -322,7 +322,6 @@ func (s *state) leave(ctx context.Context) error {
 
 func (s *state) runCommand(ctx context.Context) error {
 	// start the interceptor process
-	ctx = dos.WithStdio(ctx, s.cmd)
 	ud := daemon.GetUserClient(ctx)
 	if !s.DockerRun {
 		cmd, err := proc.Start(ctx, s.env, s.Cmdline[0], s.Cmdline[1:]...)

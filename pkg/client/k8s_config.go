@@ -10,11 +10,15 @@ import (
 
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/discovery/cached/memory"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
@@ -103,6 +107,9 @@ type KubeconfigExtension struct {
 	Manager                 *ManagerConfig   `json:"manager,omitempty"`
 }
 
+// Kubeconfig implements genericclioptions.RESTClientGetter, but is using the RestConfig
+// instead of the ConfigFlags (which also implements that interface) since the latter
+// will assume that the kubeconfig is loaded from disk.
 type Kubeconfig struct {
 	KubeconfigExtension
 	Namespace        string // default cluster namespace.
@@ -110,8 +117,34 @@ type Kubeconfig struct {
 	Server           string
 	OriginalFlagMap  map[string]string
 	EffectiveFlagMap map[string]string
-	ConfigFlags      *genericclioptions.ConfigFlags
+	ClientConfig     clientcmd.ClientConfig
 	RestConfig       *rest.Config
+}
+
+func (kf *Kubeconfig) ToRESTConfig() (*rest.Config, error) {
+	return kf.RestConfig, nil
+}
+
+func (kf *Kubeconfig) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(kf.RestConfig)
+	if err != nil {
+		return nil, err
+	}
+	return memory.NewMemCacheClient(discoveryClient), nil
+}
+
+func (kf *Kubeconfig) ToRESTMapper() (meta.RESTMapper, error) {
+	discoveryClient, err := kf.ToDiscoveryClient()
+	if err != nil {
+		return nil, err
+	}
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(discoveryClient)
+	expander := restmapper.NewShortcutExpander(mapper, discoveryClient, func(string) {})
+	return expander, nil
+}
+
+func (kf *Kubeconfig) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	return kf.ClientConfig
 }
 
 const configExtension = "telepresence.io"
@@ -142,17 +175,17 @@ func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, err
 }
 
 // ConfigLoader returns the name of the current Kubernetes context, and the context itself.
-func ConfigLoader(flagMap map[string]string) (clientcmd.ClientConfig, error) {
+func ConfigLoader(ctx context.Context, flagMap map[string]string, kubeConfigData []byte) (clientcmd.ClientConfig, error) {
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
 		return nil, err
 	}
-	return configFlags.ToRawKubeConfigLoader(), nil
+	return NewClientConfig(ctx, configFlags, kubeConfigData)
 }
 
 // CurrentContext returns the name of the current Kubernetes context, the active namespace, and the context itself.
-func CurrentContext(flagMap map[string]string) (string, string, *api.Context, error) {
-	cld, err := ConfigLoader(flagMap)
+func CurrentContext(ctx context.Context, flagMap map[string]string, configBytes []byte) (string, string, *api.Context, error) {
+	cld, err := ConfigLoader(ctx, flagMap, configBytes)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -180,7 +213,7 @@ func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespac
 	if err != nil {
 		return nil, err
 	}
-	return newKubeconfig(c, flagMap, flagMap, managerNamespaceOverride, configFlags)
+	return newKubeconfig(c, flagMap, flagMap, managerNamespaceOverride, configFlags, nil)
 }
 
 func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
@@ -209,7 +242,7 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 	if err != nil {
 		return nil, err
 	}
-	return newKubeconfig(c, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags)
+	return newKubeconfig(c, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags, cr.KubeconfigData)
 }
 
 // AppendKubeFlags appends the flags in the given map to the given slice in the form of
@@ -240,24 +273,173 @@ func AppendKubeFlags(kubeFlags map[string]string, args []string) ([]string, erro
 	return args, nil
 }
 
+// flagOverrides creates overrides based on the given ConfigFlags.
+//
+// The code in this function is copied from clientcmd.config_flags.go, function toRawKubeConfigLoader
+// but differs in that overrides are only made for non-zero values.
+func flagOverrides(f *genericclioptions.ConfigFlags) *clientcmd.ConfigOverrides {
+	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
+
+	stringVal := func(vp *string) (v string, ok bool) {
+		if vp != nil && *vp != "" {
+			v, ok = *vp, true
+		}
+		return
+	}
+
+	// bind auth info flag values to overrides
+	if v, ok := stringVal(f.CertFile); ok {
+		overrides.AuthInfo.ClientCertificate = v
+	}
+	if v, ok := stringVal(f.KeyFile); ok {
+		overrides.AuthInfo.ClientKey = v
+	}
+	if v, ok := stringVal(f.BearerToken); ok {
+		overrides.AuthInfo.Token = v
+	}
+	if v, ok := stringVal(f.Impersonate); ok {
+		overrides.AuthInfo.Impersonate = v
+	}
+	if v, ok := stringVal(f.ImpersonateUID); ok {
+		overrides.AuthInfo.ImpersonateUID = v
+	}
+	if f.ImpersonateGroup != nil && len(*f.ImpersonateGroup) > 0 {
+		overrides.AuthInfo.ImpersonateGroups = *f.ImpersonateGroup
+	}
+	if v, ok := stringVal(f.Username); ok {
+		overrides.AuthInfo.Username = v
+	}
+	if v, ok := stringVal(f.Password); ok {
+		overrides.AuthInfo.Password = v
+	}
+
+	// bind cluster flags
+	if v, ok := stringVal(f.APIServer); ok {
+		overrides.ClusterInfo.Server = v
+	}
+	if v, ok := stringVal(f.TLSServerName); ok {
+		overrides.ClusterInfo.TLSServerName = v
+	}
+	if v, ok := stringVal(f.CAFile); ok {
+		overrides.ClusterInfo.CertificateAuthority = v
+	}
+	if f.Insecure != nil && *f.Insecure {
+		overrides.ClusterInfo.InsecureSkipTLSVerify = true
+	}
+	if f.DisableCompression != nil && *f.DisableCompression {
+		overrides.ClusterInfo.DisableCompression = true
+	}
+
+	// bind context flags
+	if v, ok := stringVal(f.Context); ok {
+		overrides.CurrentContext = v
+	}
+	if v, ok := stringVal(f.ClusterName); ok {
+		overrides.Context.Cluster = v
+	}
+	if v, ok := stringVal(f.AuthInfoName); ok {
+		overrides.Context.AuthInfo = v
+	}
+	if v, ok := stringVal(f.Namespace); ok {
+		overrides.Context.Namespace = v
+	}
+
+	if v, ok := stringVal(f.Timeout); ok && v != "0" {
+		overrides.Timeout = v
+	}
+	return overrides
+}
+
+type KubeconfigGetter func() (*api.Config, error)
+
+type configGetter struct {
+	kubeconfigGetter KubeconfigGetter
+	destFile         string
+}
+
+func (g *configGetter) Load() (*api.Config, error) {
+	return g.kubeconfigGetter()
+}
+
+func (g *configGetter) GetLoadingPrecedence() []string {
+	return nil
+}
+
+func (g *configGetter) GetStartingConfig() (*api.Config, error) {
+	return g.kubeconfigGetter()
+}
+
+func (g *configGetter) GetDefaultFilename() string {
+	if g.destFile == "" {
+		destFile, err := os.CreateTemp("", "kc-*")
+		if err == nil {
+			g.destFile = destFile.Name()
+			_ = os.Remove(destFile.Name())
+			destFile.Close()
+		}
+	}
+	return g.destFile
+}
+
+func (g *configGetter) IsExplicitFile() bool {
+	return false
+}
+
+func (g *configGetter) GetExplicitFile() string {
+	return ""
+}
+
+func (g *configGetter) IsDefaultConfig(config *rest.Config) bool {
+	return false
+}
+
+// NewClientConfig creates a clientcmd.ClientConfig, by either reading the kubeconfig from the given configData or
+// by loading it from files as configured by the given configFlags.
+func NewClientConfig(ctx context.Context, configFlags *genericclioptions.ConfigFlags, configData []byte) (clientcmd.ClientConfig, error) {
+	if len(configData) == 0 {
+		return configFlags.ToRawKubeConfigLoader(), nil
+	}
+	directConfig, err := clientcmd.NewClientConfigFromBytes(configData)
+	if err != nil {
+		dlog.Errorf(ctx, "loading kubeconfig failed: %v", err)
+		return nil, err
+	}
+	config, err := directConfig.RawConfig()
+	if err != nil {
+		dlog.Errorf(ctx, "raw kubeconfig failed: %v", err)
+		return nil, err
+	}
+	overrides := flagOverrides(configFlags)
+	currentContext := overrides.CurrentContext
+	return clientcmd.NewNonInteractiveClientConfig(config, currentContext, overrides, &configGetter{
+		kubeconfigGetter: func() (*api.Config, error) {
+			return &config, nil
+		},
+	}), nil
+}
+
 func newKubeconfig(
 	ctx context.Context,
 	originalFlags,
 	effectiveFlags map[string]string,
 	managerNamespaceOverride string,
 	configFlags *genericclioptions.ConfigFlags,
+	configData []byte,
 ) (*Kubeconfig, error) {
-	configLoader := configFlags.ToRawKubeConfigLoader()
-	config, err := configLoader.RawConfig()
+	clientConfig, err := NewClientConfig(ctx, configFlags, configData)
 	if err != nil {
 		return nil, err
 	}
 
+	config, err := clientConfig.RawConfig()
+	if err != nil {
+		return nil, err
+	}
 	if len(config.Contexts) == 0 {
 		return nil, errcat.Config.New("kubeconfig has no context definition")
 	}
 
-	namespace, _, err := configLoader.Namespace()
+	namespace, _, err := clientConfig.Namespace()
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +459,7 @@ func newKubeconfig(
 		return nil, errcat.Config.Newf("the cluster %q declared in context %q does exists in the kubeconfig", kubeCtx.Cluster, ctxName)
 	}
 
-	restConfig, err := configLoader.ClientConfig()
+	restConfig, err := clientConfig.ClientConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +472,7 @@ func newKubeconfig(
 		Namespace:        namespace,
 		EffectiveFlagMap: effectiveFlags,
 		OriginalFlagMap:  originalFlags,
-		ConfigFlags:      configFlags,
+		ClientConfig:     clientConfig,
 		RestConfig:       restConfig,
 	}
 
@@ -349,8 +531,8 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		Server:           restConfig.Host,
 		EffectiveFlagMap: flagMap,
 		OriginalFlagMap:  flagMap,
-		ConfigFlags:      configFlags,
 		RestConfig:       restConfig,
+		ClientConfig:     configLoader,
 		// it may be empty, but we should avoid nil deref
 		KubeconfigExtension: KubeconfigExtension{
 			Manager: &ManagerConfig{
@@ -433,6 +615,10 @@ func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml 
 		if len(routing.NeverProxy) > 0 {
 			dlog.Debugf(ctx, "Applying remote neverProxy: %v", routing.NeverProxy)
 			kf.NeverProxy = append(kf.NeverProxy, routing.NeverProxy...)
+		}
+		if len(routing.AllowConflicting) > 0 {
+			dlog.Debugf(ctx, "Applying remote allowConflicting: %v", routing.AllowConflicting)
+			kf.AllowConflictingSubnets = append(kf.AllowConflictingSubnets, routing.AllowConflicting...)
 		}
 	}
 	return nil
