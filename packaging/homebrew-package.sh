@@ -8,7 +8,7 @@ then
 fi
 
 VERSION="${1}"
-PACKAGE_NAME="${2:-tel2}" # Can be 'tel2' or 'tel2oss'
+PACKAGE_NAME="${2:?Can be 'tel2' or 'tel2oss'}"
 
 ARCH=(amd64 arm64)
 OS=(darwin linux)
