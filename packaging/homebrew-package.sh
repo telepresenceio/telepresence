@@ -8,6 +8,7 @@ then
 fi
 
 VERSION="${1}"
+PACKAGE_NAME="${2:-tel2}" # Can be 'tel2' or 'tel2oss'
 
 ARCH=(amd64 arm64)
 OS=(darwin linux)
@@ -16,8 +17,13 @@ WORK_DIR="$(mktemp -d)"
 echo "Working in ${WORK_DIR}"
 
 BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
-FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
-FORMULA_NAME="Telepresence"
+if [ "${PACKAGE_NAME}" == 'tel2' ]; then
+    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
+    FORMULA_NAME="Telepresence"
+elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
+    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence-oss.rb"
+    FORMULA_NAME="Telepresence OSS"
+fi
 
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
@@ -31,7 +37,7 @@ for this_os in "${OS[@]}"; do
         # already exists, so let's download it
         echo "Downloading ${this_os}/${this_arch}/${VERSION}/telepresence"
         mkdir -p "${WORK_DIR}/${this_os}/${this_arch}/"
-        curl -fL "https://app.getambassador.io/download/tel2/${this_os}/${this_arch}/${VERSION}/telepresence" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
+        curl -fL "https://app.getambassador.io/download/${PACKAGE_NAME}/${this_os}/${this_arch}/${VERSION}/telepresence" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
         declare -x "TARBALL_HASH_${this_os}_${this_arch}"="$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")"
         tmp_var=TARBALL_HASH_${this_os}_${this_arch}
         echo "${tmp_var} == ${!tmp_var}"
