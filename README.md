@@ -414,5 +414,25 @@ encountered. The files are named `daemon.log` and `connector.log`. The location 
 - Linux `~/.cache/telepresence/logs`
 - Windows `"%USERPROFILE%\AppData\Local\logs"`
 
+## How it works
+
+When Telepresence 2 connects to a Kubernetes cluster, it
+
+ 1. Ensures Traffic Manager is installed in the cluster.
+ 2. Looks for the relevant subnets in the kubernetes cluster.
+ 3. Creates a Virtual Network Interface (VIF).
+ 4. Assigns the cluster's subnets to the VIF.
+ 5. Binds itself to VIF and starts routing traffic to the traffic-manager, or a traffic-agent if one is present.
+ 6. Starts listening for, and serving DNS requests, by passing a selected portion to the traffic-manager or traffic-agent.
+
+When a locally running application makes a network request to a service in the cluster, Telepresence will resolve the name to an address within the cluster.
+The operating system then sees that the TUN device has an address in the same subnet as the address of the outgoing packets and sends them to `tel0`.
+Telepresence is on the other side of `tel0` and picks up the packets, injecting them into the cluster through a gRPC connection with Traffic Manager.
+
+For a more in-depth overview, checkout our blog post: [Implementing Telepresence Networking with a TUN device](https://blog.getambassador.io/implementing-telepresence-networking-with-a-tun-device-a23a786d51e9)
+
+
+## Comparison to classic Telepresence
+
 Visit the troubleshooting section in the Telepresence documentation for more advice:
 [Troubleshooting](https://www.getambassador.io/docs/telepresence/latest/troubleshooting/)

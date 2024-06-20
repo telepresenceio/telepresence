@@ -86,6 +86,8 @@ export DTEST_REGISTRY=localhost:5000
 go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
 ```
 
+The user running the integration tests needs to be in the docker group.
+
 If you run these tests on a Mac, localhost won't work. Please use the docker hub, or this value for the registry:
 
 ```cli
@@ -250,7 +252,7 @@ visually modify test output; this happens even running locally, since the json o
 is piped to the tool anyway:
 
 ```console
-$ make check-unit
+$ DEV_TELEPRESENCE_GENERATE_GOLD=y go test -run=TestAddAgentToWorkload ./pkg/client/userd/trafficmgr
 ```
 
 ## Building for Release
