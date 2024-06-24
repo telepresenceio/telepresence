@@ -16,7 +16,6 @@ import (
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
@@ -24,11 +23,9 @@ import (
 // See: https://www.wintun.net/ for more info.
 type nativeDevice struct {
 	tun.Device
-	strategy            client.GSCStrategy
-	name                string
-	dns                 net.IP
-	interfaceIndex      int32
-	searchListAdditions map[string]struct{}
+	name           string
+	dns            net.IP
+	interfaceIndex int32
 }
 
 func openTun(ctx context.Context) (td *nativeDevice, err error) {
@@ -56,9 +53,7 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 	}
 	interfaceName := fmt.Sprintf(interfaceFmt, ifaceNumber)
 	dlog.Infof(ctx, "Creating interface %s", interfaceName)
-	td = &nativeDevice{
-		searchListAdditions: make(map[string]struct{}),
-	}
+	td = &nativeDevice{}
 	if td.Device, err = tun.CreateTUN(interfaceName, 0); err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
@@ -70,7 +65,6 @@ func openTun(ctx context.Context) (td *nativeDevice, err error) {
 		return nil, fmt.Errorf("failed to get interface for TUN device: %w", err)
 	}
 	td.interfaceIndex = int32(iface.InterfaceIndex)
-	td.strategy = client.GetConfig(ctx).OSSpecific().Network.GlobalDNSSearchConfigStrategy
 
 	return td, nil
 }
