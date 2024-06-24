@@ -34,6 +34,13 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Introduce DNS fallback on Windows.
+        body: >-
+          A <code>network.defaultDNSWithFallback</code> config option has been introduced on Windows. It will cause the
+          DNS-resolver to fall back to the resolver that was first in the list prior to when Telepresence establishes a
+          connection. The option is default <code>true</code> since it is believed to give the best experience but can be
+          set to <code>false</code> to restore the old behavior.
+      - type: feature
         title: Brew now supports MacOS (amd64/arm64) / Linux (amd64)
         body: >-
           The brew formula can now dynamically support MacOS (amd64/arm64) / Linux (amd64) in a single formula
