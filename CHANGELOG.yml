@@ -56,6 +56,10 @@ items:
           A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are
           able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources,
           including the Traffic Manager and hooks pods.
+      - type: bugfix
+        title: Fix configuring custom agent security context
+        body: ->
+          The traffic-manager helm chart will now correctly use a custom agent security context if one is provided.
   - version: 2.19.0
     date: "2024-06-15"
     notes:
