@@ -28,18 +28,25 @@ func (c *OSSpecificConfig) Merge(o *OSSpecificConfig) {
 type GSCStrategy string
 
 const (
+	defaultDNSWithFallback = true
+
 	// defaultVirtualIPSubnet is an IP that, on windows, is built from 16 class C subnets which were chosen randomly,
 	// hoping that they don't collide with another subnet.
 	defaultVirtualIPSubnet = "211.55.48.0/20"
 )
 
 type Network struct {
+	DNSWithFallback bool `json:"dnsWithFallback,omitempty" yaml:"dnsWithFallback,omitempty"`
 }
 
 func (n *Network) merge(o *Network) {
+	if o.DNSWithFallback != defaultDNSWithFallback { //nolint:gosimple // explicit default comparison
+		n.DNSWithFallback = o.DNSWithFallback
+	}
 }
 
 func (n Network) IsZero() bool {
+	return n.DNSWithFallback == defaultDNSWithFallback //nolint:gosimple // explicit default comparison
 }
 
 func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
@@ -55,6 +62,11 @@ func (n *Network) UnmarshalYAML(node *yaml.Node) (err error) {
 		}
 		v := ms[i+1]
 		switch kv {
+		case "dnsWithFallback":
+			err = v.Decode(&n.DNSWithFallback)
+			if err != nil {
+				return err
+			}
 		case "globalDNSSearchConfigStrategy":
 			logrus.Warn(WithLoc(fmt.Sprintf(`deprecated key %q, no longer needed`, kv), ms[i]))
 		default:
