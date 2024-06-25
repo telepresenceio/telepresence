@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -62,7 +63,7 @@ var QuitDaemonFuncs = []func(context.Context){
 func quitHostConnector(ctx context.Context) {
 	udCtx, err := ExistingHostDaemon(ctx, nil)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			dlog.Errorf(ctx, "unable to quit existing user daemon: %v", err)
 		}
 		return
