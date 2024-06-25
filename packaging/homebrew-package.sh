@@ -20,9 +20,11 @@ BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
 if [ "${PACKAGE_NAME}" == 'tel2' ]; then
     FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
     FORMULA_NAME="Telepresence"
+    FORMULA_FILE="packaging/homebrew-formula.rb"
 elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
     FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence-oss.rb"
     FORMULA_NAME="Telepresence OSS"
+    FORMULA_FILE="packaging/homebrew-oss-formula.rb"
 fi
 
 for this_os in "${OS[@]}"; do
@@ -82,7 +84,7 @@ echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
 git clone https://github.com/datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
 
 # Update recipe
-cp packaging/homebrew-formula.rb "${FORMULA}"
+cp "${FORMULA_FILE}" "${FORMULA}"
 
 sed -i'' -e "s/__FORMULA_NAME__/${FORMULA_NAME}/g" "${FORMULA}"
 sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "${FORMULA}"
