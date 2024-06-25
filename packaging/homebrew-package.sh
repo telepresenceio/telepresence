@@ -35,9 +35,14 @@ for this_os in "${OS[@]}"; do
 
         # We should only be updating homebrew with a version of telepresence that
         # already exists, so let's download it
-        echo "Downloading ${this_os}/${this_arch}/${VERSION}/telepresence"
+        if [ "${PACKAGE_NAME}" == 'tel2' ]; then
+            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/${this_os}/${this_arch}/${VERSION}/telepresence"
+        elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
+            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/releases/download/v${VERSION}/telepresence-${this_os}-${this_arch}"
+        fi
+        echo "Downloading ${DOWNLOAD_PATH}"
         mkdir -p "${WORK_DIR}/${this_os}/${this_arch}/"
-        curl -fL "https://app.getambassador.io/download/${PACKAGE_NAME}/${this_os}/${this_arch}/${VERSION}/telepresence" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
+        curl -fL "https://app.getambassador.io/${DOWNLOAD_PATH}" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
         declare -x "TARBALL_HASH_${this_os}_${this_arch}"="$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")"
         tmp_var=TARBALL_HASH_${this_os}_${this_arch}
         echo "${tmp_var} == ${!tmp_var}"
