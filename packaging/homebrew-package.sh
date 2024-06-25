@@ -77,10 +77,10 @@ echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
 git clone https://github.com/datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
 
 # Update recipe
-cp packaging/homebrew-formula.rb "$FORMULA"
+cp packaging/homebrew-formula.rb "${FORMULA}"
 
-sed -i'' -e "s/__FORMULA_NAME__/${FORMULA_NAME}/g" "$FORMULA"
-sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "$FORMULA"
+sed -i'' -e "s/__FORMULA_NAME__/${FORMULA_NAME}/g" "${FORMULA}"
+sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "${FORMULA}"
 
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
@@ -90,18 +90,18 @@ for this_os in "${OS[@]}"; do
             continue
         fi
         tmp_var="TARBALL_HASH_${this_os}_${this_arch}"
-        sed -i'' -e "s/__TARBALL_HASH_${this_os^^}_${this_arch^^}__/${!tmp_var}/g" "$FORMULA"
+        sed -i'' -e "s/__TARBALL_HASH_${this_os^^}_${this_arch^^}__/${!tmp_var}/g" "${FORMULA}"
     done
 done
 
-chmod 644 "$FORMULA"
+chmod 644 "${FORMULA}"
 cd "${BUILD_HOMEBREW_DIR}"
 
 # Use the correct machine user for committing
 git config user.email "services@datawire.io"
 git config user.name "d6e automaton"
 
-git add "$FORMULA"
+git add "${FORMULA}"
 git commit -m "Release ${VERSION}"
 
 # This cat is just so we can see the formula in case
