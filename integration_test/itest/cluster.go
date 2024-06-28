@@ -37,6 +37,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/dtest"
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
@@ -1198,5 +1199,36 @@ nextPod:
 		}
 	}
 	dlog.Infof(ctx, "Running pods %v", pods)
+	return pods
+}
+
+// RunningPodsWithAgents returns the names of running pods with a matching appPrefix that
+// has a running traffic-agent container.
+func RunningPodsWithAgents(ctx context.Context, appPrefix, ns string) []string {
+	out, err := KubectlOut(ctx, ns, "get", "pods", "-o", "json", "--field-selector", "status.phase==Running")
+	if err != nil {
+		getT(ctx).Log(err.Error())
+		return nil
+	}
+	var pm core.PodList
+	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
+		getT(ctx).Log(err.Error())
+		return nil
+	}
+	pods := make([]string, 0, len(pm.Items))
+nextPod:
+	for _, pod := range pm.Items {
+		if !strings.HasPrefix(pod.Labels["app"], appPrefix) {
+			continue
+		}
+		for _, cn := range pod.Status.ContainerStatuses {
+			if cn.Name == agentconfig.ContainerName && cn.Ready {
+				if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
+					pods = append(pods, pod.Name)
+					continue nextPod
+				}
+			}
+		}
+	}
 	return pods
 }

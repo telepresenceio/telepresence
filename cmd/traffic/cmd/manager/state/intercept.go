@@ -167,7 +167,7 @@ func (s *state) dropAgentConfig(
 	ctx context.Context,
 	wl k8sapi.Workload,
 ) error {
-	return mutator.GetMap(ctx).Delete(ctx, wl.GetNamespace(), wl.GetName())
+	return mutator.GetMap(ctx).Delete(ctx, wl.GetName(), wl.GetNamespace())
 }
 
 func (s *state) RestoreAppContainer(ctx context.Context, ii *managerrpc.InterceptInfo) (err error) {

@@ -189,8 +189,8 @@ func (s *nsPair) ApplyTemplate(ctx context.Context, path string, values any) {
 func (s *nsPair) DeleteTemplate(ctx context.Context, path string, values any) {
 	yml, err := ReadTemplate(ctx, path, values)
 	require.NoError(getT(ctx), err)
-	if err = s.Kubectl(dos.WithStdin(ctx, bytes.NewReader(yml)), "apply", "-f", "-"); err != nil {
-		dlog.Errorf(ctx, "unable to apply %q", string(yml))
+	if err = s.Kubectl(dos.WithStdin(ctx, bytes.NewReader(yml)), "delete", "-f", "-"); err != nil {
+		dlog.Errorf(ctx, "unable to delete %q", string(yml))
 		getT(ctx).Fatal(err)
 	}
 }

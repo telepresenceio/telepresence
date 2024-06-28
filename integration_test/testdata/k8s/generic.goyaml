@@ -1,0 +1,46 @@
+{{- /*gotype: github.com/telepresenceio/telepresence/v2/integration_test/itest.Generic*/ -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Name }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Name }}
+  labels:
+    app: {{ .Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Name }}
+{{- with .Annotations }}
+      annotations:
+  {{- toYaml . | nindent 8 }}
+{{- end}}
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Registry }}/{{ .Image }}"
+          ports:
+            - name: http
+              containerPort: 8080
+{{- with .Environment }}
+          env:
+  {{- toYaml . | nindent 12 }}
+{{- end}}
+
