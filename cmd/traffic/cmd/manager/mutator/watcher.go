@@ -37,6 +37,7 @@ import (
 type Map interface {
 	Get(context.Context, string, string) (agentconfig.SidecarExt, error)
 	Start(context.Context)
+	StartWatchers(ctx context.Context) error
 	Wait(context.Context) error
 	OnAdd(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
 	OnDelete(context.Context, string, string) error
@@ -496,7 +497,7 @@ func (c *configWatcher) SetSelf(self Map) {
 	c.self = self
 }
 
-func (c *configWatcher) Wait(ctx context.Context) error {
+func (c *configWatcher) StartWatchers(ctx context.Context) error {
 	ctx, c.cancel = context.WithCancel(ctx)
 	for _, si := range c.svs {
 		if err := c.watchServices(ctx, si); err != nil {
@@ -522,6 +523,13 @@ func (c *configWatcher) Wait(ctx context.Context) error {
 		if err := c.watchConfigMap(ctx, ci); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (c *configWatcher) Wait(ctx context.Context) error {
+	if err := c.StartWatchers(ctx); err != nil {
+		return err
 	}
 	<-ctx.Done()
 	return nil
