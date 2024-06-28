@@ -134,11 +134,11 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 func (c *configWatcher) deleteWorkload(ctx context.Context, wl k8sapi.Workload) {
 	scx, err := c.Get(ctx, wl.GetName(), wl.GetNamespace())
 	if err != nil {
-		dlog.Error(ctx, "Failed to get sidecar config: %v", err)
+		dlog.Errorf(ctx, "Failed to get sidecar config: %v", err)
 	} else if scx != nil {
 		err = c.Delete(ctx, wl.GetName(), wl.GetNamespace())
 		if err != nil {
-			dlog.Error(ctx, "Failed to delete sidecar config: %v", err)
+			dlog.Errorf(ctx, "Failed to delete sidecar config: %v", err)
 		}
 	}
 }
@@ -179,7 +179,7 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		if oldWl != nil {
 			scx, err = c.Get(ctx, wl.GetName(), wl.GetNamespace())
 			if err != nil {
-				dlog.Error(ctx, "Failed to get sidecar config: %v", err)
+				dlog.Errorf(ctx, "Failed to get sidecar config: %v", err)
 				return
 			}
 		}

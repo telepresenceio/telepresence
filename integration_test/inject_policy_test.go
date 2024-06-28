@@ -104,9 +104,11 @@ func (is *installSuite) TestInjectPolicy() {
 func (is *installSuite) applyMultipleServices(svcCount int) {
 	is.applyOrDeleteMultipleServices(svcCount, is.ApplyTemplate, true)
 }
+
 func (is *installSuite) deleteMultipleServices(svcCount int) {
 	is.applyOrDeleteMultipleServices(svcCount, is.DeleteTemplate, false)
 }
+
 func (is *installSuite) applyOrDeleteMultipleServices(svcCount int, applyOrDelete func(context.Context, string, any), wait bool) {
 	ctx := is.Context()
 	wg := sync.WaitGroup{}
