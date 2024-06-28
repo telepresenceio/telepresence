@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	informerCore "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/retry"
 
@@ -638,26 +636,6 @@ func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt) e
 	})
 }
 
-func tpAgentsInformer(ctx context.Context, ns string) informerCore.ConfigMapInformer {
-	f := informer.GetFactory(ctx, ns)
-	cV1 := informerCore.New(f, ns, func(options *meta.ListOptions) {
-		options.FieldSelector = "metadata.name=" + agentconfig.ConfigMap
-	})
-	cms := cV1.ConfigMaps()
-	return cms
-}
-
-func tpAgentsConfigMap(ctx context.Context, ns string) (*core.ConfigMap, error) {
-	cm, err := tpAgentsInformer(ctx, ns).Lister().ConfigMaps(ns).Get(agentconfig.ConfigMap)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, fmt.Errorf("unable to get ConfigMap %s: %w", agentconfig.ConfigMap, err)
-		}
-		cm = nil
-	}
-	return cm, nil
-}
-
 func data(ctx context.Context, ns string) (map[string]string, error) {
 	cm, err := tpAgentsConfigMap(ctx, ns)
 	if err != nil || cm == nil {
@@ -671,101 +649,6 @@ func whereWeWatch(ns string) string {
 		return "cluster wide"
 	}
 	return "in namespace " + ns
-}
-
-func (c *configWatcher) startConfigMap(ctx context.Context, ns string) cache.SharedIndexInformer {
-	ix := tpAgentsInformer(ctx, ns).Informer()
-	_ = ix.SetTransform(func(o any) (any, error) {
-		// Strip of the parts of the service that we don't care about
-		if cm, ok := o.(*core.ConfigMap); ok {
-			cm.ManagedFields = nil
-			cm.Finalizers = nil
-			cm.OwnerReferences = nil
-		}
-		return o, nil
-	})
-	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for ConfigMap %s %s: %v", agentconfig.ConfigMap, whereWeWatch(ns), err)
-	})
-	return ix
-}
-
-func (c *configWatcher) watchConfigMap(ctx context.Context, ix cache.SharedIndexInformer) error {
-	_, err := ix.AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj any) {
-				if cm, ok := obj.(*core.ConfigMap); ok {
-					dlog.Debugf(ctx, "ADDED %s.%s", cm.Name, cm.Namespace)
-					c.getNamespaceLock(cm.Namespace)
-					c.handleAdd(ctx, cm)
-				}
-			},
-			DeleteFunc: func(obj any) {
-				cm, ok := obj.(*core.ConfigMap)
-				if !ok {
-					if dfu, isDfu := obj.(*cache.DeletedFinalStateUnknown); isDfu {
-						cm, ok = dfu.Obj.(*core.ConfigMap)
-					}
-				}
-				if ok {
-					dlog.Debugf(ctx, "DELETED %s.%s", cm.Name, cm.Namespace)
-					c.getNamespaceLock(cm.Namespace)
-					c.handleDelete(ctx, cm)
-				}
-			},
-			UpdateFunc: func(oldObj, newObj any) {
-				if cm, ok := newObj.(*core.ConfigMap); ok {
-					dlog.Debugf(ctx, "UPDATED %s.%s", cm.Name, cm.Namespace)
-					c.handleUpdate(ctx, oldObj.(*core.ConfigMap), cm)
-				}
-			},
-		})
-	return err
-}
-
-func (c *configWatcher) startServices(ctx context.Context, ns string) cache.SharedIndexInformer {
-	f := informer.GetFactory(ctx, ns)
-	ix := f.Core().V1().Services().Informer()
-	_ = ix.SetTransform(func(o any) (any, error) {
-		// Strip of the parts of the service that we don't care about
-		if svc, ok := o.(*core.Service); ok {
-			svc.ManagedFields = nil
-			svc.Status = core.ServiceStatus{}
-			svc.Finalizers = nil
-			svc.OwnerReferences = nil
-		}
-		return o, nil
-	})
-	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for Services %s: %v", whereWeWatch(ns), err)
-	})
-	return ix
-}
-
-func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexInformer) error {
-	_, err := ix.AddEventHandler(
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj any) {
-				if svc, ok := obj.(*core.Service); ok {
-					c.updateSvc(ctx, svc, false)
-				}
-			},
-			DeleteFunc: func(obj any) {
-				if svc, ok := obj.(*core.Service); ok {
-					c.updateSvc(ctx, svc, true)
-				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
-					if svc, ok := dfsu.Obj.(*core.Service); ok {
-						c.updateSvc(ctx, svc, true)
-					}
-				}
-			},
-			UpdateFunc: func(oldObj, newObj any) {
-				if newSvc, ok := newObj.(*core.Service); ok {
-					c.updateSvc(ctx, newSvc, true)
-				}
-			},
-		})
-	return err
 }
 
 func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIndexInformer {
@@ -803,25 +686,6 @@ func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIn
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		dlog.Errorf(ctx, "Watcher for pods %s: %v", whereWeWatch(ns), err)
-	})
-	return ix
-}
-
-func (c *configWatcher) startDeployments(ctx context.Context, ns string) cache.SharedIndexInformer {
-	f := informer.GetFactory(ctx, ns)
-	ix := f.Apps().V1().Deployments().Informer()
-	_ = ix.SetTransform(func(o any) (any, error) {
-		// Strip of the parts of the deployment that we don't care about. Saves memory
-		if dep, ok := o.(*appsv1.Deployment); ok {
-			dep.ManagedFields = nil
-			dep.Status = appsv1.DeploymentStatus{}
-			dep.Finalizers = nil
-			dep.OwnerReferences = nil
-		}
-		return o, nil
-	})
-	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for Deployments %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }
@@ -867,154 +731,6 @@ func (c *configWatcher) Start(ctx context.Context) {
 		f := informer.GetFactory(ctx, ns)
 		f.Start(ctx.Done())
 		f.WaitForCacheSync(ctx.Done())
-	}
-}
-
-type affectedConfig struct {
-	err error
-	wl  k8sapi.Workload // If a workload is retrieved, it will be cached here.
-	scx agentconfig.SidecarExt
-}
-
-func (c *configWatcher) configsAffectedBySvc(ctx context.Context, nsData map[string]string, svc *core.Service, trustUID bool) []affectedConfig {
-	references := func(ac *agentconfig.Sidecar) (k8sapi.Workload, error, bool) {
-		for _, cn := range ac.Containers {
-			for _, ic := range cn.Intercepts {
-				if ic.ServiceUID == svc.UID {
-					return nil, nil, true
-				}
-			}
-		}
-		if trustUID {
-			// A deleted service will only affect configs that matches its UID
-			return nil, nil, false
-		}
-
-		// The config will be affected if a service is added or modified so that it now selects the pod for the workload.
-		wl, err := agentmap.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
-		if err != nil {
-			return nil, err, false
-		}
-		return wl, nil, labels.SelectorFromSet(svc.Spec.Selector).Matches(labels.Set(wl.GetPodTemplate().Labels))
-	}
-
-	var affected []affectedConfig
-	for _, cfg := range nsData {
-		scx, err := agentconfig.UnmarshalYAML([]byte(cfg))
-		if err != nil {
-			dlog.Errorf(ctx, "failed to decode ConfigMap entry %q into an agent config", cfg)
-		} else if wl, err, ok := references(scx.AgentConfig()); ok {
-			affected = append(affected, affectedConfig{scx: scx, wl: wl, err: err})
-		}
-	}
-	return affected
-}
-
-func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, trustUID bool) []affectedConfig {
-	ns := svc.Namespace
-	nsData, err := data(ctx, ns)
-	if err != nil {
-		return nil
-	}
-	if len(nsData) == 0 {
-		return nil
-	}
-	return c.configsAffectedBySvc(ctx, nsData, svc, trustUID)
-}
-
-func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustUID bool) {
-	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
-	// If so, include them, or if workload for the config entry isn't found, delete that entry
-	img := managerutil.GetAgentImage(ctx)
-	if img == "" {
-		return
-	}
-	cfg, err := agentmap.GeneratorConfigFunc(img)
-	if err != nil {
-		dlog.Error(ctx, err)
-		return
-	}
-	for _, ax := range c.affectedConfigs(ctx, svc, trustUID) {
-		ac := ax.scx.AgentConfig()
-		wl := ax.wl
-		if wl == nil {
-			err = ax.err
-			if err == nil {
-				wl, err = agentmap.GetWorkload(ctx, ac.WorkloadName, ac.Namespace, ac.WorkloadKind)
-			}
-			if err != nil {
-				if errors.IsNotFound(err) {
-					dlog.Debugf(ctx, "Deleting config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-					if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
-						dlog.Error(ctx, err)
-					}
-				} else {
-					dlog.Error(ctx, err)
-				}
-				continue
-			}
-		}
-		dlog.Debugf(ctx, "Regenerating config entry for %s %s.%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-		acn, err := cfg.Generate(ctx, wl, ac)
-		if err != nil {
-			if strings.Contains(err.Error(), "unable to find") {
-				if err = c.remove(ctx, ac.AgentName, ac.Namespace); err != nil {
-					dlog.Error(ctx, err)
-				}
-			} else {
-				dlog.Error(ctx, err)
-			}
-			continue
-		}
-		if err = c.store(ctx, acn); err != nil {
-			dlog.Error(ctx, err)
-		}
-	}
-}
-
-func (c *configWatcher) handleAdd(ctx context.Context, cm *core.ConfigMap) {
-	ns := cm.Namespace
-	for n, yml := range cm.Data {
-		c.handleAddOrUpdateEntry(ctx, entry{
-			name:      n,
-			namespace: ns,
-			value:     yml,
-		})
-	}
-}
-
-func (c *configWatcher) handleDelete(ctx context.Context, cm *core.ConfigMap) {
-	ns := cm.Namespace
-	for n, yml := range cm.Data {
-		c.handleDeleteEntry(ctx, entry{
-			name:      n,
-			namespace: ns,
-			value:     yml,
-		})
-	}
-}
-
-func (c *configWatcher) handleUpdate(ctx context.Context, oldCm, newCm *core.ConfigMap) {
-	ns := newCm.Namespace
-	for n, newYml := range newCm.Data {
-		e := entry{
-			name:      n,
-			namespace: ns,
-			value:     newYml,
-		}
-		if oldYml, ok := oldCm.Data[n]; ok && oldYml != newYml {
-			e.oldValue = oldYml
-		}
-		c.handleAddOrUpdateEntry(ctx, e)
-	}
-	for n, oldYml := range oldCm.Data {
-		if _, ok := newCm.Data[n]; !ok {
-			c.handleDeleteEntry(ctx, entry{
-				name:      n,
-				namespace: ns,
-				value:     oldYml,
-			})
-		}
 	}
 }
 
