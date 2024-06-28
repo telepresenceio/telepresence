@@ -210,6 +210,13 @@ func isRolloutNeededForPod(ctx context.Context, ac *agentconfig.Sidecar, name, n
 }
 
 func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) {
+	lck := c.getRolloutLock(wl)
+	if !lck.TryLock() {
+		// A rollout is already in progress, doing it again once it is complete wouldn't do any good.
+		return
+	}
+	defer lck.Unlock()
+
 	if !c.isRolloutNeeded(ctx, wl, ac) {
 		return
 	}
@@ -369,8 +376,15 @@ func (c *configWatcher) regenerateAgentMaps(ctx context.Context, ns string, gc a
 	return err
 }
 
+type workloadKey struct {
+	name      string
+	namespace string
+	kind      string
+}
+
 type configWatcher struct {
 	cancel          context.CancelFunc
+	rolloutLocks    *xsync.MapOf[workloadKey, *sync.Mutex]
 	nsLocks         *xsync.MapOf[string, *sync.RWMutex]
 	blacklistedPods *xsync.MapOf[string, time.Time]
 
@@ -454,6 +468,7 @@ func (c *configWatcher) Update(ctx context.Context, namespace string, updater fu
 func NewWatcher(namespaces ...string) Map {
 	w := &configWatcher{
 		nsLocks:         xsync.NewMapOf[string, *sync.RWMutex](),
+		rolloutLocks:    xsync.NewMapOf[workloadKey, *sync.Mutex](),
 		blacklistedPods: xsync.NewMapOf[string, time.Time](),
 	}
 	if len(namespaces) > 0 {
@@ -568,6 +583,21 @@ func (c *configWatcher) getNamespaceLock(ns string) *sync.RWMutex {
 	return lock
 }
 
+func (c *configWatcher) getRolloutLock(wl k8sapi.Workload) *sync.Mutex {
+	lock, _ := c.rolloutLocks.LoadOrCompute(workloadKey{
+		name:      wl.GetName(),
+		namespace: wl.GetNamespace(),
+		kind:      wl.GetKind(),
+	}, func() *sync.Mutex {
+		return &sync.Mutex{}
+	})
+	return lock
+}
+
+// Get returns the Sidecar configuration that for the given key and namespace.
+// If no configuration is found, this function returns nil, nil.
+// An error is only returned when the configmap holding the configuration could not be loaded for
+// other reasons than it did not exist.
 func (c *configWatcher) Get(ctx context.Context, key, ns string) (agentconfig.SidecarExt, error) {
 	lock := c.getNamespaceLock(ns)
 	lock.RLock()
