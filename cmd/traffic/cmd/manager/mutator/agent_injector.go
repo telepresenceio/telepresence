@@ -158,31 +158,17 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 		scx, err = a.agentConfigs.Get(ctx, wl.GetName(), wl.GetNamespace())
-		if err != nil {
-			return nil, err
-		}
-
 		switch {
-		case scx == nil && ia != "enabled":
+		case err != nil:
+			return nil, err
+		case scx == nil:
 			return nil, nil
-		case scx != nil && scx.AgentConfig().Manual:
+		case scx.AgentConfig().Manual:
 			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			return nil, nil
 		}
 
 		tracing.RecordWorkloadInfo(span, wl)
-		var gc agentmap.GeneratorConfig
-		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
-			return nil, err
-		}
-		if scx, err = gc.Generate(ctx, wl, scx); err != nil {
-			return nil, err
-		}
-
-		scx.RecordInSpan(span)
-		if err = a.agentConfigs.store(ctx, scx); err != nil {
-			return nil, err
-		}
 	default:
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}
