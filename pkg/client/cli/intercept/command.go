@@ -44,8 +44,10 @@ type Command struct {
 	Mechanism       string // --mechanism tcp
 	MechanismArgs   []string
 	ExtendedInfo    []byte
+	WaitMessage     string // Message printed when a containerized intercept handler is started and waiting for an interrupt
 	FormattedOutput bool
 	DetailedOutput  bool
+	Silent          bool
 }
 
 func (a *Command) AddFlags(cmd *cobra.Command) {
@@ -103,6 +105,8 @@ func (a *Command) AddFlags(cmd *cobra.Command) {
 	flagSet.StringP("namespace", "n", "", "If present, the namespace scope for this CLI request")
 
 	flagSet.StringVar(&a.Mechanism, "mechanism", "tcp", "Which extension `mechanism` to use")
+
+	flagSet.StringVar(&a.WaitMessage, "wait-message", "", "Message to print when intercept handler has started")
 
 	flagSet.BoolVar(&a.DetailedOutput, "detailed-output", false,
 		`Provide very detailed info about the intercept when used together with --output=json or --output=yaml'`)
