@@ -50,7 +50,7 @@ type Map interface {
 
 	RegenerateAgentMaps(ctx context.Context, s string) error
 
-	Delete(ctx context.Context, namespace string, name string) error
+	Delete(ctx context.Context, name, namespace string) error
 	Update(ctx context.Context, namespace string, updater func(cm *core.ConfigMap) (bool, error)) error
 }
 
@@ -397,7 +397,7 @@ func (c *configWatcher) IsBlacklisted(podName, namespace string) bool {
 	return ok
 }
 
-func (c *configWatcher) Delete(ctx context.Context, namespace string, name string) error {
+func (c *configWatcher) Delete(ctx context.Context, name, namespace string) error {
 	return c.remove(ctx, name, namespace)
 }
 
