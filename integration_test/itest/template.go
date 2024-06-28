@@ -9,8 +9,18 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	core "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 )
+
+type Generic struct {
+	Name           string
+	Annotations    map[string]string
+	Environment    []core.EnvVar
+	Image          string
+	Registry       string
+	ServiceAccount string
+}
 
 func OpenTemplate(ctx context.Context, name string, data any) (io.Reader, error) {
 	b, err := ReadTemplate(ctx, name, data)

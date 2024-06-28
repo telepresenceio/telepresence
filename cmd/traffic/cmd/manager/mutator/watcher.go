@@ -209,6 +209,8 @@ func isRolloutNeededForPod(ctx context.Context, ac *agentconfig.Sidecar, name, n
 	return ""
 }
 
+const annRestartedAt = DomainPrefix + "restartedAt"
+
 func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) {
 	lck := c.getRolloutLock(wl)
 	if !lck.TryLock() {
@@ -230,8 +232,8 @@ func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, 
 		return
 	}
 	restartAnnotation := fmt.Sprintf(
-		`{"spec": {"template": {"metadata": {"annotations": {"%srestartedAt": "%s"}}}}}`,
-		DomainPrefix,
+		`{"spec": {"template": {"metadata": {"annotations": {"%s": "%s"}}}}}`,
+		annRestartedAt,
 		time.Now().Format(time.RFC3339),
 	)
 	span.AddEvent("tel2.do-rollout")
@@ -390,6 +392,9 @@ type configWatcher struct {
 
 	cms []cache.SharedIndexInformer
 	svs []cache.SharedIndexInformer
+	dps []cache.SharedIndexInformer
+	rss []cache.SharedIndexInformer
+	sss []cache.SharedIndexInformer
 
 	self Map // For extension
 }
@@ -498,6 +503,21 @@ func (c *configWatcher) Wait(ctx context.Context) error {
 			return err
 		}
 	}
+	for _, si := range c.dps {
+		if err := c.watchWorkloads(ctx, si); err != nil {
+			return err
+		}
+	}
+	for _, si := range c.rss {
+		if err := c.watchWorkloads(ctx, si); err != nil {
+			return err
+		}
+	}
+	for _, si := range c.sss {
+		if err := c.watchWorkloads(ctx, si); err != nil {
+			return err
+		}
+	}
 	for _, ci := range c.cms {
 		if err := c.watchConfigMap(ctx, ci); err != nil {
 			return err
@@ -517,7 +537,14 @@ func (c *configWatcher) OnDelete(context.Context, string, string) error {
 }
 
 func (c *configWatcher) handleAddOrUpdateEntry(ctx context.Context, e entry) {
-	dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
+	switch e.oldValue {
+	case e.value:
+		return
+	case "":
+		dlog.Debugf(ctx, "add %s.%s", e.name, e.namespace)
+	default:
+		dlog.Debugf(ctx, "update %s.%s", e.name, e.namespace)
+	}
 	scx, wl, err := e.workload(ctx)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -528,24 +555,6 @@ func (c *configWatcher) handleAddOrUpdateEntry(ctx context.Context, e entry) {
 	ac := scx.AgentConfig()
 	if ac.Manual {
 		// Manually added, just ignore
-		return
-	}
-	if ac.Create {
-		img := managerutil.GetAgentImage(ctx)
-		if img == "" {
-			// Unable to get image. This has been logged elsewhere
-			return
-		}
-		gc, err := agentmap.GeneratorConfigFunc(img)
-		if err != nil {
-			dlog.Error(ctx, err)
-			return
-		}
-		if scx, err = gc.Generate(ctx, wl, ac); err != nil {
-			dlog.Error(ctx, err)
-		} else if err = c.store(ctx, scx); err != nil { // Calling store() will generate a new event, so we skip rollout here
-			dlog.Error(ctx, err)
-		}
 		return
 	}
 	if err = c.self.OnAdd(ctx, wl, scx); err != nil {
@@ -653,6 +662,7 @@ func (c *configWatcher) store(ctx context.Context, acx agentconfig.SidecarExt) e
 				if oldYml == yml {
 					return false, nil
 				}
+				dlog.Debugf(ctx, "Modifying configmap entry for sidecar %s.%s", ac.AgentName, ac.Namespace)
 				scx, err := agentconfig.UnmarshalYAML([]byte(oldYml))
 				if err == nil && scx.AgentConfig().Manual {
 					dlog.Warnf(ctx, "avoided an attempt to overwrite manually added Config entry for %s.%s", ac.AgentName, ns)
@@ -753,10 +763,15 @@ func (c *configWatcher) Start(ctx context.Context) {
 
 	c.svs = make([]cache.SharedIndexInformer, len(nss))
 	c.cms = make([]cache.SharedIndexInformer, len(nss))
+	c.dps = make([]cache.SharedIndexInformer, len(nss))
+	c.rss = make([]cache.SharedIndexInformer, len(nss))
+	c.sss = make([]cache.SharedIndexInformer, len(nss))
 	for i, ns := range nss {
 		c.cms[i] = c.startConfigMap(ctx, ns)
 		c.svs[i] = c.startServices(ctx, ns)
-		c.startDeployments(ctx, ns)
+		c.dps[i] = c.startDeployments(ctx, ns)
+		c.rss[i] = c.startReplicaSets(ctx, ns)
+		c.sss[i] = c.startStatefulSets(ctx, ns)
 		c.startPods(ctx, ns)
 		f := informer.GetFactory(ctx, ns)
 		f.Start(ctx.Done())
