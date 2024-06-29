@@ -584,6 +584,9 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 		"--set", "logLevel=debug",
 		"--set", "client.routing.allowConflictingSubnets={10.0.0.0/8}",
 	}
+	if !s.isCI {
+		settings = append(settings, "--set", "image.pullPolicy=Always")
+	}
 	if len(nss.ManagedNamespaces) > 0 {
 		settings = append(settings,
 			"--set", fmt.Sprintf("clientRbac.namespaces=%s", nss.HelmString()),
@@ -689,7 +692,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	vx := struct {
 		LogLevel        string    `json:"logLevel"`
 		MetritonEnabled bool      `json:"metritonEnabled"`
-		Image           *Image    `json:"image,omitempty"`
+		Image           Image     `json:"image,omitempty"`
 		Agent           *xAgent   `json:"agent,omitempty"`
 		ClientRbac      xRbac     `json:"clientRbac"`
 		ManagerRbac     xRbac     `json:"managerRbac"`
@@ -698,7 +701,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}{
 		LogLevel:        "debug",
 		MetritonEnabled: false,
-		Image:           GetImage(ctx),
 		Agent:           agent,
 		ClientRbac: xRbac{
 			Create:     true,
@@ -718,6 +720,14 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		},
 		Timeouts: xTimeouts{AgentArrival: "60s"},
 	}
+	image := GetImage(ctx)
+	if image != nil {
+		vx.Image = *image
+	}
+	if !s.isCI {
+		vx.Image.PullPolicy = "Always"
+	}
+
 	ss, err := sigsYaml.Marshal(&vx)
 	if err != nil {
 		return "", err

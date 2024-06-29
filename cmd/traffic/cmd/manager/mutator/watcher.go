@@ -210,7 +210,7 @@ func isRolloutNeededForPod(ctx context.Context, ac *agentconfig.Sidecar, name, n
 	return ""
 }
 
-const annRestartedAt = DomainPrefix + "restartedAt"
+const AnnRestartedAt = DomainPrefix + "restartedAt"
 
 func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) {
 	lck := c.getRolloutLock(wl)
@@ -234,7 +234,7 @@ func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, 
 	}
 	restartAnnotation := fmt.Sprintf(
 		`{"spec": {"template": {"metadata": {"annotations": {"%s": "%s"}}}}}`,
-		annRestartedAt,
+		AnnRestartedAt,
 		time.Now().Format(time.RFC3339),
 	)
 	span.AddEvent("tel2.do-rollout")

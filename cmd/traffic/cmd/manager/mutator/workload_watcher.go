@@ -84,7 +84,7 @@ func (c *configWatcher) startStatefulSets(ctx context.Context, ns string) cache.
 	return ix
 }
 
-func workloadFromAny(obj any) (k8sapi.Workload, bool) {
+func WorkloadFromAny(obj any) (k8sapi.Workload, bool) {
 	if ro, ok := obj.(runtime.Object); ok {
 		if wl, err := k8sapi.WrapWorkload(ro); err == nil {
 			return wl, true
@@ -97,37 +97,29 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 	_, err := ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
-				if wl, ok := workloadFromAny(obj); ok && len(wl.GetOwnerReferences()) == 0 {
-					c.updateWorkload(ctx, wl, nil, workloadState(wl))
+				if wl, ok := WorkloadFromAny(obj); ok && len(wl.GetOwnerReferences()) == 0 {
+					c.updateWorkload(ctx, wl, nil, GetWorkloadState(wl))
 				}
 			},
 			DeleteFunc: func(obj any) {
-				if wl, ok := workloadFromAny(obj); ok {
+				if wl, ok := WorkloadFromAny(obj); ok {
 					if len(wl.GetOwnerReferences()) == 0 {
 						c.deleteWorkload(ctx, wl)
 					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
-					if wl, ok = workloadFromAny(dfsu.Obj); ok && len(wl.GetOwnerReferences()) == 0 {
+					if wl, ok = WorkloadFromAny(dfsu.Obj); ok && len(wl.GetOwnerReferences()) == 0 {
 						c.deleteWorkload(ctx, wl)
 					}
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
-				if wl, ok := workloadFromAny(newObj); ok && len(wl.GetOwnerReferences()) == 0 {
-					if oldWl, ok := workloadFromAny(oldObj); ok {
-						c.updateWorkload(ctx, wl, oldWl, workloadState(wl))
+				if wl, ok := WorkloadFromAny(newObj); ok && len(wl.GetOwnerReferences()) == 0 {
+					if oldWl, ok := WorkloadFromAny(oldObj); ok {
+						c.updateWorkload(ctx, wl, oldWl, GetWorkloadState(wl))
 					}
 				}
 			},
 		})
-	if err == nil {
-		// Act on initial snapshot
-		for _, obj := range ix.GetStore().List() {
-			if wl, ok := workloadFromAny(obj); ok && len(wl.GetOwnerReferences()) == 0 {
-				c.updateWorkload(ctx, wl, nil, workloadState(wl))
-			}
-		}
-	}
 	return err
 }
 
@@ -156,7 +148,7 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		diff := cmp.Diff(oldWl.GetPodTemplate(), tpl,
 			cmpopts.IgnoreFields(meta.ObjectMeta{}, "Namespace", "UID", "ResourceVersion", "CreationTimestamp", "DeletionTimestamp"),
 			cmpopts.IgnoreMapEntries(func(k, _ string) bool {
-				return k == annRestartedAt
+				return k == AnnRestartedAt
 			}),
 		)
 		if diff == "" {

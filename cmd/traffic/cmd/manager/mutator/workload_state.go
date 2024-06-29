@@ -49,7 +49,7 @@ func statefulSetState(d *appsv1.StatefulSet) WorkloadState {
 	return WorkloadStateAvailable
 }
 
-func workloadState(wl k8sapi.Workload) WorkloadState {
+func GetWorkloadState(wl k8sapi.Workload) WorkloadState {
 	if d, ok := k8sapi.DeploymentImpl(wl); ok {
 		return deploymentState(d)
 	}
