@@ -98,7 +98,7 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				if wl, ok := WorkloadFromAny(obj); ok && len(wl.GetOwnerReferences()) == 0 {
-					c.updateWorkload(ctx, wl, nil, workloadState(wl))
+					c.updateWorkload(ctx, wl, nil, GetWorkloadState(wl))
 				}
 			},
 			DeleteFunc: func(obj any) {
@@ -115,7 +115,7 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 			UpdateFunc: func(oldObj, newObj any) {
 				if wl, ok := WorkloadFromAny(newObj); ok && len(wl.GetOwnerReferences()) == 0 {
 					if oldWl, ok := WorkloadFromAny(oldObj); ok {
-						c.updateWorkload(ctx, wl, oldWl, workloadState(wl))
+						c.updateWorkload(ctx, wl, oldWl, GetWorkloadState(wl))
 					}
 				}
 			},

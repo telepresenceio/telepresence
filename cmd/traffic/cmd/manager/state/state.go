@@ -93,6 +93,7 @@ type State interface {
 	WatchWorkloads(ctx context.Context, sessionID string) (ch <-chan []WorkloadEvent, err error)
 	WatchLookupDNS(string) <-chan *rpc.DNSRequest
 	ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
+	NewWorkloadInfoWatcher(clientSession, namespace string) WorkloadInfoWatcher
 }
 
 type (

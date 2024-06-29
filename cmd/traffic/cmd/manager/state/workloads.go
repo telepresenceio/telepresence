@@ -32,6 +32,19 @@ type WorkloadEvent struct {
 	Workload k8sapi.Workload
 }
 
+func (e EventType) String() string {
+	switch e {
+	case EventTypeAdd:
+		return "add"
+	case EventTypeUpdate:
+		return "update"
+	case EventTypeDelete:
+		return "delete"
+	default:
+		return "unknown"
+	}
+}
+
 type WorkloadWatcher interface {
 	Subscribe(ctx context.Context) <-chan []WorkloadEvent
 }
@@ -112,7 +125,7 @@ func compareOptions() []cmp.Option {
 	}
 }
 
-func (w *wlWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndexInformer, ns string) error {
+func (w *wlWatcher) watchWorkloads(ix cache.SharedIndexInformer, ns string) error {
 	_, err := ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
@@ -154,13 +167,13 @@ func (w *wlWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndexInfo
 
 func (w *wlWatcher) addEventHandler(ctx context.Context, ns string) error {
 	ai := informer.GetFactory(ctx, ns).Apps().V1()
-	if err := w.watchWorkloads(ctx, ai.Deployments().Informer(), ns); err != nil {
+	if err := w.watchWorkloads(ai.Deployments().Informer(), ns); err != nil {
 		return err
 	}
-	if err := w.watchWorkloads(ctx, ai.ReplicaSets().Informer(), ns); err != nil {
+	if err := w.watchWorkloads(ai.ReplicaSets().Informer(), ns); err != nil {
 		return err
 	}
-	if err := w.watchWorkloads(ctx, ai.StatefulSets().Informer(), ns); err != nil {
+	if err := w.watchWorkloads(ai.StatefulSets().Informer(), ns); err != nil {
 		return err
 	}
 	return nil
