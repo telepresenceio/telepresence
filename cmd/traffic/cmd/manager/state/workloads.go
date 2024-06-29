@@ -6,11 +6,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	apps "k8s.io/api/apps/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/kubectl/pkg/util/deployment"
 
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
 
@@ -84,32 +89,81 @@ func (w *wlWatcher) Subscribe(ctx context.Context) <-chan []WorkloadEvent {
 	return ch
 }
 
-func (w *wlWatcher) addEventHandler(ctx context.Context, ns string) error {
-	// TODO: Potentially watch Replicasets and Statefulsets too, perhaps configurable since it's fairly uncommon to not have a Deployment.
-	ix := informer.GetFactory(ctx, ns).Apps().V1().Deployments().Informer()
+func compareOptions() []cmp.Option {
+	return []cmp.Option{
+		// Ignore frequently changing fields of no interest
+		cmpopts.IgnoreFields(meta.ObjectMeta{}, "Namespace", "ResourceVersion", "Generation", "ManagedFields"),
+
+		// Only the Conditions are of interest in the DeploymentStatus.
+		cmp.Comparer(func(a, b apps.DeploymentStatus) bool {
+			// Only compare the DeploymentCondition's type and status
+			return cmp.Equal(a.Conditions, b.Conditions, cmp.Comparer(func(c1, c2 apps.DeploymentCondition) bool {
+				return c1.Type == c2.Type && c1.Status == c2.Status
+			}))
+		}),
+
+		// Treat a nil map or slice as empty.
+		cmpopts.EquateEmpty(),
+
+		// Ignore frequently changing annotations of no interest.
+		cmpopts.IgnoreMapEntries(func(k, _ string) bool {
+			return k == mutator.AnnRestartedAt || k == deployment.RevisionAnnotation
+		}),
+	}
+}
+
+func (w *wlWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndexInformer, ns string) error {
 	_, err := ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
-				if d, ok := obj.(*apps.Deployment); ok {
-					w.handleEvent(WorkloadEvent{Type: EventTypeAdd, Workload: k8sapi.Deployment(d)})
+				if wl, ok := mutator.WorkloadFromAny(obj); ok && ns == wl.GetNamespace() && len(wl.GetOwnerReferences()) == 0 {
+					w.handleEvent(WorkloadEvent{Type: EventTypeAdd, Workload: wl})
 				}
 			},
 			DeleteFunc: func(obj any) {
-				if d, ok := obj.(*apps.Deployment); ok {
-					w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: k8sapi.Deployment(d)})
+				if wl, ok := mutator.WorkloadFromAny(obj); ok {
+					if ns == wl.GetNamespace() && len(wl.GetOwnerReferences()) == 0 {
+						w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: wl})
+					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
-					if d, ok := dfsu.Obj.(*apps.Deployment); ok {
-						w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: k8sapi.Deployment(d)})
+					if wl, ok = mutator.WorkloadFromAny(dfsu.Obj); ok && ns == wl.GetNamespace() && len(wl.GetOwnerReferences()) == 0 {
+						w.handleEvent(WorkloadEvent{Type: EventTypeDelete, Workload: wl})
 					}
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
-				if d, ok := newObj.(*apps.Deployment); ok {
-					w.handleEvent(WorkloadEvent{Type: EventTypeUpdate, Workload: k8sapi.Deployment(d)})
+				if wl, ok := mutator.WorkloadFromAny(newObj); ok && ns == wl.GetNamespace() && len(wl.GetOwnerReferences()) == 0 {
+					if oldWl, ok := mutator.WorkloadFromAny(oldObj); ok {
+						if cmp.Equal(wl, oldWl, compareOptions()...) {
+							return
+						}
+						// Replace the cmp.Equal above with this to view the changes that trigger an update:
+						//
+						// diff := cmp.Diff(wl, oldWl, compareOptions()...)
+						// if diff == "" {
+						//   return
+						// }
+						// dlog.Debugf(ctx, "DIFF:\n%s", diff)
+						w.handleEvent(WorkloadEvent{Type: EventTypeUpdate, Workload: wl})
+					}
 				}
 			},
 		})
 	return err
+}
+
+func (w *wlWatcher) addEventHandler(ctx context.Context, ns string) error {
+	ai := informer.GetFactory(ctx, ns).Apps().V1()
+	if err := w.watchWorkloads(ctx, ai.Deployments().Informer(), ns); err != nil {
+		return err
+	}
+	if err := w.watchWorkloads(ctx, ai.ReplicaSets().Informer(), ns); err != nil {
+		return err
+	}
+	if err := w.watchWorkloads(ctx, ai.StatefulSets().Informer(), ns); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (w *wlWatcher) handleEvent(we WorkloadEvent) {
@@ -117,6 +171,6 @@ func (w *wlWatcher) handleEvent(we WorkloadEvent) {
 	w.events = append(w.events, we)
 	w.Unlock()
 
-	// Defer sending until things been quiet for a while
+	// Defers sending until things been quiet for a while
 	w.timer.Reset(50 * time.Millisecond)
 }
