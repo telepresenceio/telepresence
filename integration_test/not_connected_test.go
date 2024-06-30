@@ -32,7 +32,8 @@ func (s *notConnectedSuite) TearDownTest() {
 
 func (s *notConnectedSuite) Test_ConnectWithCommand() {
 	ctx := s.Context()
-	stdout := s.TelepresenceConnect(ctx, "--", s.Executable(), "status")
+	exe, _ := s.Executable()
+	stdout := s.TelepresenceConnect(ctx, "--", exe, "status")
 	s.Contains(stdout, "Connected to context")
 	s.Contains(stdout, "Kubernetes context:")
 }

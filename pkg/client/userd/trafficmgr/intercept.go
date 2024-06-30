@@ -558,7 +558,7 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		return &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 	}
 
-	spec.Client = s.userAndHost
+	spec.Client = s.clientID
 	if spec.Mechanism == "" {
 		spec.Mechanism = "tcp"
 	}
