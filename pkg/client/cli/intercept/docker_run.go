@@ -182,6 +182,17 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		ourArgs = append(ourArgs, "--security-opt", "apparmor=unconfined", "--cap-add", "SYS_PTRACE")
 	}
 
+	// "--rm" is mandatory when using --docker-run, because without it, the name cannot be reused and
+	// the volumes cannot be removed.
+	_, set, err := flags.GetUnparsedBoolean(args, "--rm")
+	if err != nil {
+		dr.err = err
+		return dr
+	}
+	if !set {
+		ourArgs = append(ourArgs, "--rm")
+	}
+
 	if !ud.Containerized() {
 		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
 		if s.dockerPort != 0 {
@@ -200,16 +211,6 @@ func (s *state) startInDocker(ctx context.Context, envFile string, args []string
 		daemonName := ud.DaemonID.ContainerName()
 		ourArgs = append(ourArgs, "--network", "container:"+daemonName)
 
-		// "--rm" is mandatory when using --docker-run against a docker daemon, because without it, the volumes
-		// cannot be removed.
-		_, set, err := flags.GetUnparsedBoolean(args, "--rm")
-		if err != nil {
-			dr.err = err
-			return dr
-		}
-		if !set {
-			ourArgs = append(ourArgs, "--rm")
-		}
 		if !(s.mountDisabled || s.info == nil) {
 			m := s.info.Mount
 			if m != nil {
