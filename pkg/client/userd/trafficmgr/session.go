@@ -1,6 +1,8 @@
 package trafficmgr
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -209,6 +211,13 @@ func NewSession(
 			dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
 		}
 	} else {
+		if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+			dlog.Debug(ctx, "Applying client configuration from cluster")
+			sc := bufio.NewScanner(bytes.NewReader(cliCfg.ConfigYaml))
+			for sc.Scan() {
+				dlog.Debug(ctx, sc.Text())
+			}
+		}
 		if err := yaml.Unmarshal(cliCfg.ConfigYaml, tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
 		}

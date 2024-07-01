@@ -85,25 +85,32 @@ func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Ev
 	}
 }
 
+var AmendClientConfigFunc = AmendClientConfig //nolint:gochecknoglobals // extension point
+
+func AmendClientConfig(ctx context.Context, cfg client.Config) bool {
+	env := managerutil.GetEnv(ctx)
+	if len(env.ManagedNamespaces) > 0 {
+		dlog.Debugf(ctx, "Checking if Augment mapped namespaces with %d managed namespaces", len(env.ManagedNamespaces))
+		if len(cfg.Cluster().MappedNamespaces) == 0 {
+			dlog.Debugf(ctx, "Augment mapped namespaces with %d managed namespaces", len(env.ManagedNamespaces))
+			cfg.Cluster().MappedNamespaces = env.ManagedNamespaces
+		}
+		return true
+	}
+	return false
+}
+
 func (c *config) refreshFile(ctx context.Context, data map[string]string) {
 	c.Lock()
 	if yml, ok := data[clientConfigFileName]; ok {
 		c.clientYAML = []byte(yml)
-		env := managerutil.GetEnv(ctx)
-		if len(env.ManagedNamespaces) > 0 {
-			dlog.Debugf(ctx, "Checking if Augment mapped namespaces with %d managed namespaces", len(env.ManagedNamespaces))
-			cfg, err := client.ParseConfigYAML(c.clientYAML)
-			if err != nil {
-				dlog.Errorf(ctx, "failed to unmarshal YAML from %s", clientConfigFileName)
-			}
-			if len(cfg.Cluster().MappedNamespaces) == 0 {
-				dlog.Debugf(ctx, "Augment mapped namespaces with %d managed namespaces", len(env.ManagedNamespaces))
-				cfg.Cluster().MappedNamespaces = env.ManagedNamespaces
-				yml = cfg.String()
-				c.clientYAML = []byte(yml)
-			}
+		cfg, err := client.ParseConfigYAML(c.clientYAML)
+		if err != nil {
+			dlog.Errorf(ctx, "failed to unmarshal YAML from %s", clientConfigFileName)
+		} else if AmendClientConfigFunc(ctx, cfg) {
+			c.clientYAML = []byte(cfg.String())
+			dlog.Debugf(ctx, "Refreshed client config: %s", yml)
 		}
-		dlog.Debugf(ctx, "Refreshed client config: %s", yml)
 	} else {
 		c.clientYAML = nil
 		dlog.Debugf(ctx, "Cleared client config")
