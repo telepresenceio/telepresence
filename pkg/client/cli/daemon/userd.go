@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"io"
 	"strconv"
 	"strings"
 
@@ -11,13 +12,32 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 )
 
-type UserClient struct {
+type UserClient interface {
 	connector.ConnectorClient
-	Conn       *grpc.ClientConn
-	DaemonID   *Identifier
-	Version    semver.Version
-	Executable string
-	Name       string
+	io.Closer
+	Conn() *grpc.ClientConn
+	Containerized() bool
+	DaemonPort() int
+	DaemonID() *Identifier
+	Executable() string
+	Name() string
+	Semver() semver.Version
+	SetDaemonID(*Identifier)
+}
+
+type userClient struct {
+	connector.ConnectorClient
+	conn       *grpc.ClientConn
+	daemonID   *Identifier
+	version    semver.Version
+	executable string
+	name       string
+}
+
+var NewUserClientFunc = NewUserClient //nolint:gochecknoglobals // extension point
+
+func NewUserClient(conn *grpc.ClientConn, daemonID *Identifier, version semver.Version, name string, executable string) UserClient {
+	return &userClient{ConnectorClient: connector.NewConnectorClient(conn), conn: conn, daemonID: daemonID, version: version, name: name, executable: executable}
 }
 
 type Session struct {
@@ -28,14 +48,14 @@ type Session struct {
 
 type userDaemonKey struct{}
 
-func GetUserClient(ctx context.Context) *UserClient {
-	if ud, ok := ctx.Value(userDaemonKey{}).(*UserClient); ok {
+func GetUserClient(ctx context.Context) UserClient {
+	if ud, ok := ctx.Value(userDaemonKey{}).(UserClient); ok {
 		return ud
 	}
 	return nil
 }
 
-func WithUserClient(ctx context.Context, ud *UserClient) context.Context {
+func WithUserClient(ctx context.Context, ud UserClient) context.Context {
 	return context.WithValue(ctx, userDaemonKey{}, ud)
 }
 
@@ -52,13 +72,37 @@ func WithSession(ctx context.Context, s *Session) context.Context {
 	return context.WithValue(ctx, sessionKey{}, s)
 }
 
-func (ud *UserClient) Containerized() bool {
-	return ud.DaemonID.Containerized
+func (u *userClient) Close() error {
+	return u.conn.Close()
 }
 
-func (ud *UserClient) DaemonPort() int {
-	if ud.DaemonID.Containerized {
-		addr := ud.Conn.Target()
+func (u *userClient) Conn() *grpc.ClientConn {
+	return u.conn
+}
+
+func (u *userClient) Containerized() bool {
+	return u.daemonID.Containerized
+}
+
+func (u *userClient) DaemonID() *Identifier {
+	return u.daemonID
+}
+
+func (u *userClient) Executable() string {
+	return u.executable
+}
+
+func (u *userClient) Name() string {
+	return u.name
+}
+
+func (u *userClient) Semver() semver.Version {
+	return u.version
+}
+
+func (u *userClient) DaemonPort() int {
+	if u.daemonID.Containerized {
+		addr := u.conn.Target()
 		if lc := strings.LastIndexByte(addr, ':'); lc >= 0 {
 			if port, err := strconv.Atoi(addr[lc+1:]); err == nil {
 				return port
@@ -66,4 +110,8 @@ func (ud *UserClient) DaemonPort() int {
 		}
 	}
 	return -1
+}
+
+func (u *userClient) SetDaemonID(daemonID *Identifier) {
+	u.daemonID = daemonID
 }

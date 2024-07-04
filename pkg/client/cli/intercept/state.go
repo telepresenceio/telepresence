@@ -368,7 +368,7 @@ func (s *state) runCommand(ctx context.Context) error {
 	// Ensure that the intercept handler is stopped properly if the daemon quits
 	procCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		if err := daemon.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID.InfoFileName()); err != nil {
+		if err := daemon.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID().InfoFileName()); err != nil {
 			dlog.Error(ctx)
 		}
 	}()

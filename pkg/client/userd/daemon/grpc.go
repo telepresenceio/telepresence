@@ -65,7 +65,7 @@ func (s *service) callCtx(ctx context.Context, name string) context.Context {
 	return dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s-%d", name, num))
 }
 
-func (s *service) logCall(c context.Context, callName string, f func(context.Context)) {
+func (s *service) LogCall(c context.Context, callName string, f func(context.Context)) {
 	c = s.callCtx(c, callName)
 	dlog.Debug(c, "called")
 	defer dlog.Debug(c, "returned")
@@ -77,7 +77,7 @@ func (s *service) FuseFTPError() error {
 }
 
 func (s *service) WithSession(c context.Context, callName string, f func(context.Context, userd.Session) error) (err error) {
-	s.logCall(c, callName, func(_ context.Context) {
+	s.LogCall(c, callName, func(_ context.Context) {
 		if atomic.LoadInt32(&s.sessionQuitting) != 0 {
 			err = status.Error(codes.Canceled, "session cancelled")
 			return
@@ -116,26 +116,25 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	}, nil
 }
 
-func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
-	s.logCall(ctx, "Connect", func(c context.Context) {
-		select {
-		case <-ctx.Done():
-			err = status.Error(codes.Unavailable, ctx.Err().Error())
-			return
-		case s.connectRequest <- cr:
-		}
+type crImpl struct {
+	*rpc.ConnectRequest
+}
 
-		select {
-		case <-ctx.Done():
-			err = status.Error(codes.Unavailable, ctx.Err().Error())
-		case result = <-s.connectResponse:
+func (c crImpl) Request() *rpc.ConnectRequest {
+	return c.ConnectRequest
+}
+
+func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
+	s.LogCall(ctx, "Connect", func(c context.Context) {
+		if err = s.PostConnectRequest(ctx, crImpl{ConnectRequest: cr}); err == nil {
+			result, err = s.ReadConnectResponse(ctx)
 		}
 	})
 	return result, err
 }
 
 func (s *service) Disconnect(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
-	s.logCall(ctx, "Disconnect", func(ctx context.Context) {
+	s.LogCall(ctx, "Disconnect", func(ctx context.Context) {
 		s.cancelSession()
 		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
 			_, err := rd.Disconnect(ctx, ex)
@@ -146,7 +145,7 @@ func (s *service) Disconnect(ctx context.Context, ex *empty.Empty) (*empty.Empty
 }
 
 func (s *service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.ConnectInfo, err error) {
-	s.logCall(ctx, "Status", func(c context.Context) {
+	s.LogCall(ctx, "Status", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
@@ -391,7 +390,7 @@ func (s *service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (res
 }
 
 func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (result *empty.Empty, err error) {
-	s.logCall(ctx, "SetLogLevel", func(c context.Context) {
+	s.LogCall(ctx, "SetLogLevel", func(c context.Context) {
 		mrq := &manager.LogLevelRequest{
 			LogLevel: request.LogLevel,
 			Duration: request.Duration,
@@ -432,7 +431,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 }
 
 func (s *service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
-	s.logCall(ctx, "Quit", func(c context.Context) {
+	s.LogCall(ctx, "Quit", func(c context.Context) {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		s.cancelSessionReadLocked()
