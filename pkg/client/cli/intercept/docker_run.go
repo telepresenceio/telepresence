@@ -215,7 +215,7 @@ func (s *state) startInDocker(ctx context.Context, name, envFile string, args []
 			ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s", s.mountPoint, dockerMount))
 		}
 	} else {
-		daemonName := ud.DaemonID.ContainerName()
+		daemonName := ud.DaemonID().ContainerName()
 		ourArgs = append(ourArgs, "--network", "container:"+daemonName)
 
 		if !(s.mountDisabled || s.info == nil) {

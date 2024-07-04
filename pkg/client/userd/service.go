@@ -6,6 +6,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
@@ -19,6 +20,8 @@ type Service interface {
 	// As will cast this instance to what the given ptr points to, and assign
 	// that to the pointer. It will panic if type is not implemented.
 	As(ptr any)
+
+	LogCall(context.Context, string, func(context.Context))
 
 	// ListenerAddress returns the address that this service is listening to.
 	ListenerAddress(ctx context.Context) string
@@ -34,6 +37,9 @@ type Service interface {
 
 	RootSessionInProcess() bool
 	WithSession(context.Context, string, func(context.Context, Session) error) error
+
+	PostConnectRequest(context.Context, ConnectRequest) error
+	ReadConnectResponse(context.Context) (*rpc.ConnectInfo, error)
 
 	ManageSessions(c context.Context) error
 }

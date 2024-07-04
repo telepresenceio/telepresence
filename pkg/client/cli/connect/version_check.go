@@ -16,7 +16,7 @@ var validPrerelRx = regexp.MustCompile(`^[a-z]+\.\d+$`)
 func versionCheck(ctx context.Context, daemonBinary string) error {
 	// Ensure that the already running daemons have the correct version
 	userD := daemon.GetUserClient(ctx)
-	uv := userD.Version
+	uv := userD.Semver()
 	if userD.Containerized() {
 		// The user-daemon is remote (in a docker container, most likely). Compare the major, minor, and patch. Only
 		// compare pre-release if it's rc.X or test.X, and don't check if the binaries match.
@@ -38,9 +38,9 @@ func versionCheck(ctx context.Context, daemonBinary string) error {
 		return errcat.User.Newf("version mismatch. Client %s != user daemon %s, please run 'telepresence quit -s' and reconnect",
 			version.Version, uv)
 	}
-	if daemonBinary != "" && userD.Executable != daemonBinary {
+	if daemonBinary != "" && userD.Executable() != daemonBinary {
 		return errcat.User.Newf("executable mismatch. Connector using %s, configured to use %s, please run 'telepresence quit -s' and reconnect",
-			userD.Executable, daemonBinary)
+			userD.Executable(), daemonBinary)
 	}
 	vr, err := userD.RootDaemonVersion(ctx, &empty.Empty{})
 	if err == nil && version.Version != vr.Version {

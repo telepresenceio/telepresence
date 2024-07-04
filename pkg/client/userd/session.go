@@ -20,6 +20,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
+type ConnectRequest interface {
+	Request() *rpc.ConnectRequest
+}
+
 type WatchWorkloadsStream interface {
 	Send(*rpc.WorkloadInfoSnapshot) error
 	Context() context.Context
@@ -65,7 +69,7 @@ type Session interface {
 	NewRemainRequest() *manager.RemainRequest
 
 	Status(context.Context) *rpc.ConnectInfo
-	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
+	UpdateStatus(context.Context, ConnectRequest) *rpc.ConnectInfo
 
 	Uninstall(context.Context, *rpc.UninstallRequest) (*common.Result, error)
 
@@ -94,7 +98,7 @@ type Session interface {
 	Done() <-chan struct{}
 }
 
-type NewSessionFunc func(context.Context, *rpc.ConnectRequest, *client.Kubeconfig) (context.Context, Session, *connector.ConnectInfo)
+type NewSessionFunc func(context.Context, ConnectRequest, *client.Kubeconfig) (context.Context, Session, *connector.ConnectInfo)
 
 type newSessionKey struct{}
 

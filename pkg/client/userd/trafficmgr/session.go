@@ -140,11 +140,12 @@ type session struct {
 
 func NewSession(
 	ctx context.Context,
-	cr *rpc.ConnectRequest,
+	cri userd.ConnectRequest,
 	config *client.Kubeconfig,
 ) (rc context.Context, _ userd.Session, info *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 
+	cr := cri.Request()
 	connectStart := time.Now()
 	defer func() {
 		if r := recover(); r != nil {
@@ -828,7 +829,8 @@ func (s *session) remainLoop(c context.Context) error {
 	}
 }
 
-func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (s *session) UpdateStatus(c context.Context, cri userd.ConnectRequest) *rpc.ConnectInfo {
+	cr := cri.Request()
 	config, err := client.DaemonKubeconfig(c, cr)
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
