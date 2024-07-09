@@ -470,8 +470,8 @@ func (s *session) Remain(ctx context.Context) error {
 	defer cancel()
 	_, err := self.ManagerClient().Remain(ctx, self.NewRemainRequest())
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			// Session has expired. We need to cancel the owner session and reconnect
+		if status.Code(err) == codes.NotFound || status.Code(err) == codes.Unavailable {
+			// The session has expired. We need to cancel the owner session and reconnect.
 			return ErrSessionExpired
 		}
 		dlog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
