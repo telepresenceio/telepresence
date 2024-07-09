@@ -161,7 +161,7 @@ following Free and Open Source software:
     golang.zx2c4.com/wireguard/windows                                           v0.5.3                                MIT license
     google.golang.org/genproto/googleapis/api                                    v0.0.0-20240617180043-68d350f18fd4    Apache License 2.0
     google.golang.org/genproto/googleapis/rpc                                    v0.0.0-20240617180043-68d350f18fd4    Apache License 2.0
-    google.golang.org/grpc                                                       v1.64.0                               Apache License 2.0
+    google.golang.org/grpc                                                       v1.64.1                               Apache License 2.0
     google.golang.org/protobuf                                                   v1.34.2                               3-clause BSD license
     gopkg.in/evanphx/json-patch.v4                                               v4.12.0                               3-clause BSD license
     gopkg.in/inf.v0                                                              v0.9.1                                3-clause BSD license
