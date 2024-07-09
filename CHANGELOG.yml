@@ -70,6 +70,12 @@ items:
           able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources,
           including the Traffic Manager and hooks pods.
       - type: bugfix
+        title: Race in traffic-agent injector when using inject annotation
+        body: >-
+          Applying multiple deployments that used the <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code> would cause
+          a race condition, resulting in a large number of created pods that eventually had to be deleted, or sometimes in
+          pods that didn't contain a traffic agent.
+      - type: bugfix
         title: Fix configuring custom agent security context
         body: ->
           The traffic-manager helm chart will now correctly use a custom agent security context if one is provided.
