@@ -144,18 +144,14 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 	if !ok {
 		return
 	}
-	if oldWl != nil {
-		diff := cmp.Diff(oldWl.GetPodTemplate(), tpl,
-			cmpopts.IgnoreFields(meta.ObjectMeta{}, "Namespace", "UID", "ResourceVersion", "CreationTimestamp", "DeletionTimestamp"),
-			cmpopts.IgnoreMapEntries(func(k, _ string) bool {
-				return k == AnnRestartedAt
-			}),
-		)
-		if diff == "" {
-			return
-		}
-		dlog.Debugf(ctx, "Diff: %s", diff)
+	if oldWl != nil && cmp.Equal(oldWl.GetPodTemplate(), tpl,
+		cmpopts.IgnoreFields(meta.ObjectMeta{}, "Namespace", "UID", "ResourceVersion", "CreationTimestamp", "DeletionTimestamp"),
+		cmpopts.IgnoreMapEntries(func(k, _ string) bool {
+			return k == AnnRestartedAt
+		})) {
+		return
 	}
+
 	switch ia {
 	case "enabled":
 		img := managerutil.GetAgentImage(ctx)

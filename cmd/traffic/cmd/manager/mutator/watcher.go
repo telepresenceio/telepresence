@@ -92,7 +92,20 @@ func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Wo
 // isRolloutNeeded checks if the agent's entry in telepresence-agents matches the actual state of the
 // pods. If it does, then there's no reason to trigger a rollout.
 func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) bool {
-	podLabels := wl.GetPodTemplate().GetObjectMeta().GetLabels()
+	podMeta := wl.GetPodTemplate().GetObjectMeta()
+	if wl.GetDeletionTimestamp() != nil {
+		return false
+	}
+	if ia, ok := podMeta.GetAnnotations()[agentconfig.InjectAnnotation]; ok {
+		// Annotation controls injection, so no explicit rollout is needed unless the deployment was added after the traffic-manager.
+		// If the annotation changes, there will be an implicit rollout anyway.
+		if podMeta.GetCreationTimestamp().After(c.startedAt) {
+			dlog.Debugf(ctx, "Rollout of %s.%s is not necessary. Pod template has inject annotation %s",
+				wl.GetName(), wl.GetNamespace(), ia)
+			return false
+		}
+	}
+	podLabels := podMeta.GetLabels()
 	if len(podLabels) == 0 {
 		// Have never seen this, but if it happens, then rollout only if an agent is desired
 		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. Pod template has no pod labels",
@@ -390,6 +403,7 @@ type configWatcher struct {
 	rolloutLocks    *xsync.MapOf[workloadKey, *sync.Mutex]
 	nsLocks         *xsync.MapOf[string, *sync.RWMutex]
 	blacklistedPods *xsync.MapOf[string, time.Time]
+	startedAt       time.Time
 
 	cms []cache.SharedIndexInformer
 	svs []cache.SharedIndexInformer
@@ -498,6 +512,7 @@ func (c *configWatcher) SetSelf(self Map) {
 }
 
 func (c *configWatcher) StartWatchers(ctx context.Context) error {
+	c.startedAt = time.Now()
 	ctx, c.cancel = context.WithCancel(ctx)
 	for _, si := range c.svs {
 		if err := c.watchServices(ctx, si); err != nil {

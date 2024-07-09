@@ -161,6 +161,14 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		switch {
 		case err != nil:
 			return nil, err
+		case scx == nil && ia == "enabled":
+			// A race condition may occur when a workload with "enabled" is applied.
+			// The workload event handler will create the agent config, but the webhook injection call may arrive before
+			// that agent config has been stored.
+			// Returning an error here will make the webhook call again, and hopefully we're the agent config is ready
+			// by then.
+			dlog.Debugf(ctx, "No agent config has been generated for annotation enabled %s.%s", pod.Name, pod.Namespace)
+			return nil, errors.New("agent-config is not yet generated")
 		case scx == nil:
 			return nil, nil
 		case scx.AgentConfig().Manual:
