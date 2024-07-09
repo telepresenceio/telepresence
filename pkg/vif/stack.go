@@ -97,7 +97,7 @@ func setDefaultOptions(s *stack.Stack) error {
 }
 
 func setNIC(ctx context.Context, s *stack.Stack, ep stack.LinkEndpoint) error {
-	nicID := tcpip.NICID(s.UniqueID())
+	nicID := s.NextNICID()
 	if err := s.CreateNICWithOptions(nicID, ep, stack.NICOptions{Name: "tel", Context: ctx}); err != nil {
 		return fmt.Errorf("create NIC failed: %s", err)
 	}

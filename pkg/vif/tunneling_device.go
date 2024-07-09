@@ -43,9 +43,7 @@ func (vif *TunnelingDevice) Close(ctx context.Context) error {
 	var result error
 	vif.stack.Close()
 	vif.Router.Close(ctx)
-	if err := vif.Device.Close(); err != nil {
-		result = multierror.Append(result, err)
-	}
+	vif.Device.Close()
 	if err := vif.table.Close(ctx); err != nil {
 		result = multierror.Append(result, err)
 	}
