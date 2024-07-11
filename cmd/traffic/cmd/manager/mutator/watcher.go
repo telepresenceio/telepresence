@@ -167,6 +167,7 @@ func isRolloutNeededForPod(ctx context.Context, ac *agentconfig.Sidecar, name, n
 	podAc := agentmap.AgentContainer(pod)
 	if ac == nil {
 		if podAc == nil {
+			dlog.Debugf(ctx, "Rollout check for %s.%s is found that no agent is desired and no agent config is present for pod %s", name, namespace, pod.GetName())
 			return ""
 		}
 		return fmt.Sprintf("Rollout of %s.%s is necessary. No agent is desired but the pod %s has one", name, namespace, pod.GetName())
@@ -378,7 +379,6 @@ func (c *configWatcher) regenerateAgentMaps(ctx context.Context, ns string, gc a
 				if err != nil {
 					return false, err
 				}
-				dlog.Debugf(ctx, "%v != %v", acx, ncx)
 				dlog.Debugf(ctx, "regenereate: agent %s was regenerated", n)
 				data[n] = string(yml)
 				changed = true
