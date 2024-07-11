@@ -53,7 +53,7 @@ jobs:
           - windows-2019
         clusters:
           - distribution: Kubeception
-            version: "1.27"
+            version: "1.29"
     runs-on: ${{ matrix.runners }}
     needs: build_image
     steps:
