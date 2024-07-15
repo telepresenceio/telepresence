@@ -181,7 +181,7 @@ items:
         title: Make it possible to specify ignored volume mounts using path prefix.
         body: >-
           Volume mounts like <code>/var/run/secrets/kubernetes.io</code> are not declared in the workload. Instead, they
-          are injected during pod-creation and their names are generated. It is nwo possible to ignore such mounts using a
+          are injected during pod-creation and their names are generated. It is now possible to ignore such mounts using a
           matching path prefix.
       - type: feature
         title: Make the telemount Docker Volume plugin configurable
