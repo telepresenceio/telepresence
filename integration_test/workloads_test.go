@@ -7,7 +7,22 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
-func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
+type workloadsSuite struct {
+	itest.Suite
+	itest.NamespacePair
+}
+
+func (s *workloadsSuite) SuiteName() string {
+	return "Workloads"
+}
+
+func init() {
+	itest.AddConnectedSuite("", func(h itest.NamespacePair) itest.TestingSuite {
+		return &workloadsSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
+	})
+}
+
+func (s *workloadsSuite) successfulIntercept(tp, svc, port string) {
 	ctx := s.Context()
 	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
@@ -51,18 +66,22 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	)
 }
 
-func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithProbes() {
+func (s *workloadsSuite) Test_SuccessfullyInterceptsDeploymentWithProbes() {
 	s.successfulIntercept("Deployment", "with-probes", "9090")
 }
 
-func (s *connectedSuite) Test_SuccessfullyInterceptsReplicaSet() {
+func (s *workloadsSuite) Test_SuccessfullyInterceptsReplicaSet() {
 	s.successfulIntercept("ReplicaSet", "rs-echo", "9091")
 }
 
-func (s *connectedSuite) Test_SuccessfullyInterceptsStatefulSet() {
+func (s *workloadsSuite) Test_SuccessfullyInterceptsStatefulSet() {
 	s.successfulIntercept("StatefulSet", "ss-echo", "9092")
 }
 
-func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithNoVolumes() {
+func (s *workloadsSuite) Test_SuccessfullyInterceptsDeploymentWithNoVolumes() {
 	s.successfulIntercept("Deployment", "echo-no-vols", "9093")
+}
+
+func (s *workloadsSuite) Test_SuccessfullyInterceptsArgoRollout() {
+	s.successfulIntercept("Rollout", "echo-argo-rollout", "9094")
 }

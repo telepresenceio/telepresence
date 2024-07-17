@@ -192,7 +192,7 @@ func NewSession(
 	}
 	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
 
-	ctx = cluster.WithK8sInterface(ctx)
+	ctx = cluster.WithJoinedClientSetInterface(ctx)
 	scout.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
 
 	dlog.Info(ctx, "Connecting to traffic manager...")

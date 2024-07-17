@@ -81,6 +81,17 @@ rules:
   - patch
 {{- end }}
 - apiGroups:
+  - "argoproj.io"
+  resources:
+  - rollouts
+  verbs:
+  - get
+  - list
+  - watch
+{{- if .Values.agentInjector.enabled }}
+  - patch
+{{- end }}
+- apiGroups:
     - "events.k8s.io"
   resources:
     - events

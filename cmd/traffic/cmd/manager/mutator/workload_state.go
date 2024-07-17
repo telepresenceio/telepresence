@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 )
 
@@ -49,6 +50,26 @@ func statefulSetState(d *appsv1.StatefulSet) WorkloadState {
 	return WorkloadStateAvailable
 }
 
+func rolloutSetState(r *argorollouts.Rollout) WorkloadState {
+	for _, c := range r.Status.Conditions {
+		switch c.Type {
+		case argorollouts.RolloutProgressing:
+			if c.Status == core.ConditionTrue {
+				return WorkloadStateProgressing
+			}
+		case argorollouts.RolloutHealthy:
+			if c.Status == core.ConditionTrue {
+				return WorkloadStateAvailable
+			}
+		case argorollouts.RolloutReplicaFailure:
+			if c.Status == core.ConditionTrue {
+				return WorkloadStateFailure
+			}
+		}
+	}
+	return WorkloadStateUnknown
+}
+
 func GetWorkloadState(wl k8sapi.Workload) WorkloadState {
 	if d, ok := k8sapi.DeploymentImpl(wl); ok {
 		return deploymentState(d)
@@ -58,6 +79,9 @@ func GetWorkloadState(wl k8sapi.Workload) WorkloadState {
 	}
 	if s, ok := k8sapi.StatefulSetImpl(wl); ok {
 		return statefulSetState(s)
+	}
+	if rt, ok := k8sapi.RolloutImpl(wl); ok {
+		return rolloutSetState(rt)
 	}
 	return WorkloadStateUnknown
 }

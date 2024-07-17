@@ -68,7 +68,7 @@ func newPodWatcher(ctx context.Context, nss []string) *podWatcher {
 
 	w.timer = time.AfterFunc(time.Duration(math.MaxInt64), sendIfChanged)
 	for _, ns := range nss {
-		inf := informer.GetFactory(ctx, ns).Core().V1().Pods().Informer()
+		inf := informer.GetK8sFactory(ctx, ns).Core().V1().Pods().Informer()
 		_, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				if pod, ok := obj.(*corev1.Pod); ok {
@@ -121,7 +121,7 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 	var pods []*corev1.Pod
 	var err error
 	for _, ns := range w.namespaces {
-		lister := informer.GetFactory(ctx, ns).Core().V1().Pods().Lister()
+		lister := informer.GetK8sFactory(ctx, ns).Core().V1().Pods().Lister()
 		if ns != "" {
 			pods, err = lister.Pods(ns).List(labels.Everything())
 		} else {

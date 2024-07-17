@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -244,11 +245,16 @@ func connectToManager(
 	if err != nil {
 		return ctx, nil, nil, mgrVer, err
 	}
+
 	cs, err := kubernetes.NewForConfig(rc)
 	if err != nil {
 		return ctx, nil, nil, mgrVer, err
 	}
-	ctx = k8sapi.WithK8sInterface(ctx, cs)
+	acs, err := argorollouts.NewForConfig(rc)
+	if err != nil {
+		return ctx, nil, nil, mgrVer, err
+	}
+	ctx = k8sapi.WithJoinedClientSetInterface(ctx, cs, acs)
 
 	clientConfig := client.GetConfig(ctx)
 	if !clientConfig.Cluster().ConnectFromRootDaemon {

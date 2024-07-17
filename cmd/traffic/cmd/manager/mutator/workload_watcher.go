@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/cache"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -21,7 +22,7 @@ import (
 )
 
 func (c *configWatcher) startDeployments(ctx context.Context, ns string) cache.SharedIndexInformer {
-	f := informer.GetFactory(ctx, ns)
+	f := informer.GetK8sFactory(ctx, ns)
 	ix := f.Apps().V1().Deployments().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		// Strip the parts of the deployment that we don't care about to save memory
@@ -43,7 +44,7 @@ func (c *configWatcher) startDeployments(ctx context.Context, ns string) cache.S
 }
 
 func (c *configWatcher) startReplicaSets(ctx context.Context, ns string) cache.SharedIndexInformer {
-	f := informer.GetFactory(ctx, ns)
+	f := informer.GetK8sFactory(ctx, ns)
 	ix := f.Apps().V1().ReplicaSets().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		// Strip the parts of the replicaset that we don't care about. Saves memory
@@ -64,7 +65,7 @@ func (c *configWatcher) startReplicaSets(ctx context.Context, ns string) cache.S
 }
 
 func (c *configWatcher) startStatefulSets(ctx context.Context, ns string) cache.SharedIndexInformer {
-	f := informer.GetFactory(ctx, ns)
+	f := informer.GetK8sFactory(ctx, ns)
 	ix := f.Apps().V1().StatefulSets().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		// Strip the parts of the stateful that we don't care about. Saves memory
@@ -80,6 +81,27 @@ func (c *configWatcher) startStatefulSets(ctx context.Context, ns string) cache.
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		dlog.Errorf(ctx, "watcher for StatefulSet %s: %v", whereWeWatch(ns), err)
+	})
+	return ix
+}
+
+func (c *configWatcher) startRollouts(ctx context.Context, ns string) cache.SharedIndexInformer {
+	f := informer.GetArgoRolloutsFactory(ctx, ns)
+	ix := f.Argoproj().V1alpha1().Rollouts().Informer()
+	_ = ix.SetTransform(func(o any) (any, error) {
+		// Strip the parts of the rollout that we don't care about. Saves memory
+		if dep, ok := o.(*argorollouts.Rollout); ok {
+			om := &dep.ObjectMeta
+			if an := om.Annotations; an != nil {
+				delete(an, core.LastAppliedConfigAnnotation)
+			}
+			dep.ManagedFields = nil
+			dep.Finalizers = nil
+		}
+		return o, nil
+	})
+	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		dlog.Errorf(ctx, "watcher for Rollouts %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }

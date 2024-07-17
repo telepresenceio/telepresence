@@ -80,7 +80,7 @@ type Session interface {
 	ActualNamespace(string) string
 	AddNamespaceListener(context.Context, NamespaceListener)
 
-	WithK8sInterface(context.Context) context.Context
+	WithJoinedClientSetInterface(context.Context) context.Context
 	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
 
 	GatherLogs(context.Context, *connector.LogsRequest) (*connector.LogsResponse, error)

@@ -19,6 +19,7 @@ import (
 	fakeDiscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
+	fakeargorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -300,9 +301,9 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	fakeClient.Discovery().(*fakeDiscovery.FakeDiscovery).FakedServerVersion = &k8sVersion.Info{
 		GitVersion: "v1.17.0",
 	}
-	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
+	ctx = k8sapi.WithJoinedClientSetInterface(ctx, fakeClient, fakeargorollouts.NewSimpleClientset())
 	ctx = informer.WithFactory(ctx, "")
-	f := informer.GetFactory(ctx, "")
+	f := informer.GetK8sFactory(ctx, "")
 	f.Core().V1().Services().Informer()
 	f.Core().V1().ConfigMaps().Informer()
 	f.Core().V1().Pods().Informer()

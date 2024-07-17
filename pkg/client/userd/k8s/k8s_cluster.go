@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -34,6 +35,9 @@ type Cluster struct {
 
 	// Main
 	ki kubernetes.Interface
+
+	// Argo Rollouts
+	ari argorollouts.Interface
 
 	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceListeners
 	nsLock sync.Mutex
@@ -126,11 +130,16 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 	if err != nil {
 		return nil, err
 	}
-	c = k8sapi.WithK8sInterface(c, cs)
+	acs, err := argorollouts.NewForConfig(rs)
+	if err != nil {
+		return nil, err
+	}
+	c = k8sapi.WithJoinedClientSetInterface(c, cs, acs)
 
 	ret := &Cluster{
 		Kubeconfig: kubeFlags,
 		ki:         cs,
+		ari:        acs,
 	}
 
 	cfg := client.GetConfig(c)
@@ -242,6 +251,6 @@ func (kc *Cluster) GetManagerInstallId(ctx context.Context) string {
 	return managerID
 }
 
-func (kc *Cluster) WithK8sInterface(c context.Context) context.Context {
-	return k8sapi.WithK8sInterface(c, kc.ki)
+func (kc *Cluster) WithJoinedClientSetInterface(c context.Context) context.Context {
+	return k8sapi.WithJoinedClientSetInterface(c, kc.ki, kc.ari)
 }

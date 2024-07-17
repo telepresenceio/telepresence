@@ -111,6 +111,11 @@ jobs:
           POD_NAME=$(kubectl get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
           kubectl cp tel2-image.tar "$POD_NAME:/tmp/image.tar"
           kubectl exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar
+      - name: Install Argo Rollouts
+        shell: bash
+        run: |
+          kubectl create namespace argo-rollouts
+          kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
       - name: Run integration tests
         env:
           DEV_TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}

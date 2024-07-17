@@ -577,6 +577,7 @@ message WorkloadInfo {
     DEPLOYMENT = 1;
     REPLICASET = 2;
     STATEFULSET = 3;
+    ROLLOUT = 4;
   }
 
   enum State {

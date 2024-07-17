@@ -1,0 +1,46 @@
+{{- /*gotype: github.com/telepresenceio/telepresence/v2/integration_test/itest.Generic*/ -}}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ .name }}
+spec:
+  replicas: 3
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {}
+        - setWeight: 80
+        - pause: {duration: 10}
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: {{ .Name }}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: {{ .Name }}
+        template:
+          metadata:
+            labels:
+              app: {{ .Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Name }}
+{{- with .Annotations }}
+        annotations:
+{{- toYaml . | nindent 12 }}
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Registry }}/{{ .Image }}"
+          ports:
+            - name: http
+              containerPort: 8080
+{{- with .Environment }}
+          env:
+{{- toYaml . | nindent 12 }}
+{{- end}}

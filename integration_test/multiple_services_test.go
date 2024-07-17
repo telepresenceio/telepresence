@@ -111,13 +111,13 @@ func (s *multipleServicesSuite) Test_ListOnlyMapped() {
 	s.TelepresenceConnect(ctx, "--mapped-namespaces", "default")
 
 	stdout := itest.TelepresenceOk(ctx, "list")
-	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
+	require.Contains(stdout, "No Workloads (Deployments, StatefulSets, ReplicaSets or Rollouts)")
 
 	stdout = s.TelepresenceConnect(ctx, "--mapped-namespaces", "all")
 	require.Empty(stdout)
 
 	stdout = itest.TelepresenceOk(ctx, "list")
-	require.NotContains(stdout, "No Workloads (Deployments, StatefulSets, or ReplicaSets)")
+	require.NotContains(stdout, "No Workloads (Deployments, StatefulSets, ReplicaSets or Rollouts)")
 }
 
 func (s *multipleServicesSuite) Test_RepeatedConnect() {

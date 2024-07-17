@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/yaml"
 
+	argorolloutsfake "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -784,7 +785,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		assert.Equal(t, expectedConfig, actualConfig, "configs differ")
 	}
 
-	ctx = k8sapi.WithK8sInterface(ctx, clientset)
+	ctx = k8sapi.WithJoinedClientSetInterface(ctx, clientset, argorolloutsfake.NewSimpleClientset())
 	ctx = informer.WithFactory(ctx, "")
 	ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 	require.NoError(t, err)
@@ -1818,7 +1819,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
 			ctx = managerutil.WithEnv(ctx, env)
 			agentmap.GeneratorConfigFunc = env.GeneratorConfig
-			ctx = k8sapi.WithK8sInterface(ctx, clientset)
+			ctx = k8sapi.WithJoinedClientSetInterface(ctx, clientset, argorolloutsfake.NewSimpleClientset())
 			ctx = informer.WithFactory(ctx, "")
 			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 			require.NoError(t, err)

@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/cache"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 )
@@ -30,12 +31,13 @@ const (
 	deployments  = 0
 	replicasets  = 1
 	statefulsets = 2
+	rollouts     = 3
 )
 
 // namespacedWASWatcher is watches Workloads And Services (WAS) for a namespace.
 type namespacedWASWatcher struct {
 	svcWatcher *k8sapi.Watcher[*core.Service]
-	wlWatchers [3]*k8sapi.Watcher[runtime.Object]
+	wlWatchers [4]*k8sapi.Watcher[runtime.Object]
 }
 
 // svcEquals compare only the Service fields that are of interest to Telepresence. They are
@@ -141,15 +143,19 @@ func workloadEquals(oa, ob runtime.Object) bool {
 
 func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond) *namespacedWASWatcher {
 	dlog.Debugf(c, "newNamespaceWatcher %s", namespace)
-	ki := k8sapi.GetK8sInterface(c)
-	appsGetter := ki.AppsV1().RESTClient()
+	ki := k8sapi.GetJoinedClientSetInterface(c)
+	appsGetter, rolloutsGetter := ki.AppsV1().RESTClient(), ki.ArgoprojV1alpha1().RESTClient()
 	w := &namespacedWASWatcher{
 		svcWatcher: k8sapi.NewWatcher("services", ki.CoreV1().RESTClient(), cond, k8sapi.WithEquals(svcEquals), k8sapi.WithNamespace[*core.Service](namespace)),
-		wlWatchers: [3]*k8sapi.Watcher[runtime.Object]{
+		wlWatchers: [4]*k8sapi.Watcher[runtime.Object]{
 			k8sapi.NewWatcher("deployments", appsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace)),
 			k8sapi.NewWatcher("replicasets", appsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace)),
 			k8sapi.NewWatcher("statefulsets", appsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace)),
+			nil,
 		},
+	}
+	if k8sapi.GetArgoRolloutCRDState(c) {
+		w.wlWatchers[rollouts] = k8sapi.NewWatcher("rollouts", rolloutsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace))
 	}
 	return w
 }
@@ -157,7 +163,9 @@ func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond) *
 func (nw *namespacedWASWatcher) cancel() {
 	nw.svcWatcher.Cancel()
 	for _, w := range nw.wlWatchers {
-		w.Cancel()
+		if w != nil {
+			w.Cancel()
+		}
 	}
 }
 
@@ -165,7 +173,8 @@ func (nw *namespacedWASWatcher) hasSynced() bool {
 	return nw.svcWatcher.HasSynced() &&
 		nw.wlWatchers[0].HasSynced() &&
 		nw.wlWatchers[1].HasSynced() &&
-		nw.wlWatchers[2].HasSynced()
+		nw.wlWatchers[2].HasSynced() &&
+		(nw.wlWatchers[3] == nil || nw.wlWatchers[3].HasSynced())
 }
 
 func newWASWatcher() *workloadsAndServicesWatcher {
@@ -332,6 +341,9 @@ func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *co
 
 	var allWls []k8sapi.Workload
 	for i, wlw := range nw.wlWatchers {
+		if wlw == nil {
+			continue
+		}
 		wls, err := wlw.List(c)
 		if err != nil {
 			return nil, err
@@ -345,8 +357,10 @@ func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *co
 				wl = k8sapi.ReplicaSet(o.(*apps.ReplicaSet))
 			case statefulsets:
 				wl = k8sapi.StatefulSet(o.(*apps.StatefulSet))
+			case rollouts:
+				wl = k8sapi.Rollout(o.(*argorollouts.Rollout))
 			}
-			if selector.Matches(labels.Set(wl.GetPodTemplate().Labels)) {
+			if wl != nil && selector.Matches(labels.Set(wl.GetPodTemplate().Labels)) {
 				owl, err := nw.maybeReplaceWithOwner(c, wl)
 				if err != nil {
 					return nil, err

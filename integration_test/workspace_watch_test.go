@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -188,7 +189,13 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 	if err != nil {
 		return nil, err
 	}
-	ctx = k8sapi.WithK8sInterface(ctx, k8sApi)
+
+	argoRollouApi, err := argorollouts.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = k8sapi.WithJoinedClientSetInterface(ctx, k8sApi, argoRollouApi)
 	dialer, err := dnet.NewK8sPortForwardDialer(ctx, cfg, k8sApi)
 	if err != nil {
 		return nil, err
