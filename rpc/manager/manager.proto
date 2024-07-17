@@ -142,6 +142,9 @@ message InterceptSpec {
 
   // Whether to replace the running container.
   bool replace = 22;
+
+  // How many connections should be used for the intercept
+  uint32 first_n_connections = 23;
 }
 
 enum InterceptDispositionType {

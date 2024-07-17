@@ -68,6 +68,9 @@ type intercept struct {
 
 	// Use bridged ftp/sftp mount through this local port
 	localMountPort int32
+
+	// nConnections is the number of connections that have been intercepted
+	nConnections uint32
 }
 
 // interceptResult is what gets written to the awaitIntercept's waitCh channel when the
@@ -140,7 +143,16 @@ func (ic *intercept) localPorts() []string {
 }
 
 func (ic *intercept) shouldForward() bool {
-	return len(ic.localPorts()) > 0
+	accumulator := true
+	b := []bool{}
+	b = append(b, len(ic.localPorts()) > 0)
+	if ic.Spec.FirstNConnections > 0 {
+		b = append(b, ic.nConnections < ic.Spec.FirstNConnections)
+	}
+	for _, v := range b {
+		accumulator = accumulator && v
+	}
+	return accumulator
 }
 
 // startForwards starts port forwards and mounts for the given podInterceptKey.
@@ -241,6 +253,7 @@ func (lpf *podIntercepts) start(ctx context.Context, ic *intercept, rd daemon.Da
 	}
 	if ic.shouldForward() {
 		ic.startForwards(ctx, &lp.wg)
+		ic.nConnections++
 	}
 	dlog.Debugf(ctx, "Started mounts and port-forwards for %+v", fk)
 	lpf.alivePods[fk] = lp

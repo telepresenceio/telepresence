@@ -18,13 +18,14 @@ import (
 )
 
 type Command struct {
-	Name           string // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
-	AgentName      string // --workload || Command[0] // only valid if !localOnly
-	Port           string // --port // only valid if !localOnly
-	ServiceName    string // --service // only valid if !localOnly
-	Address        string // --address // only valid if !localOnly
-	LocalOnly      bool   // --local-only
-	LocalMountPort uint16 // --local-mount-port
+	Name              string // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
+	AgentName         string // --workload || Command[0] // only valid if !localOnly
+	Port              string // --port // only valid if !localOnly
+	ServiceName       string // --service // only valid if !localOnly
+	Address           string // --address // only valid if !localOnly
+	LocalOnly         bool   // --local-only
+	LocalMountPort    uint16 // --local-mount-port
+	FirstNConnections uint32 // --first-n-connections
 
 	Replace bool // whether --replace was passed
 
@@ -117,7 +118,8 @@ func (a *Command) AddFlags(cmd *cobra.Command) {
 	flagSet.BoolVarP(&a.Replace, "replace", "", false,
 		`Indicates if the traffic-agent should replace application containers in workload pods. `+
 			`The default behavior is for the agent sidecar to be installed alongside existing containers.`)
-
+	// the default value of 0 is used to indicate that all connections should be intercepted
+	flagSet.Uint32Var(&a.FirstNConnections, "first-n-connections", 0, `Limit the number of connections to intercept`)
 	// Hide these flags. They are still functional but deprecated. Using them will yield a deprecation message.
 	flagSet.Lookup("local-only").Hidden = true
 	flagSet.Lookup("namespace").Hidden = true
