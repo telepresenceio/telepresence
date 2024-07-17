@@ -98,6 +98,11 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: image
+      - name: Install Argo Rollouts
+        shell: bash
+        run: |
+          kubectl create namespace argo-rollouts
+          kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
       - name: Upload docker image to cluster
         shell: bash
         run: |
@@ -118,7 +123,7 @@ jobs:
           command: |
             set -ex
             if [[ ${RUNNER_OS} == "Windows" ]]; then
-              export PATH="$PATH:/C/Program Files/SSHFS-Win/bin"
+              export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
             fi
             make check-integration
       - uses: ./.github/actions/upload-logs
