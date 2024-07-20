@@ -2,7 +2,6 @@ package vif
 
 import (
 	"context"
-	"io"
 	"net"
 	"sync"
 
@@ -29,7 +28,6 @@ type device struct {
 
 type Device interface {
 	stack.LinkEndpoint
-	io.Closer
 	Index() int32
 	Name() string
 	AddSubnet(context.Context, *net.IPNet) error
@@ -83,8 +81,8 @@ func (d *device) AddSubnet(ctx context.Context, subnet *net.IPNet) (err error) {
 	return d.dev.addSubnet(ctx, subnet)
 }
 
-func (d *device) Close() error {
-	return d.dev.Close()
+func (d *device) Close() {
+	_ = d.dev.Close()
 }
 
 // Index returns the index of this device.
@@ -102,8 +100,8 @@ func (d *device) SetDNS(ctx context.Context, clusterDomain string, server net.IP
 	return d.dev.setDNS(ctx, clusterDomain, server, domains)
 }
 
-func (d *device) SetMTU(mtu int) error {
-	return d.dev.setMTU(mtu)
+func (d *device) SetMTU(mtu uint32) {
+	_ = d.dev.setMTU(int(mtu))
 }
 
 // RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which

@@ -147,7 +147,7 @@ func run(cmd *cobra.Command, _ []string) error {
 				return err
 			}
 			sis[i], err = getStatusInfo(udCtx, info)
-			_ = daemon.GetUserClient(udCtx).Conn.Close()
+			_ = daemon.GetUserClient(udCtx).Close()
 			if err != nil {
 				return err
 			}
@@ -200,7 +200,7 @@ var GetStatusInfo = func(ctx context.Context) (ioutil.WriterTos, error) {
 // GetTrafficManagerStatusExtras may return an extended struct
 //
 //nolint:gochecknoglobals // extension point
-var GetTrafficManagerStatusExtras = func(context.Context, *daemon.UserClient) ioutil.KeyValueProvider {
+var GetTrafficManagerStatusExtras = func(context.Context, daemon.UserClient) ioutil.KeyValueProvider {
 	return nil
 }
 
@@ -254,10 +254,10 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 	us := &wt.UserDaemon
 	us.InstallID = scout.InstallID(ctx)
 	us.Running = true
-	us.Version = userD.Version.String()
-	us.versionName = userD.Name
-	us.Executable = userD.Executable
-	us.Name = userD.DaemonID.Name
+	us.Version = userD.Semver().String()
+	us.versionName = userD.Name()
+	us.Executable = userD.Executable()
+	us.Name = userD.DaemonID().Name
 
 	if userD.Containerized() {
 		us.InDocker = true
@@ -266,7 +266,7 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 			us.Hostname = di.Hostname
 			us.ExposedPorts = di.ExposedPorts
 		}
-		us.ContainerNetwork = "container:" + userD.DaemonID.ContainerName()
+		us.ContainerNetwork = "container:" + userD.DaemonID().ContainerName()
 		if us.versionName == "" {
 			us.versionName = "Daemon"
 		}

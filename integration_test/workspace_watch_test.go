@@ -117,12 +117,15 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 	// This map contains a key for each expected event from the workload watcher
 	expectations := map[string]bool{
 		"added":                 false,
+		"progressing":           false,
+		"available":             false,
 		"agent installed":       false,
 		"agent intercepted":     false,
 		"agent installed again": false,
 		"deleted":               false,
 	}
 
+	var interceptingClient string
 	for {
 		delta, err := wwStream.Recv()
 		if err != nil {
@@ -134,7 +137,19 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 			switch ev.Type {
 			case manager.WorkloadEvent_ADDED_UNSPECIFIED:
 				expectations["added"] = true
+				switch ev.Workload.State {
+				case manager.WorkloadInfo_PROGRESSING:
+					expectations["progressing"] = true
+				case manager.WorkloadInfo_AVAILABLE:
+					expectations["available"] = true
+				}
 			case manager.WorkloadEvent_MODIFIED:
+				switch ev.Workload.State {
+				case manager.WorkloadInfo_PROGRESSING:
+					expectations["progressing"] = true
+				case manager.WorkloadInfo_AVAILABLE:
+					expectations["available"] = true
+				}
 				switch ev.Workload.AgentState {
 				case manager.WorkloadInfo_INSTALLED:
 					if expectations["agent intercepted"] {
@@ -144,6 +159,9 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 					}
 				case manager.WorkloadInfo_INTERCEPTED:
 					expectations["agent intercepted"] = true
+					if ics := ev.Workload.InterceptClients; len(ics) == 1 {
+						interceptingClient = ics[0].Client
+					}
 				}
 			case manager.WorkloadEvent_DELETED:
 				expectations["deleted"] = true
@@ -153,6 +171,7 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 	for k, expect := range expectations {
 		s.True(expect, k)
 	}
+	s.Equal("telepresence@datawire.io", interceptingClient)
 }
 
 func (s *notConnectedSuite) trafficManagerConnection(ctx context.Context) (*grpc.ClientConn, error) {

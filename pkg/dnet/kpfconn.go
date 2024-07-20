@@ -88,14 +88,14 @@ func (pf *k8sPortForwardDialer) Dial(ctx context.Context, addr string) (conn net
 			return conn, nil
 		}
 	}
-	dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
+	dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial %s: %s", addr, err)
 	return nil, err
 }
 
 func (pf *k8sPortForwardDialer) DialPod(ctx context.Context, name, namespace string, podPortNumber uint16) (net.Conn, error) {
 	conn, err := pf.dial(ctx, &podAddress{name: name, namespace: namespace, port: podPortNumber})
 	if err != nil {
-		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial: %s", err)
+		dlog.Errorf(pf.logCtx, "Error with k8sPortForwardDialer dial %s.%s:%d: %s", name, namespace, podPortNumber, err)
 	}
 	return conn, err
 }

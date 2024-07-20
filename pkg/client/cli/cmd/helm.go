@@ -54,6 +54,7 @@ func helmInstall() *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "prevent hooks from running during install")
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
+	flags.BoolVar(&ha.CreateNamespace, "create-namespace", true, "create a namespace for the traffic-manager if not present")
 	ha.addValueSettingFlags(flags)
 	ha.addCRDsFlags(flags)
 	uf := flags.Lookup("upgrade")
@@ -83,6 +84,7 @@ func helmUpgrade() *cobra.Command {
 	flags.BoolVarP(&ha.ResetValues, "reset-values", "", false, "when upgrading, reset the values to the ones built into the chart")
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
+	flags.BoolVarP(&ha.CreateNamespace, "create-namespace", "", true, "create the release namespace if not present")
 	ha.rq = daemon.InitRequest(cmd)
 	return cmd
 }

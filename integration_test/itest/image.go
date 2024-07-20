@@ -8,9 +8,10 @@ import (
 )
 
 type Image struct {
-	Name     string `json:"name,omitempty"`
-	Tag      string `json:"tag,omitempty"`
-	Registry string `json:"registry,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Tag        string `json:"tag,omitempty"`
+	Registry   string `json:"registry,omitempty"`
+	PullPolicy string `json:"pullPolicy,omitempty"`
 }
 
 func (img *Image) FQName() string {

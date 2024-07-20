@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
@@ -76,8 +78,8 @@ type service struct {
 	sessionLock     sync.RWMutex
 
 	// These are used to communicate between the various goroutines.
-	connectRequest  chan *rpc.ConnectRequest // server-grpc.connect() -> connectWorker
-	connectResponse chan *rpc.ConnectInfo    // connectWorker -> server-grpc.connect()
+	connectRequest  chan userd.ConnectRequest // server-grpc.connect() -> connectWorker
+	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 
 	fuseFtpMgr remotefs.FuseFTPManager
 
@@ -94,7 +96,7 @@ type service struct {
 func NewService(ctx context.Context, _ *dgroup.Group, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
 	s := &service{
 		srv:             srv,
-		connectRequest:  make(chan *rpc.ConnectRequest),
+		connectRequest:  make(chan userd.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
@@ -149,6 +151,24 @@ func (s *service) RootSessionInProcess() bool {
 
 func (s *service) Server() *grpc.Server {
 	return s.srv
+}
+
+func (s *service) PostConnectRequest(ctx context.Context, cr userd.ConnectRequest) error {
+	select {
+	case <-ctx.Done():
+		return status.Error(codes.Unavailable, ctx.Err().Error())
+	case s.connectRequest <- cr:
+		return nil
+	}
+}
+
+func (s *service) ReadConnectResponse(ctx context.Context) (result *rpc.ConnectInfo, err error) {
+	select {
+	case <-ctx.Done():
+		err = status.Error(codes.Unavailable, ctx.Err().Error())
+	case result = <-s.connectResponse:
+	}
+	return
 }
 
 func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
@@ -220,7 +240,7 @@ func (s *service) ManageSessions(c context.Context) error {
 	}
 }
 
-func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
+func (s *service) startSession(ctx context.Context, cr userd.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
 	s.sessionLock.Lock() // Locked during creation
 	defer s.sessionLock.Unlock()
 
@@ -231,7 +251,7 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 
 	// Obtain the kubeconfig from the request parameters so that we can determine
 	// what kubernetes context that will be used.
-	config, err := client.DaemonKubeconfig(ctx, cr)
+	config, err := client.DaemonKubeconfig(ctx, cr.Request())
 	if err != nil {
 		if s.rootSessionInProc {
 			s.quit()
@@ -247,7 +267,7 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = userd.WithService(ctx, s.self)
 
-	daemonID, err := daemon.NewIdentifier(cr.Name, config.Context, config.Namespace, proc.RunningInContainer())
+	daemonID, err := daemon.NewIdentifier(cr.Request().Name, config.Context, config.Namespace, proc.RunningInContainer())
 	if err != nil {
 		cancel()
 		return &rpc.ConnectInfo{
@@ -277,7 +297,7 @@ func (s *service) startSession(ctx context.Context, cr *rpc.ConnectRequest, wg *
 	// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
 	// the session is running. The s.sessionCancel is called from Disconnect
 	wg.Add(1)
-	go func(cr *rpc.ConnectRequest) {
+	go func(cr userd.ConnectRequest) {
 		defer func() {
 			s.sessionLock.Lock()
 			s.self.SetManagerClient(nil)

@@ -55,7 +55,7 @@ func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 	}
 
 	if userD != nil {
-		kvf.Add(userD.Name, "v"+userD.Version.String())
+		kvf.Add(userD.Name(), "v"+userD.Semver().String())
 		vi, err := managerVersion(ctx)
 		switch {
 		case err == nil:
@@ -106,8 +106,8 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 			}
 			addDaemonVersions(udCtx, subKvf)
 			ud := daemon.GetUserClient(udCtx)
-			kvf.Add("Connection "+ud.DaemonID.Name, "\n"+subKvf.String())
-			ud.Conn.Close()
+			kvf.Add("Connection "+ud.DaemonID().Name, "\n"+subKvf.String())
+			_ = ud.Close()
 		}
 	} else {
 		addDaemonVersions(ctx, kvf)

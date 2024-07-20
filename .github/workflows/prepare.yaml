@@ -38,14 +38,3 @@ jobs:
           repository: ${{ github.repository }}
           pre_push_branch_commands: "make prepare-release"
           post_push_branch_commands: "make push-tags"
-
-  slack-notification:
-    needs: [check-commit, prepare-release]
-    runs-on: ubuntu-latest
-    if: (needs.check-commit.result == 'failure' || needs.prepare-release.result == 'failure')
-    steps:
-      - name: Notify Developers about Workflow Error
-        id: slack
-        uses: datawire/telepresence-internal-actions/slack-notification-workflow-error@main
-        with:
-          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

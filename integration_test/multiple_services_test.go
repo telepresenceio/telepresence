@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -31,7 +32,6 @@ func init() {
 }
 
 func (s *multipleServicesSuite) Test_LargeRequest() {
-	require := s.Require()
 	client := &http.Client{Timeout: 15 * time.Minute}
 	const sendSize = 1024 * 1024 * 20
 	const varyMax = 1 << 15 // vary last 64Ki
@@ -56,39 +56,37 @@ func (s *multipleServicesSuite) Test_LargeRequest() {
 			// Distribute the requests over all services
 			url := fmt.Sprintf("http://%s-%d.%s/put", s.Name(), x%s.ServiceCount(), s.AppNamespace())
 			req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer(b))
-			require.NoError(err)
+			if !s.NoError(err) {
+				return
+			}
 
 			resp, err := client.Do(req)
-			require.NoError(err)
-			defer resp.Body.Close()
-			require.Equal(resp.StatusCode, 200)
-
-			// Read start
-			buf := make([]byte, sendSize)
-			var sb []byte
-			b1 := buf[:1]
-			for {
-				if _, err = resp.Body.Read(b1); err != nil || b1[0] == '!' {
-					break
-				}
-				sb = append(sb, b1[0])
+			if !s.NoError(err) {
+				return
 			}
-			require.NoError(err)
-			b1 = buf[1:2]
-			_, err = resp.Body.Read(b1)
-			require.Equal(b1[0], byte('\n'))
-			require.NoError(err)
+			bdy := resp.Body
+			defer bdy.Close()
+			if !s.Equal(resp.StatusCode, 200) {
+				return
+			}
 
-			i := 2
-			for err == nil {
+			cl := sendSize + 1024
+			buf := make([]byte, cl)
+			i := 0
+			for i < cl && err == nil {
 				var j int
-				j, err = resp.Body.Read(buf[i:])
+				j, err = bdy.Read(buf[i:])
 				i += j
 			}
-			// Do this instead of require.Equal(b, buf) so that on failure we don't print two very large buffers to the terminal
-			require.Equalf(sendSize, i, "Size of response body not equal sent body. %s", string(sb))
-			require.Equal(true, bytes.Equal(b, buf))
-			require.Equal(io.EOF, err)
+			if errors.Is(err, io.EOF) {
+				err = nil
+			}
+			if s.NoError(err) {
+				ei := bytes.Index(buf, []byte{'!', '\n'})
+				s.GreaterOrEqual(ei, 0)
+				// Do this instead of require.Equal(b, buf[ei:i]) so that on failure we don't print two very large buffers to the terminal
+				s.Equal(true, bytes.Equal(b, buf[ei:i]))
+			}
 		}(i)
 	}
 	wg.Wait()

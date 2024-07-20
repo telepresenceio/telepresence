@@ -26,7 +26,6 @@ import (
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
@@ -118,7 +117,9 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 }
 
 func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) error {
-	var ai AgentInjector
+	cw := GetMap(ctx)
+	ai := NewAgentInjectorFunc(ctx, cw)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/traffic-agent", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -152,12 +153,6 @@ func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) er
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	cw := GetMap(ctx)
-	ai = NewAgentInjectorFunc(ctx, cw)
-	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
-		dtime.SleepWithContext(ctx, time.Second) // Give the server some time to start
-		return cw.Wait(ctx)
-	})
 
 	wrapped := otelhttp.NewHandler(mux, "agent-injector", otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 		return operation + r.URL.Path
@@ -179,7 +174,17 @@ func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) er
 			return ctx
 		},
 	}
-	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port), injectorCertGetter)
+	injectorReady := make(chan error)
+	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
+		if _, ok := <-injectorReady; ok {
+			// An error was posted on the injectorReady channel. We don't report the
+			// error from here, but we refrain from waiting on the watchers.
+			return nil
+		}
+		// the injectorReady was closed with no errors.
+		return cw.Wait(ctx)
+	})
+	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port), injectorCertGetter, injectorReady)
 }
 
 type logFilter struct {
@@ -194,7 +199,19 @@ func (l *logFilter) Write(data []byte) (int, error) {
 	return l.wr.Write(data)
 }
 
-func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGetter InjectorCertGetter) error {
+func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGetter InjectorCertGetter, rdy chan error) (err error) {
+	defer func() {
+		select {
+		case <-rdy:
+		// Already closed
+		default:
+			if err != nil {
+				rdy <- err
+			}
+			close(rdy)
+		}
+	}()
+
 	certPEM, keyPEM, err := certGetter.LoadCert()
 	if err != nil {
 		return err
@@ -214,6 +231,10 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGett
 
 	errc := make(chan error, 1)
 	go func() {
+		// Give the http server some time to start accepting calls from the listener. We don't want
+		// our own rollouts to happen before we are able to receive events from the mutating webhook.
+		time.Sleep(3 * time.Second)
+		close(rdy)
 		<-ctx.Done()
 		errc <- s.Shutdown(dcontext.HardContext(ctx))
 	}()

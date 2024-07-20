@@ -39,6 +39,12 @@ items:
           via <code>brew install datawire/blackbird/telepresence-oss</code>.
         docs: https://github.com/telepresenceio/telepresence/issues/3609
       - type: feature
+        title: Add --create-namespace flag to the telepresence helm install command.
+        body: >-
+          A <code>--create-namespace</code> (default <code>true</code>) flag was added to the <code>telepresence helm
+          install</code> command. No attempt will be made to create a namespace for the traffic-manager if it is explicitly
+          set to <code>false</code>. The command will then fail if the namespace is missing.
+      - type: feature
         title: Introduce DNS fallback on Windows.
         body: >-
           A <code>network.defaultDNSWithFallback</code> config option has been introduced on Windows. It will cause the
@@ -68,6 +74,12 @@ items:
           A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are
           able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources,
           including the Traffic Manager and hooks pods.
+      - type: bugfix
+        title: Race in traffic-agent injector when using inject annotation
+        body: >-
+          Applying multiple deployments that used the <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code> would cause
+          a race condition, resulting in a large number of created pods that eventually had to be deleted, or sometimes in
+          pods that didn't contain a traffic agent.
       - type: bugfix
         title: Fix configuring custom agent security context
         body: ->
@@ -174,7 +186,7 @@ items:
         title: Make it possible to specify ignored volume mounts using path prefix.
         body: >-
           Volume mounts like <code>/var/run/secrets/kubernetes.io</code> are not declared in the workload. Instead, they
-          are injected during pod-creation and their names are generated. It is nwo possible to ignore such mounts using a
+          are injected during pod-creation and their names are generated. It is now possible to ignore such mounts using a
           matching path prefix.
       - type: feature
         title: Make the telemount Docker Volume plugin configurable

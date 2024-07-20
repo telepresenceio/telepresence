@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"regexp"
 
-	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	apps "k8s.io/client-go/informers/apps/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -28,6 +28,7 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 		return GetWorkload(ctx, wlName, obj.GetNamespace(), lbs[agentconfig.WorkloadKindLabel])
 	}
 	refs := obj.GetOwnerReferences()
+	ns := obj.GetNamespace()
 	for i := range refs {
 		if or := &refs[i]; or.Controller != nil && *or.Controller {
 			if or.Kind == "ReplicaSet" {
@@ -35,12 +36,12 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 				// get the deployment. If this succeeds, we have saved us a replicaset
 				// lookup.
 				if m := ReplicaSetNameRx.FindStringSubmatch(or.Name); m != nil {
-					if wl, err := GetWorkload(ctx, m[1], obj.GetNamespace(), "Deployment"); err == nil {
+					if wl, err := GetWorkload(ctx, m[1], ns, "Deployment"); err == nil {
 						return wl, nil
 					}
 				}
 			}
-			wl, err := GetWorkload(ctx, or.Name, obj.GetNamespace(), or.Kind)
+			wl, err := GetWorkload(ctx, or.Name, ns, or.Kind)
 			if err != nil {
 				return nil, err
 			}
@@ -55,42 +56,59 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 
 func GetWorkload(ctx context.Context, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
 	dlog.Debugf(ctx, "GetWorkload(%s,%s,%s)", name, namespace, workloadKind)
+	f := informer.GetFactory(ctx, namespace)
+	if f == nil {
+		dlog.Debugf(ctx, "fetching %s %s.%s using direct API call", workloadKind, name, namespace)
+		return k8sapi.GetWorkload(ctx, name, namespace, workloadKind)
+	}
+	return getWorkload(f.Apps().V1(), name, namespace, workloadKind)
+}
+
+func getWorkload(ai apps.Interface, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
 	switch workloadKind {
 	case "Deployment":
-		obj, err = getDeployment(ctx, name, namespace)
+		return getDeployment(ai, name, namespace)
 	case "ReplicaSet":
-		obj, err = k8sapi.GetReplicaSet(ctx, name, namespace)
+		return getReplicaSet(ai, name, namespace)
 	case "StatefulSet":
-		obj, err = k8sapi.GetStatefulSet(ctx, name, namespace)
+		return getStatefulSet(ai, name, namespace)
 	case "":
 		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
-			if obj, err = GetWorkload(ctx, name, namespace, wk); err == nil {
+			if obj, err = getWorkload(ai, name, namespace, wk); err == nil {
 				return obj, nil
 			}
 			if !k8sErrors.IsNotFound(err) {
 				return nil, err
 			}
 		}
-		err = k8sErrors.NewNotFound(core.Resource("workload"), name+"."+namespace)
+		return nil, k8sErrors.NewNotFound(core.Resource("workload"), name+"."+namespace)
 	default:
 		return nil, k8sapi.UnsupportedWorkloadKindError(workloadKind)
 	}
-	return obj, err
 }
 
-func getDeployment(ctx context.Context, name, namespace string) (obj k8sapi.Workload, err error) {
-	if f := informer.GetFactory(ctx, namespace); f != nil {
-		var dep *appsv1.Deployment
-		dep, err = f.Apps().V1().Deployments().Lister().Deployments(namespace).Get(name)
-		if err == nil {
-			obj = k8sapi.Deployment(dep)
-		}
-		return obj, err
+func getDeployment(ai apps.Interface, name, namespace string) (wl k8sapi.Workload, err error) {
+	dep, err := ai.Deployments().Lister().Deployments(namespace).Get(name)
+	if err != nil {
+		return nil, err
 	}
+	return k8sapi.Deployment(dep), nil
+}
 
-	// This shouldn't happen really.
-	dlog.Debugf(ctx, "fetching deployment %s.%s using direct API call", name, namespace)
-	return k8sapi.GetDeployment(ctx, name, namespace)
+func getReplicaSet(ai apps.Interface, name, namespace string) (k8sapi.Workload, error) {
+	rs, err := ai.ReplicaSets().Lister().ReplicaSets(namespace).Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return k8sapi.ReplicaSet(rs), nil
+}
+
+func getStatefulSet(ai apps.Interface, name, namespace string) (k8sapi.Workload, error) {
+	ss, err := ai.StatefulSets().Lister().StatefulSets(namespace).Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return k8sapi.StatefulSet(ss), nil
 }
 
 func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {

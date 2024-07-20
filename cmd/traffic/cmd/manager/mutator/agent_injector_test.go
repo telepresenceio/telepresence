@@ -56,6 +56,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	}
 	ctx := dlog.NewTestContext(t, false)
 	ctx = managerutil.WithEnv(ctx, env)
+	agentmap.GeneratorConfigFunc = env.GeneratorConfig
 
 	podSuffix := "-6699c6cb54-"
 	podName := func(name string) string {
@@ -785,13 +786,11 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 	ctx = k8sapi.WithK8sInterface(ctx, clientset)
 	ctx = informer.WithFactory(ctx, "")
-	f := informer.GetFactory(ctx, "")
-	f.Core().V1().Services().Informer()
-	f.Core().V1().ConfigMaps().Informer()
-	f.Core().V1().Pods().Informer()
-	f.Apps().V1().Deployments().Informer()
-	f.Start(ctx.Done())
-	f.WaitForCacheSync(ctx.Done())
+	ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
+	require.NoError(t, err)
+	cw := NewWatcher("")
+	cw.Start(ctx)
+	require.NoError(t, cw.StartWatchers(ctx))
 
 	for _, test := range tests {
 		test := test // pin it
@@ -1821,13 +1820,6 @@ func TestTrafficAgentInjector(t *testing.T) {
 			agentmap.GeneratorConfigFunc = env.GeneratorConfig
 			ctx = k8sapi.WithK8sInterface(ctx, clientset)
 			ctx = informer.WithFactory(ctx, "")
-			f := informer.GetFactory(ctx, "")
-			f.Core().V1().Services().Informer()
-			f.Core().V1().ConfigMaps().Informer()
-			f.Core().V1().Pods().Informer()
-			f.Apps().V1().Deployments().Informer()
-			f.Start(ctx.Done())
-			f.WaitForCacheSync(ctx.Done())
 			ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 			require.NoError(t, err)
 			if test.envAdditions != nil {
@@ -1844,9 +1836,12 @@ func TestTrafficAgentInjector(t *testing.T) {
 				ctx = managerutil.WithEnv(ctx, &newEnv)
 				agentmap.GeneratorConfigFunc = newEnv.GeneratorConfig
 			}
+			cw := NewWatcher("")
+			cw.Start(ctx)
+			require.NoError(t, cw.StartWatchers(ctx))
+
 			var actualPatch PatchOps
 			var actualErr error
-			cw := NewWatcher("")
 			if test.generateConfig {
 				gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
 				require.NoError(t, err)

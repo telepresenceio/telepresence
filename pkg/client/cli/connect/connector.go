@@ -70,7 +70,7 @@ func quitHostConnector(ctx context.Context) {
 	}
 	ud := daemon.GetUserClient(udCtx)
 	_, _ = ud.Quit(ctx, &emptypb.Empty{})
-	_ = ud.Conn.Close()
+	_ = ud.Close()
 	_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 
 	// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
@@ -94,7 +94,7 @@ func quitDockerDaemons(ctx context.Context) {
 		}
 		ud := daemon.GetUserClient(udCtx)
 		_, _ = ud.Quit(ctx, &emptypb.Empty{})
-		_ = ud.Conn.Close()
+		_ = ud.Close()
 	}
 	if err = daemon.WaitUntilAllVanishes(ctx, 5*time.Second); err != nil {
 		dlog.Error(ctx, err)
@@ -319,8 +319,7 @@ func getConnectorVersion(ctx context.Context, cc connector.ConnectorClient) (*co
 }
 
 func newUserDaemon(ctx context.Context, conn *grpc.ClientConn, daemonID *daemon.Identifier) (context.Context, error) {
-	cc := connector.NewConnectorClient(conn)
-	vi, err := getConnectorVersion(ctx, cc)
+	vi, err := getConnectorVersion(ctx, connector.NewConnectorClient(conn))
 	if err != nil {
 		return ctx, err
 	}
@@ -328,14 +327,7 @@ func newUserDaemon(ctx context.Context, conn *grpc.ClientConn, daemonID *daemon.
 	if err != nil {
 		return ctx, fmt.Errorf("unable to parse version obtained from connector daemon: %w", err)
 	}
-	ctx = daemon.WithUserClient(ctx, &daemon.UserClient{
-		ConnectorClient: cc,
-		Conn:            conn,
-		DaemonID:        daemonID,
-		Version:         v,
-		Name:            vi.Name,
-		Executable:      vi.Executable,
-	})
+	ctx = daemon.WithUserClient(ctx, daemon.NewUserClientFunc(conn, daemonID, v, vi.Name, vi.Executable))
 	return ctx, nil
 }
 
@@ -376,25 +368,25 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 	return daemon.WithSession(ctx, s), nil
 }
 
-func connectSession(ctx context.Context, useLine string, userD *daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
+func connectSession(ctx context.Context, useLine string, userD daemon.UserClient, request *daemon.Request, required bool) (*daemon.Session, error) {
 	var ci *connector.ConnectInfo
 	var err error
 	if userD.Containerized() && !proc.RunningInContainer() {
-		patcher.AnnotateConnectRequest(&request.ConnectRequest, docker.TpCache, userD.DaemonID.KubeContext)
+		patcher.AnnotateConnectRequest(&request.ConnectRequest, docker.TpCache, userD.DaemonID().KubeContext)
 	}
 	session := func(ci *connector.ConnectInfo, started bool) *daemon.Session {
 		// Update the request from the connect info.
 		request.KubeFlags = ci.KubeFlags
 		request.ManagerNamespace = ci.ManagerNamespace
 		request.Name = ci.ConnectionName
-		userD.DaemonID = &daemon.Identifier{
+		userD.SetDaemonID(&daemon.Identifier{
 			Name:          ci.ConnectionName,
 			KubeContext:   ci.ClusterContext,
 			Namespace:     ci.Namespace,
 			Containerized: userD.Containerized(),
-		}
+		})
 		return &daemon.Session{
-			UserClient: *userD,
+			UserClient: userD,
 			Info:       ci,
 			Started:    started,
 		}
@@ -482,7 +474,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 	}
 
 	if !userD.Containerized() {
-		daemonID := userD.DaemonID
+		daemonID := userD.DaemonID()
 		err = daemon.SaveInfo(ctx,
 			&daemon.Info{
 				InDocker:     false,
@@ -498,7 +490,7 @@ func connectSession(ctx context.Context, useLine string, userD *daemon.UserClien
 	}
 	if ci, err = userD.Connect(ctx, &request.ConnectRequest); err != nil {
 		if !userD.Containerized() {
-			_ = daemon.DeleteInfo(ctx, userD.DaemonID.InfoFileName())
+			_ = daemon.DeleteInfo(ctx, userD.DaemonID().InfoFileName())
 		}
 		return nil, err
 	}

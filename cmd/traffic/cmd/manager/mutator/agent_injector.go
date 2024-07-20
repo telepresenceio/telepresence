@@ -158,31 +158,25 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 		scx, err = a.agentConfigs.Get(ctx, wl.GetName(), wl.GetNamespace())
-		if err != nil {
-			return nil, err
-		}
-
 		switch {
-		case scx == nil && ia != "enabled":
+		case err != nil:
+			return nil, err
+		case scx == nil && ia == "enabled":
+			// A race condition may occur when a workload with "enabled" is applied.
+			// The workload event handler will create the agent config, but the webhook injection call may arrive before
+			// that agent config has been stored.
+			// Returning an error here will make the webhook call again, and hopefully we're the agent config is ready
+			// by then.
+			dlog.Debugf(ctx, "No agent config has been generated for annotation enabled %s.%s", pod.Name, pod.Namespace)
+			return nil, errors.New("agent-config is not yet generated")
+		case scx == nil:
 			return nil, nil
-		case scx != nil && scx.AgentConfig().Manual:
+		case scx.AgentConfig().Manual:
 			dlog.Debugf(ctx, "Skipping webhook where agent is manually injected %s.%s", pod.Name, pod.Namespace)
 			return nil, nil
 		}
 
 		tracing.RecordWorkloadInfo(span, wl)
-		var gc agentmap.GeneratorConfig
-		if gc, err = agentmap.GeneratorConfigFunc(img); err != nil {
-			return nil, err
-		}
-		if scx, err = gc.Generate(ctx, wl, scx); err != nil {
-			return nil, err
-		}
-
-		scx.RecordInSpan(span)
-		if err = a.agentConfigs.store(ctx, scx); err != nil {
-			return nil, err
-		}
 	default:
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
 	}

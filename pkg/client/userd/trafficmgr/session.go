@@ -1,6 +1,8 @@
 package trafficmgr
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -77,8 +79,8 @@ type session struct {
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
 
 	// local information
-	installID   string // telepresence's install ID
-	userAndHost string // "laptop-username@laptop-hostname"
+	installID string // telepresence's install ID
+	clientID  string // "laptop-username@laptop-hostname"
 
 	// Kubernetes Port Forward Dialer
 	pfDialer dnet.PortForwardDialer
@@ -138,11 +140,12 @@ type session struct {
 
 func NewSession(
 	ctx context.Context,
-	cr *rpc.ConnectRequest,
+	cri userd.ConnectRequest,
 	config *client.Kubeconfig,
 ) (rc context.Context, _ userd.Session, info *connector.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 
+	cr := cri.Request()
 	connectStart := time.Now()
 	defer func() {
 		if r := recover(); r != nil {
@@ -209,6 +212,13 @@ func NewSession(
 			dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
 		}
 	} else {
+		if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+			dlog.Debug(ctx, "Applying client configuration from cluster")
+			sc := bufio.NewScanner(bytes.NewReader(cliCfg.ConfigYaml))
+			for sc.Scan() {
+				dlog.Debug(ctx, sc.Text())
+			}
+		}
 		if err := yaml.Unmarshal(cliCfg.ConfigYaml, tmgr.sessionConfig); err != nil {
 			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
 		}
@@ -323,16 +333,7 @@ func connectMgr(
 	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	userinfo, err := user.Current()
-	if err != nil {
-		return nil, fmt.Errorf("unable to obtain current user: %w", err)
-	}
-	host, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("unable to obtain hostname: %w", err)
-	}
-
-	err = CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
+	err := CheckTrafficManagerService(ctx, cluster.GetManagerNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +352,19 @@ func connectMgr(
 		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
 	}
 
-	userAndHost := fmt.Sprintf("%s@%s", userinfo.Username, host)
+	clientID := cr.ClientId
+	if clientID == "" {
+		userinfo, err := user.Current()
+		if err != nil {
+			return nil, fmt.Errorf("unable to obtain current user: %w", err)
+		}
+		host, err := os.Hostname()
+		if err != nil {
+			return nil, fmt.Errorf("unable to obtain hostname: %w", err)
+		}
+
+		clientID = fmt.Sprintf("%s@%s", userinfo.Username, host)
+	}
 
 	daemonID, err := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace, proc.RunningInContainer())
 	if err != nil {
@@ -371,16 +384,16 @@ func connectMgr(
 				// Call timed out, so the traffic-manager isn't responding at all
 				return nil, ctx.Err()
 			}
-			dlog.Debugf(ctx, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", userAndHost)
+			dlog.Debugf(ctx, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", clientID)
 		} else {
 			si = nil
 		}
 	}
 
 	if si == nil {
-		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", userAndHost)
+		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", clientID)
 		si, err = mClient.ArriveAsClient(ctx, &manager.ClientInfo{
-			Name:      userAndHost,
+			Name:      clientID,
 			Namespace: cluster.Namespace,
 			InstallId: installID,
 			Product:   "telepresence",
@@ -430,7 +443,7 @@ func connectMgr(
 		Cluster:            cluster,
 		installID:          installID,
 		daemonID:           daemonID,
-		userAndHost:        userAndHost,
+		clientID:           clientID,
 		managerClient:      mClient,
 		managerConn:        conn,
 		pfDialer:           pfDialer,
@@ -457,8 +470,8 @@ func (s *session) Remain(ctx context.Context) error {
 	defer cancel()
 	_, err := self.ManagerClient().Remain(ctx, self.NewRemainRequest())
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			// Session has expired. We need to cancel the owner session and reconnect
+		if status.Code(err) == codes.NotFound || status.Code(err) == codes.Unavailable {
+			// The session has expired. We need to cancel the owner session and reconnect.
 			return ErrSessionExpired
 		}
 		dlog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
@@ -816,7 +829,8 @@ func (s *session) remainLoop(c context.Context) error {
 	}
 }
 
-func (s *session) UpdateStatus(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (s *session) UpdateStatus(c context.Context, cri userd.ConnectRequest) *rpc.ConnectInfo {
+	cr := cri.Request()
 	config, err := client.DaemonKubeconfig(c, cr)
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
