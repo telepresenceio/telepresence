@@ -16,6 +16,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
@@ -178,8 +179,8 @@ func (w *wlWatcher) addEventHandler(ctx context.Context, ns string) error {
 	if err := w.watchWorkloads(ai.StatefulSets().Informer(), ns); err != nil {
 		return err
 	}
-	if !k8sapi.GetArgoRolloutCRDState(ctx) {
-		dlog.Infof(ctx, "ArgoRollout CRD is not available, skipping Rollpouts watch")
+	if !managerutil.ArgoRolloutsEnabled(ctx) {
+		dlog.Infof(ctx, "Argo Rollouts is disabled, Argo Rollouts will not be watched")
 	} else if err := w.watchWorkloads(ri.Rollouts().Informer(), ns); err != nil {
 		return err
 	}

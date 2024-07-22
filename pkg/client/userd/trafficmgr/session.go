@@ -439,6 +439,11 @@ func connectMgr(
 	cluster.NeverProxy = append(cluster.NeverProxy, extraNeverProxy...)
 	cluster.AllowConflictingSubnets = append(cluster.AllowConflictingSubnets, extraAllow...)
 
+	knownWorkloadKinds, err := mClient.GetKnownWorkloadKinds(ctx, si)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get known workload kinds: %w", err)
+	}
+
 	sess := &session{
 		Cluster:            cluster,
 		installID:          installID,
@@ -451,7 +456,7 @@ func connectMgr(
 		managerVersion:     managerVersion,
 		sessionInfo:        si,
 		interceptWaiters:   make(map[string]*awaitIntercept),
-		wlWatcher:          newWASWatcher(),
+		wlWatcher:          newWASWatcher(knownWorkloadKinds),
 		isPodDaemon:        cr.IsPodDaemon,
 		done:               make(chan struct{}),
 		subnetViaWorkloads: cr.SubnetViaWorkloads,

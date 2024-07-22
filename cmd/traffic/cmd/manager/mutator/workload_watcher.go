@@ -87,6 +87,7 @@ func (c *configWatcher) startStatefulSets(ctx context.Context, ns string) cache.
 
 func (c *configWatcher) startRollouts(ctx context.Context, ns string) cache.SharedIndexInformer {
 	f := informer.GetArgoRolloutsFactory(ctx, ns)
+	dlog.Infof(ctx, "Watching Rollouts in %s", ns)
 	ix := f.Argoproj().V1alpha1().Rollouts().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		// Strip the parts of the rollout that we don't care about. Saves memory

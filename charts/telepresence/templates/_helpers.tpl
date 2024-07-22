@@ -88,9 +88,11 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets", "statefulsets"]
   verbs: ["get", "watch", "list"]
+{{- if .Values.argoRollouts.enabled }}
 - apiGroups: ["argoproj.io"]
   resources: ["rollouts"]
   verbs: ["get", "watch", "list"]
+{{- end }}
 - apiGroups: [""]
   resources: ["configmaps"]
   resourceNames: ["telepresence-agents"]

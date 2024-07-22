@@ -65,10 +65,12 @@ func TestEnvconfig(t *testing.T) {
 		},
 		"simple": {
 			Input: map[string]string{
-				"AGENT_REGISTRY": "docker.io/datawire",
+				"AGENT_REGISTRY":        "docker.io/datawire",
+				"ARGO_ROLLOUTS_ENABLED": "true",
 			},
 			Output: func(e *managerutil.Env) {
 				e.AgentRegistry = "docker.io/datawire"
+				e.ArgoRolloutsEnabled = true
 			},
 		},
 		"complex": {

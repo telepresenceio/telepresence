@@ -563,6 +563,16 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	return s.state.PrepareIntercept(ctx, request)
 }
 
+func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.SessionInfo) (*rpc.KnownWorkloadKinds, error) {
+	ctx = managerutil.WithSessionInfo(ctx, request)
+	dlog.Debugf(ctx, "GetKnownWorkloadKinds called")
+	kinds := []rpc.WorkloadInfo_Kind{rpc.WorkloadInfo_DEPLOYMENT, rpc.WorkloadInfo_REPLICASET, rpc.WorkloadInfo_STATEFULSET}
+	if managerutil.ArgoRolloutsEnabled(ctx) {
+		kinds = append(kinds, rpc.WorkloadInfo_ROLLOUT)
+	}
+	return &rpc.KnownWorkloadKinds{Kinds: kinds}, nil
+}
+
 func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*empty.Empty, error) {
 	session := request.GetSession()
 	ctx = managerutil.WithSessionInfo(ctx, session)

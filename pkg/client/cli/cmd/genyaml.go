@@ -227,13 +227,12 @@ func (i *genYAMLCommand) WithJoinedClientSetInterface(ctx context.Context, flagM
 		}
 	}
 	cs, err := kubernetes.NewForConfig(restConfig)
-	if err == nil {
-		ctx = k8sapi.WithK8sInterface(ctx, cs)
-		if acs, err := argorollouts.NewForConfig(restConfig); err == nil {
-			ctx = k8sapi.WithJoinedClientSetInterface(ctx, cs, acs)
-		}
+	if err != nil {
+		return ctx, err
 	}
-
+	if acs, err := argorollouts.NewForConfig(restConfig); err == nil {
+		return k8sapi.WithJoinedClientSetInterface(ctx, cs, acs), nil
+	}
 	return ctx, err
 }
 

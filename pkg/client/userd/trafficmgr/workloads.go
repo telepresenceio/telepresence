@@ -3,6 +3,7 @@ package trafficmgr
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -18,10 +19,12 @@ import (
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 type workloadsAndServicesWatcher struct {
 	sync.Mutex
+	wlKinds     []manager.WorkloadInfo_Kind
 	nsWatchers  map[string]*namespacedWASWatcher
 	nsListeners []func()
 	cond        sync.Cond
@@ -141,7 +144,7 @@ func workloadEquals(oa, ob runtime.Object) bool {
 	return true
 }
 
-func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond) *namespacedWASWatcher {
+func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond, wlKinds []manager.WorkloadInfo_Kind) *namespacedWASWatcher {
 	dlog.Debugf(c, "newNamespaceWatcher %s", namespace)
 	ki := k8sapi.GetJoinedClientSetInterface(c)
 	appsGetter, rolloutsGetter := ki.AppsV1().RESTClient(), ki.ArgoprojV1alpha1().RESTClient()
@@ -154,7 +157,7 @@ func newNamespaceWatcher(c context.Context, namespace string, cond *sync.Cond) *
 			nil,
 		},
 	}
-	if k8sapi.GetArgoRolloutCRDState(c) {
+	if slices.Contains(wlKinds, manager.WorkloadInfo_ROLLOUT) {
 		w.wlWatchers[rollouts] = k8sapi.NewWatcher("rollouts", rolloutsGetter, cond, k8sapi.WithEquals(workloadEquals), k8sapi.WithNamespace[runtime.Object](namespace))
 	}
 	return w
@@ -171,14 +174,15 @@ func (nw *namespacedWASWatcher) cancel() {
 
 func (nw *namespacedWASWatcher) hasSynced() bool {
 	return nw.svcWatcher.HasSynced() &&
-		nw.wlWatchers[0].HasSynced() &&
-		nw.wlWatchers[1].HasSynced() &&
-		nw.wlWatchers[2].HasSynced() &&
-		(nw.wlWatchers[3] == nil || nw.wlWatchers[3].HasSynced())
+		nw.wlWatchers[deployments].HasSynced() &&
+		nw.wlWatchers[replicasets].HasSynced() &&
+		nw.wlWatchers[statefulsets].HasSynced() &&
+		(nw.wlWatchers[rollouts] == nil || nw.wlWatchers[rollouts].HasSynced())
 }
 
-func newWASWatcher() *workloadsAndServicesWatcher {
+func newWASWatcher(knownWorkloadKinds *manager.KnownWorkloadKinds) *workloadsAndServicesWatcher {
 	w := &workloadsAndServicesWatcher{
+		wlKinds:    knownWorkloadKinds.Kinds,
 		nsWatchers: make(map[string]*namespacedWASWatcher),
 	}
 	w.cond.L = &w.Mutex
@@ -275,7 +279,7 @@ func (w *workloadsAndServicesWatcher) setNamespacesToWatch(c context.Context, ns
 }
 
 func (w *workloadsAndServicesWatcher) addNSLocked(c context.Context, ns string) *namespacedWASWatcher {
-	nw := newNamespaceWatcher(c, ns, &w.cond)
+	nw := newNamespaceWatcher(c, ns, &w.cond, w.wlKinds)
 	w.nsWatchers[ns] = nw
 	for _, l := range w.nsListeners {
 		nw.svcWatcher.AddStateListener(&k8sapi.StateListener{Cb: l})

@@ -43,9 +43,17 @@ func GetFactory(ctx context.Context, ns string) GlobalFactory {
 }
 
 func GetK8sFactory(ctx context.Context, ns string) informers.SharedInformerFactory {
-	return GetFactory(ctx, ns).GetK8sInformerFactory()
+	f := GetFactory(ctx, ns)
+	if f != nil {
+		return f.GetK8sInformerFactory()
+	}
+	return nil
 }
 
 func GetArgoRolloutsFactory(ctx context.Context, ns string) argorolloutsinformer.SharedInformerFactory {
-	return GetFactory(ctx, ns).GetArgoRolloutsInformerFactory()
+	f := GetFactory(ctx, ns)
+	if f != nil {
+		return f.GetArgoRolloutsInformerFactory()
+	}
+	return nil
 }

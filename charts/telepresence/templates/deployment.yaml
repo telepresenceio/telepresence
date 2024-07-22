@@ -81,6 +81,10 @@ spec:
             value: {{ .grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
+          {{- if .argoRollouts }}
+          - name: ARGO_ROLLOUTS_ENABLED
+            value: {{ .argoRollouts.enabled | quote }}
+          {{- end }}
       {{- if .agentInjector.enabled }}
         {{- /*
         Traffic agent injector configuration

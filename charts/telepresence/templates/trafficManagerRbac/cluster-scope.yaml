@@ -80,6 +80,7 @@ rules:
 {{- if .Values.agentInjector.enabled }}
   - patch
 {{- end }}
+{{- if .Values.argoRollouts.enabled }}
 - apiGroups:
   - "argoproj.io"
   resources:
@@ -90,6 +91,7 @@ rules:
   - watch
 {{- if .Values.agentInjector.enabled }}
   - patch
+{{- end }}
 {{- end }}
 - apiGroups:
     - "events.k8s.io"

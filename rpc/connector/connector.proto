@@ -94,6 +94,9 @@ service Connector {
   // GetNamespaces gets the mapped namespaces with an optional prefix
   rpc GetNamespaces(GetNamespacesRequest) returns (GetNamespacesResponse);
 
+  // GetKnownWorkloadKinds returns the known workload kinds
+  rpc GetKnownWorkloadKinds(google.protobuf.Empty) returns (telepresence.manager.KnownWorkloadKinds);
+
   // RemoteMountAvailability checks if remote mounts are possible using the given
   // mount type and returns an error if its not.
   rpc RemoteMountAvailability(google.protobuf.Empty) returns (telepresence.common.Result);

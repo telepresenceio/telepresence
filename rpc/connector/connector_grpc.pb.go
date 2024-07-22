@@ -46,6 +46,7 @@ const (
 	Connector_AddInterceptor_FullMethodName          = "/telepresence.connector.Connector/AddInterceptor"
 	Connector_RemoveInterceptor_FullMethodName       = "/telepresence.connector.Connector/RemoveInterceptor"
 	Connector_GetNamespaces_FullMethodName           = "/telepresence.connector.Connector/GetNamespaces"
+	Connector_GetKnownWorkloadKinds_FullMethodName   = "/telepresence.connector.Connector/GetKnownWorkloadKinds"
 	Connector_RemoteMountAvailability_FullMethodName = "/telepresence.connector.Connector/RemoteMountAvailability"
 	Connector_GetConfig_FullMethodName               = "/telepresence.connector.Connector/GetConfig"
 	Connector_SetDNSExcludes_FullMethodName          = "/telepresence.connector.Connector/SetDNSExcludes"
@@ -117,6 +118,8 @@ type ConnectorClient interface {
 	RemoveInterceptor(ctx context.Context, in *Interceptor, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetNamespaces gets the mapped namespaces with an optional prefix
 	GetNamespaces(ctx context.Context, in *GetNamespacesRequest, opts ...grpc.CallOption) (*GetNamespacesResponse, error)
+	// GetKnownWorkloadKinds returns the known workload kinds
+	GetKnownWorkloadKinds(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.KnownWorkloadKinds, error)
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
 	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.Result, error)
@@ -389,6 +392,16 @@ func (c *connectorClient) GetNamespaces(ctx context.Context, in *GetNamespacesRe
 	return out, nil
 }
 
+func (c *connectorClient) GetKnownWorkloadKinds(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.KnownWorkloadKinds, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(manager.KnownWorkloadKinds)
+	err := c.cc.Invoke(ctx, Connector_GetKnownWorkloadKinds_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *connectorClient) RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.Result, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(common.Result)
@@ -494,6 +507,8 @@ type ConnectorServer interface {
 	RemoveInterceptor(context.Context, *Interceptor) (*emptypb.Empty, error)
 	// GetNamespaces gets the mapped namespaces with an optional prefix
 	GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error)
+	// GetKnownWorkloadKinds returns the known workload kinds
+	GetKnownWorkloadKinds(context.Context, *emptypb.Empty) (*manager.KnownWorkloadKinds, error)
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
 	RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error)
@@ -578,6 +593,9 @@ func (UnimplementedConnectorServer) RemoveInterceptor(context.Context, *Intercep
 }
 func (UnimplementedConnectorServer) GetNamespaces(context.Context, *GetNamespacesRequest) (*GetNamespacesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNamespaces not implemented")
+}
+func (UnimplementedConnectorServer) GetKnownWorkloadKinds(context.Context, *emptypb.Empty) (*manager.KnownWorkloadKinds, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetKnownWorkloadKinds not implemented")
 }
 func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoteMountAvailability not implemented")
@@ -1021,6 +1039,24 @@ func _Connector_GetNamespaces_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_GetKnownWorkloadKinds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).GetKnownWorkloadKinds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_GetKnownWorkloadKinds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).GetKnownWorkloadKinds(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Connector_RemoteMountAvailability_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
@@ -1187,6 +1223,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetNamespaces",
 			Handler:    _Connector_GetNamespaces_Handler,
+		},
+		{
+			MethodName: "GetKnownWorkloadKinds",
+			Handler:    _Connector_GetKnownWorkloadKinds_Handler,
 		},
 		{
 			MethodName: "RemoteMountAvailability",

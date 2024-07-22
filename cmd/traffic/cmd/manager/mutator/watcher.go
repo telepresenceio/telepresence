@@ -559,12 +559,11 @@ func (c *configWatcher) StartWatchers(ctx context.Context) error {
 			return err
 		}
 	}
-	for _, si := range c.rls {
-		if si == nil {
-			continue
-		}
-		if err := c.watchWorkloads(ctx, si); err != nil {
-			return err
+	if c.rls != nil {
+		for _, si := range c.rls {
+			if err := c.watchWorkloads(ctx, si); err != nil {
+				return err
+			}
 		}
 	}
 	for _, ci := range c.cms {
@@ -822,21 +821,21 @@ func (c *configWatcher) Start(ctx context.Context) {
 	c.dps = make([]cache.SharedIndexInformer, len(nss))
 	c.rss = make([]cache.SharedIndexInformer, len(nss))
 	c.sss = make([]cache.SharedIndexInformer, len(nss))
-	c.rls = make([]cache.SharedIndexInformer, len(nss))
 	for i, ns := range nss {
 		c.cms[i] = c.startConfigMap(ctx, ns)
 		c.svs[i] = c.startServices(ctx, ns)
 		c.dps[i] = c.startDeployments(ctx, ns)
 		c.rss[i] = c.startReplicaSets(ctx, ns)
 		c.sss[i] = c.startStatefulSets(ctx, ns)
-		if k8sapi.GetArgoRolloutCRDState(ctx) {
-			c.rls[i] = c.startRollouts(ctx, ns)
-		}
 		c.startPods(ctx, ns)
 		kf := informer.GetK8sFactory(ctx, ns)
 		kf.Start(ctx.Done())
 		kf.WaitForCacheSync(ctx.Done())
-		if k8sapi.GetArgoRolloutCRDState(ctx) {
+	}
+	if managerutil.ArgoRolloutsEnabled(ctx) {
+		c.rls = make([]cache.SharedIndexInformer, len(nss))
+		for i, ns := range nss {
+			c.rls[i] = c.startRollouts(ctx, ns)
 			rf := informer.GetArgoRolloutsFactory(ctx, ns)
 			rf.Start(ctx.Done())
 			rf.WaitForCacheSync(ctx.Done())

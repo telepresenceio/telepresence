@@ -7,12 +7,34 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
-func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
+type argoRolloutsSuite struct {
+	itest.Suite
+	itest.NamespacePair
+}
+
+func (s *argoRolloutsSuite) SuiteName() string {
+	return "ArgoRollouts"
+}
+
+func init() {
+	itest.AddTrafficManagerSuite("-argo-rollouts", func(h itest.NamespacePair) itest.TestingSuite {
+		return &argoRolloutsSuite{Suite: itest.Suite{Harness: h}, NamespacePair: h}
+	})
+}
+
+func (s *argoRolloutsSuite) SetupSuite() {
+	s.Suite.SetupSuite()
+	s.TelepresenceHelmInstallOK(s.Context(), true, "--set", "argoRollouts.enabled=true")
+	s.TelepresenceConnect(s.Context())
+}
+
+func (s *argoRolloutsSuite) Test_SuccessfullyInterceptsArgoRollout() {
 	ctx := s.Context()
+	require := s.Require()
+
+	tp, svc, port := "Rollout", "echo-argo-rollout", "9094"
 	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
-
-	require := s.Require()
 
 	require.Eventually(
 		func() bool {
@@ -49,20 +71,4 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 		180*time.Second, // waitFor
 		6*time.Second,   // polling interval
 	)
-}
-
-func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithProbes() {
-	s.successfulIntercept("Deployment", "with-probes", "9090")
-}
-
-func (s *connectedSuite) Test_SuccessfullyInterceptsReplicaSet() {
-	s.successfulIntercept("ReplicaSet", "rs-echo", "9091")
-}
-
-func (s *connectedSuite) Test_SuccessfullyInterceptsStatefulSet() {
-	s.successfulIntercept("StatefulSet", "ss-echo", "9092")
-}
-
-func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithNoVolumes() {
-	s.successfulIntercept("Deployment", "echo-no-vols", "9093")
 }

@@ -36,8 +36,9 @@ items:
       - type: feature
         title: Add support for Argo Rollout workloads.
         body: >-
-          Telepresence now supports Argo Rollout workloads.
-          It is recommended to set the following annotation `telepresence.getambassador.io/inject-traffic-agent: disabled`
+          Telepresence now has an opt-in support for Argo Rollout workloads.
+          The behavior is controlled by `argoRollouts.enabled` Helm chart value.
+          It is recommended to set the following annotation <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code>
           to avoid creation of unwanted revisions.
   - version: 2.19.1
     date: (TBD)
