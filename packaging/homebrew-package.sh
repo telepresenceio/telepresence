@@ -8,6 +8,7 @@ then
 fi
 
 VERSION="${1}"
+PACKAGE_NAME="${2:?Can be 'tel2' or 'tel2oss'}"
 
 ARCH=(amd64 arm64)
 OS=(darwin linux)
@@ -16,8 +17,15 @@ WORK_DIR="$(mktemp -d)"
 echo "Working in ${WORK_DIR}"
 
 BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
-FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
-FORMULA_NAME="Telepresence"
+if [ "${PACKAGE_NAME}" == 'tel2' ]; then
+    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
+    FORMULA_NAME="Telepresence"
+    FORMULA_FILE="packaging/homebrew-formula.rb"
+elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
+    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence-oss.rb"
+    FORMULA_NAME="Telepresence OSS"
+    FORMULA_FILE="packaging/homebrew-oss-formula.rb"
+fi
 
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
@@ -29,9 +37,14 @@ for this_os in "${OS[@]}"; do
 
         # We should only be updating homebrew with a version of telepresence that
         # already exists, so let's download it
-        echo "Downloading ${this_os}/${this_arch}/${VERSION}/telepresence"
+        if [ "${PACKAGE_NAME}" == 'tel2' ]; then
+            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/${this_os}/${this_arch}/${VERSION}/telepresence"
+        elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
+            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/releases/download/v${VERSION}/telepresence-${this_os}-${this_arch}"
+        fi
+        echo "Downloading ${DOWNLOAD_PATH}"
         mkdir -p "${WORK_DIR}/${this_os}/${this_arch}/"
-        curl -fL "https://app.getambassador.io/download/tel2/${this_os}/${this_arch}/${VERSION}/telepresence" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
+        curl -fL "https://app.getambassador.io/${DOWNLOAD_PATH}" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
         declare -x "TARBALL_HASH_${this_os}_${this_arch}"="$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")"
         tmp_var=TARBALL_HASH_${this_os}_${this_arch}
         echo "${tmp_var} == ${!tmp_var}"
@@ -71,10 +84,10 @@ echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
 git clone https://github.com/datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
 
 # Update recipe
-cp packaging/homebrew-formula.rb "$FORMULA"
+cp "${FORMULA_FILE}" "${FORMULA}"
 
-sed -i'' -e "s/__FORMULA_NAME__/${FORMULA_NAME}/g" "$FORMULA"
-sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "$FORMULA"
+sed -i'' -e "s/__FORMULA_NAME__/${FORMULA_NAME}/g" "${FORMULA}"
+sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "${FORMULA}"
 
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
@@ -84,18 +97,18 @@ for this_os in "${OS[@]}"; do
             continue
         fi
         tmp_var="TARBALL_HASH_${this_os}_${this_arch}"
-        sed -i'' -e "s/__TARBALL_HASH_${this_os^^}_${this_arch^^}__/${!tmp_var}/g" "$FORMULA"
+        sed -i'' -e "s/__TARBALL_HASH_${this_os^^}_${this_arch^^}__/${!tmp_var}/g" "${FORMULA}"
     done
 done
 
-chmod 644 "$FORMULA"
+chmod 644 "${FORMULA}"
 cd "${BUILD_HOMEBREW_DIR}"
 
 # Use the correct machine user for committing
 git config user.email "services@datawire.io"
 git config user.name "d6e automaton"
 
-git add "$FORMULA"
+git add "${FORMULA}"
 git commit -m "Release ${VERSION}"
 
 # This cat is just so we can see the formula in case

@@ -333,7 +333,8 @@ promote-to-stable: ## (Release) Update stable.txt in S3
 		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
 ifeq ($(GOHOSTOS), darwin)
-	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION)) $(GOARCH)
+# Since the enterprise version is built from a different makefile, we only use the oss target here. Ref: https://github.com/telepresenceio/telepresence/pull/3626#issuecomment-2200150895
+	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION)) "tel2oss"
 endif
 
 # Prerequisites:

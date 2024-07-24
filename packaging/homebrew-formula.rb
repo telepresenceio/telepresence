@@ -4,6 +4,8 @@ class __FORMULA_NAME__ < Formula
   desc "Local dev environment attached to a remote Kubernetes cluster"
   homepage "https://telepresence.io"
 
+  conflicts_with "telepresence"
+
   on_macos do
     # macfuse is a cask and formula can't depend on casks, so we can't actually
     # do this. This is probably fine since you don't _need_ macfuse to run
