@@ -12,14 +12,14 @@ RUN go mod download
 COPY frontend.go .
 COPY main.go .
 
-FROM base as builder
+FROM base AS builder
 RUN go build -o echo-server .
 
-FROM base as development
+FROM base AS development
 RUN go build -gcflags="all=-N -l" -o echo-server .
 EXPOSE 40000
 CMD ["/go/bin/dlv", "--listen=:40000", "--headless=true", "--api-version=2", "--accept-multiclient", "exec", "/echo-server/echo-server"]
 
-FROM alpine as production
+FROM alpine AS production
 COPY --from=builder /echo-server/echo-server /
 CMD ["/echo-server"]
