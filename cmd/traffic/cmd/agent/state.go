@@ -32,10 +32,6 @@ type State interface {
 	SetManager(ctx context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
-}
-
-type SimpleState interface {
-	State
 	NewInterceptState(forwarder forwarder.Interceptor, target InterceptTarget, mountPoint string, env map[string]string) InterceptState
 }
 
@@ -64,11 +60,6 @@ type state struct {
 	agent.UnimplementedAgentServer
 }
 
-type simpleState struct {
-	state
-	chosenIntercept *manager.InterceptInfo
-}
-
 func (s *state) ManagerClient() manager.ManagerClient {
 	return s.manager
 }
@@ -92,14 +83,6 @@ func NewState(config Config) State {
 		dialWatchers:     xsync.NewMapOf[string, chan *manager.DialRequest](),
 		awaitingForwards: xsync.NewMapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
 	}
-}
-
-func NewSimpleState(config Config) SimpleState {
-	return &simpleState{state: state{
-		Config:           config,
-		dialWatchers:     xsync.NewMapOf[string, chan *manager.DialRequest](),
-		awaitingForwards: xsync.NewMapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
-	}}
 }
 
 func (s *state) AddInterceptState(is InterceptState) {
@@ -129,25 +112,6 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 		rs = append(rs, ist.HandleIntercepts(ctx, ms)...)
 	}
 	return rs
-}
-
-func (s *simpleState) HandleIntercepts(ctx context.Context, iis []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
-	if s.chosenIntercept != nil {
-		chosenID := s.chosenIntercept.Id
-		found := false
-		for _, is := range iis {
-			if chosenID == is.Id {
-				found = true
-				s.chosenIntercept = is
-				break
-			}
-		}
-		if !found {
-			// Chosen intercept is not present in the snapshot
-			s.chosenIntercept = nil
-		}
-	}
-	return s.state.HandleIntercepts(ctx, iis)
 }
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {

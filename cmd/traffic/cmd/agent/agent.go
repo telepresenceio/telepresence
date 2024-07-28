@@ -139,7 +139,7 @@ func Main(ctx context.Context, _ ...string) error {
 		EnableSignalHandling: true,
 	})
 
-	s := NewSimpleState(config)
+	s := NewState(config)
 	info, err := StartServices(ctx, g, config, s)
 	if err != nil {
 		return err
@@ -154,7 +154,7 @@ func Main(ctx context.Context, _ ...string) error {
 	return g.Wait()
 }
 
-func sidecar(ctx context.Context, s SimpleState, info *rpc.AgentInfo) error {
+func sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 	// Manage the forwarders
 	ac := s.AgentConfig()
 	for _, cn := range ac.Containers {
