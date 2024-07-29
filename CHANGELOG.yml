@@ -37,7 +37,7 @@ items:
         title: Add support for Argo Rollout workloads.
         body: >-
           Telepresence now has an opt-in support for Argo Rollout workloads.
-          The behavior is controlled by `argoRollouts.enabled` Helm chart value.
+          The behavior is controlled by `workloads.argoRollouts.enabled` Helm chart value.
           It is recommended to set the following annotation <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code>
           to avoid creation of unwanted revisions.
   - version: 2.19.1
@@ -45,7 +45,7 @@ items:
     notes:
       - title: Add brew support for the OSS version of Telepresence.
         body: >-
-          The Open-Source Software version of Telepresence can now be installed using the brew formula 
+          The Open-Source Software version of Telepresence can now be installed using the brew formula
           via <code>brew install datawire/blackbird/telepresence-oss</code>.
         docs: https://github.com/telepresenceio/telepresence/issues/3609
       - type: feature

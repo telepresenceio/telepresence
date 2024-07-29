@@ -24,7 +24,7 @@ func init() {
 
 func (s *argoRolloutsSuite) SetupSuite() {
 	s.Suite.SetupSuite()
-	s.TelepresenceHelmInstallOK(s.Context(), true, "--set", "argoRollouts.enabled=true")
+	s.TelepresenceHelmInstallOK(s.Context(), true, "--set", "workloads.argoRollouts.enabled=true")
 	s.TelepresenceConnect(s.Context())
 }
 

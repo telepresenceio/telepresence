@@ -81,9 +81,9 @@ spec:
             value: {{ .grpc.maxReceiveSize }}
           {{- end }}
           {{- end }}
-          {{- if .argoRollouts }}
+          {{- if .workloads.argoRollouts }}
           - name: ARGO_ROLLOUTS_ENABLED
-            value: {{ .argoRollouts.enabled | quote }}
+            value: {{ .workloads.argoRollouts.enabled | quote }}
           {{- end }}
       {{- if .agentInjector.enabled }}
         {{- /*

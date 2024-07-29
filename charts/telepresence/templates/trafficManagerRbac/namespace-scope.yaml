@@ -12,7 +12,7 @@ require less permissions in clientRbac.yaml
 {{- end }}
 
 {{- $interceptEnabled := .Values.agentInjector.enabled }}
-{{- $argoRolloutsEnabled := .Values.argoRollouts.enabled }}
+{{- $argoRolloutsEnabled := .Values.workloads.argoRollouts.enabled }}
 
 {{- range .Values.managerRbac.namespaces }}
 ---

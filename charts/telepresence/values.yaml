@@ -347,6 +347,7 @@ client:
     # Tell client's DNS resolver to always send names with these suffixes to the cluster side resolver
     includeSuffixes: []
 
-# Controls Argo Rollouts integration
-argoRollouts:
-  enabled: false
+# Controls which workload kinds are recognized by Telepresence
+workloads:
+  argoRollouts:
+    enabled: false
