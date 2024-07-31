@@ -453,6 +453,11 @@ push-image: push-tel2-image
 
 .PHONY: push-test-images
 push-test-images:
-	docker buildx build --platform=linux/amd64,linux/arm64 --push --tag docker.io/telepredocker buildx build --platform=linux/amd64,linux/arm64 --push --tag docker.io/telepresenceio/echo-server:latest --tag docker.io/telepresenceio/echo-server:0.1.0 .
-	docker buildx build --platform=linux/amd64,linux/arm64 --push --tag docker.io/telepredocker buildx build --platform=linux/amd64,linux/arm64 --push --tag docker.io/telepresenceio/udp-echo:latest --tag docker.io/telepresenceio/udp-echo:0.1.0 .
-
+	(cd integration_test/testdata/echo-server && \
+ 		docker buildx build --platform=linux/amd64,linux/arm64 --push \
+ 		 --tag ghcr.io/telepresenceio/echo-server:latest \
+ 		 --tag ghcr.io/telepresenceio/echo-server:0.1.0 .)
+	(cd integration_test/testdata/udp-echo && \
+		docker buildx build --platform=linux/amd64,linux/arm64 --push \
+		 --tag ghcr.io/telepresenceio/udp-echo:latest \
+		 --tag ghcr.io/telepresenceio/udp-echo:0.1.0 .)

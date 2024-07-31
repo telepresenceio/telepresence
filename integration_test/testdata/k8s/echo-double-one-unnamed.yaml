@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: echo-server
-          image: docker.io/telepresenceio/echo-server:latest
+          image: ghcr.io/telepresenceio/echo-server:latest
           ports:
             - containerPort: 8080
             - containerPort: 8081
