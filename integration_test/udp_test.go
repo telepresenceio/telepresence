@@ -12,7 +12,7 @@ func (s *connectedSuite) TestUDPEcho() {
 	ctx := s.Context()
 	require := s.Require()
 	svc := "udp-echo"
-	tag := "docker.io/telepresenceio/udp-echo:latest"
+	tag := "ghcr.io/telepresenceio/udp-echo:latest"
 
 	require.NoError(s.Kubectl(ctx, "create", "deploy", svc, "--image", tag))
 	require.NoError(s.Kubectl(ctx, "expose", "deploy", svc, "--port", "80", "--protocol", "UDP", "--target-port", "8080"))

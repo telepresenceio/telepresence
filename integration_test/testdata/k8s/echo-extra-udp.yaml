@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: echo-udp-server
-          image: docker.io/telepresenceio/udp-echo:latest
+          image: ghcr.io/telepresenceio/udp-echo:latest
           env:
             - name: PORT
               value: "8080"
@@ -39,7 +39,7 @@ spec:
               cpu: 50m
               memory: 8Mi
         - name: echo-server
-          image: docker.io/telepresenceio/echo-server:latest
+          image: ghcr.io/telepresenceio/echo-server:latest
           ports:
             - name: http
               containerPort: 8080
