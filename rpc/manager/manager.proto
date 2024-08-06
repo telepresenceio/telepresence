@@ -569,6 +569,10 @@ message TunnelMetrics {
   uint64 egress_bytes = 3;
 }
 
+message KnownWorkloadKinds {
+  repeated WorkloadInfo.Kind kinds = 1;
+}
+
 // WorkloadInfo contains information about a workload (typically a
 // Deployment).
 message WorkloadInfo {
@@ -577,6 +581,7 @@ message WorkloadInfo {
     DEPLOYMENT = 1;
     REPLICASET = 2;
     STATEFULSET = 3;
+    ROLLOUT = 4;
   }
 
   enum State {
@@ -757,6 +762,11 @@ service Manager {
   // changing the disposition from "WATING" to "ACTIVE" or to an
   // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
+
+  // GetKnownWorkloadKinds returns the known workload kinds
+  // that the manager can handle. This base set should always include Deployment, StatefulSet, and ReplicaSet,
+  // and it may include Rollout (Argo Rollouts) if the support for it is enabled.
+  rpc GetKnownWorkloadKinds(SessionInfo) returns (KnownWorkloadKinds);
 
   // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.

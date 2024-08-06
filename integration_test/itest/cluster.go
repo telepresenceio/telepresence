@@ -809,7 +809,7 @@ func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace s
 	if err != nil {
 		return ctx, nil, err
 	}
-	return kc.WithK8sInterface(ctx), kc, nil
+	return kc.WithJoinedClientSetInterface(ctx), kc, nil
 }
 
 func KubeConfig(ctx context.Context) string {

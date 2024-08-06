@@ -70,7 +70,7 @@ func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, 
 }
 
 func (c *configWatcher) startServices(ctx context.Context, ns string) cache.SharedIndexInformer {
-	f := informer.GetFactory(ctx, ns)
+	f := informer.GetK8sFactory(ctx, ns)
 	ix := f.Core().V1().Services().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		// Strip of the parts of the service that we don't care about

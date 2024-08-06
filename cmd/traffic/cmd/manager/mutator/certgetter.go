@@ -68,7 +68,7 @@ type injectorCertLister struct {
 }
 
 func getInjectorCertLister(ctx context.Context, namespace, secretName string) InjectorCertGetter {
-	f := informer.GetFactory(ctx, namespace)
+	f := informer.GetK8sFactory(ctx, namespace)
 	cV1 := informerCore.New(f, namespace, func(options *meta.ListOptions) {
 		options.FieldSelector = "metadata.name=" + secretName
 	})

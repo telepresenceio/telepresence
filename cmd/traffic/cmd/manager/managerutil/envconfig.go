@@ -69,6 +69,8 @@ type Env struct {
 	ClientDnsExcludeSuffixes             []string      `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,        		parser=split-trim"`
 	ClientDnsIncludeSuffixes             []string      `env:"CLIENT_DNS_INCLUDE_SUFFIXES,       		parser=split-trim,  default="`
 	ClientConnectionTTL                  time.Duration `env:"CLIENT_CONNECTION_TTL,              		parser=time.ParseDuration"`
+
+	ArgoRolloutsEnabled bool `env:"ARGO_ROLLOUTS_ENABLED, parser=bool, default=false"`
 }
 
 func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorConfig, error) {
@@ -227,6 +229,14 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 			},
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(*core.SecurityContext))) },
+	}
+	fhs[reflect.TypeOf(true)] = envconfig.FieldTypeHandler{
+		Parsers: map[string]func(string) (any, error){
+			"bool": func(str string) (any, error) {
+				return strconv.ParseBool(str)
+			},
+		},
+		Setter: func(dst reflect.Value, src interface{}) { dst.SetBool(src.(bool)) },
 	}
 	return fhs
 }

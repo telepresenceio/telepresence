@@ -83,6 +83,8 @@ func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
 	switch {
 	case strings.HasPrefix(workload, "pod/"):
 		return Kubectl(ctx, namespace, "wait", workload, "--for", "condition=ready")
+	case strings.HasPrefix(workload, "rollout/"):
+		return Run(ctx, "kubectl-argo-rollouts", "status", strings.TrimPrefix(workload, "rollout/"), "--namespace", namespace)
 	case strings.HasPrefix(workload, "replicaset/"), strings.HasPrefix(workload, "statefulset/"):
 		for {
 			status := struct {

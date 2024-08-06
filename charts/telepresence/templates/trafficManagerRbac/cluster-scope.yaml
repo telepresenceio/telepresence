@@ -80,6 +80,19 @@ rules:
 {{- if .Values.agentInjector.enabled }}
   - patch
 {{- end }}
+{{- if .Values.workloads.argoRollouts.enabled }}
+- apiGroups:
+  - "argoproj.io"
+  resources:
+  - rollouts
+  verbs:
+  - get
+  - list
+  - watch
+{{- if .Values.agentInjector.enabled }}
+  - patch
+{{- end }}
+{{- end }}
 - apiGroups:
     - "events.k8s.io"
   resources:

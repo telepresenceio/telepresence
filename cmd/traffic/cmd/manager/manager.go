@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
@@ -92,7 +93,11 @@ func MainWithEnv(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)
 	}
-	ctx = k8sapi.WithK8sInterface(ctx, ki)
+	ari, err := argorollouts.NewForConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("unable to create the Argo Rollouts Interface from InClusterConfig: %w", err)
+	}
+	ctx = k8sapi.WithJoinedClientSetInterface(ctx, ki, ari)
 
 	// Ensure that the manager has access to shard informer factories for all relevant namespaces.
 	//
@@ -125,7 +130,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
 
 	if mgrFactory {
-		f := informer.GetFactory(ctx, env.ManagerNamespace)
+		f := informer.GetK8sFactory(ctx, env.ManagerNamespace)
 		f.Start(ctx.Done())
 		f.WaitForCacheSync(ctx.Done())
 	}

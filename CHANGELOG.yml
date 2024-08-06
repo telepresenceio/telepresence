@@ -30,12 +30,22 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.20.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Add support for Argo Rollout workloads.
+        body: >-
+          Telepresence now has an opt-in support for Argo Rollout workloads.
+          The behavior is controlled by `workloads.argoRollouts.enabled` Helm chart value.
+          It is recommended to set the following annotation <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code>
+          to avoid creation of unwanted revisions.
   - version: 2.19.1
     date: (TBD)
     notes:
       - title: Add brew support for the OSS version of Telepresence.
         body: >-
-          The Open-Source Software version of Telepresence can now be installed using the brew formula 
+          The Open-Source Software version of Telepresence can now be installed using the brew formula
           via <code>brew install datawire/blackbird/telepresence-oss</code>.
         docs: https://github.com/telepresenceio/telepresence/issues/3609
       - type: feature
@@ -98,8 +108,8 @@ items:
       - type: feature
         title: Add scheduler name to PODs templates.
         body: >-
-          A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are 
-          able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources, 
+          A new Helm chart value <code>schedulerName</code> has been added. With this feature, we are
+          able to define some particular schedulers from Kubernetes to apply some different strategies to allocate telepresence resources,
           including the Traffic Manager and hooks pods.
       - type: bugfix
         title: Improve traffic-manager performance in very large clusters.

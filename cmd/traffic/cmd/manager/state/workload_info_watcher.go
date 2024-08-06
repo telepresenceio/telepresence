@@ -161,6 +161,8 @@ func rpcKind(s string) rpc.WorkloadInfo_Kind {
 		return rpc.WorkloadInfo_REPLICASET
 	case "statefulset":
 		return rpc.WorkloadInfo_STATEFULSET
+	case "rollout":
+		return rpc.WorkloadInfo_ROLLOUT
 	default:
 		return rpc.WorkloadInfo_UNSPECIFIED
 	}

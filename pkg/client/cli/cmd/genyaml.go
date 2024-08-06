@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -186,7 +187,7 @@ func (i *genYAMLCommand) writeObjToOutput(obj any) error {
 	return nil
 }
 
-func (i *genYAMLCommand) withK8sInterface(ctx context.Context, flagMap map[string]string) (context.Context, error) {
+func (i *genYAMLCommand) WithJoinedClientSetInterface(ctx context.Context, flagMap map[string]string) (context.Context, error) {
 	configFlags := genericclioptions.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
@@ -226,8 +227,11 @@ func (i *genYAMLCommand) withK8sInterface(ctx context.Context, flagMap map[strin
 		}
 	}
 	cs, err := kubernetes.NewForConfig(restConfig)
-	if err == nil {
-		ctx = k8sapi.WithK8sInterface(ctx, cs)
+	if err != nil {
+		return ctx, err
+	}
+	if acs, err := argorollouts.NewForConfig(restConfig); err == nil {
+		return k8sapi.WithJoinedClientSetInterface(ctx, cs, acs), nil
 	}
 	return ctx, err
 }
@@ -285,7 +289,7 @@ func (i *genConfigMap) generateConfigMap(ctx context.Context, wl k8sapi.Workload
 }
 
 func (g *genConfigMap) run(cmd *cobra.Command, kubeFlags map[string]string) error {
-	ctx, err := g.withK8sInterface(cmd.Context(), kubeFlags)
+	ctx, err := g.WithJoinedClientSetInterface(cmd.Context(), kubeFlags)
 	if err != nil {
 		return err
 	}
@@ -330,7 +334,7 @@ func genContainerSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (g *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) error {
-	ctx, err := g.withK8sInterface(cmd.Context(), kubeFlags)
+	ctx, err := g.WithJoinedClientSetInterface(cmd.Context(), kubeFlags)
 	if err != nil {
 		return err
 	}
@@ -397,7 +401,7 @@ func genInitContainerSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (g *genInitContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) error {
-	ctx, err := g.withK8sInterface(cmd.Context(), kubeFlags)
+	ctx, err := g.WithJoinedClientSetInterface(cmd.Context(), kubeFlags)
 	if err != nil {
 		return err
 	}
@@ -444,7 +448,7 @@ func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (g *genVolumeInfo) run(cmd *cobra.Command, kubeFlags map[string]string) error {
-	ctx, err := g.withK8sInterface(cmd.Context(), kubeFlags)
+	ctx, err := g.WithJoinedClientSetInterface(cmd.Context(), kubeFlags)
 	if err != nil {
 		return err
 	}

@@ -92,7 +92,7 @@ If you run these tests on a Mac, localhost won't work. Please use the docker hub
 export DTEST_REGISTRY=host.docker.internal:5000
 ```
 
-You must also set this in your docker engine settings: 
+You must also set this in your docker engine settings:
 
 ```json
 {
@@ -142,7 +142,7 @@ shortens the time for the test with about 20 seconds.
    (`~/Library/Application Support/telepresence/config.yml` on macOS)
    file you set `images.registry` to match the `TELEPRESENCE_REGISTRY`
    environment variable. See
-   https://www.getambassador.io/docs/telepresence/latest/reference/config/ 
+   https://www.getambassador.io/docs/telepresence/latest/reference/config/
    for more information.
 
  - `TELEPRESENCE_VERSION` is is the "vSEMVER" string used by the
@@ -160,6 +160,9 @@ shortens the time for the test with about 20 seconds.
 
  - You will need to have [mockgen](https://github.com/golang/mock) installed
    to generate new or updated testing mocks for interfaces.
+
+ - You will need to have [argo-rollouts](https://github.com/argoproj/argo-rollouts) (including kubectl-argo-rollouts) installed
+   if you interact with functionality that relies on it.
 
 ## Blocking Ambassador telemetry
 Telemetry to Ambassador Labs can be disabled by having your os resolve the `metriton.datawire.io` to `127.0.0.1`.
