@@ -18,8 +18,6 @@
 # clever should probably be factored into a separate file.
 
 # All build artifacts that are files end up in $(BUILDDIR).
-$(VERBOSE).SILENT:
-
 BUILDDIR=build-output
 
 BINDIR=$(BUILDDIR)/bin

@@ -35,6 +35,9 @@ MAKEFLAGS += --no-builtin-rules
 # target, mark that target as .PRECIOUS.
 .DELETE_ON_ERROR:
 
+# Be silent
+$(VERBOSE).SILENT:
+
 # Add a rule to generate `make help` output from comments in the
 # Makefiles.
 .PHONY: help
