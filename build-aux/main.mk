@@ -216,10 +216,14 @@ setup-build-dir:
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
 
+TELEPRESENCE_SEMVER=$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+CLIENT_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/telepresence:$(TELEPRESENCE_SEMVER)
+TEL2_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_SEMVER)
+
 .PHONY: tel2-image
 tel2-image: build-deps setup-build-dir
 	$(eval PLATFORM_ARG := $(if $(TELEPRESENCE_TEL2_IMAGE_PLATFORM), --platform=$(TELEPRESENCE_TEL2_IMAGE_PLATFORM),))
-	docker build $(PLATFORM_ARG) --target tel2 --tag tel2 --tag $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.traffic .
+	docker build $(PLATFORM_ARG) --target tel2 --tag tel2 --tag $(TEL2_IMAGE_FQN) -f build-aux/docker/images/Dockerfile.traffic .
 
 .PHONY: tel2-image-x
 tel2-image-x: build-deps setup-build-dir
@@ -227,7 +231,7 @@ tel2-image-x: build-deps setup-build-dir
 
 .PHONY: client-image
 client-image: build-deps setup-build-dir
-	docker build --target telepresence --tag telepresence --tag $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) -f build-aux/docker/images/Dockerfile.client .
+	docker build --target telepresence --tag telepresence --tag $(CLIENT_IMAGE_FQN) -f build-aux/docker/images/Dockerfile.client .
 
 .PHONY: client-image-x
 client-image-x: build-deps setup-build-dir
@@ -235,27 +239,27 @@ client-image-x: build-deps setup-build-dir
 
 .PHONY: push-tel2-image
 push-tel2-image: tel2-image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
-	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+	docker push $(TEL2_IMAGE_FQN)
 
 .PHONY: push-tel2-image-x
 push-tel2-image-x: build-deps setup-build-dir
-	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-from type=local,src=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.traffic --push --tag $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) .
+	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-from type=local,src=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.traffic --push --tag $(TEL2_IMAGE_FQN) .
 
 .PHONY: push-client-image
 push-client-image: client-image ## (Build) Push the client container image to $(TELEPRESENCE_REGISTRY)
-	docker push $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
+	docker push $(CLIENT_IMAGE_FQN)
 
 .PHONY: push-client-image-x
 push-client-image-x: build-deps setup-build-dir
-	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-from type=local,src=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.client --push --tag $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) .
+	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-from type=local,src=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.client --push --tag $(CLIENT_IMAGE_FQN) .
 
 .PHONY: save-tel2-image
 save-tel2-image: tel2-image
-	docker save $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/tel2-image.tar
+	docker save $(TEL2_IMAGE_FQN) > $(BUILDDIR)/tel2-image.tar
 
 .PHONY: save-client-image
 save-client-image: client-image
-	docker save $(TELEPRESENCE_REGISTRY)/telepresence:$(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/telepresence-image.tar
+	docker save $(CLIENT_IMAGE_FQN) > $(BUILDDIR)/telepresence-image.tar
 
 .PHONY: push-images
 push-images: push-tel2-image push-client-image
@@ -305,17 +309,17 @@ ifeq ($(GOHOSTOS), windows)
 	packaging/windows-package.sh
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence.zip \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(TELEPRESENCE_SEMVER)/telepresence.zip \
 		--body $(BINDIR)/telepresence.zip
 	AWS_PAGER="" aws s3api put-object \
 		--region us-east-1 \
 		--bucket datawire-static-files \
-		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence-setup.exe \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(TELEPRESENCE_SEMVER)/telepresence-setup.exe \
 		--body $(BINDIR)/telepresence-setup.exe
 else
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
+		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/$(TELEPRESENCE_SEMVER)/telepresence \
 		--body $(BINDIR)/telepresence
 endif
 
@@ -325,14 +329,14 @@ endif
 .PHONY: promote-to-stable
 promote-to-stable: ## (Release) Update stable.txt in S3
 	mkdir -p $(BUILDDIR)
-	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/stable.txt
+	echo $(TELEPRESENCE_SEMVER) > $(BUILDDIR)/stable.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
 		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/stable.txt \
 		--body $(BUILDDIR)/stable.txt
 ifeq ($(GOHOSTOS), darwin)
 # Since the enterprise version is built from a different makefile, we only use the oss target here. Ref: https://github.com/telepresenceio/telepresence/pull/3626#issuecomment-2200150895
-	packaging/homebrew-package.sh $(patsubst v%,%,$(TELEPRESENCE_VERSION)) "tel2oss"
+	packaging/homebrew-package.sh $(TELEPRESENCE_SEMVER) "tel2oss"
 endif
 
 # Prerequisites:
@@ -341,7 +345,7 @@ endif
 .PHONY: promote-nightly
 promote-nightly: ## (Release) Update nightly.txt in S3
 	mkdir -p $(BUILDDIR)
-	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/nightly.txt
+	echo $(TELEPRESENCE_SEMVER) > $(BUILDDIR)/nightly.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
 		--key tel2-oss/$(GOHOSTOS)/$(GOARCH)/nightly.txt \
