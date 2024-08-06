@@ -10,7 +10,6 @@ jobs:
       matrix:
         runners:
           - ubuntu-latest
-          - ubuntu-arm64
           - macos-latest
           - windows-latest
     runs-on: ${{ matrix.runners }}
