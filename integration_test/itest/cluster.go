@@ -739,7 +739,13 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		vx.Image = *image
 	}
 	if !s.isCI {
-		vx.Image.PullPolicy = "Always"
+		pp := "Always"
+		if s.Registry() == "local" {
+			// Using minikube with local images.
+			// They are automatically present and must not be pulled.
+			pp = "Never"
+		}
+		vx.Image.PullPolicy = pp
 	}
 
 	ss, err := sigsYaml.Marshal(&vx)
@@ -1170,9 +1176,14 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 	cluster := cfg.Clusters[cc.Cluster]
 	require.NotNil(t, cluster, "unable to get current cluster from config")
 
+	em := cluster.Extensions
+	if em == nil {
+		em = map[string]k8sruntime.Object{}
+	}
 	raw, err := json.Marshal(extProducer(cluster))
 	require.NoError(t, err, "unable to json.Marshal extension map")
-	cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{Raw: raw}}
+	em["telepresence.io"] = &k8sruntime.Unknown{Raw: raw}
+	cluster.Extensions = em
 
 	context := *cc
 	context.Cluster = "extra"

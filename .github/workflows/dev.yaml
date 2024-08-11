@@ -5,18 +5,16 @@ on:
       - labeled
 
 env:
-  KUBECONFIG: ${{ github.workspace }}/kubeconfig.yaml
-  DTEST_KUBECONFIG: ${{ github.workspace }}/kubeconfig.yaml
-  TELEPRESENCE_REGISTRY: localhost:5000
-  DTEST_REGISTRY: localhost:5000
-  SCOUT_DISABLE: "1"
+  TELEPRESENCE_REGISTRY: ghcr.io/telepresenceio
+  DTEST_REGISTRY: ghcr.io/telepresenceio
 
 jobs:
-  build_image:
-    if: ${{ github.event.label.name == 'ok to test' }}
+  build_images:
+    if: github.event.label.name == 'ok to test'
     runs-on: ubuntu-latest
     outputs:
-      telepresenceVersion: ${{ steps.build.outputs.version }}
+      telepresenceVersion: ${{ steps.version.outputs.version }}
+      telepresenceSemver: ${{ steps.version.outputs.semver }}
     steps:
       - name: Remove label
         uses: buildsville/add-remove-label@v2.0.1
@@ -26,95 +24,64 @@ jobs:
           type: remove
       - uses: actions/checkout@v4
         with:
-          ref: "${{ github.event.pull_request.head.sha }}"
           fetch-depth: 0
-          show-progress: false
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-      - name: Build dev image
-        id: build
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - name: Get Telepresence Version
+        id: version
         run: |
-          make save-tel2-image
-          echo "version=$(cat build-output/version.txt)" >> $GITHUB_OUTPUT
-      - name: Upload image
-        uses: actions/upload-artifact@v3
+          v=$(go run build-aux/genversion/main.go ${{github.run_id}})
+          echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "version=$v" >> $GITHUB_OUTPUT
+          echo "semver=${v#v}" >> $GITHUB_OUTPUT
+      - name: Log in to registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Setup docker buildx
+        uses: docker/setup-buildx-action@v3
         with:
-          name: image
-          path: build-output/tel2-image.tar
+          platforms: linux/amd64,linux/arm64
+      - name: Build cluster images
+        run: |
+          make push-images-x
   run_tests:
+    if: github.event.label.name == 'ok to test'
     strategy:
       fail-fast: false
       matrix:
         runners:
           - ubuntu-latest
-          - ubuntu-arm64
-          - macos-latest # this runner uses arm64
-          - windows-2019
-        clusters:
-          - distribution: Kubeception
-            version: "1.29"
+          - macos-13 # use macos-latest once that runner (which is arm64) supports virtualization.
+          # Re-enable when virtualization is available so that WSL2 can be used and docker has a linux container daemon.
+          # - windows-latest
     runs-on: ${{ matrix.runners }}
-    needs: build_image
+    needs: build_images
+    env:
+      TELEPRESENCE_VERSION: ${{ needs.build_images.outputs.telepresenceVersion }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
       - name: install dependencies
         uses: ./.github/actions/install-dependencies
-      - name: install dependencies for arm64
-        if: runner.os == 'Linux' && runner.arch == 'arm64'
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update -y
-          sudo apt-get install -y socat gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu make jq uidmap
-      - name: install docker for arm64
-        if: runner.os == 'Linux' && runner.arch == 'arm64'
-        run: |
-          curl -fsSL https://get.docker.com -o get-docker.sh
-          sudo sh get-docker.sh
-          dockerd-rootless-setuptool.sh install
-      - name: Build client
-        env:
-          TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
-        run: make build
-      - name: Build client image
+      - name: Start minikube
         if: runner.os == 'Linux'
-        env:
-          TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
-        run: make client-image
-      - name: Create cluster
-        uses: datawire/infra-actions/provision-cluster@v0.2.7
-        with:
-          kubeconfig: ${{ env.KUBECONFIG }}
-          kubeceptionToken: ${{ secrets.DEV_TELEPRESENCE_KUBECEPTION_TOKEN }}
-          kubeceptionProfile: small
-          lifespan: 7200
-          distribution: ${{ matrix.clusters.distribution }}
-          version: ${{ matrix.clusters.version }}
-          gkeCredentials: '{"project_id": "foo"}' # See https://github.com/datawire/infra-actions/issues/66
-      - name: Download prebuilt docker image
-        uses: actions/download-artifact@v3
-        with:
-          name: image
+        uses: medyagh/setup-minikube@latest
+      - name: Start colima
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install kubectl docker colima
+          # the macos-13 runner has 4 cpus, 14 GiB memory, and 14 GiB disk
+          colima start --kubernetes --cpu 2 --memory 6 --disk 10
       - name: Install Argo Rollouts
         shell: bash
         run: |
           kubectl create namespace argo-rollouts
           kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
-      - name: Upload docker image to cluster
-        shell: bash
-        run: |
-          kubectl apply -f build-aux/image-importer.yaml
-          kubectl rollout status -w deployment/image-importer
-          POD_NAME=$(kubectl get pod -ojsonpath='{.items[0].metadata.name}' -l app=image-importer)
-          kubectl cp tel2-image.tar "$POD_NAME:/tmp/image.tar"
-          kubectl exec $POD_NAME -- //hostbin/ctr images import //tmp/image.tar
+      - name: Build client
+        run: make build
       - name: Run integration tests
         env:
-          DEV_TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
-          TELEPRESENCE_VERSION: ${{needs.build_image.outputs.telepresenceVersion}}
+          SCOUT_DISABLE: "1"
         uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
@@ -125,8 +92,47 @@ jobs:
             if [[ ${RUNNER_OS} == "Windows" ]]; then
               export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
             fi
-            make check-integration
+            DEV_TELEPRESENCE_VERSION=${TELEPRESENCE_VERSION} DTEST_KUBECONFIG="${HOME}/.kube/config" make check-integration
       - uses: ./.github/actions/upload-logs
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
         if: always()
+  purge_images:
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - build_images
+      - run_tests
+    steps:
+      - name: Delete tel2 image
+        uses: bots-house/ghcr-delete-image-action@v1.1.0
+        continue-on-error: true
+        with:
+          owner: telepresenceio
+          name: tel2
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ needs.build_images.outputs.telepresenceSemver }}
+          untagged-keep-latest: 6
+      - name: Delete telepresence image
+        uses: bots-house/ghcr-delete-image-action@v1.1.0
+        continue-on-error: true
+        with:
+          owner: telepresenceio
+          name: telepresence
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ needs.build_images.outputs.telepresenceSemver }}
+          untagged-keep-latest: 6
+      - name: Delete tel2 untagged images
+        uses: bots-house/ghcr-delete-image-action@v1.1.0
+        with:
+          owner: telepresenceio
+          name: tel2
+          token: ${{ secrets.GITHUB_TOKEN }}
+          untagged-keep-latest: 6
+      - name: Delete telepresence untagged images
+        uses: bots-house/ghcr-delete-image-action@v1.1.0
+        with:
+          owner: telepresenceio
+          name: telepresence
+          token: ${{ secrets.GITHUB_TOKEN }}
+          untagged-keep-latest: 6

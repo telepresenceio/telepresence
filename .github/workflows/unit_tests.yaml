@@ -10,9 +10,8 @@ jobs:
       matrix:
         runners:
           - ubuntu-latest
-          - ubuntu-arm64
           - macos-latest
-          - windows-2019
+          - windows-latest
     runs-on: ${{ matrix.runners }}
     steps:
       - uses: actions/checkout@v4

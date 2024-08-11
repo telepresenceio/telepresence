@@ -6,8 +6,6 @@ runs:
     - uses: actions/setup-go@v5
       with:
         go-version: stable
-    - uses: azure/setup-kubectl@v3
-      id: kubectl
     - if: runner.os == 'Linux'
       name: install Linux dependencies
       shell: bash
