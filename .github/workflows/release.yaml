@@ -8,16 +8,27 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+
       - v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+
 
+env:
+  TELEPRESENCE_REGISTRY: ghcr.io/telepresenceio
+
 jobs:
   build-release:
     strategy:
       fail-fast: false
       matrix:
-        runners:
+        runner:
           - ubuntu-latest
           - macos-latest
           - windows-latest
-    runs-on: ${{ matrix.runners }}
+        arch:
+          - amd64
+          - arm64
+        exclude:
+          - runner: windows-latest
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      GOARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,42 +46,19 @@ jobs:
           name: binaries
           path: build-output/release
           retention-days: 1
-      - name: generate binaries darwin-amd64 # macos-latest is arm64, so we need an extra amd64 build
-        if: runner.os == 'macOS'
-        env:
-          GOARCH: amd64
-        run: make clean release-binary
-      - name: Upload binaries darwin-amd64
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v3
-        with:
-          name: binaries
-          path: build-output/release
-          retention-days: 1
-      - name: generate binaries linux-arm64 # ubuntu-latest is amd64, so we need an extra arm64 build
-        if: runner.os == 'Linux'
-        env:
-          GOARCH: arm64
-        run: make clean release-binary
-      - name: Upload binaries linux-arm64
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v3
-        with:
-          name: binaries
-          path: build-output/release
-          retention-days: 1
 
   publish-release:
     runs-on: ubuntu-latest
     needs: build-release
     steps:
-      - name: Setup docker builx
+      - name: Setup docker buildx
         uses: docker/setup-buildx-action@v3
         with:
           platforms: linux/amd64,linux/arm64
-      - name: Upload Docker image
+      - name: Log in to registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Upload Docker images
         run: |
-          docker login -u="${{ secrets.DOCKERHUB_USERNAME }}" -p="${{ secrets.DOCKERHUB_PASSWORD }}"
           make push-images-x
       - name: Download artifacts
         uses: actions/download-artifact@v3
@@ -120,16 +108,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runners:
+        runner:
           - ubuntu-latest
-          - ubuntu-arm64
           - macos-latest
-          - macOS-arm64
-          - windows-2019
-    runs-on: ${{ matrix.runners }}
+          - windows-latest
+        arch:
+          - amd64
+          - arm64
+        exclude:
+          - runner: windows-latest
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      GOARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
       - name: Test release
         uses: ./.github/actions/test-release
         with:
           release_version: ${{ github.ref_name }}
+          arch: ${{ matrix.arch }}
