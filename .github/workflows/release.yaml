@@ -47,10 +47,17 @@ jobs:
           path: build-output/release
           retention-days: 1
 
-  publish-release:
+  push-images:
     runs-on: ubuntu-latest
-    needs: build-release
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/install-dependencies
+        name: install dependencies
+      - name: set version
+        shell: bash
+        run: echo "TELEPRESENCE_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
       - name: Setup docker buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -60,6 +67,12 @@ jobs:
       - name: Upload Docker images
         run: |
           make push-images-x
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs:
+      - build-release
+    steps:
       - name: Download artifacts
         uses: actions/download-artifact@v3
       - name: Determine if version is RC, TEST, or GA
@@ -104,7 +117,9 @@ jobs:
             ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
 
   test-release:
-    needs: publish-release
+    needs:
+      - push-images
+      - publish-release
     strategy:
       fail-fast: false
       matrix:
