@@ -79,26 +79,41 @@ jobs:
         id: semver_check
         run: |
           if [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+$ ]]; then
-            echo "MAKE_LATEST=false" >> $GITHUB_ENV
-            echo "DRAFT=false" >> $GITHUB_ENV
-            echo "PRERELEASE=true" >> $GITHUB_ENV
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+$ ]]; then
-            echo "MAKE_LATEST=false" >> $GITHUB_ENV
-            echo "DRAFT=true" >> $GITHUB_ENV
-            echo "PRERELEASE=false" >> $GITHUB_ENV
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-draft.[0-9]+$ ]]; then
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "draft=true" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
           else
-            echo "MAKE_LATEST=true" >> $GITHUB_ENV
-            echo "DRAFT=false" >> $GITHUB_ENV
-            echo "PRERELEASE=false" >> $GITHUB_ENV
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
           fi
-      - name: Create release
+      - name: Create draft release
+        if: steps.semver_check.outputs.draft == true
         uses: ncipollo/release-action@v1
         with:
           artifacts: "binaries/*"
           token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: ${{ env.PRERELEASE }}
-          makeLatest: ${{ env.MAKE_LATEST }}
-          draft: ${{ env.DRAFT }}
+          draft:
+          tag: ${{ github.ref_name }}
+          body: |
+            ## Draft Release
+            For more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
+      - name: Create release
+        if: steps.semver_check.outputs.draft != true
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "binaries/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: ${{ steps.semver_check.outputs.prerelease }}
+          makeLatest: ${{ steps.semver_check.outputs.make_latest }}
           tag: ${{ github.ref_name }}
           body: |
             ## Official Release Artifacts
@@ -120,6 +135,7 @@ jobs:
     needs:
       - push-images
       - publish-release
+    if: needs.publish-release.semver_check.outputs.draft != true
     strategy:
       fail-fast: false
       matrix:
