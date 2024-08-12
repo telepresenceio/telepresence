@@ -26,7 +26,7 @@ const (
 
 var testConfig = agentconfig.Sidecar{
 	Create:       false,
-	AgentImage:   "docker.io/datawire/tel2:2.5.4",
+	AgentImage:   "ghcr.io/telepresenceio/tel2:2.5.4",
 	AgentName:    "test-echo",
 	LogLevel:     "debug",
 	Namespace:    namespace,

@@ -14,10 +14,10 @@ replicaCount: 1
 # ensure that the tag is the same as the client version and that the
 # TELEPRESENCE_REGISTRY environment variable is equal to image.repository.
 #
-# The client will default to docker.io/datawire/tel2:{{CLIENT_VERSION}}
+# The client will default to ghcr.io/telepresenceio/tel2:{{CLIENT_VERSION}}
 
 image:
-  registry: docker.io/datawire
+  registry: ghcr.io/telepresenceio
   name: tel2
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
