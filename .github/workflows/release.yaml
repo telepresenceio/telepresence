@@ -150,12 +150,40 @@ jobs:
           - runner: windows-latest
             arch: arm64
     runs-on: ${{ matrix.runner }}
-    env:
-      GOARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Test release
-        uses: ./.github/actions/test-release
-        with:
-          release_version: ${{ github.ref_name }}
-          arch: ${{ matrix.arch }}
+      - name: download binary
+        env:
+          DOWNLOAD_URL: "https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}"
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            curl -fL ${{ env.DOWNLOAD_URL }}/telepresence-darwin-${{ matrix.arch }} -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            curl -fL ${{ env.DOWNLOAD_URL }}/telepresence-windows-${{ matrix.arch }}.zip -o ./telepresence.zip || { echo "Curl command failed" ; exit 1; }
+            unzip ./telepresence.zip || { echo "Unzip command failed" ; exit 1; }
+          else
+              curl -fL ${{ env.DOWNLOAD_URL }}/telepresence-linux-${{ matrix.arch }} -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          fi
+      - name: test binary
+        shell: bash
+        if: ${{ !(runner.os == 'Linux' && runner.arch == 'X64' && matrix.arch == 'arm64') }}
+        run: |
+          chmod +x ./telepresence
+  
+          output=$(./telepresence version)
+  
+          if [ $? -eq 0 ]; then
+              echo "Telepresence command executed successfully"
+          else
+              echo "Telepresence command failed"
+              exit 1
+          fi
+  
+          echo "$output" | grep -q "Client\s*:\s*${{ github.ref_name }}"
+  
+          if [ $? -eq 0 ]; then
+              echo "Version match!"
+          else
+              echo "Version does not match!"
+              exit 1
+          fi
