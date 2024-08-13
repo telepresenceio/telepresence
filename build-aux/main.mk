@@ -220,52 +220,32 @@ TELEPRESENCE_SEMVER=$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 CLIENT_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/telepresence:$(TELEPRESENCE_SEMVER)
 TEL2_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_SEMVER)
 
+.PHONY: images-deps
+images-deps: build-deps setup-build-dir
+
 .PHONY: tel2-image
-tel2-image: build-deps setup-build-dir
+tel2-image: images-deps
 	$(eval PLATFORM_ARG := $(if $(TELEPRESENCE_TEL2_IMAGE_PLATFORM), --platform=$(TELEPRESENCE_TEL2_IMAGE_PLATFORM),))
 	docker build $(PLATFORM_ARG) --target tel2 --tag tel2 --tag $(TEL2_IMAGE_FQN) -f build-aux/docker/images/Dockerfile.traffic .
 
-.PHONY: tel2-image-x
-tel2-image-x: build-deps setup-build-dir
-	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-to type=local,dest=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.traffic .
-
 .PHONY: client-image
-client-image: build-deps setup-build-dir
+client-image: images-deps
 	docker build --target telepresence --tag telepresence --tag $(CLIENT_IMAGE_FQN) -f build-aux/docker/images/Dockerfile.client .
-
-.PHONY: client-image-x
-client-image-x: build-deps setup-build-dir
-	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-to type=local,dest=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.client .
 
 .PHONY: push-tel2-image
 push-tel2-image: tel2-image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TEL2_IMAGE_FQN)
 
-.PHONY: push-tel2-image-x
-push-tel2-image-x: build-deps setup-build-dir
-	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-from type=local,src=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.traffic --push --tag $(TEL2_IMAGE_FQN) .
+.PHONY: save-tel2-image
+save-tel2-image: tel2-image
+	docker save $(TEL2_IMAGE_FQN) > $(BUILDDIR)/tel2-image.tar
 
 .PHONY: push-client-image
 push-client-image: client-image ## (Build) Push the client container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(CLIENT_IMAGE_FQN)
 
-.PHONY: push-client-image-x
-push-client-image-x: build-deps setup-build-dir
-	docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION) --cache-from type=local,src=$(BUILDDIR)/docker-cache -f build-aux/docker/images/Dockerfile.client --push --tag $(CLIENT_IMAGE_FQN) .
-
-.PHONY: save-tel2-image
-save-tel2-image: tel2-image
-	docker save $(TEL2_IMAGE_FQN) > $(BUILDDIR)/tel2-image.tar
-
-.PHONY: save-client-image
-save-client-image: client-image
-	docker save $(CLIENT_IMAGE_FQN) > $(BUILDDIR)/telepresence-image.tar
-
 .PHONY: push-images
 push-images: push-tel2-image push-client-image
-
-.PHONY: push-images-x
-push-images-x: push-tel2-image-x push-client-image-x
 
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
