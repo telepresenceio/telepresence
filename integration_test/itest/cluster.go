@@ -634,7 +634,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 
 // InstallTrafficManagerVersion performs a helm install of a specific version of the traffic-manager using
 // the helm registry at https://app.getambassador.io. It is assumed that the image to use for the traffic-manager
-// can be pulled from the standard registry at docker.io/datawire, and that the traffic-manager image is
+// can be pulled from the standard registry at ghcr.io/telepresenceio, and that the traffic-manager image is
 // configured using DEV_AGENT_IMAGE.
 //
 // The intent is to simulate connection to an older cluster from the current client.

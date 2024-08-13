@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	telepresenceImage = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
+	telepresenceImage = "telepresence"
 	TpCache           = "/root/.cache/telepresence"
 	dockerTpConfig    = "/root/.config/telepresence"
 	dockerTpLog       = "/root/.cache/telepresence/logs"

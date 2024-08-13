@@ -50,7 +50,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		ServerPort: 8081,
 
 		ManagerNamespace: "default",
-		AgentRegistry:    "docker.io/datawire",
+		AgentRegistry:    "ghcr.io/telepresenceio",
 		AgentImageName:   "tel2",
 		AgentImageTag:    "2.14.0",
 		AgentPort:        9900,
@@ -523,7 +523,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podNamedPort,
 			&agentconfig.Sidecar{
 				AgentName:    "named-port",
-				AgentImage:   "docker.io/datawire/tel2:2.13.3",
+				AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "named-port",
 				WorkloadKind: "Deployment",
@@ -557,7 +557,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podNumericPort,
 			&agentconfig.Sidecar{
 				AgentName:    "numeric-port",
-				AgentImage:   "docker.io/datawire/tel2:2.13.3",
+				AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "numeric-port",
 				WorkloadKind: "Deployment",
@@ -591,7 +591,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podUnnamedNumericPort,
 			&agentconfig.Sidecar{
 				AgentName:    "unnamed-numeric-port",
-				AgentImage:   "docker.io/datawire/tel2:2.13.3",
+				AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "unnamed-numeric-port",
 				WorkloadKind: "Deployment",
@@ -624,7 +624,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podNamedAndNumericPort,
 			&agentconfig.Sidecar{
 				AgentName:    "named-and-numeric",
-				AgentImage:   "docker.io/datawire/tel2:2.13.3",
+				AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "named-and-numeric",
 				WorkloadKind: "Deployment",
@@ -676,7 +676,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podMultiPort,
 			&agentconfig.Sidecar{
 				AgentName:    "multi-port",
-				AgentImage:   "docker.io/datawire/tel2:2.13.3",
+				AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "multi-port",
 				WorkloadKind: "Deployment",
@@ -721,7 +721,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 			&podMultiSplitPort,
 			&agentconfig.Sidecar{
 				AgentName:    "multi-container",
-				AgentImage:   "docker.io/datawire/tel2:2.13.3",
+				AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
 				Namespace:    "some-ns",
 				WorkloadName: "multi-container",
 				WorkloadKind: "Deployment",
@@ -771,7 +771,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	}
 
 	runFunc := func(t *testing.T, ctx context.Context, test *testInput) {
-		gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
+		gc, err := agentmap.GeneratorConfigFunc("ghcr.io/telepresenceio/tel2:2.13.3")
 		require.NoError(t, err)
 		actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
 		requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
@@ -807,7 +807,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		&podGRPCPort,
 		&agentconfig.Sidecar{
 			AgentName:    "grpc-port",
-			AgentImage:   "docker.io/datawire/tel2:2.13.3",
+			AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
 			Namespace:    "some-ns",
 			WorkloadName: "grpc-port",
 			WorkloadKind: "Deployment",
@@ -847,7 +847,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 		ServerPort: 8081,
 
 		ManagerNamespace:  "default",
-		AgentRegistry:     "docker.io/datawire",
+		AgentRegistry:     "ghcr.io/telepresenceio",
 		AgentImageName:    "tel2",
 		AgentImageTag:     "2.13.3",
 		AgentPort:         9900,
@@ -1088,7 +1088,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1180,7 +1180,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1321,7 +1321,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1402,7 +1402,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: tel-agent-init
     resources: {}
     securityContext:
@@ -1428,7 +1428,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1509,7 +1509,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: tel-agent-init
     resources: {}
     securityContext:
@@ -1535,7 +1535,7 @@ func TestTrafficAgentInjector(t *testing.T) {
         fieldRef:
           apiVersion: v1
           fieldPath: metadata.name
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1613,7 +1613,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 						},
 						{
 							Name:            agentconfig.ContainerName,
-							Image:           "docker.io/datawire/tel2:2.13.3",
+							Image:           "ghcr.io/telepresenceio/tel2:2.13.3",
 							ImagePullPolicy: "IfNotPresent",
 							Args:            []string{"agent"},
 							Ports: []core.ContainerPort{{
@@ -1744,7 +1744,7 @@ func TestTrafficAgentInjector(t *testing.T) {
           fieldPath: metadata.name
     - name: A_TELEPRESENCE_MOUNTS
       value: /var/run/secrets/kubernetes.io/serviceaccount
-    image: docker.io/datawire/tel2:2.13.3
+    image: ghcr.io/telepresenceio/tel2:2.13.3
     name: traffic-agent
     ports:
     - containerPort: 9900
@@ -1844,7 +1844,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			var actualPatch PatchOps
 			var actualErr error
 			if test.generateConfig {
-				gc, err := agentmap.GeneratorConfigFunc("docker.io/datawire/tel2:2.13.3")
+				gc, err := agentmap.GeneratorConfigFunc("ghcr.io/telepresenceio/tel2:2.13.3")
 				require.NoError(t, err)
 				var scx agentconfig.SidecarExt
 				if scx, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {

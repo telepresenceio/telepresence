@@ -40,6 +40,12 @@ items:
           The behavior is controlled by `workloads.argoRollouts.enabled` Helm chart value.
           It is recommended to set the following annotation <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code>
           to avoid creation of unwanted revisions.
+      - type: change
+        title: Use ghcr.io/telepresenceio instead of docker.io/datawire for OSS images.
+        body: >-
+          All OSS telepresence images are now published at the public registry ghcr.io/telepresenceio
+          and all references from the client and traffic-manager has been updated to use this registry
+          instead of the one at docker.io/datawire.
       - type: bugfix
         title: Detect minikube network when connecting with --docker
         body: >-

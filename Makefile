@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-TELEPRESENCE_REGISTRY ?= docker.io/datawire
+TELEPRESENCE_REGISTRY ?= ghcr.io/telepresenceio
 TELEPRESENCE_VERSION ?= $(shell unset GOOS GOARCH; go run ./build-aux/genversion)
 # Ensure that the variable is fully expanded. We don't want to call genversion repeatedly
 # as it may produce different results every time.

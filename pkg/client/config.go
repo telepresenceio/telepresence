@@ -578,7 +578,7 @@ type Images struct {
 }
 
 const (
-	defaultImagesRegistry = "docker.io/datawire"
+	defaultImagesRegistry = "ghcr.io/telepresenceio"
 )
 
 var defaultImages = Images{ //nolint:gochecknoglobals // constant

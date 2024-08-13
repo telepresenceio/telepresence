@@ -8,16 +8,27 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+
       - v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+
 
+env:
+  TELEPRESENCE_REGISTRY: ghcr.io/telepresenceio
+
 jobs:
   build-release:
     strategy:
       fail-fast: false
       matrix:
-        runners:
+        runner:
           - ubuntu-latest
           - macos-latest
           - windows-latest
-    runs-on: ${{ matrix.runners }}
+        arch:
+          - amd64
+          - arm64
+        exclude:
+          - runner: windows-latest
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      GOARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,69 +46,74 @@ jobs:
           name: binaries
           path: build-output/release
           retention-days: 1
-      - name: generate binaries darwin-amd64 # macos-latest is arm64, so we need an extra amd64 build
-        if: runner.os == 'macOS'
-        env:
-          GOARCH: amd64
-        run: make clean release-binary
-      - name: Upload binaries darwin-amd64
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v3
-        with:
-          name: binaries
-          path: build-output/release
-          retention-days: 1
-      - name: generate binaries linux-arm64 # ubuntu-latest is amd64, so we need an extra arm64 build
-        if: runner.os == 'Linux'
-        env:
-          GOARCH: arm64
-        run: make clean release-binary
-      - name: Upload binaries linux-arm64
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v3
-        with:
-          name: binaries
-          path: build-output/release
-          retention-days: 1
 
-  publish-release:
+  push-images:
     runs-on: ubuntu-latest
-    needs: build-release
     steps:
-      - name: Setup docker builx
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/install-dependencies
+        name: install dependencies
+      - name: set version
+        shell: bash
+        run: echo "TELEPRESENCE_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+      - name: Setup docker buildx
         uses: docker/setup-buildx-action@v3
         with:
           platforms: linux/amd64,linux/arm64
-      - name: Upload Docker image
+      - name: Log in to registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Upload Docker images
         run: |
-          docker login -u="${{ secrets.DOCKERHUB_USERNAME }}" -p="${{ secrets.DOCKERHUB_PASSWORD }}"
           make push-images-x
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs:
+      - build-release
+    steps:
       - name: Download artifacts
         uses: actions/download-artifact@v3
       - name: Determine if version is RC, TEST, or GA
         id: semver_check
         run: |
           if [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+$ ]]; then
-            echo "MAKE_LATEST=false" >> $GITHUB_ENV
-            echo "DRAFT=false" >> $GITHUB_ENV
-            echo "PRERELEASE=true" >> $GITHUB_ENV
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+$ ]]; then
-            echo "MAKE_LATEST=false" >> $GITHUB_ENV
-            echo "DRAFT=true" >> $GITHUB_ENV
-            echo "PRERELEASE=false" >> $GITHUB_ENV
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-draft.[0-9]+$ ]]; then
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "draft=true" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
           else
-            echo "MAKE_LATEST=true" >> $GITHUB_ENV
-            echo "DRAFT=false" >> $GITHUB_ENV
-            echo "PRERELEASE=false" >> $GITHUB_ENV
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+            echo "draft=false" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
           fi
-      - name: Create release
+      - name: Create draft release
+        if: steps.semver_check.outputs.draft == true
         uses: ncipollo/release-action@v1
         with:
           artifacts: "binaries/*"
           token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: ${{ env.PRERELEASE }}
-          makeLatest: ${{ env.MAKE_LATEST }}
-          draft: ${{ env.DRAFT }}
+          draft:
+          tag: ${{ github.ref_name }}
+          body: |
+            ## Draft Release
+            For more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
+      - name: Create release
+        if: steps.semver_check.outputs.draft != true
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "binaries/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: ${{ steps.semver_check.outputs.prerelease }}
+          makeLatest: ${{ steps.semver_check.outputs.make_latest }}
           tag: ${{ github.ref_name }}
           body: |
             ## Official Release Artifacts
@@ -116,20 +132,58 @@ jobs:
             ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
 
   test-release:
-    needs: publish-release
+    needs:
+      - push-images
+      - publish-release
+    if: needs.publish-release.semver_check.outputs.draft != true
     strategy:
       fail-fast: false
       matrix:
-        runners:
+        runner:
           - ubuntu-latest
-          - ubuntu-arm64
           - macos-latest
-          - macOS-arm64
-          - windows-2019
-    runs-on: ${{ matrix.runners }}
+          - windows-latest
+        arch:
+          - amd64
+          - arm64
+        exclude:
+          - runner: windows-latest
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Test release
-        uses: ./.github/actions/test-release
-        with:
-          release_version: ${{ github.ref_name }}
+      - name: download binary
+        env:
+          DOWNLOAD_URL: "https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}"
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            curl -fL ${{ env.DOWNLOAD_URL }}/telepresence-darwin-${{ matrix.arch }} -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            curl -fL ${{ env.DOWNLOAD_URL }}/telepresence-windows-${{ matrix.arch }}.zip -o ./telepresence.zip || { echo "Curl command failed" ; exit 1; }
+            unzip ./telepresence.zip || { echo "Unzip command failed" ; exit 1; }
+          else
+              curl -fL ${{ env.DOWNLOAD_URL }}/telepresence-linux-${{ matrix.arch }} -o ./telepresence || { echo "Curl command failed" ; exit 1; }
+          fi
+      - name: test binary
+        shell: bash
+        if: ${{ !(runner.os == 'Linux' && runner.arch == 'X64' && matrix.arch == 'arm64') }}
+        run: |
+          chmod +x ./telepresence
+  
+          output=$(./telepresence version)
+  
+          if [ $? -eq 0 ]; then
+              echo "Telepresence command executed successfully"
+          else
+              echo "Telepresence command failed"
+              exit 1
+          fi
+  
+          echo "$output" | grep -q "Client\s*:\s*${{ github.ref_name }}"
+  
+          if [ $? -eq 0 ]; then
+              echo "Version match!"
+          else
+              echo "Version does not match!"
+              exit 1
+          fi
