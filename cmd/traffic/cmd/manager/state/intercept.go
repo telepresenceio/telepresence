@@ -392,6 +392,8 @@ func (s *state) waitForAgent(ctx context.Context, name, namespace string, failed
 		return agent.Name == name && agent.Namespace == namespace
 	})
 	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + namespace)
+	mm := mutator.GetMap(ctx)
+
 	// fes collects events from the failedCreatedCh and is included in the error message in case
 	// the waitForAgent call times out.
 	var fes []*events.Event
@@ -451,8 +453,10 @@ func (s *state) waitForAgent(ctx context.Context, name, namespace string, failed
 				return status.Error(codes.Canceled, fmt.Sprintf("channel closed while waiting for agent %s.%s to arrive", name, namespace))
 			}
 			for _, a := range snapshot.State {
-				dlog.Debugf(ctx, "Agent %s.%s is ready", a.Name, a.Namespace)
-				return nil
+				if !mm.IsBlacklisted(a.PodName, a.Namespace) {
+					dlog.Debugf(ctx, "Agent %s.%s is ready", a.Name, a.Namespace)
+					return nil
+				}
 			}
 			dlog.Debugf(ctx, "Got empty snapshot while waiting for agent %s.%s", name, namespace)
 		case <-ctx.Done():
