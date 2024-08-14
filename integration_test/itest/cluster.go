@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1014,11 +1015,22 @@ func Kubectl(ctx context.Context, namespace string, args ...string) error {
 	} else {
 		ks = args
 	}
-	return Run(ctx, "kubectl", ks...)
+	b := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(2*time.Second),
+		backoff.WithMaxInterval(7*time.Second),
+		backoff.WithMaxElapsedTime(30*time.Second),
+	)
+	return backoff.Retry(func() error {
+		err := Run(ctx, "kubectl", ks...)
+		if err != nil && !strings.Contains(err.Error(), "(ServiceUnavailable)") {
+			err = backoff.Permanent(err)
+		}
+		return err
+	}, b)
 }
 
 // KubectlOut runs kubectl with the default context and the application namespace and returns its combined output.
-func KubectlOut(ctx context.Context, namespace string, args ...string) (string, error) {
+func KubectlOut(ctx context.Context, namespace string, args ...string) (out string, err error) {
 	getT(ctx).Helper()
 	var ks []string
 	if namespace != "" {
@@ -1027,7 +1039,20 @@ func KubectlOut(ctx context.Context, namespace string, args ...string) (string, 
 	} else {
 		ks = args
 	}
-	return Output(ctx, "kubectl", ks...)
+	b := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(2*time.Second),
+		backoff.WithMaxInterval(7*time.Second),
+		backoff.WithMaxElapsedTime(30*time.Second),
+	)
+	err = backoff.Retry(func() error {
+		var bErr error
+		out, bErr = Output(ctx, "kubectl", ks...)
+		if bErr != nil && !strings.Contains(bErr.Error(), "(ServiceUnavailable)") {
+			bErr = backoff.Permanent(bErr)
+		}
+		return bErr
+	}, b)
+	return out, err
 }
 
 func CreateNamespaces(ctx context.Context, namespaces ...string) {
@@ -1108,6 +1133,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers
 			dlog.Info(ctx, err)
 			return false
 		}
+		ips = iputil.UniqueSorted(ips)
 		if len(ips) != 1 {
 			dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
 			return false
