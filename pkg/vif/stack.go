@@ -137,7 +137,7 @@ func forwardTCP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *tcp
 		if err != nil {
 			msg := fmt.Sprintf("forward TCP %s: %s", idStringer(id), err)
 			span.SetStatus(codes.Error, msg)
-			dlog.Errorf(ctx, msg)
+			dlog.Error(ctx, msg)
 		}
 		span.End()
 	}()
@@ -230,7 +230,7 @@ func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp
 	if err != nil {
 		msg := fmt.Sprintf("forward UDP %s: %s", idStringer(id), err)
 		span.SetStatus(codes.Error, msg)
-		dlog.Errorf(ctx, msg)
+		dlog.Error(ctx, msg)
 		return
 	}
 	dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(&wq, ep), streamCreator)
