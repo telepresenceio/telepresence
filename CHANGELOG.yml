@@ -34,6 +34,13 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Publish the OSS version of the telepresence Helm chart
+        body: >-
+          The OSS version of the telepresence helm chart is now available at ghcr.io/telepresenceio/telepresence-oss, and
+          can be installed using the command:<br>
+          <code>helm install traffic-manager oci://ghcr.io/telepresenceio/telepresence-oss --namespace ambassador --version 2.20.0</code>
+          The chart documentation is published at <a href="https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss">ArtifactHUB</a>.
+      - type: feature
         title: Add support for Argo Rollout workloads.
         body: >-
           Telepresence now has an opt-in support for Argo Rollout workloads.
