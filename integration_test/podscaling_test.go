@@ -122,7 +122,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
 
 	// Verify that intercept is still active
-	rx := regexp.MustCompile(fmt.Sprintf(`Intercept name\s*: ` + s.ServiceName() + `\s+State\s*: ([^\n]+)\n`))
+	rx := regexp.MustCompile(`Intercept name\s*: ` + s.ServiceName() + `\s+State\s*: ([^\n]+)\n`)
 	assert.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		if err != nil {

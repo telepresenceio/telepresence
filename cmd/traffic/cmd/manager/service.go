@@ -166,7 +166,7 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	dlog.Debugf(ctx, "ArriveAsClient called, namespace: %s", client.Namespace)
 
 	if val := validateClient(client); val != "" {
-		return nil, status.Errorf(codes.InvalidArgument, val)
+		return nil, status.Error(codes.InvalidArgument, val)
 	}
 
 	installId := client.GetInstallId()
@@ -186,7 +186,7 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 	dlog.Debugf(ctx, "ArriveAsAgent %s called", agent.PodName)
 
 	if val := validateAgent(agent); val != "" {
-		return nil, status.Errorf(codes.InvalidArgument, val)
+		return nil, status.Error(codes.InvalidArgument, val)
 	}
 
 	sessionID := s.state.AddAgent(agent, s.clock.Now())
@@ -599,7 +599,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	tracing.RecordInterceptSpec(span, spec)
 
 	if val := validateIntercept(spec); val != "" {
-		return nil, status.Errorf(codes.InvalidArgument, val)
+		return nil, status.Error(codes.InvalidArgument, val)
 	}
 
 	if ciReq.InterceptSpec.Replace {
@@ -941,7 +941,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		if r := recover(); r != nil {
 			err = derror.PanicToError(r)
 			dlog.Errorf(ctx, "WatchWorkloads panic: %+v", err)
-			err = status.Errorf(codes.Internal, err.Error())
+			err = status.Error(codes.Internal, err.Error())
 		}
 		dlog.Debugf(ctx, "WatchWorkloads ended")
 	}()

@@ -79,5 +79,5 @@ func Result(r *connector.InterceptResult, err error) error {
 	if id := r.GetInterceptInfo().GetId(); id != "" {
 		msg = fmt.Sprintf("%s: id = %q", msg, id)
 	}
-	return errCat.Newf(msg)
+	return errCat.New(msg)
 }

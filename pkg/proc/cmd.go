@@ -19,7 +19,7 @@ func StdCommand(ctx context.Context, exe string, args ...string) *dexec.Cmd {
 	cmd.DisableLogging = true
 	cmd.Stdout = dos.Stdout(ctx)
 	cmd.Stderr = dos.Stderr(ctx)
-	dlog.Debugf(ctx, shellquote.ShellString(exe, args))
+	dlog.Debug(ctx, shellquote.ShellString(exe, args))
 	return cmd
 }
 

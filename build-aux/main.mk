@@ -247,6 +247,13 @@ push-client-image: client-image ## (Build) Push the client container image to $(
 .PHONY: push-images
 push-images: push-tel2-image push-client-image
 
+.PHONY: helm-chart
+helm-chart: $(BUILDDIR)/telepresence-chart.tgz
+
+$(BUILDDIR)/telepresence-chart.tgz: $(wildcard charts/telepresence/**/*)
+	mkdir -p $(BUILDDIR)
+	go run packaging/helmpackage.go -o $@ -v $(TELEPRESENCE_SEMVER)
+
 .PHONY: clobber
 clobber: ## (Build) Remove all build artifacts and tools
 	rm -rf $(BUILDDIR)
