@@ -64,7 +64,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.28.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.3.1 // indirect
 	go.starlark.net v0.0.0-20240705175910-70002002b310 // indirect
-	golang.org/x/exp v0.0.0-20240716175740-e3f259677ff7 // indirect
+	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/oauth2 v0.21.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
@@ -82,7 +82,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gvisor.dev/gvisor v0.0.0-20240815072353-227520c5e8ba // indirect
+	gvisor.dev/gvisor v0.0.0-20240816022007-28f8b471e908 // indirect
 	k8s.io/api v0.30.3 // indirect
 	k8s.io/apimachinery v0.30.3 // indirect
 	k8s.io/cli-runtime v0.30.3 // indirect
