@@ -61,8 +61,9 @@ jobs:
       matrix:
         runners:
           - ubuntu-latest
-          - macos-13 # use macos-latest once that runner (which is arm64) supports virtualization.
-          # Re-enable when virtualization is available so that WSL2 can be used and docker has a linux container daemon.
+          # Re-enable when we can run a proper cluster. Colima almost works on macOS but the very limited
+          # resources available make the test fail very often. On windows, we'll need WSL2
+          # - macos-latest
           # - windows-latest
     runs-on: ${{ matrix.runners }}
     needs: build_images
@@ -77,13 +78,6 @@ jobs:
       - name: Start minikube
         if: runner.os == 'Linux'
         uses: medyagh/setup-minikube@latest
-      - name: Start colima
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          brew install kubectl docker colima
-          # the macos-13 runner has 4 cpus, 14 GiB memory, and 14 GiB disk
-          colima start --kubernetes --cpu 2 --memory 6 --disk 10
       - name: Install Argo Rollouts
         shell: bash
         run: |
