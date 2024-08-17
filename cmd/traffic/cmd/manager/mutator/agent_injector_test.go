@@ -795,6 +795,8 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 
 	for _, test := range tests {
 		test := test // pin it
+		pod := test.request
+		cw.Blacklist(pod.Name, pod.Namespace) // prevent rollout
 		agentmap.GeneratorConfigFunc = env.GeneratorConfig
 		t.Run(test.name, func(t *testing.T) {
 			runFunc(t, ctx, &test)
@@ -1840,6 +1842,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			cw := NewWatcher("")
 			cw.Start(ctx)
 			require.NoError(t, cw.StartWatchers(ctx))
+			cw.Blacklist(test.pod.Name, test.pod.Namespace)
 
 			var actualPatch PatchOps
 			var actualErr error

@@ -14,22 +14,23 @@ import (
 )
 
 type fwdState struct {
-	*simpleState
-	intercept  InterceptTarget
-	forwarder  forwarder.Interceptor
-	mountPoint string
-	env        map[string]string
+	*state
+	intercept       InterceptTarget
+	forwarder       forwarder.Interceptor
+	mountPoint      string
+	env             map[string]string
+	chosenIntercept *manager.InterceptInfo
 }
 
-// NewInterceptState creates a InterceptState that performs intercepts by using an Interceptor which indiscriminately
+// NewInterceptState creates an InterceptState that performs intercepts by using an Interceptor which indiscriminately
 // intercepts all traffic to the port that it forwards.
-func (s *simpleState) NewInterceptState(forwarder forwarder.Interceptor, intercept InterceptTarget, mountPoint string, env map[string]string) InterceptState {
+func (s *state) NewInterceptState(forwarder forwarder.Interceptor, intercept InterceptTarget, mountPoint string, env map[string]string) InterceptState {
 	return &fwdState{
-		simpleState: s,
-		mountPoint:  mountPoint,
-		intercept:   intercept,
-		forwarder:   forwarder,
-		env:         env,
+		state:      s,
+		mountPoint: mountPoint,
+		intercept:  intercept,
+		forwarder:  forwarder,
+		env:        env,
 	}
 }
 
@@ -74,17 +75,20 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, sessionID string,
 
 func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
 	var myChoice, activeIntercept *manager.InterceptInfo
-
-	// Find the chosen intercept if it still exists
 	if fs.chosenIntercept != nil {
-		for _, cept := range cepts {
-			if cept == fs.chosenIntercept {
-				myChoice = cept
+		chosenID := fs.chosenIntercept.Id
+		for _, is := range cepts {
+			if chosenID == is.Id {
+				fs.chosenIntercept = is
+				myChoice = is
 				break
 			}
 		}
 
-		if myChoice != nil && myChoice.Disposition == manager.InterceptDispositionType_ACTIVE {
+		if myChoice == nil {
+			// Chosen intercept is not present in the snapshot
+			fs.chosenIntercept = nil
+		} else if myChoice.Disposition == manager.InterceptDispositionType_ACTIVE {
 			// The chosen intercept still exists and is active
 			activeIntercept = myChoice
 		}
