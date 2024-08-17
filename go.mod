@@ -17,7 +17,7 @@ require (
 	github.com/datawire/go-fuseftp/rpc v0.4.4
 	github.com/datawire/k8sapi v0.1.5
 	github.com/datawire/metriton-go-client v0.1.1
-	github.com/docker/docker v27.0.3+incompatible
+	github.com/docker/docker v27.1.2+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/golang/mock v1.7.0-rc.1
@@ -48,7 +48,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.28.0
 	go.opentelemetry.io/otel/trace v1.28.0
 	go.opentelemetry.io/proto/otlp v1.3.1
-	golang.org/x/exp v0.0.0-20240707233637-46b078467d37
+	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa
 	golang.org/x/net v0.28.0
 	golang.org/x/sys v0.24.0
 	golang.org/x/term v0.23.0
@@ -57,7 +57,7 @@ require (
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
-	gvisor.dev/gvisor v0.0.0-20240815072353-227520c5e8ba
+	gvisor.dev/gvisor v0.0.0-20240816022007-28f8b471e908
 	helm.sh/helm/v3 v3.15.2
 	k8s.io/api v0.30.3
 	k8s.io/apimachinery v0.30.3
@@ -172,12 +172,12 @@ require (
 	go.opentelemetry.io/otel/metric v1.28.0 // indirect
 	go.starlark.net v0.0.0-20240705175910-70002002b310 // indirect
 	golang.org/x/crypto v0.26.0 // indirect
-	golang.org/x/mod v0.19.0 // indirect
+	golang.org/x/mod v0.20.0 // indirect
 	golang.org/x/oauth2 v0.21.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	golang.org/x/tools v0.23.0 // indirect
+	golang.org/x/tools v0.24.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240711142825-46eb208f015d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
