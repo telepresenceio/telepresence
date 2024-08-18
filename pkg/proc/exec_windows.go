@@ -30,11 +30,6 @@ func createNewProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
 }
 
-func cacheAdmin(_ context.Context, _ string) error {
-	// No-op on windows, there's no sudo caching. Runas will just pop a window open.
-	return nil
-}
-
 func startInBackground(_ bool, args ...string) error {
 	return shellExec("open", args[0], args[1:]...)
 }
