@@ -18,3 +18,4 @@ jobs:
           days-before-issue-close: 7
           days-before-pr-close: 14
           operations-per-run: 80
+          exempt-issue-labels: feature,friction
