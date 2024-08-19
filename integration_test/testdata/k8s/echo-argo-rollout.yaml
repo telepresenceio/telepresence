@@ -1,0 +1,56 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: echo-argo-rollout
+  labels:
+    app: echo-argo-rollout
+spec:
+  replicas: 5
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {}
+        - setWeight: 40
+        - pause: {duration: 10}
+        - setWeight: 60
+        - pause: {duration: 10}
+        - setWeight: 80
+        - pause: {duration: 10}
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: echo-argo-rollout
+  template:
+    metadata:
+      labels:
+        app: echo-argo-rollout
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: echo-server
+          image: ghcr.io/telepresenceio/echo-server:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-argo-rollout
+spec:
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: echo-argo-rollout

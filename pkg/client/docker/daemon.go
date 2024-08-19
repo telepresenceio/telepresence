@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	telepresenceImage = "telepresence" // TODO: Point to docker.io/datawire and make it configurable
+	telepresenceImage = "telepresence"
 	TpCache           = "/root/.cache/telepresence"
 	dockerTpConfig    = "/root/.config/telepresence"
 	dockerTpLog       = "/root/.cache/telepresence/logs"
@@ -461,11 +461,39 @@ func localAddr(ctx context.Context, cnID, nwID string, isIPv6 bool) (addr netip.
 	return addr, err
 }
 
+// useMinikubeNetwork returns true if the given hostAddrPort points to a network named "minikube".
+func useMinikubeNetwork(ctx context.Context, addr netip.Addr) bool {
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return false
+	}
+	nw, err := cli.NetworkInspect(ctx, "minikube", network.InspectOptions{})
+	if err != nil {
+		return false
+	}
+	for _, c := range nw.Containers {
+		if addr.Is4() {
+			if a, err := netip.ParsePrefix(c.IPv4Address); err == nil && a.Addr() == addr {
+				return true
+			}
+		}
+		if addr.Is6() {
+			if a, err := netip.ParsePrefix(c.IPv6Address); err == nil && a.Addr() == addr {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // detectMinikube returns the container IP:port for the given hostAddrPort for a container where the
 // "name.minikube.sigs.k8s.io" label is equal to the given cluster name.
 // Returns the internal IP:port for the given hostAddrPort and the name of a network that makes the
 // IP available.
 func detectMinikube(ctx context.Context, cns []types.ContainerJSON, hostAddrPort netip.AddrPort, clusterName string) (netip.AddrPort, string) {
+	if useMinikubeNetwork(ctx, hostAddrPort.Addr()) {
+		return hostAddrPort, "minikube"
+	}
 	for _, cn := range cns {
 		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["name.minikube.sigs.k8s.io"] == clusterName {
 			if port, isIPv6 := containerPort(hostAddrPort, ns); port != 0 {

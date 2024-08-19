@@ -192,7 +192,7 @@ func NewSession(
 	}
 	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
 
-	ctx = cluster.WithK8sInterface(ctx)
+	ctx = cluster.WithJoinedClientSetInterface(ctx)
 	scout.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
@@ -439,6 +439,19 @@ func connectMgr(
 	cluster.NeverProxy = append(cluster.NeverProxy, extraNeverProxy...)
 	cluster.AllowConflictingSubnets = append(cluster.AllowConflictingSubnets, extraAllow...)
 
+	knownWorkloadKinds, err := mClient.GetKnownWorkloadKinds(ctx, si)
+	if err != nil {
+		if status.Code(err) != codes.Unimplemented {
+			return nil, fmt.Errorf("failed to get known workload kinds: %w", err)
+		}
+		// Talking to an older traffic-manager, use legacy default types
+		knownWorkloadKinds = &manager.KnownWorkloadKinds{Kinds: []manager.WorkloadInfo_Kind{
+			manager.WorkloadInfo_DEPLOYMENT,
+			manager.WorkloadInfo_REPLICASET,
+			manager.WorkloadInfo_STATEFULSET,
+		}}
+	}
+
 	sess := &session{
 		Cluster:            cluster,
 		installID:          installID,
@@ -451,7 +464,7 @@ func connectMgr(
 		managerVersion:     managerVersion,
 		sessionInfo:        si,
 		interceptWaiters:   make(map[string]*awaitIntercept),
-		wlWatcher:          newWASWatcher(),
+		wlWatcher:          newWASWatcher(knownWorkloadKinds),
 		isPodDaemon:        cr.IsPodDaemon,
 		done:               make(chan struct{}),
 		subnetViaWorkloads: cr.SubnetViaWorkloads,

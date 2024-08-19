@@ -1,0 +1,65 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-one
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-both
+  ports:
+    - name: one
+      port: 80
+      targetPort: echo-one
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-two
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-both
+  ports:
+    - name: two
+      port: 80
+      targetPort:  echo-two
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-both
+  labels:
+    app: echo-both
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-both
+  template:
+    metadata:
+      labels:
+        app: echo-both
+    spec:
+      containers:
+        - name: echo-one
+          image: jmalloc/echo-server
+          ports:
+            - name: echo-one
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
+        - name: echo-two
+          image: jmalloc/echo-server
+          ports:
+            - name: echo-two
+              containerPort: 8081
+          env:
+            - name: PORT
+              value: "8081"
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

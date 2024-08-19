@@ -2,6 +2,7 @@ package agentmap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -222,7 +223,7 @@ func filterServicePorts(svc *core.Service, nameOrNumber string) ([]core.ServiceP
 	if number, err := strconv.Atoi(nameOrNumber); err != nil {
 		errs := validation.IsValidPortName(nameOrNumber)
 		if len(errs) > 0 {
-			return nil, fmt.Errorf(strings.Join(errs, "\n"))
+			return nil, errors.New(strings.Join(errs, "\n"))
 		}
 		for _, port := range ports {
 			if port.Name == nameOrNumber {

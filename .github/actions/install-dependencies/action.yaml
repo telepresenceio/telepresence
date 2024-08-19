@@ -6,8 +6,6 @@ runs:
     - uses: actions/setup-go@v5
       with:
         go-version: stable
-    - uses: azure/setup-kubectl@v3
-      id: kubectl
     - if: runner.os == 'Linux'
       name: install Linux dependencies
       shell: bash
@@ -19,7 +17,22 @@ runs:
 
         if [[ ${RUNNER_ARCH} == "ARM64" ]]; then
           sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          curl -L https://github.com/argoproj/argo-rollouts/releases/download/v1.7.1/kubectl-argo-rollouts-linux-arm64 -o kubectl-argo-rollouts
+          echo "ec6835b12d22d84ee511b3531448c57b3dea371dca694865f53d8d7d46b6a7ed  kubectl-argo-rollouts" | sha256sum --quiet -c -
+          ret=$?
+        else
+          curl -L https://github.com/argoproj/argo-rollouts/releases/download/v1.7.1/kubectl-argo-rollouts-linux-amd64 -o kubectl-argo-rollouts
+          echo "b42859a4ead2b02dc1a53a101490f60adc9915b602e033ddc49e78e74a20895b  kubectl-argo-rollouts" | sha256sum --quiet -c -
+          ret=$?
         fi
+
+        if [ $ret -ne 0 ]; then
+          echo "Checksum failed"
+          exit 1
+        fi
+
+        sudo mv kubectl-argo-rollouts /usr/local/bin/kubectl-argo-rollouts
+        sudo chmod +x /usr/local/bin/kubectl-argo-rollouts
     - if: runner.os == 'macOS'
       name: install macOS dependencies
       shell: bash
@@ -41,6 +54,8 @@ runs:
         brew install --cask macfuse
         brew install gromgit/fuse/sshfs-mac
         brew link --overwrite sshfs-mac
+
+        brew install argoproj/tap/kubectl-argo-rollouts
 
         if [[ ${RUNNER_ARCH} == "ARM64" ]]; then
           brew install jq
@@ -85,3 +100,10 @@ runs:
         Start-Process msiexec -Wait -verb runAs -Args "/i build-output\\sshfs-win.msi /passive /qn /L*V sshfs-win-install.log"
 
         [Environment]::SetEnvironmentVariable("Path", "C:\\;C:\\Program Files\\SSHFS-Win\\bin;$ENV:Path", "Machine")
+    - if: runner.os == 'Windows'
+      name: Install Argo Rollouts Kubectl Plugin
+      shell: powershell
+      run: |
+        New-Item -Path "$HOME\kubectl-plugins" -ItemType Directory -Force
+        Invoke-WebRequest -Uri "https://github.com/argoproj/argo-rollouts/releases/download/v1.7.1/kubectl-argo-rollouts-windows-amd64" -OutFile "$HOME\kubectl-plugins\kubectl-argo-rollouts.exe"
+        [Environment]::SetEnvironmentVariable("Path", $ENV:Path + ";$HOME\kubectl-plugins", "Machine")

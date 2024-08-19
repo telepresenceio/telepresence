@@ -147,7 +147,7 @@ type Sidecar struct {
 	// If Manual is true, then this Config is created manually
 	Manual bool `json:"manual,omitempty"`
 
-	// The fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.5.4"
+	// The fully qualified name of the traffic-agent image, i.e. "ghcr.io/telepresenceio/tel2:2.5.4"
 	AgentImage string `json:"agentImage,omitempty"`
 
 	// One of "IfNotPresent", "Always", or "Never"

@@ -18,7 +18,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -53,10 +52,6 @@ func (s *RoutingSuite) SetupSuite() {
 		s.Require().NoError(err)
 	} else {
 		err := dexec.CommandContext(context.Background(), "go", "build", "-o", "testdata/router/router", "testdata/router/main.go").Run()
-		s.Require().NoError(err)
-
-		// Run sudo to get a password prompt out of the way
-		err = proc.CacheAdmin(context.Background(), "")
 		s.Require().NoError(err)
 	}
 	// Make sure there's no existing route

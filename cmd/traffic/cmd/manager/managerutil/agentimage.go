@@ -66,7 +66,7 @@ func GetAgentImageRetriever(ctx context.Context) ImageRetriever {
 	return nil
 }
 
-// GetAgentImage returns the fully qualified name of the traffic-agent image, i.e. "docker.io/tel2:2.7.4",
+// GetAgentImage returns the fully qualified name of the traffic-agent image, i.e. "ghcr.io/telepresenceio/tel2:2.20.0",
 // or an empty string if no agent image has been configured.
 func GetAgentImage(ctx context.Context) string {
 	if ir, ok := ctx.Value(irKey{}).(ImageRetriever); ok {

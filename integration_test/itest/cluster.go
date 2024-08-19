@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -634,7 +635,7 @@ func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]s
 
 // InstallTrafficManagerVersion performs a helm install of a specific version of the traffic-manager using
 // the helm registry at https://app.getambassador.io. It is assumed that the image to use for the traffic-manager
-// can be pulled from the standard registry at docker.io/datawire, and that the traffic-manager image is
+// can be pulled from the standard registry at ghcr.io/telepresenceio, and that the traffic-manager image is
 // configured using DEV_AGENT_IMAGE.
 //
 // The intent is to simulate connection to an older cluster from the current client.
@@ -739,7 +740,13 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		vx.Image = *image
 	}
 	if !s.isCI {
-		vx.Image.PullPolicy = "Always"
+		pp := "Always"
+		if s.Registry() == "local" {
+			// Using minikube with local images.
+			// They are automatically present and must not be pulled.
+			pp = "Never"
+		}
+		vx.Image.PullPolicy = pp
 	}
 
 	ss, err := sigsYaml.Marshal(&vx)
@@ -809,7 +816,7 @@ func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace s
 	if err != nil {
 		return ctx, nil, err
 	}
-	return kc.WithK8sInterface(ctx), kc, nil
+	return kc.WithJoinedClientSetInterface(ctx), kc, nil
 }
 
 func KubeConfig(ctx context.Context) string {
@@ -1008,11 +1015,22 @@ func Kubectl(ctx context.Context, namespace string, args ...string) error {
 	} else {
 		ks = args
 	}
-	return Run(ctx, "kubectl", ks...)
+	b := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(2*time.Second),
+		backoff.WithMaxInterval(7*time.Second),
+		backoff.WithMaxElapsedTime(30*time.Second),
+	)
+	return backoff.Retry(func() error {
+		err := Run(ctx, "kubectl", ks...)
+		if err != nil && !strings.Contains(err.Error(), "(ServiceUnavailable)") {
+			err = backoff.Permanent(err)
+		}
+		return err
+	}, b)
 }
 
 // KubectlOut runs kubectl with the default context and the application namespace and returns its combined output.
-func KubectlOut(ctx context.Context, namespace string, args ...string) (string, error) {
+func KubectlOut(ctx context.Context, namespace string, args ...string) (out string, err error) {
 	getT(ctx).Helper()
 	var ks []string
 	if namespace != "" {
@@ -1021,7 +1039,20 @@ func KubectlOut(ctx context.Context, namespace string, args ...string) (string, 
 	} else {
 		ks = args
 	}
-	return Output(ctx, "kubectl", ks...)
+	b := backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(2*time.Second),
+		backoff.WithMaxInterval(7*time.Second),
+		backoff.WithMaxElapsedTime(30*time.Second),
+	)
+	err = backoff.Retry(func() error {
+		var bErr error
+		out, bErr = Output(ctx, "kubectl", ks...)
+		if bErr != nil && !strings.Contains(bErr.Error(), "(ServiceUnavailable)") {
+			bErr = backoff.Permanent(bErr)
+		}
+		return bErr
+	}, b)
+	return out, err
 }
 
 func CreateNamespaces(ctx context.Context, namespaces ...string) {
@@ -1102,6 +1133,7 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers
 			dlog.Info(ctx, err)
 			return false
 		}
+		ips = iputil.UniqueSorted(ips)
 		if len(ips) != 1 {
 			dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
 			return false
@@ -1170,9 +1202,14 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 	cluster := cfg.Clusters[cc.Cluster]
 	require.NotNil(t, cluster, "unable to get current cluster from config")
 
+	em := cluster.Extensions
+	if em == nil {
+		em = map[string]k8sruntime.Object{}
+	}
 	raw, err := json.Marshal(extProducer(cluster))
 	require.NoError(t, err, "unable to json.Marshal extension map")
-	cluster.Extensions = map[string]k8sruntime.Object{"telepresence.io": &k8sruntime.Unknown{Raw: raw}}
+	em["telepresence.io"] = &k8sruntime.Unknown{Raw: raw}
+	cluster.Extensions = em
 
 	context := *cc
 	context.Cluster = "extra"

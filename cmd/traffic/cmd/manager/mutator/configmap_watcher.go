@@ -16,7 +16,7 @@ import (
 )
 
 func tpAgentsInformer(ctx context.Context, ns string) informerCore.ConfigMapInformer {
-	f := informer.GetFactory(ctx, ns)
+	f := informer.GetK8sFactory(ctx, ns)
 	cV1 := informerCore.New(f, ns, func(options *meta.ListOptions) {
 		options.FieldSelector = "metadata.name=" + agentconfig.ConfigMap
 	})

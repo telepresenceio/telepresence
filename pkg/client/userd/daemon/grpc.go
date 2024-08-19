@@ -342,6 +342,25 @@ func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.Work
 	return
 }
 
+func (s *service) GetKnownWorkloadKinds(ctx context.Context, _ *empty.Empty) (result *manager.KnownWorkloadKinds, err error) {
+	err = s.WithSession(ctx, "GetKnownWorkloadKinds", func(ctx context.Context, session userd.Session) error {
+		result, err = session.ManagerClient().GetKnownWorkloadKinds(ctx, session.SessionInfo())
+		if err != nil {
+			if status.Code(err) != codes.Unimplemented {
+				return err
+			}
+			// Talking to an older traffic-manager, use legacy default types
+			result = &manager.KnownWorkloadKinds{Kinds: []manager.WorkloadInfo_Kind{
+				manager.WorkloadInfo_DEPLOYMENT,
+				manager.WorkloadInfo_REPLICASET,
+				manager.WorkloadInfo_STATEFULSET,
+			}}
+		}
+		return nil
+	})
+	return result, err
+}
+
 func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream rpc.Connector_WatchWorkloadsServer) error {
 	var sessionCtx context.Context
 	var session userd.Session

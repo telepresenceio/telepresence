@@ -95,7 +95,7 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) error 
 		err = DeleteTrafficManager(ctx, cluster.Kubeconfig, cluster.GetManagerNamespace(), false, hr)
 	} else {
 		dlog.Debug(ctx, "ensuring that traffic-manager exists")
-		err = EnsureTrafficManager(cluster.WithK8sInterface(ctx), cluster.Kubeconfig, cluster.GetManagerNamespace(), hr)
+		err = EnsureTrafficManager(cluster.WithJoinedClientSetInterface(ctx), cluster.Kubeconfig, cluster.GetManagerNamespace(), hr)
 	}
 	if err != nil {
 		return err

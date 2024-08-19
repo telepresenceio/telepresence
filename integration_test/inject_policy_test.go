@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -135,7 +136,12 @@ func (is *installSuite) applyOrDeleteMultipleServices(svcCount int, applyOrDelet
 }
 
 func (is *installSuite) Test_MultiOnDemandInjectOnInstall() {
-	const svcCount = 25
+	svcCount := 25
+	if runtime.GOOS != "linux" {
+		// The GitHub runner is probably using Colima for Kubernetes and running with limited
+		// resources.
+		svcCount = 10
+	}
 	ctx := is.Context()
 
 	// First create the pods with inject annotation
@@ -160,7 +166,12 @@ func (is *installSuite) Test_MultiOnDemandInjectOnInstall() {
 }
 
 func (is *installSuite) Test_MultiOnDemandInjectOnApply() {
-	const svcCount = 25
+	svcCount := 25
+	if runtime.GOOS != "linux" {
+		// The GitHub runner is probably using Colima for Kubernetes and running with limited
+		// resources.
+		svcCount = 10
+	}
 	ctx := is.Context()
 
 	// First install the traffic-manager

@@ -12,6 +12,7 @@ require less permissions in clientRbac.yaml
 {{- end }}
 
 {{- $interceptEnabled := .Values.agentInjector.enabled }}
+{{- $argoRolloutsEnabled := .Values.workloads.argoRollouts.enabled }}
 
 {{- range .Values.managerRbac.namespaces }}
 ---
@@ -79,6 +80,19 @@ rules:
   - watch
 {{- if $interceptEnabled }}
   - patch
+{{- end }}
+{{- if $argoRolloutsEnabled }}
+- apiGroups:
+  - "argoproj.io"
+  resources:
+  - rollouts
+  verbs:
+  - get
+  - list
+  - watch
+{{- if $interceptEnabled }}
+  - patch
+{{- end }}
 {{- end }}
 - apiGroups:
     - "events.k8s.io"

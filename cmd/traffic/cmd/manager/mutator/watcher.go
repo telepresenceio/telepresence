@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -114,7 +115,7 @@ func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload,
 	}
 
 	selector := labels.SelectorFromValidatedSet(podLabels)
-	podsAPI := informer.GetFactory(ctx, wl.GetNamespace()).Core().V1().Pods().Lister().Pods(wl.GetNamespace())
+	podsAPI := informer.GetK8sFactory(ctx, wl.GetNamespace()).Core().V1().Pods().Lister().Pods(wl.GetNamespace())
 	pods, err := podsAPI.List(selector)
 	if err != nil {
 		dlog.Debugf(ctx, "Rollout of %s.%s is necessary. Unable to retrieve current pods: %v",
@@ -246,19 +247,42 @@ func (c *configWatcher) triggerRollout(ctx context.Context, wl k8sapi.Workload, 
 		triggerRolloutReplicaSet(ctx, wl, rs, span)
 		return
 	}
-	restartAnnotation := fmt.Sprintf(
-		`{"spec": {"template": {"metadata": {"annotations": {"%s": "%s"}}}}}`,
-		AnnRestartedAt,
-		time.Now().Format(time.RFC3339),
-	)
+
+	restartAnnotation := generateRestartAnnotationPatch(wl.GetPodTemplate())
 	span.AddEvent("tel2.do-rollout")
-	if err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(restartAnnotation)); err != nil {
+	if err := wl.Patch(ctx, types.JSONPatchType, []byte(restartAnnotation)); err != nil {
 		err = fmt.Errorf("unable to patch %s %s.%s: %v", wl.GetKind(), wl.GetName(), wl.GetNamespace(), err)
 		dlog.Error(ctx, err)
 		span.SetStatus(codes.Error, err.Error())
 		return
 	}
 	dlog.Infof(ctx, "Successfully rolled out %s.%s", wl.GetName(), wl.GetNamespace())
+}
+
+// generateRestartAnnotationPatch generates a JSON patch that adds or updates the annotation
+// We need to use this particular patch type because argo-rollouts does not support strategic merge patches.
+func generateRestartAnnotationPatch(podTemplate *core.PodTemplateSpec) string {
+	basePointer := "/spec/template/metadata/annotations"
+	pointer := fmt.Sprintf(
+		basePointer+"/%s",
+		strings.ReplaceAll(AnnRestartedAt, "/", "~1"),
+	)
+
+	if _, ok := podTemplate.Annotations[AnnRestartedAt]; ok {
+		return fmt.Sprintf(
+			`[{"op": "replace", "path": "%s", "value": "%s"}]`, pointer, time.Now().Format(time.RFC3339),
+		)
+	}
+
+	if len(podTemplate.Annotations) == 0 {
+		return fmt.Sprintf(
+			`[{"op": "add", "path": "%s", "value": {}}, {"op": "add", "path": "%s", "value": "%s"}]`, basePointer, pointer, time.Now().Format(time.RFC3339),
+		)
+	}
+
+	return fmt.Sprintf(
+		`[{"op": "add", "path": "%s", "value": "%s"}]`, pointer, time.Now().Format(time.RFC3339),
+	)
 }
 
 func triggerRolloutReplicaSet(ctx context.Context, wl k8sapi.Workload, rs *appsv1.ReplicaSet, span trace.Span) {
@@ -410,6 +434,7 @@ type configWatcher struct {
 	dps []cache.SharedIndexInformer
 	rss []cache.SharedIndexInformer
 	sss []cache.SharedIndexInformer
+	rls []cache.SharedIndexInformer
 
 	self Map // For extension
 }
@@ -532,6 +557,13 @@ func (c *configWatcher) StartWatchers(ctx context.Context) error {
 	for _, si := range c.sss {
 		if err := c.watchWorkloads(ctx, si); err != nil {
 			return err
+		}
+	}
+	if c.rls != nil {
+		for _, si := range c.rls {
+			if err := c.watchWorkloads(ctx, si); err != nil {
+				return err
+			}
 		}
 	}
 	for _, ci := range c.cms {
@@ -715,7 +747,7 @@ func whereWeWatch(ns string) string {
 }
 
 func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIndexInformer {
-	f := informer.GetFactory(ctx, ns)
+	f := informer.GetK8sFactory(ctx, ns)
 	ix := f.Core().V1().Pods().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		if pod, ok := o.(*core.Pod); ok {
@@ -796,9 +828,18 @@ func (c *configWatcher) Start(ctx context.Context) {
 		c.rss[i] = c.startReplicaSets(ctx, ns)
 		c.sss[i] = c.startStatefulSets(ctx, ns)
 		c.startPods(ctx, ns)
-		f := informer.GetFactory(ctx, ns)
-		f.Start(ctx.Done())
-		f.WaitForCacheSync(ctx.Done())
+		kf := informer.GetK8sFactory(ctx, ns)
+		kf.Start(ctx.Done())
+		kf.WaitForCacheSync(ctx.Done())
+	}
+	if managerutil.ArgoRolloutsEnabled(ctx) {
+		c.rls = make([]cache.SharedIndexInformer, len(nss))
+		for i, ns := range nss {
+			c.rls[i] = c.startRollouts(ctx, ns)
+			rf := informer.GetArgoRolloutsFactory(ctx, ns)
+			rf.Start(ctx.Done())
+			rf.WaitForCacheSync(ctx.Done())
+		}
 	}
 }
 

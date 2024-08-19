@@ -50,6 +50,7 @@ const (
 	Manager_UpdateIntercept_FullMethodName           = "/telepresence.manager.Manager/UpdateIntercept"
 	Manager_GetIntercept_FullMethodName              = "/telepresence.manager.Manager/GetIntercept"
 	Manager_ReviewIntercept_FullMethodName           = "/telepresence.manager.Manager/ReviewIntercept"
+	Manager_GetKnownWorkloadKinds_FullMethodName     = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
 	Manager_LookupDNS_FullMethodName                 = "/telepresence.manager.Manager/LookupDNS"
 	Manager_AgentLookupDNSResponse_FullMethodName    = "/telepresence.manager.Manager/AgentLookupDNSResponse"
 	Manager_WatchLookupDNS_FullMethodName            = "/telepresence.manager.Manager/WatchLookupDNS"
@@ -140,6 +141,10 @@ type ManagerClient interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// GetKnownWorkloadKinds returns the known workload kinds
+	// that the manager can handle. This base set should always include Deployment, StatefulSet, and ReplicaSet,
+	// and it may include Rollout (Argo Rollouts) if the support for it is enabled.
+	GetKnownWorkloadKinds(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*KnownWorkloadKinds, error)
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error)
@@ -576,6 +581,16 @@ func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewIntercept
 	return out, nil
 }
 
+func (c *managerClient) GetKnownWorkloadKinds(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*KnownWorkloadKinds, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KnownWorkloadKinds)
+	err := c.cc.Invoke(ctx, Manager_GetKnownWorkloadKinds_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DNSResponse)
@@ -818,6 +833,10 @@ type ManagerServer interface {
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error)
+	// GetKnownWorkloadKinds returns the known workload kinds
+	// that the manager can handle. This base set should always include Deployment, StatefulSet, and ReplicaSet,
+	// and it may include Rollout (Argo Rollouts) if the support for it is enabled.
+	GetKnownWorkloadKinds(context.Context, *SessionInfo) (*KnownWorkloadKinds, error)
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error)
@@ -930,6 +949,9 @@ func (UnimplementedManagerServer) GetIntercept(context.Context, *GetInterceptReq
 }
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
+}
+func (UnimplementedManagerServer) GetKnownWorkloadKinds(context.Context, *SessionInfo) (*KnownWorkloadKinds, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetKnownWorkloadKinds not implemented")
 }
 func (UnimplementedManagerServer) LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
@@ -1451,6 +1473,24 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_GetKnownWorkloadKinds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SessionInfo)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetKnownWorkloadKinds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_GetKnownWorkloadKinds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetKnownWorkloadKinds(ctx, req.(*SessionInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DNSRequest)
 	if err := dec(in); err != nil {
@@ -1680,6 +1720,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReviewIntercept",
 			Handler:    _Manager_ReviewIntercept_Handler,
+		},
+		{
+			MethodName: "GetKnownWorkloadKinds",
+			Handler:    _Manager_GetKnownWorkloadKinds_Handler,
 		},
 		{
 			MethodName: "LookupDNS",

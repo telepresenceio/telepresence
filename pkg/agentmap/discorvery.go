@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apps "k8s.io/client-go/informers/apps/v1"
 
+	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/informers/externalversions/rollouts/v1alpha1"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -56,15 +57,16 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 
 func GetWorkload(ctx context.Context, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
 	dlog.Debugf(ctx, "GetWorkload(%s,%s,%s)", name, namespace, workloadKind)
-	f := informer.GetFactory(ctx, namespace)
-	if f == nil {
+	i := informer.GetFactory(ctx, namespace)
+	if i == nil {
 		dlog.Debugf(ctx, "fetching %s %s.%s using direct API call", workloadKind, name, namespace)
 		return k8sapi.GetWorkload(ctx, name, namespace, workloadKind)
 	}
-	return getWorkload(f.Apps().V1(), name, namespace, workloadKind)
+	ai, ri := i.GetK8sInformerFactory().Apps().V1(), i.GetArgoRolloutsInformerFactory().Argoproj().V1alpha1().Rollouts()
+	return getWorkload(ai, ri, name, namespace, workloadKind)
 }
 
-func getWorkload(ai apps.Interface, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
+func getWorkload(ai apps.Interface, ri argorollouts.RolloutInformer, name, namespace, workloadKind string) (obj k8sapi.Workload, err error) {
 	switch workloadKind {
 	case "Deployment":
 		return getDeployment(ai, name, namespace)
@@ -72,9 +74,11 @@ func getWorkload(ai apps.Interface, name, namespace, workloadKind string) (obj k
 		return getReplicaSet(ai, name, namespace)
 	case "StatefulSet":
 		return getStatefulSet(ai, name, namespace)
+	case "Rollout":
+		return getRollout(ri, name, namespace)
 	case "":
-		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet"} {
-			if obj, err = getWorkload(ai, name, namespace, wk); err == nil {
+		for _, wk := range []string{"Deployment", "ReplicaSet", "StatefulSet", "Rollout"} {
+			if obj, err = getWorkload(ai, ri, name, namespace, wk); err == nil {
 				return obj, nil
 			}
 			if !k8sErrors.IsNotFound(err) {
@@ -93,6 +97,17 @@ func getDeployment(ai apps.Interface, name, namespace string) (wl k8sapi.Workloa
 		return nil, err
 	}
 	return k8sapi.Deployment(dep), nil
+}
+
+func getRollout(ri argorollouts.RolloutInformer, name, namespace string) (wl k8sapi.Workload, err error) {
+	if ri == nil {
+		return nil, k8sapi.UnsupportedWorkloadKindError("Rollout")
+	}
+	rollout, err := ri.Lister().Rollouts(namespace).Get(name)
+	if err != nil {
+		return nil, err
+	}
+	return k8sapi.Rollout(rollout), nil
 }
 
 func getReplicaSet(ai apps.Interface, name, namespace string) (k8sapi.Workload, error) {
@@ -116,7 +131,7 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 	case svcName != "":
 		var svc *core.Service
 		var err error
-		if f := informer.GetFactory(ctx, pod.Namespace); f != nil {
+		if f := informer.GetK8sFactory(ctx, pod.Namespace); f != nil {
 			svc, err = f.Core().V1().Services().Lister().Services(pod.Namespace).Get(svcName)
 		} else {
 			// This shouldn't happen really.
@@ -173,7 +188,7 @@ func (os objectsStringer) String() string {
 func findServicesSelecting(ctx context.Context, namespace string, lbs labels.Labels) ([]k8sapi.Object, error) {
 	var ms []k8sapi.Object
 	var scanned int
-	if f := informer.GetFactory(ctx, namespace); f != nil {
+	if f := informer.GetK8sFactory(ctx, namespace); f != nil {
 		ss, err := f.Core().V1().Services().Lister().Services(namespace).List(labels.Everything())
 		if err != nil {
 			return nil, err

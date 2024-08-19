@@ -14,7 +14,9 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/util/deployment"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
@@ -166,7 +168,8 @@ func (w *wlWatcher) watchWorkloads(ix cache.SharedIndexInformer, ns string) erro
 }
 
 func (w *wlWatcher) addEventHandler(ctx context.Context, ns string) error {
-	ai := informer.GetFactory(ctx, ns).Apps().V1()
+	kf := informer.GetFactory(ctx, ns)
+	ai, ri := kf.GetK8sInformerFactory().Apps().V1(), kf.GetArgoRolloutsInformerFactory().Argoproj().V1alpha1()
 	if err := w.watchWorkloads(ai.Deployments().Informer(), ns); err != nil {
 		return err
 	}
@@ -174,6 +177,11 @@ func (w *wlWatcher) addEventHandler(ctx context.Context, ns string) error {
 		return err
 	}
 	if err := w.watchWorkloads(ai.StatefulSets().Informer(), ns); err != nil {
+		return err
+	}
+	if !managerutil.ArgoRolloutsEnabled(ctx) {
+		dlog.Infof(ctx, "Argo Rollouts is disabled, Argo Rollouts will not be watched")
+	} else if err := w.watchWorkloads(ri.Rollouts().Informer(), ns); err != nil {
 		return err
 	}
 	return nil
