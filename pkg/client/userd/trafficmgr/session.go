@@ -441,7 +441,15 @@ func connectMgr(
 
 	knownWorkloadKinds, err := mClient.GetKnownWorkloadKinds(ctx, si)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get known workload kinds: %w", err)
+		if status.Code(err) != codes.Unimplemented {
+			return nil, fmt.Errorf("failed to get known workload kinds: %w", err)
+		}
+		// Talking to an older traffic-manager, use legacy default types
+		knownWorkloadKinds = &manager.KnownWorkloadKinds{Kinds: []manager.WorkloadInfo_Kind{
+			manager.WorkloadInfo_DEPLOYMENT,
+			manager.WorkloadInfo_REPLICASET,
+			manager.WorkloadInfo_STATEFULSET,
+		}}
 	}
 
 	sess := &session{
