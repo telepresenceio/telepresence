@@ -54,6 +54,14 @@ items:
           and all references from the client and traffic-manager has been updated to use this registry
           instead of the one at docker.io/datawire.
       - type: bugfix
+        title: Root daemon wouldn't start when sudo timeout was zero.
+        body: >-
+          The root daemon refused to start when <code>sudo</code> was configured with a <code>timestamp_timeout=0</code>.
+          This was due to logic that first requested root privileges using a sudo call, and then relied on that these
+          privileges were cached, so that a subsequent call using <code>--non-interactive</code> was guaranteed to succeed.
+          This logic will now instead do one single sudo call, and rely solely on sudo to print an informative prompt and
+          start the daemon in the background.
+      - type: bugfix
         title: Detect minikube network when connecting with --docker
         body: >-
           A <code>telepresence connect --docker</code> failed when attempting to connect to a minikube that
