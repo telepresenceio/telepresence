@@ -25,13 +25,13 @@ following Free and Open Source software:
     github.com/containerd/platforms                                              v0.2.1                                Apache License 2.0
     github.com/coreos/go-iptables                                                v0.7.0                                Apache License 2.0
     github.com/cyphar/filepath-securejoin                                        v0.2.5                                3-clause BSD license
-    github.com/datawire/argo-rollouts-go-client                                  v0.0.0-20240718122954-a05067ae59b1    Apache License 2.0
+    github.com/datawire/argo-rollouts-go-client                                  v0.0.0-20240820134429-7eacf8d19d55    Apache License 2.0
     github.com/datawire/dlib                                                     v1.3.1                                Apache License 2.0
     github.com/datawire/dtest                                                    v0.0.0-20210928162311-722b199c4c2f    Apache License 2.0
     github.com/datawire/envconfig                                                v0.0.0-20221012222025-09524dc7d59b    Apache License 2.0
     github.com/datawire/go-ftpserver                                             v0.1.3                                Apache License 2.0
     github.com/datawire/go-fuseftp/rpc                                           v0.4.4                                Apache License 2.0
-    github.com/datawire/k8sapi                                                   v0.1.5                                Apache License 2.0
+    github.com/datawire/k8sapi                                                   v0.1.6-0.20240820125232-ee712486e677  Apache License 2.0
     github.com/datawire/metriton-go-client                                       v0.1.1                                Apache License 2.0
     github.com/davecgh/go-spew                                                   v1.1.2-0.20180830191138-d8f796af33cc  ISC license
     github.com/distribution/reference                                            v0.6.0                                Apache License 2.0
@@ -51,6 +51,7 @@ following Free and Open Source software:
     github.com/fclairamb/go-log                                                  v0.5.0                                MIT license
     github.com/felixge/httpsnoop                                                 v1.0.4                                MIT license
     github.com/fsnotify/fsnotify                                                 v1.7.0                                3-clause BSD license
+    github.com/fxamacker/cbor/v2                                                 v2.7.0                                MIT license
     github.com/go-errors/errors                                                  v1.5.1                                MIT license
     github.com/go-gorp/gorp/v3                                                   v3.1.0                                MIT license
     github.com/go-logr/logr                                                      v1.4.2                                Apache License 2.0
@@ -132,6 +133,7 @@ following Free and Open Source software:
     github.com/telepresenceio/telepresence/rpc/v2                                (modified)                            Apache License 2.0
     github.com/vishvananda/netlink                                               v1.2.1-beta.2                         Apache License 2.0
     github.com/vishvananda/netns                                                 v0.0.4                                Apache License 2.0
+    github.com/x448/float16                                                      v0.8.4                                MIT license
     github.com/xeipuuv/gojsonpointer                                             v0.0.0-20190905194746-02993c407bfb    Apache License 2.0
     github.com/xeipuuv/gojsonreference                                           v0.0.0-20180127040603-bd5ef7bd5415    Apache License 2.0
     github.com/xeipuuv/gojsonschema                                              v1.2.0                                Apache License 2.0
@@ -150,17 +152,17 @@ following Free and Open Source software:
     golang.org/x/exp                                                             v0.0.0-20240808152545-0cdaa3abc0fa    3-clause BSD license
     golang.org/x/mod                                                             v0.20.0                               3-clause BSD license
     golang.org/x/net                                                             v0.28.0                               3-clause BSD license
-    golang.org/x/oauth2                                                          v0.21.0                               3-clause BSD license
+    golang.org/x/oauth2                                                          v0.22.0                               3-clause BSD license
     golang.org/x/sync                                                            v0.8.0                                3-clause BSD license
     golang.org/x/sys                                                             v0.24.0                               3-clause BSD license
     golang.org/x/term                                                            v0.23.0                               3-clause BSD license
     golang.org/x/text                                                            v0.17.0                               3-clause BSD license
-    golang.org/x/time                                                            v0.5.0                                3-clause BSD license
+    golang.org/x/time                                                            v0.6.0                                3-clause BSD license
     golang.org/x/tools                                                           v0.24.0                               3-clause BSD license
     golang.zx2c4.com/wintun                                                      v0.0.0-20230126152724-0fa3db229ce2    MIT license
     golang.zx2c4.com/wireguard                                                   v0.0.0-20231211153847-12269c276173    MIT license
     golang.zx2c4.com/wireguard/windows                                           v0.5.3                                MIT license
-    google.golang.org/genproto/googleapis/api                                    v0.0.0-20240711142825-46eb208f015d    Apache License 2.0
+    google.golang.org/genproto/googleapis/api                                    v0.0.0-20240814211410-ddb44dafa142    Apache License 2.0
     google.golang.org/genproto/googleapis/rpc                                    v0.0.0-20240814211410-ddb44dafa142    Apache License 2.0
     google.golang.org/grpc                                                       v1.65.0                               Apache License 2.0
     google.golang.org/protobuf                                                   v1.34.2                               3-clause BSD license
@@ -169,17 +171,17 @@ following Free and Open Source software:
     gopkg.in/yaml.v2                                                             v2.4.0                                Apache License 2.0, MIT license
     gopkg.in/yaml.v3                                                             v3.0.1                                Apache License 2.0, MIT license
     gvisor.dev/gvisor                                                            v0.0.0-20240816022007-28f8b471e908    Apache License 2.0, MIT license
-    helm.sh/helm/v3                                                              v3.15.2                               Apache License 2.0
-    k8s.io/api                                                                   v0.30.3                               Apache License 2.0
-    k8s.io/apiextensions-apiserver                                               v0.30.2                               Apache License 2.0
-    k8s.io/apimachinery                                                          v0.30.3                               3-clause BSD license, Apache License 2.0
-    k8s.io/apiserver                                                             v0.30.2                               Apache License 2.0
-    k8s.io/cli-runtime                                                           v0.30.2                               Apache License 2.0
-    k8s.io/client-go                                                             v0.30.3                               3-clause BSD license, Apache License 2.0
-    k8s.io/component-base                                                        v0.30.2                               Apache License 2.0
+    helm.sh/helm/v3                                                              v3.15.4                               Apache License 2.0
+    k8s.io/api                                                                   v0.31.0                               Apache License 2.0
+    k8s.io/apiextensions-apiserver                                               v0.30.3                               Apache License 2.0
+    k8s.io/apimachinery                                                          v0.31.0                               3-clause BSD license, Apache License 2.0
+    k8s.io/apiserver                                                             v0.30.3                               Apache License 2.0
+    k8s.io/cli-runtime                                                           v0.31.0                               Apache License 2.0
+    k8s.io/client-go                                                             v0.31.0                               3-clause BSD license, Apache License 2.0
+    k8s.io/component-base                                                        v0.31.0                               Apache License 2.0
     k8s.io/klog/v2                                                               v2.130.1                              Apache License 2.0
-    k8s.io/kube-openapi                                                          v0.0.0-20240709000822-3c01b740850f    3-clause BSD license, Apache License 2.0
-    k8s.io/kubectl                                                               v0.30.2                               Apache License 2.0
+    k8s.io/kube-openapi                                                          v0.0.0-20240816214639-573285566f34    3-clause BSD license, Apache License 2.0
+    k8s.io/kubectl                                                               v0.31.0                               Apache License 2.0
     k8s.io/utils                                                                 v0.0.0-20240711033017-18e509b52bc8    3-clause BSD license, Apache License 2.0
     oras.land/oras-go                                                            v1.2.5                                Apache License 2.0
     sigs.k8s.io/json                                                             v0.0.0-20221116044647-bc3834ca7abd    3-clause BSD license, Apache License 2.0

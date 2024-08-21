@@ -321,6 +321,7 @@ hooks:
     image: "curlimages/curl"
     tag: 8.1.1
     imagePullSecrets: []
+    pullPolicy: IfNotPresent
 
 client:
   # Max time that the traffic-manager will keep a client connection alive when it doesn't receive

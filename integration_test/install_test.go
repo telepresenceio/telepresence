@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -113,7 +114,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 	})
 }
 
-func (is *installSuite) Test_NonHelmInstall() {
+func (is *installSuite) Test_HelmTemplateInstall() {
 	ctx := is.Context()
 	require := is.Require()
 
@@ -123,24 +124,18 @@ func (is *installSuite) Test_NonHelmInstall() {
 	values = append([]string{"template", "traffic-manager", chart, "-n", is.ManagerNamespace()}, values...)
 	manifest, err := itest.Output(ctx, "helm", values...)
 	require.NoError(err)
-	cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "apply", "-f", "-")
-	cmd.Stdin = strings.NewReader(manifest)
-	out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
-	cmd.Stdout = out
-	cmd.Stderr = out
-	require.NoError(cmd.Run())
+	out := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+	logCtx := dos.WithStdout(dos.WithStderr(ctx, out), out)
+	require.NoError(itest.Kubectl(dos.WithStdin(logCtx, strings.NewReader(manifest)), is.ManagerNamespace(), "apply", "-f", "-"))
 	defer func() {
-		cmd := itest.Command(ctx, "kubectl", "--kubeconfig", itest.KubeConfig(ctx), "-n", is.ManagerNamespace(), "delete", "-f", "-")
-		cmd.Stdin = strings.NewReader(manifest)
-		out := dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()
-		cmd.Stdout = out
-		cmd.Stderr = out
 		// Sometimes the traffic-agents configmap gets wiped, causing the delete command to fail, hence we don't require.NoError
-		_ = cmd.Run()
+		_ = itest.Kubectl(dos.WithStdin(logCtx, strings.NewReader(manifest)), is.ManagerNamespace(), "delete", "-f", "-")
 	}()
+	require.NoError(itest.RolloutStatusWait(ctx, is.ManagerNamespace(), "deploy/traffic-manager"))
+	is.CapturePodLogs(ctx, "traffic-manager", "", is.ManagerNamespace())
 	stdout := itest.TelepresenceOk(itest.WithUser(ctx, "default"), "connect")
 	is.Contains(stdout, "Connected to context")
-	defer itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceQuitOk(ctx)
 }
 
 func (is *installSuite) Test_FindTrafficManager_notPresent() {

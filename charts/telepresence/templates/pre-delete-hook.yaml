@@ -40,7 +40,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
             {{- end }}
           image: "{{ .Values.hooks.curl.registry }}/{{ .Values.hooks.curl.image }}:{{ .Values.hooks.curl.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          imagePullPolicy: {{ .Values.hooks.curl.pullPolicy }}
           volumeMounts:
             - name: secret-volume
               mountPath: /secret

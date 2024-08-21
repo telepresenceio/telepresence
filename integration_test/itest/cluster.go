@@ -188,7 +188,7 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 		if runtime.GOOS == "windows" {
 			exe = "telepresence.exe"
 		}
-		s.executable = filepath.Join(GetModuleRoot(ctx), "build-output", "bin", exe)
+		s.executable = filepath.Join(BuildOutput(ctx), "bin", exe)
 	}
 	errs := make(chan error, 10)
 	wg := &sync.WaitGroup{}
@@ -258,7 +258,7 @@ func (s *cluster) ensureExecutable(ctx context.Context, errs chan<- error, wg *s
 		errs <- err
 		return
 	}
-	s.executable = filepath.Join(GetWorkingDir(ctx), "build-output", "bin", exe)
+	s.executable = filepath.Join(BuildOutput(ctx), "bin", exe)
 }
 
 func (s *cluster) ensureDocker(ctx context.Context, wg *sync.WaitGroup) {
@@ -599,7 +599,10 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 		"logLevel=debug",
 		"client.routing.allowConflictingSubnets={10.0.0.0/8}",
 	}
-	if !s.isCI {
+	reg := s.self.Registry()
+	if reg == "local" {
+		settings = append(settings, "image.pullPolicy=Never")
+	} else if !s.isCI {
 		settings = append(settings, "image.pullPolicy=Always")
 	}
 	if len(nss.ManagedNamespaces) > 0 {
@@ -611,9 +614,9 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 	agentImage := GetAgentImage(ctx)
 	if agentImage != nil {
 		settings = append(settings,
-			fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
-			fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
-			fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
+			fmt.Sprintf("agent.image.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
+			fmt.Sprintf("agent.image.tag=%s", agentImage.Tag),
+			fmt.Sprintf("agent.image.registry=%s", agentImage.Registry))
 	}
 	if !release {
 		settings = append(settings, fmt.Sprintf("image.registry=%s", s.self.Registry()))
@@ -1007,13 +1010,37 @@ func Output(ctx context.Context, exe string, args ...string) (string, error) {
 // Kubectl runs kubectl with the default context and the given namespace, or in the default namespace if the given
 // namespace is an empty string.
 func Kubectl(ctx context.Context, namespace string, args ...string) error {
+	return retryKubectl(ctx, namespace, args, func(args []string) error { return Run(ctx, "kubectl", args...) })
+}
+
+// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output.
+func KubectlOut(ctx context.Context, namespace string, args ...string) (out string, err error) {
+	err = retryKubectl(ctx, namespace, args, func(args []string) error {
+		out, err = Output(ctx, "kubectl", args...)
+		return err
+	})
+	return out, err
+}
+
+func retryKubectl(ctx context.Context, namespace string, args []string, f func([]string) error) error {
 	getT(ctx).Helper()
 	var ks []string
 	if namespace != "" {
-		ks = append(make([]string, 0, len(args)+2), "--namespace", namespace)
-		ks = append(ks, args...)
-	} else {
-		ks = args
+		// Add --namespace <namespace> before first flag argument
+		ks = make([]string, 0, len(args)+2)
+		pos := -1
+		for i, arg := range args {
+			if strings.HasPrefix(arg, "-") {
+				pos = i
+				break
+			}
+			ks = append(ks, arg)
+		}
+		ks = append(ks, "--namespace", namespace)
+		if pos >= 0 {
+			ks = append(ks, args[pos:]...)
+		}
+		args = ks
 	}
 	b := backoff.NewExponentialBackOff(
 		backoff.WithInitialInterval(2*time.Second),
@@ -1021,38 +1048,12 @@ func Kubectl(ctx context.Context, namespace string, args ...string) error {
 		backoff.WithMaxElapsedTime(30*time.Second),
 	)
 	return backoff.Retry(func() error {
-		err := Run(ctx, "kubectl", ks...)
+		err := f(args)
 		if err != nil && !strings.Contains(err.Error(), "(ServiceUnavailable)") {
 			err = backoff.Permanent(err)
 		}
 		return err
 	}, b)
-}
-
-// KubectlOut runs kubectl with the default context and the application namespace and returns its combined output.
-func KubectlOut(ctx context.Context, namespace string, args ...string) (out string, err error) {
-	getT(ctx).Helper()
-	var ks []string
-	if namespace != "" {
-		ks = append(make([]string, 0, len(args)+2), "--namespace", namespace)
-		ks = append(ks, args...)
-	} else {
-		ks = args
-	}
-	b := backoff.NewExponentialBackOff(
-		backoff.WithInitialInterval(2*time.Second),
-		backoff.WithMaxInterval(7*time.Second),
-		backoff.WithMaxElapsedTime(30*time.Second),
-	)
-	err = backoff.Retry(func() error {
-		var bErr error
-		out, bErr = Output(ctx, "kubectl", ks...)
-		if bErr != nil && !strings.Contains(bErr.Error(), "(ServiceUnavailable)") {
-			bErr = backoff.Permanent(bErr)
-		}
-		return bErr
-	}, b)
-	return out, err
 }
 
 func CreateNamespaces(ctx context.Context, namespaces ...string) {
