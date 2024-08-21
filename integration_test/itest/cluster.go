@@ -614,9 +614,9 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 	agentImage := GetAgentImage(ctx)
 	if agentImage != nil {
 		settings = append(settings,
-			fmt.Sprintf("agentInjector.agentImage.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
-			fmt.Sprintf("agentInjector.agentImage.tag=%s", agentImage.Tag),
-			fmt.Sprintf("agentInjector.agentImage.registry=%s", agentImage.Registry))
+			fmt.Sprintf("agent.image.name=%s", agentImage.Name), // Prevent attempts to retrieve image from SystemA
+			fmt.Sprintf("agent.image.tag=%s", agentImage.Tag),
+			fmt.Sprintf("agent.image.registry=%s", agentImage.Registry))
 	}
 	if !release {
 		settings = append(settings, fmt.Sprintf("image.registry=%s", s.self.Registry()))
