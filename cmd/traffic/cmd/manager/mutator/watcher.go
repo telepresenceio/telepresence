@@ -46,6 +46,7 @@ type Map interface {
 	Blacklist(podName, namespace string)
 	Whitelist(podName, namespace string)
 	IsBlacklisted(podName, namespace string) bool
+	DisableRollouts()
 
 	store(ctx context.Context, acx agentconfig.SidecarExt) error
 	remove(ctx context.Context, name, namespace string) error
@@ -93,6 +94,9 @@ func (e *entry) workload(ctx context.Context) (agentconfig.SidecarExt, k8sapi.Wo
 // isRolloutNeeded checks if the agent's entry in telepresence-agents matches the actual state of the
 // pods. If it does, then there's no reason to trigger a rollout.
 func (c *configWatcher) isRolloutNeeded(ctx context.Context, wl k8sapi.Workload, ac *agentconfig.Sidecar) bool {
+	if c.rolloutDisabled {
+		return false
+	}
 	podMeta := wl.GetPodTemplate().GetObjectMeta()
 	if wl.GetDeletionTimestamp() != nil {
 		return false
@@ -428,6 +432,7 @@ type configWatcher struct {
 	nsLocks         *xsync.MapOf[string, *sync.RWMutex]
 	blacklistedPods *xsync.MapOf[string, time.Time]
 	startedAt       time.Time
+	rolloutDisabled bool
 
 	cms []cache.SharedIndexInformer
 	svs []cache.SharedIndexInformer
@@ -449,6 +454,10 @@ func (c *configWatcher) Blacklist(podName, namespace string) {
 
 func (c *configWatcher) Whitelist(podName, namespace string) {
 	c.blacklistedPods.Delete(podName + "." + namespace)
+}
+
+func (c *configWatcher) DisableRollouts() {
+	c.rolloutDisabled = true
 }
 
 func (c *configWatcher) IsBlacklisted(podName, namespace string) bool {
