@@ -403,9 +403,14 @@ func (c *kpfConn) Write(b []byte) (int, error) {
 
 func (c *kpfConn) Close() error {
 	closeErr := c.Reset()
-	<-c.oobErrCh
-	if c.oobErr != nil {
-		return c.oobErr
+
+	// Prevent indefinite hanging when reading the errorStream.
+	select {
+	case <-c.oobErrCh:
+		if c.oobErr != nil {
+			return c.oobErr
+		}
+	case <-time.After(5 * time.Second):
 	}
 	if closeErr != nil {
 		return closeErr
