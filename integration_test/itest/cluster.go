@@ -599,7 +599,10 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 		"logLevel=debug",
 		"client.routing.allowConflictingSubnets={10.0.0.0/8}",
 	}
-	if !s.isCI {
+	reg := s.self.Registry()
+	if reg == "local" {
+		settings = append(settings, "image.pullPolicy=Never")
+	} else if !s.isCI {
 		settings = append(settings, "image.pullPolicy=Always")
 	}
 	if len(nss.ManagedNamespaces) > 0 {
