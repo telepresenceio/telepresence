@@ -1,9 +1,17 @@
 package integration_test
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -24,8 +32,47 @@ func init() {
 
 func (s *argoRolloutsSuite) SetupSuite() {
 	s.Suite.SetupSuite()
-	s.TelepresenceHelmInstallOK(s.Context(), true, "--set", "workloads.argoRollouts.enabled=true")
-	s.TelepresenceConnect(s.Context())
+	ctx := s.Context()
+	rq := s.Require()
+	if itest.Kubectl(ctx, "", "get", "namespaces", "argo-rollouts") != nil {
+		itest.CreateNamespaces(ctx, "argo-rollouts")
+	}
+	arExe := filepath.Join(itest.BuildOutput(ctx), "bin", "kubectl-argo-rollouts")
+	if runtime.GOOS == "windows" {
+		arExe += ".exe"
+	}
+	if _, err := os.Stat(arExe); err != nil {
+		rq.ErrorIs(err, os.ErrNotExist)
+		rq.NoError(downloadKubectlArgoRollouts(ctx, arExe))
+	}
+	out, err := itest.KubectlOut(ctx, "", "argo", "rollouts", "version")
+	rq.NoError(err)
+	dlog.Info(ctx, out)
+	rq.NoError(itest.Kubectl(ctx, "argo-rollouts", "apply", "-f", "https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml"))
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "workloads.argoRollouts.enabled=true")
+	s.TelepresenceConnect(ctx)
+}
+
+func downloadKubectlArgoRollouts(ctx context.Context, arExe string) error {
+	du := fmt.Sprintf(
+		"https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-%s-%s",
+		runtime.GOOS, runtime.GOARCH)
+	dlog.Infof(ctx, "Downloading %s", du)
+	resp, err := http.Get(du)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("expected status 200 OK, got %v", resp.Status)
+	}
+	arExeFile, err := os.OpenFile(arExe, os.O_WRONLY|os.O_CREATE, 0o755)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(arExeFile, resp.Body)
+	_ = arExeFile.Close()
+	return err
 }
 
 func (s *argoRolloutsSuite) Test_SuccessfullyInterceptsArgoRollout() {

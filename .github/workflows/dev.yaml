@@ -78,11 +78,6 @@ jobs:
       - name: Start minikube
         if: runner.os == 'Linux'
         uses: medyagh/setup-minikube@latest
-      - name: Install Argo Rollouts
-        shell: bash
-        run: |
-          kubectl create namespace argo-rollouts
-          kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
       - name: Build client
         run: make build
       - name: Run integration tests
