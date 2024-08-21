@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -217,6 +218,10 @@ func findServicesSelecting(ctx context.Context, namespace string, lbs labels.Lab
 			}
 		}
 	}
+	// Ensure predictable order of found services
+	sort.Slice(ms, func(i, j int) bool {
+		return ms[i].GetName() < ms[j].GetName()
+	})
 	dlog.Debugf(ctx, "Scanned %d services in namespace %s and found that %s selects labels %v", scanned, namespace, objectsStringer(ms), lbs)
 	return ms, nil
 }

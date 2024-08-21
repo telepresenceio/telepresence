@@ -345,7 +345,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	unnamedNumericPortUID := makeUID()
 	multiPortUID := makeUID()
 
-	clientset := fake.NewSimpleClientset(
+	clientset := fake.NewClientset(
 		&core.Service{
 			TypeMeta: meta.TypeMeta{
 				Kind:       "Service",
@@ -383,7 +383,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 					Name:       "http",
 					Protocol:   "TCP",
 					Port:       80,
-					TargetPort: intstr.FromInt(8899),
+					TargetPort: intstr.FromInt32(8899),
 				}},
 				Selector: map[string]string{
 					"app": "numeric-port",
@@ -404,7 +404,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 				Ports: []core.ServicePort{{
 					Protocol:   "TCP",
 					Port:       80,
-					TargetPort: intstr.FromInt(8899),
+					TargetPort: intstr.FromInt32(8899),
 				}},
 				Selector: map[string]string{
 					"app": "unnamed-numeric-port",
@@ -790,13 +790,12 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
 	require.NoError(t, err)
 	cw := NewWatcher("")
+	cw.DisableRollouts()
 	cw.Start(ctx)
 	require.NoError(t, cw.StartWatchers(ctx))
 
 	for _, test := range tests {
 		test := test // pin it
-		pod := test.request
-		cw.Blacklist(pod.Name, pod.Namespace) // prevent rollout
 		agentmap.GeneratorConfigFunc = env.GeneratorConfig
 		t.Run(test.name, func(t *testing.T) {
 			runFunc(t, ctx, &test)
@@ -889,11 +888,11 @@ func TestTrafficAgentInjector(t *testing.T) {
 	}
 
 	podObjectMetaInjected := func(name string) meta.ObjectMeta {
-		meta := podObjectMeta(name)
-		meta.Labels[agentconfig.WorkloadNameLabel] = name
-		meta.Labels[agentconfig.WorkloadKindLabel] = "Deployment"
-		meta.Labels[agentconfig.WorkloadEnabledLabel] = "true"
-		return meta
+		pm := podObjectMeta(name)
+		pm.Labels[agentconfig.WorkloadNameLabel] = name
+		pm.Labels[agentconfig.WorkloadKindLabel] = "Deployment"
+		pm.Labels[agentconfig.WorkloadEnabledLabel] = "true"
+		return pm
 	}
 
 	podNamedPort := core.Pod{
@@ -960,7 +959,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 		}
 	}
 
-	clientset := fake.NewSimpleClientset(
+	clientset := fake.NewClientset(
 		&core.Service{
 			TypeMeta: meta.TypeMeta{
 				Kind:       "Service",
@@ -999,7 +998,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				Ports: []core.ServicePort{{
 					Protocol:   "TCP",
 					Port:       80,
-					TargetPort: intstr.FromInt(8888),
+					TargetPort: intstr.FromInt32(8888),
 				}},
 				Selector: map[string]string{
 					"service": "numeric-port",
@@ -1840,9 +1839,9 @@ func TestTrafficAgentInjector(t *testing.T) {
 				agentmap.GeneratorConfigFunc = newEnv.GeneratorConfig
 			}
 			cw := NewWatcher("")
+			cw.DisableRollouts()
 			cw.Start(ctx)
 			require.NoError(t, cw.StartWatchers(ctx))
-			cw.Blacklist(test.pod.Name, test.pod.Namespace)
 
 			var actualPatch PatchOps
 			var actualErr error
