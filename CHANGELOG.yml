@@ -53,6 +53,12 @@ items:
           All OSS telepresence images are now published at the public registry ghcr.io/telepresenceio
           and all references from the client and traffic-manager has been updated to use this registry
           instead of the one at docker.io/datawire.
+      - title: Use nftables instead of iptables-legacy
+        type: change
+        body: >-
+          Some time ago, we introduced iptables-legacy because users had problems using Telepresence with Fly.io where nftables
+          wasn't supported by the kernel. Fly.io has since fixed this, so Telepresence will now use nftables again. This in turn,
+          ensures that modern systems that lack support iptables-legacy will work.
       - type: bugfix
         title: Root daemon wouldn't start when sudo timeout was zero.
         body: >-
