@@ -41,9 +41,7 @@ RUN setcap 'cap_net_bind_service+ep' /usr/local/bin/telepresence
 # The telepresence target is the one that gets published. It aims to be a small as possible.
 FROM alpine as telepresence
 
-RUN apk add --no-cache ca-certificates iptables iptables-legacy bash
-RUN rm /sbin/iptables && ln -s /sbin/iptables-legacy /sbin/iptables
-RUN rm /sbin/ip6tables && ln -s /sbin/ip6tables-legacy /sbin/ip6tables
+RUN apk add --no-cache ca-certificates iptables bash
 
 # the telepresence binary
 COPY --from=telepresence-build /usr/local/bin/telepresence /usr/local/bin
