@@ -1,7 +1,8 @@
 name: 'Close stale issues and PR'
 on:
-  schedule:
-    - cron: '13 10 * * *'
+  push:
+    branches:
+      - release/v2
 
 jobs:
   stale:
