@@ -462,16 +462,11 @@ func (s *state) writeEnvToFileAndClose(file *os.File) (err error) {
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		if _, err = w.WriteString(k); err != nil {
+		r, err := s.EnvSyntax.WriteEnv(k, s.env[k])
+		if err != nil {
 			return err
 		}
-		if err = w.WriteByte('='); err != nil {
-			return err
-		}
-		if _, err = w.WriteString(s.env[k]); err != nil {
-			return err
-		}
-		if err = w.WriteByte('\n'); err != nil {
+		if _, err = fmt.Fprintln(w, r); err != nil {
 			return err
 		}
 	}

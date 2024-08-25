@@ -6,67 +6,7 @@ import (
 )
 
 func quoteArg(arg string) string {
-	if arg == "" {
-		return `""`
-	}
-	needsBackslash := false
-	needsQuote := false
-	for _, c := range arg {
-		switch c {
-		case '"', '\\':
-			needsBackslash = true
-		case ' ', '\t':
-			needsQuote = true
-		}
-	}
-	if !(needsBackslash || needsQuote) {
-		return arg
-	}
-
-	b := strings.Builder{}
-	slashes := 0
-	slashOut := func() {
-		for ; slashes > 0; slashes-- {
-			b.WriteByte('\\')
-		}
-	}
-	slashOutBeforeQuote := func(escape bool) {
-		slashes <<= 1
-		if escape {
-			slashes++
-		}
-		slashOut()
-	}
-
-	if needsQuote {
-		b.WriteByte('"')
-	}
-
-	if !needsBackslash {
-		b.WriteString(arg)
-		b.WriteByte('"')
-		return b.String()
-	}
-
-	for _, c := range arg {
-		switch c {
-		default:
-			slashOut()
-			b.WriteRune(c)
-		case '\\':
-			slashes++
-		case '"':
-			slashOutBeforeQuote(true)
-			b.WriteByte('"')
-		}
-	}
-	if needsQuote {
-		slashOutBeforeQuote(false)
-		b.WriteByte('"')
-	} else {
-		slashOut()
-	}
-	return b.String()
+	return Windows(arg)
 }
 
 // Split the given string into an array, using shell quote semantics.
