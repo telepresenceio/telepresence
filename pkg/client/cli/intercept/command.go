@@ -28,11 +28,12 @@ type Command struct {
 
 	Replace bool // whether --replace was passed
 
-	EnvFile  string   // --env-file
-	EnvJSON  string   // --env-json
-	Mount    string   // --mount // "true", "false", or desired mount point // only valid if !localOnly
-	MountSet bool     // whether --mount was passed
-	ToPod    []string // --to-pod
+	EnvFile   string // --env-file
+	EnvSyntax EnvironmentSyntax
+	EnvJSON   string   // --env-json
+	Mount     string   // --mount // "true", "false", or desired mount point // only valid if !localOnly
+	MountSet  bool     // whether --mount was passed
+	ToPod     []string // --to-pod
 
 	DockerRun          bool     // --docker-run
 	DockerBuild        string   // --docker-build DIR | URL
@@ -71,8 +72,9 @@ func (a *Command) AddFlags(cmd *cobra.Command) {
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
 
 	flagSet.StringVarP(&a.EnvFile, "env-file", "e", "", ``+
-		`Also emit the remote environment to an env file in Docker Compose format. `+
-		`See https://docs.docker.com/compose/env-file/ for more information on the limitations of this format.`)
+		`Also emit the remote environment to an file. The syntax used in the file can be determined using flag --env-syntax`)
+
+	flagSet.Var(&a.EnvSyntax, "env-syntax", `Syntax used for env-file. One of `+EnvSyntaxUsage())
 
 	flagSet.StringVarP(&a.EnvJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
 
