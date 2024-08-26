@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -48,6 +49,7 @@ import (
 )
 
 func main() {
+	addr := os.Getenv("LISTEN_ADDRESS")
 	portsEnv := os.Getenv("PORTS")
 	if portsEnv == "" {
 		portsEnv = os.Getenv("PORT")
@@ -63,14 +65,21 @@ func main() {
 	for _, port := range ports {
 		port := port // pin it
 		g.Go(fmt.Sprintf("port-%s", port), func(ctx context.Context) error {
-			fmt.Printf("Echo server listening on port %s.\n", port)
 			lc := dhttp.ServerConfig{Handler: h2c.NewHandler(
 				http.HandlerFunc(func(wr http.ResponseWriter, rq *http.Request) {
 					handler(wr, rq, port)
 				}),
 				&http2.Server{},
 			)}
-			return lc.ListenAndServe(ctx, ":"+port)
+			var addrPort string
+			if addr == "" {
+				addrPort = ":" + port
+				fmt.Printf("Echo server listening on port %s.\n", port)
+			} else {
+				addrPort = net.JoinHostPort(addr, port)
+				fmt.Printf("Echo server listening on %s.\n", addrPort)
+			}
+			return lc.ListenAndServe(ctx, addrPort)
 		})
 	}
 	if err := g.Wait(); err != nil {
