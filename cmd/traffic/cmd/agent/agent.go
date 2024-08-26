@@ -170,23 +170,24 @@ func sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 		}
 
 		for pp, ics := range icStates {
-			cp := ics[0].ContainerPort // They all have the same protocol container port, so the first one will do
+			ic := ics[0] // They all have the same protocol container port, so the first one will do.
+			var cp uint16
+			if ic.TargetPortNumeric {
+				// We must differentiate between connections originating from the agent's forwarder to the container
+				// port and those from other sources. The former should not be routed back, while the latter should
+				// always be routed to the agent. We do this by using a proxy port that will be recognized by the
+				// iptables filtering in our init-container.
+				cp = ac.ProxyPort(ic)
+			} else {
+				cp = ic.ContainerPort
+			}
 			lisAddr, err := pp.Addr()
 			if err != nil {
 				return err
 			}
 			// Redirect non-intercepted traffic to the pod, so that injected sidecars that hijack the ports for
 			// incoming connections will continue to work.
-			targetHost := config.PodIP()
-
-			// Using the podIP is problematic with our current init-container, because it will hijack the
-			// port for incoming traffic and hence cause an infinite loop.
-			// TODO: Fix the init-container so that it doesn't hijack traffic that originates from the pod, and remove this.
-			for _, ic := range ics {
-				if ic.TargetPortNumeric {
-					targetHost = "127.0.0.1"
-				}
-			}
+			targetHost := s.PodIP()
 
 			fwd := forwarder.NewInterceptor(lisAddr, targetHost, cp)
 			dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s", iputil.JoinHostPort(cn.Name, cp)), func(ctx context.Context) error {

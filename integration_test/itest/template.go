@@ -17,6 +17,8 @@ type Generic struct {
 	Name           string
 	Annotations    map[string]string
 	Environment    []core.EnvVar
+	TargetPort     string
+	ContainerPort  int
 	Image          string
 	Registry       string
 	ServiceAccount string
