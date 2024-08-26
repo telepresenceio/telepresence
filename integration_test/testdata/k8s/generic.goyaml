@@ -11,7 +11,7 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: http
+      targetPort: {{ .TargetPort | default "http" }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -38,7 +38,7 @@ spec:
           image: "{{ .Registry }}/{{ .Image }}"
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: {{ .ContainerPort | default 8080 }}
 {{- with .Environment }}
           env:
   {{- toYaml . | nindent 12 }}

@@ -441,11 +441,17 @@ save-image: save-tel2-image
 push-image: push-tel2-image
 
 .PHONY: push-test-images
-push-test-images:
+push-test-images: push-echo-server push-udp-echo
+
+.PHONY: push-echo-server
+push-echo-server:
 	(cd integration_test/testdata/echo-server && \
  		docker buildx build --platform=linux/amd64,linux/arm64 --push \
  		 --tag ghcr.io/telepresenceio/echo-server:latest \
- 		 --tag ghcr.io/telepresenceio/echo-server:0.1.0 .)
+ 		 --tag ghcr.io/telepresenceio/echo-server:0.2.0 .)
+
+.PHONY: push-udp-echo
+push-udp-echo:
 	(cd integration_test/testdata/udp-echo && \
 		docker buildx build --platform=linux/amd64,linux/arm64 --push \
 		 --tag ghcr.io/telepresenceio/udp-echo:latest \

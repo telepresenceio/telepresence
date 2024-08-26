@@ -42,3 +42,16 @@ func PortUniqueIntercepts(cn *Container) []*Intercept {
 	}
 	return ics
 }
+
+// ProxyPort returns a port that can be used as a proxy for container port for the given Intercept.
+// The proxy port will be the intercept's agentPort + the maximum number of possible intercepts for the sidecar.
+func (s *Sidecar) ProxyPort(ic *Intercept) uint16 {
+	return ic.AgentPort + 11 + uint16(s.numberOfPossibleIntercepts())
+}
+
+func (s *Sidecar) numberOfPossibleIntercepts() (count int) {
+	for _, c := range s.Containers {
+		count += len(c.Intercepts)
+	}
+	return
+}

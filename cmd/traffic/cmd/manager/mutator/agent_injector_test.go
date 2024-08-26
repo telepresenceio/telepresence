@@ -1398,6 +1398,7 @@ func TestTrafficAgentInjector(t *testing.T) {
   - args:
     - agent-init
     env:
+    - name: LOG_LEVEL
     - name: POD_IP
       valueFrom:
         fieldRef:
@@ -1505,6 +1506,7 @@ func TestTrafficAgentInjector(t *testing.T) {
     args:
     - agent-init
     env:
+    - name: LOG_LEVEL
     - name: POD_IP
       valueFrom:
         fieldRef:

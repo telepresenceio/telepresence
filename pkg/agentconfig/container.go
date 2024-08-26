@@ -205,6 +205,10 @@ func InitContainer(config *Sidecar) *core.Container {
 		Args:  []string{"agent-init"},
 		Env: []core.EnvVar{
 			{
+				Name:  "LOG_LEVEL",
+				Value: config.LogLevel,
+			},
+			{
 				Name: "POD_IP",
 				ValueFrom: &core.EnvVarSource{
 					FieldRef: &core.ObjectFieldSelector{

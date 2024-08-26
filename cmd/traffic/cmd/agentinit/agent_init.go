@@ -24,8 +24,7 @@ import (
 )
 
 const (
-	nat          = "nat"
-	inboundChain = "TEL_INBOUND"
+	nat = "nat"
 )
 
 type config struct {
@@ -46,7 +45,7 @@ func loadConfig(ctx context.Context) (*config, error) {
 	return &c, nil
 }
 
-func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTables, loopback, localHostCIDR string) error {
+func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTables, loopback, localHostCIDR, podIP string) error {
 	// These iptables rules implement routing such that a packet directed to the appPort will hit the agentPort instead.
 	// If there's no mesh this is simply request -> agent -> app (or intercept)
 	// However, if there's a service mesh we want to make sure we don't bypass the mesh, so the traffic
@@ -72,24 +71,55 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 			continue
 		}
 
-		// Clearing the inbound chain will create it if it doesn't exist, or clear it out if it does.
-		chain := inboundChain + "_" + string(proto)
-		err := iptables.ClearChain(nat, chain)
+		// Clearing the chains will create them if they don't exist, or clear them out if they do.
+		preRoutingChain := "TEL_PREROUTING_" + string(proto)
+		err := iptables.ClearChain(nat, preRoutingChain)
 		if err != nil {
-			return fmt.Errorf("failed to clear chain %s: %w", chain, err)
+			return fmt.Errorf("failed to clear chain %s: %w", preRoutingChain, err)
+		}
+		outputChain := "TEL_OUTPUT_" + string(proto)
+		err = iptables.ClearChain(nat, outputChain)
+		if err != nil {
+			return fmt.Errorf("failed to clear chain %s: %w", outputChain, err)
 		}
 
 		// Use our inbound chain to direct traffic coming into the app port to the agent port.
-		for _, cn := range c.AgentConfig().Containers {
+		lcProto := strings.ToLower(string(proto))
+		ac := c.AgentConfig()
+		for _, cn := range ac.Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				if proto == ic.Protocol {
-					err = iptables.AppendUnique(nat, chain,
-						"-p", strings.ToLower(string(proto)), "--dport", strconv.Itoa(int(ic.ContainerPort)),
+					// Add REDIRECT to both PREROUTING and OUTPUT, because we want connections that
+					// originate from the agent to be subjected to this rule.
+					dlog.Debugf(ctx, "preroute redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
+					err = iptables.AppendUnique(nat, preRoutingChain,
+						"-p", lcProto, "--dport", strconv.Itoa(int(ic.ContainerPort)),
 						"-j", "REDIRECT", "--to-ports", strconv.Itoa(int(ic.AgentPort)))
 					if err != nil {
-						return fmt.Errorf("failed to append rule to %s: %w", chain, err)
+						return fmt.Errorf("failed to append rule to %s: %w", preRoutingChain, err)
 					}
-					hasRule = true
+					dlog.Debugf(ctx, "output redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
+					err = iptables.AppendUnique(nat, outputChain,
+						"-p", lcProto, "--dport", strconv.Itoa(int(ic.ContainerPort)),
+						"-j", "REDIRECT", "--to-ports", strconv.Itoa(int(ic.AgentPort)))
+					if err != nil {
+						return fmt.Errorf("failed to append rule to %s: %w", outputChain, err)
+					}
+					if ic.TargetPortNumeric {
+						// The agent forwarder will not write directly to the container port when it is inactive.
+						// Instead, it writes to a proxy port and relies on it being redirected to the
+						// container port here.
+						// Why? Because if it wrote directly to the container port, we wouldn't be able to
+						// prevent an endless loop that would otherwise occur here when the previous rule would
+						// loop it back into the agent.
+						dlog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, ac.ProxyPort(ic), podIP, ic.ContainerPort)
+						err = iptables.AppendUnique(nat, outputChain,
+							"-p", lcProto, "-d", podIP, "--dport", strconv.Itoa(int(ac.ProxyPort(ic))),
+							"-j", "DNAT", "--to-destination", net.JoinHostPort(podIP, strconv.Itoa(int(ic.ContainerPort))))
+						if err != nil {
+							return fmt.Errorf("failed to append rule to %s: %w", outputChain, err)
+						}
+					}
 				}
 			}
 		}
@@ -99,10 +129,10 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 		// if one exists. If a service mesh exists, its PREROUTING rules will kick in before ours, ensuring traffic
 		// coming into the pod does not bypass the mesh.
 		err = iptables.AppendUnique(nat, "PREROUTING",
-			"-p", strings.ToLower(string(proto)),
-			"-j", chain)
+			"-p", lcProto,
+			"-j", preRoutingChain)
 		if err != nil {
-			return fmt.Errorf("failed to append prerouting rule to direct to %s: %w", chain, err)
+			return fmt.Errorf("failed to append prerouting rule to direct to %s: %w", preRoutingChain, err)
 		}
 
 		// Any traffic heading out of the loopback and into the app port (other than traffic from the agent) needs to
@@ -110,10 +140,11 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 		// request the application, it will get a response via the traffic agent.
 		err = iptables.Insert(nat, "OUTPUT", 1,
 			"-o", loopback,
+			"-p", lcProto,
 			"-m", "owner", "!", "--uid-owner", agentUID,
-			"-j", chain)
+			"-j", outputChain)
 		if err != nil {
-			return fmt.Errorf("failed to insert ! --gid-owner rule in OUTPUT: %w", err)
+			return fmt.Errorf("failed to insert ! --uid-owner rule in OUTPUT: %w", err)
 		}
 		outputInsertCount++
 
@@ -123,12 +154,12 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 		// This is needed to support requesting an intercepted pod by IP (or to intercept a headless service).
 		err = iptables.Insert(nat, "OUTPUT", 1,
 			"-o", loopback,
-			"-p", strings.ToLower(string(proto)),
+			"-p", lcProto,
 			"!", "-d", localHostCIDR,
 			"-m", "owner", "--uid-owner", agentUID,
-			"-j", chain)
+			"-j", outputChain)
 		if err != nil {
-			return fmt.Errorf("failed to insert --gid-owner rule in OUTPUT: %w", err)
+			return fmt.Errorf("failed to insert --uid-owner rule in OUTPUT: %w", err)
 		}
 		outputInsertCount++
 	}
@@ -140,7 +171,7 @@ func (c *config) configureIptables(_ context.Context, iptables *iptables.IPTable
 		"-m", "owner", "--uid-owner", agentUID,
 		"-j", "RETURN")
 	if err != nil {
-		return fmt.Errorf("failed to insert --gid-owner rule in OUTPUT: %w", err)
+		return fmt.Errorf("failed to insert --uid-owner rule in OUTPUT: %w", err)
 	}
 	return nil
 }
@@ -183,7 +214,8 @@ func Main(ctx context.Context, args ...string) error {
 	}
 	proto := iptables.ProtocolIPv4
 	localhostCIDR := "127.0.0.1/32"
-	if len(iputil.Parse(os.Getenv("POD_IP"))) == 16 {
+	podIP := os.Getenv("POD_IP")
+	if len(iputil.Parse(podIP)) == 16 {
 		proto = iptables.ProtocolIPv6
 		localhostCIDR = "::1/128"
 	}
@@ -193,7 +225,7 @@ func Main(ctx context.Context, args ...string) error {
 		dlog.Error(ctx, err)
 		return err
 	}
-	if err = cfg.configureIptables(ctx, it, lo, localhostCIDR); err != nil {
+	if err = cfg.configureIptables(ctx, it, lo, localhostCIDR, podIP); err != nil {
 		dlog.Error(ctx, err)
 	}
 	return err
