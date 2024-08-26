@@ -621,6 +621,11 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]string
 	if !release {
 		settings = append(settings, fmt.Sprintf("image.registry=%s", s.self.Registry()))
 	}
+	if reg == "local" {
+		settings = append(settings, "agent.image.pullPolicy=Never")
+	} else if !s.isCI {
+		settings = append(settings, "agent.image.pullPolicy=Always")
+	}
 
 	for k, v := range values {
 		settings = append(settings, k+"="+v)
@@ -750,6 +755,13 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 			pp = "Never"
 		}
 		vx.Image.PullPolicy = pp
+		if vx.Agent == nil {
+			vx.Agent = &xAgent{}
+		}
+		if vx.Agent.Image == nil {
+			vx.Agent.Image = &Image{}
+		}
+		vx.Agent.Image.PullPolicy = pp
 	}
 
 	ss, err := sigsYaml.Marshal(&vx)
