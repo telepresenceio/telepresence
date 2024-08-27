@@ -3,7 +3,7 @@ name: telepresence-oss
 description: A chart for deploying the server-side components of Telepresence
 type: application
 version: "1.1.1-bogus.overwritten.by.charts.go"
-icon: https://www.getambassador.io/images/logo.png
+icon: https://raw.githubusercontent.com/telepresenceio/telepresence.io/master/src/assets/images/telepresence-edgy.svg
 
 # Note: This is the version of the Traffic Manager that will be installed by
 # this chart. The telepresence CLI will always attempt to update the Traffic
