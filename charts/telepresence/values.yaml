@@ -98,9 +98,6 @@ grpc:
 # podCIDRs is the verbatim list of CIDRs used when the podCIDRStrategy is set to environment
 podCIDRs: []
 
-# Enable/disable metriton reporting to ambassador
-metritonEnabled: true
-
 # podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
 # CIDRs the cluster is using for its pods. Valid values are:
 #

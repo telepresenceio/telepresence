@@ -197,7 +197,11 @@ func NewSession(
 	scout.SetMetadatum(ctx, "cluster_id", cluster.GetClusterId(ctx))
 
 	dlog.Info(ctx, "Connecting to traffic manager...")
-	tmgr, err := connectMgr(ctx, cluster, scout.InstallID(ctx), cr)
+	installID, err := client.InstallID(ctx)
+	if err != nil {
+		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
+	}
+	tmgr, err := connectMgr(ctx, cluster, installID, cr)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
