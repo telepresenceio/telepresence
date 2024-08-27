@@ -64,6 +64,14 @@ items:
           The behavior is controlled by `workloads.argoRollouts.enabled` Helm chart value.
           It is recommended to set the following annotation <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code>
           to avoid creation of unwanted revisions.
+      - type: bugfix
+        title: Enable intercepts of containers that bind to podIP
+        body: >-
+          In previous versions, the traffic-agent would route traffic to localhost during periods when an intercept wasn't
+          active. This made it impossible for an application to bind to the pod's IP, and it also meant that service meshes binding
+          to the podIP would get bypassed, both during and after an intercept had been made.
+          This is now changed, so that the traffic-agent instead forwards non intercepted requests to the pod's IP, thereby
+          enabling the application to either bind to localhost or to that IP.
       - type: change
         title: Use ghcr.io/telepresenceio instead of docker.io/datawire for OSS images and the telemount Docker volume plugin.
         body: >-
