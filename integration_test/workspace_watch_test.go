@@ -90,10 +90,14 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 		spec.ServicePort = pi.ServicePort
 		spec.ServicePortName = pi.ServicePortName
 		spec.ServiceUid = pi.ServiceUid
-		if pi.ServicePortName != "" {
-			spec.ServicePortIdentifier = pi.ServicePortName
+		if pi.ServiceUid != "" {
+			if pi.ServicePortName != "" {
+				spec.PortIdentifier = pi.ServicePortName
+			} else {
+				spec.PortIdentifier = strconv.Itoa(int(pi.ServicePort))
+			}
 		} else {
-			spec.ServicePortIdentifier = strconv.Itoa(int(pi.ServicePort))
+			spec.PortIdentifier = strconv.Itoa(int(pi.ContainerPort))
 		}
 		_, err = client.CreateIntercept(ctx, ir)
 		if !s.NoError(err) {

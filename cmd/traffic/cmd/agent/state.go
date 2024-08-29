@@ -104,8 +104,8 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 		for _, ii := range iis {
 			ic := ist.Target()
 			if ic.MatchForSpec(ii.Spec) {
-				dlog.Debugf(ctx, "intercept id %s svc=%q, svcPortId=%q matches target protocol=%s, agentPort=%d, containerPort=%d",
-					ii.Id, ii.Spec.ServiceName, ii.Spec.ServicePortIdentifier, ic.Protocol(), ic.AgentPort(), ic.ContainerPort())
+				dlog.Debugf(ctx, "intercept id %s svc=%q, portId=%q matches target protocol=%s, agentPort=%d, containerPort=%d",
+					ii.Id, ii.Spec.ServiceName, ii.Spec.PortIdentifier, ic.Protocol(), ic.AgentPort(), ic.ContainerPort())
 				ms = append(ms, ii)
 			}
 		}

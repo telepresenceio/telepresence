@@ -14,9 +14,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
-// InterceptTarget describes the mapping between service ports and one container port. All entries
-// must be guaranteed to all have the same Protocol, ContainerPort, and AgentPort. The slice must
-// be considered immutable once created using NewInterceptTarget.
+// InterceptTarget describes the mapping between service ports and one container port, or if no service
+// is used, just the container port.
+// All entries must be guaranteed to all have the same Protocol, ContainerPort, and AgentPort.
+// The slice must be considered immutable once created using NewInterceptTarget.
 type InterceptTarget []*agentconfig.Intercept
 
 func NewInterceptTarget(ics []*agentconfig.Intercept) InterceptTarget {
@@ -26,10 +27,10 @@ func NewInterceptTarget(ics []*agentconfig.Intercept) InterceptTarget {
 		panic("attempt to add intercept create an InterceptTarget with no Intercepts")
 	}
 	if ni > 1 {
-		sv := ics[0]
+		icZero := ics[0]
 		for i := 1; i < ni; i++ {
 			ic := ics[i]
-			if sv.AgentPort != ic.AgentPort || sv.ContainerPort != ic.ContainerPort || sv.Protocol != ic.Protocol {
+			if icZero.AgentPort != ic.AgentPort || icZero.ContainerPort != ic.ContainerPort || icZero.Protocol != ic.Protocol {
 				panic("attempt to add intercept to an InterceptTarget with different AgentPort or ContainerPort")
 			}
 		}
@@ -38,8 +39,8 @@ func NewInterceptTarget(ics []*agentconfig.Intercept) InterceptTarget {
 }
 
 func (cp InterceptTarget) MatchForSpec(spec *manager.InterceptSpec) bool {
-	for _, sv := range cp {
-		if agentconfig.SpecMatchesIntercept(spec, sv) {
+	for _, ic := range cp {
+		if agentconfig.SpecMatchesIntercept(spec, ic) {
 			return true
 		}
 	}
@@ -62,26 +63,35 @@ func (cp InterceptTarget) Protocol() v1.Protocol {
 	return cp[0].Protocol
 }
 
+func portString(ic *agentconfig.Intercept) (s string) {
+	if ic.ServiceUID != "" {
+		p := ic.ServicePortName
+		if p == "" {
+			p = strconv.Itoa(int(ic.ServicePort))
+		}
+		return fmt.Sprintf("service port %s:%s", ic.ServiceName, p)
+	}
+	p := ic.ContainerPortName
+	if p == "" {
+		p = strconv.Itoa(int(ic.ContainerPort))
+	}
+	return fmt.Sprintf("container port %s", p)
+}
+
 func (cp InterceptTarget) AppProtocol(ctx context.Context) (proto string) {
-	var foundSv *agentconfig.Intercept
-	for _, sv := range cp {
-		if sv.AppProtocol == "" {
+	var foundIc *agentconfig.Intercept
+	for _, ic := range cp {
+		if ic.AppProtocol == "" {
 			continue
 		}
-		if foundSv == nil {
-			foundSv = sv
-			proto = foundSv.AppProtocol
-		} else if foundSv.AppProtocol != sv.AppProtocol {
-			svcPort := func(s *agentconfig.Intercept) string {
-				if s.ServicePortName != "" {
-					return fmt.Sprintf("%s:%s", s.ServiceName, s.ServicePortName)
-				}
-				return fmt.Sprintf("%s:%d", s.ServiceName, s.ServicePort)
-			}
-			dlog.Warningf(ctx, "port %s appProtocol %s differs from port %s appProtocol %s. %s will be used for container port %d",
-				svcPort(foundSv), proto,
-				svcPort(sv), sv.AppProtocol,
-				proto, sv.ContainerPort)
+		if foundIc == nil {
+			foundIc = ic
+			proto = foundIc.AppProtocol
+		} else if foundIc.AppProtocol != ic.AppProtocol {
+			dlog.Warningf(ctx, "%s appProtocol %s differs from %s appProtocol %s. %s will be used for %s",
+				portString(foundIc), proto,
+				portString(ic), ic.AppProtocol,
+				proto, portString(ic))
 		}
 	}
 	return proto
@@ -111,7 +121,7 @@ func (cp InterceptTarget) String() string {
 	if l > 1 {
 		sb.WriteByte('[')
 	}
-	for i, sv := range cp {
+	for i, ic := range cp {
 		if i > 0 {
 			switch l {
 			case 2:
@@ -122,17 +132,13 @@ func (cp InterceptTarget) String() string {
 				sb.WriteString(", ")
 			}
 		}
-		sb.WriteString(sv.ServiceName)
-		sb.WriteByte(':')
-		if sv.ServicePortName != "" {
-			sb.WriteString(sv.ServicePortName)
-		} else {
-			sb.WriteString(strconv.Itoa(int(sv.ServicePort)))
-		}
+		sb.WriteString(portString(ic))
 	}
 	if l > 1 {
 		sb.WriteByte(']')
 	}
-	ioutil.Printf(&sb, " => container port %d/%s", cp.ContainerPort(), cp.Protocol())
+	if l > 1 || cp[0].ServiceName != "" {
+		ioutil.Printf(&sb, " => container port %d/%s", cp.ContainerPort(), cp.Protocol())
+	}
 	return sb.String()
 }

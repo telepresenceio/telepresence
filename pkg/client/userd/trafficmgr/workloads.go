@@ -2,21 +2,16 @@ package trafficmgr
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"sort"
 	"sync"
 	"time"
 
-	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/cache"
 
-	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -189,17 +184,17 @@ func newWASWatcher(knownWorkloadKinds *manager.KnownWorkloadKinds) *workloadsAnd
 	return w
 }
 
-// eachService iterates over the services in the current snapshot. Unless namespace
-// is the empty string, the iteration is limited to the services matching that namespace.
-// The traffic-manager service is excluded.
-func (w *workloadsAndServicesWatcher) eachService(c context.Context, tmns string, namespaces []string, f func(*core.Service)) {
+// eachWorkload will iterate over the workloads in the current snapshot. Unless namespace
+// is the empty string, the iteration is limited to the workloads matching that namespace.
+// The traffic-manager workload is excluded.
+func (w *workloadsAndServicesWatcher) eachWorkload(c context.Context, tmns string, namespaces []string, f func(workload k8sapi.Workload)) {
 	if len(namespaces) != 1 {
 		// Produce workloads in a predictable order
 		nss := make([]string, len(namespaces))
 		copy(nss, namespaces)
 		sort.Strings(nss)
 		for _, n := range nss {
-			w.eachService(c, tmns, []string{n}, f)
+			w.eachWorkload(c, tmns, []string{n}, f)
 		}
 	} else {
 		ns := namespaces[0]
@@ -207,15 +202,35 @@ func (w *workloadsAndServicesWatcher) eachService(c context.Context, tmns string
 		nw, ok := w.nsWatchers[ns]
 		w.Unlock()
 		if ok {
-			svcs, err := nw.svcWatcher.List(c)
-			if err != nil {
-				dlog.Errorf(c, "error listing services: %s", err)
-				return
-			}
-			for _, svc := range svcs {
-				// If this is our traffic-manager namespace, then exclude the traffic-manager service.
-				if !(ns == tmns && svc.Labels["app"] == "traffic-manager" && svc.Labels["telepresence"] == "manager") {
-					f(svc)
+			for _, wlw := range nw.wlWatchers {
+				if wlw == nil {
+					continue
+				}
+				wls, err := wlw.List(c)
+				if err != nil {
+					dlog.Errorf(c, "error listing workloads: %v", err)
+					return
+				}
+
+			nextWorkload:
+				for _, ro := range wls {
+					wl, err := k8sapi.WrapWorkload(ro)
+					if err != nil {
+						dlog.Errorf(c, "error wrapping runtime object as a workload: %v", err)
+						return
+					}
+
+					// Only include top level workloads
+					for _, or := range wl.GetOwnerReferences() {
+						if or.Controller != nil && *or.Controller {
+							continue nextWorkload
+						}
+					}
+					// If this is our traffic-manager namespace, then exclude the traffic-manager service.
+					lbs := wl.GetLabels()
+					if !(ns == tmns && lbs["app"] == "traffic-manager" && lbs["telepresence"] == "manager") {
+						f(wl)
+					}
 				}
 			}
 		}
@@ -301,140 +316,4 @@ func (w *workloadsAndServicesWatcher) ensureStarted(c context.Context, ns string
 	if err != nil {
 		dlog.Errorf(c, "error starting service watchers: %s", err)
 	}
-}
-
-func (w *workloadsAndServicesWatcher) findMatchingWorkloads(c context.Context, svc *core.Service) ([]k8sapi.Workload, error) {
-	w.Lock()
-	nw := w.nsWatchers[svc.Namespace]
-	w.Unlock()
-	if nw == nil {
-		// Extremely odd, given that the service originated from a namespace watcher
-		return nil, fmt.Errorf("no watcher found for namespace %q", svc.Namespace)
-	}
-	return nw.findMatchingWorkloads(c, svc)
-}
-
-func (nw *namespacedWASWatcher) findMatchingWorkloads(c context.Context, svc *core.Service) ([]k8sapi.Workload, error) {
-	ps := svc.Spec.Ports
-	targetPortNames := make([]string, 0, len(ps))
-	for i := range ps {
-		tp := ps[i].TargetPort
-		if tp.Type == intstr.String {
-			targetPortNames = append(targetPortNames, tp.StrVal)
-		} else {
-			if tp.IntVal == 0 {
-				// targetPort is not specified, so it defaults to the port name
-				targetPortNames = append(targetPortNames, ps[i].Name)
-			} else {
-				// Unless all target ports are named, we cannot really use this as a filter.
-				// A numeric target port will map to any container, and containers don't
-				// have to expose numbered ports in order to use them.
-				targetPortNames = nil
-				break
-			}
-		}
-	}
-
-	var selector labels.Selector
-	if sm := svc.Spec.Selector; len(sm) > 0 {
-		selector = labels.SelectorFromSet(sm)
-	} else {
-		// There will be no matching workloads for this service
-		return nil, nil
-	}
-
-	var allWls []k8sapi.Workload
-	for i, wlw := range nw.wlWatchers {
-		if wlw == nil {
-			continue
-		}
-		wls, err := wlw.List(c)
-		if err != nil {
-			return nil, err
-		}
-		for _, o := range wls {
-			var wl k8sapi.Workload
-			switch i {
-			case deployments:
-				wl = k8sapi.Deployment(o.(*apps.Deployment))
-			case replicasets:
-				wl = k8sapi.ReplicaSet(o.(*apps.ReplicaSet))
-			case statefulsets:
-				wl = k8sapi.StatefulSet(o.(*apps.StatefulSet))
-			case rollouts:
-				wl = k8sapi.Rollout(o.(*argorollouts.Rollout))
-			}
-			if wl != nil && selector.Matches(labels.Set(wl.GetPodTemplate().Labels)) {
-				owl, err := nw.maybeReplaceWithOwner(c, wl)
-				if err != nil {
-					return nil, err
-				}
-				allWls = append(allWls, owl)
-			}
-		}
-	}
-
-	// Prefer entries with matching ports. I.e. strip all non-matching if matching entries
-	// are found.
-	if pfWls := filterByNamedTargetPort(c, targetPortNames, allWls); len(pfWls) > 0 {
-		allWls = pfWls
-	}
-	return allWls, nil
-}
-
-func (nw *namespacedWASWatcher) maybeReplaceWithOwner(c context.Context, wl k8sapi.Workload) (k8sapi.Workload, error) {
-	var err error
-	for _, or := range wl.GetOwnerReferences() {
-		if or.Controller != nil && *or.Controller && or.Kind == "Deployment" {
-			// Chances are that the owner's labels doesn't match, but we really want the owner anyway.
-			wl, err = nw.replaceWithOwner(c, wl, or.Kind, or.Name)
-			break
-		}
-	}
-	return wl, err
-}
-
-func (nw *namespacedWASWatcher) replaceWithOwner(c context.Context, wl k8sapi.Workload, kind, name string) (k8sapi.Workload, error) {
-	od, found, err := nw.wlWatchers[deployments].Get(c, &apps.Deployment{
-		ObjectMeta: meta.ObjectMeta{
-			Name:      name,
-			Namespace: wl.GetNamespace(),
-		},
-	})
-	switch {
-	case err != nil:
-		return nil, fmt.Errorf("get %s owner %s for %s %s.%s: %v",
-			kind, name, wl.GetKind(), wl.GetName(), wl.GetNamespace(), err)
-	case found:
-		dlog.Debugf(c, "replacing %s %s.%s, with owner %s %s", wl.GetKind(), wl.GetName(), wl.GetNamespace(), kind, name)
-		return k8sapi.Deployment(od.(*apps.Deployment)), nil
-	default:
-		return nil, fmt.Errorf("get %s owner %s for %s %s.%s: not found", kind, name, wl.GetKind(), wl.GetName(), wl.GetNamespace())
-	}
-}
-
-func filterByNamedTargetPort(c context.Context, targetPortNames []string, wls []k8sapi.Workload) []k8sapi.Workload {
-	if len(targetPortNames) == 0 {
-		// service ports are not all named
-		return wls
-	}
-	var filtered []k8sapi.Workload
-nextWL:
-	for _, wl := range wls {
-		cs := wl.GetPodTemplate().Spec.Containers
-		for ci := range cs {
-			ps := cs[ci].Ports
-			for pi := range ps {
-				name := ps[pi].Name
-				for _, tpn := range targetPortNames {
-					if name == tpn {
-						filtered = append(filtered, wl)
-						continue nextWL
-					}
-				}
-			}
-		}
-		dlog.Debugf(c, "skipping %s %s.%s, it has no matching ports", wl.GetKind(), wl.GetName(), wl.GetNamespace())
-	}
-	return filtered
 }

@@ -2,6 +2,7 @@ package agentconfig
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -47,6 +48,22 @@ func NewPortIdentifier(protocol string, portString string) (PortIdentifier, erro
 // HasProto returns the protocol, and the name or number.
 func (spi PortIdentifier) HasProto() bool {
 	return strings.IndexByte(string(spi), ProtoSeparator) > 0
+}
+
+// Validate checks that the PortIdentifier has a valid protocol, and a valid name or number.
+func (spi PortIdentifier) Validate() error {
+	s := string(spi)
+	p := core.ProtocolTCP
+	if ix := strings.IndexByte(s, ProtoSeparator); ix > 0 {
+		p = core.Protocol(s[ix+1:])
+		s = s[0:ix]
+	}
+	switch p {
+	case core.ProtocolTCP, core.ProtocolUDP:
+		return ValidatePort(s)
+	default:
+		return fmt.Errorf("invalid protocol %q", p)
+	}
 }
 
 // ProtoAndNameOrNumber returns the protocol, and the name or number.

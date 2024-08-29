@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type Ingress struct {
@@ -36,15 +37,19 @@ type Info struct {
 	WorkloadKind  string            `json:"workload_kind,omitempty"   yaml:"workload_kind,omitempty"`
 	TargetHost    string            `json:"target_host,omitempty"     yaml:"target_host,omitempty"`
 	TargetPort    int32             `json:"target_port,omitempty"     yaml:"target_port,omitempty"`
-	ServicePortID string            `json:"service_port_id,omitempty" yaml:"service_port_id,omitempty"`
+	ServiceUID    string            `json:"service_uid,omitempty"     yaml:"service_uid,omitempty"`
+	ServicePortID string            `json:"service_port_id,omitempty" yaml:"service_port_id,omitempty"` // ServicePortID is deprecated. Use PortID
+	PortID        string            `json:"port_id,omitempty"         yaml:"port_id,omitempty"`
+	ContainerPort int32             `json:"container_port,omitempty"  yaml:"container_port,omitempty"`
 	Environment   map[string]string `json:"environment,omitempty"     yaml:"environment,omitempty"`
 	Mount         *Mount            `json:"mount,omitempty"           yaml:"mount,omitempty"`
 	FilterDesc    string            `json:"filter_desc,omitempty"     yaml:"filter_desc,omitempty"`
-	Metadata      map[string]string `json:"metadata,omitempty"     yaml:"metadata,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"        yaml:"metadata,omitempty"`
 	HttpFilter    []string          `json:"http_filter,omitempty"     yaml:"http_filter,omitempty"`
 	Global        bool              `json:"global,omitempty"          yaml:"global,omitempty"`
 	PreviewURL    string            `json:"preview_url,omitempty"     yaml:"preview_url,omitempty"`
 	Ingress       *Ingress          `json:"ingress,omitempty"         yaml:"ingress,omitempty"`
+	PodIP         string            `json:"pod_ip,omitempty"          yaml:"pod_ip,omitempty"`
 	debug         bool
 }
 
@@ -100,7 +105,7 @@ func NewMount(ctx context.Context, ii *manager.InterceptInfo, mountError string)
 
 func NewInfo(ctx context.Context, ii *manager.InterceptInfo, mountError string) *Info {
 	spec := ii.Spec
-	return &Info{
+	info := &Info{
 		ID:            ii.Id,
 		Name:          spec.Name,
 		Disposition:   ii.Disposition.String(),
@@ -109,7 +114,10 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, mountError string) 
 		TargetHost:    spec.TargetHost,
 		TargetPort:    spec.TargetPort,
 		Mount:         NewMount(ctx, ii, mountError),
-		ServicePortID: spec.ServicePortIdentifier,
+		ServiceUID:    spec.ServiceUid,
+		PortID:        spec.PortIdentifier,
+		ContainerPort: spec.ContainerPort,
+		PodIP:         ii.PodIp,
 		Environment:   ii.Environment,
 		FilterDesc:    ii.MechanismArgsDesc,
 		Metadata:      ii.Metadata,
@@ -118,6 +126,11 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, mountError string) 
 		PreviewURL:    PreviewURL(ii.PreviewDomain),
 		Ingress:       NewIngress(ii.PreviewSpec),
 	}
+	if spec.ServiceUid != "" {
+		// For backward compatibility in JSON output
+		info.ServicePortID = info.PortID
+	}
+	return info
 }
 
 func (ii *Info) WriteTo(w io.Writer) (int64, error) {
@@ -146,8 +159,12 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 		net.JoinHostPort(ii.TargetHost, fmt.Sprintf("%d", ii.TargetPort)),
 	)
 
-	if ii.ServicePortID != "" {
-		kvf.Add("Service Port Identifier", ii.ServicePortID)
+	if ii.PortID != "" {
+		if ii.ServiceUID == "" {
+			kvf.Add("Container Port Identifier", ii.PortID)
+		} else {
+			kvf.Add("Service Port Identifier", ii.PortID)
+		}
 	}
 	if ii.debug {
 		m := "http"
@@ -176,6 +193,9 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 		}
 		return fmt.Sprintf("using mechanism=%q with args=%q", "http", ii.HttpFilter)
 	}())
+	if ii.ServiceUID == "" {
+		kvf.Add("Address", iputil.JoinHostPort(ii.PodIP, uint16(ii.ContainerPort)))
+	}
 
 	if ii.PreviewURL != "" {
 		previewURL := ii.PreviewURL

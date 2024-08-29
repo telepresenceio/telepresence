@@ -568,16 +568,20 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	// iInfo.preparedIntercept == nil means that we're using an older traffic-manager, incapable
 	// of using PrepareIntercept.
 	pi := iInfo.PreparedIntercept()
-	// Make spec port identifier unambiguous.
-	spec.ServiceName = pi.ServiceName
-	spec.ServicePortName = pi.ServicePortName
-	spec.ServicePort = pi.ServicePort
-	spec.Protocol = pi.Protocol
-	pti, err := iInfo.PortIdentifier()
-	if err != nil {
-		return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err)
+
+	if pi.ServicePort > 0 || pi.ServicePortName != "" {
+		// Make spec port identifier unambiguous.
+		spec.ServiceName = pi.ServiceName
+		spec.ServicePortName = pi.ServicePortName
+		spec.ServicePort = pi.ServicePort
+		pti, err := iInfo.PortIdentifier()
+		if err != nil {
+			return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err)
+		}
+		spec.PortIdentifier = pti.String()
 	}
-	spec.ServicePortIdentifier = pti.String()
+	spec.Protocol = pi.Protocol
+	spec.ContainerPort = pi.ContainerPort
 	result = iInfo.InterceptResult()
 
 	spec.ServiceUid = result.ServiceUid

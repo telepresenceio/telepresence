@@ -7,9 +7,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
-func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
+func (s *connectedSuite) successfulIntercept(tp, wl, port string) {
 	ctx := s.Context()
-	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
+	s.ApplyApp(ctx, wl, strings.ToLower(tp)+"/"+wl)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
 
 	require := s.Require()
@@ -17,34 +17,34 @@ func (s *connectedSuite) successfulIntercept(tp, svc, port string) {
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list")
-			return err == nil && strings.Contains(stdout, svc)
+			return err == nil && strings.Contains(stdout, wl)
 		},
 		6*time.Second, // waitFor
 		2*time.Second, // polling interval
 	)
 
-	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--port", port, svc)
-	require.Contains(stdout, "Using "+tp+" "+svc)
+	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--port", port, wl)
+	require.Contains(stdout, "Using "+tp+" "+wl)
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
-	require.Contains(stdout, svc+": intercepted")
+	require.Contains(stdout, wl+": intercepted")
 	require.NotContains(stdout, "Volume Mount Point")
-	s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
-	itest.TelepresenceOk(ctx, "leave", svc)
+	s.CapturePodLogs(ctx, wl, "traffic-agent", s.AppNamespace())
+	itest.TelepresenceOk(ctx, "leave", wl)
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
-	require.NotContains(stdout, svc+": intercepted")
+	require.NotContains(stdout, wl+": intercepted")
 
 	itest.TelepresenceDisconnectOk(ctx)
 
 	dfltCtx := itest.WithUser(ctx, "default")
 	itest.TelepresenceOk(dfltCtx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
-	itest.TelepresenceOk(dfltCtx, "uninstall", "--agent", svc)
+	itest.TelepresenceOk(dfltCtx, "uninstall", "--agent", wl)
 	itest.TelepresenceDisconnectOk(dfltCtx)
 	s.TelepresenceConnect(ctx)
 
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
-			return err == nil && !strings.Contains(stdout, svc)
+			return err == nil && !strings.Contains(stdout, wl)
 		},
 		180*time.Second, // waitFor
 		6*time.Second,   // polling interval
@@ -65,4 +65,8 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsStatefulSet() {
 
 func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithNoVolumes() {
 	s.successfulIntercept("Deployment", "echo-no-vols", "9093")
+}
+
+func (s *connectedSuite) Test_SuccessfullyInterceptsDeploymentWithoutService() {
+	s.successfulIntercept("Deployment", "echo-no-svc", "9094")
 }

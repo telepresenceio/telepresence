@@ -82,7 +82,8 @@ func (r ReplacePolicy) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&i)
 }
 
-// Intercept describes the mapping between a service port and an intercepted container port.
+// Intercept describes the mapping between a service port and an intercepted container port or, when
+// service is used, just the container port.
 type Intercept struct {
 	// The name of the intercepted container port
 	ContainerPortName string `json:"containerPortName,omitempty"`
