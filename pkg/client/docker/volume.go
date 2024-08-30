@@ -24,7 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-// EnsureVolumePlugin checks if the datawire/telemount plugin is installed and installs it if that is
+// EnsureVolumePlugin checks if the telemount plugin is installed and installs it if that is
 // not the case. The plugin is also enabled.
 func EnsureVolumePlugin(ctx context.Context) (string, error) {
 	cli, err := GetClient(ctx)
@@ -110,6 +110,14 @@ type repsResponse struct {
 func getLatestPluginVersion(ctx context.Context, pluginName string) (ver semver.Version, err error) {
 	dlog.Debugf(ctx, "Checking for latest version of %s", pluginName)
 	cfg := client.GetConfig(ctx).Intercept().Telemount
+	if cfg.RegistryAPI == "ghcr.io/v2" {
+		// This registryAPI have on support for anonymous queries, so we hardcode a default for the 0.1.5 version here for now.
+		tag := cfg.Tag
+		if tag == "" {
+			tag = "0.1.5"
+		}
+		return semver.Parse(tag)
+	}
 	url := fmt.Sprintf("https://%s/namespaces/%s/repositories/%s/tags", cfg.RegistryAPI, cfg.Namespace, cfg.Repository)
 	var rq *http.Request
 	rq, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

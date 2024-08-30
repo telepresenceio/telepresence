@@ -61,9 +61,9 @@ items:
           It is recommended to set the following annotation <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code>
           to avoid creation of unwanted revisions.
       - type: change
-        title: Use ghcr.io/telepresenceio instead of docker.io/datawire for OSS images.
+        title: Use ghcr.io/telepresenceio instead of docker.io/datawire for OSS images and the telemount Docker volume plugin.
         body: >-
-          All OSS telepresence images are now published at the public registry ghcr.io/telepresenceio
+          All OSS telepresence images and the telemount Docker plugin are now published at the public registry ghcr.io/telepresenceio
           and all references from the client and traffic-manager has been updated to use this registry
           instead of the one at docker.io/datawire.
       - title: Use nftables instead of iptables-legacy
