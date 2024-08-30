@@ -101,7 +101,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 
 	// Parse port into spec based on how it's formatted
 	var err error
-	s.localPort, s.dockerPort, spec.ServicePortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Containerized())
+	s.localPort, s.dockerPort, spec.PortIdentifier, err = parsePort(s.Port, s.DockerRun, ud.Containerized())
 	if err != nil {
 		return nil, err
 	}

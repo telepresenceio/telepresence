@@ -45,6 +45,7 @@ import (
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -627,50 +628,40 @@ func (s *session) getInfosForWorkloads(
 	filter rpc.ListRequest_Filter,
 ) []*rpc.WorkloadInfo {
 	wiMap := make(map[types.UID]*rpc.WorkloadInfo)
-	s.wlWatcher.eachService(ctx, s.GetManagerNamespace(), namespaces, func(svc *core.Service) {
-		wls, err := s.wlWatcher.findMatchingWorkloads(ctx, svc)
-		if err != nil {
-			return
-		}
-		for _, workload := range wls {
-			serviceUID := string(svc.UID)
+	s.wlWatcher.eachWorkload(ctx, s.GetManagerNamespace(), namespaces, func(workload k8sapi.Workload) {
+		name := workload.GetName()
+		dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service", workload.GetKind(), name, workload.GetNamespace())
 
-			if wlInfo, ok := wiMap[workload.GetUID()]; ok {
-				if _, ok := wlInfo.Services[serviceUID]; !ok {
-					wlInfo.Services[serviceUID] = &rpc.WorkloadInfo_ServiceReference{
+		wlInfo := &rpc.WorkloadInfo{
+			Name:                 name,
+			Namespace:            workload.GetNamespace(),
+			WorkloadResourceType: workload.GetKind(),
+			Uid:                  string(workload.GetUID()),
+		}
+
+		svcs, err := agentmap.FindServicesForPod(ctx, workload.GetPodTemplate(), "")
+		if err == nil && len(svcs) > 0 {
+			srm := make(map[string]*rpc.WorkloadInfo_ServiceReference, len(svcs))
+			for _, so := range svcs {
+				if svc, ok := k8sapi.ServiceImpl(so); ok {
+					srm[string(svc.UID)] = &rpc.WorkloadInfo_ServiceReference{
 						Name:      svc.Name,
 						Namespace: svc.Namespace,
 						Ports:     getServicePorts(svc),
 					}
 				}
-				continue
 			}
-
-			name := workload.GetName()
-			dlog.Debugf(ctx, "Getting info for %s %s.%s, matching service %s.%s", workload.GetKind(), name, workload.GetNamespace(), svc.Name, svc.Namespace)
-
-			wlInfo := &rpc.WorkloadInfo{
-				Name:                 name,
-				Namespace:            workload.GetNamespace(),
-				WorkloadResourceType: workload.GetKind(),
-				Uid:                  string(workload.GetUID()),
-				Services: map[string]*rpc.WorkloadInfo_ServiceReference{
-					string(svc.UID): {
-						Name:      svc.Name,
-						Namespace: svc.Namespace,
-						Ports:     getServicePorts(svc),
-					},
-				},
-			}
-			var ok bool
-			if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
-				continue
-			}
-			if wlInfo.Sidecar, ok = sMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
-				continue
-			}
-			wiMap[workload.GetUID()] = wlInfo
+			wlInfo.Services = srm
 		}
+
+		var ok bool
+		if wlInfo.InterceptInfos, ok = iMap[name]; !ok && filter <= rpc.ListRequest_INTERCEPTS {
+			return
+		}
+		if wlInfo.Sidecar, ok = sMap[name]; !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			return
+		}
+		wiMap[workload.GetUID()] = wlInfo
 	})
 	wiz := make([]*rpc.WorkloadInfo, len(wiMap))
 	i := 0

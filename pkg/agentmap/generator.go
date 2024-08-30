@@ -2,22 +2,23 @@ package agentmap
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"go.opentelemetry.io/otel"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/validation"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/tracing"
 )
 
 const (
+	ContainerPortsAnnotation = agentconfig.DomainPrefix + "inject-container-ports"
+	ServicePortsAnnotation   = agentconfig.DomainPrefix + "inject-service-ports"
+	// ServicePortAnnotation is deprecated. Use plural form instead.
 	ServicePortAnnotation = agentconfig.DomainPrefix + "inject-service-port"
 	ServiceNameAnnotation = agentconfig.DomainPrefix + "inject-service-name"
 	ManagerAppName        = "traffic-manager"
@@ -52,6 +53,21 @@ type BasicGeneratorConfig struct {
 	SecurityContext     *core.SecurityContext
 }
 
+func portsFromAnnotation(wl k8sapi.Workload, annotation string) (ports []agentconfig.PortIdentifier, err error) {
+	if cpa := wl.GetPodTemplate().GetAnnotations()[annotation]; cpa != "" {
+		cps := strings.Split(cpa, ",")
+		ports = make([]agentconfig.PortIdentifier, len(cps))
+		for i, cp := range cps {
+			pi := agentconfig.PortIdentifier(cp)
+			if err = pi.Validate(); err != nil {
+				return nil, fmt.Errorf("unable to parse annotation %s of workload %s.%s: %w", annotation, wl.GetName(), wl.GetNamespace(), err)
+			}
+			ports[i] = pi
+		}
+	}
+	return ports, nil
+}
+
 func (cfg *BasicGeneratorConfig) Generate(
 	ctx context.Context,
 	wl k8sapi.Workload,
@@ -78,14 +94,13 @@ func (cfg *BasicGeneratorConfig) Generate(
 		}
 	}
 
-	svcs, err := findServicesForPod(ctx, pod, pod.Annotations[ServiceNameAnnotation])
+	svcs, err := FindServicesForPod(ctx, pod, pod.Annotations[ServiceNameAnnotation])
 	if err != nil {
 		return nil, err
 	}
 
-	var ccs []*agentconfig.Container
 	pns := make(map[int32]uint16)
-	portNumber := func(cnPort int32) uint16 {
+	agentPortNumberFunc := func(cnPort int32) uint16 {
 		if p, ok := pns[cnPort]; ok {
 			// Port already mapped. Reuse that mapping
 			return p
@@ -95,14 +110,35 @@ func (cfg *BasicGeneratorConfig) Generate(
 		return p
 	}
 
-	for _, svc := range svcs {
-		svcImpl, _ := k8sapi.ServiceImpl(svc)
-		if ccs, err = appendAgentContainerConfigs(ctx, svcImpl, pod, portNumber, ccs, existingConfig, cfg.AppProtocolStrategy); err != nil {
-			return nil, err
+	ports, err := portsFromAnnotation(wl, ServicePortsAnnotation)
+	if err == nil && len(ports) == 0 {
+		// Check singular form.
+		ports, err = portsFromAnnotation(wl, ServicePortAnnotation)
+		if len(ports) > 0 {
+			dlog.Warningf(ctx, "the %q annotation is deprecated. Use plural form %q instead", ServicePortAnnotation, ServicePortsAnnotation)
 		}
 	}
-	if len(ccs) == 0 {
-		return nil, fmt.Errorf("found no service with a port that matches a container in pod %s.%s", pod.Name, pod.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	var ccs []*agentconfig.Container
+	for _, svc := range svcs {
+		svcImpl, _ := k8sapi.ServiceImpl(svc)
+		ccs = appendAgentContainerConfigs(ctx, svcImpl, pod, ports, agentPortNumberFunc, ccs, existingConfig, cfg.AppProtocolStrategy)
+	}
+
+	ports, err = portsFromAnnotation(wl, ContainerPortsAnnotation)
+	if err != nil {
+		return nil, err
+	}
+	if len(ports) == 0 {
+		if len(ccs) == 0 {
+			return nil, fmt.Errorf("found no service with a port that matches a container in pod %s.%s", pod.Name, pod.Namespace)
+		}
+	} else {
+		if ccs, err = appendServiceLessAgentContainerConfigs(ctx, pod, ports, agentPortNumberFunc, ccs, existingConfig, cfg.AppProtocolStrategy); err != nil {
+			return nil, err
+		}
 	}
 
 	ag := &agentconfig.Sidecar{
@@ -131,16 +167,13 @@ func appendAgentContainerConfigs(
 	ctx context.Context,
 	svc *core.Service,
 	pod *core.PodTemplateSpec,
-	portNumber func(int32) uint16,
+	portAnnotations []agentconfig.PortIdentifier,
+	agentPortNumberFunc func(int32) uint16,
 	ccs []*agentconfig.Container,
 	existingConfig agentconfig.SidecarExt,
 	aps k8sapi.AppProtocolStrategy,
-) ([]*agentconfig.Container, error) {
-	portNameOrNumber := pod.Annotations[ServicePortAnnotation]
-	ports, err := filterServicePorts(svc, portNameOrNumber)
-	if err != nil {
-		return nil, err
-	}
+) []*agentconfig.Container {
+	ports := filterServicePorts(svc, portAnnotations)
 	ignoredVolumeMounts := agentconfig.GetIgnoredVolumeMounts(pod.ObjectMeta.Annotations)
 nextSvcPort:
 	for _, port := range ports {
@@ -167,7 +200,7 @@ nextSvcPort:
 			TargetPortNumeric: port.TargetPort.Type == intstr.Int,
 			Protocol:          port.Protocol,
 			AppProtocol:       k8sapi.GetAppProto(ctx, aps, &port),
-			AgentPort:         portNumber(appPort.ContainerPort),
+			AgentPort:         agentPortNumberFunc(appPort.ContainerPort),
 			ContainerPortName: appPort.Name,
 			ContainerPort:     uint16(appPort.ContainerPort),
 		}
@@ -208,41 +241,176 @@ nextSvcPort:
 			Replace:    replaceContainer,
 		})
 	}
+	return ccs
+}
+
+func findContainerPort(cns []core.Container, p agentconfig.PortIdentifier) (*core.Container, *core.ContainerPort) {
+	proto, name, num := p.ProtoAndNameOrNumber()
+	for n := range cns {
+		cn := &cns[n]
+		if cn.Name != agentconfig.ContainerName {
+			for i := range cn.Ports {
+				appPort := &cn.Ports[i]
+				if (name != "" && name == appPort.Name || num == uint16(appPort.ContainerPort)) &&
+					(proto == appPort.Protocol || proto == core.ProtocolTCP && appPort.Protocol == "") {
+					return cn, appPort
+				}
+			}
+		}
+	}
+	return nil, nil
+}
+
+func appendServiceLessAgentContainerConfigs(
+	ctx context.Context,
+	pod *core.PodTemplateSpec,
+	portAnnotations []agentconfig.PortIdentifier,
+	agentPortNumberFunc func(int32) uint16,
+	ccs []*agentconfig.Container,
+	existingConfig agentconfig.SidecarExt,
+	aps k8sapi.AppProtocolStrategy,
+) ([]*agentconfig.Container, error) {
+	ignoredVolumeMounts := agentconfig.GetIgnoredVolumeMounts(pod.Annotations)
+	cns := pod.Spec.Containers
+	anonNameIndex := uint64(0)
+nextContainerPort:
+	for _, p := range portAnnotations {
+		cn, appPort := findContainerPort(cns, p)
+		if appPort == nil {
+			// The port is not explicitly declared as a container port, so if possible, we synthesize one.
+			proto, name, num := p.ProtoAndNameOrNumber()
+			if name != "" {
+				// We can only synthesize given a numeric port.
+				return nil, fmt.Errorf("found no container port that matches port annotation %s", p)
+			}
+			appPort = &core.ContainerPort{
+				Name:          fmt.Sprintf("port-%s", Base26(anonNameIndex)),
+				ContainerPort: int32(num),
+				Protocol:      proto,
+			}
+			anonNameIndex++
+		}
+		ic := &agentconfig.Intercept{
+			TargetPortNumeric: true,
+			Protocol:          appPort.Protocol,
+			AgentPort:         agentPortNumberFunc(appPort.ContainerPort),
+			AppProtocol:       getContainerPortAppProtocol(ctx, aps, appPort.Name),
+			ContainerPortName: appPort.Name,
+			ContainerPort:     uint16(appPort.ContainerPort),
+		}
+
+		// The container might already have intercepts declared
+		for _, cc := range ccs {
+			if cc.Name == cn.Name {
+				// Don't add service less intercept if an intercept with a service is present
+				cnFound := false
+				for _, eic := range cc.Intercepts {
+					if eic.ContainerPort == ic.ContainerPort {
+						cnFound = true
+						break
+					}
+				}
+				if !cnFound {
+					cc.Intercepts = append(cc.Intercepts, ic)
+				}
+				continue nextContainerPort
+			}
+		}
+		var mounts []string
+		if l := len(cn.VolumeMounts); l > 0 {
+			mounts = make([]string, 0, l)
+			for _, vm := range cn.VolumeMounts {
+				if !ignoredVolumeMounts.IsVolumeIgnored(vm.Name, vm.MountPath) {
+					mounts = append(mounts, vm.MountPath)
+				}
+			}
+		}
+
+		var replaceContainer agentconfig.ReplacePolicy
+		if existingConfig != nil {
+			for _, cc := range existingConfig.AgentConfig().Containers {
+				if cc.Name == cn.Name {
+					replaceContainer = cc.Replace
+					break
+				}
+			}
+		}
+		ccs = append(ccs, &agentconfig.Container{
+			Name:       cn.Name,
+			EnvPrefix:  CapsBase26(uint64(len(ccs))) + "_",
+			MountPoint: agentconfig.MountPrefixApp + "/" + cn.Name,
+			Mounts:     mounts,
+			Intercepts: []*agentconfig.Intercept{ic},
+			Replace:    replaceContainer,
+		})
+	}
 	return ccs, nil
+}
+
+func getContainerPortAppProtocol(ctx context.Context, aps k8sapi.AppProtocolStrategy, portName string) string {
+	switch aps {
+	case k8sapi.Http:
+		return "http"
+	case k8sapi.Http2:
+		return "http2"
+	case k8sapi.PortName:
+		if portName == "" {
+			dlog.Debug(ctx, "Unable to derive application protocol from unnamed container port")
+			break
+		}
+		pn := portName
+		if dashPos := strings.IndexByte(pn, '-'); dashPos > 0 {
+			pn = pn[:dashPos]
+		}
+		var appProto string
+		switch strings.ToLower(pn) {
+		case "http", "https", "grpc", "http2":
+			appProto = pn
+		case "h2c": // h2c is cleartext HTTP/2
+			appProto = "http2"
+		case "tls", "h2": // same as https in this context and h2 is HTTP/2 with TLS
+			appProto = "https"
+		}
+		if appProto != "" {
+			dlog.Debugf(ctx, "Using application protocol %q derived from port name %q", appProto, portName)
+			return appProto
+		}
+		dlog.Debugf(ctx, "Unable to derive application protocol from port name %q", portName)
+	}
+	return ""
 }
 
 // filterServicePorts iterates through a list of ports in a service and
 // only returns the ports that match the given nameOrNumber. All ports will
 // be returned if nameOrNumber is equal to the empty string.
-func filterServicePorts(svc *core.Service, nameOrNumber string) ([]core.ServicePort, error) {
+func filterServicePorts(svc *core.Service, portAnnotations []agentconfig.PortIdentifier) []core.ServicePort {
 	ports := svc.Spec.Ports
-	if nameOrNumber == "" {
-		return ports, nil
+	if len(portAnnotations) == 0 {
+		return ports
 	}
 	svcPorts := make([]core.ServicePort, 0)
-	if number, err := strconv.Atoi(nameOrNumber); err != nil {
-		errs := validation.IsValidPortName(nameOrNumber)
-		if len(errs) > 0 {
-			return nil, errors.New(strings.Join(errs, "\n"))
-		}
-		for _, port := range ports {
-			if port.Name == nameOrNumber {
-				svcPorts = append(svcPorts, port)
+	for _, pi := range portAnnotations {
+		proto, name, num := pi.ProtoAndNameOrNumber()
+		if name != "" {
+			for _, port := range ports {
+				if port.Name == name {
+					svcPorts = append(svcPorts, port)
+				}
 			}
-		}
-	} else {
-		for _, port := range ports {
-			pn := int32(0)
-			if port.TargetPort.Type == intstr.Int {
-				pn = port.TargetPort.IntVal
-			}
-			if pn == 0 {
-				pn = port.Port
-			}
-			if pn == int32(number) {
-				svcPorts = append(svcPorts, port)
+		} else {
+			for _, port := range ports {
+				pn := int32(0)
+				if port.TargetPort.Type == intstr.Int {
+					pn = port.TargetPort.IntVal
+				}
+				if pn == 0 {
+					pn = port.Port
+				}
+				if uint16(pn) == num && (port.Protocol == "" && proto == core.ProtocolTCP || port.Protocol == proto) {
+					svcPorts = append(svcPorts, port)
+				}
 			}
 		}
 	}
-	return svcPorts, nil
+	return svcPorts
 }

@@ -35,17 +35,15 @@ import (
 
 // PrepareIntercept ensures that the given request can be matched against the intercept configuration of
 // the workload that it references. It returns a PreparedIntercept where all intercepted ports have been
-// qualified with a service name and a service port name.
+// qualified with a container port and if applicable, with service name and a service port name.
 //
 // The first step is to find the requested Workload and the agent config for that workload. This step will
 // create the initial ConfigMap for the namespace if it doesn't exist yet, and also generate the actual
 // intercept config if it doesn't exist.
 //
-// The second step matches all ServicePortIdentifiers in the request to the intercepts of the agent config
-// and creates a resulting PreparedIntercept with a services array that has the same size and positions as
-// the ServicePortIdentifiers in the request.
+// The second step matches all PortIdentifiers in the request to the intercepts of the agent config.
 //
-// It's expected that the client that makes the call will update any unqualified service port identifiers
+// It's expected that the client that makes the call will update any unqualified port identifiers
 // with the ones in the returned PreparedIntercept.
 func (s *state) PrepareIntercept(
 	ctx context.Context,
@@ -83,7 +81,7 @@ func (s *state) PrepareIntercept(
 	if err != nil {
 		return interceptError(err)
 	}
-	_, ic, err := findIntercept(ac, spec)
+	cn, ic, err := findIntercept(ac, spec)
 	if err != nil {
 		return interceptError(err)
 	}
@@ -92,6 +90,9 @@ func (s *state) PrepareIntercept(
 		ServiceUid:      string(ic.ServiceUID),
 		ServiceName:     ic.ServiceName,
 		ServicePortName: ic.ServicePortName,
+		ContainerName:   cn.Name,
+		Protocol:        string(ic.Protocol),
+		ContainerPort:   int32(ic.ContainerPort),
 		ServicePort:     int32(ic.ServicePort),
 		AgentImage:      ac.AgentImage,
 		WorkloadKind:    ac.WorkloadKind,
@@ -517,16 +518,22 @@ func unmarshalConfigMapEntry(y string, name, namespace string) (agentconfig.Side
 	return scx, nil
 }
 
-// findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port.
+// findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port or container port.
 func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
-	spi := agentconfig.PortIdentifier(spec.ServicePortIdentifier)
+	pi := agentconfig.PortIdentifier(spec.PortIdentifier)
 	for _, cn := range ac.Containers {
 		for _, ic := range cn.Intercepts {
 			if !(spec.ServiceName == "" || spec.ServiceName == ic.ServiceName) {
 				continue
 			}
-			if !(spi == "" || agentconfig.IsInterceptFor(spi, ic)) {
-				continue
+			if pi != "" {
+				if ic.ServiceUID != "" {
+					if !agentconfig.IsInterceptForService(pi, ic) {
+						continue
+					}
+				} else if !agentconfig.IsInterceptForContainer(pi, ic) {
+					continue
+				}
 			}
 			if foundIC == nil {
 				foundCN = cn
@@ -535,22 +542,22 @@ func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (fou
 			}
 			var msg string
 			switch {
-			case spec.ServiceName == "" && spi == "":
-				msg = fmt.Sprintf("%s %s.%s has multiple interceptable service ports.\n"+
-					"Please specify the service and/or service port you want to intercept "+
-					"by passing the --service=<svc> and/or --port=<local:svcPortName> flag.",
+			case spec.ServiceName == "" && pi == "":
+				msg = fmt.Sprintf("%s %s.%s has multiple interceptable ports.\n"+
+					"Please specify the service and/or port you want to intercept "+
+					"by passing the --service=<svc> and/or --port=<local:portName/portNumber> flag.",
 					ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
 			case spec.ServiceName == "":
 				msg = fmt.Sprintf("%s %s.%s has multiple interceptable services with port %s.\n"+
 					"Please specify the service you want to intercept by passing the --service=<svc> flag.",
-					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, spi)
-			case spi == "":
+					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, pi)
+			case pi == "":
 				msg = fmt.Sprintf("%s %s.%s has multiple interceptable ports in service %s.\n"+
 					"Please specify the port you want to intercept by passing the --port=<local:svcPortName> flag.",
 					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, spec.ServiceName)
 			default:
 				msg = fmt.Sprintf("%s %s.%s intercept config is broken. Service %s, port %s is declared more than once\n",
-					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, spec.ServiceName, spi)
+					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, spec.ServiceName, pi)
 			}
 			return nil, nil, errcat.User.New(msg)
 		}
@@ -561,13 +568,13 @@ func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (fou
 
 	ss := ""
 	if spec.ServiceName != "" {
-		if spi != "" {
-			ss = fmt.Sprintf(" matching service %s, port %s", spec.ServiceName, spi)
+		if pi != "" {
+			ss = fmt.Sprintf(" matching service %s, port %s", spec.ServiceName, pi)
 		} else {
 			ss = fmt.Sprintf(" matching service %s", spec.ServiceName)
 		}
-	} else if spi != "" {
-		ss = fmt.Sprintf(" matching port %s", spi)
+	} else if pi != "" {
+		ss = fmt.Sprintf(" matching port %s", pi)
 	}
 	return nil, nil, errcat.User.Newf("%s %s.%s has no interceptable port%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace, ss)
 }

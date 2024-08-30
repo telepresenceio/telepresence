@@ -127,7 +127,7 @@ func getStatefulSet(ai apps.Interface, name, namespace string) (k8sapi.Workload,
 	return k8sapi.StatefulSet(ss), nil
 }
 
-func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {
+func FindServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName string) ([]k8sapi.Object, error) {
 	switch {
 	case svcName != "":
 		var svc *core.Service
@@ -149,15 +149,7 @@ func findServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 		}
 		return []k8sapi.Object{k8sapi.Service(svc)}, nil
 	case len(pod.Labels) > 0:
-		lbs := labels.Set(pod.Labels)
-		svcs, err := findServicesSelecting(ctx, pod.Namespace, lbs)
-		if err != nil {
-			return nil, err
-		}
-		if len(svcs) > 0 {
-			return svcs, nil
-		}
-		return nil, fmt.Errorf("unable to find services that selects pod %s.%s using labels %s", pod.Name, pod.Namespace, lbs)
+		return findServicesSelecting(ctx, pod.Namespace, labels.Set(pod.Labels))
 	default:
 		return nil, fmt.Errorf("unable to find a service using pod %s.%s because it has no labels", pod.Name, pod.Namespace)
 	}

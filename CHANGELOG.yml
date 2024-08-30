@@ -34,6 +34,13 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Enable intercepts of workloads that have no service.
+        body: >-
+          Telepresence is now capable of intercepting workloads that have no associated service. The intercept will then target container port
+          instead of a service port. The new behavior is enabled by adding a <code>telepresence.getambassador.io/inject-container-ports</code>
+          annotation where the value is a comma separated list of port identifiers consisting of either the name or the port number of a container
+          port, optionally suffixed with <code>/TCP</code> or <code>/UDP</code>.
+      - type: feature
         title: Publish the OSS version of the telepresence Helm chart
         body: >-
           The OSS version of the telepresence helm chart is now available at ghcr.io/telepresenceio/telepresence-oss, and
