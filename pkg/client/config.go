@@ -761,9 +761,9 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 }
 
 var defaultTelemount = DockerImage{ //nolint:gochecknoglobals // constant
-	RegistryAPI: "hub.docker.com/v2",
-	Registry:    "docker.io",
-	Namespace:   "datawire",
+	RegistryAPI: "ghcr.io/v2",
+	Registry:    "ghcr.io",
+	Namespace:   "telepresenceio",
 	Repository:  "telemount",
 }
 
