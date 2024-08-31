@@ -22,10 +22,13 @@ sudo chmod a+x /usr/local/bin/telepresence
 
 # Apple silicon Macs
 
-# 1. Download the latest binary (~101 MB):
+# 1. Remove the old binary. This is very important on Silicon macs, because they keep track of the binary signature
+sudo rm /usr/local/bin/telepresence
+
+# 2. Download the latest binary (~101 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
 
-# 2. Make the binary executable:
+# 3. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
 ```
 

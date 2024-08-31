@@ -4,12 +4,6 @@ description: "How Telepresence works to intercept traffic from your Kubernetes c
 
 # Telepresence Architecture
 
-<div class="docs-diagram-wrapper">
-
-![Telepresence Architecture](https://www.getambassador.io/images/documentation/telepresence-architecture.inline.svg)
-
-</div>
-
 ## Telepresence CLI
 
 The Telepresence CLI orchestrates the moving parts on the workstation: it starts the Telepresence Daemons and then acts
@@ -25,7 +19,7 @@ All requests from and to the cluster go through this Daemon.
 
 ### Root-Daemon
 The Root-Daemon manages the networking necessary to handle traffic between the local workstation and the cluster by setting up a
-[Virtual Network Device](../tun-device) (VIF).  For a detailed description of how the VIF manages traffic and why it is necessary
+[Virtual Network Device](tun-device) (VIF).  For a detailed description of how the VIF manages traffic and why it is necessary
 please refer to this blog post:
 [Implementing Telepresence Networking with a TUN Device](https://blog.getambassador.io/implementing-telepresence-networking-with-a-tun-device-a23a786d51e9).
 

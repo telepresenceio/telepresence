@@ -4,7 +4,7 @@ import Alert from '@material-ui/lab/Alert';
 The intention of this document is to provide a template for securing and limiting the permissions of Telepresence.
 This documentation covers the full extent of permissions necessary to administrate Telepresence components in a cluster.
 
-There are two general categories for cluster permissions with respect to Telepresence.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [intercept](../../howtos/intercepts/), and otherwise be unable to affect Kubernetes resources.
+There are two general categories for cluster permissions with respect to Telepresence.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [intercept](../howtos/intercepts/), and otherwise be unable to affect Kubernetes resources.
 
 In addition to the above, there is also a consideration of how to manage Users and Groups in Kubernetes which is outside of the scope of the document.  This document will use Service Accounts to assign Roles and Bindings.  Other methods of RBAC administration and enforcement can be found on the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) page.
 
@@ -41,7 +41,7 @@ After creating `config.yaml` in your current directory, export the file's locati
 
 ## Administrating Telepresence
 
-Telepresence administration requires permissions for creating `Namespaces`, `ServiceAccounts`, `ClusterRoles`, `ClusterRoleBindings`, `Secrets`, `Services`, `MutatingWebhookConfiguration`, and for creating the `traffic-manager` [deployment](../architecture/#traffic-manager) which is typically done by a full cluster administrator. The following permissions are needed for the installation and use of Telepresence:
+Telepresence administration requires permissions for creating `Namespaces`, `ServiceAccounts`, `ClusterRoles`, `ClusterRoleBindings`, `Secrets`, `Services`, `MutatingWebhookConfiguration`, and for creating the `traffic-manager` [deployment](architecture/#traffic-manager) which is typically done by a full cluster administrator. The following permissions are needed for the installation and use of Telepresence:
 
 ```yaml
 ---
@@ -108,7 +108,7 @@ roleRef:
   kind: ClusterRole
 ```
 
-There are two ways to install the traffic-manager: Using `telepresence connect` and installing the [helm chart](../../install/manager/).
+There are two ways to install the traffic-manager: Using `telepresence connect` and installing the [helm chart](../install/manager/).
 
 By using `telepresence connect`, Telepresence will use your kubeconfig to create the objects mentioned above in the cluster if they don't already exist.  If you want the most introspection into what is being installed, we recommend using the helm chart to install the traffic-manager.
 

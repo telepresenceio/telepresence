@@ -1,6 +1,6 @@
 # Running Telepresence inside a container
 
-All Telepresence commands now have the global option `--docker`. This option tells telepresence to start the Telepresence daemon in a
+The `telepresence connect` command now has the option `--docker`. This option tells telepresence to start the Telepresence daemon in a
 docker container.
 
 Running the daemon in a container brings many advantages. The daemon will no longer make modifications to the host's network or DNS, and

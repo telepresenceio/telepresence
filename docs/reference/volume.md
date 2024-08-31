@@ -33,4 +33,6 @@ With either method, the code you run locally either from the subshell or from th
 
 For example, Kubernetes mounts secrets to `/var/run/secrets/kubernetes.io` (even if no `mountPoint` for it exists in the Pod spec).  Once mounted, to access these you would need to change your code to use `$TELEPRESENCE_ROOT/var/run/secrets/kubernetes.io`.
 
-<Alert severity="info">If using <code>--mount=true</code> without a command, you can use either <a href="../environment/">environment variable</a> flag to retrieve the variable.</Alert>
+<Alert severity="info">
+If using <code>--mount=true</code> without a command, you can use either <a href="environment/">environment variable</a> flag to retrieve the variable.
+</Alert>

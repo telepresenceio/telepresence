@@ -2,7 +2,7 @@
 
 ## DNS resolution
 When requesting a connection to a host, the IP of that host must be determined. Telepresence provides DNS resolvers to help with this task. There are currently four types of resolvers but only one of them will be used on a workstation at any given time. Common for all of them is that they will propagate a selection of the host lookups to be performed in the cluster. The selection normally includes all names ending with `.cluster.local` or a currently mapped namespace but more entries can be added to the list using the `includeSuffixes` or `mappings` option in the
-[cluster DNS configuration](../config/#dns) 
+[cluster DNS configuration](config/#dns) 
 
 ### Cluster side DNS lookups
 The cluster side host lookup will be performed by a traffic-agent in the connected namespace, or by the traffic-manager if no such agent exists.
@@ -11,10 +11,10 @@ The cluster side host lookup will be performed by a traffic-agent in the connect
 This resolver hooks into the macOS DNS system by creating files under `/etc/resolver`. Those files correspond to some domain and contain the port number of the Telepresence resolver. Telepresence creates one such file for each of the currently mapped namespaces and `include-suffixes` option. The file `telepresence.local` contains a search path that is configured based on current intercepts so that single label names can be resolved correctly.
 
 ### Linux systemd-resolved resolver
-This resolver registers itself as part of telepresence's [VIF](../tun-device) using `systemd-resolved` and uses the DBus API to configure domains and routes that corresponds to the current set of intercepts and namespaces.
+This resolver registers itself as part of telepresence's [VIF](tun-device) using `systemd-resolved` and uses the DBus API to configure domains and routes that corresponds to the current set of intercepts and namespaces.
 
 ### Linux overriding resolver
-Linux systems that aren't configured with `systemd-resolved` will use this resolver. A Typical case is when running Telepresence [inside a docker container](../inside-container). During initialization, the resolver will first establish a _fallback_ connection to the IP passed as `--dns`, the one configured as `local-ip` in the [local DNS configuration](../config#dns), or the primary `nameserver` registered in `/etc/resolv.conf`. It will then use iptables to actually override that IP so that requests to it instead end up in the overriding resolver, which unless it succeeds on its own, will use the _fallback_.
+Linux systems that aren't configured with `systemd-resolved` will use this resolver. A Typical case is when running Telepresence [inside a docker container](inside-container). During initialization, the resolver will first establish a _fallback_ connection to the IP passed as `--dns`, the one configured as `local-ip` in the [local DNS configuration](config#dns), or the primary `nameserver` registered in `/etc/resolv.conf`. It will then use iptables to actually override that IP so that requests to it instead end up in the overriding resolver, which unless it succeeds on its own, will use the _fallback_.
 
 ### Windows resolver
 This resolver uses the DNS resolution capabilities of the [win-tun](https://www.wintun.net/) device in conjunction with [Win32_NetworkAdapterConfiguration SetDNSDomain](https://docs.microsoft.com/en-us/powershell/scripting/samples/performing-networking-tasks?view=powershell-7.2#assigning-the-dns-domain-for-a-network-adapter).
@@ -25,12 +25,12 @@ The Telepresence DNS resolver often changes its configuration. Telepresence will
 ## Routing
 
 ### Subnets
-The Telepresence `traffic-manager` service is responsible for discovering the cluster's service subnet and all subnets used by the pods. In order to do this, it needs permission to create a dummy service[<sup>[2](#servicesubnet)</sup>] in its own namespace, and the ability to list, get, and watch nodes and pods. Most clusters will expose the pod subnets as `podCIDR` in the `Node` while others, like Amazon EKS, don't. Telepresence will then fall back to deriving the subnets from the IPs of all pods. If you'd like to choose a specific method for discovering subnets, or want to provide the list yourself, you can use the `podCIDRStrategy` configuration value in the [helm](../../install/manager) chart to do that.
+The Telepresence `traffic-manager` service is responsible for discovering the cluster's service subnet and all subnets used by the pods. In order to do this, it needs permission to create a dummy service[<sup>[2](#servicesubnet)</sup>] in its own namespace, and the ability to list, get, and watch nodes and pods. Most clusters will expose the pod subnets as `podCIDR` in the `Node` while others, like Amazon EKS, don't. Telepresence will then fall back to deriving the subnets from the IPs of all pods. If you'd like to choose a specific method for discovering subnets, or want to provide the list yourself, you can use the `podCIDRStrategy` configuration value in the [helm](../install/manager) chart to do that.
 
-The complete set of subnets that the [VIF](../tun-device) will be configured with is dynamic and may change during a connection's life cycle as new nodes arrive or disappear from the cluster. The set consists of what that the traffic-manager finds in the cluster, and the subnets configured using the [also-proxy](../config#alsoproxysubnets) configuration option. Telepresence will remove subnets that are equal to, or completely covered by, other subnets.
+The complete set of subnets that the [VIF](tun-device) will be configured with is dynamic and may change during a connection's life cycle as new nodes arrive or disappear from the cluster. The set consists of what that the traffic-manager finds in the cluster, and the subnets configured using the [also-proxy](config#alsoproxysubnets) configuration option. Telepresence will remove subnets that are equal to, or completely covered by, other subnets.
 
 ### Connection origin
-A request to connect to an IP-address that belongs to one of the subnets of the [VIF](../tun-device) will cause a connection request to be made in the cluster. As with host name lookups, the request will originate from a traffic-agent in the connected namespace, of by the traffic-manager when no agent is present.
+A request to connect to an IP-address that belongs to one of the subnets of the [VIF](tun-device) will cause a connection request to be made in the cluster. As with host name lookups, the request will originate from a traffic-agent in the connected namespace, of by the traffic-manager when no agent is present.
 
 There are multiple reasons for doing this. One is that it is important that the request originates from the correct namespace. Example:
 

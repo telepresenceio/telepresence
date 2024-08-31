@@ -4,7 +4,6 @@ description: "Start using Telepresence in your own environment. Follow these ste
 
 import Alert from '@material-ui/lab/Alert';
 import Platform from '@src/components/Platform';
-import QSCards from '../quick-start/qs-cards'
 
 # Intercept a service in your own environment
 
@@ -13,7 +12,7 @@ Telepresence enables you to create intercepts to a target Kubernetes workload. O
 
 ## Prerequisites
 
-Before you begin, you need to have [Telepresence installed](../../install/), and either the Kubernetes command-line tool, [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/), or the OpenShift Container Platform command-line interface, [`oc`](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html#cli-installing-cli_cli-developer-commands). This document uses kubectl in all example commands. OpenShift users can substitute oc [commands instead](https://docs.openshift.com/container-platform/4.1/cli_reference/developer-cli-commands.html).
+Before you begin, you need to have [Telepresence installed](../install/client), and either the Kubernetes command-line tool, [`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl/), or the OpenShift Container Platform command-line interface, [`oc`](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html#cli-installing-cli_cli-developer-commands). This document uses kubectl in all example commands. OpenShift users can substitute oc [commands instead](https://docs.openshift.com/container-platform/4.1/cli_reference/developer-cli-commands.html).
 
 This guide assumes you have a Kubernetes deployment and service accessible publicly by an ingress controller, and that you can run a copy of that service on your laptop.
 

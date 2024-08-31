@@ -1,8 +1,8 @@
 import Platform from '@src/components/Platform';
 
-# Install
+# Client Installation
 
-Install Telepresence OSS by running the commands below for your OS. If you are not the administrator of your cluster, you will need [administrative RBAC permissions](../reference/rbac#administrating-telepresence) to install and use Telepresence in your cluster.
+Install the Telepresence client on your workstation by running the commands below for your OS.
 
 <Platform.TabGroup>
 <Platform.MacOSTab>
@@ -18,10 +18,14 @@ sudo chmod a+x /usr/local/bin/telepresence
 
 # Apple silicon Macs
 
-# 1. Download the latest binary (~101 MB):
+# 1. Ensure that no old binary exists. This is very important because Silicon macs track the executable's signature
+#    and just updating it in place will not work.
+sudo rm -f /usr/local/bin/telepresence
+
+# 2. Download the latest binary (~101 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
 
-# 2. Make the binary executable:
+# 3. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
 ```
 

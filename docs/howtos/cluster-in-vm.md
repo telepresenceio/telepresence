@@ -6,7 +6,7 @@ description: "Use Telepresence to intercept services in a cluster running in a h
 # Network considerations for locally hosted clusters
 
 ## The problem
-Telepresence creates a Virtual Network Interface ([VIF](../../reference/tun-device)) that maps the clusters subnets to the host machine when it connects. If you're running Kubernetes locally (e.g., k3s, Minikube, Docker for Desktop), you may encounter network problems because the devices in the host are also accessible from the cluster's nodes.
+Telepresence creates a Virtual Network Interface ([VIF](../reference/tun-device)) that maps the clusters subnets to the host machine when it connects. If you're running Kubernetes locally (e.g., k3s, Minikube, Docker for Desktop), you may encounter network problems because the devices in the host are also accessible from the cluster's nodes.
 
 ### Example:
 A k3s cluster runs in a headless VirtualBox machine that uses a "host-only" network. This network will allow both host-to-guest and guest-to-host connections. In other words, the cluster will have access to the host's network and, while Telepresence is connected, also to its VIF. This means that from the cluster's perspective, there will now be more than one interface that maps the cluster's subnets; the ones already present in the cluster's nodes, and then the Telepresence VIF, mapping them again.

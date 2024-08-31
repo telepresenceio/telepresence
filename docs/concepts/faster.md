@@ -3,19 +3,19 @@ title: Install the Telepresence Docker extension | Ambassador
 ---
 # Making the remote local: Faster feedback, collaboration and debugging
 
-With the goal of achieving [fast, efficient development](https://www.getambassador.io/use-case/local-kubernetes-development/), developers need a set of approaches to bridge the gap between remote Kubernetes clusters and local development, and reduce time to feedback and debugging.
+With the goal of achieving fast, efficient development, developers need a set of approaches to bridge the gap between remote Kubernetes clusters and local development, and reduce time to feedback and debugging.
 
 ## How should I set up a Kubernetes development environment?
 
-[Setting up a development environment](https://www.getambassador.io/resources/development-environments-microservices/) for Kubernetes can be much more complex than the setup for traditional web applications. Creating and maintaining a Kubernetes development environment relies on a number of external dependencies, such as databases or authentication.
+Setting up a development environment for Kubernetes can be much more complex than the setup for traditional web applications. Creating and maintaining a Kubernetes development environment relies on a number of external dependencies, such as databases or authentication.
 
 While there are several ways to set up a Kubernetes development environment, most introduce complexities and impediments to speed. The dev environment should be set up to easily code and test in conditions where a service can access the resources it depends on.
 
-A good way to meet the goals of faster feedback, possibilities for collaboration, and scale in a realistic production environment is the "single service local, all other remote" environment. Developing in a fully remote environment offers some benefits, but for developers, it offers the slowest possible feedback loop. With local development in a remote environment, the developer retains considerable control while using tools like [Telepresence](../../quick-start/) to facilitate fast feedback, debugging and collaboration.
+A good way to meet the goals of faster feedback, possibilities for collaboration, and scale in a realistic production environment is the "single service local, all other remote" environment. Developing in a fully remote environment offers some benefits, but for developers, it offers the slowest possible feedback loop. With local development in a remote environment, the developer retains considerable control while using tools like [Telepresence](..) to facilitate fast feedback, debugging and collaboration.
 
 ## What is Telepresence?
 
-Telepresence is an open source tool that lets developers [code and test microservices locally against a remote Kubernetes cluster](../../quick-start/). Telepresence facilitates more efficient development workflows while relieving the need to worry about other service dependencies.
+Telepresence is an open source tool that lets developers [code and test microservices locally against a remote Kubernetes cluster](../quick-start). Telepresence facilitates more efficient development workflows while relieving the need to worry about other service dependencies.
 
 ## How can I get fast, efficient local development?
 

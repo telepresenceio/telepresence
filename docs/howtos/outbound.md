@@ -12,7 +12,7 @@ Telepresence offers other options for proxying traffic between your laptop and t
 
 Connecting to the cluster instead of running an intercept allows you to access cluster workloads as if your laptop was another pod in the cluster. This enables you to access other Kubernetes services using `<service name>.<namespace>`. A service running on your laptop can interact with other services on the cluster by name.
 
-When you connect to your cluster, the background daemon on your machine runs and installs the [Traffic Manager deployment](../../reference/architecture/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
+When you connect to your cluster, the background daemon on your machine runs and installs the [Traffic Manager deployment](../reference/architecture/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
 
 1. Run `telepresence connect` and enter your password to run the daemon.
 

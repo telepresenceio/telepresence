@@ -48,7 +48,7 @@ items:
         title: Publish the OSS version of the telepresence Helm chart
         body: >-
           The OSS version of the telepresence helm chart is now available at ghcr.io/telepresenceio/telepresence-oss, and
-          can be installed using the command:<br>
+          can be installed using the command:<br/>
           <code>helm install traffic-manager oci://ghcr.io/telepresenceio/telepresence-oss --namespace ambassador --version 2.20.0</code>
           The chart documentation is published at <a href="https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss">ArtifactHUB</a>.
       - type: feature
@@ -191,6 +191,9 @@ items:
           a Linux host, the Docker host available from <code>host.docker.internal</code> that the <code>kubeauth</code> connected to
           was the Windows host running Docker Desktop. The fix for this was to use the local IP of the default route instead of
           <code>host.docker.internal</code> when running under WSL..
+  - version: 2.18.6
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Fix bug in workload cache, causing endless recursion when a workload uses the same name as its owner.
         body: >-
@@ -204,6 +207,9 @@ items:
           has been initiated. This logic would trigger on events like &quot;Warning FailedScheduling 0/63 nodes are
           available&quot; although those events indicate a recoverable condition and kill the wait. This is now fixed so
           that the events are logged but the wait continues.
+  - version: 2.18.5
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Improve how the traffic-manager resolves DNS when no agent is installed.
         body: >-
@@ -289,6 +295,9 @@ items:
         body: >-
           This resolves a bug that did not test all subnets in a private range, sometimes resulting in the warning,
           "DNS doesn't seem to work properly."
+  - version: 2.18.4
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Docker aliases deprecation caused failure to detect Kind cluster.
         body: >-
@@ -296,12 +305,18 @@ items:
           using <code>telepresence connect --docker</code>, relied on the presence of <code>Aliases</code> in the Docker
           network that a Kind cluster sets up. In Docker versions from 26 and up, this value is no longer used, but the
           corresponding info can instead be found in the new <code>DNSNames</code> field.
+  - version: 2.18.3
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Creation of individual pods was blocked by the agent-injector webhook.
         body: >-
           An attempt to create a pod was blocked unless it was provided by a workload. Hence, commands like
           <code>kubectl run -i busybox --rm --image=curlimages/curl --restart=Never -- curl echo-easy.default</code>
           would be blocked from executing.
+  - version: 2.18.2
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Fix panic due to root daemon not running.
         body: >-
@@ -309,6 +324,9 @@ items:
           condition) and a subsequent intercept was then made, a panic would occur when the port-forward to the agent
           was set up. This is now fixed so that the initial <code>telepresence connect</code> is refused unless the root
           daemon is running.
+  - version: 2.18.1
+    date: (TBD)
+    notes:
       - type: bugfix
         title: Get rid of telemount plugin stickiness
         body: >-

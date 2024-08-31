@@ -6,7 +6,7 @@ All intercepts contribute to the DNS resolver, even those that do not use the `-
 
 No namespaces are used by the DNS resolver (not even `default`) when no intercepts are active, which means that no service is available by `<svc-name>` only. Without an active intercept, the namespace qualified DNS name must be used (in the form `<svc-name>.<namespace>`).
 
-See this demonstrated below, using the [quick start's](../../quick-start/) sample app services.
+See this demonstrated below, using the [quick start's](../quick-start/) sample app services.
 
 No intercepts are currently running, we'll connect to the cluster and list the services that can be intercepted.
 
@@ -65,4 +65,4 @@ client is connected to.
 The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,
 `MX`, `NS`, `PTR`, `SRV`, and `TXT`.
 
-See [Outbound connectivity](../routing/#dns-resolution) for details on DNS lookups.
+See [Outbound connectivity](routing/#dns-resolution) for details on DNS lookups.

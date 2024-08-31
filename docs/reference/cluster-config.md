@@ -1,11 +1,10 @@
 import Alert from '@material-ui/lab/Alert';
-import { ClusterConfig } from '@src/components/Docs/Telepresence';
 
 # Cluster-side configuration
 
 For the most part, Telepresence doesn't require any special
 configuration in the cluster and can be used right away in any
-cluster (as long as the user has adequate [RBAC permissions](../rbac)
+cluster (as long as the user has adequate [RBAC permissions](rbac)
 and the cluster's server version is `1.19.0` or higher).
 
 ## Helm Chart configuration
@@ -14,7 +13,7 @@ or upgrading the Telepresence cluster installation using Helm. Once
 installed, the Telepresence client will configure itself from values
 that it receives when connecting to the Traffic manager.
 
-See the Helm chart [README](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence)
+See the Helm chart [README](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss/$version$)
 for a full list of available configuration settings.
 
 ### Values
@@ -23,26 +22,11 @@ To add configuration, create a yaml file with the configuration values and then 
 ## Client Configuration
 
 It is possible for the Traffic Manager to automatically push config to all
-connecting clients. To learn more about this, please see the [client config docs](../config#global-configuration)
+connecting clients. To learn more about this, please see the [client config docs](config#global-configuration)
 
 ## Traffic Manager Configuration
 
 The `trafficManager` structure of the Helm chart configures the behavior of the Telepresence traffic manager.
-
-### Service Mesh
-
-The `trafficManager.serviceMesh` structure is used to configure Telepresence's integrations with service meshes.
-You should configure this if your cluster is running a compatible service mesh, as it's often needed to be able
-to intercept all workloads. **Currently only `istio` is supported.**
-
-See the page on [service meshes](../service-meshes) for more information.
-
-Valid values are:
-
-
-| Value        | Resulting action                                                                                                             |
-|--------------|------------------------------------------------------------------------------------------------------------------------------|
-| `type`       | The type of service mesh that is in use by your cluster. Supports `none` (the default) and `istio`                           |
 
 ## Agent Configuration
 
@@ -60,7 +44,7 @@ The `agent.image` structure contains the following values:
 
 ### Log level
 
-The `agent.LogLevel` controls the log level of the traffic-agent. See [Log Levels](../config/#log-levels) for more info.
+The `agent.LogLevel` controls the log level of the traffic-agent. See [Log Levels](config/#log-levels) for more info.
 
 ### Resources
 
@@ -68,7 +52,7 @@ The `agent.resources` and `agent.initResources` will be used as the `resources` 
 
 ## Mutating Webhook
 
-Telepresence uses a Mutating Webhook to inject the [Traffic Agent](../architecture/#traffic-agent) sidecar container and update the
+Telepresence uses a Mutating Webhook to inject the [Traffic Agent](architecture/#traffic-agent) sidecar container and update the
 port definitions. This means that an intercepted workload (Deployment, StatefulSet, ReplicaSet) will remain untouched
 and in sync as far as GitOps workflows (such as ArgoCD) are concerned.
 
@@ -188,7 +172,7 @@ This also applies when upgrading:
 
 Once this is completed, the environment variables will no longer be in the environment file created by an Intercept.
 
-The other way to complete this is in your custom `values.yaml`. Customizing your traffic-manager through a values file can be viewed [here](../../install/manager).
+The other way to complete this is in your custom `values.yaml`. Customizing your traffic-manager through a values file can be viewed [here](../install/manager).
 
 ```yaml
 intercept:

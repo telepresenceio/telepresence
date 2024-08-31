@@ -4,7 +4,6 @@ description: "Start using Telepresence in your own environment. Follow these ste
 
 import Alert from '@material-ui/lab/Alert';
 import Platform from '@src/components/Platform';
-import QSCards from '../quick-start/qs-cards'
 
 # Telepresence Quickstart
 
@@ -15,68 +14,14 @@ Telepresence is an open source tool that enables you to set up remote developmen
    - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/), the Kubernetes command-line tool, or the OpenShift Container Platform command-line interface, [oc](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html#cli-installing-cli_cli-developer-commands). 
    - A Kubernetes Deployment and Service.
 
-   <Alert severity="info">
+## Install Telepresence
 
-  **Don’t have access to Kubernetes cluster?** Try Telepresence in a free remote Kubernetes cluster without having to mess with your production environment. [Get Started >](https://app.getambassador.io/cloud/welcome?select=developer&utm_source=telepresence&utm_medium=website&utm_campaign=quickstart).
-
-   </Alert>
-
-## Install Telepresence on Your Machine
-
-Install Telepresence by running the relevant commands below for your OS. If you are not the administrator of your cluster, you will need [administrative RBAC permissions](https://www.getambassador.io/docs/telepresence-oss/latest/reference/rbac#administrating-telepresence) to install and use the Telepresence traffic-manager in your cluster.
-
-<Platform.TabGroup>
-<Platform.MacOSTab>
-
-```shell
-# Intel Macs
-
-# 1. Download the latest binary (~105 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
-
-# 2. Make the binary executable:
-sudo chmod a+x /usr/local/bin/telepresence
-
-# Apple silicon Macs
-
-# 1. Download the latest binary (~101 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
-
-# 2. Make the binary executable:
-sudo chmod a+x /usr/local/bin/telepresence
-```
-
-</Platform.MacOSTab>
-<Platform.GNULinuxTab>
-
-```shell
-# 1. Download the latest binary (~95 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-linux-amd64 -o /usr/local/bin/telepresence
-
-# 2. Make the binary executable:
-sudo chmod a+x /usr/local/bin/telepresence
-```
-
-</Platform.GNULinuxTab>
-<Platform.WindowsTab>
-
-Installing Telepresence on Windows is easy. Download this [zip folder](https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-windows-amd64.zip) and run the powershell script.
-</Platform.WindowsTab>
-</Platform.TabGroup>
-
-## Install Telepresence in Your Cluster
-
-1. Install the traffic manager into your cluster with `telepresence helm install`. More information about installing Telepresence can be found [here](https://www.getambassador.io/docs/telepresence-oss/latest/install/manager). This will require root access on your machine.
-
-```
-$ telepresence helm install
-...
-Traffic Manager installed successfully
-```
+Follow [Install Client](install/client) and [Install Traffic Manager](install/manager) instructions to install the
+telepresence client on your workstation, and the traffic manager in your cluster.
 
 ## Intercept Your Service
 
-With Telepresence, you can create [global intercepts](https://www.getambassador.io/docs/telepresence-oss/latest/concepts/intercepts?intercept=global) that intercept all traffic going to a service in your remote cluster and route it to your local environment instead.
+With Telepresence, you can create [intercepts](concepts/intercepts?intercept=global) that intercept all traffic going to a service in your remote cluster and route it to your local environment instead.
 
 1. Connect to your cluster with `telepresence connect` and connect to the Kubernetes API server:
 
@@ -172,6 +117,6 @@ Now, with Telepresence, you can:
    </Alert>
 
 ## What’s Next?
-- [Learn about the Telepresence architecture.](https://www.getambassador.io/docs/telepresence-oss/latest/reference/architecture)
+- [Learn about the Telepresence architecture.](reference/architecture)
 
 <img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab" />

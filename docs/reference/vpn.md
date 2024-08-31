@@ -1,6 +1,7 @@
+import Alert from '@material-ui/lab/Alert';
+
 <!-- TODO: We should figure out a way to make this site-wide without affecting the release notes page -->
 <div class="container">
-
 
 # Telepresence and VPNs
 
@@ -148,6 +149,6 @@ The cluster's subnets are now hidden behind a virtual subnet, and the resulting 
 
 ### Using docker
 
-Use `telepresence connect --docker` to make the Telepresence daemon containerized, which means that it has its own network configuration and therefore no conflict with a VPN. Read more about docker [here](../docker-run).
+Use `telepresence connect --docker` to make the Telepresence daemon containerized, which means that it has its own network configuration and therefore no conflict with a VPN. Read more about docker [here](docker-run).
 
 </div>

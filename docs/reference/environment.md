@@ -32,7 +32,7 @@ There are three options available to do this:
 Telepresence adds some useful environment variables in addition to the ones imported from the intercepted pod:
 
 ### TELEPRESENCE_ROOT
-Directory where all remote volumes mounts are rooted. See [Volume Mounts](../volume/) for more info.
+Directory where all remote volumes mounts are rooted. See [Volume Mounts](volume/) for more info.
 
 ### TELEPRESENCE_MOUNTS
 Colon separated list of remotely mounted directories.

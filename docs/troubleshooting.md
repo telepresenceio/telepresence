@@ -4,34 +4,14 @@ description: "Learn how to troubleshoot common issues related to Telepresence, i
 ---
 # Troubleshooting
 
-
-## Creating an intercept did not generate a preview URL
-
-Preview URLs can only be created if Telepresence is [logged in to
-Ambassador Cloud](../reference/client/login/).  When not logged in, it
-will not even try to create a preview URL (additionally, by default it
-will intercept all traffic rather than just a subset of the traffic).
-Remove the intercept with `telepresence leave [deployment name]`, run
-`telepresence login` to login to Ambassador Cloud, then recreate the
-intercept.  See the [intercepts how-to doc](../howtos/intercepts) for
-more details.
-
-## Error on accessing preview URL: `First record does not look like a TLS handshake`
-
-The service you are intercepting is likely not using TLS, however when configuring the intercept you indicated that it does use TLS. Remove the intercept with `telepresence leave [deployment name]` and recreate it, setting `TLS` to `n`. Telepresence tries to intelligently determine these settings for you when creating an intercept and offer them as defaults, but odd service configurations might cause it to suggest the wrong settings.
-
-## Error on accessing preview URL: Detected a 301 Redirect Loop
-
-If your ingress is set to redirect HTTP requests to HTTPS and your web app uses HTTPS, but you configure the intercept to not use TLS, you will get this error when opening the preview URL.  Remove the intercept with `telepresence leave [deployment name]` and recreate it, selecting the correct port and setting `TLS` to `y` when prompted.
-
 ## Connecting to a cluster via VPN doesn't work.
 
-There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](../reference/vpn) on Telepresence and VPNs to learn more on how to fix these.
+There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](reference/vpn) on Telepresence and VPNs to learn more on how to fix these.
 
 ## Connecting to a cluster hosted in a VM on the workstation doesn't work
 
 The cluster probably has access to the host's network and gets confused when it is mapped by Telepresence.
-Please check the [cluster in hosted vm](../howtos/cluster-in-vm) for more details.
+Please check the [cluster in hosted vm](howtos/cluster-in-vm) for more details.
 
 ## Volume mounts are not working on macOS
 
@@ -96,7 +76,7 @@ $ telepresence upload-traces traces.gz $OTLP_GRPC_ENDPOINT
 
 Once that's been done, the traces will be visible via whatever means your usual collector allows. For example, this is what they look like when loaded into Jaeger's [OTLP API](https://www.jaegertracing.io/docs/1.36/apis/#opentelemetry-protocol-stable):
 
-![Jaeger Interface](../images/tracing.png)
+![Jaeger Interface](images/tracing.png)
 
 **Note:** The host and port provided for the `OTLP_GRPC_ENDPOINT` must accept OTLP formatted spans (instead of e.g. Jaeger or Zipkin specific spans) via a GRPC API (instead of the HTTP API that is also available in some collectors)
 **Note:** Since traces are not automatically shipped to the backend by telepresence, they are stored in memory. Hence, to avoid running telepresence components out of memory, only the last 10MB of trace data are available for export.
@@ -124,7 +104,7 @@ Traffic Manager's webhook injector from the API server.
 To fix this, add a firewall rule allowing your cluster's master nodes to access TCP port `443` in your cluster's pods,
 or change the port number that Telepresence is using for the agent injector by providing the number of an allowed port
 using the Helm chart value `agentInjector.webhook.port`.
-Please refer to the [telepresence install instructions](../install/cloud#gke) or the [GCP docs](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules) for information to resolve this.
+Please refer to the [telepresence install instructions](install/cloud#gke) or the [GCP docs](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules) for information to resolve this.
 
 ## Injected init-container doesn't function properly
 
@@ -176,7 +156,7 @@ not get remapped. A headless service will always require the init-container.
 ## Error connecting to GKE or EKS cluster
 
 GKE and EKS require a plugin that utilizes their resepective IAM providers. 
-You will need to install the [gke](../install/cloud#gke-authentication-plugin) or [eks](../install/cloud#eks-authentication-plugin) plugins 
+You will need to install the [gke](install/cloud#gke-authentication-plugin) or [eks](install/cloud#eks-authentication-plugin) plugins 
 for Telepresence to connect to your cluster.
 
 ## `too many files open` error when running `telepresence connect` on Linux
