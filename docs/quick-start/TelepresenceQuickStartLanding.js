@@ -1,9 +1,5 @@
-import queryString from 'query-string';
-import React, { useEffect, useState } from 'react';
-
-import Embed from '../../../../src/components/Embed';
-import Icon from '../../../../../src/components/Icon';
-import Link from '../../../../../src/components/Link';
+import Icon from '@src/components/Icon';
+import Link from '@src/components/Link';
 
 import './telepresence-quickstart-landing.less';
 

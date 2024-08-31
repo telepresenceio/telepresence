@@ -23,7 +23,7 @@ Telepresence is an open source tool that enables you to set up remote developmen
 
 ## Install Telepresence on Your Machine
 
-Install Telepresence by running the relevant commands below for your OS. If you are not the administrator of your cluster, you will need [administrative RBAC permissions](../reference/rbac/#administrating-telepresence) to install and use the Telepresence traffic-manager in your cluster.
+Install Telepresence by running the relevant commands below for your OS. If you are not the administrator of your cluster, you will need [administrative RBAC permissions](https://www.getambassador.io/docs/telepresence-oss/latest/reference/rbac#administrating-telepresence) to install and use the Telepresence traffic-manager in your cluster.
 
 <Platform.TabGroup>
 <Platform.MacOSTab>
@@ -60,20 +60,13 @@ sudo chmod a+x /usr/local/bin/telepresence
 </Platform.GNULinuxTab>
 <Platform.WindowsTab>
 
-To install Telepresence, [Click here to download the Telepresence binary](https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-windows-amd64.zip).
-
-Once you have the binary downloaded and unzipped you will need to do a few things:
-
-1. Rename the binary from `telepresence-windows-amd64.exe` to `telepresence.exe`
-2. Move the binary to `C:\Program Files (x86)\$USER\Telepresence\`
-
-
+Installing Telepresence on Windows is easy. Download this [zip folder](https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-windows-amd64.zip) and run the powershell script.
 </Platform.WindowsTab>
 </Platform.TabGroup>
 
 ## Install Telepresence in Your Cluster
 
-1. Install the traffic manager into your cluster with `telepresence helm install`. More information about installing Telepresence can be found [here](../install/manager). This will require root access on your machine.
+1. Install the traffic manager into your cluster with `telepresence helm install`. More information about installing Telepresence can be found [here](https://www.getambassador.io/docs/telepresence-oss/latest/install/manager). This will require root access on your machine.
 
 ```
 $ telepresence helm install
@@ -83,7 +76,7 @@ Traffic Manager installed successfully
 
 ## Intercept Your Service
 
-With Telepresence, you can create [global intercepts](../concepts/intercepts/?intercept=global) that intercept all traffic going to a service in your remote cluster and route it to your local environment instead.
+With Telepresence, you can create [global intercepts](https://www.getambassador.io/docs/telepresence-oss/latest/concepts/intercepts?intercept=global) that intercept all traffic going to a service in your remote cluster and route it to your local environment instead.
 
 1. Connect to your cluster with `telepresence connect` and connect to the Kubernetes API server:
 
@@ -179,4 +172,6 @@ Now, with Telepresence, you can:
    </Alert>
 
 ## What’s Next?
-- [Learn about the Telepresence architecture.](../reference/architecture)
+- [Learn about the Telepresence architecture.](https://www.getambassador.io/docs/telepresence-oss/latest/reference/architecture)
+
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab" />

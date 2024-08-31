@@ -29,36 +29,26 @@ export default function CenteredGrid() {
         <Grid item xs={4}>
           <Paper variant="outlined" className={classes.paper}>
             <Typography variant="h6" component="h2">
-              <GatsbyLink to="../howtos/personal-intercepts/">
-                <b>Collaborating</b>
-              </GatsbyLink>
-            </Typography>
-            <Typography variant="body2" component="p">
-              Use personal intercepts to get specific requests when working with colleagues.
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={4}>
-          <Paper variant="outlined" className={classes.paper}>
-            <Typography variant="h6" component="h2">
-              <GatsbyLink to="../howtos/outbound/">
+              <GatsbyLink to="../../howtos/outbound/">
                 <b>Outbound Sessions</b>
               </GatsbyLink>
             </Typography>
             <Typography variant="body2" component="p">
-              Control what your laptop can reach in the cluster while connected.
+              While connected to the cluster, your laptop can interact with
+              services as if it was another pod in the cluster.
             </Typography>
           </Paper>
         </Grid>
         <Grid item xs={4}>
           <Paper variant="outlined" className={classes.paper}>
             <Typography variant="h6" component="h2">
-              <GatsbyLink to="../docker/compose">
-                <b>Telepresence for Docker Compose</b>
+              <GatsbyLink to="../../faqs/">
+                <b>FAQs</b>
               </GatsbyLink>
             </Typography>
             <Typography variant="body2" component="p">
-              Develop in a hybrid local/cluster environment using Telepresence for Docker Compose.
+              Learn more about uses cases and the technical implementation of
+              Telepresence.
             </Typography>
           </Paper>
         </Grid>
