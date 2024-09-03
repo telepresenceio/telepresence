@@ -1700,6 +1700,10 @@ func TestTrafficAgentInjector(t *testing.T) {
 									Name:  "SECRET_NAME",
 									Value: "default-secret-name",
 								},
+								{
+									Name:  "BOTH_NAMES",
+									Value: "$(TOKEN_VOLUME) and $(SECRET_NAME)",
+								},
 							},
 							Ports: []core.ContainerPort{
 								{
@@ -1735,6 +1739,8 @@ func TestTrafficAgentInjector(t *testing.T) {
       value: default-token-vol
     - name: _TEL_APP_A_SECRET_NAME
       value: default-secret-name
+    - name: _TEL_APP_A_BOTH_NAMES
+      value: $(_TEL_APP_A_TOKEN_VOLUME) and $(_TEL_APP_A_SECRET_NAME)
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:

@@ -3,6 +3,7 @@ package agentconfig
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -434,9 +435,14 @@ func prefixInterpolated(str, pfx string) string {
 	return bd.String()
 }
 
+var envRxReplace = regexp.MustCompile(`\$\(([^)]+)\)`)
+
 func appendAppContainerEnv(app *core.Container, cc *Container, es []core.EnvVar) []core.EnvVar {
+	pfx := EnvPrefixApp + cc.EnvPrefix
+	pfxReplace := "$(" + pfx + "$1)"
 	for _, e := range app.Env {
-		e.Name = EnvPrefixApp + cc.EnvPrefix + e.Name
+		e.Name = pfx + e.Name
+		e.Value = envRxReplace.ReplaceAllString(e.Value, pfxReplace)
 		es = append(es, e)
 	}
 	return es
