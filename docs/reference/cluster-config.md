@@ -4,7 +4,7 @@ import Alert from '@material-ui/lab/Alert';
 
 For the most part, Telepresence doesn't require any special
 configuration in the cluster and can be used right away in any
-cluster (as long as the user has adequate [RBAC permissions](rbac)
+cluster (as long as the user has adequate [RBAC permissions](rbac.md)
 and the cluster's server version is `1.19.0` or higher).
 
 ## Helm Chart configuration
@@ -22,7 +22,7 @@ To add configuration, create a yaml file with the configuration values and then 
 ## Client Configuration
 
 It is possible for the Traffic Manager to automatically push config to all
-connecting clients. To learn more about this, please see the [client config docs](config#global-configuration)
+connecting clients. To learn more about this, please see the [client config docs](config.md#global-configuration)
 
 ## Traffic Manager Configuration
 
@@ -44,7 +44,7 @@ The `agent.image` structure contains the following values:
 
 ### Log level
 
-The `agent.LogLevel` controls the log level of the traffic-agent. See [Log Levels](config/#log-levels) for more info.
+The `agent.LogLevel` controls the log level of the traffic-agent. See [Log Levels](config.md#log-levels) for more info.
 
 ### Resources
 
@@ -52,7 +52,7 @@ The `agent.resources` and `agent.initResources` will be used as the `resources` 
 
 ## Mutating Webhook
 
-Telepresence uses a Mutating Webhook to inject the [Traffic Agent](architecture/#traffic-agent) sidecar container and update the
+Telepresence uses a Mutating Webhook to inject the [Traffic Agent](architecture.md#traffic-agent) sidecar container and update the
 port definitions. This means that an intercepted workload (Deployment, StatefulSet, ReplicaSet) will remain untouched
 and in sync as far as GitOps workflows (such as ArgoCD) are concerned.
 
@@ -172,7 +172,7 @@ This also applies when upgrading:
 
 Once this is completed, the environment variables will no longer be in the environment file created by an Intercept.
 
-The other way to complete this is in your custom `values.yaml`. Customizing your traffic-manager through a values file can be viewed [here](../install/manager).
+The other way to complete this is in your custom `values.yaml`. Customizing your traffic-manager through a values file can be viewed [here](../install/manager.md).
 
 ```yaml
 intercept:

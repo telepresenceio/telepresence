@@ -6,12 +6,12 @@ description: "Learn how to troubleshoot common issues related to Telepresence, i
 
 ## Connecting to a cluster via VPN doesn't work.
 
-There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](reference/vpn) on Telepresence and VPNs to learn more on how to fix these.
+There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](reference/vpn.md) on Telepresence and VPNs to learn more on how to fix these.
 
 ## Connecting to a cluster hosted in a VM on the workstation doesn't work
 
 The cluster probably has access to the host's network and gets confused when it is mapped by Telepresence.
-Please check the [cluster in hosted vm](howtos/cluster-in-vm) for more details.
+Please check the [cluster in hosted vm](howtos/cluster-in-vm.md) for more details.
 
 ## Volume mounts are not working on macOS
 

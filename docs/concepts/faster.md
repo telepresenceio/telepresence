@@ -11,11 +11,11 @@ Setting up a development environment for Kubernetes can be much more complex tha
 
 While there are several ways to set up a Kubernetes development environment, most introduce complexities and impediments to speed. The dev environment should be set up to easily code and test in conditions where a service can access the resources it depends on.
 
-A good way to meet the goals of faster feedback, possibilities for collaboration, and scale in a realistic production environment is the "single service local, all other remote" environment. Developing in a fully remote environment offers some benefits, but for developers, it offers the slowest possible feedback loop. With local development in a remote environment, the developer retains considerable control while using tools like [Telepresence](..) to facilitate fast feedback, debugging and collaboration.
+A good way to meet the goals of faster feedback, possibilities for collaboration, and scale in a realistic production environment is the "single service local, all other remote" environment. Developing in a fully remote environment offers some benefits, but for developers, it offers the slowest possible feedback loop. With local development in a remote environment, the developer retains considerable control while using tools like [Telepresence](../quick-start.md) to facilitate fast feedback, debugging and collaboration.
 
 ## What is Telepresence?
 
-Telepresence is an open source tool that lets developers [code and test microservices locally against a remote Kubernetes cluster](../quick-start). Telepresence facilitates more efficient development workflows while relieving the need to worry about other service dependencies.
+Telepresence is an open source tool that lets developers [code and test microservices locally against a remote Kubernetes cluster](../quick-start.md). Telepresence facilitates more efficient development workflows while relieving the need to worry about other service dependencies.
 
 ## How can I get fast, efficient local development?
 

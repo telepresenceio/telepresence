@@ -6,7 +6,7 @@ description: "Learn how Telepresence helps with fast development and debugging i
 
 ** Why Telepresence?**
 
-Modern microservices-based applications that are deployed into Kubernetes often consist of tens or hundreds of services. The resource constraints and number of these services means that it is often difficult to impossible to run all of this on a local development machine, which makes fast development and debugging very challenging. The fast [inner development loop](concepts/devloop/) from previous software projects is often a distant memory for cloud developers.
+Modern microservices-based applications that are deployed into Kubernetes often consist of tens or hundreds of services. The resource constraints and number of these services means that it is often difficult to impossible to run all of this on a local development machine, which makes fast development and debugging very challenging. The fast [inner development loop](concepts/devloop.md) from previous software projects is often a distant memory for cloud developers.
 
 Telepresence enables you to connect your local development machine seamlessly to the cluster via a two way proxying mechanism. This enables you to code locally and run the majority of your services within a remote Kubernetes cluster -- which in the cloud means you have access to effectively unlimited resources.
 
@@ -33,11 +33,11 @@ If you need another protocol supported, please [drop us a line](https://github.c
 
 ** When using Telepresence to intercept a pod, are the Kubernetes cluster environment variables proxied to my local machine?**
 
-Yes, you can either set the pod's environment variables on your machine or write the variables to a file to use with Docker or another build process. Please see [the environment variable reference doc](reference/environment) for more information.
+Yes, you can either set the pod's environment variables on your machine or write the variables to a file to use with Docker or another build process. Please see [the environment variable reference doc](reference/environment.md) for more information.
 
 ** When using Telepresence to intercept a pod, can the associated pod volume mounts also be mounted by my local machine?**
 
-Yes, please see [the volume mounts reference doc](reference/volume/) for more information.
+Yes, please see [the volume mounts reference doc](reference/volume.md) for more information.
 
 ** When connected to a Kubernetes cluster via Telepresence, can I access cluster-based services via their DNS name?**
 

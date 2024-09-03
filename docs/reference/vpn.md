@@ -149,6 +149,6 @@ The cluster's subnets are now hidden behind a virtual subnet, and the resulting 
 
 ### Using docker
 
-Use `telepresence connect --docker` to make the Telepresence daemon containerized, which means that it has its own network configuration and therefore no conflict with a VPN. Read more about docker [here](docker-run).
+Use `telepresence connect --docker` to make the Telepresence daemon containerized, which means that it has its own network configuration and therefore no conflict with a VPN. Read more about docker [here](docker-run.md).
 
 </div>

@@ -56,7 +56,7 @@ Once you have the binary downloaded and unzipped you will need to do a few thing
 </Platform.WindowsTab>
 </Platform.TabGroup>
 
-The Telepresence CLI contains an embedded Helm chart. See [Install/Uninstall the Traffic Manager](../manager/) if you want to also upgrade
+The Telepresence CLI contains an embedded Helm chart. See [Install/Uninstall the Traffic Manager](../manager.md) if you want to also upgrade
 the Traffic Manager in your cluster.
 
 <img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab" alt="" style="max-width:1px;"/>

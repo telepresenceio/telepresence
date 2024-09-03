@@ -44,4 +44,4 @@ Depending on use-case, it's sometimes beneficial to have several traffic-manager
 
 A client that connects to a namespaced manager will automatically be limited to those namespaces.
 
-See [Installing a namespaced-scoped traffic-manager](../install/manager#installing-a-namespace-scoped-traffic-manager) for details.
+See [Installing a namespaced-scoped traffic-manager](../install/manager.md#installing-a-namespace-scoped-traffic-manager) for details.

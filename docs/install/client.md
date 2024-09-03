@@ -73,7 +73,7 @@ Remove-Item telepresenceInstaller -Recurse -Confirm:$false -Force
 
 ## <img class="os-logo" src="../images/logo.png" alt="Telepresence logo" /> What's Next?
 
-Follow one of our [quick start guides](../quick-start/) to start using Telepresence, either with our sample app or in your own environment.
+Follow one of our [quick start guides](../quick-start.md) to start using Telepresence, either with our sample app or in your own environment.
 
 ## Installing older versions of Telepresence
 

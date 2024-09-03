@@ -4,12 +4,12 @@ Telepresence uses a traffic manager to send/recieve cloud traffic to the user. T
 
 ## Prerequisites
 
-Before you begin, you need to have [Telepresence installed](../install/client).
+Before you begin, you need to have [Telepresence installed](../install/client.md).
 
-If you are not the administrator of your cluster, you will need [administrative RBAC permissions](../reference/rbac#administrating-telepresence) to install and use Telepresence in your cluster.
+If you are not the administrator of your cluster, you will need [administrative RBAC permissions](../reference/rbac.md#administrating-telepresence) to install and use Telepresence in your cluster.
 
 In addition, you may need certain prerequisites depending on your cloud provider and platform.
-See the [cloud provider installation notes](../install/cloud) for more.
+See the [cloud provider installation notes](../install/cloud.md) for more.
 
 ## Install the Traffic Manager
 
@@ -61,7 +61,7 @@ clusters:
   name: example-cluster
 ```
 
-See [the kubeconfig documentation](../reference/config#manager) for more information.
+See [the kubeconfig documentation](../reference/config.md#manager) for more information.
 
 ## Upgrading/Downgrading the Traffic Manager.
 
@@ -164,7 +164,7 @@ clientRbac:
 
 ### Installing RBAC only
 
-Telepresence Traffic Manager does require some [RBAC](../reference/rbac/) for the traffic-manager deployment itself, as well as for users.
+Telepresence Traffic Manager does require some [RBAC](../reference/rbac.md) for the traffic-manager deployment itself, as well as for users.
 To make it easier for operators to introspect / manage RBAC separately, you can use `rbac.only=true` to
 only create the rbac-related objects.
 Additionally, you can use `clientRbac.create=true` and `managerRbac.create=true` to toggle which subset(s) of RBAC objects you wish to create.
