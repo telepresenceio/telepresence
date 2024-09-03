@@ -34,6 +34,10 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Add timestamp to telepresence_logs.zip filename.
+        body: >-
+          Telepresence is now capable of easily find telepresence gather-logs by certain timestamp.
+      - type: feature
         title: Enable intercepts of workloads that have no service.
         body: >-
           Telepresence is now capable of intercepting workloads that have no associated service. The intercept will then target container port

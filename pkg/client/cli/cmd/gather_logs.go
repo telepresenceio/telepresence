@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -103,7 +104,7 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return errcat.User.New(err)
 		}
-		gl.outputFile = filepath.Join(pwd, "telepresence_logs.zip")
+		gl.outputFile = filepath.Join(pwd, fmt.Sprintf("telepresence_logs_%s.zip", time.Now().Format(time.RFC3339)))
 	} else if !strings.HasSuffix(gl.outputFile, ".zip") {
 		return errcat.User.New("output file must end in .zip")
 	}
