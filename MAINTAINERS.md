@@ -7,10 +7,11 @@ maintainer responsibilities.
 
 Maintainers are listed in alphabetical order.
 
-| Maintainer      | GitHub ID                                 | Affiliation |
-| --------------- | ----------------------------------------- |-------------|
-| Nick Powell     | [njayp](https://github.com/njayp)         |             |
-| Thomas Hallgren | [thallgren](https://github.com/thallgren) |             |
+| Maintainer      | GitHub ID                                 | Affiliation     |
+|-----------------| ----------------------------------------- |-----------------|
+| Jakub Rożek     | [P0lip](https://github.com/P0lip)         | Ambassador Labs |
+| Nick Powell     | [njayp](https://github.com/njayp)         |                 |
+| Thomas Hallgren | [thallgren](https://github.com/thallgren) |                 |
 
 ## Maintainers Emeriti
 
