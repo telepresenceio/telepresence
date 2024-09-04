@@ -86,7 +86,7 @@ protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-g
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean
-generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz docs/README.md
+generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz docs/README.md docs/release-notes.md
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/dnet/testdata/mockserver && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/vif/testdata/router && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
@@ -115,11 +115,15 @@ generate-clean: ## (Generate) Delete generated files
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
 	rm -f docs/README.md
+	rm -f docs/releaseNotes.md
 
 docs/README.md: docs/doc-links.yml $(tools/tocgen)
 	printf "# <img src="images/logo.png" height="64px"/> Telepresence Documentation\n" > $@
 	printf "raw markdown version, more bells and whistles at [telepresence.io](https://telepresence.io)\n\n" >> $@
 	$(tools/tocgen) --input $< >> $@
+
+docs/release-notes.md: CHANGELOG.yml $(tools/relnotesgen)
+	$(tools/relnotesgen) --input $< > $@
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
