@@ -91,7 +91,7 @@ jobs:
       - build-release
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4.1.7
       - name: Determine if version is RC, TEST, or GA
         id: semver_check
         run: |
