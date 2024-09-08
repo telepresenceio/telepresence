@@ -1,5 +1,3 @@
-import Alert from '@material-ui/lab/Alert';
-
 # Intercepts
 
 When intercepting a service, the Telepresence Traffic Manager ensures
@@ -20,9 +18,5 @@ Kubernetes has various
 Currently, Telepresence supports intercepting (installing a
 traffic-agent on) `Deployments`, `ReplicaSets`, and `StatefulSets`.
 
-<Alert severity="info">
-
-While many of our examples use Deployments, they would also work on
-ReplicaSets and StatefulSets
-
-</Alert>
+> [!NOTE]
+> While many of our examples use Deployments, they would also work on ReplicaSets and StatefulSets

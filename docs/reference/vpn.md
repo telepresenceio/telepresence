@@ -1,20 +1,9 @@
-import Alert from '@material-ui/lab/Alert';
-
-<!-- TODO: We should figure out a way to make this site-wide without affecting the release notes page -->
-<div class="container">
-
 # Telepresence and VPNs
 
 It is often important to set up Kubernetes API server endpoints to be only accessible via a VPN.
 In setups like these, users need to connect first to their VPN, and then use Telepresence to connect
 to their cluster. As Telepresence uses many of the same underlying technologies that VPNs use,
 the two can sometimes conflict. This page will help you identify and resolve such VPN conflicts.
-
-
-<Alert severity="warning">
-The <strong>test-vpn</strong> command, which was once part of Telepresence, became obsolete in <strong>2.14</strong> due to a change in functionality and was subsequently removed.
-</Alert>
-
 
 ## VPN Configuration
 
@@ -150,5 +139,3 @@ The cluster's subnets are now hidden behind a virtual subnet, and the resulting 
 ### Using docker
 
 Use `telepresence connect --docker` to make the Telepresence daemon containerized, which means that it has its own network configuration and therefore no conflict with a VPN. Read more about docker [here](docker-run.md).
-
-</div>

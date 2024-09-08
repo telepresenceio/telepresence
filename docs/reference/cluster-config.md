@@ -1,5 +1,3 @@
-import Alert from '@material-ui/lab/Alert';
-
 # Cluster-side configuration
 
 For the most part, Telepresence doesn't require any special
@@ -107,14 +105,12 @@ An annotation `telepresence.getambassador.io/inject-ignore-volume-mounts` can be
 
 ### Note on Numeric Ports
 
-If the <code>targetPort</code> of your intercepted service is pointing at a port number, in addition to
-injecting the Traffic Agent sidecar, Telepresence will also inject an <code>initContainer</code> that will
+If the `targetPort` of your intercepted service is pointing at a port number, in addition to
+injecting the Traffic Agent sidecar, Telepresence will also inject an `initContainer` that will
 reconfigure the pod's firewall rules to redirect traffic to the Traffic Agent.
 
-<Alert severity="info">
-Note that this <code>initContainer</code> requires `NET_ADMIN` capabilities.
-If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
-</Alert>
+> [!IMPORTANT]
+> Note that this `initContainer` requires `NET_ADMIN` capabilities. If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
 
 For example, the following service is using a numeric port, so Telepresence would inject an initContainer into it:
 ```yaml

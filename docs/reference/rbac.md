@@ -1,5 +1,3 @@
-import Alert from '@material-ui/lab/Alert';
-
 # Telepresence RBAC
 The intention of this document is to provide a template for securing and limiting the permissions of Telepresence.
 This documentation covers the full extent of permissions necessary to administrate Telepresence components in a cluster.
@@ -116,7 +114,8 @@ By using `telepresence connect`, Telepresence will use your kubeconfig to create
 
 To allow users to make intercepts across all namespaces, but with more limited `kubectl` permissions, the following `ServiceAccount`, `ClusterRole`, and `ClusterRoleBinding` will allow full `telepresence intercept` functionality.
 
-<Alert severity="warning">The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator</Alert>
+> [!WARNING]
+> The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator
 
 ```yaml
 ---
@@ -195,7 +194,8 @@ roleRef:
 
 RBAC for multi-tenant scenarios where multiple dev teams are sharing a single cluster where users are constrained to a specific namespace(s).
 
-<Alert severity="warning">The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator</Alert>
+> [!WARNING]
+> The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator
 
 For each accessible namespace
 ```yaml

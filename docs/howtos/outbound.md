@@ -2,8 +2,6 @@
 description: "Telepresence can connect to your Kubernetes cluster, letting you access cluster services as if your laptop was another pod in the cluster."
 ---
 
-import Alert from '@material-ui/lab/Alert';
-
 # Proxy outbound traffic to my cluster
 
 Telepresence offers other options for proxying traffic between your laptop and the cluster. This section discribes how to proxy outbound traffic and control outbound connectivity to your cluster.

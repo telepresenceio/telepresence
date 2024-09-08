@@ -1,5 +1,3 @@
-import Alert from '@material-ui/lab/Alert';
-
 # Configuring intercept using CLI
 
 ## Specifying a namespace for an intercept
@@ -230,20 +228,9 @@ intercepted
     Intercepting      : all TCP connections
 ```
 
-<Alert severity="info">
-This utilizes an <code>initContainer</code> that requires `NET_ADMIN` capabilities.
-If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
-</Alert>
-
-<Alert severity="info">
-This requires the Traffic Agent to run as GID <code>7777</code>. By default, this is disabled on openshift clusters.
-To enable running as GID <code>7777</code> on a specific openshift namespace, run:
-<code>oc adm policy add-scc-to-group anyuid system:serviceaccounts:$NAMESPACE</code>
-</Alert>
-
-<Alert severity="info">
-Intercepting headless services without a selector is not supported.
-</Alert>
+> [!IMPORTANT]
+> This utilizes an `initContainer` that requires `NET_ADMIN` capabilities.
+> If your cluster administrator has disabled them, you will be unable to use numeric ports with the agent injector.
 
 ## Specifying the intercept traffic target
 
@@ -286,12 +273,5 @@ $ telepresence intercept my-service --port 8080 --replace
    Intercepting           : all TCP connections
 ```
 
-<Alert severity="info">
-Using the --replace flag implies a global intercept. This is to prevent situations
-where multiple personal intercepts are consuming from the same message queue, which
-would be the same as allowing the application to do so while an intercept is running.
-</Alert>
-
-<Alert severity="info">
-Sidecars will not be stopped. Only the container serving the intrcepted port will be removed from the pod.
-</Alert>
+> [!NOTE]
+> Sidecars will not be stopped. Only the container serving the intercepted port will be removed from the pod.

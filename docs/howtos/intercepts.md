@@ -2,9 +2,6 @@
 description: "Start using Telepresence in your own environment. Follow these steps to intercept your service in your cluster."
 ---
 
-import Alert from '@material-ui/lab/Alert';
-import Platform from '@src/components/Platform';
-
 # Intercept a service in your own environment
 
 Telepresence enables you to create intercepts to a target Kubernetes workload. Once you have created and intercept, you can code and debug your associated service locally. 
@@ -20,7 +17,7 @@ This guide assumes you have a Kubernetes deployment and service accessible publi
 
 With Telepresence, you can create an intercept that intercepts all traffic going to a service in your cluster and route it to your local environment instead. 
 
-1. Connect to your cluster with `telepresence connect` and try to curl to the Kubernetes API server:
+1. Connect to your cluster with `telepresence connect` and try to curl to the Kubernetes API server. A 401 response code is expected and indicates that the service could be reached:
 
    ```console
    $ curl -ik https://kubernetes.default
@@ -29,10 +26,6 @@ With Telepresence, you can create an intercept that intercepts all traffic going
    Content-Type: application/json
    ...
    ```
-
-   <Alert>
-    The 401 response is expected.
-   </Alert>
 
    You now have access to your remote Kubernetes API server as if you were on the same network. You can now use any local tools to connect to any service in the cluster.
 
@@ -93,8 +86,5 @@ You can now:
 - Query services only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-   <Alert severity="info">
-
-    **Didn't work?** Make sure the port you're listening on matches the one you specified when you created your intercept.
-
-   </Alert>
+> [!TIP]
+> **Didn't work?** Make sure the port you're listening on matches the one you specified when you created your intercept.

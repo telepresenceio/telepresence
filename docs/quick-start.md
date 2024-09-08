@@ -2,9 +2,6 @@
 description: "Start using Telepresence in your own environment. Follow these steps to intercept your service in your cluster."
 ---
 
-import Alert from '@material-ui/lab/Alert';
-import Platform from '@src/components/Platform';
-
 # Telepresence Quickstart
 
 Telepresence is an open source tool that enables you to set up remote development environments for Kubernetes where you can still use all of your favorite local tools like IDEs, debuggers, and profilers.
@@ -23,7 +20,7 @@ telepresence client on your workstation, and the traffic manager in your cluster
 
 With Telepresence, you can create [intercepts](concepts/intercepts.md) that intercept all traffic going to a service in your remote cluster and route it to your local environment instead.
 
-1. Connect to your cluster with `telepresence connect` and connect to the Kubernetes API server:
+1. Connect to your cluster with `telepresence connect` and connect to the Kubernetes API server. A 401 response code is expected and indicates that the service could be reached:
 
    ```
    $ telepresence connect
@@ -40,11 +37,8 @@ With Telepresence, you can create [intercepts](concepts/intercepts.md) that inte
 
    ```
 
-   <Alert>
-    The 401 response is expected when you first connect.
-   </Alert>
-
    You now have access to your remote Kubernetes API server as if you were on the same network. You can now use any local tools to connect to any service in the cluster.
+
 
 2. Enter `telepresence list` and make sure the service you want to intercept is listed. For example:
 
@@ -104,17 +98,12 @@ The following are some examples of how to pass the environment variables to your
 
 Now, with Telepresence, you can:
 
-- <div>
-   Make changes on the fly and see them reflected when interacting with your remote Kubernetes environment, this is just like hot reloading, but it works across both local and remote environments.
-  </div>
-- <div>Query services and microservice APIs that are only accessible in your remote cluster's network.</div>
-- <div>Set breakpoints in your IDE and re-route remote traffic to your local machine to investigate bugs with realistic user traffic and API calls.</div>
+- Make changes on the fly and see them reflected when interacting with your remote Kubernetes environment, this is just like hot reloading, but it works across both local and remote environments.
+- Query services and microservice APIs that are only accessible in your remote cluster's network.
+- Set breakpoints in your IDE and re-route remote traffic to your local machine to investigate bugs with realistic user traffic and API calls.
 
-   <Alert severity="info">
-
-  **Didn't work?** Make sure the port you're listening on matches the one you specified when you created your intercept.
-
-   </Alert>
+> [!TIP]
+> **Didn't work?** Make sure the port you're listening on matches the one you specified when you created your intercept.
 
 ## What’s Next?
 - [Learn about the Telepresence architecture.](reference/architecture)
