@@ -81,7 +81,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gvisor.dev/gvisor v0.0.0-20240919205252-49310d92b103 // indirect
+	gvisor.dev/gvisor v0.0.0-20240925185045-e364897eab6a // indirect
 	k8s.io/api v0.31.1 // indirect
 	k8s.io/apimachinery v0.31.1 // indirect
 	k8s.io/cli-runtime v0.31.1 // indirect

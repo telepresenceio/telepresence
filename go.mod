@@ -55,7 +55,7 @@ require (
 	google.golang.org/grpc v1.67.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
-	gvisor.dev/gvisor v0.0.0-20240816022007-28f8b471e908
+	gvisor.dev/gvisor v0.0.0-20240925185045-e364897eab6a
 	helm.sh/helm/v3 v3.16.1
 	k8s.io/api v0.31.1
 	k8s.io/apimachinery v0.31.1
