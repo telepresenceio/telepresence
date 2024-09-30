@@ -125,6 +125,9 @@ docs/README.md: docs/doc-links.yml $(tools/tocgen)
 docs/release-notes.md: CHANGELOG.yml $(tools/relnotesgen)
 	$(tools/relnotesgen) --input $< > $@
 
+docs/release-notes.mdx: CHANGELOG.yml $(tools/relnotesgen)
+	$(tools/relnotesgen) --mdx --input $< > $@
+
 PKG_VERSION = $(shell go list ./pkg/version)
 
 # Build: artifacts that don't get checked in to Git

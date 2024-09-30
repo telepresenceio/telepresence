@@ -389,12 +389,12 @@ items:
           are then routed (with reverse translation) via the pod's of a given workload. This makes it possible to handle
           custom DNS servers that resolve domains into loopback IPs. The flag may also be used in cases where the
           cluster's subnets are in conflict with the workstation's VPN.</p>
-          <p>The CIDR can also be a symbolic name that identifies a subnet or list of subnets:<table>
+          <p>The CIDR can also be a symbolic name that identifies a subnet or list of subnets:</p><table><tbody>
           <tr><td><code>also</code></td><td>All subnets added with --also-proxy</td></tr>
           <tr><td><code>service</code></td><td>The cluster's service subnet</td></tr>
           <tr><td><code>pods</code></td><td>The cluster's pod subnets.</td></tr>
           <tr><td><code>all</code></td><td>All of the above.</td></tr>
-          </table></p>
+          </tbody></table>
       - type: bugfix
         title: Ensure that agent.appProtocolStrategy is propagated correctly.
         body: >-
@@ -621,7 +621,7 @@ items:
       - type: bugfix
         title: Backward compatibility for pod template TLS annotations.
         body: >-
-          Users of Telepresence < 2.9.0 that make use of the pod template TLS annotations were unable to upgrade because
+          Users of Telepresence &lt; 2.9.0 that make use of the pod template TLS annotations were unable to upgrade because
           the annotation names have changed (now prefixed by "telepresence."), and the environment expansion of the
           annotation values was dropped. This fix restores support for the old names (while retaining the new ones) and
           the environment expansion.
@@ -741,7 +741,7 @@ items:
         body: >-
           Upgrading the traffic-manager using <code>telepresence helm upgrade</code> would sometimes
           result in a helm error message <q>executing "telepresence/templates/intercept-env-configmap.yaml"
-          at <.Values.intercept.environment.excluded>: nil pointer evaluating interface {}.excluded"</q>
+          at &lt;.Values.intercept.environment.excluded&gt;: nil pointer evaluating interface {}.excluded"</q>
         docs: https://github.com/telepresenceio/telepresence/issues/3313
   - version: 2.14.2
     date: "2023-07-26"

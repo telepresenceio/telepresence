@@ -15,7 +15,11 @@ import (
 //go:embed relnotes.gomd
 var relnotesData []byte
 
+//go:embed relnotes.gomdx
+var relnotesDataMDX []byte
+
 const templateName = "relnotes.gomd"
+const templateNameMDX = "relnotes.gomdx"
 
 type NoteType string
 
@@ -65,7 +69,7 @@ type NoteStyles struct {
 	Image       string
 }
 
-func MakeReleaseNotes(input string) error {
+func MakeReleaseNotes(input string, mdx bool) error {
 	cl, err := readChangeLog(input)
 	if err != nil {
 		return err
@@ -84,7 +88,7 @@ func MakeReleaseNotes(input string) error {
 		},
 	}
 	wr := bufio.NewWriter(os.Stdout)
-	if err := applyTemplate(cl, wr); err != nil {
+	if err := applyTemplate(cl, mdx, wr); err != nil {
 		return err
 	}
 	return wr.Flush()
@@ -114,10 +118,17 @@ func readChangeLog(input string) (*ChangeLog, error) {
 	return &changeLog, nil
 }
 
-func applyTemplate(data any, wr io.Writer) error {
-	tpl, err := template.New(templateName).Parse(string(relnotesData))
+func applyTemplate(data any, mdx bool, wr io.Writer) (err error) {
+	var tpl *template.Template
+	tn := templateName
+	if mdx {
+		tn = templateNameMDX
+		tpl, err = template.New(tn).Parse(string(relnotesDataMDX))
+	} else {
+		tpl, err = template.New(tn).Parse(string(relnotesData))
+	}
 	if err == nil {
-		err = tpl.ExecuteTemplate(wr, templateName, data)
+		err = tpl.ExecuteTemplate(wr, tn, data)
 	}
 	return err
 }
