@@ -121,7 +121,7 @@ By using `telepresence connect`, Telepresence will use your kubeconfig to create
 To allow users to make intercepts across all namespaces, but with more limited `kubectl` permissions, the following `ServiceAccount`, `ClusterRole`, and `ClusterRoleBinding` will allow full `telepresence intercept` functionality.
 
 > [!WARNING]
-> The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator
+> The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator.
 
 ```yaml
 ---
@@ -201,7 +201,7 @@ roleRef:
 RBAC for multi-tenant scenarios where multiple dev teams are sharing a single cluster where users are constrained to a specific namespace(s).
 
 > [!WARNING]
-> The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator
+> The following RBAC configurations assume that there is already a Traffic Manager deployment set up by a Cluster Administrator.
 
 For each accessible namespace
 ```yaml

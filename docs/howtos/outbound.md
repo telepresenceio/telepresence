@@ -71,7 +71,8 @@ If you terminate the client with `telepresence quit` and try to access the servi
     Disconnected
   ```
 
-<Alert severity="info">When using Telepresence in this way, you need to access services with the namespace qualified DNS name (<code>&lt;service name&gt;.&lt;namespace&gt;</code>) before you start an intercept. After you start an intercept, only  <code>&lt;service name&gt;</code> is required.</Alert>
+> [!NOTE]
+> When using Telepresence in this way, you need to access services with the namespace qualified DNS name (<code>&lt;service name&gt;.&lt;namespace&gt;</code>) before you start an intercept. After you start an intercept, only  <code>&lt;service name&gt;</code> is required.
 
 ## Controlling outbound connectivity
 

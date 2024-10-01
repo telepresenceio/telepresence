@@ -10,6 +10,7 @@ import Platform from '@site/src/components/Platform';
 
 Install the Telepresence client on your workstation by running the commands below for your OS.
 
+<Platform.Provider>
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
@@ -77,9 +78,9 @@ Remove-Item telepresenceInstaller -Recurse -Confirm:$false -Force
 </Platform.WindowsTab>
 </Platform.TabGroup>
 
-## <img class="os-logo" src="../images/logo.png" alt="Telepresence logo" /> What's Next?
-
-Follow one of our [quick start guides](../quick-start.md) to start using Telepresence, either with our sample app or in your own environment.
+> [!TIP]
+> What's Next?
+> Follow one of our [quick start guides](../quick-start.md) to start using Telepresence, either with our sample app or in your own environment.
 
 ## Installing older versions of Telepresence
 
@@ -112,5 +113,4 @@ https://app.getambassador.io/download/tel2oss/releases/download/vx.y.z/teleprese
 
 </Platform.WindowsTab>
 </Platform.TabGroup>
-
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab" alt="" style="max-width:1px;"/>
+</Platform.Provider>

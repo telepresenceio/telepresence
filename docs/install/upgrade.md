@@ -12,6 +12,7 @@ The Telepresence CLI will periodically check for new versions and notify you whe
 Before upgrading your CLI, you must stop any live Telepresence processes by issuing `telepresence quit -s` (or `telepresence quit -ur`
 if your current version is less than 2.8.0).
 
+<Platform.Provider>
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
@@ -59,8 +60,9 @@ Once you have the binary downloaded and unzipped you will need to do a few thing
 
 </Platform.WindowsTab>
 </Platform.TabGroup>
+</Platform.Provider>
 
-The Telepresence CLI contains an embedded Helm chart. See [Install/Uninstall the Traffic Manager](../manager.md) if you want to also upgrade
+The Telepresence CLI contains an embedded Helm chart. See [Install/Uninstall the Traffic Manager](manager.md) if you want to also upgrade
 the Traffic Manager in your cluster.
 
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab" alt="" style="max-width:1px;"/>
+![scarf](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)

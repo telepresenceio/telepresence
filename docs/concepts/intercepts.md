@@ -4,71 +4,39 @@ description: "Short demonstration of global intercepts"
 hide_table_of_contents: true
 ---
 
-import React from 'react';
-
-import Alert from '@material-ui/lab/Alert';
-import AppBar from '@material-ui/core/AppBar';
-import Paper from '@material-ui/core/Paper';
-import Tab from '@material-ui/core/Tab';
-import TabContext from '@material-ui/lab/TabContext';
-import TabList from '@material-ui/lab/TabList';
-import TabPanel from '@material-ui/lab/TabPanel';
-import Animation from '@src/components/InterceptAnimation';
-
-export function TabsContainer({ children, ...props }) {
-    const [state, setState] = React.useState({curTab: "personal"});
-    React.useEffect(() => {
-        const query = new URLSearchParams(window.location.search);
-        var interceptType = query.get('intercept') || "regular";
-        if (state.curTab != interceptType) {
-            setState({curTab: interceptType});
-        }
-    }, [state, setState])
-    var setURL = function(newTab) {
-        history.replaceState(null,null,
-            `?intercept=${newTab}${window.location.hash}`,
-        );
-    };
-    return (
-        <div class="TabGroup">
-            <TabContext value={state.curTab}>
-                <AppBar class="TabBar" elevation={0} position="static">
-                    <TabList onChange={(ev, newTab) => {setState({curTab: newTab}); setURL(newTab)}} aria-label="intercept types">
-                        <Tab class="TabHead" value="regular" label="No intercept"/>
-                        <Tab class="TabHead" value="global" label="Intercept"/>
-                    </TabList>
-                </AppBar>
-                {children}
-            </TabContext>
-        </div>
-    );
-};
+import Admonition from '@theme/Admonition';
+import Paper from '@mui/material/Paper';
+import Tab from '@mui/material/Tab';
+import TabContext from '@mui/lab/TabContext';
+import TabList from '@mui/lab/TabList';
+import TabPanel from '@mui/lab/TabPanel';
+import TabsContainer from '@site/src/components/TabsContainer';
+import Animation from '@site/src/components/InterceptAnimation';
 
 <TabsContainer>
-<TabPanel class="TabBody" value="regular">
+<TabPanel className="TabBody" value="regular">
 
 # No intercept
 
-<Paper style="padding: 1em">
-<Animation class="mode-regular" />
+<Paper className="interceptTab">
+<Animation className="mode-regular" />
 
 This is the normal operation of your cluster without Telepresence.
 
 </Paper>
 </TabPanel>
-<TabPanel class="TabBody" value="global">
+<TabPanel className="TabBody" value="global">
+
+<Paper className="interceptTab">
 
 # Intercept
 
-<Paper style="padding: 1em">
-<Animation class="mode-global" />
+<Animation className="mode-global" />
 
 **Intercepts** replace the Kubernetes "Orders" service with the
 Orders service running on your laptop.  The users see no change, but
 with all the traffic coming to your laptop, you can observe and debug
 with all your dev tools.
-
-</Paper>
 
 ### Creating and using intercepts
 
@@ -78,18 +46,19 @@ with all your dev tools.
     telepresence intercept SERVICENAME
     ```
 
-    <Alert severity="info">
+    <Admonition className="alert" type="info">
 
     Make sure your current kubectl context points to the target
     cluster.  If your service is running in a different namespace than
     your current active context, use or change the `--namespace` flag.
 
-    </Alert>
+    </Admonition>
 
  2. Using the intercept: Send requests to your service:
 
     All requests will be sent to the version of your service that is
     running in the local development environment.
 
+</Paper>
 </TabPanel>
 </TabsContainer>
