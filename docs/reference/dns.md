@@ -69,4 +69,4 @@ client is connected to.
 The Telepresence DNS resolver is now capable of resolving queries of type `A`, `AAAA`, `CNAME`,
 `MX`, `NS`, `PTR`, `SRV`, and `TXT`.
 
-See [Outbound connectivity](routing#dns-resolution.md) for details on DNS lookups.
+See [Outbound connectivity](routing.md#dns-resolution) for details on DNS lookups.

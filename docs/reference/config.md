@@ -31,7 +31,7 @@ client:
     agentImage: tel2:$version$ # This overrides the agent image to inject when intercepting
   grpc:
     maxReceiveSize: 10Mi
-   dns:
+  dns:
     includeSuffixes: [.private]
     excludeSuffixes: [.se, .com, .io, .net, .org, .ru]
     lookupTimeout: 30s

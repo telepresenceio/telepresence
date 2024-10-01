@@ -298,7 +298,7 @@ The version and status commands will now output the image that the traffic-agent
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Custom DNS using the client DNS resolver.</div></div>
 <div style="margin-left: 15px">
 
-<p>A new <code>telepresence connect --proxy-via CIDR=WORKLOAD</code> flag was introduced, allowing Telepresence to translate DNS responses matching specific subnets into virtual IPs that are used locally. Those virtual IPs are then routed (with reverse translation) via the pod's of a given workload. This makes it possible to handle custom DNS servers that resolve domains into loopback IPs. The flag may also be used in cases where the cluster's subnets are in conflict with the workstation's VPN.</p> <p>The CIDR can also be a symbolic name that identifies a subnet or list of subnets:<table> <tr><td><code>also</code></td><td>All subnets added with --also-proxy</td></tr> <tr><td><code>service</code></td><td>The cluster's service subnet</td></tr> <tr><td><code>pods</code></td><td>The cluster's pod subnets.</td></tr> <tr><td><code>all</code></td><td>All of the above.</td></tr> </table></p>
+<p>A new <code>telepresence connect --proxy-via CIDR=WORKLOAD</code> flag was introduced, allowing Telepresence to translate DNS responses matching specific subnets into virtual IPs that are used locally. Those virtual IPs are then routed (with reverse translation) via the pod's of a given workload. This makes it possible to handle custom DNS servers that resolve domains into loopback IPs. The flag may also be used in cases where the cluster's subnets are in conflict with the workstation's VPN.</p> <p>The CIDR can also be a symbolic name that identifies a subnet or list of subnets:</p><table> <tr><td><code>also</code></td><td>All subnets added with --also-proxy</td></tr> <tr><td><code>service</code></td><td>The cluster's service subnet</td></tr> <tr><td><code>pods</code></td><td>The cluster's pod subnets.</td></tr> <tr><td><code>all</code></td><td>All of the above.</td></tr> </table>
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ensure that agent.appProtocolStrategy is propagated correctly.</div></div>
@@ -640,7 +640,7 @@ Replace deprecated info in the JSON output of the telepresence list command.
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Nil pointer exception when upgrading the traffic-manager.](https://github.com/telepresenceio/telepresence/issues/3313)</div></div>
 <div style="margin-left: 15px">
 
-Upgrading the traffic-manager using <code>telepresence helm upgrade</code> would sometimes result in a helm error message <q>executing "telepresence/templates/intercept-env-configmap.yaml" at <.Values.intercept.environment.excluded>: nil pointer evaluating interface {}.excluded"</q>
+Upgrading the traffic-manager using <code>telepresence helm upgrade</code> would sometimes result in a helm error message <q>executing "telepresence/templates/intercept-env-configmap.yaml" at &lt;.Values.intercept.environment.excluded&gt;: nil pointer evaluating interface {}.excluded"</q>
 </div>
 
 ## Version 2.14.2 <span style="font-size: 16px;">(July 26)</span>

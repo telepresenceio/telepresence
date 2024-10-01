@@ -10,8 +10,8 @@ Telepresence is an open source tool that enables you to set up remote developmen
 
 ## Prerequisites
 
-   - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/), the Kubernetes command-line tool, or the OpenShift Container Platform command-line interface, [oc](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html#cli-installing-cli_cli-developer-commands). 
-   - A Kubernetes Deployment and Service.
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/), the Kubernetes command-line tool, or the OpenShift Container Platform command-line interface, [oc](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html#cli-installing-cli_cli-developer-commands).
+- A Kubernetes Deployment and Service.
 
 ## Install Telepresence
 
@@ -41,10 +41,9 @@ With Telepresence, you can create [intercepts](concepts/intercepts.md) that inte
 
    You now have access to your remote Kubernetes API server as if you were on the same network. You can now use any local tools to connect to any service in the cluster.
 
-
 2. Enter `telepresence list` and make sure the service you want to intercept is listed. For example:
 
-   ```
+   ```console
    $ telepresence list
    ...
    example-service: ready to intercept (traffic-agent not yet installed)
@@ -68,7 +67,10 @@ With Telepresence, you can create [intercepts](concepts/intercepts.md) that inte
    ```
 
 4. Intercept all traffic going to the service in your cluster:
-   `telepresence intercept <service-name> --port <local-port>[:<remote-port>] --env-file <path-to-env-file>`.
+
+   ```console
+   $ telepresence intercept <service-name> --port <local-port>[:<remote-port>] --env-file <path-to-env-file>`
+   ```
 
    - For `--port`: specify the port the local instance of your service is running on. If the intercepted service exposes multiple ports, specify the port you want to intercept after a colon.
    - For `--env-file`: specify a file path for Telepresence to write the environment variables that are set in the pod.
@@ -109,5 +111,3 @@ Now, with Telepresence, you can:
 
 ## What’s Next?
 - [Learn about the Telepresence architecture.](reference/architecture)
-
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab" />

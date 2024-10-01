@@ -36,7 +36,7 @@ If it is RBAC permission limitations that prevent the traffic-manager from readi
 podCIDRStrategy: environment
 podCIDRs:
   - <known podCIDR>
-  ...
+...
 ```
 
 ## Use a Namespaced Scoped Traffic Manager

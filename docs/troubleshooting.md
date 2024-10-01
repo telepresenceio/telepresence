@@ -2,6 +2,9 @@
 title: Troubleshooting
 description: "Learn how to troubleshoot common issues related to Telepresence, including intercept issues, cluster connection issues, and errors related to Ambassador Cloud."
 ---
+
+import Platform from '@site/src/components/Platform';
+
 # Troubleshooting
 
 ## Connecting to a cluster via VPN doesn't work.
@@ -122,10 +125,8 @@ kind: Pod
 metadata:
   ...
 spec:
-  ...
   containers:
-    - ...
-      ports:
+    - ports:
       - name: http
         containerPort: 8080
 ---
@@ -134,7 +135,6 @@ kind: Service
 metadata:
   ...
 spec:
-  ...
   ports:
     - port: 80
       targetPort: http
@@ -169,6 +169,7 @@ If `telepresence connect` succeeds, but you find yourself unable to reach servic
 as often VPN clients may add routes that conflict with those added by telepresence. To debug this, pick an IP address in the cluster and get its route information. In this case, we'll get the route for `100.124.150.45`, and discover
 that it's running through a `tailscale` device.
 
+<Platform.Provider>
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
@@ -243,6 +244,7 @@ ifIndex            : 29
 
 </Platform.WindowsTab>
 </Platform.TabGroup>
+</Platform.Provider>
 
 This will tell you which device the traffic is being routed through. As a rule, if the traffic is not being routed by the telepresence device,
 your VPN may need to be reconfigured, as its routing configuration is conflicting with telepresence. One way to determine if this is the case

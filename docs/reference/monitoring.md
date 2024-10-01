@@ -409,7 +409,7 @@ This dashboard is designed to provide you with comprehensive monitoring and visu
       ],
       "title": "Number of sessions",
       "type": "stat"
-    },
+    }
   ],
   "refresh": "",
   "schemaVersion": 38,
