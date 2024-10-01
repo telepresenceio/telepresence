@@ -1,5 +1,8 @@
 ---
-title: Install the Telepresence Docker extension | Ambassador 
+title: "Making the remote local: Faster feedback, collaboration and debugging"
+hide_table_of_contents: true
+---
+
 ---
 # Making the remote local: Faster feedback, collaboration and debugging
 

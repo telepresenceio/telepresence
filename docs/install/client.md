@@ -1,4 +1,10 @@
-import Platform from '@src/components/Platform';
+---
+title: Install client
+hide_table_of_contents: true
+---
+
+
+import Platform from '@site/src/components/Platform';
 
 # Client Installation
 

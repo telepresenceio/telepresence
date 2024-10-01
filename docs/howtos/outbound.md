@@ -1,5 +1,7 @@
 ---
-description: "Telepresence can connect to your Kubernetes cluster, letting you access cluster services as if your laptop was another pod in the cluster."
+title: Proxy outbound traffic to my cluster
+description: Telepresence can connect to your Kubernetes cluster, letting you access cluster services as if your laptop was another pod in the cluster.
+hide_table_of_contents: true
 ---
 
 # Proxy outbound traffic to my cluster

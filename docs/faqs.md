@@ -1,5 +1,7 @@
 ---
+title: FAQs
 description: "Learn how Telepresence helps with fast development and debugging in your Kubernetes cluster."
+hide_table_of_contents: true
 ---
 
 # FAQs

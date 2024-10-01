@@ -1,6 +1,7 @@
 ---
-title: "Types of intercepts"
-description: "Short demonstration of personal vs global intercepts"
+title: "Intercepts"
+description: "Short demonstration of global intercepts"
+hide_table_of_contents: true
 ---
 
 import React from 'react';

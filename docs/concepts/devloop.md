@@ -1,5 +1,6 @@
 ---
-title: "The developer and the inner dev loop | Ambassador "
+title: The developer experience and the inner dev loop
+hide_table_of_contents: true
 ---
 
 # The developer experience and the inner dev loop

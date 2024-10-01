@@ -1,3 +1,8 @@
+---
+title: Networking through Virtual Network Interface
+hide_table_of_contents: true
+---
+
 # Networking through Virtual Network Interface
 
 The Telepresence daemon process creates a Virtual Network Interface (VIF) when Telepresence connects to the cluster. The VIF ensures that the cluster's subnets are available to the workstation. It also intercepts DNS requests and forwards them to the traffic-manager which in turn forwards them to intercepted agents, if any, or performs a host lookup by itself.

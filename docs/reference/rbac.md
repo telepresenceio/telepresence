@@ -1,3 +1,9 @@
+---
+title: RBAC
+toc_min_heading_level: 2
+toc_max_heading_level: 2
+---
+
 # Telepresence RBAC
 The intention of this document is to provide a template for securing and limiting the permissions of Telepresence.
 This documentation covers the full extent of permissions necessary to administrate Telepresence components in a cluster.

@@ -1,3 +1,7 @@
+---
+title: Laptop-side configuration
+---
+
 # Laptop-side configuration
 
 There are a number of configuration values that can be tweaked to change how Telepresence behaves.

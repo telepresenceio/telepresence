@@ -1,3 +1,7 @@
+---
+title: Volume mounts
+hide_table_of_contents: true
+---
 # Volume mounts
 
 import Alert from '@material-ui/lab/Alert';

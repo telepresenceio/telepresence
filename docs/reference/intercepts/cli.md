@@ -1,3 +1,7 @@
+---
+title: Configure intercept using CLI
+---
+
 # Configuring intercept using CLI
 
 ## Specifying a namespace for an intercept

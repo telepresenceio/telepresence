@@ -1,5 +1,7 @@
 ---
+title: Environment variables
 description: "How Telepresence can import environment variables from your Kubernetes cluster to use with code running on your laptop."
+hide_table_of_contents: true
 ---
 
 # Environment variables

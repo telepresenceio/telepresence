@@ -1,6 +1,7 @@
 ---
-title: "Working with large clusters"
-description: "Use Telepresence to intercept services in clusters with a large number of namespaces and workloads."
+title: Work with large clusters
+description: Use Telepresence to intercept services in clusters with a large number of namespaces and workloads.
+hide_table_of_contents: true
 ---
 # Working with large clusters
 

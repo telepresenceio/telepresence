@@ -1,3 +1,7 @@
+---
+title: Running Telepresence inside a container
+hide_table_of_contents: true
+---
 # Running Telepresence inside a container
 
 The `telepresence connect` command now has the option `--docker`. This option tells telepresence to start the Telepresence daemon in a

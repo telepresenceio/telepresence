@@ -1,6 +1,8 @@
 ---
-title: "Considerations for locally hosted clusters | Ambassador"
-description: "Use Telepresence to intercept services in a cluster running in a hosted virtual machine."
+title: Host a cluster in a local VM
+description: Use Telepresence to intercept services in a cluster running in a hosted virtual
+ machine.
+hide_table_of_contents: true
 ---
 
 # Network considerations for locally hosted clusters

@@ -1,3 +1,8 @@
+---
+title: Install Traffic Manager
+hide_table_of_contents: true
+---
+
 # Install/Uninstall the Traffic Manager
 
 Telepresence uses a traffic manager to send/recieve cloud traffic to the user. Telepresence uses [Helm](https://helm.sh) under the hood to install the traffic manager in your cluster. The `telepresence` binary embeds both `helm` and a helm-chart for a traffic-manager that is of the same version as the binary.

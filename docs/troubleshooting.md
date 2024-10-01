@@ -1,5 +1,5 @@
 ---
-title: "Telepresence Troubleshooting"
+title: Troubleshooting
 description: "Learn how to troubleshoot common issues related to Telepresence, including intercept issues, cluster connection issues, and errors related to Ambassador Cloud."
 ---
 # Troubleshooting

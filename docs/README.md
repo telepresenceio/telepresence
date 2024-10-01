@@ -1,4 +1,7 @@
-# <img src=images/logo.png height=64px/> Telepresence Documentation
+---
+description: Main menu when using plain markdown. Excluded when generating the website
+---
+# <img src="images/logo.png" height="64px"/> Telepresence Documentation
 raw markdown version, more bells and whistles at [telepresence.io](https://telepresence.io)
 
 - [Quick start](quick-start.md)
@@ -24,8 +27,9 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Using Docker for intercepts](reference/docker-run.md)
   - [Running Telepresence in a Docker container](reference/inside-container.md)
   - [Environment variables](reference/environment.md)
-  - [Intercepts](reference/intercepts.md)
+  - [Intercepts]
     - [Configure intercept using CLI](reference/intercepts/cli.md)
+    - [Traffic Agent Sidecar](reference/intercepts/sidecar.md)
   - [Volume mounts](reference/volume.md)
   - [DNS resolution](reference/dns.md)
   - [RBAC](reference/rbac.md)

@@ -3,19 +3,21 @@
 - title: Install Telepresence
   items:
     - title: Install Client
-      link: install/client/
+      link: install/client
     - title: Upgrade Client
-      link: install/upgrade/
+      link: install/upgrade
     - title: Install Traffic Manager
-      link: install/manager/
+      link: install/manager
     - title: Cloud Provider Prerequisites
-      link: install/cloud/
+      link: install/cloud
 - title: Core concepts
   items:
     - title: The developer experience and the inner dev loop
       link: concepts/devloop
     - title: "Making the remote local: Faster feedback, collaboration and debugging"
       link: concepts/faster
+    - title: Using Telepresence with Docker
+      link: concepts/docker
     - title: Intercepts
       link: concepts/intercepts
 - title: How do I...
@@ -45,10 +47,11 @@
     - title: Environment variables
       link: reference/environment
     - title: Intercepts
-      link: reference/intercepts
       items:
         - title: Configure intercept using CLI
           link: reference/intercepts/cli
+        - title: Traffic Agent Sidecar
+          link: reference/intercepts/sidecar
     - title: Volume mounts
       link: reference/volume
     - title: DNS resolution
@@ -61,6 +64,8 @@
       link: reference/tun-device
     - title: Connection Routing
       link: reference/routing
+    - title: Monitoring
+      link: reference/monitoring
 - title: FAQs
   link: faqs
 - title: Troubleshooting

@@ -1,3 +1,6 @@
+---
+title: Cluster-side configuration
+---
 # Cluster-side configuration
 
 For the most part, Telepresence doesn't require any special

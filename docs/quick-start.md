@@ -1,5 +1,7 @@
 ---
+title: Quick start
 description: "Start using Telepresence in your own environment. Follow these steps to intercept your service in your cluster."
+hide_table_of_contents: true
 ---
 
 # Telepresence Quickstart

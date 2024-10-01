@@ -1,5 +1,8 @@
 ---
-Description: "How a Telepresence intercept can run a Docker container with configured environment and volume mounts."
+title: Using Docker for intercepts
+description: How a Telepresence intercept can run a Docker container with configured environment and volume mounts.
+toc_min_heading_level: 2
+toc_max_heading_level: 2
 ---
 
 # Using Docker for intercepts

@@ -1,3 +1,7 @@
+---
+title: Telepresence and VPNs
+---
+
 # Telepresence and VPNs
 
 It is often important to set up Kubernetes API server endpoints to be only accessible via a VPN.

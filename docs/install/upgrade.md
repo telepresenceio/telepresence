@@ -1,6 +1,10 @@
 ---
+title: Upgrade client
 description: "How to upgrade your installation of Telepresence and install previous versions."
+hide_table_of_contents: true
 ---
+
+import Platform from '@site/src/components/Platform';
 
 # Upgrade Process
 The Telepresence CLI will periodically check for new versions and notify you when an upgrade is available.  Running the same commands used for installation will replace your current binary with the latest version.
