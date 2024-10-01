@@ -24,7 +24,7 @@ Even within the Kubernetes space, developers will find much of the inner dev loo
 
 In a traditional inner dev loop, if a typical developer codes for 360 minutes (6 hours) a day, with a traditional local iterative development loop of 5 minutes — 3 coding, 1 building, i.e. compiling/deploying/reloading, 1 testing inspecting, and 10-20 seconds for committing code — they can expect to make ~70 iterations of their code per day. Any one of these iterations could be a release candidate. The only “developer tax” being paid here is for the commit process, which is negligible.
 
-![traditional inner dev loop](../images/trad-inner-dev-loop.png)
+![traditional inner dev loop](../images/trad-inner-dev-loop.png#devloop)
 
 ## In search of lost time: How does containerization change the inner dev loop?
 
@@ -40,7 +40,7 @@ Changes to the inner dev loop process, i.e., containerization, threaten to slow 
 Each new step within the container inner dev loop adds to overall development time, and developers are repeating this process frequently. If the build time is incremented to 5 minutes — not atypical with a standard container build, registry upload, and deploy — then the number of possible development iterations per day drops to ~40. At the extreme that’s a 40% decrease in potential new features being released. This new container build step is a hidden tax, which is quite expensive.
 
 
-![container inner dev loop](../images/container-inner-dev-loop.png)
+![container inner dev loop](../images/container-inner-dev-loop.png#devloop)
 
 ## Tackling the slow inner dev loop
 
