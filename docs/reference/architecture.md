@@ -6,6 +6,8 @@ hide_table_of_contents: true
 
 # Telepresence Architecture
 
+![Architecture](../images/TP_Architecture.svg)
+
 ## Telepresence CLI
 
 The Telepresence CLI orchestrates the moving parts on the workstation: it starts the Telepresence Daemons and then acts
