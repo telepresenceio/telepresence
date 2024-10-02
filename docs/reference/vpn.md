@@ -108,7 +108,7 @@ Cluster DNS responses matching CIDR to virtual IPs that are routed (with reverse
 | `pods`    | The cluster's pod subnets.          | 
 | `all`     | All of the above.                   |
 
-The WORKLOAD is the deployment, replicaset, or statefulset in the cluster whose agent will be used for targeting the routed subnets.
+The WORKLOAD is the deployment, replicaset, statefulset, or argo-rollout in the cluster whose agent will be used for targeting the routed subnets.
 
 This is useful in two situations:
 

@@ -47,6 +47,7 @@ items:
           instead of a service port. The new behavior is enabled by adding a <code>telepresence.getambassador.io/inject-container-ports</code>
           annotation where the value is a comma separated list of port identifiers consisting of either the name or the port number of a container
           port, optionally suffixed with `/TCP` or `/UDP`.
+        docs: https://telepresence.io/docs/reference/intercepts/cli#intercepting-without-a-service
       - type: feature
         title: Publish the OSS version of the telepresence Helm chart
         body: >-
@@ -54,12 +55,14 @@ items:
           can be installed using the command:<br/>
           <code>helm install traffic-manager oci://ghcr.io/telepresenceio/telepresence-oss --namespace ambassador --version 2.20.0</code>
           The chart documentation is published at <a href="https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss">ArtifactHUB</a>.
+        docs: https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss
       - type: feature
         title: Control the syntax of the environment file created with the intercept flag --env-file
         body: >-
           A new <code>--env-syntax &lt;syntax&gt;</code> was introduced to allow control over the syntax of the file created when using the intercept
           flag <code>--env-file &lt;file&gt;</code>. Valid syntaxes are &quot;docker&quot;, &quot;compose&quot;, &quot;sh&quot;, &quot;csh&quot;, &quot;cmd&quot;,
           and &quot;ps&quot;; where &quot;sh&quot;, &quot;csh&quot;, and &quot;ps&quot; can be suffixed with &quot;:export&quot;.
+        docs: https://telepresence.io/docs/reference/environment
       - type: feature
         title: Add support for Argo Rollout workloads.
         body: >-

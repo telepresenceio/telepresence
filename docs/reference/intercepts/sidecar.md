@@ -19,7 +19,13 @@ the intercepted service.
 Kubernetes has various
 [workloads](https://kubernetes.io/docs/concepts/workloads/).
 Currently, Telepresence supports intercepting (installing a
-traffic-agent on) `Deployments`, `ReplicaSets`, and `StatefulSets`.
+traffic-agent on) `Deployments`, `ReplicaSets`, `StatefulSets`, and `ArgoRollouts`.
+
+### Enable ArgoRollouts
+
+In order to use `ArgoRollouts`, you must pass the Helm chart value `workloads.argoRollouts.enabled=true` when installing the traffic-manager.
+It is recommended to set the pod template annotation `telepresence.getambassador.io/inject-traffic-agent: enabled` to avoid creation of unwanted
+revisions.
 
 > [!NOTE]
-> While many of our examples use Deployments, they would also work on ReplicaSets and StatefulSets
+> While many of our examples use Deployments, they would also work on other supported workload types.

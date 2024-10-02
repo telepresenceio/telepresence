@@ -54,7 +54,7 @@ The `agent.resources` and `agent.initResources` will be used as the `resources` 
 ## Mutating Webhook
 
 Telepresence uses a Mutating Webhook to inject the [Traffic Agent](architecture.md#traffic-agent) sidecar container and update the
-port definitions. This means that an intercepted workload (Deployment, StatefulSet, ReplicaSet) will remain untouched
+port definitions. This means that an intercepted workload (Deployment, StatefulSet, ReplicaSet, ArgoRollout) will remain untouched
 and in sync as far as GitOps workflows (such as ArgoCD) are concerned.
 
 The injection will happen on demand the first time an attempt is made to intercept the workload.
