@@ -58,12 +58,24 @@ func (t *TOC) writeMarkdown(indent string, w io.Writer) (err error) {
 	return err
 }
 
+const frontMatter = `---
+description: Main menu when using plain markdown. Excluded when generating the website
+---
+# <img src="images/logo.png" height="64px"/> Telepresence Documentation
+raw markdown version, more bells and whistles at [telepresence.io](https://telepresence.io)
+
+`
+
 func makeTOC(input string) error {
 	ts, err := readTOC(input)
 	if err != nil {
 		return err
 	}
 	wr := bufio.NewWriter(os.Stdout)
+	_, err = wr.WriteString(frontMatter)
+	if err != nil {
+		return err
+	}
 	for _, c := range ts {
 		if err = c.writeMarkdown("", wr); err != nil {
 			return err

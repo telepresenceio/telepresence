@@ -13,6 +13,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
 - Core concepts
   - [The developer experience and the inner dev loop](concepts/devloop.md)
   - [Making the remote local: Faster feedback, collaboration and debugging](concepts/faster.md)
+  - [Using Telepresence with Docker](concepts/docker.md)
   - [Intercepts](concepts/intercepts.md)
 - How do I...
   - [Intercept a service in your own environment](howtos/intercepts.md)
@@ -27,7 +28,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Using Docker for intercepts](reference/docker-run.md)
   - [Running Telepresence in a Docker container](reference/inside-container.md)
   - [Environment variables](reference/environment.md)
-  - [Intercepts]
+  - Intercepts
     - [Configure intercept using CLI](reference/intercepts/cli.md)
     - [Traffic Agent Sidecar](reference/intercepts/sidecar.md)
   - [Volume mounts](reference/volume.md)
@@ -36,6 +37,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Telepresence and VPNs](reference/vpn.md)
   - [Networking through Virtual Network Interface](reference/tun-device.md)
   - [Connection Routing](reference/routing.md)
+  - [Monitoring](reference/monitoring.md)
 - [FAQs](faqs.md)
 - [Troubleshooting](troubleshooting.md)
 - [Community](community.md)

@@ -97,7 +97,7 @@ $(TOOLSBINDIR)/tocgen$(EXE): $(TOOLSSRCDIR)/tocgen/*.go
 # ==========
 #
 tools/relnotesgen = $(TOOLSBINDIR)/relnotesgen$(EXE)
-$(TOOLSBINDIR)/relnotesgen$(EXE): $(TOOLSSRCDIR)/relnotesgen/**/*.go $(TOOLSSRCDIR)/relnotesgen/relnotes/relnotes.gomd
+$(TOOLSBINDIR)/relnotesgen$(EXE): $(TOOLSSRCDIR)/relnotesgen/**/*.go $(TOOLSSRCDIR)/relnotesgen/relnotes/relnotes.*
 	(cd $(TOOLSSRCDIR)/relnotesgen && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
 
 # Shellcheck

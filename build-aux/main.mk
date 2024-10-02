@@ -115,8 +115,6 @@ generate-clean: ## (Generate) Delete generated files
 	rm -rf ./vendor
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
-	rm -f docs/README.md
-	rm -f docs/releaseNotes.md
 
 CHANGELOG.yml: FORCE
 	@# Check if the version is in the x.x.x format (GA release)
@@ -130,9 +128,7 @@ CHANGELOG.yml: FORCE
 docs-files: docs/README.md docs/release-notes.md docs/release-notes.mdx
 
 docs/README.md: docs/doc-links.yml $(tools/tocgen)
-	printf "# <img src="images/logo.png" height="64px"/> Telepresence Documentation\n" > $@
-	printf "raw markdown version, more bells and whistles at [telepresence.io](https://telepresence.io)\n\n" >> $@
-	$(tools/tocgen) --input $< >> $@
+	$(tools/tocgen) --input $< > $@
 
 docs/release-notes.md: CHANGELOG.yml $(tools/relnotesgen)
 	$(tools/relnotesgen) --input $< > $@

@@ -1,9 +1,4 @@
----
-title: Licenses
-hide_table_of_contents: true
----
-
-Telepresence incorporates Free and Open Source software under the following licenses:
+Telepresence CLI incorporates Free and Open Source software under the following licenses:
 
 * [2-clause BSD license](https://opensource.org/licenses/BSD-2-Clause)
 * [3-clause BSD license](https://opensource.org/licenses/BSD-3-Clause)
