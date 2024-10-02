@@ -41,9 +41,9 @@ jobs:
       - name: generate binaries
         run: make release-binary
       - name: Upload binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: binaries
+          name: binaries-${{ matrix.runner }}-${{ matrix.arch }}
           path: build-output/release
           retention-days: 1
 
@@ -91,7 +91,9 @@ jobs:
       - build-release
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4.1.7
+        uses: actions/download-artifact@v4
+      - name: Display structure of downloaded files
+        run: ls -R
       - name: Determine if version is RC, TEST, or GA
         id: semver_check
         run: |
@@ -116,7 +118,7 @@ jobs:
         if: steps.semver_check.outputs.draft == true
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "binaries/*"
+          artifacts: "binaries-*/*"
           token: ${{ secrets.GITHUB_TOKEN }}
           draft:
           tag: ${{ github.ref_name }}
@@ -127,7 +129,7 @@ jobs:
         if: steps.semver_check.outputs.draft != true
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "binaries/*"
+          artifacts: "binaries-*/*"
           token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: ${{ steps.semver_check.outputs.prerelease }}
           makeLatest: ${{ steps.semver_check.outputs.make_latest }}
@@ -144,7 +146,7 @@ jobs:
                - 📦 [telepresence-windows-amd64.zip](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
 
             For more builds across platforms and architectures, see the `Assets` section below.
-            And for more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
+            And for more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start/).
 
             ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
 

@@ -13,15 +13,15 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 	<Body>Telepresence is now capable of easily find telepresence gather-logs by certain timestamp.</Body>
 </Note>
 <Note>
-	<Title type="feature">Enable intercepts of workloads that have no service.</Title>
+	<Title type="feature" docs="https://telepresence.io/docs/reference/intercepts/cli#intercepting-without-a-service">Enable intercepts of workloads that have no service.</Title>
 	<Body>Telepresence is now capable of intercepting workloads that have no associated service. The intercept will then target container port instead of a service port. The new behavior is enabled by adding a <code>telepresence.getambassador.io/inject-container-ports</code> annotation where the value is a comma separated list of port identifiers consisting of either the name or the port number of a container port, optionally suffixed with `/TCP` or `/UDP`.</Body>
 </Note>
 <Note>
-	<Title type="feature">Publish the OSS version of the telepresence Helm chart</Title>
+	<Title type="feature" docs="https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss">Publish the OSS version of the telepresence Helm chart</Title>
 	<Body>The OSS version of the telepresence helm chart is now available at ghcr.io/telepresenceio/telepresence-oss, and can be installed using the command:<br/> <code>helm install traffic-manager oci://ghcr.io/telepresenceio/telepresence-oss --namespace ambassador --version 2.20.0</code> The chart documentation is published at <a href="https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss">ArtifactHUB</a>.</Body>
 </Note>
 <Note>
-	<Title type="feature">Control the syntax of the environment file created with the intercept flag --env-file</Title>
+	<Title type="feature" docs="https://telepresence.io/docs/reference/environment">Control the syntax of the environment file created with the intercept flag --env-file</Title>
 	<Body>A new <code>--env-syntax &lt;syntax&gt;</code> was introduced to allow control over the syntax of the file created when using the intercept flag <code>--env-file &lt;file&gt;</code>. Valid syntaxes are &quot;docker&quot;, &quot;compose&quot;, &quot;sh&quot;, &quot;csh&quot;, &quot;cmd&quot;, and &quot;ps&quot;; where &quot;sh&quot;, &quot;csh&quot;, and &quot;ps&quot; can be suffixed with &quot;:export&quot;.</Body>
 </Note>
 <Note>

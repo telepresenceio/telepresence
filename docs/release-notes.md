@@ -8,19 +8,19 @@
 Telepresence is now capable of easily find telepresence gather-logs by certain timestamp.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Enable intercepts of workloads that have no service.</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Enable intercepts of workloads that have no service.](https://telepresence.io/docs/reference/intercepts/cli#intercepting-without-a-service)</div></div>
 <div style="margin-left: 15px">
 
 Telepresence is now capable of intercepting workloads that have no associated service. The intercept will then target container port instead of a service port. The new behavior is enabled by adding a <code>telepresence.getambassador.io/inject-container-ports</code> annotation where the value is a comma separated list of port identifiers consisting of either the name or the port number of a container port, optionally suffixed with `/TCP` or `/UDP`.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Publish the OSS version of the telepresence Helm chart</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Publish the OSS version of the telepresence Helm chart](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss)</div></div>
 <div style="margin-left: 15px">
 
 The OSS version of the telepresence helm chart is now available at ghcr.io/telepresenceio/telepresence-oss, and can be installed using the command:<br/> <code>helm install traffic-manager oci://ghcr.io/telepresenceio/telepresence-oss --namespace ambassador --version 2.20.0</code> The chart documentation is published at <a href="https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss">ArtifactHUB</a>.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Control the syntax of the environment file created with the intercept flag --env-file</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Control the syntax of the environment file created with the intercept flag --env-file](https://telepresence.io/docs/reference/environment)</div></div>
 <div style="margin-left: 15px">
 
 A new <code>--env-syntax &lt;syntax&gt;</code> was introduced to allow control over the syntax of the file created when using the intercept flag <code>--env-file &lt;file&gt;</code>. Valid syntaxes are &quot;docker&quot;, &quot;compose&quot;, &quot;sh&quot;, &quot;csh&quot;, &quot;cmd&quot;, and &quot;ps&quot;; where &quot;sh&quot;, &quot;csh&quot;, and &quot;ps&quot; can be suffixed with &quot;:export&quot;.
