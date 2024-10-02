@@ -3,7 +3,10 @@
 # changelog: An (optional) URL to the CHANGELOG for the product.
 # items: An array of releases with the following attributes:
 #     - version: The (optional) version number of the release, if applicable.
-#     - date: The date of the release in the format YYYY-MM-DD.
+#     - date: >-
+#         The date of the release in the format YYYY-MM-DD.
+#         If the date is (SUPERSEDED), then the release didn't happen, which means
+#         that its notes belong to the next release.
 #     - notes: An array of noteworthy changes included in the release, each having the following attributes:
 #         - type: The type of change, one of `bugfix`, `feature`, `security` or `change`.
 #         - title: A short title of the noteworthy change.
@@ -43,12 +46,12 @@ items:
           Telepresence is now capable of intercepting workloads that have no associated service. The intercept will then target container port
           instead of a service port. The new behavior is enabled by adding a <code>telepresence.getambassador.io/inject-container-ports</code>
           annotation where the value is a comma separated list of port identifiers consisting of either the name or the port number of a container
-          port, optionally suffixed with <code>/TCP</code> or <code>/UDP</code>.
+          port, optionally suffixed with `/TCP` or `/UDP`.
       - type: feature
         title: Publish the OSS version of the telepresence Helm chart
         body: >-
           The OSS version of the telepresence helm chart is now available at ghcr.io/telepresenceio/telepresence-oss, and
-          can be installed using the command:<br>
+          can be installed using the command:<br/>
           <code>helm install traffic-manager oci://ghcr.io/telepresenceio/telepresence-oss --namespace ambassador --version 2.20.0</code>
           The chart documentation is published at <a href="https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss">ArtifactHUB</a>.
       - type: feature
@@ -64,6 +67,14 @@ items:
           The behavior is controlled by `workloads.argoRollouts.enabled` Helm chart value.
           It is recommended to set the following annotation <code>telepresence.getambassador.io/inject-traffic-agent: enabled</code>
           to avoid creation of unwanted revisions.
+      - type: bugfix
+        title: Enable intercepts of containers that bind to podIP
+        body: >-
+          In previous versions, the traffic-agent would route traffic to localhost during periods when an intercept wasn't
+          active. This made it impossible for an application to bind to the pod's IP, and it also meant that service meshes binding
+          to the podIP would get bypassed, both during and after an intercept had been made.
+          This is now changed, so that the traffic-agent instead forwards non intercepted requests to the pod's IP, thereby
+          enabling the application to either bind to localhost or to that IP.
       - type: change
         title: Use ghcr.io/telepresenceio instead of docker.io/datawire for OSS images and the telemount Docker volume plugin.
         body: >-
@@ -184,7 +195,7 @@ items:
           was the Windows host running Docker Desktop. The fix for this was to use the local IP of the default route instead of
           <code>host.docker.internal</code> when running under WSL..
   - version: 2.18.6
-    date: (TBD)
+    date: (SUPERSEDED)
     notes:
       - type: bugfix
         title: Fix bug in workload cache, causing endless recursion when a workload uses the same name as its owner.
@@ -200,7 +211,7 @@ items:
           available&quot; although those events indicate a recoverable condition and kill the wait. This is now fixed so
           that the events are logged but the wait continues.
   - version: 2.18.5
-    date: (TBD)
+    date: (SUPERSEDED)
     notes:
       - type: bugfix
         title: Improve how the traffic-manager resolves DNS when no agent is installed.
@@ -288,7 +299,7 @@ items:
           This resolves a bug that did not test all subnets in a private range, sometimes resulting in the warning,
           "DNS doesn't seem to work properly."
   - version: 2.18.4
-    date: (TBD)
+    date: (SUPERSEDED)
     notes:
       - type: bugfix
         title: Docker aliases deprecation caused failure to detect Kind cluster.
@@ -298,7 +309,7 @@ items:
           network that a Kind cluster sets up. In Docker versions from 26 and up, this value is no longer used, but the
           corresponding info can instead be found in the new <code>DNSNames</code> field.
   - version: 2.18.3
-    date: (TBD)
+    date: (SUPERSEDED)
     notes:
       - type: bugfix
         title: Creation of individual pods was blocked by the agent-injector webhook.
@@ -307,7 +318,7 @@ items:
           <code>kubectl run -i busybox --rm --image=curlimages/curl --restart=Never -- curl echo-easy.default</code>
           would be blocked from executing.
   - version: 2.18.2
-    date: (TBD)
+    date: (SUPERSEDED)
     notes:
       - type: bugfix
         title: Fix panic due to root daemon not running.
@@ -317,7 +328,7 @@ items:
           was set up. This is now fixed so that the initial <code>telepresence connect</code> is refused unless the root
           daemon is running.
   - version: 2.18.1
-    date: (TBD)
+    date: (SUPERSEDED)
     notes:
       - type: bugfix
         title: Get rid of telemount plugin stickiness
@@ -378,12 +389,12 @@ items:
           are then routed (with reverse translation) via the pod's of a given workload. This makes it possible to handle
           custom DNS servers that resolve domains into loopback IPs. The flag may also be used in cases where the
           cluster's subnets are in conflict with the workstation's VPN.</p>
-          <p>The CIDR can also be a symbolic name that identifies a subnet or list of subnets:<table>
+          <p>The CIDR can also be a symbolic name that identifies a subnet or list of subnets:</p><table><tbody>
           <tr><td><code>also</code></td><td>All subnets added with --also-proxy</td></tr>
           <tr><td><code>service</code></td><td>The cluster's service subnet</td></tr>
           <tr><td><code>pods</code></td><td>The cluster's pod subnets.</td></tr>
           <tr><td><code>all</code></td><td>All of the above.</td></tr>
-          </table></p>
+          </tbody></table>
       - type: bugfix
         title: Ensure that agent.appProtocolStrategy is propagated correctly.
         body: >-
@@ -541,7 +552,7 @@ items:
         title: Additional Prometheus metrics to track intercept/connect activity
         body: >-
           This feature adds the following metrics to the Prometheus endpoint: <code>connect_count</code>,
-          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code.
+          <code>connect_active_status</code>, <code>intercept_count</code>, and <code>intercept_active_status</code>.
           These are labeled by client/install_id.
           Additionally, the <code>intercept_count</code> metric has been renamed to <code>active_intercept_count</code>
           for clarity.
@@ -610,7 +621,7 @@ items:
       - type: bugfix
         title: Backward compatibility for pod template TLS annotations.
         body: >-
-          Users of Telepresence < 2.9.0 that make use of the pod template TLS annotations were unable to upgrade because
+          Users of Telepresence &lt; 2.9.0 that make use of the pod template TLS annotations were unable to upgrade because
           the annotation names have changed (now prefixed by "telepresence."), and the environment expansion of the
           annotation values was dropped. This fix restores support for the old names (while retaining the new ones) and
           the environment expansion.
@@ -730,7 +741,7 @@ items:
         body: >-
           Upgrading the traffic-manager using <code>telepresence helm upgrade</code> would sometimes
           result in a helm error message <q>executing "telepresence/templates/intercept-env-configmap.yaml"
-          at <.Values.intercept.environment.excluded>: nil pointer evaluating interface {}.excluded"</q>
+          at &lt;.Values.intercept.environment.excluded&gt;: nil pointer evaluating interface {}.excluded"</q>
         docs: https://github.com/telepresenceio/telepresence/issues/3313
   - version: 2.14.2
     date: "2023-07-26"

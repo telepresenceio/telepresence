@@ -1,0 +1,78 @@
+- title: Quick start
+  link: quick-start
+- title: Install Telepresence
+  items:
+    - title: Install Client
+      link: install/client
+    - title: Upgrade Client
+      link: install/upgrade
+    - title: Install Traffic Manager
+      link: install/manager
+    - title: Cloud Provider Prerequisites
+      link: install/cloud
+- title: Core concepts
+  items:
+    - title: The developer experience and the inner dev loop
+      link: concepts/devloop
+    - title: "Making the remote local: Faster feedback, collaboration and debugging"
+      link: concepts/faster
+    - title: Using Telepresence with Docker
+      link: concepts/docker
+    - title: Intercepts
+      link: concepts/intercepts
+- title: How do I...
+  items:
+    - title: Intercept a service in your own environment
+      link: howtos/intercepts
+    - title: Proxy outbound traffic to my cluster
+      link: howtos/outbound
+    - title: Work with large clusters
+      link: howtos/large-clusters
+    - title: Host a cluster in a local VM
+      link: howtos/cluster-in-vm
+- title: Technical reference
+  items:
+    - title: Architecture
+      link: reference/architecture
+    - title: Client reference
+      link: reference/client
+    - title: Laptop-side configuration
+      link: reference/config
+    - title: Cluster-side configuration
+      link: reference/cluster-config
+    - title: Using Docker for intercepts
+      link: reference/docker-run
+    - title: Running Telepresence in a Docker container
+      link: reference/inside-container
+    - title: Environment variables
+      link: reference/environment
+    - title: Intercepts
+      items:
+        - title: Configure intercept using CLI
+          link: reference/intercepts/cli
+        - title: Traffic Agent Sidecar
+          link: reference/intercepts/sidecar
+    - title: Volume mounts
+      link: reference/volume
+    - title: DNS resolution
+      link: reference/dns
+    - title: RBAC
+      link: reference/rbac
+    - title: Telepresence and VPNs
+      link: reference/vpn
+    - title: Networking through Virtual Network Interface
+      link: reference/tun-device
+    - title: Connection Routing
+      link: reference/routing
+    - title: Monitoring
+      link: reference/monitoring
+- title: FAQs
+  link: faqs
+- title: Troubleshooting
+  link: troubleshooting
+- title: Community
+  link: community
+- title: Release Notes
+  link: release-notes
+- title: Licenses
+  link: licenses

@@ -86,6 +86,20 @@ tools/test-report = $(TOOLSBINDIR)/test-report$(EXE)
 $(TOOLSBINDIR)/test-report$(EXE): $(TOOLSSRCDIR)/test-report/*.go $(TOOLSSRCDIR)/test-report/go.*
 	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
 
+# TOC generator
+# ==========
+#
+tools/tocgen = $(TOOLSBINDIR)/tocgen$(EXE)
+$(TOOLSBINDIR)/tocgen$(EXE): $(TOOLSSRCDIR)/tocgen/*.go
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
+
+# Release Notes generator
+# ==========
+#
+tools/relnotesgen = $(TOOLSBINDIR)/relnotesgen$(EXE)
+$(TOOLSBINDIR)/relnotesgen$(EXE): $(TOOLSSRCDIR)/relnotesgen/**/*.go $(TOOLSSRCDIR)/relnotesgen/relnotes/relnotes.*
+	(cd $(TOOLSSRCDIR)/relnotesgen && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
+
 # Shellcheck
 # ==========
 #

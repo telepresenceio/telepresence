@@ -86,7 +86,7 @@ protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-g
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean
-generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz
+generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).src.tar.gz docs-files
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/dnet/testdata/mockserver && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/vif/testdata/router && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
@@ -105,6 +105,7 @@ generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).
 		--output-type=json --application-type=external --unparsable-packages build-aux/unparsable-packages.yaml > $(BUILDDIR)/DEPENDENCIES.json
 	jq -r '.licenseInfo | to_entries | .[] | "* [" + .key + "](" + .value + ")"' $(BUILDDIR)/DEPENDENCIES.json > $(BUILDDIR)/LICENSES.txt
 	sed -e 's/\[\([^]]*\)]()/\1/' $(BUILDDIR)/LICENSES.txt >> DEPENDENCY_LICENSES.md
+	rsync -vc DEPENDENCY_LICENSES.md docs/licenses.md
 
 	rm -rf vendor
 
@@ -114,6 +115,26 @@ generate-clean: ## (Generate) Delete generated files
 	rm -rf ./vendor
 	rm -f DEPENDENCIES.md
 	rm -f DEPENDENCY_LICENSES.md
+
+CHANGELOG.yml: FORCE
+	@# Check if the version is in the x.x.x format (GA release)
+	if echo "$(TELEPRESENCE_VERSION)" | grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo $$file; \
+		sed -i.bak -r "s/date: (TBD|\(TBD\)|\"TBD\"|\"\(TBD\)\")$$/date: $$(date +'%Y-%m-%d')/" CHANGELOG.yml; \
+		rm -f CHANGELOG.yml.bak; \
+		git add CHANGELOG.yml; \
+	fi
+
+docs-files: docs/README.md docs/release-notes.md docs/release-notes.mdx
+
+docs/README.md: docs/doc-links.yml $(tools/tocgen)
+	$(tools/tocgen) --input $< > $@
+
+docs/release-notes.md: CHANGELOG.yml $(tools/relnotesgen)
+	$(tools/relnotesgen) --input $< > $@
+
+docs/release-notes.mdx: CHANGELOG.yml $(tools/relnotesgen)
+	$(tools/relnotesgen) --mdx --input $< > $@
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
@@ -263,13 +284,6 @@ clobber: ## (Build) Remove all build artifacts and tools
 
 .PHONY: prepare-release
 prepare-release: generate
-	@# Check if the version is in the x.x.x format (GA release)
-	if echo "$(TELEPRESENCE_VERSION)" | grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		sed -i.bak "/date: \"*TBD\"*\$$/s/\"*TBD\"*/\"$$(date +'%Y-%m-%d')\"/" CHANGELOG.yml; \
-		rm -f CHANGELOG.yml.bak; \
-		git add CHANGELOG.yml; \
-	fi
-
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
 	git add go.mod
 
