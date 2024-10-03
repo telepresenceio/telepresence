@@ -129,12 +129,15 @@ docs-files: docs/README.md docs/release-notes.md docs/release-notes.mdx
 
 docs/README.md: docs/doc-links.yml $(tools/tocgen)
 	$(tools/tocgen) --input $< > $@
+	git add $@
 
 docs/release-notes.md: CHANGELOG.yml $(tools/relnotesgen)
 	$(tools/relnotesgen) --input $< > $@
+	git add $@
 
 docs/release-notes.mdx: CHANGELOG.yml $(tools/relnotesgen)
 	$(tools/relnotesgen) --mdx --input $< > $@
+	git add $@
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
