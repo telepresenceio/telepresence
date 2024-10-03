@@ -34,7 +34,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.20.0
-    date: (TBD)
+    date: 2024-10-03
     notes:
       - type: feature
         title: Add timestamp to telepresence_logs.zip filename.
