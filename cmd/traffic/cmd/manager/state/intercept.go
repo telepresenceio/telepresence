@@ -537,6 +537,14 @@ func findIntercept(ac *agentconfig.Sidecar, spec *managerrpc.InterceptSpec) (fou
 			}
 			if foundIC == nil {
 				foundCN = cn
+				if spec.ContainerName != "" {
+					for _, cx := range ac.Containers {
+						if cx.Name == spec.ContainerName {
+							foundCN = cx
+							break
+						}
+					}
+				}
 				foundIC = ic
 				continue
 			}

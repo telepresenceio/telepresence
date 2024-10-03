@@ -16,21 +16,19 @@ import (
 type fwdState struct {
 	*state
 	intercept       InterceptTarget
+	container       string
 	forwarder       forwarder.Interceptor
-	mountPoint      string
-	env             map[string]string
 	chosenIntercept *manager.InterceptInfo
 }
 
 // NewInterceptState creates an InterceptState that performs intercepts by using an Interceptor which indiscriminately
 // intercepts all traffic to the port that it forwards.
-func (s *state) NewInterceptState(forwarder forwarder.Interceptor, intercept InterceptTarget, mountPoint string, env map[string]string) InterceptState {
+func (s *state) NewInterceptState(forwarder forwarder.Interceptor, intercept InterceptTarget, container string) InterceptState {
 	return &fwdState{
-		state:      s,
-		mountPoint: mountPoint,
-		intercept:  intercept,
-		forwarder:  forwarder,
-		env:        env,
+		state:     s,
+		intercept: intercept,
+		container: container,
+		forwarder: forwarder,
 	}
 }
 
@@ -117,6 +115,20 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 	// Review waiting intercepts
 	reviews := make([]*manager.ReviewInterceptRequest, 0, len(cepts))
 	for _, cept := range cepts {
+		container := cept.Spec.ContainerName
+		if container == "" {
+			container = fs.container
+		}
+		cs := fs.containerStates[container]
+		if cs == nil {
+			reviews = append(reviews, &manager.ReviewInterceptRequest{
+				Id:                cept.Id,
+				Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
+				Message:           fmt.Sprintf("No match for container %q", container),
+				MechanismArgsDesc: "all TCP connections",
+			})
+			continue
+		}
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active
 			switch {
@@ -130,9 +142,9 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 					PodIp:             fs.PodIP(),
 					FtpPort:           int32(fs.FtpPort()),
 					SftpPort:          int32(fs.SftpPort()),
-					MountPoint:        fs.mountPoint,
+					MountPoint:        cs.MountPoint(),
 					MechanismArgsDesc: "all TCP connections",
-					Environment:       fs.env,
+					Environment:       cs.Env(),
 				})
 			case fs.chosenIntercept == nil:
 				// We don't have an intercept in play, so choose this one. All
@@ -149,9 +161,9 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 					PodIp:             fs.PodIP(),
 					FtpPort:           int32(fs.FtpPort()),
 					SftpPort:          int32(fs.SftpPort()),
-					MountPoint:        fs.mountPoint,
+					MountPoint:        cs.MountPoint(),
 					MechanismArgsDesc: "all TCP connections",
-					Environment:       fs.env,
+					Environment:       cs.Env(),
 				})
 			default:
 				// We already have an intercept in play, so reject this one.

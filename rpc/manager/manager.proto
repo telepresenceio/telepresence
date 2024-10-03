@@ -118,6 +118,11 @@ message InterceptSpec {
   // The resolved protocol used by the container port
   string protocol = 21; // TCP or UDP
 
+  // Name of container that provides environment and mounts. This is normally the container
+  // that owns the container_port, but in some cases it will differ because the container_port
+  // is owned by some kind of routing mechanism (such as nginx).
+  string container_name = 24;
+
   // The resolved container port
   int32 container_port = 23;
 

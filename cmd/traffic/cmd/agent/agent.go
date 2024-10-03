@@ -51,7 +51,7 @@ func AppEnvironment(ctx context.Context, ag *agentconfig.Container) (map[string]
 	// Add prefixed variables separately last, so that we can
 	// ensure that they have higher precedence.
 	for _, env := range osEnv {
-		if !strings.HasPrefix(env, agentconfig.EnvPrefix) {
+		if !strings.HasPrefix(env, agentconfig.EnvPrefix) && !strings.Contains(env, "_TELEPRESENCE_MOUNTS=") {
 			pair := strings.SplitN(env, "=", 2)
 			if len(pair) == 2 {
 				k := pair[0]
@@ -162,6 +162,9 @@ func sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 		if err != nil {
 			return err
 		}
+		cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
+		s.AddContainerState(cn.Name, NewContainerState(cnMountPoint, env))
+
 		// Group the containers intercepts by agent port
 		icStates := make(map[agentconfig.PortAndProto][]*agentconfig.Intercept, len(cn.Intercepts))
 		for _, ic := range cn.Intercepts {
@@ -193,8 +196,7 @@ func sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 			dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s", iputil.JoinHostPort(cn.Name, cp)), func(ctx context.Context) error {
 				return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 			})
-			cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
-			s.AddInterceptState(s.NewInterceptState(fwd, NewInterceptTarget(ics), cnMountPoint, env))
+			s.AddInterceptState(s.NewInterceptState(fwd, NewInterceptTarget(ics), cn.Name))
 		}
 	}
 	TalkToManagerLoop(ctx, s, info)
