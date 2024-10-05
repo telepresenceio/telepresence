@@ -52,6 +52,8 @@
           link: reference/intercepts/cli
         - title: Traffic Agent Sidecar
           link: reference/intercepts/sidecar
+        - title: Target a specific container
+          link: reference/intercepts/container
     - title: Volume mounts
       link: reference/volume
     - title: DNS resolution
