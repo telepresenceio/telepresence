@@ -33,6 +33,15 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.20.1
+    date: TBD
+    notes:
+      - type: bugfix
+        title: Allow comma separated list of daemons for the gather-logs command.
+        body: ->
+          The name of the `telepresence gather-logs` flag `--daemons` suggests that the argument can contain more
+          than one daemon, but prior to this fix, it couldn't. It is now possible to use a comma separated
+          list, e.g. `telepresence gather-logs --daemons root,user`.
   - version: 2.20.0
     date: 2024-10-03
     notes:

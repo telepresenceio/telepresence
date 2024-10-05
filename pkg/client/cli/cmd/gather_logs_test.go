@@ -191,6 +191,12 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			errMsg:     "",
 		},
 		{
+			name:       "successfulZipConnectorAndDaemonLogs",
+			outputFile: "",
+			daemons:    "user,root",
+			errMsg:     "",
+		},
+		{
 			name:       "successfulZipNoDaemonLogs",
 			outputFile: "",
 			daemons:    "None",
@@ -261,6 +267,8 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 					regexStr = "daemon"
 				case "user":
 					regexStr = "connector"
+				case "user,root":
+					regexStr = "connector|daemon"
 				case "None":
 					regexStr = "a^" // impossible to match
 				default:
