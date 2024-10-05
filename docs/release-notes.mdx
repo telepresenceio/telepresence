@@ -13,6 +13,10 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 	<Body>-> In certain scenarios, the container owning the intercepted port differs from the container the intercept targets. This port owner's sole purpose is to route traffic from the service to the intended container, often using a direct localhost connection.
 This commit introduces a `--container <name>` option to the intercept command. While this option doesn't influence the port selection, it guarantees that the environment variables and mounts propagated to the client originate from the specified container. Additionally, if the `--replace` option is used, it ensures that this container is replaced.</Body>
 </Note>
+<Note>
+	<Title type="bugfix">Allow comma separated list of daemons for the gather-logs command.</Title>
+	<Body>-> The name of the `telepresence gather-logs` flag `--daemons` suggests that the argument can contain more than one daemon, but prior to this fix, it couldn't. It is now possible to use a comma separated list, e.g. `telepresence gather-logs --daemons root,user`.</Body>
+</Note>
 ## Version 2.20.0 <span style={{fontSize:'16px'}}>(October  3)</span>
 <Note>
 	<Title type="feature">Add timestamp to telepresence_logs.zip filename.</Title>
