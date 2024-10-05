@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: echo-data
+data:
+  text: |
+    Hello from echo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: socat-data
+data:
+  text: |
+    Hello from socat
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "echo-secondary"
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-secondary
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "echo-secondary"
+  labels:
+    app: echo-secondary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-secondary
+  template:
+    metadata:
+      labels:
+        app: echo-secondary
+    spec:
+      volumes:
+        - name: echo-data
+          configMap:
+            name: echo-data
+        - name: socat-data
+          configMap:
+            name: socat-data
+      containers:
+        - name: socat
+          image: alpine/socat:latest
+          args:
+            - "tcp-listen:9080,fork,reuseaddr"
+            - "tcp-connect:localhost:8080"
+          env:
+            - name: TAG
+              value: socat
+          ports:
+            - containerPort: 9080
+              name: http
+          volumeMounts:
+            - mountPath: "/usr/share/data"
+              name: socat-data
+        - name: echo
+          image: jmalloc/echo-server
+          env:
+            - name: TAG
+              value: echo-server
+          volumeMounts:
+            - mountPath: "/usr/share/data"
+              name: echo-data

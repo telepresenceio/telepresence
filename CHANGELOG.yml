@@ -33,6 +33,23 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.21.0
+    date: TBD
+    notes:
+      - type: feature
+        title: Intercepts targeting a specific container
+        body: ->
+          In certain scenarios, the container owning the intercepted port differs
+          from the container the intercept targets. This port owner's sole purpose
+          is to route traffic from the service to the intended container, often
+          using a direct localhost connection.
+
+          This commit introduces a `--container <name>` option to the intercept
+          command. While this option doesn't influence the port selection, it
+          guarantees that the environment variables and mounts propagated to the
+          client originate from the specified container. Additionally, if the
+          `--replace` option is used, it ensures that this container is replaced.
+        docs: https://telepresence.io/docs/reference/intercepts/container
   - version: 2.20.0
     date: 2024-10-03
     notes:

@@ -32,7 +32,13 @@ type State interface {
 	SetManager(ctx context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
-	NewInterceptState(forwarder forwarder.Interceptor, target InterceptTarget, mountPoint string, env map[string]string) InterceptState
+	NewInterceptState(forwarder forwarder.Interceptor, target InterceptTarget, container string) InterceptState
+	AddContainerState(containerName string, containerState ContainerState)
+}
+
+type ContainerState interface {
+	MountPoint() string
+	Env() map[string]string
 }
 
 // An InterceptState implements what's needed to intercept one target port.
@@ -57,6 +63,7 @@ type state struct {
 	mgrVer      semver.Version
 
 	interceptStates []InterceptState
+	containerStates map[string]ContainerState
 	agent.UnimplementedAgentServer
 }
 
@@ -80,6 +87,7 @@ func (s *state) SessionInfo() *manager.SessionInfo {
 func NewState(config Config) State {
 	return &state{
 		Config:           config,
+		containerStates:  make(map[string]ContainerState),
 		dialWatchers:     xsync.NewMapOf[string, chan *manager.DialRequest](),
 		awaitingForwards: xsync.NewMapOf[string, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
 	}
@@ -87,6 +95,10 @@ func NewState(config Config) State {
 
 func (s *state) AddInterceptState(is InterceptState) {
 	s.interceptStates = append(s.interceptStates, is)
+}
+
+func (s *state) AddContainerState(containerName string, containerState ContainerState) {
+	s.containerStates[containerName] = containerState
 }
 
 func (s *state) AgentState() restapi.AgentState {

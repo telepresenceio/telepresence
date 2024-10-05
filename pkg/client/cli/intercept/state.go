@@ -88,10 +88,8 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		return ir, nil
 	}
 
-	if s.ServiceName != "" {
-		spec.ServiceName = s.ServiceName
-	}
-
+	spec.ServiceName = s.ServiceName
+	spec.ContainerName = s.ContainerName
 	spec.Mechanism = s.Mechanism
 	spec.MechanismArgs = s.MechanismArgs
 	spec.Agent = s.AgentName

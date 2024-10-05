@@ -11,7 +11,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -20,10 +19,10 @@ import (
 type Command struct {
 	Name           string // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
 	AgentName      string // --workload || Command[0] // only valid if !localOnly
-	Port           string // --port // only valid if !localOnly
-	ServiceName    string // --service // only valid if !localOnly
-	Address        string // --address // only valid if !localOnly
-	LocalOnly      bool   // --local-only
+	Port           string // --port
+	ServiceName    string // --service
+	ContainerName  string // --container
+	Address        string // --address
 	LocalMountPort uint16 // --local-mount-port
 
 	Replace bool // whether --replace was passed
@@ -68,8 +67,8 @@ func (a *Command) AddFlags(cmd *cobra.Command) {
 
 	flagSet.StringVar(&a.ServiceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
 
-	flagSet.BoolVarP(&a.LocalOnly, "local-only", "l", false, ``+
-		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
+	flagSet.StringVar(&a.ContainerName, "container", "",
+		"Name of container that provides the environment and mounts for the intercept. Defaults to the container matching the targetPort")
 
 	flagSet.StringVarP(&a.EnvFile, "env-file", "e", "", ``+
 		`Also emit the remote environment to an file. The syntax used in the file can be determined using flag --env-syntax`)
@@ -119,39 +118,15 @@ func (a *Command) AddFlags(cmd *cobra.Command) {
 	flagSet.BoolVarP(&a.Replace, "replace", "", false,
 		`Indicates if the traffic-agent should replace application containers in workload pods. `+
 			`The default behavior is for the agent sidecar to be installed alongside existing containers.`)
-
-	// Hide these flags. They are still functional but deprecated. Using them will yield a deprecation message.
-	flagSet.Lookup("local-only").Hidden = true
-	flagSet.Lookup("namespace").Hidden = true
 }
 
 func (a *Command) Validate(cmd *cobra.Command, positional []string) error {
-	flags.DeprecationIfChanged(cmd, "local-only", "use telepresence connect to set the namespace")
-	flags.DeprecationIfChanged(cmd, "namespace", "use telepresence connect to set the namespace")
 	if len(positional) > 1 && cmd.Flags().ArgsLenAtDash() != 1 {
 		return errcat.User.New("commands to be run with intercept must come after options")
 	}
 	a.Name = positional[0]
 	a.Cmdline = positional[1:]
 	a.FormattedOutput = output.WantsFormatted(cmd)
-	if a.LocalOnly {
-		// Not actually intercepting anything -- check that the flags make sense for that
-		if a.AgentName != "" {
-			return errcat.User.New("a local-only intercept cannot have a workload")
-		}
-		if a.ServiceName != "" {
-			return errcat.User.New("a local-only intercept cannot have a service")
-		}
-		if cmd.Flag("port").Changed {
-			return errcat.User.New("a local-only intercept cannot have a port")
-		}
-		if cmd.Flag("mount").Changed {
-			if doMount, _ := a.GetMountPoint(); doMount {
-				return errcat.User.New("a local-only intercept cannot have mounts")
-			}
-		}
-		return nil
-	}
 
 	if a.LocalMountPort > 0 && client.GetConfig(cmd.Context()).Intercept().UseFtp {
 		return errcat.User.New("only SFTP can be used with --local-mount-port. Client is configured to perform remote mounts using FTP")
