@@ -22,8 +22,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type gatherLogsCommand struct {
@@ -71,7 +73,7 @@ telepresence gather-logs --daemons=None
 	}
 	flags := cmd.Flags()
 	flags.StringVarP(&gl.outputFile, "output-file", "o", "", "The file you want to output the logs to.")
-	flags.StringVar(&gl.daemons, "daemons", "all", "The daemons you want logs from: all, root, user, kubeauth, None")
+	flags.StringVar(&gl.daemons, "daemons", "all", "Comma separated list of daemons you want logs from: all, root, user, kubeauth, None")
 	flags.BoolVar(&gl.trafficManager, "traffic-manager", true, "If you want to collect logs from the traffic-manager")
 	flags.StringVar(&gl.trafficAgents, "traffic-agents", "all", "Traffic-agents to collect logs from: all, name substring, None")
 	flags.BoolVarP(&gl.anon, "anonymize", "a", false, "To anonymize pod names + namespaces from the logs")
@@ -94,6 +96,7 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	ctx := cmd.Context()
+	ctx = dos.WithStdio(ctx, cmd)
 	ctx = scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 	defer scout.Close(ctx)
@@ -117,25 +120,31 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 	}
 	defer func() {
 		if err := os.RemoveAll(exportDir); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Failed to remove temp directory %s: %s", exportDir, err)
+			ioutil.Printf(dos.Stderr(ctx), "Failed to remove temp directory %s: %s", exportDir, err)
 		}
 	}()
 
-	// First we add the daemonLogs to the export directory
+	// Add the daemonLogs to the export directory
 	var daemonLogs []string
-	switch gl.daemons {
-	case "all":
-		daemonLogs = append(daemonLogs, "cli", "connector", "daemon", "kubeauth")
-	case "root":
-		daemonLogs = append(daemonLogs, "daemon")
-	case "user":
-		daemonLogs = append(daemonLogs, "connector")
-	case "kubeauth":
-		daemonLogs = append(daemonLogs, "kubeauth")
-	case "None":
-	default:
-		return errcat.User.New("Options for --daemons are: all, root, user, or None")
+	for _, daemon := range strings.Split(gl.daemons, ",") {
+		daemon = strings.TrimSpace(daemon)
+		switch daemon {
+		case "all":
+			daemonLogs = append(daemonLogs, "cli", "connector", "daemon", "kubeauth")
+		case "cli":
+			daemonLogs = append(daemonLogs, "cli")
+		case "daemon", "root":
+			daemonLogs = append(daemonLogs, "daemon")
+		case "connector", "user":
+			daemonLogs = append(daemonLogs, "connector")
+		case "kubeauth":
+			daemonLogs = append(daemonLogs, "kubeauth")
+		case "", "None":
+		default:
+			return errcat.User.New("Options for --daemons are: all, root, user, or None")
+		}
 	}
+
 	// Add metadata about the request, so we can track usage + see which
 	// types of logs people are requesting more frequently.
 	// This also gives us an idea about how much usage this command is
@@ -164,72 +173,90 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 			// We let the user know we were unable to get logs from the kubernetes components,
 			// and why, but this shouldn't block the command returning successful with the logs
 			// it was able to get.
-			fmt.Fprintf(cmd.ErrOrStderr(), "error getting logs from kubernetes components: %s\n", err)
+			ioutil.Printf(dos.Stderr(ctx), "error getting logs from kubernetes components: %s\n", err)
 		}
 	}
 
+	err = retrieveLocalLogs(ctx, daemonLogs, exportDir)
+	if err != nil {
+		return errcat.User.New(err)
+	}
+
+	// Zip up all the files we've created in the zip directory and return that to the user
+	files, err := getLogFiles(exportDir)
+	if err != nil {
+		return errcat.User.New(err)
+	}
+	if az != nil {
+		anonymizeLogs(ctx, files, az)
+	}
+	if err = zipFiles(files, gl.outputFile); err != nil {
+		return err
+	}
+
+	ioutil.Printf(dos.Stdout(ctx), "Logs have been exported to %s\n", gl.outputFile)
+	return nil
+}
+
+// retrieveLocalLogs retrieves all logs from the logDir that match the daemons the user cares about.
+func retrieveLocalLogs(ctx context.Context, daemonLogs []string, exportDir string) error {
 	// Get all logs from the logDir that match the daemons the user cares about.
 	logDir := filelocation.AppUserLogDir(ctx)
 	logFiles, err := os.ReadDir(logDir)
 	if err != nil {
-		return errcat.User.New(err)
+		return err
 	}
 	for _, entry := range logFiles {
 		if entry.IsDir() {
 			continue
 		}
 		for _, logType := range daemonLogs {
-			if strings.Contains(entry.Name(), logType) {
-				srcFile := filepath.Join(logDir, entry.Name())
+			if !strings.Contains(entry.Name(), logType) {
+				continue
+			}
+			srcFile := filepath.Join(logDir, entry.Name())
 
-				// The cli.log is often empty, so this check is relevant.
-				empty, err := isEmpty(srcFile)
-				if err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "failed stat on %s: %s\n", entry.Name(), err)
-					continue
-				}
-				if empty {
-					continue
-				}
-				dstFile := filepath.Join(exportDir, entry.Name())
-				if err := copyFiles(dstFile, srcFile); err != nil {
-					// We don't want to fail / exit abruptly if we can't copy certain
-					// files, but we do want the user to know we were unsuccessful
-					fmt.Fprintf(cmd.ErrOrStderr(), "failed exporting %s: %s\n", entry.Name(), err)
-					continue
-				}
+			// The cli.log is often empty, so this check is relevant.
+			empty, err := isEmpty(srcFile)
+			if err != nil {
+				ioutil.Printf(dos.Stderr(ctx), "failed stat on %s: %s\n", entry.Name(), err)
+				continue
+			}
+			if empty {
+				continue
+			}
+			dstFile := filepath.Join(exportDir, entry.Name())
+			if err := copyFiles(dstFile, srcFile); err != nil {
+				// We don't want to fail / exit abruptly if we can't copy certain
+				// files, but we do want the user to know we were unsuccessful
+				ioutil.Printf(dos.Stderr(ctx), "failed exporting %s: %s\n", entry.Name(), err)
 			}
 		}
 	}
-
-	// Zip up all the files we've created in the zip directory and return that to the user
-	dirEntries, err := os.ReadDir(exportDir)
-	files := make([]string, len(dirEntries))
-	if err != nil {
-		return errcat.User.New(err)
-	}
-	for i, entry := range dirEntries {
-		if entry.IsDir() {
-			files = files[:len(files)-1]
-			continue
-		}
-
-		fullFileName := filepath.Join(exportDir, entry.Name())
-		// anonymize the log if necessary
-		if az != nil {
-			if err := az.anonymizeLog(fullFileName); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "error anonymizing %s: %s\n", fullFileName, err)
-			}
-		}
-		files[i] = fullFileName
-	}
-
-	if err := zipFiles(files, gl.outputFile); err != nil {
-		return errcat.User.New(err)
-	}
-
-	fmt.Fprintf(cmd.OutOrStdout(), "Logs have been exported to %s\n", gl.outputFile)
 	return nil
+}
+
+func getLogFiles(exportDir string) ([]string, error) {
+	dirEntries, err := os.ReadDir(exportDir)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]string, 0, len(dirEntries))
+	for _, entry := range dirEntries {
+		if !entry.IsDir() {
+			files = append(files, filepath.Join(exportDir, entry.Name()))
+		}
+	}
+	return files, nil
+}
+
+func anonymizeLogs(ctx context.Context, files []string, az *anonymizer) {
+	for _, fullFileName := range files {
+		if err := az.anonymizeLog(fullFileName); err != nil {
+			ioutil.Printf(dos.Stderr(ctx), "error anonymizing %s: %s\n", fullFileName, err)
+		}
+		files = append(files, fullFileName)
+	}
 }
 
 func (gl *gatherLogsCommand) gatherClusterLogs(ctx context.Context, exportDir string, az *anonymizer) error {
