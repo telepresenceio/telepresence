@@ -121,17 +121,3 @@ jobs:
           name: telepresence
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ needs.build_images.outputs.telepresenceSemver }}
-      - name: Delete tel2 untagged images
-        uses: bots-house/ghcr-delete-image-action@v1.1.0
-        with:
-          owner: telepresenceio
-          name: tel2
-          token: ${{ secrets.GITHUB_TOKEN }}
-          untagged-keep-latest: 6
-      - name: Delete telepresence untagged images
-        uses: bots-house/ghcr-delete-image-action@v1.1.0
-        with:
-          owner: telepresenceio
-          name: telepresence
-          token: ${{ secrets.GITHUB_TOKEN }}
-          untagged-keep-latest: 6
