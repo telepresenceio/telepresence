@@ -10,7 +10,7 @@ class __FORMULA_NAME__ < Formula
   OPERATING_SYSTEM = OS.mac? ? "darwin" : "linux"
   PACKAGE_NAME = "telepresence-#{OPERATING_SYSTEM}-#{ARCH}"
 
-  url "#{BASE_URL}/#{version}/#{PACKAGE_NAME}"
+  url "#{BASE_URL}/v#{version}/#{PACKAGE_NAME}"
 
   sha256 "__TARBALL_HASH_DARWIN_AMD64__" if OS.mac? && Hardware::CPU.intel?
   sha256 "__TARBALL_HASH_DARWIN_ARM64__" if OS.mac? && Hardware::CPU.arm?

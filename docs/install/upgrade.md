@@ -16,27 +16,36 @@ if your current version is less than 2.8.0).
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
+## Upgrade with brew:
 ```shell
-# Intel Macs
+brew upgrade telepresenceio/telepresence/telepresence-oss
+```
 
-# 1. Download the latest binary (~105 MB):
+## OR upgrade by downloading the binary for your platform
+
+### Intel Macs
+
+```shell
+# 1. Download the binary.
 sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
+```
 
-# Apple silicon Macs
+### Apple silicon Macs
 
-# 1. Remove the old binary. This is very important on Silicon macs, because they keep track of the binary signature
-sudo rm /usr/local/bin/telepresence
+```shell
+# 1. Ensure that no old binary exists. This is very important because Silicon macs track the executable's signature
+# and just updating it in place will not work.
+sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
 
-# 2. Download the latest binary (~101 MB):
+# 2. Download the binary.
 sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
 
 # 3. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
 ```
-
 </Platform.MacOSTab>
 <Platform.GNULinuxTab>
 
