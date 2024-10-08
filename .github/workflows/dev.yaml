@@ -99,25 +99,29 @@ jobs:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
         if: always()
   purge_images:
+    if: github.event.label.name == 'ok to test'
     runs-on: ubuntu-latest
-    if: always()
+    permissions:
+      packages: write
     needs:
       - build_images
       - run_tests
     steps:
-      - name: Delete tel2 image
-        uses: bots-house/ghcr-delete-image-action@v1.1.0
+      - name: Delete tel2 and telepresence image
+        uses: dataaxiom/ghcr-cleanup-action@v1
         continue-on-error: true
+        if: always()
         with:
           owner: telepresenceio
-          name: tel2
+          packages: tel2,telepresence
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ needs.build_images.outputs.telepresenceSemver }}
-      - name: Delete telepresence image
-        uses: bots-house/ghcr-delete-image-action@v1.1.0
-        continue-on-error: true
+          delete-tags: ${{ needs.build_images.outputs.telepresenceSemver }}
+      - name: Prune tel2 and telepresence
+        uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           owner: telepresenceio
-          name: telepresence
+          packages: tel2,telepresence
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ needs.build_images.outputs.telepresenceSemver }}
+          delete-ghost-images: true
+          delete-partial-images: true
+          delete-orphaned-images: true
