@@ -14,22 +14,31 @@ Install the Telepresence client on your workstation by running the commands belo
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
+## Install with brew:
 ```shell
-# Intel Macs
+brew install telepresenceio/telepresence/telepresence-oss
+```
 
-# 1. Download the latest binary (~105 MB):
+## OR download the binary for your platform
+
+### Intel Macs
+
+```shell
+# 1. Download the binary.
 sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
+```
 
-# Apple silicon Macs
+### Apple silicon Macs
 
+```shell
 # 1. Ensure that no old binary exists. This is very important because Silicon macs track the executable's signature
-#    and just updating it in place will not work.
-sudo rm -f /usr/local/bin/telepresence
+# and just updating it in place will not work.
+sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
 
-# 2. Download the latest binary (~101 MB):
+# 2. Download the binary.
 sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
 
 # 3. Make the binary executable:

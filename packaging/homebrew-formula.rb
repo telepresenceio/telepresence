@@ -13,7 +13,7 @@ class __FORMULA_NAME__ < Formula
     #depends_on "macfuse"
 
     if Hardware::CPU.arm?
-      url "https://app.getambassador.io/download/tel2/darwin/arm64/__NEW_VERSION__/telepresence"
+      url "https://app.getambassador.io/download/tel2/darwin/arm64/v__NEW_VERSION__/telepresence"
       sha256 "__TARBALL_HASH_DARWIN_ARM64__"
 
       def install
@@ -34,7 +34,7 @@ class __FORMULA_NAME__ < Formula
       end
     end
     if Hardware::CPU.intel?
-      url "https://app.getambassador.io/download/tel2/darwin/amd64/__NEW_VERSION__/telepresence"
+      url "https://app.getambassador.io/download/tel2/darwin/amd64/v__NEW_VERSION__/telepresence"
       sha256 "__TARBALL_HASH_DARWIN_AMD64__"
 
       def install
@@ -58,7 +58,7 @@ class __FORMULA_NAME__ < Formula
 
   on_linux do
     # if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-    #   url "https://app.getambassador.io/download/tel2/linux/arm64/__NEW_VERSION__/telepresence"
+    #   url "https://app.getambassador.io/download/tel2/linux/arm64/v__NEW_VERSION__/telepresence"
     #   sha256 "__TARBALL_HASH_LINUX_ARM64__"
 
     #   def install
@@ -78,7 +78,7 @@ class __FORMULA_NAME__ < Formula
     #   end
     # end
     if Hardware::CPU.intel?
-      url "https://app.getambassador.io/download/tel2/linux/amd64/__NEW_VERSION__/telepresence"
+      url "https://app.getambassador.io/download/tel2/linux/amd64/v__NEW_VERSION__/telepresence"
       sha256 "__TARBALL_HASH_LINUX_AMD64__"
 
       def install
