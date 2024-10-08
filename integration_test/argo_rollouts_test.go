@@ -49,7 +49,6 @@ func (s *argoRolloutsSuite) SetupSuite() {
 	rq.NoError(err)
 	dlog.Info(ctx, out)
 	rq.NoError(itest.Kubectl(ctx, "argo-rollouts", "apply", "-f", "https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml"))
-	s.TelepresenceHelmInstallOK(ctx, true, "--set", "workloads.argoRollouts.enabled=true")
 	s.TelepresenceConnect(ctx)
 }
 
@@ -79,9 +78,12 @@ func (s *argoRolloutsSuite) Test_SuccessfullyInterceptsArgoRollout() {
 	ctx := s.Context()
 	require := s.Require()
 
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", "workloads.argoRollouts.enabled=true")
+	defer s.RollbackTM(ctx)
+
 	tp, svc, port := "Rollout", "echo-argo-rollout", "9094"
 	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
-	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
+	defer s.DeleteSvcAndWorkload(ctx, "rollout", svc)
 
 	require.Eventually(
 		func() bool {
@@ -117,5 +119,24 @@ func (s *argoRolloutsSuite) Test_SuccessfullyInterceptsArgoRollout() {
 		},
 		180*time.Second, // waitFor
 		6*time.Second,   // polling interval
+	)
+}
+
+func (s *argoRolloutsSuite) Test_ListsReplicaSetWhenRolloutDisabled() {
+	ctx := s.Context()
+	require := s.Require()
+
+	tp, svc := "Rollout", "echo-argo-rollout"
+	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
+	defer s.DeleteSvcAndWorkload(ctx, "rollout", svc)
+
+	require.Eventually(
+		func() bool {
+			stdout, _, err := itest.Telepresence(ctx, "list")
+			dlog.Info(ctx, stdout)
+			return err == nil && strings.Contains(stdout, svc+"-")
+		},
+		6*time.Second, // waitFor
+		2*time.Second, // polling interval
 	)
 }

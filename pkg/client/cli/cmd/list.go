@@ -165,7 +165,7 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 		if formattedOut {
 			output.Object(ctx, []struct{}{}, false)
 		} else {
-			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, ReplicaSets or Rollouts)")
+			fmt.Fprintln(stdout, "No Workloads (Deployments, StatefulSets, ReplicaSets, or Rollouts)")
 		}
 		return
 	}

@@ -220,10 +220,17 @@ func (w *workloadsAndServicesWatcher) eachWorkload(c context.Context, tmns strin
 						return
 					}
 
-					// Only include top level workloads
+					// Exclude workloads that are owned by a supported workload.
 					for _, or := range wl.GetOwnerReferences() {
 						if or.Controller != nil && *or.Controller {
-							continue nextWorkload
+							switch or.Kind {
+							case "Deployment", "ReplicaSet", "StatefulSet":
+								continue nextWorkload
+							case "ArgoRollout":
+								if slices.Contains(w.wlKinds, manager.WorkloadInfo_ROLLOUT) {
+									continue nextWorkload
+								}
+							}
 						}
 					}
 					// If this is our traffic-manager namespace, then exclude the traffic-manager service.
