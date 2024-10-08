@@ -18,13 +18,13 @@ echo "Working in ${WORK_DIR}"
 
 BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
 if [ "${PACKAGE_NAME}" == 'tel2' ]; then
-    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
     FORMULA_NAME="Telepresence"
     FORMULA_FILE="packaging/homebrew-formula.rb"
+    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
 elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
-    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence-oss.rb"
-    FORMULA_NAME="Telepresence OSS"
+    FORMULA_NAME="TelepresenceOss"
     FORMULA_FILE="packaging/homebrew-oss-formula.rb"
+    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence-oss.rb"
 fi
 
 for this_os in "${OS[@]}"; do
@@ -38,7 +38,7 @@ for this_os in "${OS[@]}"; do
         # We should only be updating homebrew with a version of telepresence that
         # already exists, so let's download it
         if [ "${PACKAGE_NAME}" == 'tel2' ]; then
-            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/${this_os}/${this_arch}/${VERSION}/telepresence"
+            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/${this_os}/${this_arch}/v${VERSION}/telepresence"
         elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
             DOWNLOAD_PATH="/download/${PACKAGE_NAME}/releases/download/v${VERSION}/telepresence-${this_os}-${this_arch}"
         fi
@@ -79,11 +79,12 @@ if [ "${HASH_ERRORS}" -gt 0 ]; then
     exit 1
 fi
 
-# Clone blackbird-homebrew:
+# Clone telepresenceio-homebrew:
 echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
-git clone https://github.com/datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
+git clone https://github.com/telepresenceio/homebrew-telepresence.git "${BUILD_HOMEBREW_DIR}"
 
 # Update recipe
+mkdir -p "$(dirname "${FORMULA}")"
 cp "${FORMULA_FILE}" "${FORMULA}"
 
 sed -i'' -e "s/__FORMULA_NAME__/${FORMULA_NAME}/g" "${FORMULA}"
@@ -104,10 +105,6 @@ done
 chmod 644 "${FORMULA}"
 cd "${BUILD_HOMEBREW_DIR}"
 
-# Use the correct machine user for committing
-git config user.email "services@datawire.io"
-git config user.name "d6e automaton"
-
 git add "${FORMULA}"
 git commit -m "Release ${VERSION}"
 
@@ -116,7 +113,7 @@ git commit -m "Release ${VERSION}"
 # the change. Once we know the automation is working, we can
 # remove it.
 cat "${FORMULA}"
-git push origin master
+git push origin main
 
 # Clean up the working directory
 rm -rf "${WORK_DIR}"
