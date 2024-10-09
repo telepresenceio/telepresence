@@ -9,22 +9,29 @@ fi
 
 VERSION="${1}"
 PACKAGE_NAME="${2:?Can be 'tel2' or 'tel2oss'}"
+GITHUB_USER="${3:-$(git config get user.name)}"
+GITHUB_EMAIL="${4:-$(git config get user.email)}"
+GITHUB_TOKEN="${5}"
 
 ARCH=(amd64 arm64)
 OS=(darwin linux)
 
+MY_PATH=`dirname "$0"`
+MY_PATH=`( cd "$MY_PATH" && pwd )`
+
 WORK_DIR="$(mktemp -d)"
+cd "${WORK_DIR}"
 echo "Working in ${WORK_DIR}"
 
-BUILD_HOMEBREW_DIR=${WORK_DIR}/homebrew
+BUILD_HOMEBREW_DIR=homebrew
 if [ "${PACKAGE_NAME}" == 'tel2' ]; then
     FORMULA_NAME="Telepresence"
-    FORMULA_FILE="packaging/homebrew-formula.rb"
-    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
+    FORMULA_FILE="${MY_PATH}/homebrew-formula.rb"
+    FORMULA="Formula/telepresence.rb"
 elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
     FORMULA_NAME="TelepresenceOss"
-    FORMULA_FILE="packaging/homebrew-oss-formula.rb"
-    FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence-oss.rb"
+    FORMULA_FILE="${MY_PATH}/homebrew-oss-formula.rb"
+    FORMULA="Formula/telepresence-oss.rb"
 fi
 
 for this_os in "${OS[@]}"; do
@@ -79,9 +86,17 @@ if [ "${HASH_ERRORS}" -gt 0 ]; then
     exit 1
 fi
 
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+
 # Clone telepresenceio-homebrew:
 echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
-git clone https://github.com/telepresenceio/homebrew-telepresence.git "${BUILD_HOMEBREW_DIR}"
+if [ "${GITHUB_TOKEN}" == "" ]; then
+  git clone "https://github.com/telepresenceio/homebrew-telepresence.git" "${BUILD_HOMEBREW_DIR}"
+else
+  git clone "https://${GITHUB_TOKEN}@github.com/telepresenceio/homebrew-telepresence.git" "${BUILD_HOMEBREW_DIR}"
+fi
+cd "${BUILD_HOMEBREW_DIR}"
 
 # Update recipe
 mkdir -p "$(dirname "${FORMULA}")"
@@ -103,7 +118,10 @@ for this_os in "${OS[@]}"; do
 done
 
 chmod 644 "${FORMULA}"
-cd "${BUILD_HOMEBREW_DIR}"
+
+# Use the correct machine user for committing
+git config --local user.email "${GITHUB_EMAIL}"
+git config --local user.name "${GITHUB_USER}"
 
 git add "${FORMULA}"
 git commit -m "Release ${VERSION}"

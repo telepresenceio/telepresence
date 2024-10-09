@@ -9,6 +9,13 @@
 This commit introduces a `--container <name>` option to the intercept command. While this option doesn't influence the port selection, it guarantees that the environment variables and mounts propagated to the client originate from the specified container. Additionally, if the `--replace` option is used, it ensures that this container is replaced.
 </div>
 
+## Version 2.20.1
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Some workloads missing in the telepresence list output (typically replicasets owned by rollouts).</div></div>
+<div style="margin-left: 15px">
+
+-> Version 2.20.0 introduced a regression in the `telepresence list` command, resulting in the omission of all workloads that were owned by another workload. The correct behavior is to just omit those workloads that are owned by the supported workload kinds `Deployment`, `ReplicaSet`, `StatefulSet`, and `Rollout`. Furthermore, the `Rollout` kind must only be considered supported when the Argo Rollouts feature is enabled in the traffic-manager.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Allow comma separated list of daemons for the gather-logs command.</div></div>
 <div style="margin-left: 15px">
 
@@ -80,7 +87,7 @@ A <code>telepresence connect --docker</code> failed when attempting to connect t
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Add brew support for the OSS version of Telepresence.](https://github.com/telepresenceio/telepresence/issues/3609)</div></div>
 <div style="margin-left: 15px">
 
-The Open-Source Software version of Telepresence can now be installed using the brew formula via <code>brew install datawire/blackbird/telepresence-oss</code>.
+The Open-Source Software version of Telepresence can now be installed using the brew formula via <code>brew install telepresenceio/telepresence/telepresence-oss</code>.
 </div>
 
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add --create-namespace flag to the telepresence helm install command.</div></div>

@@ -50,6 +50,17 @@ items:
           client originate from the specified container. Additionally, if the
           `--replace` option is used, it ensures that this container is replaced.
         docs: https://telepresence.io/docs/reference/intercepts/container
+  - version: 2.20.1
+    date: TBD
+    notes:
+      - type: bugfix
+        title: Some workloads missing in the telepresence list output (typically replicasets owned by rollouts).
+        body: ->
+          Version 2.20.0 introduced a regression in the `telepresence list` command, resulting in the omission of
+          all workloads that were owned by another workload. The correct behavior is to just omit those workloads
+          that are owned by the supported workload kinds `Deployment`, `ReplicaSet`, `StatefulSet`, and `Rollout`.
+          Furthermore, the `Rollout` kind must only be considered supported when the Argo Rollouts feature is
+          enabled in the traffic-manager.
       - type: bugfix
         title: Allow comma separated list of daemons for the gather-logs command.
         body: ->
@@ -135,7 +146,7 @@ items:
         title: Add brew support for the OSS version of Telepresence.
         body: >-
           The Open-Source Software version of Telepresence can now be installed using the brew formula
-          via <code>brew install datawire/blackbird/telepresence-oss</code>.
+          via <code>brew install telepresenceio/telepresence/telepresence-oss</code>.
         docs: https://github.com/telepresenceio/telepresence/issues/3609
       - type: feature
         title: Add --create-namespace flag to the telepresence helm install command.
