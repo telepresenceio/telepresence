@@ -226,7 +226,7 @@ func (w *workloadsAndServicesWatcher) eachWorkload(c context.Context, tmns strin
 							switch or.Kind {
 							case "Deployment", "ReplicaSet", "StatefulSet":
 								continue nextWorkload
-							case "ArgoRollout":
+							case "Rollout":
 								if slices.Contains(w.wlKinds, manager.WorkloadInfo_ROLLOUT) {
 									continue nextWorkload
 								}

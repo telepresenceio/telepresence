@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 
 	core "k8s.io/api/core/v1"
@@ -23,7 +24,7 @@ import (
 
 var ReplicaSetNameRx = regexp.MustCompile(`\A(.+)-[a-f0-9]+\z`)
 
-func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload, error) {
+func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object, supportedWorkloadKinds []string) (k8sapi.Workload, error) {
 	dlog.Debugf(ctx, "FindOwnerWorkload(%s,%s,%s)", obj.GetName(), obj.GetNamespace(), obj.GetKind())
 	lbs := obj.GetLabels()
 	if wlName, ok := lbs[agentconfig.WorkloadNameLabel]; ok {
@@ -43,11 +44,15 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object) (k8sapi.Workload,
 					}
 				}
 			}
-			wl, err := GetWorkload(ctx, or.Name, ns, or.Kind)
-			if err != nil {
-				return nil, err
+			if slices.Contains(supportedWorkloadKinds, or.Kind) {
+				wl, err := GetWorkload(ctx, or.Name, ns, or.Kind)
+				if err != nil {
+					return nil, err
+				}
+				return FindOwnerWorkload(ctx, wl, supportedWorkloadKinds)
 			}
-			return FindOwnerWorkload(ctx, wl)
+			// A controller owner of unsupported workload kind is treated as "no owner".
+			break
 		}
 	}
 	if wl, ok := obj.(k8sapi.Workload); ok {

@@ -1899,7 +1899,11 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admissi
 }
 
 func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentmap.GeneratorConfig) (agentconfig.SidecarExt, error) {
-	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+	supportedKinds := []string{"Deployment", "ReplicaSet", "StatefulSet"}
+	if managerutil.ArgoRolloutsEnabled(ctx) {
+		supportedKinds = append(supportedKinds, "Rollout")
+	}
+	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod), supportedKinds)
 	if err != nil {
 		return nil, err
 	}

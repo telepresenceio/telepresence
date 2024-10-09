@@ -49,7 +49,6 @@ func (s *argoRolloutsSuite) SetupSuite() {
 	rq.NoError(err)
 	dlog.Info(ctx, out)
 	rq.NoError(itest.Kubectl(ctx, "argo-rollouts", "apply", "-f", "https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml"))
-	s.TelepresenceConnect(ctx)
 }
 
 func downloadKubectlArgoRollouts(ctx context.Context, arExe string) error {
@@ -85,6 +84,8 @@ func (s *argoRolloutsSuite) Test_SuccessfullyInterceptsArgoRollout() {
 	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
 	defer s.DeleteSvcAndWorkload(ctx, "rollout", svc)
 
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list")
@@ -129,6 +130,9 @@ func (s *argoRolloutsSuite) Test_ListsReplicaSetWhenRolloutDisabled() {
 	tp, svc := "Rollout", "echo-argo-rollout"
 	s.ApplyApp(ctx, svc, strings.ToLower(tp)+"/"+svc)
 	defer s.DeleteSvcAndWorkload(ctx, "rollout", svc)
+
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
 
 	require.Eventually(
 		func() bool {
