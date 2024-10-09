@@ -6,12 +6,7 @@
 
 Telepresence gives developers infinite scale development environments for Kubernetes.
 
-Docs:
-    OSS: [https://telepresence.io](https://telepresence.io/docs/quick-start)
-    Licensed: [https://www.getambassador.io/docs/telepresence ](https://www.getambassador.io/docs/telepresence )
-Slack:
-    Discuss in the [OSS CNCF Slack](https://communityinviter.com/apps/cloud-native/cncf) in the [#telepresence-oss](https://cloud-native.slack.com/archives/C06B36KJ85P) channel
-    Licensed: [a8r.io/slack](https://a8r.io/slack)
+## Key benefits
 
 **With Telepresence:**
 
@@ -26,12 +21,16 @@ Slack:
 
 ## Quick Start
 
-A few quick ways to start using Telepresence
+A few quick ways to start using Telepresence:
 
 * **Telepresence Quick Start:** [Quick Start](https://telepresence.io/docs/quick-start)
 * **Install Telepresence:** [Install](https://telepresence.io/docs/install/client)
 * **Contributor's Guide:** [Guide](https://github.com/telepresenceio/telepresence/blob/release/v2/CONTRIBUTING.md)
 * **Meetings:** Check out our community [meeting schedule](https://github.com/telepresenceio/telepresence/blob/release/v2/MEETING_SCHEDULE.md) for opportunities to interact with Telepresence developers
+
+## Enterprise Version
+
+Find out more about Telepresence Enterprise and related products at [getambassador.io](https://www.getambassador.io/products/telepresence).
 
 ## Walkthrough
 
@@ -435,3 +434,7 @@ For a more in-depth overview, checkout our blog post: [Implementing Telepresence
 
 Visit the troubleshooting section in the Telepresence documentation for more advice:
 [Troubleshooting](https://telepresence.io/docs/troubleshooting/)
+
+Or discuss with the community in the [CNCF Slack](https://communityinviter.com/apps/cloud-native/cncf) in the [#telepresence-oss](https://cloud-native.slack.com/archives/C06B36KJ85P) channel.
+
+
