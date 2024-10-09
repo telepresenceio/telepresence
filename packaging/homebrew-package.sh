@@ -16,8 +16,8 @@ GITHUB_TOKEN="${5}"
 ARCH=(amd64 arm64)
 OS=(darwin linux)
 
-MY_PATH=`dirname "$0"`
-MY_PATH=`( cd "$MY_PATH" && pwd )`
+MY_PATH=$(dirname "$0")
+MY_PATH=$( cd "$MY_PATH" && pwd )
 
 WORK_DIR="$(mktemp -d)"
 cd "${WORK_DIR}"
