@@ -7,7 +7,7 @@
 Telepresence gives developers infinite scale development environments for Kubernetes.
 
 Docs:
-    OSS: [https://www.getambassador.io/docs/telepresence-oss/](https://www.getambassador.io/docs/telepresence-oss)
+    OSS: [https://telepresence.io](https://telepresence.io/docs/quick-start)
     Licensed: [https://www.getambassador.io/docs/telepresence ](https://www.getambassador.io/docs/telepresence )
 Slack:
     Discuss in the [OSS CNCF Slack](https://communityinviter.com/apps/cloud-native/cncf) in the [#telepresence-oss](https://cloud-native.slack.com/archives/C06B36KJ85P) channel
@@ -15,8 +15,8 @@ Slack:
 
 **With Telepresence:**
 
-* You run one service locally, using your favorite IDE and other tools
-* You run the rest of your application in the [cloud](https://www.getambassador.io/products/ambassador-cloud/), where there is unlimited memory and compute
+* You run your services locally, using your favorite IDE and other tools
+* Your workstation is connected to the cluster and can access to its services
 
 **This gives developers:**
 
@@ -28,8 +28,8 @@ Slack:
 
 A few quick ways to start using Telepresence
 
-* **Telepresence Quick Start:** [Quick Start](https://www.getambassador.io/docs/telepresence/latest/quick-start/)
-* **Install Telepresence:** [Install](https://www.getambassador.io/docs/telepresence/latest/install/)
+* **Telepresence Quick Start:** [Quick Start](https://telepresence.io/docs/quick-start)
+* **Install Telepresence:** [Install](https://telepresence.io/docs/install/client)
 * **Contributor's Guide:** [Guide](https://github.com/telepresenceio/telepresence/blob/release/v2/CONTRIBUTING.md)
 * **Meetings:** Check out our community [meeting schedule](https://github.com/telepresenceio/telepresence/blob/release/v2/MEETING_SCHEDULE.md) for opportunities to interact with Telepresence developers
 
@@ -431,8 +431,7 @@ Telepresence is on the other side of `tel0` and picks up the packets, injecting 
 
 For a more in-depth overview, checkout our blog post: [Implementing Telepresence Networking with a TUN device](https://blog.getambassador.io/implementing-telepresence-networking-with-a-tun-device-a23a786d51e9)
 
-
-## Comparison to classic Telepresence
+## Troubleshooting
 
 Visit the troubleshooting section in the Telepresence documentation for more advice:
-[Troubleshooting](https://www.getambassador.io/docs/telepresence/latest/troubleshooting/)
+[Troubleshooting](https://telepresence.io/docs/troubleshooting/)
