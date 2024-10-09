@@ -149,6 +149,13 @@ jobs:
             And for more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start/).
 
             ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
+      - uses: actions/checkout@v4
+        if: needs.publish-release.semver_check.outputs.draft != true
+      - name: Update Homebrew
+        if: needs.publish-release.semver_check.outputs.draft != true
+        run: |
+          v=${{ github.ref_name }}
+          packaging/homebrew-package.sh "${v#v}" tel2oss "${{ vars.GH_BOT_USER }}" "${{ vars.GH_BOT_EMAIL }}" "${{ secrets.HOMEBREW_TAP_TOKEN }}"
 
   test-release:
     needs:
