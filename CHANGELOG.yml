@@ -129,7 +129,7 @@ items:
         title: Add brew support for the OSS version of Telepresence.
         body: >-
           The Open-Source Software version of Telepresence can now be installed using the brew formula
-          via <code>brew install datawire/blackbird/telepresence-oss</code>.
+          via <code>brew install telepresenceio/telepresence/telepresence-oss</code>.
         docs: https://github.com/telepresenceio/telepresence/issues/3609
       - type: feature
         title: Add --create-namespace flag to the telepresence helm install command.
