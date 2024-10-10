@@ -16,8 +16,8 @@ GITHUB_TOKEN="${5}"
 ARCH=(amd64 arm64)
 OS=(darwin linux)
 
-MY_PATH=`dirname "$0"`
-MY_PATH=`( cd "$MY_PATH" && pwd )`
+MY_PATH=$(dirname "$0")
+MY_PATH=$( cd "$MY_PATH" && pwd )
 
 WORK_DIR="$(mktemp -d)"
 cd "${WORK_DIR}"
@@ -125,13 +125,14 @@ git config --local user.name "${GITHUB_USER}"
 
 git add "${FORMULA}"
 git commit -m "Release ${VERSION}"
+git tag --message "Release ${VERSION}" "${VERSION}"
 
 # This cat is just so we can see the formula in case
 # the git permissions are incorrect and we can't publish
 # the change. Once we know the automation is working, we can
 # remove it.
 cat "${FORMULA}"
-git push origin main
+git push origin "${VERSION}" main
 
 # Clean up the working directory
 rm -rf "${WORK_DIR}"

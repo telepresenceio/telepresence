@@ -51,11 +51,11 @@ items:
           `--replace` option is used, it ensures that this container is replaced.
         docs: https://telepresence.io/docs/reference/intercepts/container
   - version: 2.20.1
-    date: TBD
+    date: 2024-10-10
     notes:
       - type: bugfix
         title: Some workloads missing in the telepresence list output (typically replicasets owned by rollouts).
-        body: ->
+        body: >-
           Version 2.20.0 introduced a regression in the `telepresence list` command, resulting in the omission of
           all workloads that were owned by another workload. The correct behavior is to just omit those workloads
           that are owned by the supported workload kinds `Deployment`, `ReplicaSet`, `StatefulSet`, and `Rollout`.
@@ -63,7 +63,7 @@ items:
           enabled in the traffic-manager.
       - type: bugfix
         title: Allow comma separated list of daemons for the gather-logs command.
-        body: ->
+        body: >-
           The name of the `telepresence gather-logs` flag `--daemons` suggests that the argument can contain more
           than one daemon, but prior to this fix, it couldn't. It is now possible to use a comma separated
           list, e.g. `telepresence gather-logs --daemons root,user`.

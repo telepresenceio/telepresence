@@ -145,7 +145,11 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 
-		wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod))
+		supportedKinds := []string{"Deployment", "ReplicaSet", "StatefulSet"}
+		if managerutil.ArgoRolloutsEnabled(ctx) {
+			supportedKinds = append(supportedKinds, "Rollout")
+		}
+		wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod), supportedKinds)
 		if err != nil {
 			uwkError := k8sapi.UnsupportedWorkloadKindError("")
 			switch {
