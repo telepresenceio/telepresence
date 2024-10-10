@@ -34,7 +34,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.20.1
-    date: TBD
+    date: 2024-10-10
     notes:
       - type: bugfix
         title: Some workloads missing in the telepresence list output (typically replicasets owned by rollouts).
