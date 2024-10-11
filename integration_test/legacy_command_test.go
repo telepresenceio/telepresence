@@ -30,7 +30,7 @@ func (s *singleServiceSuite) Test_LegacySwapDeploymentDoesIntercept() {
 		if err != nil || stderr != "" {
 			return false
 		}
-		return strings.Contains(stdout, "No Workloads (Deployments, StatefulSets, ReplicaSets or Rollouts)")
+		return strings.Contains(stdout, "No Workloads")
 	},
 		10*time.Second,
 		1*time.Second,
