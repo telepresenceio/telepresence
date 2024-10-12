@@ -2,12 +2,12 @@ package restapi_test
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 	"sync"
 	"testing"
 
+	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -265,11 +265,11 @@ func Test_server_intercepts(t *testing.T) {
 			assert.Equal(t, r.StatusCode, http.StatusOK)
 			if _, ok := tt.want.(bool); ok {
 				var rpl bool
-				require.NoError(t, json.NewDecoder(r.Body).Decode(&rpl))
+				require.NoError(t, json.UnmarshalRead(r.Body, &rpl))
 				assert.Equal(t, tt.want, rpl)
 			} else {
 				var rpl restapi.InterceptInfo
-				require.NoError(t, json.NewDecoder(r.Body).Decode(&rpl))
+				require.NoError(t, json.UnmarshalRead(r.Body, &rpl))
 				assert.Equal(t, tt.want, &rpl)
 			}
 			cancel()

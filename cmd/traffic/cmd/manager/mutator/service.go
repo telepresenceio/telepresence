@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	admission "k8s.io/api/admission/v1"
 	core "k8s.io/api/core/v1"
@@ -43,7 +44,7 @@ type PatchOperation struct {
 type PatchOps []PatchOperation
 
 func (p PatchOps) String() string {
-	b, _ := json.MarshalIndent(p, "", "  ")
+	b, _ := json.Marshal(p, jsontext.WithIndent("  "))
 	return string(b)
 }
 

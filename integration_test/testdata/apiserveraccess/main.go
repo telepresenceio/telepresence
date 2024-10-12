@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-json-experiment/json"
 	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dhttp"
@@ -96,11 +96,11 @@ func run(c context.Context) error {
 	} else {
 		mux.HandleFunc("/consume-here", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(false)
+			_ = json.MarshalWrite(w, false)
 		})
 		mux.HandleFunc("/intercept-info", func(w http.ResponseWriter, r *http.Request) {
 			ii := restapi.InterceptInfo{}
-			_ = json.NewEncoder(w).Encode(&ii)
+			_ = json.MarshalWrite(w, &ii)
 		})
 	}
 
@@ -143,12 +143,11 @@ func doRequest(c context.Context, rqUrl string, path string, hm map[string]strin
 	}
 	defer rs.Body.Close()
 
-	ec := json.NewDecoder(rs.Body)
 	if rs.StatusCode == http.StatusOK {
-		err = ec.Decode(objTemplate)
+		err = json.UnmarshalRead(rs.Body, objTemplate)
 	} else {
 		// Make an attempt to decode a json error.
-		_ = ec.Decode(er)
+		_ = json.UnmarshalRead(rs.Body, er)
 	}
 	return rs.StatusCode, err
 }
@@ -180,9 +179,9 @@ func intercepted(c context.Context, url string, path string, w http.ResponseWrit
 	} else {
 		w.WriteHeader(status)
 		if status == http.StatusOK {
-			err = json.NewEncoder(w).Encode(objTemplate)
+			err = json.MarshalWrite(w, objTemplate)
 		} else if er.Error != "" {
-			err = json.NewEncoder(w).Encode(er)
+			err = json.MarshalWrite(w, er)
 		}
 		if err != nil {
 			dlog.Error(c, err)

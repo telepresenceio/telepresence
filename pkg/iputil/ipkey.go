@@ -1,9 +1,10 @@
 package iputil
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
+
+	"github.com/go-json-experiment/json"
 )
 
 // IPKey is an immutable cast of a net.IP suitable to be used as a map key. It must be created using IPKey(ip).

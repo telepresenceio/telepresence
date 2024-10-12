@@ -3,7 +3,6 @@ package daemon
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -384,13 +383,13 @@ func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result
 	return
 }
 
-func (s *service) GetConfig(ctx context.Context, empty *empty.Empty) (cfg *rpc.ClientConfig, err error) {
+func (s *service) GetConfig(ctx context.Context, _ *empty.Empty) (cfg *rpc.ClientConfig, err error) {
 	err = s.WithSession(ctx, "GetConfig", func(c context.Context, session userd.Session) error {
 		sc, err := session.GetConfig(ctx)
 		if err != nil {
 			return err
 		}
-		data, err := json.Marshal(sc)
+		data, err := client.MarshalJSON(sc)
 		if err != nil {
 			return status.Error(codes.Internal, err.Error())
 		}

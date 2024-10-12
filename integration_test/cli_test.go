@@ -2,9 +2,10 @@ package integration_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"regexp"
+
+	"github.com/go-json-experiment/json"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"

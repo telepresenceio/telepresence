@@ -2,10 +2,11 @@ package watchable_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/dlib/dlog"
@@ -16,12 +17,12 @@ import (
 func assertMessageMapSnapshotEqual[V watchable.Message](t *testing.T, expected, actual watchable.Snapshot[V], msgAndArgs ...any) bool {
 	t.Helper()
 
-	expectedBytes, err := json.MarshalIndent(expected, "", "    ")
+	expectedBytes, err := json.Marshal(expected, jsontext.WithIndent("    "))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	actualBytes, err := json.MarshalIndent(actual, "", "    ")
+	actualBytes, err := json.Marshal(actual, jsontext.WithIndent("    "))
 	if err != nil {
 		t.Fatal(err)
 	}

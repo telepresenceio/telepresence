@@ -2,9 +2,9 @@ package itest
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
+	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/dlib/dlog"

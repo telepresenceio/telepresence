@@ -2,11 +2,12 @@ package restapi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"strconv"
+
+	"github.com/go-json-experiment/json"
 
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
@@ -73,7 +74,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 	mux := http.NewServeMux()
 	writeError := func(w http.ResponseWriter, status int, err error) {
 		w.WriteHeader(status)
-		if err := json.NewEncoder(w).Encode(&ErrorResponse{Error: err.Error()}); err != nil {
+		if err := json.MarshalWrite(w, &ErrorResponse{Error: err.Error()}); err != nil {
 			dlog.Errorf(c, "error %v when responding with error %v", err, err)
 		}
 	}
@@ -105,7 +106,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 			if !ii.ClientSide {
 				consumeHere = !consumeHere
 			}
-			if err = json.NewEncoder(w).Encode(consumeHere); err != nil {
+			if err = json.MarshalWrite(w, consumeHere); err != nil {
 				dlog.Errorf(c, "error %v when responding with %t", err, consumeHere)
 			}
 		}
@@ -119,7 +120,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 		}
 		if ii, err := s.interceptInfo(c, r.FormValue("path"), cp, r.Header); err != nil {
 			writeError(w, http.StatusInternalServerError, err)
-		} else if err = json.NewEncoder(w).Encode(&ii); err != nil {
+		} else if err = json.MarshalWrite(w, &ii); err != nil {
 			dlog.Errorf(c, "error %v when responding with %v", err, ii)
 		}
 	})

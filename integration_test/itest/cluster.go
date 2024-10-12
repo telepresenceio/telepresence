@@ -3,7 +3,6 @@ package itest
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -21,10 +20,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/go-json-experiment/json"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -369,7 +368,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
 	config.Intercept().UseFtp = true
 
-	configYaml, err := yaml.Marshal(&config)
+	configYaml, err := config.MarshalYAML()
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
 
@@ -1195,10 +1194,11 @@ func WithConfig(c context.Context, modifierFunc func(config client.Config)) cont
 	cfgCopyVal.Elem().Set(cfgVal) // By value copy
 	configCopy := cfgCopyVal.Interface()
 	modifierFunc(configCopy.(client.Config))
-	configYaml, err := yaml.Marshal(&configCopy)
+	configYaml, err := configCopy.(client.Config).MarshalYAML()
 	require.NoError(t, err)
 	configYamlStr := string(configYaml)
-	configDir := t.TempDir()
+	configDir, err := os.MkdirTemp(t.TempDir(), "config")
+	require.NoError(t, err)
 	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c
@@ -1252,7 +1252,7 @@ func RunningPods(ctx context.Context, svc, ns string) []core.Pod {
 		return nil
 	}
 	var pm core.PodList
-	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
+	if err := json.UnmarshalRead(strings.NewReader(out), &pm); err != nil {
 		getT(ctx).Log(err.Error())
 		return nil
 	}
@@ -1289,7 +1289,7 @@ func RunningPodsWithAgents(ctx context.Context, appPrefix, ns string) []string {
 		return nil
 	}
 	var pm core.PodList
-	if err := json.NewDecoder(strings.NewReader(out)).Decode(&pm); err != nil {
+	if err := json.UnmarshalRead(strings.NewReader(out), &pm); err != nil {
 		getT(ctx).Log(err.Error())
 		return nil
 	}
