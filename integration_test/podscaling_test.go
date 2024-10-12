@@ -161,5 +161,5 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 // that at least one container is still running. I.e. the pod might well be terminating
 // but still considered running.
 func (s *interceptMountSuite) runningPods(ctx context.Context) []string {
-	return itest.RunningPods(ctx, s.ServiceName(), s.AppNamespace())
+	return itest.RunningPodNames(ctx, s.ServiceName(), s.AppNamespace())
 }
