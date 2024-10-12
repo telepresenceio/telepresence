@@ -3,7 +3,6 @@ package intercept
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -472,7 +473,7 @@ func (s *state) writeEnvToFileAndClose(file *os.File) (err error) {
 }
 
 func (s *state) writeEnvJSON() error {
-	data, err := json.MarshalIndent(s.env, "", "  ")
+	data, err := json.Marshal(s.env, jsontext.WithIndent("  "))
 	if err != nil {
 		// Creating JSON from a map[string]string should never fail
 		panic(err)

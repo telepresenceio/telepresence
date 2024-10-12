@@ -104,7 +104,7 @@ func (c *config) refreshFile(ctx context.Context, data map[string]string) {
 	c.Lock()
 	if yml, ok := data[clientConfigFileName]; ok {
 		c.clientYAML = []byte(yml)
-		cfg, err := client.ParseConfigYAML(c.clientYAML)
+		cfg, err := client.ParseConfigYAML(ctx, clientConfigFileName, c.clientYAML)
 		if err != nil {
 			dlog.Errorf(ctx, "failed to unmarshal YAML from %s", clientConfigFileName)
 		} else if AmendClientConfigFunc(ctx, cfg) {

@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dcontext"

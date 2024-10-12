@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )

@@ -34,7 +34,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.21.0
-    date: TBD
+    date: 2024-10-12
     notes:
       - type: feature
         title: Make usage data collection configurable using an extension point, and default to no-ops

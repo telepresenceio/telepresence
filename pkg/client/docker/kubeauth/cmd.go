@@ -2,7 +2,6 @@ package kubeauth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"k8s.io/cli-runtime/pkg/genericclioptions"

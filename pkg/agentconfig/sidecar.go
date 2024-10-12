@@ -1,9 +1,9 @@
 package agentconfig
 
 import (
-	"encoding/json"
 	"reflect"
 
+	"github.com/go-json-experiment/json"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	core "k8s.io/api/core/v1"

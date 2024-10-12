@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/go-json-experiment/json"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"

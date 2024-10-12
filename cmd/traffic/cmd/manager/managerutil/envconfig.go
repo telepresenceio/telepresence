@@ -2,13 +2,13 @@ package managerutil
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 

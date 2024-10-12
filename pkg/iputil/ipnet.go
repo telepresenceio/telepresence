@@ -1,10 +1,10 @@
 package iputil
 
 import (
-	"encoding/json"
 	"net"
 	"strings"
 
+	"github.com/go-json-experiment/json"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"

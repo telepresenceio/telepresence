@@ -5,13 +5,13 @@ package output
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -71,7 +71,7 @@ func Object(ctx context.Context, obj any, override bool) {
 			}
 
 			if o.format == formatJSONStream {
-				if err := json.NewEncoder(o.originalStdout).Encode(obj); err != nil {
+				if err := json.MarshalWrite(o.originalStdout, obj); err != nil {
 					panic(err)
 				}
 			} else {
@@ -143,11 +143,14 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	}
 	switch o.format {
 	case formatJSON:
-		if encErr := json.NewEncoder(o.originalStdout).Encode(obj); encErr != nil {
+		if encErr := json.MarshalWrite(o.originalStdout, obj); encErr != nil {
 			panic(encErr)
 		}
 	case formatYAML:
-		ym, encErr := yaml.Marshal(obj)
+		ym, encErr := json.Marshal(obj)
+		if encErr == nil {
+			ym, encErr = yaml.JSONToYAML(ym)
+		}
 		if encErr == nil {
 			_, encErr = o.originalStdout.Write(ym)
 		}

@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"net/netip"
 	"os"
@@ -110,7 +109,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 		var view client.SessionConfig
-		require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
+		require.NoError(client.UnmarshalJSON([]byte(jsonStdout), &view, false))
 		if len(view.Routing.NeverProxy) != neverProxiedCount {
 			dlog.Errorf(ctx, "did not find %d never-proxied subnets in json status", neverProxiedCount)
 			return false
@@ -243,7 +242,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	var view client.SessionConfig
 	s.TelepresenceConnect(ctx)
 	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
-	require.NoError(json.Unmarshal([]byte(jsonStdout), &view))
+	require.NoError(client.UnmarshalJSON([]byte(jsonStdout), &view, false))
 	require.Equal(view.LogLevels().RootDaemon, logrus.DebugLevel)
 }
 

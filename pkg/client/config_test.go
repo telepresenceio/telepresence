@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/datawire/dlib/dlog"
@@ -34,8 +34,8 @@ logLevels:
 `,
 		/* user */ `
 timeouts:
-  clusterConnect: 25
-  proxyDial: 17.0
+  clusterConnect: 25s
+  proxyDial: 17s
 logLevels:
   rootDaemon: trace
 images:
@@ -107,7 +107,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg.Intercept().AppProtocolStrategy = k8sapi.PortName
 	cfg.Intercept().DefaultPort = 9080
 	cfg.Cluster().DefaultManagerNamespace = "hello-there"
-	cfgBytes, err := yaml.Marshal(cfg)
+	cfgBytes, err := cfg.MarshalYAML()
 	require.NoError(t, err)
 
 	// Store YAML in file
@@ -122,7 +122,28 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 }
 
 func Test_ConfigMarshalYAMLDefaults(t *testing.T) {
-	cfgBytes, err := yaml.Marshal(GetDefaultConfig())
+	cfgBytes, err := GetDefaultConfig().MarshalYAML()
 	require.NoError(t, err)
 	require.Equal(t, "{}\n", string(cfgBytes))
+}
+
+func Test_ConfigMarshalYAMLDefaultsNotEmitted(t *testing.T) {
+	cfg := GetDefaultConfig()
+	lls := cfg.LogLevels()
+	lls.UserDaemon = defaultLogLevels.UserDaemon
+	lls.RootDaemon = logrus.DebugLevel
+	cfgBytes, err := cfg.MarshalYAML()
+	require.NoError(t, err)
+	require.Equal(t, "logLevels:\n  rootDaemon: debug\n", string(cfgBytes))
+}
+
+func Test_ConfigUnmarshalUnsupported(t *testing.T) {
+	config := []byte(`---
+logLevels:
+  userDaemon: debug
+  fooDaemon: debug
+`)
+	cfg, err := ParseConfigYAML(context.Background(), "config.yml", config)
+	require.NoError(t, err)
+	require.Equal(t, cfg.LogLevels().UserDaemon, logrus.DebugLevel)
 }

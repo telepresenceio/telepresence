@@ -1,9 +1,10 @@
 package intercept
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/go-json-experiment/json"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"

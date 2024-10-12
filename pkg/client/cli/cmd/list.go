@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 
+	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 

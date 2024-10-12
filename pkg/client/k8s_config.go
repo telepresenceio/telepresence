@@ -3,13 +3,12 @@ package client
 import (
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/go-json-experiment/json"
 	"github.com/spf13/pflag"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,6 +20,7 @@ import (
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -568,7 +568,11 @@ func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml 
 		DNS     *DNS     `yaml:"dns,omitempty"`
 		Routing *Routing `yaml:"routing,omitempty"`
 	}{}
-	if err := yaml.Unmarshal(cfgYaml, &remote); err != nil {
+	cfgJson, err := yaml.YAMLToJSON(cfgYaml)
+	if err == nil {
+		err = json.Unmarshal(cfgJson, &remote)
+	}
+	if err != nil {
 		return fmt.Errorf("unable to parse remote kubeconfig: %w", err)
 	}
 	if kf.DNS == nil {

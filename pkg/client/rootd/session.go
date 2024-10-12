@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	"gopkg.in/yaml.v3"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -351,12 +350,13 @@ func NewSession(c context.Context, mi *rpc.OutboundInfo) (context.Context, *Sess
 func nope() bool { return false }
 
 func newSession(c context.Context, mi *rpc.OutboundInfo, mc connector.ManagerProxyClient, ver semver.Version, isPodDaemon bool) (*Session, error) {
-	cfg := client.GetDefaultConfig()
+	var cfg client.Config
 	cliCfg, err := mc.GetClientConfig(c, &empty.Empty{})
 	if err != nil {
 		dlog.Warnf(c, "Failed to get remote config from traffic manager: %v", err)
+		cfg = client.GetDefaultConfig()
 	} else {
-		err = yaml.Unmarshal(cliCfg.ConfigYaml, cfg)
+		cfg, err = client.ParseConfigYAML(c, "client config", cliCfg.ConfigYaml)
 		if err != nil {
 			dlog.Warnf(c, "Failed to deserialize remote config: %v", err)
 		}

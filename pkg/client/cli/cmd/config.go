@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
-
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -119,7 +117,7 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal(cc.Json, &cfg)
+	err = client.UnmarshalJSON(cc.Json, &cfg, false)
 	if err != nil {
 		return err
 	}

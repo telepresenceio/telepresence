@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -19,13 +18,13 @@ import (
 	"time"
 
 	"github.com/blang/semver/v4"
+	"github.com/go-json-experiment/json"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	"gopkg.in/yaml.v3"
 	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -224,8 +223,9 @@ func NewSession(
 				dlog.Debug(ctx, sc.Text())
 			}
 		}
-		if err := yaml.Unmarshal(cliCfg.ConfigYaml, tmgr.sessionConfig); err != nil {
-			dlog.Warnf(ctx, "Failed to deserialize remote config: %v", err)
+		tmgr.sessionConfig, err = client.ParseConfigYAML(ctx, "client configuration from cluster", cliCfg.ConfigYaml)
+		if err != nil {
+			dlog.Warn(ctx, err.Error())
 		}
 		if err := tmgr.ApplyConfig(ctx); err != nil {
 			dlog.Warnf(ctx, "failed to apply config from traffic-manager: %v", err)
