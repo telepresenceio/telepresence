@@ -81,8 +81,6 @@ github.com/datawire/go-fuseftp/rpc v0.4.4 h1:CnafKfnXRcvK9SH40wH1SMbqbsiqJLiVy3O
 github.com/datawire/go-fuseftp/rpc v0.4.4/go.mod h1:KuWviT8YX7bg84uPBIsZEjWFBNU7siR8KoqZL7EjmqA=
 github.com/datawire/k8sapi v0.1.6-0.20240820125232-ee712486e677 h1:ZckPUncGzmUmSrNMJRZr8mbTPU3uDu8N2RWdLJZY8j0=
 github.com/datawire/k8sapi v0.1.6-0.20240820125232-ee712486e677/go.mod h1:wZOWo+KiWs6+oBXfIQsj3VbArkvQqiP83WtukLmAMRU=
-github.com/datawire/metriton-go-client v0.1.1 h1:T+gFOmIWBg4Cc8B5OTst0lllflaT1Pdh/LaxA1YouTQ=
-github.com/datawire/metriton-go-client v0.1.1/go.mod h1:OVLUaTDnGNk58GluwoaFKaWTo0IYU03b9qiN14cdwkw=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=

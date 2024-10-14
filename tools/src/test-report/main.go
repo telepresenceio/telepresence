@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-
-	"github.com/datawire/metriton-go-client/metriton"
 )
 
 const logsFileName = "tests.log"
@@ -28,30 +26,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	_, isCi := os.LookupEnv("GITHUB_SHA")
 	progressBar := newProgressBar(ctx, isCi)
-	reporter, err := NewReporter(ctx, progressBar, func(err error) {
-		fmt.Fprintf(progressBar, "Failed to report: %s\n", err)
-	})
-	if err != nil {
-		// An error will not be reported if the reporter is disabled because not in CI.
-		// We can't print to the progressBar if we're leaving, apparently.
-		fmt.Fprintf(os.Stderr, "Failed to create reporter: %s\n", err)
-		os.Exit(1)
-	}
 	logger, err := NewLogger(ctx, logsFileName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create logger: %s\n", err)
 		os.Exit(1)
 	}
-	if metriton.IsDisabledByUser() {
-		fmt.Fprint(progressBar, "Reporting is disabled by user\n")
-	}
-	if isCi {
-		fmt.Fprintf(progressBar, "Reporting to %s\n", reporter.Endpoint)
-	}
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		defer func() {
-			reporter.CloseAndWait()
 			logger.CloseAndWait()
 			// This ends the progress bar and hence the program
 			progressBar.End()
@@ -67,7 +49,6 @@ func main() {
 			if line.Test == "" {
 				continue
 			}
-			reporter.Report(line)
 			progressBar.ReportCh <- line
 			logger.Report(line)
 		}

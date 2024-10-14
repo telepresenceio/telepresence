@@ -163,15 +163,6 @@ shortens the time for the test with about 20 seconds.
  - You will need to have [mockgen](https://github.com/golang/mock) installed
    to generate new or updated testing mocks for interfaces.
 
-## Blocking Ambassador telemetry
-Telemetry to Ambassador Labs can be disabled by having your os resolve the `metriton.datawire.io` to `127.0.0.1`.
-
-### Windows
-`echo "127.0.0.1 metriton.datawire.io" >> c:\windows\system32\drivers\etc\hosts`
-
-### Linux and MacOS
-`echo "127.0.0.1 metriton.datawire.io" | sudo tee -a /etc/hosts`
-
 ## Build the binary, push the image
 
 The easiest thing to do to get going:
@@ -245,9 +236,7 @@ binaries.  However, after that initial run, you can instead use
 
 ### Test metric collection
 
-**When running in CI,** `make check-unit` and `make check-integration` will report the result of test
-runs to metriton, Ambassador Labs' metrics store. These reports include test name, running time, and
-result. They are reported by the tool at `tools/src/test-report`. This `test-report` tool will also
+**When running in CI,** `make check-unit` and `make check-integration` this `test-report` tool will
 visually modify test output; this happens even running locally, since the json output to go test
 is piped to the tool anyway:
 

@@ -713,18 +713,16 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 	nsl := nss.UniqueList()
 	vx := struct {
-		LogLevel        string    `json:"logLevel"`
-		MetritonEnabled bool      `json:"metritonEnabled"`
-		Image           Image     `json:"image,omitempty"`
-		Agent           *xAgent   `json:"agent,omitempty"`
-		ClientRbac      xRbac     `json:"clientRbac"`
-		ManagerRbac     xRbac     `json:"managerRbac"`
-		Client          xClient   `json:"client"`
-		Timeouts        xTimeouts `json:"timeouts,omitempty"`
+		LogLevel    string    `json:"logLevel"`
+		Image       Image     `json:"image,omitempty"`
+		Agent       *xAgent   `json:"agent,omitempty"`
+		ClientRbac  xRbac     `json:"clientRbac"`
+		ManagerRbac xRbac     `json:"managerRbac"`
+		Client      xClient   `json:"client"`
+		Timeouts    xTimeouts `json:"timeouts,omitempty"`
 	}{
-		LogLevel:        "debug",
-		MetritonEnabled: false,
-		Agent:           agent,
+		LogLevel: "debug",
+		Agent:    agent,
 		ClientRbac: xRbac{
 			Create:     true,
 			Namespaced: len(nss.ManagedNamespaces) > 0,

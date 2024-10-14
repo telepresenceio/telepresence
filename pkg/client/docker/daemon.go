@@ -338,6 +338,12 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (conn *grpc.
 		return nil, err
 	}
 
+	// Ensure that an ID exists in the config prior to launching the daemon. If it doesn't, the daemon
+	// will try to add it and fail, because the config is a read-only file system.
+	if _, err = client.InstallID(ctx); err != nil {
+		return nil, err
+	}
+
 	if err = EnsureNetwork(ctx, "telepresence"); err != nil {
 		return nil, err
 	}

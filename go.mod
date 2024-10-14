@@ -14,7 +14,6 @@ require (
 	github.com/datawire/go-ftpserver v0.1.3
 	github.com/datawire/go-fuseftp/rpc v0.4.4
 	github.com/datawire/k8sapi v0.1.6-0.20240820125232-ee712486e677
-	github.com/datawire/metriton-go-client v0.1.1
 	github.com/docker/docker v27.3.0+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/godbus/dbus/v5 v5.1.0

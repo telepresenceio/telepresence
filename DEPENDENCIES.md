@@ -33,7 +33,6 @@ following Free and Open Source software:
     github.com/datawire/go-ftpserver                                             v0.1.3                                Apache License 2.0
     github.com/datawire/go-fuseftp/rpc                                           v0.4.4                                Apache License 2.0
     github.com/datawire/k8sapi                                                   v0.1.6-0.20240820125232-ee712486e677  Apache License 2.0
-    github.com/datawire/metriton-go-client                                       v0.1.1                                Apache License 2.0
     github.com/davecgh/go-spew                                                   v1.1.2-0.20180830191138-d8f796af33cc  ISC license
     github.com/distribution/reference                                            v0.6.0                                Apache License 2.0
     github.com/docker/cli                                                        v27.3.0+incompatible                  Apache License 2.0

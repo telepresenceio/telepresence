@@ -199,10 +199,6 @@ spec:
             value: "{{ join " " . }}"
           {{- end }}
           {{- end }}
-          {{- if not .metritonEnabled }}  # 0 is false
-          - name: SCOUT_DISABLE
-            value: "1"
-          {{- end }}
         {{- /*
         Client configuration
         */}}

@@ -252,7 +252,11 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 	}
 	ctx = scout.NewReporter(ctx, "cli")
 	us := &wt.UserDaemon
-	us.InstallID = scout.InstallID(ctx)
+	installID, err := client.InstallID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	us.InstallID = installID
 	us.Running = true
 	us.Version = userD.Semver().String()
 	us.versionName = userD.Name()
