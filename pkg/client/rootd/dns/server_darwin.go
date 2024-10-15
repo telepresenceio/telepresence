@@ -105,11 +105,11 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName string, 
 	}
 
 	// All routes and include suffixes become domains
-	domains := make(map[string]*dnsproxy.ResolveFile, len(s.routes)+len(s.includeSuffixes))
+	domains := make(map[string]*dnsproxy.ResolveFile, len(s.routes)+len(s.IncludeSuffixes))
 	for route := range s.routes {
 		domains[route] = newDomainResolveFile(route)
 	}
-	for _, sfx := range s.includeSuffixes {
+	for _, sfx := range s.IncludeSuffixes {
 		sfx = strings.TrimPrefix(sfx, ".")
 		domains[sfx] = newDomainResolveFile(sfx)
 	}

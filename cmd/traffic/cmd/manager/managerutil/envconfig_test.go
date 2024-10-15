@@ -2,7 +2,7 @@ package managerutil_test
 
 import (
 	"context"
-	"net"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -51,7 +51,7 @@ func TestEnvconfig(t *testing.T) {
 		LogLevel:                 "info",
 		MaxReceiveSize:           resource.MustParse("4Mi"),
 		PodCIDRStrategy:          "auto",
-		PodIP:                    net.IP{203, 0, 113, 18},
+		PodIP:                    netip.AddrFrom4([4]byte{203, 0, 113, 18}),
 		ServerPort:               8081,
 	}
 
@@ -78,9 +78,9 @@ func TestEnvconfig(t *testing.T) {
 				"CLIENT_ROUTING_NEVER_PROXY_SUBNETS": "10.20.30.0/24 10.20.40.0/24",
 			},
 			Output: func(e *managerutil.Env) {
-				_, a, _ := net.ParseCIDR("10.20.30.0/24")
-				_, b, _ := net.ParseCIDR("10.20.40.0/24")
-				e.ClientRoutingNeverProxySubnets = []*net.IPNet{a, b}
+				a := netip.MustParsePrefix("10.20.30.0/24")
+				b := netip.MustParsePrefix("10.20.40.0/24")
+				e.ClientRoutingNeverProxySubnets = []netip.Prefix{a, b}
 			},
 		},
 	}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,14 +15,12 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
-	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 type table struct{}
 
-func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP net.IP) (*Route, error) {
+func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP netip.Addr) (*Route, error) {
 	dst := row.DestinationPrefix.Prefix()
 	if !dst.IsValid() {
 		return nil, nil
@@ -35,36 +34,20 @@ func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP net.IP) (*Route, error) 
 	if err != nil {
 		return nil, errInconsistentRT
 	}
-	if len(localIP) == 0 {
+	if !localIP.IsValid() {
 		localIP, err = interfaceLocalIP(iface, dst.Addr().Is4())
-		if err != nil {
+		if err != nil || !localIP.IsValid() {
 			return nil, err
 		}
-	} else if ip4 := localIP.To4(); ip4 != nil {
-		localIP = ip4
 	}
-	if localIP == nil {
-		return nil, nil
-	}
-	ip := dst.Addr().AsSlice()
-	var mask net.IPMask
-	if dst.Bits() > 0 {
-		if dst.Addr().Is4() {
-			mask = net.CIDRMask(dst.Bits(), 32)
-		} else {
-			mask = net.CIDRMask(dst.Bits(), 128)
-		}
-	}
-	routedNet := &net.IPNet{
-		IP:   ip,
-		Mask: mask,
-	}
+	ip := dst.Addr()
+	routedNet := netip.PrefixFrom(ip, dst.Bits())
 	return &Route{
 		LocalIP:   localIP,
-		Gateway:   gw.AsSlice(),
+		Gateway:   gw,
 		RoutedNet: routedNet,
 		Interface: iface,
-		Default:   subnet.IsZeroMask(routedNet),
+		Default:   dst.Bits() == 0,
 	}, nil
 }
 
@@ -73,9 +56,9 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to get routing table: %w", err)
 	}
-	routes := []*Route{}
+	routes := make([]*Route, 0, len(table))
 	for _, row := range table {
-		r, err := rowAsRoute(&row, nil)
+		r, err := rowAsRoute(&row, netip.Addr{})
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +69,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	return routes, nil
 }
 
-func getRouteForIP(localIP net.IP) (*Route, error) {
+func getRouteForIP(localIP netip.Addr) (*Route, error) {
 retryInconsistent:
 	for i := 0; i < maxInconsistentRetries; i++ {
 		table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
@@ -98,8 +81,8 @@ retryInconsistent:
 			if iface, err := net.InterfaceByIndex(ifaceIdx); err == nil && iface.Flags&net.FlagUp == net.FlagUp {
 				if addrs, err := iface.Addrs(); err == nil {
 					for _, addr := range addrs {
-						if ip, _, err := net.ParseCIDR(addr.String()); err == nil && ip.Equal(localIP) {
-							r, err := rowAsRoute(&row, ip)
+						if pfx, err := netip.ParsePrefix(addr.String()); err == nil && pfx.Addr() == localIP {
+							r, err := rowAsRoute(&row, pfx.Addr())
 							if err != nil {
 								if err == errInconsistentRT {
 									time.Sleep(inconsistentRetryDelay)
@@ -120,10 +103,10 @@ retryInconsistent:
 	return nil, fmt.Errorf("unable to get interface index for IP %s", localIP.String())
 }
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+func GetRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	ip := routedNet.IP
+	ip := routedNet.Addr()
 	cmd := proc.CommandContext(ctx, "pathping", "-n", "-h", "1", "-p", "100", "-w", "100", "-q", "1", ip.String())
 	cmd.DisableLogging = true
 	stderr := &strings.Builder{}
@@ -132,20 +115,16 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to run 'pathping %s': %s (%w)", ip, stderr, err)
 	}
-	var localIP net.IP
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	ipLine := regexp.MustCompile(`^\s+0\s+(\S+)\s*$`)
 	for scanner.Scan() {
 		if match := ipLine.FindStringSubmatch(scanner.Text()); match != nil {
-			if localIP = iputil.Parse(match[1]); localIP != nil {
-				break
+			if localIP, err := netip.ParseAddr(match[1]); err == nil {
+				return getRouteForIP(localIP)
 			}
 		}
 	}
-	if localIP == nil {
-		return nil, fmt.Errorf("unable to parse local IP from %q", string(out))
-	}
-	return getRouteForIP(localIP)
+	return nil, fmt.Errorf("unable to parse local IP from %q", string(out))
 }
 
 func maskToIP(mask net.IPMask) (ip net.IP) {
@@ -155,12 +134,20 @@ func maskToIP(mask net.IPMask) (ip net.IP) {
 }
 
 func (r *Route) addStatic(ctx context.Context) error {
+	ip := r.RoutedNet.Addr()
+	var maskSize int
+	if ip.Is4() {
+		maskSize = 32
+	} else {
+		maskSize = 128
+	}
+	mask := net.CIDRMask(r.RoutedNet.Bits(), maskSize)
 	cmd := proc.CommandContext(ctx,
 		"route",
 		"ADD",
-		r.RoutedNet.IP.String(),
+		ip.String(),
 		"MASK",
-		maskToIP(r.RoutedNet.Mask).String(),
+		maskToIP(mask).String(),
 		r.Gateway.String(),
 		"IF",
 		strconv.Itoa(r.Interface.Index),
@@ -180,7 +167,7 @@ func (r *Route) removeStatic(ctx context.Context) error {
 	cmd := proc.CommandContext(ctx,
 		"route",
 		"DELETE",
-		r.RoutedNet.IP.String(),
+		r.RoutedNet.Addr().String(),
 	)
 	cmd.DisableLogging = true
 	err := cmd.Run()

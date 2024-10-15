@@ -1,7 +1,7 @@
 package routing
 
 import (
-	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,7 +21,8 @@ func TestGetRoutingTable_defaultRoute(t *testing.T) {
 		}
 	}
 	assert.NotNil(t, dflt)
-	assert.False(t, dflt.Gateway.Equal(net.IP{0, 0, 0, 0}))
+	assert.NotEqual(t, netip.IPv4Unspecified(), dflt.Gateway)
+	assert.NotEqual(t, netip.IPv6Unspecified(), dflt.Gateway)
 }
 
 func TestGetRoutingTable(t *testing.T) {
@@ -30,8 +31,8 @@ func TestGetRoutingTable(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, rt)
 	for _, r := range rt {
-		assert.NotNil(t, r.LocalIP)
+		assert.True(t, r.LocalIP.IsValid())
 		assert.NotNil(t, r.Interface)
-		assert.NotNil(t, r.RoutedNet)
+		assert.True(t, r.RoutedNet.IsValid())
 	}
 }

@@ -34,8 +34,8 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	if err != nil {
 		return err
 	}
-	dnsIP := s.remoteIP
-	configureDNS(dnsIP, dnsResolverAddr)
+	dnsIP := s.RemoteIP
+	configureDNS(dnsIP.AsSlice(), dnsResolverAddr)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
@@ -44,7 +44,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 
 	g.Go("Server", func(c context.Context) error {
 		dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
-		if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP); err != nil {
+		if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP.AsSlice()); err != nil {
 			dlog.Error(c, err)
 			initDone <- struct{}{}
 			return errResolveDNotConfigured
@@ -104,7 +104,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 
 func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	s.Lock()
-	paths := make([]string, len(s.search)+len(s.routes)+len(s.includeSuffixes)+1)
+	paths := make([]string, len(s.search)+len(s.routes)+len(s.IncludeSuffixes)+1)
 
 	// Namespaces are copied verbatim. Entries that aren't prefixed with "~" are considered search path entries.
 	copy(paths, s.search)
@@ -117,7 +117,7 @@ func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	// Include-suffixes are routes, i.e. in contrast to search paths, they are never appended to the name, but
 	// used as a filter that will direct queries for names ending with them to this resolver. Routes must be
 	// prefixed with "~".
-	for _, sfx := range s.includeSuffixes {
+	for _, sfx := range s.IncludeSuffixes {
 		if !strings.HasSuffix(sfx, ".") {
 			sfx += "."
 		}

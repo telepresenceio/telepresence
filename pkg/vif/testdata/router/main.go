@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"os"
 	"strings"
 
@@ -55,23 +55,23 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	yesRoutes := []*net.IPNet{}
-	noRoutes := []*net.IPNet{}
-	whitelist := []*net.IPNet{}
+	yesRoutes := []netip.Prefix{}
+	noRoutes := []netip.Prefix{}
+	whitelist := []netip.Prefix{}
 	for _, cidr := range os.Args[1:] {
-		var ipnet *net.IPNet
+		var ipnet netip.Prefix
 		if strings.HasPrefix(cidr, "!") {
-			if _, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "!")); err == nil {
+			if ipnet, err = netip.ParsePrefix(strings.TrimPrefix(cidr, "!")); err == nil {
 				fmt.Printf("Blacklisting route: %s\n", ipnet)
 				noRoutes = append(noRoutes, ipnet)
 			}
 		} else if strings.HasPrefix(cidr, "+") {
-			if _, ipnet, err = net.ParseCIDR(strings.TrimPrefix(cidr, "+")); err == nil {
+			if ipnet, err = netip.ParsePrefix(strings.TrimPrefix(cidr, "+")); err == nil {
 				fmt.Printf("Whitelisting route: %s\n", ipnet)
 				whitelist = append(whitelist, ipnet)
 			}
 		} else {
-			if _, ipnet, err = net.ParseCIDR(cidr); err == nil {
+			if ipnet, err = netip.ParsePrefix(cidr); err == nil {
 				fmt.Printf("Adding route: %s\n", ipnet)
 				yesRoutes = append(yesRoutes, ipnet)
 			}

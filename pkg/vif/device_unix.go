@@ -5,13 +5,13 @@ package vif
 
 import (
 	"context"
-	"net"
+	"net/netip"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
 
-func (t *nativeDevice) setDNS(context.Context, string, net.IP, []string) (err error) {
+func (t *nativeDevice) setDNS(context.Context, string, netip.Addr, []string) (err error) {
 	// DNS is configured by other means than through the actual device
 	return nil
 }

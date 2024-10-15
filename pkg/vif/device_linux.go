@@ -3,7 +3,7 @@ package vif
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/netip"
 	"os"
 	"runtime"
 	"unsafe"
@@ -11,6 +11,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif/buffer"
 )
 
@@ -99,24 +100,24 @@ func (t *nativeDevice) Close() error {
 	return nil
 }
 
-func (t *nativeDevice) addSubnet(ctx context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) addSubnet(ctx context.Context, pfx netip.Prefix) error {
 	link, err := netlink.LinkByIndex(int(t.interfaceIndex))
 	if err != nil {
 		return fmt.Errorf("failed to find link for interface %s: %w", t.name, err)
 	}
-	addr := &netlink.Addr{IPNet: subnet}
+	addr := &netlink.Addr{IPNet: subnet.PrefixToIPNet(pfx)}
 	if err := netlink.AddrAdd(link, addr); err != nil {
-		return fmt.Errorf("failed to add address %s to interface %s: %w", subnet, t.name, err)
+		return fmt.Errorf("failed to add address %s to interface %s: %w", pfx, t.name, err)
 	}
 	return nil
 }
 
-func (t *nativeDevice) removeSubnet(ctx context.Context, subnet *net.IPNet) error {
+func (t *nativeDevice) removeSubnet(ctx context.Context, pfx netip.Prefix) error {
 	link, err := netlink.LinkByIndex(int(t.interfaceIndex))
 	if err != nil {
 		return err
 	}
-	addr := &netlink.Addr{IPNet: subnet}
+	addr := &netlink.Addr{IPNet: subnet.PrefixToIPNet(pfx)}
 	return netlink.AddrDel(link, addr)
 }
 

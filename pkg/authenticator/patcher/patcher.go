@@ -158,9 +158,9 @@ func AnnotateConnectRequest(cr *connector.ConnectRequest, cacheDir, kubeContext 
 	delete(cr.Environment, "-KUBECONFIG")
 }
 
-// AnnotateOutboundInfo is used when a non-containerized user-daemon connects to the root-daemon. The KubeFlags
+// AnnotateNetworkConfig is used when a non-containerized user-daemon connects to the root-daemon. The KubeFlags
 // are modified to contain the path to the modified kubeconfig file.
-func AnnotateOutboundInfo(ctx context.Context, oi *daemon.OutboundInfo, kubeContext string) {
+func AnnotateNetworkConfig(ctx context.Context, oi *daemon.NetworkConfig, kubeContext string) {
 	kubeConfigFile := ioutil.SafeName(kubeContext)
 	if oi.KubeFlags == nil {
 		oi.KubeFlags = make(map[string]string)

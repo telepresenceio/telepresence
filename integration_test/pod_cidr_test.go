@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type podCIDRSuite struct {
@@ -44,7 +44,7 @@ func (s *podCIDRSuite) Test_PodCIDRStrategy() {
 	itest.TelepresenceQuitOk(ctx)
 	connected = false
 
-	subnetsAsStrings := func(snn []*iputil.Subnet) []string {
+	subnetsAsStrings := func(snn []netip.Prefix) []string {
 		sns := make([]string, len(snn))
 		for i, sn := range snn {
 			sns[i] = sn.String()

@@ -3,7 +3,7 @@ package vif
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/netip"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -19,30 +19,30 @@ type Router struct {
 	// A list of never proxied routes that have already been added to routing table
 	staticOverrides []*routing.Route
 	// The subnets that are currently being routed
-	routedSubnets []*net.IPNet
+	routedSubnets []netip.Prefix
 	// The subnets that are allowed to be routed even in the presence of conflicting routes
-	whitelistedSubnets []*net.IPNet
+	whitelistedSubnets []netip.Prefix
 }
 
 func NewRouter(device Device, table routing.Table) *Router {
 	return &Router{device: device, routingTable: table}
 }
 
-func (rt *Router) GetRoutedSubnets() []*net.IPNet {
+func (rt *Router) GetRoutedSubnets() []netip.Prefix {
 	return rt.routedSubnets
 }
 
-func (rt *Router) UpdateWhitelist(whitelist []*net.IPNet) {
+func (rt *Router) UpdateWhitelist(whitelist []netip.Prefix) {
 	rt.whitelistedSubnets = whitelist
 }
 
-func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error {
+func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) error {
 	// We need the entire table because we need to check for any overlaps, not just "is this IP already routed"
 	table, err := routing.GetRoutingTable(ctx)
 	if err != nil {
 		return err
 	}
-	_, nonWhitelisted := subnet.Partition(routes, func(_ int, r *net.IPNet) bool {
+	_, nonWhitelisted := subnet.Partition(routes, func(_ int, r netip.Prefix) bool {
 		for _, w := range rt.whitelistedSubnets {
 			if subnet.Covers(w, r) {
 				// This is a whitelisted subnet, so we'll overlap it if needed
@@ -51,23 +51,23 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 		}
 		for _, er := range table {
 			// Route is already in the routing table.
-			if subnet.Equal(r, er.RoutedNet) {
+			if r == er.RoutedNet {
 				return true
 			}
 		}
 		return false
 	})
-	// Slightly awkward nested loops, since they can both continue (i.e. there's probably wasted iterations) but it's okay, there's not gonna be hundreds of routes.
+	// Slightly awkward nested loops, since they can both continue (i.e., there are probably wasted iterations), but it's okay, there's not going to be hundreds of routes.
 	// In any case, we really wanna run over the table as the outer loop, since it's bigger.
 	for _, tr := range table {
 		dlog.Tracef(ctx, "checking for overlap with route %q", tr)
-		if (subnet.IsZeroMask(tr.RoutedNet) || tr.Default) || // Default route, overlapped if needed
+		if (tr.RoutedNet.Bits() == 0 || tr.Default) || // Default route, overlapped if needed
 			subnet.IsHalfOfDefault(tr.RoutedNet) || // OpenVPN covers half the address space with a /1 route and the other half with another. This is its way of doing a default route.
 			tr.Interface.Name == rt.device.Name() { // This is the interface we're routing through, so we can overlap it
 			continue
 		}
 		for _, r := range nonWhitelisted {
-			if subnet.Overlaps(tr.RoutedNet, r) {
+			if tr.RoutedNet.Overlaps(r) {
 				return errcat.Config.New(fmt.Sprintf(
 					"subnet %s overlaps with existing route %q. Please see %s for more information",
 					r, tr, "https://www.getambassador.io/docs/telepresence/latest/reference/vpn",
@@ -78,7 +78,7 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []*net.IPNet) error
 	return nil
 }
 
-func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dontProxyOverrides []*net.IPNet) error {
+func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dontProxyOverrides []netip.Prefix) error {
 	// Don't never-proxy subnets that aren't routed
 	if err := rt.ValidateRoutes(ctx, pleaseProxy); err != nil {
 		return err
@@ -89,10 +89,10 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	rt.dropStaticOverrides(ctx)
 
 	// Remove all no longer desired subnets from the routedSubnets
-	var removed []*net.IPNet
-	rt.routedSubnets, removed = subnet.Partition(rt.routedSubnets, func(_ int, sn *net.IPNet) bool {
+	var removed []netip.Prefix
+	rt.routedSubnets, removed = subnet.Partition(rt.routedSubnets, func(_ int, sn netip.Prefix) bool {
 		for _, d := range pleaseProxy {
-			if subnet.Equal(sn, d) {
+			if sn == d {
 				return true
 			}
 		}
@@ -100,9 +100,9 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	})
 
 	// Remove already routed subnets from the pleaseProxy list
-	added, _ := subnet.Partition(pleaseProxy, func(_ int, sn *net.IPNet) bool {
+	added, _ := subnet.Partition(pleaseProxy, func(_ int, sn netip.Prefix) bool {
 		for _, d := range rt.routedSubnets {
-			if subnet.Equal(sn, d) {
+			if sn == d {
 				return false
 			}
 		}
@@ -118,12 +118,12 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 		}
 	}
 
-	var staticNets []*net.IPNet
+	var staticNets []netip.Prefix
 	var pr *routing.Route
 	for _, sn := range added {
 		var err error
-		ones, bits := sn.Mask.Size()
-		if bits == 32 && ones > 30 {
+		bits := sn.Bits()
+		if sn.Addr().Is4() && bits > 30 {
 			staticNets = append(staticNets, sn)
 			continue
 		}
@@ -134,7 +134,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 		}
 
 		if pr == nil {
-			if pr, err = routing.GetRoute(ctx, sn); err == nil {
+			if pr, err = routing.GetRoute(ctx, sn); err != nil {
 				dlog.Errorf(ctx, "failed to retrieve route for subnet %s: %v", sn, err)
 			}
 		}
@@ -145,7 +145,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	return rt.addStaticOverrides(ctx, dontProxy, dontProxyOverrides, staticNets, pr)
 }
 
-func (rt *Router) addStaticOverrides(ctx context.Context, neverProxy, neverProxyOverrides, staticNets []*net.IPNet, primaryRoute *routing.Route) (err error) {
+func (rt *Router) addStaticOverrides(ctx context.Context, neverProxy, neverProxyOverrides, staticNets []netip.Prefix, primaryRoute *routing.Route) (err error) {
 	desired := make([]*routing.Route, 0, len(neverProxy)+len(neverProxyOverrides))
 	dr, err := routing.DefaultRoute(ctx)
 	if err != nil {

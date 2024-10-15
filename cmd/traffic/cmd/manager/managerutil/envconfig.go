@@ -2,7 +2,7 @@ package managerutil
 
 import (
 	"context"
-	"net"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,7 +17,6 @@ import (
 	"github.com/datawire/k8sapi/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 // Env is the traffic-manager's environment. It does not define any defaults because all
@@ -44,9 +43,9 @@ type Env struct {
 	TracingGrpcPort uint16            `env:"TRACING_GRPC_PORT,     parser=port-number,default=0"`
 	MaxReceiveSize  resource.Quantity `env:"GRPC_MAX_RECEIVE_SIZE, parser=quantity"`
 
-	PodCIDRStrategy string       `env:"POD_CIDR_STRATEGY, parser=nonempty-string"`
-	PodCIDRs        []*net.IPNet `env:"POD_CIDRS,         parser=split-ipnet, default="`
-	PodIP           net.IP       `env:"POD_IP,            parser=ip"`
+	PodCIDRStrategy string         `env:"POD_CIDR_STRATEGY, parser=nonempty-string"`
+	PodCIDRs        []netip.Prefix `env:"POD_CIDRS,         parser=split-ipnet, default="`
+	PodIP           netip.Addr     `env:"POD_IP,            parser=ip"`
 
 	AgentRegistry            string                      `env:"AGENT_REGISTRY,           parser=string,         default="`
 	AgentImageName           string                      `env:"AGENT_IMAGE_NAME,         parser=string,         default="`
@@ -63,12 +62,12 @@ type Env struct {
 	AgentInjectorSecret      string                      `env:"AGENT_INJECTOR_SECRET,    parser=string,         default="`
 	AgentSecurityContext     *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,   parser=json-security-context, default="`
 
-	ClientRoutingAlsoProxySubnets        []*net.IPNet  `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
-	ClientRoutingNeverProxySubnets       []*net.IPNet  `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
-	ClientRoutingAllowConflictingSubnets []*net.IPNet  `env:"CLIENT_ROUTING_ALLOW_CONFLICTING_SUBNETS, 	parser=split-ipnet, default="`
-	ClientDnsExcludeSuffixes             []string      `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,        		parser=split-trim"`
-	ClientDnsIncludeSuffixes             []string      `env:"CLIENT_DNS_INCLUDE_SUFFIXES,       		parser=split-trim,  default="`
-	ClientConnectionTTL                  time.Duration `env:"CLIENT_CONNECTION_TTL,              		parser=time.ParseDuration"`
+	ClientRoutingAlsoProxySubnets        []netip.Prefix `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
+	ClientRoutingNeverProxySubnets       []netip.Prefix `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
+	ClientRoutingAllowConflictingSubnets []netip.Prefix `env:"CLIENT_ROUTING_ALLOW_CONFLICTING_SUBNETS, 	parser=split-ipnet, default="`
+	ClientDnsExcludeSuffixes             []string       `env:"CLIENT_DNS_EXCLUDE_SUFFIXES,        		parser=split-trim"`
+	ClientDnsIncludeSuffixes             []string       `env:"CLIENT_DNS_INCLUDE_SUFFIXES,       		parser=split-trim,  default="`
+	ClientConnectionTTL                  time.Duration  `env:"CLIENT_CONNECTION_TTL,              		parser=time.ParseDuration"`
 
 	ArgoRolloutsEnabled bool `env:"ARGO_ROLLOUTS_ENABLED, parser=bool, default=false"`
 }
@@ -143,13 +142,13 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(resource.Quantity))) },
 	}
-	fhs[reflect.TypeOf(net.IP{})] = envconfig.FieldTypeHandler{
+	fhs[reflect.TypeOf(netip.Addr{})] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){
 			"ip": func(str string) (any, error) { //nolint:unparam // API requirement
-				return iputil.Parse(str), nil
+				return netip.ParseAddr(str)
 			},
 		},
-		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(net.IP))) },
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.(netip.Addr))) },
 	}
 	fhs[reflect.TypeOf([]string{})] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){
@@ -166,24 +165,24 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 		},
 		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]string))) },
 	}
-	fhs[reflect.TypeOf([]*net.IPNet{})] = envconfig.FieldTypeHandler{
+	fhs[reflect.TypeOf([]netip.Prefix{})] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){
 			"split-ipnet": func(str string) (any, error) {
 				if len(str) == 0 {
 					return nil, nil
 				}
 				ss := strings.Split(str, " ")
-				ns := make([]*net.IPNet, len(ss))
+				ns := make([]netip.Prefix, len(ss))
 				for i, s := range ss {
 					var err error
-					if _, ns[i], err = net.ParseCIDR(strings.TrimSpace(s)); err != nil {
+					if ns[i], err = netip.ParsePrefix(strings.TrimSpace(s)); err != nil {
 						return nil, err
 					}
 				}
 				return ns, nil
 			},
 		},
-		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]*net.IPNet))) },
+		Setter: func(dst reflect.Value, src interface{}) { dst.Set(reflect.ValueOf(src.([]netip.Prefix))) },
 	}
 	fhs[reflect.TypeOf([]core.LocalObjectReference{})] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){

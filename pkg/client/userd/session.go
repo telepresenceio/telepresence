@@ -38,7 +38,6 @@ type InterceptInfo interface {
 type KubeConfig interface {
 	GetContext() string
 	GetRestConfig() *rest.Config
-	GetManagerNamespace() string
 }
 
 type NamespaceListener func(context.Context)

@@ -81,7 +81,7 @@ type sessionReply struct {
 type Service struct {
 	rpc.UnsafeDaemonServer
 	quit            context.CancelFunc
-	connectCh       chan *rpc.OutboundInfo
+	connectCh       chan *rpc.NetworkConfig
 	connectReplyCh  chan sessionReply
 	sessionLock     sync.RWMutex
 	sessionCancel   context.CancelFunc
@@ -94,7 +94,7 @@ type Service struct {
 func NewService(cfg client.Config) *Service {
 	return &Service{
 		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon.String(), log.SetLevel),
-		connectCh:      make(chan *rpc.OutboundInfo),
+		connectCh:      make(chan *rpc.NetworkConfig),
 		connectReplyCh: make(chan sessionReply),
 	}
 }
@@ -131,7 +131,7 @@ func (s *Service) Version(_ context.Context, _ *emptypb.Empty) (*common.VersionI
 	}, nil
 }
 
-func (s *Service) Status(_ context.Context, _ *emptypb.Empty) (*rpc.DaemonStatus, error) {
+func (s *Service) Status(context.Context, *emptypb.Empty) (*rpc.DaemonStatus, error) {
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
 	r := &rpc.DaemonStatus{
@@ -142,9 +142,7 @@ func (s *Service) Status(_ context.Context, _ *emptypb.Empty) (*rpc.DaemonStatus
 		},
 	}
 	if s.session != nil {
-		nc := s.session.getNetworkConfig()
-		r.Subnets = nc.Subnets
-		r.OutboundConfig = nc.OutboundInfo
+		r.OutboundConfig = s.session.getNetworkConfig(s.sessionContext)
 	}
 	return r, nil
 }
@@ -189,7 +187,7 @@ func (s *Service) SetDNSMappings(ctx context.Context, req *rpc.SetDNSMappingsReq
 	return &emptypb.Empty{}, err
 }
 
-func (s *Service) Connect(ctx context.Context, info *rpc.OutboundInfo) (*rpc.DaemonStatus, error) {
+func (s *Service) Connect(ctx context.Context, info *rpc.NetworkConfig) (*rpc.DaemonStatus, error) {
 	dlog.Debug(ctx, "Received gRPC Connect")
 	select {
 	case <-ctx.Done():
@@ -264,10 +262,10 @@ func (s *Service) WithSession(f func(context.Context, *Session) error) error {
 
 func (s *Service) GetNetworkConfig(ctx context.Context, e *emptypb.Empty) (nc *rpc.NetworkConfig, err error) {
 	err = s.WithSession(func(ctx context.Context, session *Session) error {
-		nc = session.getNetworkConfig()
+		nc = session.getNetworkConfig(s.sessionContext)
 		return nil
 	})
-	dlog.Debugf(ctx, "Returning session %v", nc.OutboundInfo.Session)
+	dlog.Debugf(ctx, "Returning session %v", nc.Session)
 	return
 }
 
@@ -292,12 +290,7 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 
 func (s *Service) configReload(c context.Context) error {
 	return client.Watch(c, func(c context.Context) error {
-		s.sessionLock.RLock()
-		defer s.sessionLock.RUnlock()
-		if s.session == nil {
-			return client.RestoreDefaults(c, true)
-		}
-		return s.session.applyConfig(c)
+		return client.ReloadDaemonLogLevel(c, true)
 	})
 }
 
@@ -331,7 +324,7 @@ func (s *Service) manageSessions(c context.Context) error {
 	}
 }
 
-func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sync.WaitGroup) sessionReply {
+func (s *Service) startSession(parentCtx context.Context, oi *rpc.NetworkConfig, wg *sync.WaitGroup) sessionReply {
 	s.sessionLock.Lock() // Locked during creation
 	defer s.sessionLock.Unlock()
 	reply := sessionReply{
@@ -343,12 +336,12 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 		},
 	}
 	if s.session != nil {
-		reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
-		dlog.Debugf(ctx, "Returning session %v from existing session", reply.status.OutboundConfig.Session)
+		reply.status.OutboundConfig = s.session.getNetworkConfig(s.sessionContext)
+		dlog.Debugf(parentCtx, "Returning session %v from existing session", reply.status.OutboundConfig.Session)
 		return reply
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(parentCtx)
 	ctx, session, err := GetNewSessionFunc(ctx)(ctx, oi)
 	if session == nil || ctx.Err() != nil || err != nil {
 		cancel()
@@ -366,11 +359,8 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 		cancel()
 		<-session.Done()
 	}
-	if err := s.session.applyConfig(ctx); err != nil {
-		dlog.Warnf(ctx, "failed to apply config from traffic-manager: %v", err)
-	}
-
-	reply.status.OutboundConfig = s.session.getNetworkConfig().OutboundInfo
+	_ = client.ReloadDaemonLogLevel(ctx, true)
+	reply.status.OutboundConfig = s.session.getNetworkConfig(ctx)
 	dlog.Debugf(ctx, "Returning session from new session %v", reply.status.OutboundConfig.Session)
 
 	initErrCh := make(chan error, 1)
@@ -388,10 +378,8 @@ func (s *Service) startSession(ctx context.Context, oi *rpc.OutboundInfo, wg *sy
 			s.sessionLock.Lock()
 			s.session = nil
 			s.sessionCancel = nil
-			if err := client.RestoreDefaults(ctx, true); err != nil {
-				dlog.Warn(ctx, err)
-			}
 			s.sessionLock.Unlock()
+			_ = client.ReloadDaemonLogLevel(parentCtx, true)
 			wg.Done()
 		}()
 		if err := s.session.run(s.sessionContext, initErrCh); err != nil {

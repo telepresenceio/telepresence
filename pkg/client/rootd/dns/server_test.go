@@ -37,7 +37,7 @@ func (s *suiteServer) TestSetMappings() {
 	s.server.cache.Store(aliasedToKeyA, entry)
 	s.server.cache.Store(aliasedToKeyAAAA, entry)
 
-	s.server.mappings = map[string]string{}
+	s.server.mappingsMap = map[string]string{}
 
 	// when
 	s.server.SetMappings([]*rpc.DNSMapping{
@@ -57,7 +57,7 @@ func (s *suiteServer) TestSetMappings() {
 	_, exists = s.server.cache.Load(aliasedToKeyAAAA)
 	s.True(exists, "Service's AAAA record was purged")
 
-	s.Equal(s.server.mappings, map[string]string{
+	s.Equal(s.server.mappingsMap, map[string]string{
 		"echo-easy-alias.": "echo-easy.blue.svc.cluster.local.",
 	})
 
@@ -70,7 +70,7 @@ func (s *suiteServer) TestSetMappings() {
 
 	// then
 	// mappings are empty
-	s.Empty(s.server.mappings)
+	s.Empty(s.server.mappingsMap)
 
 	// nothing is purged when clearing the mappings because mappings never make it to the cache
 	_, exists = s.server.cache.Load(aliasKeyA)
@@ -94,7 +94,7 @@ func (s *suiteServer) TestSetExcludes() {
 	s.server.cache.Store(toDelete4ARecordKey, entry)
 	s.server.cache.Store(toDeleteNewARecordKey, entry)
 
-	s.server.excludes = []string{"echo-easy"}
+	s.server.Excludes = []string{"echo-easy"}
 
 	// when
 	newExcluded := []string{"new-excluded"}
@@ -107,12 +107,12 @@ func (s *suiteServer) TestSetExcludes() {
 	assert.False(s.T(), exists, "Excluded AAAA record was purged")
 	_, exists = s.server.cache.Load(toDeleteNewARecordKey)
 	assert.False(s.T(), exists, "New excluded record was purged")
-	assert.Equal(s.T(), newExcluded, s.server.excludes)
+	assert.Equal(s.T(), newExcluded, s.server.Excludes)
 }
 
 func (s *suiteServer) TestIsExcluded() {
 	// given
-	s.server.excludes = []string{
+	s.server.Excludes = []string{
 		"echo-easy",
 	}
 	s.server.search = []string{

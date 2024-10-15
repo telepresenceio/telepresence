@@ -361,10 +361,6 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 	if s == nil {
 		return ctx, nil
 	}
-
-	if dns := s.Info.GetDaemonStatus().GetOutboundConfig().GetDns(); dns != nil && dns.Error != "" {
-		ioutil.Printf(output.Err(ctx), "Warning: %s\n", dns.Error)
-	}
 	return daemon.WithSession(ctx, s), nil
 }
 

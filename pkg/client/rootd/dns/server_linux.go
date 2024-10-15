@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -50,16 +50,20 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 }
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
-	if s.localIP == nil {
+	if !s.LocalIP.IsValid() {
 		rf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
 		if err != nil {
 			return err
 		}
 		dlog.Debug(c, rf.String())
 		if len(rf.Nameservers) > 0 {
-			ip := iputil.Parse(rf.Nameservers[0])
-			s.localIP = ip
-			dlog.Infof(c, "Automatically set -dns=%s", ip)
+			nsAddr := rf.Nameservers[0]
+			addr, err := netip.ParseAddr(nsAddr)
+			if err != nil {
+				return fmt.Errorf("nameserver IP %q in /etc/resolv.conf is invalid: %v", nsAddr, err)
+			}
+			s.LocalIP = addr
+			dlog.Infof(c, "Automatically set -dns=%s", addr)
 		}
 
 		// The search entries in /etc/resolv.conf are not intended for this resolver so
@@ -80,7 +84,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			}
 		}
 	}
-	if s.localIP == nil {
+	if !s.LocalIP.IsValid() {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
@@ -97,7 +101,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	pool, err := NewConnPool(s.localIP.String(), 10)
+	pool, err := NewConnPool(s.LocalIP, 10)
 	if err != nil {
 		return err
 	}
@@ -148,7 +152,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.localIP, dnsResolverAddr, pool.LocalAddrs())
+			err := routeDNS(c, s.LocalIP, dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {
 				return err
 			}
@@ -263,7 +267,7 @@ const tpDNSChain = "TELEPRESENCE_DNS"
 // that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
 // uses a fallback, that fallback reaches the original DNS service.
-func routeDNS(c context.Context, dnsIP net.IP, toAddr *net.UDPAddr, localDNSs []*net.UDPAddr) (err error) {
+func routeDNS(c context.Context, dnsIP netip.Addr, toAddr *net.UDPAddr, localDNSs []*net.UDPAddr) (err error) {
 	// create the chain
 	unrouteDNS(c)
 

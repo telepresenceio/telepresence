@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"context"
-	"net"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -158,7 +158,7 @@ func (w *nodeWatcher) onNodeUpdated(ctx context.Context, oldNode, newNode *corev
 	}
 }
 
-func (w *nodeWatcher) add(subnets []*net.IPNet) {
+func (w *nodeWatcher) add(subnets []netip.Prefix) {
 	w.lock.Lock()
 	if w.addLocked(subnets) {
 		// If this was the first change since the last subnet calculation, then store
@@ -171,7 +171,7 @@ func (w *nodeWatcher) add(subnets []*net.IPNet) {
 	w.lock.Unlock()
 }
 
-func (w *nodeWatcher) drop(subnets []*net.IPNet) {
+func (w *nodeWatcher) drop(subnets []netip.Prefix) {
 	w.lock.Lock()
 	if w.dropLocked(subnets) {
 		// If this was the first change since the last subnet calculation, then store
@@ -184,7 +184,7 @@ func (w *nodeWatcher) drop(subnets []*net.IPNet) {
 	w.lock.Unlock()
 }
 
-func (w *nodeWatcher) update(dropped, added []*net.IPNet) {
+func (w *nodeWatcher) update(dropped, added []netip.Prefix) {
 	w.lock.Lock()
 	if w.dropLocked(dropped) || w.addLocked(added) {
 		// If this was the first change since the last subnet calculation, then store
@@ -197,7 +197,7 @@ func (w *nodeWatcher) update(dropped, added []*net.IPNet) {
 	w.lock.Unlock()
 }
 
-func (w *nodeWatcher) addLocked(subnets []*net.IPNet) bool {
+func (w *nodeWatcher) addLocked(subnets []netip.Prefix) bool {
 	changed := false
 	for _, sn := range subnets {
 		if w.subnets.Add(sn) {
@@ -207,7 +207,7 @@ func (w *nodeWatcher) addLocked(subnets []*net.IPNet) bool {
 	return changed
 }
 
-func (w *nodeWatcher) dropLocked(subnets []*net.IPNet) bool {
+func (w *nodeWatcher) dropLocked(subnets []netip.Prefix) bool {
 	changed := false
 	last := len(w.subnets) - 1
 	if last < 0 {
@@ -225,7 +225,7 @@ func (w *nodeWatcher) dropLocked(subnets []*net.IPNet) bool {
 // getSubnetsDelta returns the difference between the old and new subnet slices.
 //
 // NOTE! The array of the old slice is modified and used for the dropped return.
-func getSubnetsDelta(oldSubnets, newSubnets []*net.IPNet) (added, dropped []*net.IPNet) {
+func getSubnetsDelta(oldSubnets, newSubnets []netip.Prefix) (added, dropped []netip.Prefix) {
 	lastOI := len(oldSubnets) - 1
 	if lastOI < 0 {
 		return newSubnets, nil
@@ -234,7 +234,7 @@ func getSubnetsDelta(oldSubnets, newSubnets []*net.IPNet) (added, dropped []*net
 nextN:
 	for _, n := range newSubnets {
 		for oi, o := range oldSubnets {
-			if subnet.Equal(n, o) {
+			if n == o {
 				oldSubnets[oi] = oldSubnets[lastOI]
 				oldSubnets = oldSubnets[:lastOI]
 				lastOI--
@@ -249,7 +249,7 @@ nextN:
 	return added, oldSubnets
 }
 
-func nodeSubnets(ctx context.Context, node *corev1.Node) []*net.IPNet {
+func nodeSubnets(ctx context.Context, node *corev1.Node) []netip.Prefix {
 	if node == nil {
 		return nil
 	}
@@ -258,9 +258,9 @@ func nodeSubnets(ctx context.Context, node *corev1.Node) []*net.IPNet {
 	if len(cidrs) == 0 && spec.PodCIDR != "" {
 		cidrs = []string{spec.PodCIDR}
 	}
-	subnets := make([]*net.IPNet, 0, len(cidrs))
+	subnets := make([]netip.Prefix, 0, len(cidrs))
 	for _, cs := range cidrs {
-		_, cidr, err := net.ParseCIDR(cs)
+		cidr, err := netip.ParsePrefix(cs)
 		if err != nil {
 			dlog.Errorf(ctx, "unable to parse podCIDR %q in node %s", cs, node.Name)
 			continue
