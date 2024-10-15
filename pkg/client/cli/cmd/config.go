@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -38,7 +40,7 @@ func configView() *cobra.Command {
 }
 
 // GetCommandKubeConfig will return the fully resolved client.Kubeconfig for the given command.
-func GetCommandKubeConfig(cmd *cobra.Command) (*client.Kubeconfig, error) {
+func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *client.Kubeconfig, error) {
 	ctx := cmd.Context()
 	uc := daemon.GetUserClient(ctx)
 	var kc *client.Kubeconfig
@@ -48,18 +50,18 @@ func GetCommandKubeConfig(cmd *cobra.Command) (*client.Kubeconfig, error) {
 		var ci *connector.ConnectInfo
 		ci, err = uc.Status(ctx, &empty.Empty{})
 		if err == nil {
-			kc, err = client.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
+			ctx, kc, err = client.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
 		}
 	} else {
 		if daemon.GetRequest(ctx) == nil {
 			if ctx, err = daemon.WithDefaultRequest(ctx, cmd); err != nil {
-				return nil, err
+				return ctx, nil, err
 			}
 		}
 		rq := daemon.GetRequest(ctx)
-		kc, err = client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+		ctx, kc, err = client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
 	}
-	return kc, err
+	return ctx, kc, err
 }
 
 func runConfigView(cmd *cobra.Command, _ []string) error {
@@ -82,26 +84,12 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 
-		kc, err := GetCommandKubeConfig(cmd)
+		ctx, _, err := GetCommandKubeConfig(cmd)
 		if err != nil {
 			return err
 		}
-		ctx := cmd.Context()
 		cfg.Config = client.GetConfig(ctx)
 		cfg.ClientFile = client.GetConfigFile(ctx)
-		cfg.Routing.AlsoProxy = kc.AlsoProxy
-		cfg.Routing.NeverProxy = kc.NeverProxy
-		cfg.Routing.AllowConflicting = kc.AllowConflictingSubnets
-		if dns := kc.DNS; dns != nil {
-			cfg.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
-			cfg.DNS.IncludeSuffixes = dns.IncludeSuffixes
-			cfg.DNS.LookupTimeout = dns.LookupTimeout.Duration
-			cfg.DNS.LocalIP = dns.LocalIP.IP()
-			cfg.DNS.RemoteIP = dns.RemoteIP.IP()
-		}
-		if mgr := kc.Manager; mgr != nil {
-			cfg.ManagerNamespace = mgr.Namespace
-		}
 		output.Object(cmd.Context(), &cfg, true)
 		return nil
 	}

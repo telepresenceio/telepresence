@@ -188,12 +188,12 @@ func (is *installSuite) Test_RemoveManager_canUninstall() {
 	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
 
 	require.NoError(ensureTrafficManager(ctx, kc))
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, kc.GetManagerNamespace(), true, &helm.Request{}))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(ctx), true, &helm.Request{}))
 	// We want to make sure that we can re-install the manager after it's been uninstalled,
 	// so try to ensureManager again.
 	require.NoError(ensureTrafficManager(ctx, kc))
 	// Uninstall the manager one last time -- this should behave the same way as the previous uninstall
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, kc.GetManagerNamespace(), true, &helm.Request{}))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(ctx), true, &helm.Request{}))
 }
 
 func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
@@ -247,7 +247,7 @@ func (is *installSuite) Test_No_Upgrade() {
 	jvp, err := json.Marshal(vp)
 	require.NoError(err)
 
-	require.NoError(helm.EnsureTrafficManager(ctx, kc.Kubeconfig, kc.GetManagerNamespace(), &helm.Request{
+	require.NoError(helm.EnsureTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(ctx), &helm.Request{
 		Type:       helm.Upgrade,
 		ValuesJson: jvp,
 	}))
@@ -292,6 +292,6 @@ func ensureTrafficManager(ctx context.Context, kc *k8s.Cluster) error {
 	return helm.EnsureTrafficManager(
 		ctx,
 		kc.Kubeconfig,
-		kc.GetManagerNamespace(),
+		k8s.GetManagerNamespace(ctx),
 		&helm.Request{Type: helm.Install})
 }

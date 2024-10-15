@@ -70,8 +70,8 @@ func (s *largeFilesSuite) ServiceCount() int {
 }
 
 func (s *largeFilesSuite) SetupSuite() {
-	if s.IsCI() {
-		s.T().Skip("Disabled. Test started failing inexplicably when running with Kubeception and CI")
+	if s.IsCI() || s.LargeFileTestDisabled() {
+		s.T().Skip("Disabled. Test is too demanding for the current setup (requires more CPU or a remote cluster)")
 		return
 	}
 	s.Suite.SetupSuite()

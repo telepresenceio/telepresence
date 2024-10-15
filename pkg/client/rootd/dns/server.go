@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -13,8 +14,6 @@ import (
 
 	"github.com/miekg/dns"
 	"github.com/puzpuzpuz/xsync/v3"
-	"golang.org/x/exp/maps"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -47,7 +46,7 @@ const (
 
 type FallbackPool interface {
 	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
-	RemoteAddr() string
+	RemoteAddr() netip.Addr
 	LocalAddrs() []*net.UDPAddr
 	Close()
 }
@@ -60,14 +59,7 @@ const (
 	recursionDetected
 )
 
-//nolint:gochecknoglobals // constant
-var DefaultExcludeSuffixes = []string{
-	".com",
-	".io",
-	".net",
-	".org",
-	".ru",
-}
+var DefaultExcludeSuffixes = client.DefaultExcludeSuffixes //nolint:gochecknoglobals // constant
 
 type nsAndDomains struct {
 	domains   []string
@@ -77,6 +69,7 @@ type nsAndDomains struct {
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface.
 type Server struct {
 	sync.RWMutex
+	client.DNS
 	ctx          context.Context // necessary to make logging work in ServeDNS function
 	fallbackPool FallbackPool
 	resolve      Resolver
@@ -104,23 +97,14 @@ type Server struct {
 	// nsAndDomainsCh receives requests to change the top level domains and the search path.
 	nsAndDomainsCh chan nsAndDomains
 
-	includeSuffixes []string
-
-	excludeSuffixes []string
-
-	excludes []string
-	mappings map[string]string
-
-	lookupTimeout time.Duration
-
-	localIP  net.IP
-	remoteIP net.IP
-
 	// clusterDomain reported by the traffic-manager
 	clusterDomain string
 
 	// Function that sends a lookup request to the traffic-manager
 	clusterLookup Resolver
+
+	// mappingsMap is contains the same mappings as DNS.Mappings but as a map (for performance).
+	mappingsMap map[string]string
 
 	error string
 
@@ -159,37 +143,29 @@ func sliceToLower(ss []string) []string {
 }
 
 // NewServer returns a new dns.Server.
-func NewServer(config *rpc.DNSConfig, clusterLookup Resolver) *Server {
+func NewServer(config *client.DNS, clusterLookup Resolver) *Server {
 	if config == nil {
-		config = &rpc.DNSConfig{}
+		config = &client.DNS{}
 	}
 	if len(config.ExcludeSuffixes) == 0 {
 		config.ExcludeSuffixes = DefaultExcludeSuffixes
 	}
-	if config.LookupTimeout.AsDuration() <= 0 {
-		config.LookupTimeout = durationpb.New(8 * time.Second)
+	if config.LookupTimeout <= 0 {
+		config.LookupTimeout = 8 * time.Second
 	}
-	s := &Server{
-		cache:           xsync.NewMapOf[cacheKey, *cacheEntry](),
-		routes:          make(map[string]struct{}),
-		domains:         make(map[string]struct{}),
-		excludes:        sliceToLower(config.Excludes),
-		excludeSuffixes: sliceToLower(config.ExcludeSuffixes),
-		includeSuffixes: sliceToLower(config.IncludeSuffixes),
-		mappings:        mappingsMap(config.Mappings),
-		localIP:         config.LocalIp,
-		remoteIP:        config.RemoteIp,
-		dropSuffixes:    []string{tel2SubDomainDot},
-		search:          []string{tel2SubDomain},
-		nsAndDomainsCh:  make(chan nsAndDomains, 5),
-		clusterDomain:   defaultClusterDomain,
-		clusterLookup:   clusterLookup,
-		ready:           make(chan struct{}),
+	return &Server{
+		DNS:            *config,
+		mappingsMap:    mappingsMap(config.Mappings),
+		cache:          xsync.NewMapOf[cacheKey, *cacheEntry](),
+		routes:         make(map[string]struct{}),
+		domains:        make(map[string]struct{}),
+		dropSuffixes:   []string{tel2SubDomainDot},
+		search:         []string{tel2SubDomain},
+		nsAndDomainsCh: make(chan nsAndDomains, 5),
+		clusterDomain:  defaultClusterDomain,
+		clusterLookup:  clusterLookup,
+		ready:          make(chan struct{}),
 	}
-	if lt := config.LookupTimeout; lt != nil {
-		s.lookupTimeout = lt.AsDuration()
-	}
-	return s
 }
 
 // tel2SubDomain helps differentiate between single label and qualified DNS queries.
@@ -241,10 +217,10 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 
 	// Skip configured exclude-suffixes unless also matched by an include-suffix
 	// that is longer (i.e. more specific).
-	for _, es := range s.excludeSuffixes {
+	for _, es := range s.ExcludeSuffixes {
 		if strings.HasSuffix(name, es) {
 			// Exclude unless more specific include.
-			for _, is := range s.includeSuffixes {
+			for _, is := range s.IncludeSuffixes {
 				if len(is) >= len(es) && strings.HasSuffix(name, is) {
 					dlog.Debugf(s.ctx,
 						"Cluster DNS included by include-suffix %q (overriding exclude-suffix %q) for name %q", is, es, name)
@@ -279,7 +255,7 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 	}
 
 	// Always include configured includeSuffixes
-	for _, sfx := range s.includeSuffixes {
+	for _, sfx := range s.IncludeSuffixes {
 		if strings.HasSuffix(name, sfx) {
 			dlog.Debugf(s.ctx,
 				"Cluster DNS included by include-suffix %q for name %q", sfx, name)
@@ -293,7 +269,7 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 }
 
 func (s *Server) isExcluded(name string) bool {
-	if slice.Contains(s.excludes, name) {
+	if slice.Contains(s.Excludes, name) {
 		return true
 	}
 
@@ -301,7 +277,7 @@ func (s *Server) isExcluded(name string) bool {
 	// unqualified hostname should be evaluated too.
 	qLen := len(name)
 	for _, sp := range s.search {
-		if strings.HasSuffix(name, "."+sp) && slice.Contains(s.excludes, name[:qLen-len(sp)-1]) {
+		if strings.HasSuffix(name, "."+sp) && slice.Contains(s.Excludes, name[:qLen-len(sp)-1]) {
 			return true
 		}
 	}
@@ -309,7 +285,7 @@ func (s *Server) isExcluded(name string) bool {
 }
 
 func (s *Server) isDomainExcluded(name string) bool {
-	return slices.Contains(s.excludeSuffixes, "."+name)
+	return slices.Contains(s.ExcludeSuffixes, "."+name)
 }
 
 func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dnsproxy.RRs, rCode int, err error) {
@@ -348,7 +324,7 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	}
 
 	// Give the cluster lookup a reasonable timeout.
-	c, cancel := context.WithTimeout(c, s.lookupTimeout)
+	c, cancel := context.WithTimeout(c, s.LookupTimeout)
 	defer cancel()
 
 	result, rCode, err = s.clusterLookup(c, q)
@@ -367,32 +343,12 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 	return result, rCode, nil
 }
 
-func (s *Server) GetConfig() *rpc.DNSConfig {
+func (s *Server) GetConfig() *client.DNS {
+	var d client.DNS
 	s.RLock()
-	c := rpc.DNSConfig{
-		LocalIp:         s.localIP,
-		RemoteIp:        s.remoteIP,
-		ExcludeSuffixes: s.excludeSuffixes,
-		IncludeSuffixes: s.includeSuffixes,
-		Excludes:        s.excludes,
-		Error:           s.error,
-	}
-	if s.lookupTimeout != 0 {
-		c.LookupTimeout = durationpb.New(s.lookupTimeout)
-	}
-	if len(s.mappings) > 0 {
-		ns := maps.Keys(s.mappings)
-		slices.Sort(ns)
-		c.Mappings = make([]*rpc.DNSMapping, len(s.mappings))
-		for i, n := range ns {
-			c.Mappings[i] = &rpc.DNSMapping{
-				Name:     strings.TrimSuffix(n, "."),
-				AliasFor: strings.TrimSuffix(s.mappings[n], "."),
-			}
-		}
-	}
+	d = s.DNS
 	s.RUnlock()
-	return &c
+	return &d
 }
 
 func (s *Server) Ready() <-chan struct{} {
@@ -408,17 +364,17 @@ func (s *Server) Stop() {
 	}
 }
 
-func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP net.IP) {
+func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP netip.Addr) {
 	s.Lock()
-	if s.remoteIP == nil {
-		s.remoteIP = remoteIP
+	if !s.RemoteIP.IsValid() {
+		s.RemoteIP = remoteIP
 	}
 	if dns != nil {
-		if slices.Equal(s.excludeSuffixes, DefaultExcludeSuffixes) && len(dns.ExcludeSuffixes) > 0 {
-			s.excludeSuffixes = sliceToLower(dns.ExcludeSuffixes)
+		if slices.Equal(s.ExcludeSuffixes, DefaultExcludeSuffixes) && len(dns.ExcludeSuffixes) > 0 {
+			s.ExcludeSuffixes = sliceToLower(dns.ExcludeSuffixes)
 		}
-		if len(s.includeSuffixes) == 0 {
-			s.includeSuffixes = sliceToLower(dns.IncludeSuffixes)
+		if len(s.IncludeSuffixes) == 0 {
+			s.IncludeSuffixes = sliceToLower(dns.IncludeSuffixes)
 		}
 		s.clusterDomain = strings.ToLower(dns.ClusterDomain)
 	}
@@ -453,8 +409,8 @@ func (s *Server) SetExcludes(excludes []string) {
 		excludes[i] = strings.ToLower(e)
 	}
 	s.Lock()
-	oldExcludes := s.excludes
-	s.excludes = excludes
+	oldExcludes := s.Excludes
+	s.Excludes = excludes
 	s.Unlock()
 
 	for _, e := range slice.AppendUnique(oldExcludes, excludes...) {
@@ -462,7 +418,7 @@ func (s *Server) SetExcludes(excludes []string) {
 	}
 }
 
-func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
+func mappingsMap(mappings []*client.DNSMapping) map[string]string {
 	if l := len(mappings); l > 0 {
 		mm := make(map[string]string, l)
 		for _, m := range mappings {
@@ -479,9 +435,11 @@ func mappingsMap(mappings []*rpc.DNSMapping) map[string]string {
 
 // SetMappings sets the Mappings list in the config.
 func (s *Server) SetMappings(mappings []*rpc.DNSMapping) {
-	mm := mappingsMap(mappings)
+	ml := client.MappingsFromRPC(mappings)
+	mm := mappingsMap(ml)
 	s.Lock()
-	s.mappings = mm
+	s.Mappings = ml
+	s.mappingsMap = mm
 	s.Unlock()
 
 	// Flush the mappings.
@@ -899,7 +857,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	case dns.TypePTR:
 		// Respond with cluster domain if the queried IP is the IP of this DNS server.
-		if ip, err := dnsproxy.PtrAddress(q.Name); err == nil && ip.Equal(s.remoteIP) {
+		if ip, err := dnsproxy.PtrAddress(q.Name); err == nil && ip == s.RemoteIP {
 			answer = dnsproxy.RRs{
 				&dns.PTR{
 					Hdr: dnsproxy.NewHeader(q.Name, q.Qtype),
@@ -950,7 +908,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 func (s *Server) fallbackExchange(c context.Context, msg, r *dns.Msg) (*dns.Msg, func() string) {
-	dc := &dns.Client{Net: "udp", Timeout: s.lookupTimeout}
+	dc := &dns.Client{Net: "udp", Timeout: s.LookupTimeout}
 	poolMsg, _, err := s.fallbackPool.Exchange(c, dc, r)
 	var txt func() string
 	if err != nil {
@@ -984,7 +942,7 @@ func (s *Server) resolveMapping(q *dns.Question) (dnsproxy.RRs, int, error) {
 	}
 
 	s.RLock()
-	mappingAlias, ok := s.mappings[q.Name]
+	mappingAlias, ok := s.mappingsMap[q.Name]
 	s.RUnlock()
 
 	if !ok {

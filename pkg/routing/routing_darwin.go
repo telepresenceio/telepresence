@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"regexp"
 
@@ -12,7 +13,6 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 const (
@@ -61,43 +61,42 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			if err != nil {
 				return nil, err
 			}
-			if localIP == nil {
+			if !localIP.IsValid() {
 				continue
 			}
 			mask, ok := mask.(*route.Inet4Addr)
 			if !ok {
 				continue
 			}
-			var gwIP net.IP
+			var gwIP netip.Addr
 			if gwAddr, ok := gw.(*route.Inet4Addr); ok {
-				gwIP = gwAddr.IP[:]
+				gwIP = netip.AddrFrom4(gwAddr.IP)
 			}
-			routedNet := &net.IPNet{
-				IP:   a.IP[:],
-				Mask: net.IPv4Mask(mask.IP[0], mask.IP[1], mask.IP[2], mask.IP[3]),
-			}
+			ip4Mask := net.IPv4Mask(mask.IP[0], mask.IP[1], mask.IP[2], mask.IP[3])
+			ones, _ := ip4Mask.Size()
+			routedNet := netip.PrefixFrom(netip.AddrFrom4(a.IP), ones)
 			routes = append(routes, &Route{
 				Interface: iface,
 				Gateway:   gwIP,
 				LocalIP:   localIP,
 				RoutedNet: routedNet,
-				Default:   subnet.IsZeroMask(routedNet),
+				Default:   ones == 0,
 			})
 		case *route.Inet6Addr:
 			localIP, err := interfaceLocalIP(iface, false)
 			if err != nil {
 				return nil, err
 			}
-			if localIP == nil {
+			if !localIP.IsValid() {
 				continue
 			}
 			mask, ok := mask.(*route.Inet6Addr)
 			if !ok {
 				continue
 			}
-			var gwIP net.IP
+			var gwIP netip.Addr
 			if gwAddr, ok := gw.(*route.Inet6Addr); ok {
-				gwIP = gwAddr.IP[:]
+				gwIP = netip.AddrFrom16(gwAddr.IP)
 			}
 			i := 0
 			for _, b := range mask.IP {
@@ -106,24 +105,21 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 				}
 				i++
 			}
-			routedNet := &net.IPNet{
-				IP:   a.IP[:],
-				Mask: net.CIDRMask(i*8, 128),
-			}
+			routedNet := netip.PrefixFrom(netip.AddrFrom16(a.IP), i*8)
 			routes = append(routes, &Route{
 				Interface: iface,
 				Gateway:   gwIP,
 				LocalIP:   localIP,
 				RoutedNet: routedNet,
-				Default:   subnet.IsZeroMask(routedNet),
+				Default:   i == 0,
 			})
 		}
 	}
 	return routes, nil
 }
 
-func getOsRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
-	ip := routedNet.IP
+func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
+	ip := routedNet.Addr()
 	cmd := dexec.CommandContext(ctx, "route", "-n", "get", ip.String())
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
@@ -141,31 +137,29 @@ func getOsRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to get interface object for interface %s: %w", ifaceName, err)
 	}
-	var gatewayIp net.IP
+	var gatewayIp netip.Addr
 	if gateway := match[1]; gateway != "" {
-		gatewayIp = iputil.Parse(gateway)
-		if gatewayIp == nil {
-			return nil, fmt.Errorf("unable to parse gateway %s", gateway)
+		gatewayIp, err = netip.ParseAddr(gateway)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse gateway %s: %v", gateway, err)
 		}
 	}
-	localIP, err := interfaceLocalIP(iface, ip.To4() != nil)
+	localIP, err := interfaceLocalIP(iface, ip.Is4())
 	if err != nil {
 		return nil, err
 	}
-	routed := &net.IPNet{
-		IP:   ip,
-		Mask: routedNet.Mask,
-	}
+	ones := routedNet.Bits()
 	if match := maskRe.FindStringSubmatch(string(out)); match != nil {
 		ip := iputil.Parse(match[1])
 		mask := net.IPv4Mask(ip[0], ip[1], ip[2], ip[3])
-		routed.Mask = mask
+		ones, _ = mask.Size()
 	}
+	routed := netip.PrefixFrom(ip, ones)
 	isDefault := false
 	if match := defaultRe.FindStringSubmatch(string(out)); match != nil {
 		isDefault = true
 	}
-	isDefault = isDefault || subnet.IsZeroMask(routed)
+	isDefault = isDefault || ones == 0
 	return &Route{
 		RoutedNet: routed,
 		LocalIP:   localIP,
@@ -193,33 +187,34 @@ func withRouteSocket(f func(routeSocket int) error) error {
 }
 
 // toRouteAddr converts a net.IP to its corresponding addrMessage.Addr.
-func toRouteAddr(ip net.IP) (addr route.Addr) {
-	if ip4 := ip.To4(); ip4 != nil {
-		dst := route.Inet4Addr{}
-		copy(dst.IP[:], ip4)
-		addr = &dst
-	} else {
-		dst := route.Inet6Addr{}
-		copy(dst.IP[:], ip)
-		addr = &dst
+func toRouteAddr(ip netip.Addr) (addr route.Addr) {
+	if ip.Is4() {
+		return &route.Inet4Addr{IP: ip.As4()}
 	}
-	return addr
+	return &route.Inet6Addr{IP: ip.As16()}
 }
 
-func toRouteMask(mask net.IPMask) (addr route.Addr) {
-	if _, bits := mask.Size(); bits == 32 {
-		dst := route.Inet4Addr{}
-		copy(dst.IP[:], mask)
-		addr = &dst
-	} else {
-		dst := route.Inet6Addr{}
-		copy(dst.IP[:], mask)
-		addr = &dst
-	}
-	return addr
+func toRoute4Mask(bits int) (addr route.Addr) {
+	mask := net.CIDRMask(bits, 32)
+	dst := route.Inet4Addr{}
+	copy(dst.IP[:], mask)
+	return &dst
 }
 
-func newRouteMessage(rtm, seq int, subnet *net.IPNet, gw net.IP) *route.RouteMessage {
+func toRoute6Mask(bits int) (addr route.Addr) {
+	mask := net.CIDRMask(bits, 128)
+	dst := route.Inet6Addr{}
+	copy(dst.IP[:], mask)
+	return &dst
+}
+
+func newRouteMessage(rtm, seq int, subnet netip.Prefix, gw netip.Addr) *route.RouteMessage {
+	var mask route.Addr
+	if subnet.Addr().Is4() {
+		mask = toRoute4Mask(subnet.Bits())
+	} else {
+		mask = toRoute6Mask(subnet.Bits())
+	}
 	return &route.RouteMessage{
 		Version: unix.RTM_VERSION,
 		ID:      uintptr(os.Getpid()),
@@ -227,14 +222,14 @@ func newRouteMessage(rtm, seq int, subnet *net.IPNet, gw net.IP) *route.RouteMes
 		Type:    rtm,
 		Flags:   unix.RTF_UP | unix.RTF_STATIC | unix.RTF_CLONING | unix.RTF_GATEWAY,
 		Addrs: []route.Addr{
-			unix.RTAX_DST:     toRouteAddr(subnet.IP),
+			unix.RTAX_DST:     toRouteAddr(subnet.Addr()),
 			unix.RTAX_GATEWAY: toRouteAddr(gw),
-			unix.RTAX_NETMASK: toRouteMask(subnet.Mask),
+			unix.RTAX_NETMASK: mask,
 		},
 	}
 }
 
-func Add(seq int, r *net.IPNet, gw net.IP) error {
+func Add(seq int, r netip.Prefix, gw netip.Addr) error {
 	return withRouteSocket(func(routeSocket int) error {
 		m := newRouteMessage(unix.RTM_ADD, seq, r, gw)
 		wb, err := m.Marshal()
@@ -250,7 +245,7 @@ func Add(seq int, r *net.IPNet, gw net.IP) error {
 	})
 }
 
-func Clear(seq int, r *net.IPNet, gw net.IP) error {
+func Clear(seq int, r netip.Prefix, gw netip.Addr) error {
 	return withRouteSocket(func(routeSocket int) error {
 		m := newRouteMessage(unix.RTM_DELETE, seq, r, gw)
 		wb, err := m.Marshal()

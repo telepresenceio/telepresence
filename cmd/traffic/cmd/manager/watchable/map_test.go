@@ -17,12 +17,12 @@ import (
 func assertMessageMapSnapshotEqual[V watchable.Message](t *testing.T, expected, actual watchable.Snapshot[V], msgAndArgs ...any) bool {
 	t.Helper()
 
-	expectedBytes, err := json.Marshal(expected, jsontext.WithIndent("    "))
+	expectedBytes, err := json.Marshal(expected, jsontext.WithIndent("    "), json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	actualBytes, err := json.Marshal(actual, jsontext.WithIndent("    "))
+	actualBytes, err := json.Marshal(actual, jsontext.WithIndent("    "), json.Deterministic(true))
 	if err != nil {
 		t.Fatal(err)
 	}

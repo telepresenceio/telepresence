@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"regexp"
 	"runtime"
@@ -30,13 +31,10 @@ func TestRouting(t *testing.T) {
 	suite.Run(t, new(RoutingSuite))
 }
 
-func getCidr(byte3, byte4 byte, mask int) *net.IPNet {
+func getCidr(byte3, byte4 byte, mask int) netip.Prefix {
 	// 198.18.0.0/15 is reserved for benchmarking.
-	ip := net.IPv4(198, 18, byte3, byte4)
-	return &net.IPNet{
-		IP:   ip.To4(),
-		Mask: net.CIDRMask(mask, 32),
-	}
+	ip := netip.AddrFrom4([4]byte{198, 18, byte3, byte4})
+	return netip.PrefixFrom(ip, mask)
 }
 
 func (s *RoutingSuite) SetupSuite() {
@@ -58,7 +56,7 @@ func (s *RoutingSuite) SetupSuite() {
 	cidr := getCidr(2, 1, 32)
 	route, err := routing.GetRoute(context.Background(), cidr)
 	s.Require().NoError(err)
-	s.Require().True(route.Default || subnet.IsHalfOfDefault(route.RoutedNet), "There should be no route for %s, or everything will fail. Route is: %s", cidr.IP, route)
+	s.Require().True(route.Default || subnet.IsHalfOfDefault(route.RoutedNet), "There should be no route for %s, or everything will fail. Route is: %s", cidr.Addr(), route)
 }
 
 // The routes are all gonna be inside 100.64.0.0/10 which is assigned as a reserved block for NAT. Github machines map 10/8 sometimes, so we wanna make sure not to conflict
@@ -128,17 +126,17 @@ func (s *RoutingSuite) Test_RoutingTable() {
 		if route.Interface.Name == device {
 			deviceFound = true
 			s.Require().False(route.Default, fmt.Sprintf("Route %s is default", route.String()))
-			s.Require().False(subnet.IsZeroMask(route.RoutedNet), fmt.Sprintf("Route %s has zero mask", route.String()))
+			s.Require().False(route.RoutedNet.Bits() == 0, fmt.Sprintf("Route %s has zero mask", route.String()))
 			// Linux and Windows will automatically add a bunch of multicast routes, which we can ignore as they're not actually for routing through the device.
-			if !route.RoutedNet.IP.IsMulticast() {
-				if route.RoutedNet.IP.To4() == nil {
-					s.Require().Contains([]net.IPMask{net.CIDRMask(128, 128), net.CIDRMask(64, 128)}, route.RoutedNet.Mask, fmt.Sprintf("Route %s is not a /128 or /64 mask", route.String()))
+			if !route.RoutedNet.Addr().IsMulticast() {
+				if !route.RoutedNet.Addr().Is4() {
+					s.Require().Contains([]int{128, 64}, route.RoutedNet.Bits(), fmt.Sprintf("Route %s is not a /128 or /64 mask", route.String()))
 				} else {
 					// 255.255.255.255/32 is a special broadcast address that won't actually be used for routing
-					if !route.RoutedNet.IP.Equal(net.IPv4(255, 255, 255, 255)) {
-						s.Require().True(cidr.Contains(route.RoutedNet.IP), fmt.Sprintf("Route %s is not contained in %s", route.String(), cidr))
+					if route.RoutedNet.Addr() != netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
+						s.Require().True(cidr.Contains(route.RoutedNet.Addr()), fmt.Sprintf("Route %s is not contained in %s", route.String(), cidr))
 					} else {
-						s.Require().Equal(net.CIDRMask(32, 32), route.RoutedNet.Mask, fmt.Sprintf("Route %s is not a /32 mask", route.String()))
+						s.Require().Equal(32, route.RoutedNet.Bits(), fmt.Sprintf("Route %s is not a /32 mask", route.String()))
 					}
 				}
 			}
@@ -222,21 +220,23 @@ func (s *RoutingSuite) Test_VPNConflictsWithWhitelist() {
 	if !ok {
 		s.T().Skip("VPN_CIDR not set, skipping test")
 	}
-	_, ipnet, err := net.ParseCIDR(cidr)
+	ipnet, err := netip.ParsePrefix(cidr)
 	s.Require().NoError(err)
-	ones, _ := ipnet.Mask.Size()
+	ones := ipnet.Bits()
 	s.Require().LessOrEqual(ones, 28, "VPN_CIDR mask is too small")
-	ip := ipnet.IP.To4()
+	ip := ipnet.Addr().As4()
 	s.Require().Equal(uint8(0x0), ip[3], "VPN_CIDR must begin at 0")
 	ip[3] = 8
-	conflicting := fmt.Sprintf("%s/29", ip.String())
+	ia := netip.AddrFrom4(ip)
+	conflicting := fmt.Sprintf("%s/29", ia.String())
 
 	device, routerCancel, err := s.runRouter(ctx, conflicting, "+"+cidr)
 	s.Require().NoError(err)
 	defer routerCancel()
 
 	ip[3] += 1
-	route, err := routing.GetRoute(ctx, &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)})
+	ia = netip.AddrFrom4(ip)
+	route, err := routing.GetRoute(ctx, netip.PrefixFrom(ia, 32))
 	s.Require().NoError(err)
 	s.Require().Equal(device, route.Interface.Name)
 }
@@ -259,7 +259,7 @@ func (s *RoutingSuite) Test_GetRoute() {
 	s.Require().Equal(cidr, route.RoutedNet)
 	s.Require().False(route.Default)
 	// s.Require().NotNil(route.Gateway) there's no gateway when scope == link, and that's OK.
-	s.Require().Equal(cidr.IP, route.LocalIP)
+	s.Require().Equal(cidr.Addr(), route.LocalIP)
 }
 
 func (s *RoutingSuite) printRoutingTable(ctx context.Context) { //nolint:unused // Useful for debugging

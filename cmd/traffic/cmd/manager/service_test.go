@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/go-json-experiment/json"
@@ -314,10 +315,9 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	env := managerutil.Env{
 		MaxReceiveSize:  resource.Quantity{},
 		PodCIDRStrategy: "environment",
-		PodCIDRs: []*net.IPNet{{
-			IP:   net.IP{192, 168, 0, 0},
-			Mask: net.CIDRMask(16, 32),
-		}},
+		PodCIDRs: []netip.Prefix{
+			netip.PrefixFrom(netip.AddrFrom4([4]byte{192, 168, 0, 0}), 16),
+		},
 	}
 	ctx = managerutil.WithEnv(ctx, &env)
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))

@@ -69,6 +69,7 @@ type Cluster interface {
 	InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]string) error
 	IsCI() bool
 	IsIPv6() bool
+	LargeFileTestDisabled() bool
 	Registry() string
 	SetGeneralError(error)
 	Suffix() string
@@ -91,20 +92,21 @@ type Cluster interface {
 //   - built images are pushed to the docker repository
 //   - a cluster is available
 type cluster struct {
-	suffix           string
-	isCI             bool
-	prePushed        bool
-	ipv6             bool
-	executable       string
-	testVersion      string
-	compatVersion    string
-	registry         string
-	kubeConfig       string
-	generalError     error
-	logCapturingPods sync.Map
-	userdPProf       uint16
-	rootdPProf       uint16
-	self             Cluster
+	suffix                string
+	isCI                  bool
+	prePushed             bool
+	ipv6                  bool
+	executable            string
+	testVersion           string
+	compatVersion         string
+	registry              string
+	kubeConfig            string
+	generalError          error
+	logCapturingPods      sync.Map
+	userdPProf            uint16
+	rootdPProf            uint16
+	self                  Cluster
+	largeFileTestDisabled bool
 }
 
 //nolint:gochecknoglobals // extension point
@@ -190,6 +192,7 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 		}
 		s.executable = filepath.Join(BuildOutput(ctx), "bin", exe)
 	}
+	s.largeFileTestDisabled, _ = strconv.ParseBool(dos.Getenv(ctx, "LARGE_FILE_TEST_DISABLED"))
 	errs := make(chan error, 10)
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
@@ -436,6 +439,10 @@ func (s *cluster) IsCI() bool {
 
 func (s *cluster) IsIPv6() bool {
 	return s.ipv6
+}
+
+func (s *cluster) LargeFileTestDisabled() bool {
+	return s.largeFileTestDisabled
 }
 
 func (s *cluster) Registry() string {
@@ -821,11 +828,12 @@ func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace s
 	if context != "" {
 		flags["context"] = context
 	}
-	cfgAndFlags, err := client.NewKubeconfig(ctx, flags, managerNamespace)
+	ctx, cfgAndFlags, err := client.NewKubeconfig(ctx, flags, managerNamespace)
 	if err != nil {
 		return ctx, nil, err
 	}
-	kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
+
+	ctx, kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
 	if err != nil {
 		return ctx, nil, err
 	}

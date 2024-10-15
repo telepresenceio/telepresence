@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"runtime"
 	"unsafe"
@@ -64,28 +65,28 @@ func openTun(_ context.Context) (*nativeDevice, error) {
 	}, nil
 }
 
-func (t *nativeDevice) addSubnet(_ context.Context, subnet *net.IPNet) error {
-	to := make(net.IP, len(subnet.IP))
-	copy(to, subnet.IP)
+func (t *nativeDevice) addSubnet(_ context.Context, subnet netip.Prefix) error {
+	to := subnet.Addr().AsSlice()
 	to[len(to)-1] = 1
-	if err := t.setAddr(subnet, to); err != nil {
+	dest, _ := netip.AddrFromSlice(to)
+	if err := t.setAddr(subnet, dest); err != nil {
 		return err
 	}
-	return routing.Add(1, subnet, to)
+	return routing.Add(1, subnet, dest)
 }
 
 func (t *nativeDevice) index() int32 {
 	panic("not implemented")
 }
 
-func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error {
-	to := make(net.IP, len(subnet.IP))
-	copy(to, subnet.IP)
+func (t *nativeDevice) removeSubnet(_ context.Context, subnet netip.Prefix) error {
+	to := subnet.Addr().AsSlice()
 	to[len(to)-1] = 1
-	if err := t.removeAddr(subnet, to); err != nil {
+	dest, _ := netip.AddrFromSlice(to)
+	if err := t.removeAddr(subnet, dest); err != nil {
 		return err
 	}
-	return routing.Clear(1, subnet, to)
+	return routing.Clear(1, subnet, dest)
 }
 
 func (t *nativeDevice) setMTU(mtu int) error {
@@ -181,19 +182,8 @@ const (
 // SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6.
 const SIOCDIFADDR_IN6 = (unix.SIOCDIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
 
-func addrToIp4(subnet *net.IPNet, to net.IP) (*net.IPNet, net.IP, bool) {
-	if to4 := to.To4(); to4 != nil {
-		if dest4 := subnet.IP.To4(); dest4 != nil {
-			if _, bits := subnet.Mask.Size(); bits == 32 {
-				return &net.IPNet{IP: dest4, Mask: subnet.Mask}, to4, true
-			}
-		}
-	}
-	return nil, nil, false
-}
-
-func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
-	if sub4, to4, ok := addrToIp4(subnet, to); ok {
+func (t *nativeDevice) setAddr(subnet netip.Prefix, to netip.Addr) error {
+	if to.Is4() && subnet.Addr().Is4() {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{
 				addr: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet4, Family: unix.AF_INET},
@@ -201,9 +191,9 @@ func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
 				mask: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet4, Family: unix.AF_INET},
 			}
 			copy(ifreq.name[:], t.name)
-			copy(ifreq.addr.Addr[:], sub4.IP)
-			copy(ifreq.mask.Addr[:], sub4.Mask)
-			copy(ifreq.dest.Addr[:], to4)
+			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 32))
+			ifreq.addr.Addr = subnet.Addr().As4()
+			ifreq.dest.Addr = to.As4()
 			err := ioctl(fd, unix.SIOCAIFADDR, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err
@@ -219,8 +209,8 @@ func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
 			ifreq.addrLifetime.prefixLifeTime = ND6_INFINITE_LIFETIME
 
 			copy(ifreq.name[:], t.name)
-			copy(ifreq.addr.Addr[:], subnet.IP.To16())
-			copy(ifreq.mask.Addr[:], subnet.Mask)
+			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 128))
+			ifreq.addr.Addr = subnet.Addr().As16()
 			err := ioctl(fd, SIOCAIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err
@@ -228,8 +218,8 @@ func (t *nativeDevice) setAddr(subnet *net.IPNet, to net.IP) error {
 	}
 }
 
-func (t *nativeDevice) removeAddr(subnet *net.IPNet, to net.IP) error {
-	if sub4, to4, ok := addrToIp4(subnet, to); ok {
+func (t *nativeDevice) removeAddr(subnet netip.Prefix, to netip.Addr) error {
+	if to.Is4() && subnet.Addr().Is4() {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{
 				addr: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
@@ -237,9 +227,9 @@ func (t *nativeDevice) removeAddr(subnet *net.IPNet, to net.IP) error {
 				mask: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
 			}
 			copy(ifreq.name[:], t.name)
-			copy(ifreq.addr.Addr[:], sub4.IP)
-			copy(ifreq.mask.Addr[:], sub4.Mask)
-			copy(ifreq.dest.Addr[:], to4)
+			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 32))
+			ifreq.addr.Addr = subnet.Addr().As4()
+			ifreq.dest.Addr = to.As4()
 			err := ioctl(fd, unix.SIOCDIFADDR, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err
@@ -255,8 +245,8 @@ func (t *nativeDevice) removeAddr(subnet *net.IPNet, to net.IP) error {
 			ifreq.addrLifetime.prefixLifeTime = ND6_INFINITE_LIFETIME
 
 			copy(ifreq.name[:], t.name)
-			copy(ifreq.addr.Addr[:], subnet.IP.To16())
-			copy(ifreq.mask.Addr[:], subnet.Mask)
+			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 128))
+			ifreq.addr.Addr = subnet.Addr().As16()
 			err := ioctl(fd, SIOCDIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err

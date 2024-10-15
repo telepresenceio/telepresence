@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -19,11 +20,13 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/go-json-experiment/json/jsontext"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -66,7 +69,7 @@ func mapWithoutDefaults[T DefaultsAware](sourceStruct T) map[string]any {
 	return m
 }
 
-// mapWithoutDefaults will merge non-default values from sourceStruct into targetStruct
+// mapWithoutDefaults will merge non-default values from sourceStruct into targetStruct.
 func mergeNonDefaults[T DefaultsAware](targetStruct, sourceStruct T) {
 	tv := reflect.ValueOf(targetStruct).Elem()
 	sv := reflect.ValueOf(sourceStruct).Elem()
@@ -101,6 +104,8 @@ type Config interface {
 	TelepresenceAPI() *TelepresenceAPI
 	Intercept() *Intercept
 	Cluster() *Cluster
+	DNS() *DNS
+	Routing() *Routing
 	DestructiveMerge(Config)
 	Merge(priority Config) Config
 }
@@ -115,6 +120,8 @@ type BaseConfig struct {
 	TelepresenceAPIV TelepresenceAPI `json:"telepresenceAPI,omitzero"`
 	InterceptV       Intercept       `json:"intercept,omitzero"`
 	ClusterV         Cluster         `json:"cluster,omitzero"`
+	DNSV             DNS             `json:"dns,omitzero"`
+	RoutingV         Routing         `json:"routing,omitzero"`
 }
 
 func (c *BaseConfig) OSSpecific() *OSSpecificConfig {
@@ -151,6 +158,14 @@ func (c *BaseConfig) Intercept() *Intercept {
 
 func (c *BaseConfig) Cluster() *Cluster {
 	return &c.ClusterV
+}
+
+func (c *BaseConfig) DNS() *DNS {
+	return &c.DNSV
+}
+
+func (c *BaseConfig) Routing() *Routing {
+	return &c.RoutingV
 }
 
 func (c *BaseConfig) MarshalYAML() ([]byte, error) {
@@ -190,24 +205,6 @@ func MarshalJSON(value any) ([]byte, error) {
 }
 
 func UnmarshalJSONConfig(data []byte, rejectUnknown bool) (Config, error) {
-	opts := []json.Options{
-		json.WithUnmarshalers(
-			json.UnmarshalFuncV2(func(dec *jsontext.Decoder, strategy *k8sapi.AppProtocolStrategy, opts json.Options) error {
-				var s string
-				if err := json.UnmarshalDecode(dec, &s, opts); err != nil {
-					panic(err)
-					return err
-				}
-				err := strategy.EnvDecode(s)
-				if err != nil {
-					panic(err)
-				}
-				return err
-			})),
-	}
-	if rejectUnknown {
-		opts = append(opts, json.RejectUnknownMembers(true))
-	}
 	cfg := GetDefaultConfig()
 	if err := UnmarshalJSON(data, cfg, rejectUnknown); err != nil {
 		return nil, err
@@ -249,6 +246,8 @@ func (c *BaseConfig) DestructiveMerge(lc Config) {
 	c.TelepresenceAPIV.merge(lc.TelepresenceAPI())
 	c.InterceptV.merge(lc.Intercept())
 	c.ClusterV.merge(lc.Cluster())
+	c.DNSV.merge(lc.DNS())
+	c.RoutingV.merge(lc.Routing())
 }
 
 func (c *BaseConfig) Merge(lc Config) Config {
@@ -665,8 +664,9 @@ const (
 )
 
 var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
-	DefaultPort: defaultInterceptDefaultPort,
-	Telemount:   defaultTelemount,
+	AppProtocolStrategy: k8sapi.Http2Probe,
+	DefaultPort:         defaultInterceptDefaultPort,
+	Telemount:           defaultTelemount,
 }
 
 type DockerImage struct {
@@ -730,17 +730,71 @@ func (cc *Cluster) merge(o *Cluster) {
 	mergeNonDefaults(cc, o)
 }
 
+// IsZero controls whether this element will be included in marshalled output.
+func (cc *Cluster) IsZero() bool {
+	return cc == nil || isDefault(cc)
+}
+
 func (cc *Cluster) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
 	return json.MarshalEncode(out, mapWithoutDefaults(cc), opts)
 }
 
+func (r *Routing) merge(o *Routing) {
+	if len(o.AlsoProxy) > 0 {
+		r.AlsoProxy = o.AlsoProxy
+	}
+	if len(o.NeverProxy) > 0 {
+		r.NeverProxy = o.NeverProxy
+	}
+	if len(o.AllowConflicting) > 0 {
+		r.AllowConflicting = o.AllowConflicting
+	}
+	if len(o.Subnets) > 0 {
+		r.Subnets = o.Subnets
+	}
+}
+
+func (d *DNS) Equal(o *DNS) bool {
+	if d == nil || o == nil {
+		return d == o
+	}
+	return o.LocalIP == d.LocalIP &&
+		o.RemoteIP == d.RemoteIP &&
+		o.LookupTimeout == d.LookupTimeout &&
+		slices.Equal(o.IncludeSuffixes, d.IncludeSuffixes) &&
+		slices.Equal(o.ExcludeSuffixes, d.ExcludeSuffixes) &&
+		slices.Equal(o.Excludes, d.Excludes) &&
+		slices.Equal(o.Mappings, d.Mappings)
+}
+
+var DefaultExcludeSuffixes = []string{ //nolint:gochecknoglobals // constant
+	".com",
+	".io",
+	".net",
+	".org",
+	".ru",
+}
+
+var defaultDNS = DNS{ //nolint:gochecknoglobals // constant
+	ExcludeSuffixes: DefaultExcludeSuffixes,
+}
+
+func (d *DNS) defaults() DefaultsAware {
+	return &defaultDNS
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (d *DNS) merge(o *DNS) {
+	mergeNonDefaults(d, o)
+}
+
 // IsZero controls whether this element will be included in marshalled output.
-func (cc *Cluster) IsZero() bool {
-	return cc == nil || cc.DefaultManagerNamespace == defaultDefaultManagerNamespace &&
-		len(cc.MappedNamespaces) == 0 &&
-		cc.ConnectFromRootDaemon &&
-		cc.AgentPortForward &&
-		cc.VirtualIPSubnet == defaultVirtualIPSubnet
+func (d *DNS) IsZero() bool {
+	return d == nil || d.Equal(&defaultDNS)
+}
+
+func (d *DNS) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(d), opts)
 }
 
 type configKey struct{}
@@ -794,6 +848,8 @@ var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
 	TelepresenceAPIV: TelepresenceAPI{},
 	InterceptV:       defaultIntercept,
 	ClusterV:         defaultCluster,
+	DNSV:             defaultDNS,
+	RoutingV:         Routing{},
 }
 
 // GetDefaultBaseConfig returns the default configuration settings.
@@ -850,36 +906,54 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 }
 
 type Routing struct {
-	Subnets          []*iputil.Subnet `json:"subnets,omitempty"`
-	AlsoProxy        []*iputil.Subnet `json:"alsoProxy,omitempty"`
-	NeverProxy       []*iputil.Subnet `json:"neverProxy,omitempty"`
-	AllowConflicting []*iputil.Subnet `json:"allowConflicting,omitempty"`
+	Subnets          []netip.Prefix `json:"subnets,omitempty"`
+	AlsoProxy        []netip.Prefix `json:"alsoProxy,omitempty"`
+	NeverProxy       []netip.Prefix `json:"neverProxy,omitempty"`
+	AllowConflicting []netip.Prefix `json:"allowConflicting,omitempty"`
+}
+
+func (r *Routing) ToRPC() *daemon.Routing {
+	return &daemon.Routing{
+		Subnets:                 iputil.PrefixesToRPC(r.Subnets),
+		AlsoProxySubnets:        iputil.PrefixesToRPC(r.AlsoProxy),
+		NeverProxySubnets:       iputil.PrefixesToRPC(r.NeverProxy),
+		AllowConflictingSubnets: iputil.PrefixesToRPC(r.AllowConflicting),
+	}
+}
+
+func RoutingFromRPC(r *daemon.Routing) *Routing {
+	return &Routing{
+		Subnets:          iputil.RPCsToPrefixes(r.Subnets),
+		AlsoProxy:        iputil.RPCsToPrefixes(r.AlsoProxySubnets),
+		NeverProxy:       iputil.RPCsToPrefixes(r.NeverProxySubnets),
+		AllowConflicting: iputil.RPCsToPrefixes(r.AllowConflictingSubnets),
+	}
 }
 
 // RoutingSnake is the same as Routing but with snake_case json/yaml names.
 type RoutingSnake struct {
-	Subnets          []*iputil.Subnet `json:"subnets,omitempty"`
-	AlsoProxy        []*iputil.Subnet `json:"also_proxy_subnets,omitempty"`
-	NeverProxy       []*iputil.Subnet `json:"never_proxy_subnets,omitempty"`
-	AllowConflicting []*iputil.Subnet `json:"allow_conflicting_subnets,omitempty"`
+	Subnets          []netip.Prefix `json:"subnets,omitempty"`
+	AlsoProxy        []netip.Prefix `json:"also_proxy_subnets,omitempty"`
+	NeverProxy       []netip.Prefix `json:"never_proxy_subnets,omitempty"`
+	AllowConflicting []netip.Prefix `json:"allow_conflicting_subnets,omitempty"`
 }
 
 type DNS struct {
-	Error           string        `json:"error,omitempty"`
-	LocalIP         net.IP        `json:"localIP,omitempty"`
-	RemoteIP        net.IP        `json:"remoteIP,omitempty"`
-	IncludeSuffixes []string      `json:"includeSuffixes,omitempty"`
-	ExcludeSuffixes []string      `json:"excludeSuffixes,omitempty"`
-	Excludes        []string      `json:"excludes,omitempty"`
-	Mappings        DNSMappings   `json:"mappings,omitempty"`
-	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty"`
+	Error           string        `json:"error"`
+	LocalIP         netip.Addr    `json:"localIP"`
+	RemoteIP        netip.Addr    `json:"remoteIP"`
+	IncludeSuffixes []string      `json:"includeSuffixes"`
+	ExcludeSuffixes []string      `json:"excludeSuffixes"`
+	Excludes        []string      `json:"excludes"`
+	Mappings        DNSMappings   `json:"mappings"`
+	LookupTimeout   time.Duration `json:"lookupTimeout"`
 }
 
 // DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
 	Error           string        `json:"error,omitempty"`
-	LocalIP         net.IP        `json:"local_ip,omitempty"`
-	RemoteIP        net.IP        `json:"remote_ip,omitempty"`
+	LocalIP         netip.Addr    `json:"local_ip,omitempty"`
+	RemoteIP        netip.Addr    `json:"remote_ip,omitempty"`
 	IncludeSuffixes []string      `json:"include_suffixes,omitempty"`
 	ExcludeSuffixes []string      `json:"exclude_suffixes,omitempty"`
 	Excludes        []string      `json:"excludes,omitempty"`
@@ -887,12 +961,87 @@ type DNSSnake struct {
 	LookupTimeout   time.Duration `json:"lookup_timeout,omitempty"`
 }
 
+func (d *DNS) ToRPC() *daemon.DNSConfig {
+	rd := daemon.DNSConfig{
+		LocalIp:         d.LocalIP.AsSlice(),
+		RemoteIp:        d.RemoteIP.AsSlice(),
+		ExcludeSuffixes: d.ExcludeSuffixes,
+		IncludeSuffixes: d.IncludeSuffixes,
+		Excludes:        d.Excludes,
+		LookupTimeout:   durationpb.New(d.LookupTimeout),
+		Error:           d.Error,
+	}
+	if len(d.Mappings) > 0 {
+		rd.Mappings = make([]*daemon.DNSMapping, len(d.Mappings))
+		for i, n := range d.Mappings {
+			rd.Mappings[i] = &daemon.DNSMapping{
+				Name:     n.Name,
+				AliasFor: n.AliasFor,
+			}
+		}
+	}
+	return &rd
+}
+
+func (d *DNS) ToSnake() *DNSSnake {
+	return &DNSSnake{
+		LocalIP:         d.LocalIP,
+		RemoteIP:        d.RemoteIP,
+		ExcludeSuffixes: d.ExcludeSuffixes,
+		IncludeSuffixes: d.IncludeSuffixes,
+		Excludes:        d.Excludes,
+		Mappings:        d.Mappings,
+		LookupTimeout:   d.LookupTimeout,
+		Error:           d.Error,
+	}
+}
+
+func MappingsFromRPC(mappings []*daemon.DNSMapping) DNSMappings {
+	if l := len(mappings); l > 0 {
+		ml := make(DNSMappings, l)
+		for i, m := range mappings {
+			ml[i] = &DNSMapping{
+				Name:     m.Name,
+				AliasFor: m.AliasFor,
+			}
+		}
+		return ml
+	}
+	return nil
+}
+
+func DNSFromRPC(s *daemon.DNSConfig) *DNS {
+	c := DNS{
+		ExcludeSuffixes: s.ExcludeSuffixes,
+		IncludeSuffixes: s.IncludeSuffixes,
+		Excludes:        s.Excludes,
+		Mappings:        MappingsFromRPC(s.Mappings),
+		Error:           s.Error,
+	}
+	if ip, ok := netip.AddrFromSlice(s.LocalIp); ok {
+		c.LocalIP = ip
+	}
+	if ip, ok := netip.AddrFromSlice(s.RemoteIp); ok {
+		c.RemoteIP = ip
+	}
+	if s.LookupTimeout != nil {
+		c.LookupTimeout = s.LookupTimeout.AsDuration()
+	}
+	return &c
+}
+
+func (r *Routing) ToSnake() *RoutingSnake {
+	return &RoutingSnake{
+		Subnets:          r.Subnets,
+		AlsoProxy:        r.AlsoProxy,
+		NeverProxy:       r.NeverProxy,
+		AllowConflicting: r.AllowConflicting,
+	}
+}
+
 type SessionConfig struct {
-	Config           `json:"clientConfig"`
-	ClientFile       string  `json:"clientFile,omitempty"`
-	DNS              DNS     `json:"dns,omitempty"`
-	Routing          Routing `json:"routing,omitempty"`
-	ManagerNamespace string  `json:"managerNamespace,omitempty"`
+	Config     `json:"clientConfig"`
+	ClientFile string `json:"clientFile,omitempty"`
 }
 
 func (sc *SessionConfig) UnmarshalJSON(data []byte) error {

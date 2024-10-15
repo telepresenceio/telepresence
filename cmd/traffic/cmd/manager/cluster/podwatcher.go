@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"math"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -46,15 +47,15 @@ func newPodWatcher(ctx context.Context, nss []string) *podWatcher {
 	var oldSubnets subnet.Set
 	sendIfChanged := func() {
 		w.lock.Lock()
-		ips := make(iputil.IPs, len(w.ipsMap))
+		ips := make([]netip.Addr, len(w.ipsMap))
 		i := 0
 		for ip := range w.ipsMap {
-			ips[i] = ip.IP()
+			ips[i], _ = netip.AddrFromSlice(ip.IP())
 			i++
 		}
 		w.lock.Unlock()
 
-		newSubnets := subnet.NewSet(subnet.CoveringCIDRs(ips))
+		newSubnets := subnet.NewSet(subnet.CoveringPrefixes(ips))
 		if !newSubnets.Equals(oldSubnets) {
 			dlog.Debugf(ctx, "podWatcher calling updateSubnets with %v", newSubnets)
 			select {

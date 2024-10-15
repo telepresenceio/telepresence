@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -16,10 +17,10 @@ import (
 )
 
 type Route struct {
-	LocalIP   net.IP
-	RoutedNet *net.IPNet
+	LocalIP   netip.Addr
+	RoutedNet netip.Prefix
 	Interface *net.Interface
-	Gateway   net.IP
+	Gateway   netip.Addr
 	Default   bool
 }
 
@@ -76,7 +77,7 @@ func GetRoutingTable(ctx context.Context) ([]*Route, error) {
 	return nil, errInconsistentRT
 }
 
-func (r *Route) Routes(ip net.IP) bool {
+func (r *Route) Routes(ip netip.Addr) bool {
 	return r.RoutedNet.Contains(ip)
 }
 
@@ -105,25 +106,26 @@ func (r *Route) RemoveStatic(ctx context.Context) (err error) {
 	return r.removeStatic(ctx)
 }
 
-func interfaceLocalIP(iface *net.Interface, ipv4 bool) (net.IP, error) {
-	addrs, err := iface.Addrs()
+func interfaceLocalIP(iface *net.Interface, ipv4 bool) (netip.Addr, error) {
+	ias, err := iface.Addrs()
 	if err != nil {
-		return net.IP{}, fmt.Errorf("unable to get interface addresses for interface %s: %w", iface.Name, err)
+		return netip.Addr{}, fmt.Errorf("unable to get interface addresses for interface %s: %w", iface.Name, err)
 	}
-	for _, addr := range addrs {
-		ip, _, err := net.ParseCIDR(addr.String())
+	for _, ia := range ias {
+		pfx, err := netip.ParsePrefix(ia.String())
 		if err != nil {
-			return net.IP{}, fmt.Errorf("unable to parse address %s: %v", addr.String(), err)
+			return netip.Addr{}, fmt.Errorf("unable to parse address %s: %v", ia.String(), err)
 		}
-		if ip4 := ip.To4(); ip4 != nil {
+		ip := pfx.Addr()
+		if ip.Is4() {
 			if !ipv4 {
 				continue
 			}
-			return ip4, nil
+			return ip, nil
 		} else if ipv4 {
 			continue
 		}
 		return ip, nil
 	}
-	return nil, nil
+	return netip.Addr{}, nil
 }

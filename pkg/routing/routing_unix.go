@@ -5,12 +5,12 @@ package routing
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/netip"
 
 	"github.com/datawire/dlib/dlog"
 )
 
-func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
+func GetRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	// This is a two-step process. First the OS will be queried for the route directly.
 	// Whatever it gives back is not necessarily gonna look exactly like the route from the routing table.
 	// i.e. the OS will not tell us, for example, if this is the default route.
@@ -29,7 +29,7 @@ func GetRoute(ctx context.Context, routedNet *net.IPNet) (*Route, error) {
 	var defaultRoute *Route
 	for _, r := range rt {
 		if ok, err := compareRoutes(ctx, osRoute, r); ok && err == nil {
-			if r.Routes(routedNet.IP) {
+			if r.Routes(routedNet.Addr()) {
 				return r, nil
 			} else if r.Default {
 				defaultRoute = r

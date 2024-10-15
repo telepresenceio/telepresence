@@ -86,103 +86,103 @@ func (r ReplacePolicy) MarshalJSON() ([]byte, error) {
 // service is used, just the container port.
 type Intercept struct {
 	// The name of the intercepted container port
-	ContainerPortName string `json:"containerPortName,omitempty"`
+	ContainerPortName string `json:"containerPortName,omitzero"`
 
 	// Name of intercepted service
-	ServiceName string `json:"serviceName,omitempty"`
+	ServiceName string `json:"serviceName,omitzero"`
 
 	// UID of intercepted service
-	ServiceUID types.UID `json:"serviceUID,omitempty"`
+	ServiceUID types.UID `json:"serviceUID,omitzero"`
 
 	// Name of intercepted service port
-	ServicePortName string `json:"servicePortName,omitempty"`
+	ServicePortName string `json:"servicePortName,omitzero"`
 
 	// TargetPortNumeric is set to true unless the servicePort has a symbolic target port
-	TargetPortNumeric bool `json:"targetPortNumeric,omitempty"`
+	TargetPortNumeric bool `json:"targetPortNumeric,omitzero"`
 
 	// L4 protocol used by the intercepted port
-	Protocol core.Protocol `json:"protocol,omitempty"`
+	Protocol core.Protocol `json:"protocol,omitzero"`
 
 	// L7 protocol used by the intercepted port
-	AppProtocol string `json:"appProtocol,omitempty"`
+	AppProtocol string `json:"appProtocol,omitzero"`
 
 	// True if the service is headless
-	Headless bool `json:"headless,omitempty"`
+	Headless bool `json:"headless,omitzero"`
 
 	// The number of the intercepted container port
-	ContainerPort uint16 `json:"containerPort,omitempty"`
+	ContainerPort uint16 `json:"containerPort,omitzero"`
 
 	// Number of intercepted service port
-	ServicePort uint16 `json:"servicePort,omitempty"`
+	ServicePort uint16 `json:"servicePort,omitzero"`
 
 	// The port number that the agent listens to
-	AgentPort uint16 `json:"agentPort,omitempty"`
+	AgentPort uint16 `json:"agentPort,omitzero"`
 }
 
 // Container describes one container that can have one or several intercepts.
 type Container struct {
 	// Name of the intercepted container
-	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	Name string `json:"name,omitempty" yaml:"name,omitzero"`
 
 	// The intercepts managed by the agent
 	Intercepts []*Intercept `json:"intercepts,omitempty"`
 
 	// Prefix used for all keys in the container environment copy
-	EnvPrefix string `json:"envPrefix,omitempty"`
+	EnvPrefix string `json:"envPrefix,omitzero"`
 
 	// Where the agent mounts the agents volumes
-	MountPoint string `json:"mountPoint,omitempty"`
+	MountPoint string `json:"mountPoint,omitzero"`
 
 	// Mounts are the actual mount points that are mounted by this container
 	Mounts []string `json:"Mounts,omitempty"`
 
 	// Replace is whether the agent should replace the intercepted container
-	Replace ReplacePolicy `json:"replace,omitempty"`
+	Replace ReplacePolicy `json:"replace,omitzero"`
 }
 
 // The Sidecar configures the traffic-agent sidecar.
 type Sidecar struct {
 	// If Create is true, then this Config has not yet been filled in.
-	Create bool `json:"create,omitempty"`
+	Create bool `json:"create,omitzero"`
 
 	// If Manual is true, then this Config is created manually
-	Manual bool `json:"manual,omitempty"`
+	Manual bool `json:"manual,omitzero"`
 
 	// The fully qualified name of the traffic-agent image, i.e. "ghcr.io/telepresenceio/tel2:2.5.4"
-	AgentImage string `json:"agentImage,omitempty"`
+	AgentImage string `json:"agentImage,omitzero"`
 
 	// One of "IfNotPresent", "Always", or "Never"
-	PullPolicy string `json:"pullPolicy,omitempty"`
+	PullPolicy string `json:"pullPolicy,omitzero"`
 
 	// Secrets used when pulling the agent image from a private registry
 	PullSecrets []core.LocalObjectReference `json:"pullSecrets,omitempty"`
 
 	// The name of the traffic-agent instance. Typically, the same as the name of the workload owner
-	AgentName string `json:"agentName,omitempty"`
+	AgentName string `json:"agentName,omitzero"`
 
 	// The namespace of the intercepted pod
-	Namespace string `json:"namespace,omitempty"`
+	Namespace string `json:"namespace,omitzero"`
 
 	// LogLevel used for all traffic-agent logging
-	LogLevel string `json:"logLevel,omitempty"`
+	LogLevel string `json:"logLevel,omitzero"`
 
 	// The name of the workload that the pod originates from
-	WorkloadName string `json:"workloadName,omitempty"`
+	WorkloadName string `json:"workloadName,omitzero"`
 
 	// The kind of workload that the pod originates from
-	WorkloadKind string `json:"workloadKind,omitempty"`
+	WorkloadKind string `json:"workloadKind,omitzero"`
 
 	// The host used when connecting to the traffic-manager
-	ManagerHost string `json:"managerHost,omitempty"`
+	ManagerHost string `json:"managerHost,omitzero"`
 
 	// The port used when connecting to the traffic manager
-	ManagerPort uint16 `json:"managerPort,omitempty"`
+	ManagerPort uint16 `json:"managerPort,omitzero"`
 
 	// The port used by the agents restFUL API server
-	APIPort uint16 `json:"apiPort,omitempty"`
+	APIPort uint16 `json:"apiPort,omitzero"`
 
 	// The port used by the agent's GRPC tracing server
-	TracingPort uint16 `json:"tracingPort,omitempty"`
+	TracingPort uint16 `json:"tracingPort,omitzero"`
 
 	// Resources for the sidecar
 	Resources *core.ResourceRequirements `json:"resources,omitempty"`
