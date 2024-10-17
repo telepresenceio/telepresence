@@ -147,6 +147,9 @@ func (cfg *BasicGeneratorConfig) Generate(
 	// dispatching container that is.
 	for i := range cns {
 		cn := &cns[i]
+		if cn.Name == agentconfig.ContainerName {
+			continue
+		}
 		if !slices.ContainsFunc(ccs, func(cc *agentconfig.Container) bool { return cc.Name == cn.Name }) {
 			ccs = append(ccs, &agentconfig.Container{
 				Name:       cn.Name,
