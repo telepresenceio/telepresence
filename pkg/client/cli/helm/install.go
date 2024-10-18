@@ -221,6 +221,7 @@ func installNew(
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
 	install.Atomic = true
+	install.Wait = true
 	install.CreateNamespace = req.CreateNamespace
 	install.DisableHooks = req.NoHooks
 	return timedRun(ctx, func(timeout time.Duration) error {
@@ -242,6 +243,7 @@ func upgradeExisting(
 	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, client.Version())
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
+	upgrade.Wait = true
 	upgrade.Namespace = ns
 	upgrade.ResetValues = req.ResetValues
 	upgrade.ReuseValues = req.ReuseValues
@@ -257,6 +259,7 @@ func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, re
 	dlog.Infof(ctx, "Uninstalling %s in namespace %s", releaseName, namespace)
 	uninstall := action.NewUninstall(helmConfig)
 	uninstall.DisableHooks = req.NoHooks
+	uninstall.Wait = true
 	return timedRun(ctx, func(timeout time.Duration) error {
 		uninstall.Timeout = timeout
 		_, err := uninstall.Run(releaseName)
