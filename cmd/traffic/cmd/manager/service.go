@@ -138,9 +138,12 @@ func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 }
 
 func (s *service) GetAgentImageFQN(ctx context.Context, _ *empty.Empty) (*rpc.AgentImageFQN, error) {
-	return &rpc.AgentImageFQN{
-		FQN: managerutil.GetAgentImage(ctx),
-	}, nil
+	if managerutil.AgentInjectorEnabled(ctx) {
+		return &rpc.AgentImageFQN{
+			FQN: managerutil.GetAgentImage(ctx),
+		}, nil
+	}
+	return nil, status.Error(codes.Unavailable, "")
 }
 
 func (s *service) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {

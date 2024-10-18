@@ -52,6 +52,34 @@ func (s *agentInjectorDisabledSuite) Test_AgentInjectorDisabled() {
 	s.Contains(logs, "Cluster domain derived from /etc/resolv.conf")
 }
 
+func (s *agentInjectorDisabledSuite) Test_VersionWithAgentInjectorDisabled() {
+	ctx := s.Context()
+	rq := s.Require()
+	restartCount := func() int {
+		pods := itest.RunningPods(ctx, "traffic-manager", s.ManagerNamespace())
+		if len(pods) == 1 {
+			for _, cs := range pods[0].Status.ContainerStatuses {
+				if cs.Name == "traffic-manager" {
+					return int(cs.RestartCount)
+				}
+			}
+		}
+		return -1
+	}
+	oldRestartCount := restartCount()
+	rq.GreaterOrEqual(oldRestartCount, 0)
+	s.TelepresenceConnect(ctx)
+	sr, err := itest.TelepresenceStatus(ctx)
+	itest.TelepresenceQuitOk(ctx)
+	rq.NoError(err)
+	tm := sr.TrafficManager
+	rq.NotNil(tm)
+	rq.Empty(tm.TrafficAgent)
+
+	// Verify that traffic-manager didn't crash
+	rq.Equal(oldRestartCount, restartCount())
+}
+
 func (s *agentInjectorDisabledSuite) Test_ManualAgent() {
 	s.TelepresenceConnect(s.Context())
 	defer itest.TelepresenceQuitOk(s.Context())
