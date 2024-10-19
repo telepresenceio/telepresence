@@ -116,26 +116,29 @@ func Partition[T any](subnets []T, filter func(int, T) bool) (matched, notMatche
 
 // Covers answers the question if network range a contains the full network range b.
 func Covers(a, b netip.Prefix) bool {
-	return a.Contains(b.Addr()) && a.Contains(PrefixMaxIP(b))
-}
-
-func PrefixMaxIP(cidr netip.Prefix) netip.Addr {
-	// create max IP in range b using its mask
-	a := cidr.Addr()
-	l := a.BitLen()
-	m := a.AsSlice()
-	for i := cidr.Bits(); i < l; i++ {
-		byn := i / 8 // byte number
-		bit := i % 8 // the bit in that byte
-		if bit == 7 {
-			m[byn] = 0xff // set all eight bits
-			i += 7        // and jump to the next byte
-		} else {
-			m[byn] |= 1 << bit
+	if !(a.IsValid() && b.IsValid()) {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	if a.Addr().Is4() != b.Addr().Is4() {
+		return false
+	}
+	bts := a.Bits()
+	if bts > b.Bits() {
+		return false
+	}
+	if bts > 0 {
+		var err error
+		if a, err = a.Addr().Prefix(bts); err != nil {
+			return false
+		}
+		if b, err = b.Addr().Prefix(bts); err != nil {
+			return false
 		}
 	}
-	mx, _ := netip.AddrFromSlice(m)
-	return mx
+	return a.Addr() == b.Addr()
 }
 
 // incIP4 attempts to increase the given ip. The increase starts at the penultimate byte. The increased IP is
