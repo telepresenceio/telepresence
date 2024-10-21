@@ -1,33 +1,33 @@
 package cluster
 
 import (
+	"net/netip"
 	"reflect"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 var (
-	oneIP   = iputil.IPKey(iputil.Parse("192.168.0.1"))
-	nodeIP  = iputil.IPKey(iputil.Parse("192.168.0.2"))
-	threeIP = iputil.IPKey(iputil.Parse("192.168.0.3"))
-	fourIP  = iputil.IPKey(iputil.Parse("192.168.0.4"))
-	fiveIP  = iputil.IPKey(iputil.Parse("192.168.0.5"))
+	oneIP   = netip.MustParseAddr("192.168.0.1")
+	nodeIP  = netip.MustParseAddr("192.168.0.2")
+	threeIP = netip.MustParseAddr("192.168.0.3")
+	fourIP  = netip.MustParseAddr("192.168.0.4")
+	fiveIP  = netip.MustParseAddr("192.168.0.5")
 )
 
 func Test_getIPsDelta(t *testing.T) {
 	type args struct {
-		oldIPs []iputil.IPKey
-		newIPs []iputil.IPKey
+		oldIPs []netip.Addr
+		newIPs []netip.Addr
 	}
 	tests := []struct {
 		name        string
 		args        args
-		wantAdded   []iputil.IPKey
-		wantDropped []iputil.IPKey
+		wantAdded   []netip.Addr
+		wantDropped []netip.Addr
 	}{
 		{
 			name: "nil",
@@ -42,25 +42,25 @@ func Test_getIPsDelta(t *testing.T) {
 			name: "just new",
 			args: args{
 				oldIPs: nil,
-				newIPs: []iputil.IPKey{oneIP, nodeIP, threeIP},
+				newIPs: []netip.Addr{oneIP, nodeIP, threeIP},
 			},
 			wantDropped: nil,
-			wantAdded:   []iputil.IPKey{oneIP, nodeIP, threeIP},
+			wantAdded:   []netip.Addr{oneIP, nodeIP, threeIP},
 		},
 		{
 			name: "just old",
 			args: args{
-				oldIPs: []iputil.IPKey{oneIP, nodeIP, threeIP},
+				oldIPs: []netip.Addr{oneIP, nodeIP, threeIP},
 				newIPs: nil,
 			},
-			wantDropped: []iputil.IPKey{oneIP, nodeIP, threeIP},
+			wantDropped: []netip.Addr{oneIP, nodeIP, threeIP},
 			wantAdded:   nil,
 		},
 		{
 			name: "same old and new",
 			args: args{
-				oldIPs: []iputil.IPKey{oneIP, nodeIP, threeIP},
-				newIPs: []iputil.IPKey{oneIP, nodeIP, threeIP},
+				oldIPs: []netip.Addr{oneIP, nodeIP, threeIP},
+				newIPs: []netip.Addr{oneIP, nodeIP, threeIP},
 			},
 			wantDropped: nil,
 			wantAdded:   nil,
@@ -68,29 +68,29 @@ func Test_getIPsDelta(t *testing.T) {
 		{
 			name: "more old than new",
 			args: args{
-				oldIPs: []iputil.IPKey{oneIP, nodeIP, threeIP, fourIP, fiveIP},
-				newIPs: []iputil.IPKey{nodeIP, threeIP, fiveIP},
+				oldIPs: []netip.Addr{oneIP, nodeIP, threeIP, fourIP, fiveIP},
+				newIPs: []netip.Addr{nodeIP, threeIP, fiveIP},
 			},
-			wantDropped: []iputil.IPKey{oneIP, fourIP},
+			wantDropped: []netip.Addr{oneIP, fourIP},
 			wantAdded:   nil,
 		},
 		{
 			name: "less old than new",
 			args: args{
-				oldIPs: []iputil.IPKey{oneIP, threeIP, fourIP},
-				newIPs: []iputil.IPKey{oneIP, nodeIP, threeIP, fourIP, fiveIP},
+				oldIPs: []netip.Addr{oneIP, threeIP, fourIP},
+				newIPs: []netip.Addr{oneIP, nodeIP, threeIP, fourIP, fiveIP},
 			},
 			wantDropped: nil,
-			wantAdded:   []iputil.IPKey{nodeIP, fiveIP},
+			wantAdded:   []netip.Addr{nodeIP, fiveIP},
 		},
 		{
 			name: "different old than new",
 			args: args{
-				oldIPs: []iputil.IPKey{oneIP, threeIP, fourIP},
-				newIPs: []iputil.IPKey{nodeIP, threeIP, fiveIP},
+				oldIPs: []netip.Addr{oneIP, threeIP, fourIP},
+				newIPs: []netip.Addr{nodeIP, threeIP, fiveIP},
 			},
-			wantDropped: []iputil.IPKey{oneIP, fourIP},
-			wantAdded:   []iputil.IPKey{nodeIP, fiveIP},
+			wantDropped: []netip.Addr{oneIP, fourIP},
+			wantAdded:   []netip.Addr{nodeIP, fiveIP},
 		},
 	}
 	for _, tt := range tests {
@@ -106,11 +106,11 @@ func Test_getIPsDelta(t *testing.T) {
 	}
 }
 
-func Test_podIPKeys(t *testing.T) {
+func Test_podIPs(t *testing.T) {
 	tests := []struct {
 		name string
 		pod  *corev1.Pod
-		want []iputil.IPKey
+		want []netip.Addr
 	}{
 		{
 			name: "nil pod",
@@ -129,7 +129,7 @@ func Test_podIPKeys(t *testing.T) {
 					PodIP: "192.168.0.1",
 				},
 			},
-			want: []iputil.IPKey{oneIP},
+			want: []netip.Addr{oneIP},
 		},
 		{
 			name: "pod with podIPs",
@@ -141,7 +141,7 @@ func Test_podIPKeys(t *testing.T) {
 					},
 				},
 			},
-			want: []iputil.IPKey{oneIP, nodeIP},
+			want: []netip.Addr{oneIP, nodeIP},
 		},
 		{
 			name: "pod with podIP and podIPs",
@@ -154,13 +154,13 @@ func Test_podIPKeys(t *testing.T) {
 					},
 				},
 			},
-			want: []iputil.IPKey{oneIP, nodeIP},
+			want: []netip.Addr{oneIP, nodeIP},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := podIPKeys(dlog.NewTestContext(t, false), tt.pod); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("podIPKeys() = %v, want %v", got, tt.want)
+			if got := podIPs(dlog.NewTestContext(t, false), tt.pod); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("podIPs() = %v, want %v", got, tt.want)
 			}
 		})
 	}

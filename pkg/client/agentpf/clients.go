@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,7 +23,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -210,9 +210,9 @@ func (ac *client) startDialWatcherReady(ctx context.Context) error {
 }
 
 type Clients interface {
-	GetClient(net.IP) tunnel.Provider
+	GetClient(netip.Addr) tunnel.Provider
 	WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error
-	WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error
+	WaitForIP(ctx context.Context, timeout time.Duration, ip netip.Addr) error
 	WaitForWorkload(ctx context.Context, timeout time.Duration, name string) error
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
 	SetProxyVia(workload string)
@@ -221,7 +221,7 @@ type Clients interface {
 type clients struct {
 	session   *manager.SessionInfo
 	clients   *xsync.MapOf[string, *client]
-	ipWaiters *xsync.MapOf[iputil.IPKey, chan struct{}]
+	ipWaiters *xsync.MapOf[netip.Addr, chan struct{}]
 	wlWaiters *xsync.MapOf[string, chan struct{}]
 	proxyVias *xsync.MapOf[string, struct{}]
 	disabled  atomic.Bool
@@ -231,7 +231,7 @@ func NewClients(session *manager.SessionInfo) Clients {
 	return &clients{
 		session:   session,
 		clients:   xsync.NewMapOf[string, *client](),
-		ipWaiters: xsync.NewMapOf[iputil.IPKey, chan struct{}](),
+		ipWaiters: xsync.NewMapOf[netip.Addr, chan struct{}](),
 		wlWaiters: xsync.NewMapOf[string, chan struct{}](),
 		proxyVias: xsync.NewMapOf[string, struct{}](),
 	}
@@ -245,11 +245,12 @@ func NewClients(session *manager.SessionInfo) Clients {
 //  3. any agent
 //
 // The function returns nil when there are no agents in the connected namespace.
-func (s *clients) GetClient(ip net.IP) (pvd tunnel.Provider) {
+func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 	var primary, secondary, ternary tunnel.Provider
 	s.clients.Range(func(_ string, c *client) bool {
+		podIP, ok := netip.AddrFromSlice(c.info.PodIp)
 		switch {
-		case ip.Equal(c.info.PodIp):
+		case ok && ip == podIP:
 			primary = c
 		case c.intercepted():
 			secondary = c
@@ -294,8 +295,10 @@ func (s *clients) isProxyVIA(info *manager.AgentPodInfo) bool {
 }
 
 func (s *clients) hasWaiterFor(info *manager.AgentPodInfo) bool {
-	if _, isW := s.ipWaiters.Load(iputil.IPKey(info.PodIp)); isW {
-		return true
+	if podIP, ok := netip.AddrFromSlice(info.PodIp); ok {
+		if _, isW := s.ipWaiters.Load(podIP); isW {
+			return true
+		}
 	}
 	if _, isW := s.wlWaiters.Load(info.WorkloadName); isW {
 		return true
@@ -369,8 +372,10 @@ outer:
 
 func (s *clients) notifyWaiters() {
 	s.clients.Range(func(name string, ac *client) bool {
-		if waiter, ok := s.ipWaiters.LoadAndDelete(iputil.IPKey(ac.info.PodIp)); ok {
-			close(waiter)
+		if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok {
+			if waiter, ok := s.ipWaiters.LoadAndDelete(podIP); ok {
+				close(waiter)
+			}
 		}
 		if waiter, ok := s.wlWaiters.LoadAndDelete(ac.info.WorkloadName); ok {
 			close(waiter)
@@ -391,17 +396,17 @@ func (s *clients) waitWithTimeout(ctx context.Context, timeout time.Duration, wa
 	}
 }
 
-func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip net.IP) error {
+func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip netip.Addr) error {
 	if s.disabled.Load() {
 		return nil
 	}
-	waitOn, ok := s.ipWaiters.Compute(iputil.IPKey(ip), func(oldValue chan struct{}, loaded bool) (chan struct{}, bool) {
+	waitOn, ok := s.ipWaiters.Compute(ip, func(oldValue chan struct{}, loaded bool) (chan struct{}, bool) {
 		if loaded {
 			return oldValue, false
 		}
 		found := false
 		s.clients.Range(func(k string, ac *client) bool {
-			if ip.Equal(ac.info.PodIp) {
+			if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ip == podIP {
 				found = true
 				return false
 			}

@@ -13,7 +13,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
@@ -26,7 +25,7 @@ type PodLister interface {
 }
 
 type podWatcher struct {
-	ipsMap     map[iputil.IPKey]struct{}
+	ipsMap     map[netip.Addr]struct{}
 	timer      *time.Timer
 	namespaces []string
 	notifyCh   chan subnet.Set
@@ -39,7 +38,7 @@ func newPodWatcher(ctx context.Context, nss []string) *podWatcher {
 		nss = []string{""}
 	}
 	w := &podWatcher{
-		ipsMap:     make(map[iputil.IPKey]struct{}),
+		ipsMap:     make(map[netip.Addr]struct{}),
 		notifyCh:   make(chan subnet.Set),
 		namespaces: nss,
 	}
@@ -50,7 +49,7 @@ func newPodWatcher(ctx context.Context, nss []string) *podWatcher {
 		ips := make([]netip.Addr, len(w.ipsMap))
 		i := 0
 		for ip := range w.ipsMap {
-			ips[i], _ = netip.AddrFromSlice(ip.IP())
+			ips[i] = ip
 			i++
 		}
 		w.lock.Unlock()
@@ -133,7 +132,7 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 			return false
 		}
 		for _, pod := range pods {
-			w.addLocked(podIPKeys(ctx, pod))
+			w.addLocked(podIPs(ctx, pod))
 		}
 	}
 
@@ -141,19 +140,19 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 }
 
 func (w *podWatcher) onPodAdded(ctx context.Context, pod *corev1.Pod) {
-	if ipKeys := podIPKeys(ctx, pod); len(ipKeys) > 0 {
+	if ipKeys := podIPs(ctx, pod); len(ipKeys) > 0 {
 		w.add(ipKeys)
 	}
 }
 
 func (w *podWatcher) onPodDeleted(ctx context.Context, pod *corev1.Pod) {
-	if ipKeys := podIPKeys(ctx, pod); len(ipKeys) > 0 {
+	if ipKeys := podIPs(ctx, pod); len(ipKeys) > 0 {
 		w.drop(ipKeys)
 	}
 }
 
 func (w *podWatcher) onPodUpdated(ctx context.Context, oldPod, newPod *corev1.Pod) {
-	added, dropped := getIPsDelta(podIPKeys(ctx, oldPod), podIPKeys(ctx, newPod))
+	added, dropped := getIPsDelta(podIPs(ctx, oldPod), podIPs(ctx, newPod))
 	if len(added) > 0 {
 		if len(dropped) > 0 {
 			w.update(dropped, added)
@@ -167,28 +166,28 @@ func (w *podWatcher) onPodUpdated(ctx context.Context, oldPod, newPod *corev1.Po
 
 const podWatcherSendDelay = 10 * time.Millisecond
 
-func (w *podWatcher) add(ips []iputil.IPKey) {
+func (w *podWatcher) add(ips []netip.Addr) {
 	w.lock.Lock()
 	w.addLocked(ips)
 	w.lock.Unlock()
 }
 
-func (w *podWatcher) drop(ips []iputil.IPKey) {
+func (w *podWatcher) drop(ips []netip.Addr) {
 	w.lock.Lock()
 	w.dropLocked(ips)
 	w.lock.Unlock()
 }
 
-func (w *podWatcher) update(dropped, added []iputil.IPKey) {
+func (w *podWatcher) update(dropped, added []netip.Addr) {
 	w.lock.Lock()
 	w.dropLocked(dropped)
 	w.addLocked(added)
 	w.lock.Unlock()
 }
 
-func (w *podWatcher) addLocked(ips []iputil.IPKey) {
+func (w *podWatcher) addLocked(ips []netip.Addr) {
 	if w.ipsMap == nil {
-		w.ipsMap = make(map[iputil.IPKey]struct{}, 100)
+		w.ipsMap = make(map[netip.Addr]struct{}, 100)
 	}
 
 	changed := false
@@ -204,7 +203,7 @@ func (w *podWatcher) addLocked(ips []iputil.IPKey) {
 	}
 }
 
-func (w *podWatcher) dropLocked(ips []iputil.IPKey) {
+func (w *podWatcher) dropLocked(ips []netip.Addr) {
 	changed := false
 	for _, ip := range ips {
 		if _, ok := w.ipsMap[ip]; ok {
@@ -220,7 +219,7 @@ func (w *podWatcher) dropLocked(ips []iputil.IPKey) {
 // getIPsDelta returns the difference between the old and new IPs.
 //
 // NOTE! The array of the old slice is modified and used for the dropped return.
-func getIPsDelta(oldIPs, newIPs []iputil.IPKey) (added, dropped []iputil.IPKey) {
+func getIPsDelta(oldIPs, newIPs []netip.Addr) (added, dropped []netip.Addr) {
 	lastOI := len(oldIPs) - 1
 	if lastOI < 0 {
 		return newIPs, nil
@@ -244,7 +243,7 @@ nextN:
 	return added, oldIPs
 }
 
-func podIPKeys(ctx context.Context, pod *corev1.Pod) []iputil.IPKey {
+func podIPs(ctx context.Context, pod *corev1.Pod) []netip.Addr {
 	if pod == nil {
 		return nil
 	}
@@ -256,14 +255,14 @@ func podIPKeys(ctx context.Context, pod *corev1.Pod) []iputil.IPKey {
 		}
 		podIPs = []corev1.PodIP{{IP: status.PodIP}}
 	}
-	ips := make([]iputil.IPKey, 0, len(podIPs))
+	ips := make([]netip.Addr, 0, len(podIPs))
 	for _, ps := range podIPs {
-		ip := iputil.Parse(ps.IP)
-		if ip == nil {
+		ip, err := netip.ParseAddr(ps.IP)
+		if err != nil {
 			dlog.Errorf(ctx, "unable to parse IP %q in pod %s.%s", ps.IP, pod.Name, pod.Namespace)
 			continue
 		}
-		ips = append(ips, iputil.IPKey(ip))
+		ips = append(ips, ip)
 	}
 	return ips
 }

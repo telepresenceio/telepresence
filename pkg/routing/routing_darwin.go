@@ -1,7 +1,9 @@
 package routing
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -120,9 +122,14 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 
 func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	ip := routedNet.Addr()
+	errOut := bytes.Buffer{}
 	cmd := dexec.CommandContext(ctx, "route", "-n", "get", ip.String())
+	cmd.Stderr = &errOut
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
+	if err == nil && len(out) == 0 {
+		err = errors.New(errOut.String())
+	}
 	if err != nil {
 		return nil, fmt.Errorf("unable to run 'route -n get %s': %w", ip, err)
 	}
@@ -130,7 +137,7 @@ func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	// This might fail because no "gateway" is listed. The problem is that without a gateway IP we can't
 	// route to the network anyway, so we should just return an error.
 	if match == nil {
-		return nil, fmt.Errorf("%s did not match output of route:\n%s", findInterfaceRegex, out)
+		return nil, fmt.Errorf("%s did not match output of %s:\n%q", findInterfaceRegex, cmd, out)
 	}
 	ifaceName := match[2]
 	iface, err := net.InterfaceByName(ifaceName)

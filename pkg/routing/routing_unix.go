@@ -46,7 +46,7 @@ func GetRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 }
 
 func compareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
-	dlog.Tracef(ctx, "Comparing OS route %s to table route %s", osRoute, tableRoute)
+	dlog.Tracef(ctx, "Comparing OS route %q to table route %q", osRoute, tableRoute)
 	if osRoute.Interface.Index == tableRoute.Interface.Index {
 		return true, nil
 	}

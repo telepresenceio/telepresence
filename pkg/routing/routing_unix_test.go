@@ -27,7 +27,7 @@ func TestGetRouteConsistency(t *testing.T) {
 	assert.NoError(t, err)
 	for _, route := range table {
 		if ip := route.RoutedNet.Addr(); ip.Is4() {
-			if ip.String() == "0.0.0.0" || ip.IsMulticast() {
+			if ip.IsUnspecified() || ip.IsMulticast() {
 				// Don't test 0.0.0.0 or any multicast addresses.
 				continue
 			}
@@ -35,9 +35,10 @@ func TestGetRouteConsistency(t *testing.T) {
 			addresses[ip.String()] = struct{}{}
 			if route.RoutedNet.Bits() < 32 {
 				ip2 := ip.As4()
-				ip2[3]++
-				addresses[netip.AddrFrom4(ip2).String()] = struct{}{}
-				dlog.Debugf(ctx, "Adding IP %s", ip2)
+				ip2[3] += 2
+				a := netip.AddrFrom4(ip2)
+				addresses[a.String()] = struct{}{}
+				dlog.Debugf(ctx, "Adding IP %s", a)
 			}
 		}
 	}

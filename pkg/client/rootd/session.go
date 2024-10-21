@@ -1242,7 +1242,11 @@ func (s *Session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 	if s.agentClients == nil {
 		return nil, status.Error(codes.Unavailable, "")
 	}
-	err := s.agentClients.WaitForIP(ctx, request.Timeout.AsDuration(), request.Ip)
+	ip, ok := netip.AddrFromSlice(request.Ip)
+	if !ok {
+		return nil, status.Error(codes.InvalidArgument, "")
+	}
+	err := s.agentClients.WaitForIP(ctx, request.Timeout.AsDuration(), ip)
 	switch {
 	case err == nil:
 	case errors.Is(err, context.DeadlineExceeded):
