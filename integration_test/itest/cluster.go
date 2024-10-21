@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -469,7 +470,7 @@ func (s *cluster) RootdPProf() uint16 {
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) string {
 	var pods []string
 	for i := 0; ; i++ {
-		runningPods := RunningPods(ctx, app, ns)
+		runningPods := RunningPodNames(ctx, app, ns)
 		if len(runningPods) > 0 {
 			if container == "" {
 				pods = runningPods
@@ -808,7 +809,7 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 	TelepresenceOk(ctx, append([]string{"helm", "uninstall", "--manager-namespace", managerNamespace}, args...)...)
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
-	assert.Eventually(t, func() bool { return len(RunningPods(ctx, "traffic-manager", managerNamespace)) == 0 },
+	assert.Eventually(t, func() bool { return len(RunningPodNames(ctx, "traffic-manager", managerNamespace)) == 0 },
 		60*time.Second, 4*time.Second, "traffic-manager deployment was not removed")
 	TelepresenceQuitOk(ctx)
 }
@@ -1244,13 +1245,8 @@ func WithKubeConfig(ctx context.Context, cfg *api.Config) context.Context {
 	return WithEnv(ctx, map[string]string{"KUBECONFIG": kubeconfigFileName})
 }
 
-// RunningPods return the names of running pods with app=<service name>. Running here means
-// that at least one container is still running. I.e. the pod might well be terminating
-// but still considered running.
-func RunningPods(ctx context.Context, svc, ns string) []string {
-	out, err := KubectlOut(ctx, ns, "get", "pods", "-o", "json",
-		"--field-selector", "status.phase==Running",
-		"-l", "app="+svc)
+func RunningPods(ctx context.Context, svc, ns string) []core.Pod {
+	out, err := KubectlOut(ctx, ns, "get", "pods", "-o", "json", "--field-selector", "status.phase==Running", "-l", "app="+svc)
 	if err != nil {
 		getT(ctx).Log(err.Error())
 		return nil
@@ -1260,19 +1256,28 @@ func RunningPods(ctx context.Context, svc, ns string) []string {
 		getT(ctx).Log(err.Error())
 		return nil
 	}
-	pods := make([]string, 0, len(pm.Items))
-nextPod:
-	for _, pod := range pm.Items {
+	return slices.DeleteFunc(pm.Items, func(pod core.Pod) bool {
 		for _, cn := range pod.Status.ContainerStatuses {
 			if r := cn.State.Running; r != nil && !r.StartedAt.IsZero() {
 				// At least one container is still running.
-				pods = append(pods, pod.Name)
-				continue nextPod
+				return false
 			}
 		}
+		return true
+	})
+}
+
+// RunningPodNames return the names of running pods with app=<service name>. Running here means
+// that at least one container is still running. I.e. the pod might well be terminating
+// but still considered running.
+func RunningPodNames(ctx context.Context, svc, ns string) []string {
+	pods := RunningPods(ctx, svc, ns)
+	podNames := make([]string, len(pods))
+	for i := range pods {
+		podNames[i] = pods[i].Name
 	}
-	dlog.Infof(ctx, "Running pods %v", pods)
-	return pods
+	dlog.Infof(ctx, "Running pods %v", podNames)
+	return podNames
 }
 
 // RunningPodsWithAgents returns the names of running pods with a matching appPrefix that

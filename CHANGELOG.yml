@@ -55,6 +55,16 @@ items:
           client originate from the specified container. Additionally, if the
           `--replace` option is used, it ensures that this container is replaced.
         docs: https://telepresence.io/docs/reference/intercepts/container
+  - version: 2.20.2
+    date: 2024-10-21
+    notes:
+      - type: bugfix
+        title: Crash in traffic-manager configured with agentInjector.enabled=false
+        body: >-
+          A traffic-manager that was installed with the Helm value `agentInjector.enabled=false` crashed when a
+          client used the commands `telepresence version` or `telepresence status`. Those commands would call
+          a method on the traffic-manager that panicked if no traffic-agent was present. This method will now
+          instead return the standard `Unavailable` error code, which is expected by the caller.
   - version: 2.20.1
     date: 2024-10-10
     notes:
