@@ -34,7 +34,7 @@ docDescription: >-
   customizable development environments.
 items:
   - version: 2.20.2
-    date: TBD
+    date: 2024-10-21
     notes:
       - type: bugfix
         title: Crash in traffic-manager configured with agentInjector.enabled=false
