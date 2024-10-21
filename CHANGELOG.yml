@@ -33,6 +33,16 @@ docDescription: >-
   environments, access to instantaneous feedback loops, and highly
   customizable development environments.
 items:
+  - version: 2.20.2
+    date: 2024-10-21
+    notes:
+      - type: bugfix
+        title: Crash in traffic-manager configured with agentInjector.enabled=false
+        body: >-
+          A traffic-manager that was installed with the Helm value `agentInjector.enabled=false` crashed when a
+          client used the commands `telepresence version` or `telepresence status`. Those commands would call
+          a method on the traffic-manager that panicked if no traffic-agent was present. This method will now
+          instead return the standard `Unavailable` error code, which is expected by the caller.
   - version: 2.20.1
     date: 2024-10-10
     notes:

@@ -75,7 +75,7 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 	}()
 
 	oneContainer := func() bool {
-		pods := itest.RunningPods(ctx, s.ServiceName(), s.AppNamespace())
+		pods := itest.RunningPodNames(ctx, s.ServiceName(), s.AppNamespace())
 		if len(pods) != 1 {
 			dlog.Infof(ctx, "got %d pods", len(pods))
 			return false
