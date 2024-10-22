@@ -5,8 +5,7 @@ title: Cluster-side configuration
 
 For the most part, Telepresence doesn't require any special
 configuration in the cluster and can be used right away in any
-cluster (as long as the user has adequate [RBAC permissions](rbac.md)
-and the cluster's server version is `1.19.0` or higher).
+cluster (as long as the user has adequate [RBAC permissions](rbac.md).
 
 ## Helm Chart configuration
 Some cluster specific configuration can be provided when installing

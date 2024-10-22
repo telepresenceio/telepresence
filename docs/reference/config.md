@@ -5,8 +5,8 @@ title: Laptop-side configuration
 # Laptop-side configuration
 
 There are a number of configuration values that can be tweaked to change how Telepresence behaves.
-These can be set in two ways: globally, by a platform engineer with powers to deploy the Telepresence Traffic Manager, or locally by any user.
-One important exception is the location of the traffic manager itself, which, if it's different from the default of `ambassador`, [must be set](#manager) locally per-cluster to be able to connect.
+These can be set in three ways: globally, by a platform engineer with powers to deploy the Telepresence Traffic Manager, or locally by any user, either in the Telepresence configuration file `config.yml`, or as a Telepresence extension the Kubernetes configuration.
+One important exception is the configuration of the of the traffic manager namespace, which, if it's different from the default of `ambassador`, [must be set](#manager) locally to be able to connect.
 
 ## Global Configuration
 
@@ -246,9 +246,7 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 ### Values
 
-The config file currently supports values for the [cluster](#cluster), [grpc](#grpc), [images](#images), [logLevels](#log-levels),
-and [timeouts](#timeouts) keys.
-The definitions of these values are identical to those values in the `client` config above.
+The definitions of the values in the `config.yml` are identical to those values in the `client` config above, but without the top level `client` key.
 
 Here is an example configuration to show you the conventions of how Telepresence is configured:
 **note: This config shouldn't be used verbatim, since the registry `privateRepo` used doesn't exist**
@@ -271,12 +269,13 @@ grpc:
 
 Configuration that is specific to a cluster can also be overriden per-workstation by modifying your `$KUBECONFIG` file.
 It is recommended that you do not do this, and instead rely on upstream values provided to the Traffic Manager. This ensures
-that all users that connect to the Traffic Manager will have the same routing and DNS resolution behavior.
-An important exception to this is the [`manager.namespace` configuration](#manager) which must be set locally.
+that all users that connect to the Traffic Manager will behave the same.
+An important exception to this is the [`cluster.defaultManagerNamespace` configuration](#manager) which must be set locally.
 
 ### Values
 
-The kubeconfig supports values for `dns`, `also-proxy`, `never-proxy`, and `manager`.
+The definitions of the values in the Telepresence kubeconfig extension are identical to those values in the `config.yml` config. The values will be merged into the config and have higher
+priority when Telepresence is connected to the extended cluster.
 
 Example kubeconfig:
 ```yaml
@@ -287,15 +286,14 @@ clusters:
     extensions:
     - name: telepresence.io
       extension:
-        manager:
-          namespace: staging
+        cluster:
+          defaultManagerNamespace: staging
         dns:
-          include-suffixes: [.private]
-          exclude-suffixes: [.se, .com, .io, .net, .org, .ru]
-          local-ip: 8.8.8.8
-          lookup-timeout: 30s
-        never-proxy: [10.0.0.0/16]
-        also-proxy: [10.0.5.0/24]
+          includeSuffixes: [.private]
+          excludeSuffixes: [.se, .com, .io, .net, .org, .ru]
+        routing:
+          neverProxy: [10.0.0.0/16]
+          alsoProxy: [10.0.5.0/24]
   name: example-cluster
 ```
 
@@ -304,9 +302,11 @@ clusters:
 This is the one cluster configuration that cannot be set using the Helm chart because it defines how Telepresence  connects to
 the Traffic manager. When not default, that setting needs to be configured in the workstation's kubeconfig for the cluster.
 
-The `manager` key contains configuration for finding the `traffic-manager` that telepresence will connect to. It supports one key, `namespace`, indicating the namespace where the traffic manager is to be found
+The `cluster.defaultManagerNamespace` key contains configuration for finding the `traffic-manager` that telepresence will connect to.
 
-Here is an example kubeconfig that will instruct telepresence to connect to a manager in namespace `staging`:
+Here is an example kubeconfig that will instruct telepresence to connect to a manager in namespace `staging`. The setting can be overridden using the Telepresence connect flag `--manager-namespace`.
+
+Please note that the `cluster.defaultManagerNamespace` can be set in the `config.yml` too, but will then not be unique per cluster.
 
 ```yaml
 apiVersion: v1
@@ -316,8 +316,8 @@ clusters:
       extensions:
         - name: telepresence.io
           extension:
-            manager:
-              namespace: staging
+            cluster:
+              defaultManagerNamespace: staging
     name: example-cluster
 ```
 

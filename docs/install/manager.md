@@ -61,9 +61,16 @@ clusters:
     extensions:
     - name: telepresence.io
       extension:
-        manager:
-          namespace: staging
+        cluster:
+          defaultManagerNamespace: staging
   name: example-cluster
+```
+
+or add the config the `config.yml`:
+
+```yaml
+cluster:
+ defaultManagerNamespace: staging
 ```
 
 See [the kubeconfig documentation](../reference/config.md#manager) for more information.
