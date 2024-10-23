@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/miekg/dns"
@@ -16,10 +17,10 @@ type ConnPool struct {
 	finished   chan *dns.Conn
 	clients    clientQueue
 	cancel     context.CancelFunc
-	remoteAddr string
+	remoteAddr netip.Addr
 }
 
-func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
+func NewConnPool(addr netip.Addr, poolSize int) (*ConnPool, error) {
 	cCtx, cCancel := context.WithCancel(context.Background())
 	pool := &ConnPool{
 		items:      make(map[*dns.Conn]bool, poolSize),
@@ -30,7 +31,7 @@ func NewConnPool(addr string, poolSize int) (*ConnPool, error) {
 	}
 	heap.Init(&pool.clients)
 	for i := 0; i < poolSize; i++ {
-		conn, err := dns.Dial("udp", net.JoinHostPort(addr, "53"))
+		conn, err := dns.Dial("udp", netip.AddrPortFrom(addr, 53).String())
 		if err != nil {
 			return nil, fmt.Errorf("unable to create DNS conn to %s: %w", addr, err)
 		}
@@ -50,7 +51,7 @@ func (cp *ConnPool) LocalAddrs() []*net.UDPAddr {
 	return retval
 }
 
-func (cp *ConnPool) RemoteAddr() string {
+func (cp *ConnPool) RemoteAddr() netip.Addr {
 	return cp.remoteAddr
 }
 

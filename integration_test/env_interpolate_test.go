@@ -1,8 +1,7 @@
 package integration_test
 
 import (
-	"encoding/json"
-
+	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"

@@ -1,32 +1,21 @@
 package subnet
 
 import (
-	"net"
+	"net/netip"
 	"reflect"
 	"testing"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 var (
-	oneCIDR = &net.IPNet{
-		IP:   iputil.Parse("192.168.0.0"),
-		Mask: net.CIDRMask(24, 32),
-	}
-	twoCIDR = &net.IPNet{
-		IP:   iputil.Parse("192.168.1.0"),
-		Mask: net.CIDRMask(24, 32),
-	}
-	threeCIDR = &net.IPNet{
-		IP:   iputil.Parse("192.168.2.0"),
-		Mask: net.CIDRMask(24, 32),
-	}
+	oneCIDR   = netip.MustParsePrefix("192.168.0.0/24")
+	twoCIDR   = netip.MustParsePrefix("192.168.1.0/24")
+	threeCIDR = netip.MustParsePrefix("192.168.2.0/24")
 )
 
 func TestSet_Add(t *testing.T) {
 	tests := []struct {
 		name  string
-		cidrs []*net.IPNet
+		cidrs []netip.Prefix
 		want  Set
 	}{
 		{
@@ -36,8 +25,8 @@ func TestSet_Add(t *testing.T) {
 		},
 		{
 			name:  "adds uniquely",
-			cidrs: []*net.IPNet{oneCIDR, twoCIDR, oneCIDR, twoCIDR},
-			want:  NewSet([]*net.IPNet{oneCIDR, twoCIDR}),
+			cidrs: []netip.Prefix{oneCIDR, twoCIDR, oneCIDR, twoCIDR},
+			want:  NewSet([]netip.Prefix{oneCIDR, twoCIDR}),
 		},
 		{
 			name:  "works with nil",
@@ -73,12 +62,12 @@ func TestSet_String(t *testing.T) {
 		},
 		{
 			name: "one element is without space",
-			s:    NewSet([]*net.IPNet{oneCIDR}),
+			s:    NewSet([]netip.Prefix{oneCIDR}),
 			want: "[192.168.0.0/24]",
 		},
 		{
 			name: "output is space separated and sorted",
-			s:    NewSet([]*net.IPNet{threeCIDR, oneCIDR, twoCIDR}),
+			s:    NewSet([]netip.Prefix{threeCIDR, oneCIDR, twoCIDR}),
 			want: "[192.168.0.0/24 192.168.1.0/24 192.168.2.0/24]",
 		},
 	}
@@ -95,14 +84,14 @@ func TestSet_AppendSortedTo(t *testing.T) {
 	tests := []struct {
 		name    string
 		s       Set
-		subnets []*net.IPNet
-		want    []*net.IPNet
+		subnets []netip.Prefix
+		want    []netip.Prefix
 	}{
 		{
 			name:    "appends sorted",
-			s:       NewSet([]*net.IPNet{threeCIDR, oneCIDR, twoCIDR}),
-			subnets: []*net.IPNet{threeCIDR},
-			want:    []*net.IPNet{threeCIDR, oneCIDR, twoCIDR, threeCIDR},
+			s:       NewSet([]netip.Prefix{threeCIDR, oneCIDR, twoCIDR}),
+			subnets: []netip.Prefix{threeCIDR},
+			want:    []netip.Prefix{threeCIDR, oneCIDR, twoCIDR, threeCIDR},
 		},
 	}
 	for _, tt := range tests {

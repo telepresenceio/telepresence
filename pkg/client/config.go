@@ -2,34 +2,99 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
-	"sync"
+	"reflect"
+	"regexp"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unsafe"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/k8sapi/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
+type DefaultsAware interface {
+	defaults() DefaultsAware
+}
+
+func jsonName(f reflect.StructField) string {
+	if !f.IsExported() {
+		return ""
+	}
+	if jt := f.Tag.Get("json"); len(jt) > 0 {
+		if jt == "-" {
+			return ""
+		}
+		if ci := strings.IndexByte(jt, ','); ci > 0 {
+			return jt[:ci]
+		}
+		return jt
+	}
+	return f.Name
+}
+
+// mapWithoutDefaults returns a map with all values in the given struct that are not equal to their corresponding default value.
+func mapWithoutDefaults[T DefaultsAware](sourceStruct T) map[string]any {
+	m := make(map[string]any)
+	sv := reflect.ValueOf(sourceStruct).Elem()
+	dv := reflect.ValueOf(sourceStruct.defaults()).Elem()
+	vt := sv.Type()
+	for _, f := range reflect.VisibleFields(vt) {
+		if n := jsonName(f); n != "" {
+			sf := sv.FieldByIndex(f.Index).Interface()
+			if !reflect.DeepEqual(sf, dv.FieldByIndex(f.Index).Interface()) {
+				m[n] = sf
+			}
+		}
+	}
+	return m
+}
+
+// mapWithoutDefaults will merge non-default values from sourceStruct into targetStruct.
+func mergeNonDefaults[T DefaultsAware](targetStruct, sourceStruct T) {
+	tv := reflect.ValueOf(targetStruct).Elem()
+	sv := reflect.ValueOf(sourceStruct).Elem()
+	dv := reflect.ValueOf(targetStruct.defaults()).Elem()
+	vt := tv.Type()
+	for _, f := range reflect.VisibleFields(vt) {
+		if jsonName(f) != "" {
+			sf := sv.FieldByIndex(f.Index)
+			if !reflect.DeepEqual(sf.Interface(), dv.FieldByIndex(f.Index).Interface()) {
+				tv.FieldByIndex(f.Index).Set(sf)
+			}
+		}
+	}
+}
+
+// isDefault returns true if the given struct is equal to its default.
+func isDefault[T DefaultsAware](sourceStruct T) bool {
+	return reflect.DeepEqual(sourceStruct, sourceStruct.defaults())
+}
+
 const ConfigFile = "config.yml"
 
 type Config interface {
 	fmt.Stringer
+	MarshalYAML() ([]byte, error)
 	OSSpecific() *OSSpecificConfig
 	Base() *BaseConfig
 	Timeouts() *Timeouts
@@ -39,19 +104,24 @@ type Config interface {
 	TelepresenceAPI() *TelepresenceAPI
 	Intercept() *Intercept
 	Cluster() *Cluster
-	Merge(Config)
+	DNS() *DNS
+	Routing() *Routing
+	DestructiveMerge(Config)
+	Merge(priority Config) Config
 }
 
 // BaseConfig contains all configuration values for the telepresence CLI.
 type BaseConfig struct {
-	OSSpecificConfig `yaml:",inline"`
-	TimeoutsV        Timeouts        `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
-	LogLevelsV       LogLevels       `json:"logLevels,omitempty" yaml:"logLevels,omitempty"`
-	ImagesV          Images          `json:"images,omitempty" yaml:"images,omitempty"`
-	GrpcV            Grpc            `json:"grpc,omitempty" yaml:"grpc,omitempty"`
-	TelepresenceAPIV TelepresenceAPI `json:"telepresenceAPI,omitempty" yaml:"telepresenceAPI,omitempty"`
-	InterceptV       Intercept       `json:"intercept,omitempty" yaml:"intercept,omitempty"`
-	ClusterV         Cluster         `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+	OSSpecificConfig ``
+	TimeoutsV        Timeouts        `json:"timeouts,omitzero"`
+	LogLevelsV       LogLevels       `json:"logLevels,omitzero"`
+	ImagesV          Images          `json:"images,omitzero"`
+	GrpcV            Grpc            `json:"grpc,omitzero"`
+	TelepresenceAPIV TelepresenceAPI `json:"telepresenceAPI,omitzero"`
+	InterceptV       Intercept       `json:"intercept,omitzero"`
+	ClusterV         Cluster         `json:"cluster,omitzero"`
+	DNSV             DNS             `json:"dns,omitzero"`
+	RoutingV         Routing         `json:"routing,omitzero"`
 }
 
 func (c *BaseConfig) OSSpecific() *OSSpecificConfig {
@@ -90,16 +160,84 @@ func (c *BaseConfig) Cluster() *Cluster {
 	return &c.ClusterV
 }
 
-func ParseConfigYAML(data []byte) (Config, error) {
+func (c *BaseConfig) DNS() *DNS {
+	return &c.DNSV
+}
+
+func (c *BaseConfig) Routing() *Routing {
+	return &c.RoutingV
+}
+
+func (c *BaseConfig) MarshalYAML() ([]byte, error) {
+	data, err := MarshalJSON(c)
+	if err == nil {
+		data, err = yaml.JSONToYAML(data)
+	}
+	return data, err
+}
+
+func UnmarshalJSON(data []byte, into any, rejectUnknown bool) error {
+	opts := []json.Options{
+		json.WithUnmarshalers(
+			json.UnmarshalFuncV2(func(dec *jsontext.Decoder, strategy *k8sapi.AppProtocolStrategy, opts json.Options) error {
+				var s string
+				if err := json.UnmarshalDecode(dec, &s, opts); err != nil {
+					return err
+				}
+				return strategy.EnvDecode(s)
+			})),
+	}
+	if rejectUnknown {
+		opts = append(opts, json.RejectUnknownMembers(true))
+	}
+	if err := json.Unmarshal(data, into, opts...); err != nil {
+		return err
+	}
+	return nil
+}
+
+func MarshalJSON(value any) ([]byte, error) {
+	return json.Marshal(value, json.WithMarshalers(json.NewMarshalers(
+		json.MarshalFuncV2[k8sapi.AppProtocolStrategy](func(enc *jsontext.Encoder, strategy k8sapi.AppProtocolStrategy, _ json.Options) error {
+			return enc.WriteToken(jsontext.String(strategy.String()))
+		}),
+	)))
+}
+
+func UnmarshalJSONConfig(data []byte, rejectUnknown bool) (Config, error) {
 	cfg := GetDefaultConfig()
-	if err := yaml.Unmarshal(data, cfg); err != nil {
+	if err := UnmarshalJSON(data, cfg, rejectUnknown); err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-// Merge merges this instance with the non-zero values of the given argument. The argument values take priority.
-func (c *BaseConfig) Merge(lc Config) {
+func ParseConfigYAML(ctx context.Context, path string, data []byte) (Config, error) {
+	data, err := yaml.YAMLToJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := UnmarshalJSONConfig(data, true)
+	if err != nil {
+		var semanticErr *json.SemanticError
+		if errors.As(err, &semanticErr) && strings.Contains(semanticErr.Error(), "unknown name ") {
+			s := semanticErr.Error()
+			// Strip unnecessarily verbose text from the message, but retain the type.
+			if m := regexp.MustCompile(`json:.+ of type (.*)$`).FindStringSubmatch(s); len(m) == 2 {
+				s = m[1]
+			}
+			dlog.Errorf(ctx, "%s: %v", path, s)
+			cfg, err = UnmarshalJSONConfig(data, false)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cfg, nil
+}
+
+// DestructiveMerge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (c *BaseConfig) DestructiveMerge(lc Config) {
 	c.OSSpecificConfig.Merge(lc.OSSpecific())
 	c.TimeoutsV.merge(lc.Timeouts())
 	c.LogLevelsV.merge(lc.LogLevels())
@@ -108,10 +246,19 @@ func (c *BaseConfig) Merge(lc Config) {
 	c.TelepresenceAPIV.merge(lc.TelepresenceAPI())
 	c.InterceptV.merge(lc.Intercept())
 	c.ClusterV.merge(lc.Cluster())
+	c.DNSV.merge(lc.DNS())
+	c.RoutingV.merge(lc.Routing())
+}
+
+func (c *BaseConfig) Merge(lc Config) Config {
+	cfg := GetDefaultBaseConfig()
+	*cfg = *c
+	cfg.DestructiveMerge(lc)
+	return cfg
 }
 
 func (c *BaseConfig) String() string {
-	y, _ := yaml.Marshal(c)
+	y, _ := c.MarshalYAML()
 	return string(y)
 }
 
@@ -159,14 +306,6 @@ func Watch(c context.Context, onReload func(context.Context) error) error {
 	}
 }
 
-func StringKey(n *yaml.Node) (string, error) {
-	var s string
-	if err := n.Decode(&s); err != nil {
-		return "", errors.New(WithLoc("key must be a string", n))
-	}
-	return s, nil
-}
-
 type Timeouts struct {
 	// These all nave names starting with "Private" because we "want" them to be unexported in
 	// order to force you to use .TimeoutContext(), but (1) we dont' want them to be hidden from
@@ -176,27 +315,27 @@ type Timeouts struct {
 	// make them easy to grep for (`grep Private`) later.
 
 	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
-	PrivateClusterConnect time.Duration `json:"clusterConnect" yaml:"clusterConnect"`
-	// PrivateConnectivityCheck timeout used when checking if cluster is already proxied on the workstation
-	PrivateConnectivityCheck time.Duration `json:"connectivityCheck" yaml:"connectivityCheck"`
+	PrivateClusterConnect time.Duration `json:"clusterConnect"`
+	// PrivateConnectivityCheck timeout used when checking if the cluster is already proxied on the workstation
+	PrivateConnectivityCheck time.Duration `json:"connectivityCheck"`
 	// PrivateEndpointDial is how long to wait for a Dial to a service for which the IP is known.
-	PrivateEndpointDial time.Duration `json:"endpointDial" yaml:"endpointDial"`
+	PrivateEndpointDial time.Duration `json:"endpointDial"`
 	// PrivateHelm is how long to wait for any helm operation.
-	PrivateHelm time.Duration `json:"helm" yaml:"helm"`
+	PrivateHelm time.Duration `json:"helm"`
 	// PrivateIntercept is the time to wait for an intercept after the agents has been installed
-	PrivateIntercept time.Duration `json:"intercept" yaml:"intercept"`
+	PrivateIntercept time.Duration `json:"intercept"`
 	// PrivateRoundtripLatency is how much to add  to the EndpointDial timeout when establishing a remote connection.
-	PrivateRoundtripLatency time.Duration `json:"roundtripLatency" yaml:"roundtripLatency"`
+	PrivateRoundtripLatency time.Duration `json:"roundtripLatency"`
 	// PrivateProxyDial is how long to wait for the proxy to establish an outbound connection
-	PrivateProxyDial time.Duration `json:"proxyDial" yaml:"proxyDial"`
+	PrivateProxyDial time.Duration `json:"proxyDial"`
 	// PrivateTrafficManagerConnect is how long to wait for the traffic-manager API to connect
-	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI" yaml:"trafficManagerAPI"`
+	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
-	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect" yaml:"trafficManagerConnect"`
+	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect"`
 	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
-	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite" yaml:"ftpReadWrite"`
+	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite"`
 	// PrivateFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
-	PrivateFtpShutdown time.Duration `json:"ftpShutdown" yaml:"ftpShutdown"`
+	PrivateFtpShutdown time.Duration `json:"ftpShutdown"`
 }
 
 type TimeoutID int
@@ -337,70 +476,6 @@ func CheckTimeout(ctx context.Context, err error) error {
 	return err
 }
 
-// UnmarshalYAML caters for the unfortunate fact that time.Duration doesn't do YAML or JSON at all.
-func (t *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(WithLoc("timeouts must be an object", node))
-	}
-	*t = defaultTimeouts
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := StringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		var dp *time.Duration
-		switch kv {
-		case "agentInstall":
-			logrus.Warn(WithLoc(`unused key "timeouts.agentInstall". Use the Helm chart value "timeouts.agentArrival" to configure the traffic-manager`, ms[i]))
-			continue
-		case "clusterConnect":
-			dp = &t.PrivateClusterConnect
-		case "connectivityCheck":
-			dp = &t.PrivateConnectivityCheck
-		case "endpointDial":
-			dp = &t.PrivateEndpointDial
-		case "helm":
-			dp = &t.PrivateHelm
-		case "intercept":
-			dp = &t.PrivateIntercept
-		case "proxyDial":
-			dp = &t.PrivateProxyDial
-		case "roundtripLatency":
-			dp = &t.PrivateRoundtripLatency
-		case "trafficManagerAPI":
-			dp = &t.PrivateTrafficManagerAPI
-		case "trafficManagerConnect":
-			dp = &t.PrivateTrafficManagerConnect
-		case "ftpReadWrite":
-			dp = &t.PrivateFtpReadWrite
-		case "ftpShutdown":
-			dp = &t.PrivateFtpShutdown
-		default:
-			logrus.Warn(WithLoc(fmt.Sprintf(`unknown key "timeouts.%s"`, kv), ms[i]))
-			continue
-		}
-
-		v := ms[i+1]
-		var vv any
-		if err = v.Decode(&vv); err != nil {
-			return errors.New(WithLoc("unable to parse value", v))
-		}
-		switch vv := vv.(type) {
-		case int:
-			*dp = time.Duration(vv) * time.Second
-		case float64:
-			*dp = time.Duration(vv * float64(time.Second))
-		case string:
-			if *dp, err = time.ParseDuration(vv); err != nil {
-				return errors.New(WithLoc(fmt.Sprintf("%q is not a valid duration", vv), v))
-			}
-		}
-	}
-	return nil
-}
-
 const (
 	defaultTimeoutsClusterConnect        = 20 * time.Second
 	defaultTimeoutsConnectivityCheck     = 500 * time.Millisecond
@@ -429,85 +504,22 @@ var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
 	PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
 }
 
-// IsZero controls whether this element will be included in marshalled output.
-func (t Timeouts) IsZero() bool {
-	return t == defaultTimeouts
-}
-
-// MarshalYAML is not using pointer receiver here, because Timeouts is not pointer in the Config struct.
-func (t Timeouts) MarshalYAML() (any, error) {
-	tm := make(map[string]string)
-	if t.PrivateClusterConnect != 0 && t.PrivateClusterConnect != defaultTimeoutsClusterConnect {
-		tm["clusterConnect"] = t.PrivateClusterConnect.String()
-	}
-	if t.PrivateConnectivityCheck != defaultTimeoutsConnectivityCheck {
-		tm["connectivityCheck"] = t.PrivateConnectivityCheck.String()
-	}
-	if t.PrivateEndpointDial != defaultTimeoutsEndpointDial {
-		tm["endpointDial"] = t.PrivateEndpointDial.String()
-	}
-	if t.PrivateHelm != defaultTimeoutsHelm {
-		tm["helm"] = t.PrivateHelm.String()
-	}
-	if t.PrivateIntercept != defaultTimeoutsIntercept {
-		tm["intercept"] = t.PrivateIntercept.String()
-	}
-	if t.PrivateProxyDial != defaultTimeoutsProxyDial {
-		tm["proxyDial"] = t.PrivateProxyDial.String()
-	}
-	if t.PrivateRoundtripLatency != defaultTimeoutsRoundtripLatency {
-		tm["roundtripLatency"] = t.PrivateRoundtripLatency.String()
-	}
-	if t.PrivateTrafficManagerAPI != defaultTimeoutsTrafficManagerAPI {
-		tm["trafficManagerAPI"] = t.PrivateTrafficManagerAPI.String()
-	}
-	if t.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
-		tm["trafficManagerConnect"] = t.PrivateTrafficManagerConnect.String()
-	}
-	if t.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
-		tm["ftpReadWrite"] = t.PrivateFtpReadWrite.String()
-	}
-	if t.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
-		tm["ftpShutdown"] = t.PrivateFtpShutdown.String()
-	}
-	return tm, nil
+func (t *Timeouts) defaults() DefaultsAware {
+	return &defaultTimeouts
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (t *Timeouts) merge(o *Timeouts) {
-	if o.PrivateClusterConnect != defaultTimeoutsClusterConnect {
-		t.PrivateClusterConnect = o.PrivateClusterConnect
-	}
-	if o.PrivateConnectivityCheck != defaultTimeoutsConnectivityCheck {
-		t.PrivateConnectivityCheck = o.PrivateConnectivityCheck
-	}
-	if o.PrivateEndpointDial != defaultTimeoutsEndpointDial {
-		t.PrivateEndpointDial = o.PrivateEndpointDial
-	}
-	if o.PrivateHelm != defaultTimeoutsHelm {
-		t.PrivateHelm = o.PrivateHelm
-	}
-	if o.PrivateIntercept != defaultTimeoutsIntercept {
-		t.PrivateIntercept = o.PrivateIntercept
-	}
-	if o.PrivateProxyDial != defaultTimeoutsProxyDial {
-		t.PrivateProxyDial = o.PrivateProxyDial
-	}
-	if o.PrivateRoundtripLatency != defaultTimeoutsRoundtripLatency {
-		t.PrivateRoundtripLatency = o.PrivateRoundtripLatency
-	}
-	if o.PrivateTrafficManagerAPI != defaultTimeoutsTrafficManagerAPI {
-		t.PrivateTrafficManagerAPI = o.PrivateTrafficManagerAPI
-	}
-	if o.PrivateTrafficManagerConnect != defaultTimeoutsTrafficManagerConnect {
-		t.PrivateTrafficManagerConnect = o.PrivateTrafficManagerConnect
-	}
-	if o.PrivateFtpReadWrite != defaultTimeoutsFtpReadWrite {
-		t.PrivateFtpReadWrite = o.PrivateFtpReadWrite
-	}
-	if o.PrivateFtpShutdown != defaultTimeoutsFtpShutdown {
-		t.PrivateFtpShutdown = o.PrivateFtpShutdown
-	}
+	mergeNonDefaults(t, o)
+}
+
+// IsZero controls whether this element will be included in marshalled output.
+func (t *Timeouts) IsZero() bool {
+	return t == nil || *t == defaultTimeouts
+}
+
+func (t *Timeouts) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(t), opts)
 }
 
 const (
@@ -521,60 +533,33 @@ var defaultLogLevels = LogLevels{ //nolint:gochecknoglobals // constant
 }
 
 type LogLevels struct {
-	UserDaemon logrus.Level `json:"userDaemon,omitempty" yaml:"userDaemon,omitempty"`
-	RootDaemon logrus.Level `json:"rootDaemon,omitempty" yaml:"rootDaemon,omitempty"`
+	UserDaemon logrus.Level `json:"userDaemon"`
+	RootDaemon logrus.Level `json:"rootDaemon"`
+}
+
+func (ll *LogLevels) defaults() DefaultsAware {
+	return &defaultLogLevels
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (ll *LogLevels) merge(o *LogLevels) {
+	mergeNonDefaults(ll, o)
 }
 
 // IsZero controls whether this element will be included in marshalled output.
-func (ll LogLevels) IsZero() bool {
-	return ll == defaultLogLevels
+func (ll *LogLevels) IsZero() bool {
+	return ll == nil || *ll == defaultLogLevels
 }
 
-// UnmarshalYAML parses the logrus log-levels.
-func (ll *LogLevels) UnmarshalYAML(node *yaml.Node) (err error) {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(WithLoc("timeouts must be an object", node))
-	}
-
-	*ll = defaultLogLevels
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := StringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		v := ms[i+1]
-		level, err := logrus.ParseLevel(v.Value)
-		if err != nil {
-			return errors.New(WithLoc("invalid log-level", v))
-		}
-		switch kv {
-		case "userDaemon":
-			ll.UserDaemon = level
-		case "rootDaemon":
-			ll.RootDaemon = level
-		default:
-			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-		}
-	}
-	return nil
-}
-
-func (ll *LogLevels) merge(o *LogLevels) {
-	if o.UserDaemon != defaultLogLevelsUserDaemon {
-		ll.UserDaemon = o.UserDaemon
-	}
-	if o.RootDaemon != defaultLogLevelsRootDaemon {
-		ll.RootDaemon = o.RootDaemon
-	}
+func (ll *LogLevels) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(ll), opts)
 }
 
 type Images struct {
-	PrivateRegistry        string `json:"registry,omitempty" yaml:"registry,omitempty"`
-	PrivateAgentImage      string `json:"agentImage,omitempty" yaml:"agentImage,omitempty"`
-	PrivateClientImage     string `json:"clientImage,omitempty" yaml:"clientImage,omitempty"`
-	PrivateWebhookRegistry string `json:"webhookRegistry,omitempty" yaml:"webhookRegistry,omitempty"`
+	PrivateRegistry        string `json:"registry"`
+	PrivateAgentImage      string `json:"agentImage"`
+	PrivateClientImage     string `json:"clientImage"`
+	PrivateWebhookRegistry string `json:"webhookRegistry"`
 }
 
 const (
@@ -585,53 +570,22 @@ var defaultImages = Images{ //nolint:gochecknoglobals // constant
 	PrivateRegistry: defaultImagesRegistry,
 }
 
-// UnmarshalYAML parses the images YAML.
-func (img *Images) UnmarshalYAML(node *yaml.Node) (err error) {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(WithLoc("images must be an object", node))
-	}
-
-	*img = defaultImages
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := StringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		v := ms[i+1]
-		switch kv {
-		case "registry":
-			img.PrivateRegistry = v.Value
-		case "agentImage":
-			img.PrivateAgentImage = v.Value
-		case "clientImage":
-			img.PrivateClientImage = v.Value
-		case "webhookRegistry":
-			img.PrivateWebhookRegistry = v.Value
-		case "webhookAgentImage":
-			logrus.Warn(WithLoc(fmt.Sprintf(`deprecated key %q, please use "agentImage" instead`, kv), ms[i]))
-			img.PrivateAgentImage = v.Value
-		default:
-			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-		}
-	}
-	return nil
+func (img *Images) defaults() DefaultsAware {
+	return &defaultImages
 }
 
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (img *Images) merge(o *Images) {
-	if o.PrivateAgentImage != "" {
-		img.PrivateAgentImage = o.PrivateAgentImage
-	}
-	if o.PrivateClientImage != "" {
-		img.PrivateClientImage = o.PrivateClientImage
-	}
-	if o.PrivateRegistry != defaultImagesRegistry {
-		img.PrivateRegistry = o.PrivateRegistry
-	}
-	if o.PrivateWebhookRegistry != "" {
-		img.PrivateWebhookRegistry = o.PrivateWebhookRegistry
-	}
+	mergeNonDefaults(img, o)
+}
+
+// IsZero controls whether this element will be included in marshalled output.
+func (img *Images) IsZero() bool {
+	return img == nil || *img == defaultImages
+}
+
+func (img *Images) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(img), opts)
 }
 
 func (img *Images) Registry(c context.Context) string {
@@ -644,7 +598,7 @@ func (img *Images) Registry(c context.Context) string {
 	return img.PrivateRegistry
 }
 
-func (img *Images) WebhookRegistry(c context.Context) string {
+func (img *Images) WebhookRegistry(_ context.Context) string {
 	return img.PrivateWebhookRegistry
 }
 
@@ -662,33 +616,10 @@ func (img *Images) ClientImage(c context.Context) string {
 	return GetEnv(c).ClientImage
 }
 
-// IsZero controls whether this element will be included in marshalled output.
-func (img Images) IsZero() bool {
-	return img == defaultImages
-}
-
-// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct.
-func (img Images) MarshalYAML() (any, error) {
-	m := make(map[string]string)
-	if img.PrivateRegistry != defaultImagesRegistry {
-		m["registry"] = img.PrivateRegistry
-	}
-	if img.PrivateAgentImage != "" {
-		m["agentImage"] = img.PrivateAgentImage
-	}
-	if img.PrivateClientImage != "" {
-		m["clientImage"] = img.PrivateClientImage
-	}
-	if img.PrivateWebhookRegistry != "" {
-		m["webhookRegistry"] = img.PrivateWebhookRegistry
-	}
-	return m, nil
-}
-
 type Grpc struct {
 	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
 	// Overrides the gRPC default of 4MB.
-	MaxReceiveSizeV resource.Quantity `json:"maxReceiveSize,omitempty" yaml:"maxReceiveSize,omitempty"`
+	MaxReceiveSizeV resource.Quantity `json:"maxReceiveSize,omitempty"`
 }
 
 func (g *Grpc) MaxReceiveSize() int64 {
@@ -706,52 +637,13 @@ func (g *Grpc) merge(o *Grpc) {
 	}
 }
 
-// UnmarshalYAML parses the images YAML.
-func (g *Grpc) UnmarshalYAML(node *yaml.Node) (err error) {
-	if node.Kind != yaml.MappingNode {
-		return errors.New(WithLoc("grpc must be an object", node))
-	}
-
-	ms := node.Content
-	top := len(ms)
-	for i := 0; i < top; i += 2 {
-		kv, err := StringKey(ms[i])
-		if err != nil {
-			return err
-		}
-		v := ms[i+1]
-		switch kv {
-		case "maxReceiveSize":
-			val, err := resource.ParseQuantity(v.Value)
-			if err != nil {
-				logrus.Warnf("unable to parse quantity %q: %v", v.Value, WithLoc(err.Error(), ms[i]))
-			} else {
-				g.MaxReceiveSizeV = val
-			}
-		default:
-			logrus.Warn(WithLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
-		}
-	}
-	return nil
-}
-
 // IsZero controls whether this element will be included in marshalled output.
-func (g Grpc) IsZero() bool {
-	return g.MaxReceiveSizeV.IsZero()
-}
-
-// MarshalYAML is not using pointer receiver here, because Cloud is not pointer in the Config struct.
-func (g Grpc) MarshalYAML() (any, error) {
-	if !g.MaxReceiveSizeV.IsZero() {
-		return map[string]any{
-			"maxReceiveSize": g.MaxReceiveSizeV.String(),
-		}, nil
-	}
-	return nil, nil
+func (g *Grpc) IsZero() bool {
+	return g == nil || g.MaxReceiveSizeV.IsZero()
 }
 
 type TelepresenceAPI struct {
-	Port int `json:"port,omitempty" yaml:"port,omitempty"`
+	Port int `json:"port,omitempty"`
 }
 
 func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
@@ -772,69 +664,50 @@ const (
 )
 
 var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
-	DefaultPort: defaultInterceptDefaultPort,
-	Telemount:   defaultTelemount,
+	AppProtocolStrategy: k8sapi.Http2Probe,
+	DefaultPort:         defaultInterceptDefaultPort,
+	Telemount:           defaultTelemount,
 }
 
 type DockerImage struct {
-	RegistryAPI string `json:"registryAPI,omitempty" yaml:"registryAPI,omitempty"`
-	Registry    string `json:"registry,omitempty" yaml:"registry,omitempty"`
-	Namespace   string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	Repository  string `json:"repository,omitempty" yaml:"repository,omitempty"`
-	Tag         string `json:"tag,omitempty" yaml:"tag,omitempty"`
+	RegistryAPI string `json:"registryAPI,omitempty"`
+	Registry    string `json:"registry,omitempty"`
+	Namespace   string `json:"namespace,omitempty"`
+	Repository  string `json:"repository,omitempty"`
+	Tag         string `json:"tag,omitempty"`
 }
 
 type Intercept struct {
-	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy,omitempty" yaml:"appProtocolStrategy,omitempty"`
-	DefaultPort         int                        `json:"defaultPort,omitempty" yaml:"defaultPort,omitempty"`
-	UseFtp              bool                       `json:"useFtp,omitempty" yaml:"useFtp,omitempty"`
-	Telemount           DockerImage                `json:"telemount,omitempty" yaml:"telemount,omitempty"`
+	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy"`
+	DefaultPort         int                        `json:"defaultPort"`
+	UseFtp              bool                       `json:"useFtp"`
+	Telemount           DockerImage                `json:"telemount,omitzero"`
 }
 
+func (ic *Intercept) defaults() DefaultsAware {
+	return &defaultIntercept
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (ic *Intercept) merge(o *Intercept) {
-	if o.AppProtocolStrategy != k8sapi.Http2Probe {
-		ic.AppProtocolStrategy = o.AppProtocolStrategy
-	}
-	if o.DefaultPort != defaultInterceptDefaultPort {
-		ic.DefaultPort = o.DefaultPort
-	}
-	if o.UseFtp {
-		ic.UseFtp = true
-	}
-	if o.Telemount != defaultTelemount {
-		ic.Telemount = o.Telemount
-	}
+	mergeNonDefaults(ic, o)
 }
 
 // IsZero controls whether this element will be included in marshalled output.
-func (ic Intercept) IsZero() bool {
-	return ic == defaultIntercept
+func (ic *Intercept) IsZero() bool {
+	return ic == nil || *ic == defaultIntercept
 }
 
-// MarshalYAML is not using pointer receiver here, because Intercept is not pointer in the Config struct.
-func (ic Intercept) MarshalYAML() (any, error) {
-	im := make(map[string]any)
-	if ic.DefaultPort != defaultInterceptDefaultPort {
-		im["defaultPort"] = ic.DefaultPort
-	}
-	if ic.AppProtocolStrategy != k8sapi.Http2Probe {
-		im["appProtocolStrategy"] = ic.AppProtocolStrategy.String()
-	}
-	if ic.UseFtp {
-		im["useFtp"] = true
-	}
-	if ic.Telemount != defaultTelemount {
-		im["telemount"] = ic.Telemount
-	}
-	return im, nil
+func (ic *Intercept) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(ic), opts)
 }
 
 type Cluster struct {
-	DefaultManagerNamespace string   `json:"defaultManagerNamespace,omitempty" yaml:"defaultManagerNamespace,omitempty"`
-	MappedNamespaces        []string `json:"mappedNamespaces,omitempty" yaml:"mappedNamespaces,omitempty"`
-	ConnectFromRootDaemon   bool     `json:"connectFromRootDaemon,omitempty" yaml:"connectFromRootDaemon,omitempty"`
-	AgentPortForward        bool     `json:"agentPortForward,omitempty" yaml:"agentPortForward,omitempty"`
-	VirtualIPSubnet         string   `json:"virtualIPSubnet,omitempty" yaml:"virtualIPSubnet,omitempty"`
+	DefaultManagerNamespace string   `json:"defaultManagerNamespace"`
+	MappedNamespaces        []string `json:"mappedNamespaces"`
+	ConnectFromRootDaemon   bool     `json:"connectFromRootDaemon"`
+	AgentPortForward        bool     `json:"agentPortForward"`
+	VirtualIPSubnet         string   `json:"virtualIPSubnet"`
 }
 
 // This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
@@ -848,64 +721,80 @@ var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
 	VirtualIPSubnet:         defaultVirtualIPSubnet,
 }
 
+func (cc *Cluster) defaults() DefaultsAware {
+	return &defaultCluster
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (cc *Cluster) merge(o *Cluster) {
-	if o.DefaultManagerNamespace != defaultDefaultManagerNamespace {
-		cc.DefaultManagerNamespace = o.DefaultManagerNamespace
-	}
-	if len(o.MappedNamespaces) > 0 {
-		cc.MappedNamespaces = o.MappedNamespaces
-	}
-	if !o.ConnectFromRootDaemon {
-		cc.ConnectFromRootDaemon = false
-	}
-	if !o.AgentPortForward {
-		cc.AgentPortForward = false
-	}
-	if o.VirtualIPSubnet != defaultVirtualIPSubnet {
-		cc.VirtualIPSubnet = o.VirtualIPSubnet
-	}
+	mergeNonDefaults(cc, o)
 }
 
 // IsZero controls whether this element will be included in marshalled output.
-func (cc Cluster) IsZero() bool {
-	return cc.DefaultManagerNamespace == defaultDefaultManagerNamespace &&
-		len(cc.MappedNamespaces) == 0 &&
-		cc.ConnectFromRootDaemon &&
-		cc.AgentPortForward &&
-		cc.VirtualIPSubnet == defaultVirtualIPSubnet
+func (cc *Cluster) IsZero() bool {
+	return cc == nil || isDefault(cc)
 }
 
-// MarshalYAML is not using pointer receiver here, because Cluster is not pointer in the Config struct.
-func (cc Cluster) MarshalYAML() (any, error) {
-	cm := make(map[string]any)
-	if cc.DefaultManagerNamespace != defaultDefaultManagerNamespace {
-		cm["defaultManagerNamespace"] = cc.DefaultManagerNamespace
-	}
-	if len(cc.MappedNamespaces) > 0 {
-		cm["mappedNamespaces"] = cc.MappedNamespaces
-	}
-	if !cc.ConnectFromRootDaemon {
-		cm["connectFromRootDaemon"] = false
-	}
-	if !cc.AgentPortForward {
-		cm["agentPortForward"] = false
-	}
-	if cc.VirtualIPSubnet != defaultVirtualIPSubnet {
-		cm["virtualIPSubnet"] = cc.VirtualIPSubnet
-	}
-	return cm, nil
+func (cc *Cluster) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(cc), opts)
 }
 
-var (
-	parsedFile string     //nolint:gochecknoglobals // protected by parseLock
-	parseLock  sync.Mutex //nolint:gochecknoglobals // protects parsedFile
-)
-
-func WithLoc(s string, n *yaml.Node) string {
-	if parsedFile != "" {
-		return fmt.Sprintf("file %s, line %d: %s", parsedFile, n.Line, s)
+func (r *Routing) merge(o *Routing) {
+	if len(o.AlsoProxy) > 0 {
+		r.AlsoProxy = o.AlsoProxy
 	}
-	return fmt.Sprintf("line %d: %s", n.Line, s)
+	if len(o.NeverProxy) > 0 {
+		r.NeverProxy = o.NeverProxy
+	}
+	if len(o.AllowConflicting) > 0 {
+		r.AllowConflicting = o.AllowConflicting
+	}
+	if len(o.Subnets) > 0 {
+		r.Subnets = o.Subnets
+	}
+}
+
+func (d *DNS) Equal(o *DNS) bool {
+	if d == nil || o == nil {
+		return d == o
+	}
+	return o.LocalIP == d.LocalIP &&
+		o.RemoteIP == d.RemoteIP &&
+		o.LookupTimeout == d.LookupTimeout &&
+		slices.Equal(o.IncludeSuffixes, d.IncludeSuffixes) &&
+		slices.Equal(o.ExcludeSuffixes, d.ExcludeSuffixes) &&
+		slices.Equal(o.Excludes, d.Excludes) &&
+		slices.Equal(o.Mappings, d.Mappings)
+}
+
+var DefaultExcludeSuffixes = []string{ //nolint:gochecknoglobals // constant
+	".com",
+	".io",
+	".net",
+	".org",
+	".ru",
+}
+
+var defaultDNS = DNS{ //nolint:gochecknoglobals // constant
+	ExcludeSuffixes: DefaultExcludeSuffixes,
+}
+
+func (d *DNS) defaults() DefaultsAware {
+	return &defaultDNS
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (d *DNS) merge(o *DNS) {
+	mergeNonDefaults(d, o)
+}
+
+// IsZero controls whether this element will be included in marshalled output.
+func (d *DNS) IsZero() bool {
+	return d == nil || d.Equal(&defaultDNS)
+}
+
+func (d *DNS) MarshalJSONV2(out *jsontext.Encoder, opts json.Options) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(d), opts)
 }
 
 type configKey struct{}
@@ -937,8 +826,7 @@ func GetConfigFile(c context.Context) string {
 
 //nolint:gochecknoglobals // extension point
 var GetDefaultConfigFunc = func() Config {
-	dflt := GetDefaultBaseConfig()
-	return &dflt
+	return GetDefaultBaseConfig()
 }
 
 //nolint:gochecknoglobals // extension point
@@ -951,18 +839,24 @@ func GetDefaultConfig() Config {
 	return GetDefaultConfigFunc()
 }
 
-// GetDefaultConfig returns the default configuration settings.
-func GetDefaultBaseConfig() BaseConfig {
-	return BaseConfig{
-		OSSpecificConfig: GetDefaultOSSpecificConfig(),
-		TimeoutsV:        defaultTimeouts,
-		LogLevelsV:       defaultLogLevels,
-		ImagesV:          defaultImages,
-		GrpcV:            Grpc{},
-		TelepresenceAPIV: TelepresenceAPI{},
-		InterceptV:       defaultIntercept,
-		ClusterV:         defaultCluster,
-	}
+var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
+	OSSpecificConfig: GetDefaultOSSpecificConfig(),
+	TimeoutsV:        defaultTimeouts,
+	LogLevelsV:       defaultLogLevels,
+	ImagesV:          defaultImages,
+	GrpcV:            Grpc{},
+	TelepresenceAPIV: TelepresenceAPI{},
+	InterceptV:       defaultIntercept,
+	ClusterV:         defaultCluster,
+	DNSV:             defaultDNS,
+	RoutingV:         Routing{},
+}
+
+// GetDefaultBaseConfig returns the default configuration settings.
+func GetDefaultBaseConfig() *BaseConfig {
+	c := new(BaseConfig)
+	*c = defaultConfig
+	return c
 }
 
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
@@ -977,8 +871,6 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 	dirs := filelocation.AppSystemConfigDirs(c)
 	cfg = GetDefaultConfigFunc()
 	readMerge := func(dir string) error {
-		parseLock.Lock()
-		defer parseLock.Unlock()
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
 		}
@@ -990,15 +882,11 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 			}
 			return err
 		}
-		parsedFile = fileName
-		defer func() {
-			parsedFile = ""
-		}()
-		fileConfig, err := ParseConfigYAML(bs)
+		fileConfig, err := ParseConfigYAML(c, fileName, bs)
 		if err != nil {
 			return err
 		}
-		cfg.Merge(fileConfig)
+		cfg.DestructiveMerge(fileConfig)
 		return nil
 	}
 
@@ -1018,56 +906,149 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 }
 
 type Routing struct {
-	Subnets          []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
-	AlsoProxy        []*iputil.Subnet `json:"alsoProxy,omitempty" yaml:"alsoProxy,omitempty"`
-	NeverProxy       []*iputil.Subnet `json:"neverProxy,omitempty" yaml:"neverProxy,omitempty"`
-	AllowConflicting []*iputil.Subnet `json:"allowConflicting,omitempty" yaml:"allowConflicting,omitempty"`
+	Subnets          []netip.Prefix `json:"subnets,omitempty"`
+	AlsoProxy        []netip.Prefix `json:"alsoProxy,omitempty"`
+	NeverProxy       []netip.Prefix `json:"neverProxy,omitempty"`
+	AllowConflicting []netip.Prefix `json:"allowConflicting,omitempty"`
+}
+
+func (r *Routing) ToRPC() *daemon.Routing {
+	return &daemon.Routing{
+		Subnets:                 iputil.PrefixesToRPC(r.Subnets),
+		AlsoProxySubnets:        iputil.PrefixesToRPC(r.AlsoProxy),
+		NeverProxySubnets:       iputil.PrefixesToRPC(r.NeverProxy),
+		AllowConflictingSubnets: iputil.PrefixesToRPC(r.AllowConflicting),
+	}
+}
+
+func RoutingFromRPC(r *daemon.Routing) *Routing {
+	return &Routing{
+		Subnets:          iputil.RPCsToPrefixes(r.Subnets),
+		AlsoProxy:        iputil.RPCsToPrefixes(r.AlsoProxySubnets),
+		NeverProxy:       iputil.RPCsToPrefixes(r.NeverProxySubnets),
+		AllowConflicting: iputil.RPCsToPrefixes(r.AllowConflictingSubnets),
+	}
 }
 
 // RoutingSnake is the same as Routing but with snake_case json/yaml names.
 type RoutingSnake struct {
-	Subnets          []*iputil.Subnet `json:"subnets,omitempty" yaml:"subnets,omitempty"`
-	AlsoProxy        []*iputil.Subnet `json:"also_proxy_subnets,omitempty" yaml:"also_proxy_subnets,omitempty"`
-	NeverProxy       []*iputil.Subnet `json:"never_proxy_subnets,omitempty" yaml:"never_proxy_subnets,omitempty"`
-	AllowConflicting []*iputil.Subnet `json:"allow_conflicting_subnets,omitempty" yaml:"allow_conflicting_subnets,omitempty"`
+	Subnets          []netip.Prefix `json:"subnets,omitempty"`
+	AlsoProxy        []netip.Prefix `json:"also_proxy_subnets,omitempty"`
+	NeverProxy       []netip.Prefix `json:"never_proxy_subnets,omitempty"`
+	AllowConflicting []netip.Prefix `json:"allow_conflicting_subnets,omitempty"`
 }
 
 type DNS struct {
-	Error           string        `json:"error,omitempty" yaml:"error,omitempty"`
-	LocalIP         net.IP        `json:"localIP,omitempty" yaml:"localIP,omitempty"`
-	RemoteIP        net.IP        `json:"remoteIP,omitempty" yaml:"remoteIP,omitempty"`
-	IncludeSuffixes []string      `json:"includeSuffixes,omitempty" yaml:"includeSuffixes,omitempty"`
-	ExcludeSuffixes []string      `json:"excludeSuffixes,omitempty" yaml:"excludeSuffixes,omitempty"`
-	Excludes        []string      `json:"excludes,omitempty" yaml:"excludes,omitempty"`
-	Mappings        DNSMappings   `json:"mappings,omitempty" yaml:"mappings,omitempty"`
-	LookupTimeout   time.Duration `json:"lookupTimeout,omitempty" yaml:"lookupTimeout,omitempty"`
+	Error           string        `json:"error"`
+	LocalIP         netip.Addr    `json:"localIP"`
+	RemoteIP        netip.Addr    `json:"remoteIP"`
+	IncludeSuffixes []string      `json:"includeSuffixes"`
+	ExcludeSuffixes []string      `json:"excludeSuffixes"`
+	Excludes        []string      `json:"excludes"`
+	Mappings        DNSMappings   `json:"mappings"`
+	LookupTimeout   time.Duration `json:"lookupTimeout"`
 }
 
 // DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
-	Error           string        `json:"error,omitempty" yaml:"error,omitempty"`
-	LocalIP         net.IP        `json:"local_ip,omitempty" yaml:"local_ip,omitempty"`
-	RemoteIP        net.IP        `json:"remote_ip,omitempty" yaml:"remote_ip,omitempty"`
-	IncludeSuffixes []string      `json:"include_suffixes,omitempty" yaml:"include_suffixes,omitempty"`
-	ExcludeSuffixes []string      `json:"exclude_suffixes,omitempty" yaml:"exclude_suffixes,omitempty"`
-	Excludes        []string      `json:"excludes,omitempty" yaml:"excludes,omitempty"`
-	Mappings        DNSMappings   `json:"mappings,omitempty" yaml:"mappings,omitempty"`
-	LookupTimeout   time.Duration `json:"lookup_timeout,omitempty" yaml:"lookup_timeout,omitempty"`
+	Error           string        `json:"error,omitempty"`
+	LocalIP         netip.Addr    `json:"local_ip,omitempty"`
+	RemoteIP        netip.Addr    `json:"remote_ip,omitempty"`
+	IncludeSuffixes []string      `json:"include_suffixes,omitempty"`
+	ExcludeSuffixes []string      `json:"exclude_suffixes,omitempty"`
+	Excludes        []string      `json:"excludes,omitempty"`
+	Mappings        DNSMappings   `json:"mappings,omitempty"`
+	LookupTimeout   time.Duration `json:"lookup_timeout,omitempty"`
+}
+
+func (d *DNS) ToRPC() *daemon.DNSConfig {
+	rd := daemon.DNSConfig{
+		LocalIp:         d.LocalIP.AsSlice(),
+		RemoteIp:        d.RemoteIP.AsSlice(),
+		ExcludeSuffixes: d.ExcludeSuffixes,
+		IncludeSuffixes: d.IncludeSuffixes,
+		Excludes:        d.Excludes,
+		LookupTimeout:   durationpb.New(d.LookupTimeout),
+		Error:           d.Error,
+	}
+	if len(d.Mappings) > 0 {
+		rd.Mappings = make([]*daemon.DNSMapping, len(d.Mappings))
+		for i, n := range d.Mappings {
+			rd.Mappings[i] = &daemon.DNSMapping{
+				Name:     n.Name,
+				AliasFor: n.AliasFor,
+			}
+		}
+	}
+	return &rd
+}
+
+func (d *DNS) ToSnake() *DNSSnake {
+	return &DNSSnake{
+		LocalIP:         d.LocalIP,
+		RemoteIP:        d.RemoteIP,
+		ExcludeSuffixes: d.ExcludeSuffixes,
+		IncludeSuffixes: d.IncludeSuffixes,
+		Excludes:        d.Excludes,
+		Mappings:        d.Mappings,
+		LookupTimeout:   d.LookupTimeout,
+		Error:           d.Error,
+	}
+}
+
+func MappingsFromRPC(mappings []*daemon.DNSMapping) DNSMappings {
+	if l := len(mappings); l > 0 {
+		ml := make(DNSMappings, l)
+		for i, m := range mappings {
+			ml[i] = &DNSMapping{
+				Name:     m.Name,
+				AliasFor: m.AliasFor,
+			}
+		}
+		return ml
+	}
+	return nil
+}
+
+func DNSFromRPC(s *daemon.DNSConfig) *DNS {
+	c := DNS{
+		ExcludeSuffixes: s.ExcludeSuffixes,
+		IncludeSuffixes: s.IncludeSuffixes,
+		Excludes:        s.Excludes,
+		Mappings:        MappingsFromRPC(s.Mappings),
+		Error:           s.Error,
+	}
+	if ip, ok := netip.AddrFromSlice(s.LocalIp); ok {
+		c.LocalIP = ip
+	}
+	if ip, ok := netip.AddrFromSlice(s.RemoteIp); ok {
+		c.RemoteIP = ip
+	}
+	if s.LookupTimeout != nil {
+		c.LookupTimeout = s.LookupTimeout.AsDuration()
+	}
+	return &c
+}
+
+func (r *Routing) ToSnake() *RoutingSnake {
+	return &RoutingSnake{
+		Subnets:          r.Subnets,
+		AlsoProxy:        r.AlsoProxy,
+		NeverProxy:       r.NeverProxy,
+		AllowConflicting: r.AllowConflicting,
+	}
 }
 
 type SessionConfig struct {
-	Config           `json:"clientConfig" yaml:"clientConfig"`
-	ClientFile       string  `json:"clientFile,omitempty" yaml:"clientFile,omitempty"`
-	DNS              DNS     `json:"dns,omitempty" yaml:"dns,omitempty"`
-	Routing          Routing `json:"routing,omitempty" yaml:"routing,omitempty"`
-	ManagerNamespace string  `json:"managerNamespace,omitempty" yaml:"managerNamespace,omitempty"`
+	Config     `json:"clientConfig"`
+	ClientFile string `json:"clientFile,omitempty"`
 }
 
 func (sc *SessionConfig) UnmarshalJSON(data []byte) error {
 	type tmpType SessionConfig
 	var tmpJSON tmpType
 	tmpJSON.Config = GetDefaultConfig()
-	if err := json.Unmarshal(data, &tmpJSON); err != nil {
+	if err := UnmarshalJSON(data, &tmpJSON, false); err != nil {
 		return err
 	}
 	*sc = SessionConfig(tmpJSON)

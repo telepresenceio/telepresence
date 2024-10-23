@@ -4,6 +4,7 @@ package routing
 
 import (
 	"net"
+	"net/netip"
 	"runtime"
 	"testing"
 
@@ -25,28 +26,25 @@ func TestGetRouteConsistency(t *testing.T) {
 	table, err := GetRoutingTable(ctx)
 	assert.NoError(t, err)
 	for _, route := range table {
-		if ip := route.RoutedNet.IP.To4(); ip != nil {
-			if ip.String() == "0.0.0.0" || ip.IsMulticast() {
+		if ip := route.RoutedNet.Addr(); ip.Is4() {
+			if ip.IsUnspecified() || ip.IsMulticast() {
 				// Don't test 0.0.0.0 or any multicast addresses.
 				continue
 			}
 			dlog.Debugf(ctx, "Adding route %s", route)
 			addresses[ip.String()] = struct{}{}
-			if n, _ := route.RoutedNet.Mask.Size(); n < 32 {
-				ip2 := make(net.IP, len(ip))
-				copy(ip2, ip)
-				ip2[3]++
-				addresses[ip2.String()] = struct{}{}
-				dlog.Debugf(ctx, "Adding IP %s", ip2)
+			if route.RoutedNet.Bits() < 32 {
+				ip2 := ip.As4()
+				ip2[3] += 2
+				a := netip.AddrFrom4(ip2)
+				addresses[a.String()] = struct{}{}
+				dlog.Debugf(ctx, "Adding IP %s", a)
 			}
 		}
 	}
 	for addr := range addresses {
 		t.Run(addr, func(t *testing.T) {
-			testNet := &net.IPNet{
-				IP:   iputil.Parse(addr),
-				Mask: net.CIDRMask(32, 32),
-			}
+			testNet := netip.PrefixFrom(netip.MustParseAddr(addr), 32)
 			osRoute, err := getOsRoute(ctx, testNet)
 			require.NoError(t, err)
 			route, err := GetRoute(ctx, testNet)
@@ -54,12 +52,13 @@ func TestGetRouteConsistency(t *testing.T) {
 			// This is about as much as we can actually assert, because OSs tend to create
 			// routes on the fly when, for example, a default route is hit. So there's no guarantee
 			// that the matching "original" route in the table will be identical to the route returned on the fly.
-			if runtime.GOOS == "linux" && osRoute.Interface.Flags&net.FlagLoopback != 0 && osRoute.LocalIP.Equal(osRoute.RoutedNet.IP) {
+			if runtime.GOOS == "linux" && osRoute.Interface.Flags&net.FlagLoopback != 0 && osRoute.LocalIP == osRoute.RoutedNet.Addr() {
 				addrs, err := route.Interface.Addrs()
 				assert.NoError(t, err)
 				assert.True(t, func() bool {
 					for _, addr := range addrs {
-						if addr.(*net.IPNet).IP.Equal(osRoute.LocalIP) {
+						a, ok := netip.AddrFromSlice(iputil.Normalize(addr.(*net.IPNet).IP))
+						if ok && a == osRoute.LocalIP {
 							return true
 						}
 					}
@@ -68,7 +67,7 @@ func TestGetRouteConsistency(t *testing.T) {
 			} else {
 				require.Equal(t, osRoute.Interface.Index, route.Interface.Index, "Routes %s and %s differ", osRoute, route)
 			}
-			require.True(t, route.RoutedNet.Contains(osRoute.RoutedNet.IP) || route.Default, "Route %s doesn't route requested IP %s", route, osRoute.RoutedNet.IP)
+			require.True(t, route.RoutedNet.Contains(osRoute.RoutedNet.Addr()) || route.Default, "Route %s doesn't route requested IP %s", route, osRoute.RoutedNet.Addr())
 		})
 	}
 }

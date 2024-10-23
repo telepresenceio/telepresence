@@ -209,7 +209,7 @@ func (s *service) configReload(c context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
-			return client.RestoreDefaults(c, false)
+			return client.ReloadDaemonLogLevel(ctx, false)
 		}
 		return s.session.ApplyConfig(c)
 	})
@@ -240,7 +240,7 @@ func (s *service) ManageSessions(c context.Context) error {
 	}
 }
 
-func (s *service) startSession(ctx context.Context, cr userd.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
+func (s *service) startSession(parentCtx context.Context, cr userd.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
 	s.sessionLock.Lock() // Locked during creation
 	defer s.sessionLock.Unlock()
 
@@ -251,7 +251,7 @@ func (s *service) startSession(ctx context.Context, cr userd.ConnectRequest, wg 
 
 	// Obtain the kubeconfig from the request parameters so that we can determine
 	// what kubernetes context that will be used.
-	config, err := client.DaemonKubeconfig(ctx, cr.Request())
+	ctx, config, err := client.DaemonKubeconfig(parentCtx, cr.Request())
 	if err != nil {
 		if s.rootSessionInProc {
 			s.quit()
@@ -303,10 +303,8 @@ func (s *service) startSession(ctx context.Context, cr userd.ConnectRequest, wg 
 			s.self.SetManagerClient(nil)
 			s.session = nil
 			s.sessionCancel = nil
-			if err := client.RestoreDefaults(ctx, false); err != nil {
-				dlog.Warn(ctx, err)
-			}
 			s.sessionLock.Unlock()
+			_ = client.ReloadDaemonLogLevel(parentCtx, false)
 			wg.Done()
 		}()
 		if err := session.RunSession(s.sessionContext); err != nil {

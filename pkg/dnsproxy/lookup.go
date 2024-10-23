@@ -5,15 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
-	"time"
 
 	"github.com/miekg/dns"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 const dnsTTL = 4
@@ -90,28 +89,35 @@ func nibbleToInt(v string) (uint8, bool) {
 	return 0, false
 }
 
-func PtrAddress(addr string) (net.IP, error) {
-	ip := iputil.Parse(addr)
+func PtrAddress(addr string) (netip.Addr, error) {
+	a, err := netip.ParseAddr(addr)
 	switch {
-	case ip != nil:
-		return ip, nil
+	case err == nil:
+		return a, nil
 	case strings.HasSuffix(addr, arpaV4):
 		ix := addr[0 : len(addr)-len(arpaV4)]
-		if ip = iputil.Parse(ix); len(ip) == 4 {
-			return net.IP{ip[3], ip[2], ip[1], ip[0]}, nil
+		if a, err := netip.ParseAddr(ix); err == nil && a.Is4() {
+			ip := a.As4()
+			ip0 := ip[0]
+			ip1 := ip[1]
+			ip[0] = ip[3]
+			ip[1] = ip[2]
+			ip[2] = ip1
+			ip[3] = ip0
+			return netip.AddrFrom4(ip), nil
 		}
-		return nil, fmt.Errorf("%q is not a valid IP (v4) prefixing .in-addr.arpa", ix)
+		return a, fmt.Errorf("%q is not a valid IP (v4) prefixing .in-addr.arpa", ix)
 	case strings.HasSuffix(addr, arpaV6):
 		hds := strings.Split(addr[0:len(addr)-len(arpaV6)], ".")
 		if len(hds) != 32 {
-			return nil, errors.New("expected 32 nibbles to prefix .ip6.arpa")
+			return a, errors.New("expected 32 nibbles to prefix .ip6.arpa")
 		}
-		ip = make(net.IP, 16)
+		ip := [16]byte{}
 		odd := false
 		for i, nb := range hds {
 			d, ok := nibbleToInt(nb)
 			if !ok {
-				return nil, errors.New("expected 32 nibbles to prefix .ip6.arpa")
+				return a, errors.New("expected 32 nibbles to prefix .ip6.arpa")
 			}
 			b := 15 - i>>1
 			if odd {
@@ -121,9 +127,9 @@ func PtrAddress(addr string) (net.IP, error) {
 			}
 			odd = !odd
 		}
-		return ip, nil
+		return netip.AddrFrom16(ip), nil
 	default:
-		return nil, fmt.Errorf("%q is neither a valid IP-address or a valid reverse notation", addr)
+		return a, fmt.Errorf("%q is neither a valid IP-address or a valid reverse notation", addr)
 	}
 }
 
@@ -154,13 +160,6 @@ func useLookupName(qName string) (string, bool) {
 		// With > 4 dots, we can safely assume that no search path should be applied
 		return qName, true
 	}
-}
-
-// TimedExternalLookup will shell out to an operating specific lookup command. The reason for this
-// is to make sure that no caching or a negative result is performed in this process, which would
-// invalidate subsequent attempts.
-func TimedExternalLookup(ctx context.Context, name string, timeout time.Duration) iputil.IPs {
-	return externalLookup(ctx, name, timeout)
 }
 
 func lookupIP(ctx context.Context, network, qName string, r *net.Resolver) ([]net.IP, error) {

@@ -1,11 +1,11 @@
 package integration_test
 
 import (
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 

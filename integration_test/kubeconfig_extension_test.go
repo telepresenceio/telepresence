@@ -3,10 +3,10 @@ package integration_test
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,29 +22,31 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
-func getClusterIPs(cluster *api.Cluster) ([]net.IP, error) {
-	var ips []net.IP
+func getClusterIPs(cluster *api.Cluster) ([]netip.Addr, error) {
+	var as []netip.Addr
 	svcUrl, err := url.Parse(cluster.Server)
 	if err != nil {
 		return nil, err
 	}
 	hostname := svcUrl.Hostname()
-	if rawIP := net.ParseIP(hostname); rawIP != nil {
-		ips = []net.IP{rawIP}
+	if rawIP, err := netip.ParseAddr(hostname); err == nil {
+		as = []netip.Addr{rawIP}
 	} else {
-		ips, err = net.LookupIP(hostname)
+		ips, err := net.LookupIP(hostname)
 		if err != nil {
 			return nil, err
 		}
+		as = make([]netip.Addr, len(ips))
+		for i, ip := range ips {
+			as[i], _ = netip.AddrFromSlice(ip)
+		}
 	}
-	return ips, nil
+	return as, nil
 }
 
 func (s *notConnectedSuite) Test_APIServerIsProxied() {
@@ -52,7 +54,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	require := s.Require()
 	defaultGW, err := routing.DefaultRoute(ctx)
 	require.NoError(err)
-	var ips []net.IP
+	var ips []netip.Addr
 
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		var apiServers []string
@@ -63,7 +65,7 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 			if ip.IsLoopback() {
 				s.T().Skipf("test can't run on host with a loopback cluster IP %s", ip)
 			}
-			if len(ip) == 16 {
+			if ip.Is6() {
 				apiServers = append(apiServers, fmt.Sprintf(`%s/96`, ip))
 			} else {
 				apiServers = append(apiServers, fmt.Sprintf(`%s/24`, ip))
@@ -95,13 +97,9 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 	status := itest.TelepresenceStatusOk(ctx)
 	require.Len(status.RootDaemon.AlsoProxy, expectedLen)
 	for _, ip := range ips {
-		rng := make(net.IP, len(ip))
-		copy(rng[:], ip)
+		rng := ip.As4()
 		rng[len(rng)-1] = 0
-		expectedValue := &iputil.Subnet{
-			IP:   rng,
-			Mask: net.CIDRMask(24, 32),
-		}
+		expectedValue := netip.PrefixFrom(netip.AddrFrom4(rng), 24)
 		require.Contains(status.RootDaemon.AlsoProxy, expectedValue)
 	}
 }
@@ -123,7 +121,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 	if s.IsIPv6() {
 		mask = 128
 	}
-	var ips []net.IP
+	var ips []netip.Addr
 	ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 		var err error
 		ips, err = getClusterIPs(cluster)
@@ -168,25 +166,17 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 	rq := s.Require()
 	rq.True(len(st.RootDaemon.Subnets) > 0)
 	svcCIDR := st.RootDaemon.Subnets[0]
-	ones, bits := svcCIDR.Mask.Size()
-	if ones != 16 || bits != 32 {
+	ones := svcCIDR.Bits()
+	if ones != 16 || !svcCIDR.Addr().Is4() {
 		s.T().Skip("test requires an IPv4 service subnet with a 16 bit mask")
 	}
 
-	base := svcCIDR.IP.Mask(svcCIDR.Mask)
-	largeCIDR := &net.IPNet{
-		IP:   base,
-		Mask: net.CIDRMask(24, 32),
-	}
-	smallCIDR := &net.IPNet{
-		IP:   base,
-		Mask: net.CIDRMask(28, 32),
-	}
+	base := svcCIDR.Masked().Addr()
+	largeCIDR := netip.PrefixFrom(base, 24)
+	smallCIDR := netip.PrefixFrom(base, 28)
 	// testIP is an IP that is covered by smallCIDR
-	testIP := &net.IPNet{
-		IP:   net.IP{base[0], base[1], 0, 4},
-		Mask: net.CIDRMask(32, 32),
-	}
+	baseBytes := base.As4()
+	testIP := netip.PrefixFrom(netip.AddrFrom4([4]byte{baseBytes[0], baseBytes[1], 0, 4}), 32)
 	// We don't really care if we can't route this with TP disconnected provided the result is the same once we connect
 	originalRoute, _ := routing.GetRoute(ctx, testIP)
 	for name, t := range map[string]struct {
@@ -249,7 +239,7 @@ func (s *notConnectedSuite) Test_AlsoNeverProxyDocker() {
 			"also-proxy":  alsoProxy,
 		}
 	})
-	cidrsToStrings := func(cidrs []*iputil.Subnet) []string {
+	cidrsToStrings := func(cidrs []netip.Prefix) []string {
 		ss := make([]string, len(cidrs))
 		for i, cidr := range cidrs {
 			ss[i] = cidr.String()
@@ -268,26 +258,35 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 		s.T().Skip("The DNS on the linux-arm64 GitHub runner is not configured correctly")
 	}
 
+	defaults := client.GetDefaultConfig().DNS()
+
 	const randomName = "zwslkjsdf"
 	const randomDomain = ".xnrqj"
+	const randomDomain2 = ".pvdar"
 	tests := []struct {
-		name             string
-		domainName       string
-		includeSuffixes  []string
-		excludeSuffixes  []string
-		wantedLogEntry   []string
-		mustHaveWanted   bool
-		unwantedLogEntry []string
+		name                    string
+		domainName              string
+		includeSuffixes         []string
+		excludeSuffixes         []string
+		configIncludeSuffixes   []string
+		wantedLogEntry          []string
+		mustHaveWanted          bool
+		expectedIncludeSuffixes []string
+		expectedExcludeSuffixes []string
+		unwantedLogEntry        []string
 	}{
 		{
 			"default-exclude-com",
 			randomName + ".com",
 			nil,
 			nil,
+			nil,
 			[]string{
 				`Cluster DNS excluded by exclude-suffix ".com" for name "` + randomName + `.com"`,
 			},
 			false,
+			defaults.IncludeSuffixes,
+			defaults.ExcludeSuffixes,
 			[]string{
 				`Lookup A "` + randomName + `.com`,
 			},
@@ -297,10 +296,13 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 			randomName + randomDomain,
 			nil,
 			nil,
+			nil,
 			[]string{
 				`Cluster DNS excluded for name "` + randomName + randomDomain + `". No inclusion rule was matched`,
 			},
 			false,
+			defaults.IncludeSuffixes,
+			defaults.ExcludeSuffixes,
 			[]string{
 				`Lookup A "` + randomName + randomDomain,
 			},
@@ -309,36 +311,75 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 			"include-random-domain",
 			randomName + randomDomain,
 			[]string{randomDomain},
-			dns.DefaultExcludeSuffixes,
+			nil,
+			nil,
 			[]string{
 				`Cluster DNS included by include-suffix "` + randomDomain + `" for name "` + randomName + randomDomain,
 				`Lookup A "` + randomName + randomDomain,
 			},
 			true,
+			[]string{randomDomain},
+			defaults.ExcludeSuffixes,
+			nil,
+		},
+		{
+			"include-random-domain-config",
+			randomName + randomDomain,
+			nil,
+			nil,
+			[]string{randomDomain},
+			[]string{
+				`Cluster DNS included by include-suffix "` + randomDomain + `" for name "` + randomName + randomDomain,
+				`Lookup A "` + randomName + randomDomain,
+			},
+			true,
+			[]string{randomDomain},
+			defaults.ExcludeSuffixes,
+			nil,
+		},
+		{
+			"override-random-domain",
+			randomName + randomDomain,
+			[]string{randomDomain},
+			nil,
+			[]string{randomDomain2},
+			[]string{
+				`Cluster DNS included by include-suffix "` + randomDomain + `" for name "` + randomName + randomDomain,
+				`Lookup A "` + randomName + randomDomain,
+			},
+			true,
+			[]string{randomDomain},
+			defaults.ExcludeSuffixes,
 			nil,
 		},
 		{
 			"equally specific include overrides exclude",
 			randomName + ".org",
 			[]string{".org"},
-			dns.DefaultExcludeSuffixes,
+			nil,
+			nil,
 			[]string{
 				`Cluster DNS included by include-suffix ".org" (overriding exclude-suffix ".org") for name "` + randomName + `.org"`,
 				`Lookup A "` + randomName + `.org."`,
 			},
 			true,
+			[]string{".org"},
+			defaults.ExcludeSuffixes,
 			nil,
 		},
 		{
 			"more specific include overrides exclude",
 			randomName + ".my-domain.org",
 			[]string{".my-domain.org"},
-			dns.DefaultExcludeSuffixes,
+			defaults.ExcludeSuffixes,
+			nil,
 			[]string{
 				`Cluster DNS included by include-suffix ".my-domain.org" (overriding exclude-suffix ".org") for name "` + randomName + `.my-domain.org"`,
 				`Lookup A "` + randomName + `.my-domain.org."`,
 			},
 			true,
+			[]string{".my-domain.org"},
+			defaults.ExcludeSuffixes,
 			nil,
 		},
 		{
@@ -346,10 +387,13 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 			randomName + ".my-domain.org",
 			[]string{".org"},
 			[]string{".com", ".my-domain.org"},
+			nil,
 			[]string{
 				`Cluster DNS excluded by exclude-suffix ".my-domain.org" for name "` + randomName + `.my-domain.org"`,
 			},
 			true,
+			[]string{".org"},
+			[]string{".com", ".my-domain.org"},
 			[]string{
 				`Lookup A "` + randomName + `.my-domain.org."`,
 			},
@@ -360,7 +404,13 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 	for _, tt := range tests {
 		tt := tt
 		s.Run(tt.name, func() {
-			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]any {
+			ctx := s.Context()
+			if len(tt.configIncludeSuffixes) > 0 {
+				ctx = itest.WithConfig(ctx, func(config client.Config) {
+					config.DNS().IncludeSuffixes = tt.configIncludeSuffixes
+				})
+			}
+			ctx = itest.WithKubeConfigExtension(ctx, func(cluster *api.Cluster) map[string]any {
 				return map[string]any{
 					"dns": map[string][]string{
 						"exclude-suffixes": tt.excludeSuffixes,
@@ -371,14 +421,14 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 			require := s.Require()
 
 			s.TelepresenceConnect(ctx, "--context", "extra")
-			defer itest.TelepresenceDisconnectOk(ctx)
+			defer itest.TelepresenceQuitOk(ctx)
 
 			// Check that config view -c includes the includeSuffixes
 			var cfg client.SessionConfig
 			stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only", "--output", "json")
-			require.NoError(json.Unmarshal([]byte(stdout), &cfg))
-			require.Equal(cfg.DNS.ExcludeSuffixes, tt.excludeSuffixes)
-			require.Equal(cfg.DNS.IncludeSuffixes, tt.includeSuffixes)
+			require.NoError(client.UnmarshalJSON([]byte(stdout), &cfg, false))
+			require.Equal(tt.expectedExcludeSuffixes, cfg.DNS().ExcludeSuffixes)
+			require.Equal(tt.expectedIncludeSuffixes, cfg.DNS().IncludeSuffixes)
 
 			rootLog, err := os.Open(logFile)
 			require.NoError(err)

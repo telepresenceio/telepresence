@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
+	jsonv1 "github.com/go-json-experiment/json/v1"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	admission "k8s.io/api/admission/v1"
 	core "k8s.io/api/core/v1"
@@ -43,7 +45,7 @@ type PatchOperation struct {
 type PatchOps []PatchOperation
 
 func (p PatchOps) String() string {
-	b, _ := json.MarshalIndent(p, "", "  ")
+	b, _ := json.Marshal(p, jsontext.WithIndent("  "))
 	return string(b)
 }
 
@@ -347,7 +349,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 		}
 	} else {
 		// Otherwise, encode the patch operations to JSON and return a positive response.
-		patchBytes, err := json.Marshal(patchOps)
+		patchBytes, err := json.Marshal(patchOps, jsonv1.OmitEmptyWithLegacyDefinition(true), json.FormatNilSliceAsNull(true))
 		if err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("could not marshal JSON patch: %v", err)
 		}

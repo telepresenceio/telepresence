@@ -2,12 +2,12 @@ package agentconfig
 
 import (
 	"context"
-	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/blang/semver/v4"
+	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"

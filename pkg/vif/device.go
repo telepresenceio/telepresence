@@ -2,7 +2,7 @@ package vif
 
 import (
 	"context"
-	"net"
+	"net/netip"
 	"sync"
 
 	"go.opentelemetry.io/otel"
@@ -30,9 +30,9 @@ type Device interface {
 	stack.LinkEndpoint
 	Index() int32
 	Name() string
-	AddSubnet(context.Context, *net.IPNet) error
-	RemoveSubnet(context.Context, *net.IPNet) error
-	SetDNS(context.Context, string, net.IP, []string) (err error)
+	AddSubnet(context.Context, netip.Prefix) error
+	RemoveSubnet(context.Context, netip.Prefix) error
+	SetDNS(context.Context, string, netip.Addr, []string) (err error)
 	WaitForDevice()
 }
 
@@ -75,7 +75,7 @@ func (d *device) Attach(dp stack.NetworkDispatcher) {
 
 // AddSubnet adds a subnet to this TUN device and creates a route for that subnet which
 // is associated with the device (removing the device will automatically remove the route).
-func (d *device) AddSubnet(ctx context.Context, subnet *net.IPNet) (err error) {
+func (d *device) AddSubnet(ctx context.Context, subnet netip.Prefix) (err error) {
 	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "AddSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
 	defer tracing.EndAndRecord(span, err)
 	return d.dev.addSubnet(ctx, subnet)
@@ -96,7 +96,7 @@ func (d *device) Name() string {
 }
 
 // SetDNS sets the DNS configuration for the device on the windows platform.
-func (d *device) SetDNS(ctx context.Context, clusterDomain string, server net.IP, domains []string) (err error) {
+func (d *device) SetDNS(ctx context.Context, clusterDomain string, server netip.Addr, domains []string) (err error) {
 	return d.dev.setDNS(ctx, clusterDomain, server, domains)
 }
 
@@ -106,7 +106,7 @@ func (d *device) SetMTU(mtu uint32) {
 
 // RemoveSubnet removes a subnet from this TUN device and also removes the route for that subnet which
 // is associated with the device.
-func (d *device) RemoveSubnet(ctx context.Context, subnet *net.IPNet) (err error) {
+func (d *device) RemoveSubnet(ctx context.Context, subnet netip.Prefix) (err error) {
 	// Staticcheck screams if this is ctx, span := because it thinks the context argument is being overwritten before being used.
 	sCtx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "RemoveSubnet", trace.WithAttributes(attribute.Stringer("tel2.subnet", subnet)))
 	defer tracing.EndAndRecord(span, err)

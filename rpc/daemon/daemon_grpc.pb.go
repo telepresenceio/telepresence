@@ -50,7 +50,7 @@ type DaemonClient interface {
 	// Quit quits (terminates) the service.
 	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Connect creates a new session that provides outbound connectivity to the cluster
-	Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*DaemonStatus, error)
+	Connect(ctx context.Context, in *NetworkConfig, opts ...grpc.CallOption) (*DaemonStatus, error)
 	// Disconnect disconnects the current session.
 	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetNetworkConfig returns the current network configuration
@@ -107,7 +107,7 @@ func (c *daemonClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc
 	return out, nil
 }
 
-func (c *daemonClient) Connect(ctx context.Context, in *OutboundInfo, opts ...grpc.CallOption) (*DaemonStatus, error) {
+func (c *daemonClient) Connect(ctx context.Context, in *NetworkConfig, opts ...grpc.CallOption) (*DaemonStatus, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DaemonStatus)
 	err := c.cc.Invoke(ctx, Daemon_Connect_FullMethodName, in, out, cOpts...)
@@ -211,7 +211,7 @@ type DaemonServer interface {
 	// Quit quits (terminates) the service.
 	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// Connect creates a new session that provides outbound connectivity to the cluster
-	Connect(context.Context, *OutboundInfo) (*DaemonStatus, error)
+	Connect(context.Context, *NetworkConfig) (*DaemonStatus, error)
 	// Disconnect disconnects the current session.
 	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GetNetworkConfig returns the current network configuration
@@ -244,7 +244,7 @@ func (UnimplementedDaemonServer) Status(context.Context, *emptypb.Empty) (*Daemo
 func (UnimplementedDaemonServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedDaemonServer) Connect(context.Context, *OutboundInfo) (*DaemonStatus, error) {
+func (UnimplementedDaemonServer) Connect(context.Context, *NetworkConfig) (*DaemonStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
 func (UnimplementedDaemonServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
@@ -339,7 +339,7 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 }
 
 func _Daemon_Connect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OutboundInfo)
+	in := new(NetworkConfig)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -351,7 +351,7 @@ func _Daemon_Connect_Handler(srv interface{}, ctx context.Context, dec func(inte
 		FullMethod: Daemon_Connect_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Connect(ctx, req.(*OutboundInfo))
+		return srv.(DaemonServer).Connect(ctx, req.(*NetworkConfig))
 	}
 	return interceptor(ctx, in, info, handler)
 }

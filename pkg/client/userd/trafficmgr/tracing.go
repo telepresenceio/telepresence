@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
@@ -127,7 +128,7 @@ func (c *traceCollector) rootdTraces(ctx context.Context, tCh chan<- []byte) err
 
 func (c *traceCollector) trafficManagerTraces(ctx context.Context, sess *session, tCh chan<- []byte, remotePort string) error {
 	span := trace.SpanFromContext(ctx)
-	host := "svc/traffic-manager." + sess.GetManagerNamespace()
+	host := "svc/traffic-manager." + k8s.GetManagerNamespace(ctx)
 	grpcAddr := dnet.K8sPFScheme + ":///" + net.JoinHostPort(host, remotePort)
 	span.SetAttributes(attribute.String("traffic-manager.host", host), attribute.String("traffic-manager.port", remotePort))
 

@@ -24,7 +24,7 @@ import (
 type nativeDevice struct {
 	tun.Device
 	name           string
-	dns            net.IP
+	dns            netip.Addr
 	interfaceIndex int32
 }
 
@@ -106,49 +106,27 @@ func (t *nativeDevice) index() int32 {
 	return t.interfaceIndex
 }
 
-func addrFromIP(ip net.IP) netip.Addr {
-	var addr netip.Addr
-	if ip4 := ip.To4(); ip4 != nil {
-		addr = netip.AddrFrom4(*(*[4]byte)(ip4))
-	} else if ip16 := ip.To16(); ip16 != nil {
-		addr = netip.AddrFrom16(*(*[16]byte)(ip16))
-	}
-	return addr
+func (t *nativeDevice) addSubnet(_ context.Context, subnet netip.Prefix) error {
+	return t.getLUID().AddIPAddress(subnet)
 }
 
-func prefixFromIPNet(subnet *net.IPNet) netip.Prefix {
-	if subnet == nil {
-		return netip.Prefix{}
-	}
-	ones, _ := subnet.Mask.Size()
-	return netip.PrefixFrom(addrFromIP(subnet.IP), ones)
+func (t *nativeDevice) removeSubnet(_ context.Context, subnet netip.Prefix) error {
+	return t.getLUID().DeleteIPAddress(subnet)
 }
 
-func (t *nativeDevice) addSubnet(_ context.Context, subnet *net.IPNet) error {
-	return t.getLUID().AddIPAddress(prefixFromIPNet(subnet))
-}
-
-func (t *nativeDevice) removeSubnet(_ context.Context, subnet *net.IPNet) error {
-	return t.getLUID().DeleteIPAddress(prefixFromIPNet(subnet))
-}
-
-func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server net.IP, searchList []string) (err error) {
+func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server netip.Addr, searchList []string) (err error) {
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
 	dlog.Debugf(ctx, "SetDNS server: %s, searchList: %v, domain: %q", server, searchList, clusterDomain)
 	defer dlog.Debug(ctx, "SetDNS done")
 
 	luid := t.getLUID()
 	family := addressFamily(server)
-	if t.dns != nil {
+	if t.dns.IsValid() {
 		if oldFamily := addressFamily(t.dns); oldFamily != family {
 			_ = luid.FlushDNS(oldFamily)
 		}
 	}
 	t.dns = server
-	svcAddr, ok := netip.AddrFromSlice(server)
-	if !ok {
-		return fmt.Errorf("%s is not a valid address", server)
-	}
 	clusterDomain = strings.TrimSuffix(clusterDomain, ".")
 	cdi := slices.Index(searchList, clusterDomain)
 	switch cdi {
@@ -161,12 +139,12 @@ func (t *nativeDevice) setDNS(ctx context.Context, clusterDomain string, server 
 		// put clusterDomain first in list, but retain the order of remaining elements
 		searchList = slices.Insert(slices.Delete(searchList, cdi, cdi+1), 0, clusterDomain)
 	}
-	return luid.SetDNS(family, []netip.Addr{svcAddr}, searchList)
+	return luid.SetDNS(family, []netip.Addr{t.dns}, searchList)
 }
 
-func addressFamily(ip net.IP) winipcfg.AddressFamily {
+func addressFamily(ip netip.Addr) winipcfg.AddressFamily {
 	f := winipcfg.AddressFamily(windows.AF_INET6)
-	if ip4 := ip.To4(); ip4 != nil {
+	if ip.Is4() {
 		f = windows.AF_INET
 	}
 	return f

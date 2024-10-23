@@ -5,6 +5,7 @@ package dns
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"sync"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func TestConnPoolConcurrency(t *testing.T) {
 		Net:     "udp",
 		Timeout: TIMEOUT_S * time.Second,
 	}
-	pool, err := NewConnPool("8.8.8.8", 5)
+	pool, err := NewConnPool(netip.MustParseAddr("8.8.8.8"), 5)
 	if err != nil {
 		t.Log(err)
 		t.FailNow()

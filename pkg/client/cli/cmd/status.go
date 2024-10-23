@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"strings"
 
+	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -20,13 +21,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type StatusInfo struct {
-	RootDaemon     RootDaemonStatus     `json:"root_daemon" yaml:"root_daemon"`
-	UserDaemon     UserDaemonStatus     `json:"user_daemon" yaml:"user_daemon"`
-	TrafficManager TrafficManagerStatus `json:"traffic_manager" yaml:"traffic_manager"`
+	RootDaemon     RootDaemonStatus     `json:"root_daemon"`
+	UserDaemon     UserDaemonStatus     `json:"user_daemon"`
+	TrafficManager TrafficManagerStatus `json:"traffic_manager"`
 }
 
 type MultiConnectStatusInfo struct {
@@ -40,52 +40,52 @@ type SingleConnectStatusInfo struct {
 }
 
 type RootDaemonStatus struct {
-	Running              bool             `json:"running,omitempty" yaml:"running,omitempty"`
-	Name                 string           `json:"name,omitempty" yaml:"name,omitempty"`
-	Version              string           `json:"version,omitempty" yaml:"version,omitempty"`
-	APIVersion           int32            `json:"api_version,omitempty" yaml:"api_version,omitempty"`
-	DNS                  *client.DNSSnake `json:"dns,omitempty" yaml:"dns,omitempty"`
-	*client.RoutingSnake `yaml:",inline"`
+	Running    bool             `json:"running,omitempty"`
+	Name       string           `json:"name,omitempty"`
+	Version    string           `json:"version,omitempty"`
+	APIVersion int32            `json:"api_version,omitempty"`
+	DNS        *client.DNSSnake `json:"dns,omitempty"`
+	*client.RoutingSnake
 }
 
 type UserDaemonStatus struct {
-	Running           bool                     `json:"running,omitempty" yaml:"running,omitempty"`
-	InDocker          bool                     `json:"in_docker,omitempty" yaml:"in_docker,omitempty"`
-	Name              string                   `json:"name,omitempty" yaml:"name,omitempty"`
-	DaemonPort        int                      `json:"daemon_port,omitempty" yaml:"daemon_port,omitempty"`
-	ContainerNetwork  string                   `json:"container_network,omitempty" yaml:"container_network,omitempty"`
-	Hostname          string                   `json:"hostname,omitempty" yaml:"hostname,omitempty"`
-	ExposedPorts      []string                 `json:"exposedPorts,omitempty" yaml:"exposedPorts,omitempty"`
-	Version           string                   `json:"version,omitempty" yaml:"version,omitempty"`
-	Executable        string                   `json:"executable,omitempty" yaml:"executable,omitempty"`
-	InstallID         string                   `json:"install_id,omitempty" yaml:"install_id,omitempty"`
-	Status            string                   `json:"status,omitempty" yaml:"status,omitempty"`
-	Error             string                   `json:"error,omitempty" yaml:"error,omitempty"`
-	KubernetesServer  string                   `json:"kubernetes_server,omitempty" yaml:"kubernetes_server,omitempty"`
-	KubernetesContext string                   `json:"kubernetes_context,omitempty" yaml:"kubernetes_context,omitempty"`
-	Namespace         string                   `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	ManagerNamespace  string                   `json:"manager_namespace,omitempty" yaml:"manager_namespace,omitempty"`
-	MappedNamespaces  []string                 `json:"mapped_namespaces,omitempty" yaml:"mapped_namespaces,omitempty"`
-	Intercepts        []ConnectStatusIntercept `json:"intercepts,omitempty" yaml:"intercepts,omitempty"`
+	Running           bool                     `json:"running,omitempty"`
+	InDocker          bool                     `json:"in_docker,omitempty"`
+	Name              string                   `json:"name,omitempty"`
+	DaemonPort        int                      `json:"daemon_port,omitempty"`
+	ContainerNetwork  string                   `json:"container_network,omitempty"`
+	Hostname          string                   `json:"hostname,omitempty"`
+	ExposedPorts      []string                 `json:"exposedPorts,omitempty"`
+	Version           string                   `json:"version,omitempty"`
+	Executable        string                   `json:"executable,omitempty"`
+	InstallID         string                   `json:"install_id,omitempty"`
+	Status            string                   `json:"status,omitempty"`
+	Error             string                   `json:"error,omitempty"`
+	KubernetesServer  string                   `json:"kubernetes_server,omitempty"`
+	KubernetesContext string                   `json:"kubernetes_context,omitempty"`
+	Namespace         string                   `json:"namespace,omitempty"`
+	ManagerNamespace  string                   `json:"manager_namespace,omitempty"`
+	MappedNamespaces  []string                 `json:"mapped_namespaces,omitempty"`
+	Intercepts        []ConnectStatusIntercept `json:"intercepts,omitempty"`
 	versionName       string
 }
 
 type ContainerizedDaemonStatus struct {
-	*UserDaemonStatus    `yaml:",inline"`
-	DNS                  *client.DNSSnake `json:"dns,omitempty" yaml:"dns,omitempty"`
-	*client.RoutingSnake `yaml:",inline"`
+	*UserDaemonStatus
+	DNS *client.DNSSnake `json:"dns,omitempty"`
+	*client.RoutingSnake
 }
 
 type TrafficManagerStatus struct {
-	Name         string `json:"name,omitempty" yaml:"name,omitempty"`
-	Version      string `json:"version,omitempty" yaml:"version,omitempty"`
-	TrafficAgent string `json:"traffic_agent,omitempty" yaml:"traffic_agent,omitempty"`
+	Name         string `json:"name,omitempty"`
+	Version      string `json:"version,omitempty"`
+	TrafficAgent string `json:"traffic_agent,omitempty"`
 	extendedInfo ioutil.KeyValueProvider
 }
 
 type ConnectStatusIntercept struct {
-	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
-	Client string `json:"client,omitempty" yaml:"client,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Client string `json:"client,omitempty"`
 }
 
 const (
@@ -222,10 +222,6 @@ func (s *StatusInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.toMap())
 }
 
-func (s *StatusInfo) MarshalYAML() (any, error) {
-	return s.toMap(), nil
-}
-
 func (s *StatusInfo) toMap() map[string]any {
 	if s.UserDaemon.InDocker {
 		return map[string]any{
@@ -325,31 +321,10 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		rs.Version = rStatus.Version.Version
 		rs.APIVersion = rStatus.Version.ApiVersion
 		if obc := rStatus.OutboundConfig; obc != nil {
-			rs.DNS = &client.DNSSnake{}
-			dns := obc.Dns
-			if dns.LocalIp != nil {
-				// Local IP is only set when the overriding resolver is used
-				rs.DNS.LocalIP = dns.LocalIp
-			}
-			rs.DNS.Error = dns.Error
-			rs.DNS.RemoteIP = dns.RemoteIp
-			rs.DNS.ExcludeSuffixes = dns.ExcludeSuffixes
-			rs.DNS.IncludeSuffixes = dns.IncludeSuffixes
-			rs.DNS.Excludes = dns.Excludes
-			rs.DNS.Mappings.FromRPC(dns.Mappings)
-			rs.DNS.LookupTimeout = dns.LookupTimeout.AsDuration()
-			rs.RoutingSnake = &client.RoutingSnake{}
-			for _, subnet := range rStatus.Subnets {
-				rs.RoutingSnake.Subnets = append(rs.RoutingSnake.Subnets, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
-			}
-			for _, subnet := range obc.AlsoProxySubnets {
-				rs.RoutingSnake.AlsoProxy = append(rs.RoutingSnake.AlsoProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
-			}
-			for _, subnet := range obc.NeverProxySubnets {
-				rs.RoutingSnake.NeverProxy = append(rs.RoutingSnake.NeverProxy, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
-			}
-			for _, subnet := range obc.AllowConflictingSubnets {
-				rs.RoutingSnake.AllowConflicting = append(rs.RoutingSnake.AllowConflicting, (*iputil.Subnet)(iputil.IPNetFromRPC(subnet)))
+			rootCfg := client.GetDefaultConfig()
+			if err := client.UnmarshalJSON(obc.ClientConfig, rootCfg, true); err == nil {
+				rs.DNS = rootCfg.DNS().ToSnake()
+				rs.RoutingSnake = rootCfg.Routing().ToSnake()
 			}
 		}
 	}
@@ -384,10 +359,6 @@ func (s *SingleConnectStatusInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func (s *SingleConnectStatusInfo) MarshalYAML() (any, error) {
-	return s.toMap()
-}
-
 func (s *SingleConnectStatusInfo) toMap() (map[string]any, error) {
 	m := make(map[string]any)
 	if s.extendedInfo != nil {
@@ -415,10 +386,6 @@ func (s *MultiConnectStatusInfo) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(m)
-}
-
-func (s *MultiConnectStatusInfo) MarshalYAML() (any, error) {
-	return s.toMap()
 }
 
 func (s *MultiConnectStatusInfo) toMap() (map[string]any, error) {
@@ -495,10 +462,10 @@ func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 	if d.Error != "" {
 		dnsKvf.Add("Error", d.Error)
 	}
-	if len(d.LocalIP) > 0 {
+	if d.LocalIP.IsValid() {
 		dnsKvf.Add("Local IP", d.LocalIP.String())
 	}
-	if len(d.RemoteIP) > 0 {
+	if d.RemoteIP.IsValid() {
 		dnsKvf.Add("Remote IP", d.RemoteIP.String())
 	}
 	dnsKvf.Add("Exclude suffixes", fmt.Sprintf("%v", d.ExcludeSuffixes))
@@ -518,7 +485,7 @@ func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 }
 
 func printRouting(kvf *ioutil.KeyValueFormatter, r *client.RoutingSnake) {
-	printSubnets := func(title string, subnets []*iputil.Subnet) {
+	printSubnets := func(title string, subnets []netip.Prefix) {
 		if len(subnets) == 0 {
 			return
 		}
@@ -593,10 +560,6 @@ func (ts *TrafficManagerStatus) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(m)
-}
-
-func (ts *TrafficManagerStatus) MarshalYAML() (any, error) {
-	return ts.toMap()
 }
 
 func (ts *TrafficManagerStatus) toMap() (map[string]any, error) {

@@ -52,16 +52,14 @@ func (rd *InProcSession) Version(context.Context, *empty.Empty, ...grpc.CallOpti
 	}, nil
 }
 
-func (rd *InProcSession) Status(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.DaemonStatus, error) {
-	nc := rd.getNetworkConfig()
+func (rd *InProcSession) Status(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	return &rpc.DaemonStatus{
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
 			Name:       client.DisplayName,
 		},
-		Subnets:        nc.Subnets,
-		OutboundConfig: nc.OutboundInfo,
+		OutboundConfig: rd.getNetworkConfig(ctx),
 	}, nil
 }
 
@@ -70,7 +68,7 @@ func (rd *InProcSession) Quit(context.Context, *empty.Empty, ...grpc.CallOption)
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) Connect(ctx context.Context, _ *rpc.OutboundInfo, opts ...grpc.CallOption) (*rpc.DaemonStatus, error) {
+func (rd *InProcSession) Connect(ctx context.Context, _ *rpc.NetworkConfig, opts ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	return rd.Status(ctx, nil, opts...)
 }
 
@@ -79,8 +77,8 @@ func (rd *InProcSession) Disconnect(context.Context, *empty.Empty, ...grpc.CallO
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) GetNetworkConfig(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.NetworkConfig, error) {
-	return rd.getNetworkConfig(), nil
+func (rd *InProcSession) GetNetworkConfig(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*rpc.NetworkConfig, error) {
+	return rd.getNetworkConfig(ctx), nil
 }
 
 func (rd *InProcSession) SetDNSTopLevelDomains(ctx context.Context, in *rpc.Domains, _ ...grpc.CallOption) (*empty.Empty, error) {
@@ -118,16 +116,16 @@ func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitFo
 // when the user daemon runs in a docker container with NET_ADMIN capabilities.
 func NewInProcSession(
 	ctx context.Context,
-	mi *rpc.OutboundInfo,
+	mi *rpc.NetworkConfig,
 	mc manager.ManagerClient,
 	ver semver.Version,
 	isPodDaemon bool,
-) (*InProcSession, error) {
+) (context.Context, *InProcSession, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	session, err := newSession(ctx, mi, &userdToManagerShortcut{mc}, ver, isPodDaemon)
+	ctx, session, err := newSession(ctx, mi, &userdToManagerShortcut{mc}, ver, isPodDaemon)
 	if err != nil {
 		cancel()
-		return nil, err
+		return ctx, nil, err
 	}
-	return &InProcSession{Session: session, cancel: cancel}, nil
+	return ctx, &InProcSession{Session: session, cancel: cancel}, nil
 }

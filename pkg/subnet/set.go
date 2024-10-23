@@ -1,45 +1,17 @@
 package subnet
 
 import (
-	"bytes"
-	"net"
+	"net/netip"
 	"sort"
-	"strconv"
 	"strings"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
-type setKey struct {
-	iputil.IPKey
-	int
-}
-
-func newSetKey(subnet *net.IPNet) setKey {
-	ones, _ := subnet.Mask.Size()
-	return setKey{iputil.IPKey(subnet.IP), ones}
-}
-
-func (sk setKey) compare(o setKey) int {
-	if cmp := bytes.Compare(sk.IPKey.IP(), o.IPKey.IP()); cmp != 0 {
-		return cmp
-	}
-	return sk.int - o.int
-}
-
-func (sk setKey) toSubnet() *net.IPNet {
-	ip := sk.IP()
-	return &net.IPNet{
-		IP:   ip,
-		Mask: net.CIDRMask(sk.int, len(ip)*8),
-	}
-}
-
 // Set represents a unique unordered set of subnets.
-type Set map[setKey]struct{}
+type Set map[netip.Prefix]struct{}
 
-func NewSet(subnets []*net.IPNet) Set {
+func NewSet(subnets []netip.Prefix) Set {
 	s := make(Set, len(subnets))
 	for _, subnet := range subnets {
 		s.Add(subnet)
@@ -62,7 +34,7 @@ func (s Set) Equals(o Set) bool {
 
 // AppendSortedTo appends the sorted subnets of this set to the given slice and returns
 // the resulting slice.
-func (s Set) AppendSortedTo(subnets []*net.IPNet) []*net.IPNet {
+func (s Set) AppendSortedTo(subnets []netip.Prefix) []netip.Prefix {
 	sz := len(s)
 	if sz == 0 {
 		return subnets
@@ -70,32 +42,26 @@ func (s Set) AppendSortedTo(subnets []*net.IPNet) []*net.IPNet {
 	// Ensure capacity of the slice
 	need := len(subnets) + sz
 	if cap(subnets) < need {
-		ns := make([]*net.IPNet, len(subnets), need)
+		ns := make([]netip.Prefix, len(subnets), need)
 		copy(ns, subnets)
 		subnets = ns
 	}
-
-	for _, key := range s.sortedKeys() {
-		subnets = append(subnets, key.toSubnet())
-	}
-	return subnets
+	return append(subnets, s.sortedKeys()...)
 }
 
 // Add adds a subnet to this set unless it doesn't already exist. Returns true if the subnet was added, false otherwise.
-func (s Set) Add(subnet *net.IPNet) bool {
-	key := newSetKey(subnet)
-	if _, ok := s[key]; ok {
+func (s Set) Add(subnet netip.Prefix) bool {
+	if _, ok := s[subnet]; ok {
 		return false
 	}
-	s[key] = struct{}{}
+	s[subnet] = struct{}{}
 	return true
 }
 
 // Delete deletes a subnet equal to the given subnet. Returns true if the subnet was deleted, false otherwise.
-func (s Set) Delete(subnet *net.IPNet) bool {
-	key := newSetKey(subnet)
-	if _, ok := s[key]; ok {
-		delete(s, key)
+func (s Set) Delete(subnet netip.Prefix) bool {
+	if _, ok := s[subnet]; ok {
+		delete(s, subnet)
 		return true
 	}
 	return false
@@ -116,23 +82,26 @@ func (s Set) String() string {
 		if i > 0 {
 			sb.WriteByte(' ')
 		}
-		sb.WriteString(key.IP().String())
-		sb.WriteByte('/')
-		sb.WriteString(strconv.Itoa(key.int))
+		sb.WriteString(key.String())
 	}
 	sb.WriteByte(']')
 	return sb.String()
 }
 
-func (s Set) sortedKeys() []setKey {
-	ks := make([]setKey, len(s))
+func (s Set) sortedKeys() []netip.Prefix {
+	ks := make([]netip.Prefix, len(s))
 	i := 0
 	for k := range s {
 		ks[i] = k
 		i++
 	}
 	sort.Slice(ks, func(i, j int) bool {
-		return ks[i].compare(ks[j]) < 0
+		ia := ks[i].Addr()
+		ja := ks[j].Addr()
+		if ia == ja {
+			return ks[i].Bits() < ks[j].Bits()
+		}
+		return ia.Less(ja)
 	})
 	return ks
 }

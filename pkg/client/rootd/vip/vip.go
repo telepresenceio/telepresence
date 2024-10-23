@@ -2,91 +2,84 @@ package vip
 
 import (
 	"fmt"
-	"net"
+	"net/netip"
 	"sync/atomic"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
 type Generator interface {
-	Next() (net.IP, error)
-	Subnet() *net.IPNet
+	Next() (netip.Addr, error)
+	Subnet() netip.Prefix
 }
 
 // NewGenerator creates a generator for virtual IPs with in the given subnet.
-func NewGenerator(sn *net.IPNet) Generator {
-	lo := sn.IP.Mask(sn.Mask)
-	hi := subnet.MaxIP(sn)
-	if len(lo) == 4 {
+func NewGenerator(sn netip.Prefix) Generator {
+	lo := sn.Masked().Addr()
+	if lo.Is4() {
 		return &ip4Generator{
-			subnet:        *sn,
+			subnet:        sn,
 			nextVirtualIP: intFromIPV4(lo),
-			maxVirtualIP:  intFromIPV4(hi) + 1,
 		}
 	} else {
 		fixed, lo := intsFromIPV6(lo)
-		_, maxLo := intsFromIPV6(hi)
 		return &vip6Provider{
-			subnet:  *sn,
+			subnet:  sn,
 			fixedHi: fixed,
 			nextLo:  lo,
-			maxLo:   maxLo,
 		}
 	}
 }
 
 type ip4Generator struct {
-	subnet        net.IPNet
-	maxVirtualIP  uint32 // Immutable
+	subnet        netip.Prefix
 	nextVirtualIP uint32
 }
 
-func (v *ip4Generator) Next() (net.IP, error) {
-	nxt := atomic.AddUint32(&v.nextVirtualIP, 1)
-	if nxt >= v.maxVirtualIP {
-		return nil, fmt.Errorf("virtual subnet CIDR %s is exhausted", v.Subnet())
+func (v *ip4Generator) Next() (netip.Addr, error) {
+	nxt := ipV4FromInt(atomic.AddUint32(&v.nextVirtualIP, 1))
+	if !v.subnet.Contains(nxt) {
+		return netip.Addr{}, fmt.Errorf("virtual subnet CIDR %s is exhausted", v.Subnet())
 	}
-	return ipV4FromInt(nxt), nil
+	return nxt, nil
 }
 
-func (v *ip4Generator) Subnet() *net.IPNet {
-	return &v.subnet
+func (v *ip4Generator) Subnet() netip.Prefix {
+	return v.subnet
 }
 
-func ipV4FromInt(v uint32) net.IP {
-	return net.IP{
+func ipV4FromInt(v uint32) netip.Addr {
+	return netip.AddrFrom4([4]byte{
 		byte(v & 0xff000000 >> 24),
 		byte(v & 0x00ff0000 >> 16),
 		byte(v & 0x0000ff00 >> 8),
 		byte(v & 0x000000ff),
-	}
+	})
 }
 
-func intFromIPV4(v net.IP) uint32 {
+func intFromIPV4(a netip.Addr) uint32 {
+	v := a.As4()
 	return uint32(v[0])<<24 | uint32(v[1])<<16 | uint32(v[2])<<8 | uint32(v[3])
 }
 
 type vip6Provider struct {
-	subnet  net.IPNet
+	subnet  netip.Prefix
 	fixedHi uint64
-	maxLo   uint64 // Immutable
 	nextLo  uint64
 }
 
-func (v *vip6Provider) Next() (net.IP, error) {
-	nxt := atomic.AddUint64(&v.nextLo, 1)
-	if nxt >= v.maxLo {
-		return nil, fmt.Errorf("virtual subnet CIDR %s is exhausted", v.Subnet())
+func (v *vip6Provider) Next() (netip.Addr, error) {
+	nxt := ipV6FromInts(v.fixedHi, atomic.AddUint64(&v.nextLo, 1))
+	if !v.subnet.Contains(nxt) {
+		return netip.Addr{}, fmt.Errorf("virtual subnet CIDR %s is exhausted", v.Subnet())
 	}
-	return ipV6FromInts(v.fixedHi, nxt), nil
+	return nxt, nil
 }
 
-func (v *vip6Provider) Subnet() *net.IPNet {
-	return &v.subnet
+func (v *vip6Provider) Subnet() netip.Prefix {
+	return v.subnet
 }
 
-func ipV6FromInts(hi, lo uint64) net.IP {
-	return net.IP{
+func ipV6FromInts(hi, lo uint64) netip.Addr {
+	return netip.AddrFrom16([16]byte{
 		byte(hi & 0xff00000000000000 >> 56),
 		byte(hi & 0x00ff000000000000 >> 48),
 		byte(hi & 0x0000ff0000000000 >> 40),
@@ -103,10 +96,11 @@ func ipV6FromInts(hi, lo uint64) net.IP {
 		byte(lo & 0x0000000000ff0000 >> 16),
 		byte(lo & 0x000000000000ff00 >> 8),
 		byte(lo & 0x00000000000000ff),
-	}
+	})
 }
 
-func intsFromIPV6(v net.IP) (uint64, uint64) {
+func intsFromIPV6(a netip.Addr) (uint64, uint64) {
+	v := a.As16()
 	return uint64(v[0])<<56 | uint64(v[1])<<48 | uint64(v[2])<<40 | uint64(v[3])<<32 | uint64(v[4])<<24 | uint64(v[5])<<16 | uint64(v[6])<<8 | uint64(v[7]),
 		uint64(v[8])<<56 | uint64(v[9])<<48 | uint64(v[10])<<40 | uint64(v[11])<<32 | uint64(v[12])<<24 | uint64(v[13])<<16 | uint64(v[14])<<8 | uint64(v[15])
 }

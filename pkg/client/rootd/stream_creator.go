@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -22,8 +22,9 @@ func (s *Session) isForDNS(ip net.IP, port uint16) bool {
 // checkRecursion checks that the given IP is not contained in any of the subnets
 // that the VIF is configured with. When that's the case, the VIF is somehow receiving
 // requests that originate from the cluster and dispatching it leads to infinite recursion.
-func checkRecursion(p int, ip net.IP, sn *net.IPNet) (err error) {
-	if sn.Contains(ip) && !ip.Equal(sn.IP.Mask(sn.Mask)) {
+func checkRecursion(p int, ip net.IP, sn netip.Prefix) (err error) {
+	a, _ := netip.AddrFromSlice(ip)
+	if sn.Contains(a) && a != sn.Masked().Addr() {
 		err = fmt.Errorf("refusing recursive %s %s dispatch from pod subnet %s", ipproto.String(p), ip, sn)
 	}
 	return err
@@ -58,10 +59,13 @@ func (s *Session) streamCreator() tunnel.StreamCreator {
 			}
 			// Replace the virtual IP with the original destination IP. This will ensure that the agent
 			// dials the original destination when the tunnel is established.
-			id = tunnel.NewConnID(id.Protocol(), id.Source(), a.destinationIP, id.SourcePort(), id.DestinationPort())
+			id = tunnel.NewConnID(id.Protocol(), id.Source(), a.destinationIP.AsSlice(), id.SourcePort(), id.DestinationPort())
 			dlog.Debugf(c, "Opening proxy-via %s tunnel for id %s", a.workload, id)
 		} else {
-			if tp = s.getAgentClient(id.Destination()); tp != nil {
+			if a, ok := netip.AddrFromSlice(id.Destination()); ok {
+				tp = s.getAgentClient(a)
+			}
+			if tp != nil {
 				dlog.Debugf(c, "Opening traffic-agent tunnel for id %s", id)
 			} else {
 				tp = tunnel.ManagerProxyProvider(s.managerClient)
@@ -80,12 +84,13 @@ func (s *Session) streamCreator() tunnel.StreamCreator {
 
 func (s *Session) getAgentVIP(id tunnel.ConnID) (a agentVIP, ok bool) {
 	if s.virtualIPs != nil {
-		a, ok = s.virtualIPs.Load(iputil.IPKey(id.Destination()))
+		key, _ := netip.AddrFromSlice(id.Destination())
+		a, ok = s.virtualIPs.Load(key)
 	}
 	return
 }
 
-func (s *Session) getAgentClient(ip net.IP) (pvd tunnel.Provider) {
+func (s *Session) getAgentClient(ip netip.Addr) (pvd tunnel.Provider) {
 	if s.agentClients != nil {
 		pvd = s.agentClients.GetClient(ip)
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strings"
@@ -150,12 +151,11 @@ func NewInfo(ctx context.Context) Info {
 	if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, metav1.CreateOptions{}); err != nil {
 		svcCIDRrx := regexp.MustCompile(`range of valid IPs is (.*)$`)
 		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
-			var cidr *net.IPNet
-			if _, cidr, err = net.ParseCIDR(match[1]); err != nil {
+			if cidr, err := netip.ParsePrefix(match[1]); err != nil {
 				dlog.Errorf(ctx, "unable to parse service CIDR %q", match[1])
 			} else {
 				dlog.Infof(ctx, "Extracting service subnet %v from create service error message", cidr)
-				oi.ServiceSubnet = iputil.IPNetToRPC(cidr)
+				oi.ServiceSubnet = iputil.PrefixToRPC(cidr)
 			}
 		} else {
 			dlog.Errorf(ctx, "unable to extract service subnet from error message %q", err.Error())
@@ -181,7 +181,7 @@ func NewInfo(ctx context.Context) Info {
 	podCIDRStrategy := env.PodCIDRStrategy
 	dlog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
 
-	oi.ManagerPodIp = env.PodIP
+	oi.ManagerPodIp = env.PodIP.AsSlice()
 	oi.ManagerPodPort = int32(env.ServerPort)
 	oi.InjectorSvcHost = fmt.Sprintf("%s.%s", env.AgentInjectorName, env.ManagerNamespace)
 
@@ -198,14 +198,14 @@ func NewInfo(ctx context.Context) Info {
 		AllowConflictingSubnets: make([]*rpc.IPNet, len(allowConflicting)),
 	}
 	for i, sn := range alsoProxy {
-		oi.Routing.AlsoProxySubnets[i] = iputil.IPNetToRPC(sn)
+		oi.Routing.AlsoProxySubnets[i] = iputil.PrefixToRPC(sn)
 	}
 	for i, sn := range neverProxy {
-		oi.Routing.NeverProxySubnets[i] = iputil.IPNetToRPC(sn)
+		oi.Routing.NeverProxySubnets[i] = iputil.PrefixToRPC(sn)
 	}
 
 	for i, sn := range allowConflicting {
-		oi.Routing.AllowConflictingSubnets[i] = iputil.IPNetToRPC(sn)
+		oi.Routing.AllowConflictingSubnets[i] = iputil.PrefixToRPC(sn)
 	}
 
 	clusterDomain := getClusterDomain(ctx, oi.InjectorSvcIp, env)
@@ -213,7 +213,7 @@ func NewInfo(ctx context.Context) Info {
 	oi.Dns = &rpc.DNS{
 		IncludeSuffixes: env.ClientDnsIncludeSuffixes,
 		ExcludeSuffixes: env.ClientDnsExcludeSuffixes,
-		KubeIp:          env.PodIP,
+		KubeIp:          env.PodIP.AsSlice(),
 		ClusterDomain:   clusterDomain,
 	}
 
@@ -375,7 +375,7 @@ func (oi *info) watchPodSubnets(ctx context.Context, namespaces []string) {
 func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 	subnets := managerutil.GetEnv(ctx).PodCIDRs
 	if len(subnets) > 0 {
-		oi.PodSubnets = subnetsToRPC(subnets)
+		oi.PodSubnets = iputil.PrefixesToRPC(subnets)
 		oi.ciSubs.notify(ctx, oi.clusterInfo())
 		dlog.Infof(ctx, "Using subnets from POD_CIDRS environment variable")
 		return true
@@ -451,19 +451,7 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 
 func (oi *info) watchSubnets(ctx context.Context, retriever subnetRetriever) {
 	retriever.changeNotifier(ctx, func(subnets subnet.Set) {
-		oi.PodSubnets = subnetSetToRPC(subnets)
+		oi.PodSubnets = iputil.PrefixesToRPC(subnets.AppendSortedTo(nil))
 		oi.ciSubs.notify(ctx, oi.clusterInfo())
 	})
-}
-
-func subnetSetToRPC(cidrMap subnet.Set) []*rpc.IPNet {
-	return subnetsToRPC(cidrMap.AppendSortedTo(nil))
-}
-
-func subnetsToRPC(subnets []*net.IPNet) []*rpc.IPNet {
-	rpcSubnets := make([]*rpc.IPNet, len(subnets))
-	for i, s := range subnets {
-		rpcSubnets[i] = iputil.IPNetToRPC(s)
-	}
-	return rpcSubnets
 }

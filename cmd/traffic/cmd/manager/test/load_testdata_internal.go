@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"github.com/go-json-experiment/json"
+	"sigs.k8s.io/yaml"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
@@ -36,9 +37,13 @@ func GetTestMechanisms(t *testing.T) map[string]*rpc.AgentInfo_Mechanism {
 		t.Fatal(err)
 	}
 
-	res := map[string]*rpc.AgentInfo_Mechanism{}
+	res := make(map[string]*rpc.AgentInfo_Mechanism)
 
-	if err := yaml.Unmarshal(data, res); err != nil {
+	data, err = yaml.YAMLToJSON(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &res); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,9 +60,13 @@ func GetTestAgents(t *testing.T) map[string]*rpc.AgentInfo {
 		t.Fatal(err)
 	}
 
-	res := map[string]*rpc.AgentInfo{}
+	res := make(map[string]*rpc.AgentInfo)
 
-	if err := yaml.Unmarshal(data, res); err != nil {
+	data, err = yaml.YAMLToJSON(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &res); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,9 +83,13 @@ func GetTestClients(t *testing.T) map[string]*rpc.ClientInfo {
 		t.Fatal(err)
 	}
 
-	res := map[string]*rpc.ClientInfo{}
+	res := make(map[string]*rpc.ClientInfo)
 
-	if err := yaml.Unmarshal(data, res); err != nil {
+	data, err = yaml.YAMLToJSON(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &res); err != nil {
 		t.Fatal(err)
 	}
 

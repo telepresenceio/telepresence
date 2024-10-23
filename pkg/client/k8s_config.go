@@ -3,13 +3,12 @@ package client
 import (
 	"context"
 	"encoding/csv"
-	"encoding/json"
-	"fmt"
+	"net/netip"
 	"os"
 	"strings"
 
+	"github.com/go-json-experiment/json"
 	"github.com/spf13/pflag"
-	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -61,17 +59,18 @@ func (d DNSMappings) ToRPC() []*rpc.DNSMapping {
 	return rpcMappings
 }
 
-// The DnsConfig is part of the KubeconfigExtension struct.
-type DnsConfig struct {
+// The dnsConfig is part of the kubeconfigExtension struct.
+// Deprecated: Use Config as the Kubeconfig extension.
+type dnsConfig struct {
 	// LocalIP is the address of the local DNS server. This entry is only
 	// used on Linux system that are not configured to use systemd-resolved and
 	// can be overridden by using the option --dns on the command line and defaults
 	// to the first line of /etc/resolv.conf
-	LocalIP iputil.IPKey `json:"local-ip,omitempty"`
+	LocalIP netip.Addr `json:"local-ip,omitempty"`
 
 	// RemoteIP is the address of the cluster's DNS service. It will default
 	// to the IP of the kube-dns.kube-system or the dns-default.openshift-dns service.
-	RemoteIP iputil.IPKey `json:"remote-ip,omitempty"`
+	RemoteIP netip.Addr `json:"remote-ip,omitempty"`
 
 	// ExcludeSuffixes are suffixes for which the DNS resolver will always return
 	// NXDOMAIN (or fallback in case of the overriding resolver).
@@ -92,26 +91,69 @@ type DnsConfig struct {
 	LookupTimeout v1.Duration `json:"lookup-timeout,omitempty"`
 }
 
-// The ManagerConfig is part of the KubeconfigExtension struct. It configures discovery of the traffic manager.
-type ManagerConfig struct {
+// The managerConfig is part of the kubeconfigExtension struct. It configures discovery of the traffic manager.
+// Deprecated: Use Config as the Kubeconfig extension.
+type managerConfig struct {
 	// Namespace is the name of the namespace where the traffic manager is to be found
 	Namespace string `json:"namespace,omitempty"`
 }
 
-// KubeconfigExtension is an extension read from the selected kubeconfig Cluster.
-type KubeconfigExtension struct {
-	DNS                     *DnsConfig       `json:"dns,omitempty"`
-	AlsoProxy               []*iputil.Subnet `json:"also-proxy,omitempty"`
-	NeverProxy              []*iputil.Subnet `json:"never-proxy,omitempty"`
-	AllowConflictingSubnets []*iputil.Subnet `json:"allow-conflicting-subnets,omitempty"`
-	Manager                 *ManagerConfig   `json:"manager,omitempty"`
+// kubeconfigExtension is an extension read from the selected kubeconfig Cluster.
+// Deprecated: Use Config as the Kubeconfig extension.
+type kubeconfigExtension struct {
+	DNS                     *dnsConfig     `json:"dns,omitempty"`
+	AlsoProxy               []netip.Prefix `json:"also-proxy,omitempty"`
+	NeverProxy              []netip.Prefix `json:"never-proxy,omitempty"`
+	AllowConflictingSubnets []netip.Prefix `json:"allow-conflicting-subnets,omitempty"`
+	Manager                 *managerConfig `json:"manager,omitempty"`
+}
+
+func (ke *kubeconfigExtension) asConfig() Config {
+	cfg := GetDefaultConfig()
+	if keDns := ke.DNS; keDns != nil {
+		dns := cfg.DNS()
+		if len(keDns.Excludes) > 0 {
+			dns.Excludes = keDns.Excludes
+		}
+		if len(keDns.ExcludeSuffixes) > 0 {
+			dns.ExcludeSuffixes = keDns.ExcludeSuffixes
+		}
+		if len(keDns.IncludeSuffixes) > 0 {
+			dns.IncludeSuffixes = keDns.IncludeSuffixes
+		}
+		if len(keDns.Mappings) > 0 {
+			dns.Mappings = keDns.Mappings
+		}
+		if keDns.LocalIP.IsValid() {
+			dns.LocalIP = keDns.LocalIP
+		}
+		if keDns.RemoteIP.IsValid() {
+			dns.RemoteIP = keDns.RemoteIP
+		}
+		if keDns.LookupTimeout.Duration != 0 {
+			dns.LookupTimeout = keDns.LookupTimeout.Duration
+		}
+	}
+	rt := cfg.Routing()
+	if len(ke.NeverProxy) > 0 {
+		rt.NeverProxy = ke.NeverProxy
+	}
+	if len(ke.AlsoProxy) > 0 {
+		rt.AlsoProxy = ke.AlsoProxy
+	}
+	if len(ke.AllowConflictingSubnets) > 0 {
+		rt.AllowConflicting = ke.AllowConflictingSubnets
+	}
+	if m := ke.Manager; m != nil && m.Namespace != "" {
+		cfg.Cluster().DefaultManagerNamespace = m.Namespace
+	}
+	return cfg
 }
 
 // Kubeconfig implements genericclioptions.RESTClientGetter, but is using the RestConfig
 // instead of the ConfigFlags (which also implements that interface) since the latter
 // will assume that the kubeconfig is loaded from disk.
 type Kubeconfig struct {
-	KubeconfigExtension
 	Namespace        string // default cluster namespace.
 	Context          string
 	Server           string
@@ -208,17 +250,18 @@ func CurrentContext(ctx context.Context, flagMap map[string]string, configBytes 
 	return cc, ns, config.Contexts[cc], nil
 }
 
-func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (*Kubeconfig, error) {
+func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (context.Context, *Kubeconfig, error) {
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
-		return nil, err
+		return c, nil, err
 	}
 	return newKubeconfig(c, flagMap, flagMap, managerNamespaceOverride, configFlags, nil)
 }
 
-func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
+func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (context.Context, *Kubeconfig, error) {
 	if cr.IsPodDaemon {
-		return NewInClusterConfig(c, cr.KubeFlags)
+		ke, err := NewInClusterConfig(c, cr.KubeFlags)
+		return c, ke, err
 	}
 	flagMap := cr.KubeFlags
 	if proc.RunningInContainer() {
@@ -240,7 +283,7 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 	}
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
-		return nil, err
+		return c, nil, err
 	}
 	return newKubeconfig(c, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags, cr.KubeconfigData)
 }
@@ -375,7 +418,7 @@ func (g *configGetter) GetDefaultFilename() string {
 		if err == nil {
 			g.destFile = destFile.Name()
 			_ = os.Remove(destFile.Name())
-			destFile.Close()
+			_ = destFile.Close()
 		}
 	}
 	return g.destFile
@@ -425,23 +468,23 @@ func newKubeconfig(
 	managerNamespaceOverride string,
 	configFlags *genericclioptions.ConfigFlags,
 	configData []byte,
-) (*Kubeconfig, error) {
+) (context.Context, *Kubeconfig, error) {
 	clientConfig, err := NewClientConfig(ctx, configFlags, configData)
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
 
 	config, err := clientConfig.RawConfig()
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
 	if len(config.Contexts) == 0 {
-		return nil, errcat.Config.New("kubeconfig has no context definition")
+		return ctx, nil, errcat.Config.New("kubeconfig has no context definition")
 	}
 
 	namespace, _, err := clientConfig.Namespace()
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
 
 	ctxName := effectiveFlags["context"]
@@ -451,17 +494,17 @@ func newKubeconfig(
 
 	kubeCtx, ok := config.Contexts[ctxName]
 	if !ok {
-		return nil, errcat.Config.Newf("context %q does not exist in the kubeconfig", ctxName)
+		return ctx, nil, errcat.Config.Newf("context %q does not exist in the kubeconfig", ctxName)
 	}
 
 	cluster, ok := config.Clusters[kubeCtx.Cluster]
 	if !ok {
-		return nil, errcat.Config.Newf("the cluster %q declared in context %q does exists in the kubeconfig", kubeCtx.Cluster, ctxName)
+		return ctx, nil, errcat.Config.Newf("the cluster %q declared in context %q does exists in the kubeconfig", kubeCtx.Cluster, ctxName)
 	}
 
 	restConfig, err := clientConfig.ClientConfig()
 	if err != nil {
-		return nil, err
+		return ctx, nil, err
 	}
 
 	dlog.Debugf(ctx, "using namespace %q", namespace)
@@ -476,27 +519,36 @@ func newKubeconfig(
 		RestConfig:       restConfig,
 	}
 
+	cfg := GetConfig(ctx)
+	managerNamespace := managerNamespaceOverride
+	if managerNamespace == "" {
+		managerNamespace = GetEnv(ctx).ManagerNamespace
+	}
+
+	var keCfg Config
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
-		if err = json.Unmarshal(ext.Raw, &k.KubeconfigExtension); err != nil {
-			return nil, errcat.Config.Newf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
+		if kc, err := UnmarshalJSONConfig(ext.Raw, true); err != nil {
+			// Try with legacy kubeconfigExtension
+			ke := kubeconfigExtension{}
+			if keErr := json.Unmarshal(ext.Raw, &ke); keErr != nil {
+				return ctx, nil, errcat.Config.Newf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
+			}
+			keCfg = ke.asConfig()
+		} else {
+			keCfg = kc
 		}
+		if managerNamespace != "" {
+			keCfg.Cluster().DefaultManagerNamespace = managerNamespace
+		}
+	} else if managerNamespace != "" && managerNamespace != cfg.Cluster().DefaultManagerNamespace {
+		// No kubeconfig exists but we still need a config when the managerNamespace is set.
+		keCfg = GetDefaultConfig()
+		keCfg.Cluster().DefaultManagerNamespace = managerNamespace
 	}
-
-	if k.KubeconfigExtension.Manager == nil {
-		k.KubeconfigExtension.Manager = &ManagerConfig{}
+	if keCfg != nil {
+		ctx = WithConfig(ctx, cfg.Merge(keCfg))
 	}
-
-	if managerNamespaceOverride != "" {
-		k.KubeconfigExtension.Manager.Namespace = managerNamespaceOverride
-	}
-
-	if k.KubeconfigExtension.Manager.Namespace == "" {
-		k.KubeconfigExtension.Manager.Namespace = GetEnv(ctx).ManagerNamespace
-	}
-	if k.KubeconfigExtension.Manager.Namespace == "" {
-		k.KubeconfigExtension.Manager.Namespace = GetConfig(ctx).Cluster().DefaultManagerNamespace
-	}
-	return k, nil
+	return ctx, k, nil
 }
 
 // NewInClusterConfig represents an inClusterConfig.
@@ -521,11 +573,6 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		return nil, err
 	}
 
-	managerNamespace := GetEnv(c).ManagerNamespace
-	if managerNamespace == "" {
-		managerNamespace = GetConfig(c).Cluster().DefaultManagerNamespace
-	}
-
 	return &Kubeconfig{
 		Namespace:        namespace,
 		Server:           restConfig.Host,
@@ -533,12 +580,6 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 		OriginalFlagMap:  flagMap,
 		RestConfig:       restConfig,
 		ClientConfig:     configLoader,
-		// it may be empty, but we should avoid nil deref
-		KubeconfigExtension: KubeconfigExtension{
-			Manager: &ManagerConfig{
-				Namespace: managerNamespace,
-			},
-		},
 	}, nil
 }
 
@@ -555,71 +596,6 @@ func (kf *Kubeconfig) GetContext() string {
 	return kf.Context
 }
 
-func (kf *Kubeconfig) GetManagerNamespace() string {
-	return kf.KubeconfigExtension.Manager.Namespace
-}
-
 func (kf *Kubeconfig) GetRestConfig() *rest.Config {
 	return kf.RestConfig
-}
-
-func (kf *Kubeconfig) AddRemoteKubeConfigExtension(ctx context.Context, cfgYaml []byte) error {
-	remote := struct {
-		DNS     *DNS     `yaml:"dns,omitempty"`
-		Routing *Routing `yaml:"routing,omitempty"`
-	}{}
-	if err := yaml.Unmarshal(cfgYaml, &remote); err != nil {
-		return fmt.Errorf("unable to parse remote kubeconfig: %w", err)
-	}
-	if kf.DNS == nil {
-		kf.DNS = &DnsConfig{}
-	}
-	if dns := remote.DNS; dns != nil {
-		if kf.DNS.LocalIP == "" {
-			kf.DNS.LocalIP = iputil.IPKey(dns.LocalIP)
-			dlog.Debugf(ctx, "Applying remote dns local IP: %s", dns.LocalIP)
-		}
-		if kf.DNS.RemoteIP == "" {
-			kf.DNS.RemoteIP = iputil.IPKey(dns.RemoteIP)
-			dlog.Debugf(ctx, "Applying remote dns remote IP: %s", dns.RemoteIP)
-		}
-		if len(dns.ExcludeSuffixes) > 0 {
-			dlog.Debugf(ctx, "Applying remote excludeSuffixes: %v", dns.ExcludeSuffixes)
-			kf.DNS.ExcludeSuffixes = append(kf.DNS.ExcludeSuffixes, dns.ExcludeSuffixes...)
-		}
-		if len(dns.IncludeSuffixes) > 0 {
-			dlog.Debugf(ctx, "Applying remote includeSuffixes: %v", dns.IncludeSuffixes)
-			kf.DNS.IncludeSuffixes = append(kf.DNS.IncludeSuffixes, dns.IncludeSuffixes...)
-		}
-		if len(dns.Excludes) > 0 {
-			dlog.Debugf(ctx, "Applying remote excludes: %v", dns.Excludes)
-			kf.DNS.Excludes = append(kf.DNS.Excludes, dns.Excludes...)
-		}
-		if len(dns.Mappings) > 0 {
-			for _, m := range dns.Mappings {
-				dlog.Debugf(ctx, "Applying remote mapping: Name: %s, AliasFor %s", m.Name, m.AliasFor)
-			}
-			kf.DNS.Mappings = append(kf.DNS.Mappings, dns.Mappings...)
-		}
-
-		if kf.DNS.LookupTimeout.Duration == 0 {
-			dlog.Debugf(ctx, "Applying remote lookupTimeout: %s", dns.LookupTimeout)
-			kf.DNS.LookupTimeout.Duration = dns.LookupTimeout
-		}
-	}
-	if routing := remote.Routing; routing != nil {
-		if len(routing.AlsoProxy) > 0 {
-			dlog.Debugf(ctx, "Applying remote alsoProxy: %v", routing.AlsoProxy)
-			kf.AlsoProxy = append(kf.AlsoProxy, routing.AlsoProxy...)
-		}
-		if len(routing.NeverProxy) > 0 {
-			dlog.Debugf(ctx, "Applying remote neverProxy: %v", routing.NeverProxy)
-			kf.NeverProxy = append(kf.NeverProxy, routing.NeverProxy...)
-		}
-		if len(routing.AllowConflicting) > 0 {
-			dlog.Debugf(ctx, "Applying remote allowConflicting: %v", routing.AllowConflicting)
-			kf.AllowConflictingSubnets = append(kf.AllowConflictingSubnets, routing.AllowConflicting...)
-		}
-	}
-	return nil
 }

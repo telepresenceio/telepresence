@@ -21,7 +21,7 @@ service Daemon {
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
   // Connect creates a new session that provides outbound connectivity to the cluster
-  rpc Connect(OutboundInfo) returns (DaemonStatus);
+  rpc Connect(NetworkConfig) returns (DaemonStatus);
 
   // Disconnect disconnects the current session.
   rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -49,8 +49,7 @@ service Daemon {
 }
 
 message DaemonStatus {
-  repeated manager.IPNet subnets = 1;
-  OutboundInfo outbound_config = 4;
+  NetworkConfig outbound_config = 4;
   telepresence.common.VersionInfo version = 5;
   reserved 2, 3;
 }
@@ -95,6 +94,19 @@ message DNSConfig {
   reserved 5;
 }
 
+message Routing {
+  repeated manager.IPNet subnets = 1;
+
+  // also_proxy are user-added subnets.
+  repeated manager.IPNet also_proxy_subnets = 2;
+
+  // never_proxy_subnets are subnets that the daemon should not proxy but resolve
+  // via the underlying network interface.
+  repeated manager.IPNet never_proxy_subnets = 3;
+
+  repeated manager.IPNet allow_conflicting_subnets = 4;
+}
+
 message SubnetViaWorkload {
   // The remote IP that the DNS resolver translates into a Virtual IP to use locally.
   string subnet = 1;
@@ -103,49 +115,30 @@ message SubnetViaWorkload {
   string workload = 2;
 }
 
-// OutboundInfo contains all information that the root daemon needs in order to
+// NetworkConfig contains all information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
-message OutboundInfo {
-  reserved 1;
-
+message NetworkConfig {
   // session makes it possible for the root daemon to identify itself as the
   // same client as the user daemon.
-  manager.SessionInfo session = 2;
-
-  // DNS configuration
-  DNSConfig dns = 3;
+  manager.SessionInfo session = 1;
 
   // Route subnets via given workload using virtual IPs
-  repeated SubnetViaWorkload subnet_via_workloads = 4;
-
-  // also_proxy are user-added subnets.
-  repeated manager.IPNet also_proxy_subnets = 5;
-
-  // never_proxy_subnets are subnets that the daemon should not proxy but resolve
-  // via the underlying network interface.
-  repeated manager.IPNet never_proxy_subnets = 6;
-
-  repeated manager.IPNet allow_conflicting_subnets = 10;
+  repeated SubnetViaWorkload subnet_via_workloads = 2;
 
   // Users home directory
-  string home_dir = 7;
+  string home_dir = 3;
 
   // Connection namespace
-  string namespace = 11;
-
-  // Traffic manager namespace
-  string manager_namespace = 8;
+  string namespace = 4;
 
   // Kubernetes flags
-  map<string, string> kube_flags = 9;
+  map<string, string> kube_flags = 5;
 
   // Kubeconfig YAML, if not to be loaded from file.
-  optional bytes kubeconfig_data = 12;
-}
+  optional bytes kubeconfig_data = 6;
 
-message NetworkConfig {
-  repeated manager.IPNet subnets = 1;
-  OutboundInfo outbound_info = 2;
+  // The completely merged client Config, unless daemon runs embedded
+  optional bytes client_config = 7;
 }
 
 message SetDNSExcludesRequest {

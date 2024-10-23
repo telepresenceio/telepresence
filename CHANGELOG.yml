@@ -37,11 +37,6 @@ items:
     date: TBD
     notes:
       - type: feature
-        title: Make usage data collection configurable using an extension point, and default to no-ops
-        body: >-
-          The OSS code-base will no longer report usage data to the proprietary collector at Ambassador Labs. The actual calls
-          to the collector remain, but will be no-ops unless a proper collector client is installed using an extension point.
-      - type: feature
         title: Intercepts targeting a specific container
         body: ->
           In certain scenarios, the container owning the intercepted port differs
@@ -55,6 +50,25 @@ items:
           client originate from the specified container. Additionally, if the
           `--replace` option is used, it ensures that this container is replaced.
         docs: https://telepresence.io/docs/reference/intercepts/container
+      - type: feature
+        title: Unify client configuration
+        body: >-
+          Previously, client configuration was divided between the config.yml file and a Kubernetes extension. DNS and
+          routing settings were initially found only in the extension. However, the Helm client structure allowed
+          entries from both.
+
+          To simplify this, we've now aligned the config.yml and Kubernetes extension with the Helm client structure.
+          This means DNS and routing settings are now included in both. The Kubernetes extension takes precedence over
+          the config.yml and Helm client object.
+
+          While the old-style Kubernetes extension is still supported for compatibility, it cannot be used with the new
+          style.
+        docs: https://telepresence.io/docs/reference/config
+      - type: feature
+        title: Make usage data collection configurable using an extension point, and default to no-ops
+        body: >-
+          The OSS code-base will no longer report usage data to the proprietary collector at Ambassador Labs. The actual calls
+          to the collector remain, but will be no-ops unless a proper collector client is installed using an extension point.
   - version: 2.20.2
     date: 2024-10-21
     notes:

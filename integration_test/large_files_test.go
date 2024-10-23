@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -13,6 +12,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/go-json-experiment/json"
 
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -69,8 +70,8 @@ func (s *largeFilesSuite) ServiceCount() int {
 }
 
 func (s *largeFilesSuite) SetupSuite() {
-	if s.IsCI() {
-		s.T().Skip("Disabled. Test started failing inexplicably when running with Kubeception and CI")
+	if s.IsCI() || s.LargeFileTestDisabled() {
+		s.T().Skip("Disabled. Test is too demanding for the current setup (requires more CPU or a remote cluster)")
 		return
 	}
 	s.Suite.SetupSuite()

@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 )
 
 // getPodLog obtains the log and optionally the YAML for a given pod and stores it in
@@ -144,7 +145,7 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 	// any errors in the traffic-manager getting the traffic-agent pods, we
 	// want those logs to appear in what we export
 	if request.TrafficManager {
-		ns := s.GetManagerNamespace()
+		ns := k8s.GetManagerNamespace(ctx)
 		podsAPI := coreAPI.Pods(ns)
 		selector := labels.SelectorFromSet(labels.Set{
 			"app":          "traffic-manager",

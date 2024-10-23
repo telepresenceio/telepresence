@@ -64,7 +64,9 @@ func TestKubectlPortForward(t *testing.T) {
 	}
 
 	makePipe := func() (_, _ net.Conn, _ func(), _err error) {
-		ctx, cancel := context.WithCancel(dcontext.WithSoftness(dlog.NewTestContext(t, true)))
+		ctx, tcCancel := context.WithTimeout(dlog.NewTestContext(t, true), 30*time.Second)
+		defer tcCancel()
+		ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
 		grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 		var cliConn, srvConn net.Conn
 		stop := func() {
