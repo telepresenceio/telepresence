@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-json-experiment/json"
 	jsonv1 "github.com/go-json-experiment/json/v1"
@@ -47,20 +48,6 @@ func stringP(s string) *string {
 }
 
 func TestTrafficAgentConfigGenerator(t *testing.T) {
-	env := &managerutil.Env{
-		ServerHost: "tel-example",
-		ServerPort: 8081,
-
-		ManagerNamespace: "default",
-		AgentRegistry:    "ghcr.io/telepresenceio",
-		AgentImageName:   "tel2",
-		AgentImageTag:    "2.14.0",
-		AgentPort:        9900,
-	}
-	ctx := dlog.NewTestContext(t, false)
-	ctx = managerutil.WithEnv(ctx, env)
-	agentmap.GeneratorConfigFunc = env.GeneratorConfig
-
 	podSuffix := "-6699c6cb54-"
 	podName := func(name string) string {
 		return name + podSuffix
@@ -511,7 +498,7 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 					Containers: []core.Container{
 						{
 							Ports: []core.ContainerPort{
-								{Name: "http", ContainerPort: int32(env.AgentPort)},
+								{Name: "http", ContainerPort: 9900},
 							},
 						},
 					},
@@ -772,7 +759,32 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		},
 	}
 
-	runFunc := func(t *testing.T, ctx context.Context, test *testInput) {
+	runFunc := func(t *testing.T, test *testInput, appProtoStrategy k8sapi.AppProtocolStrategy) {
+		env := &managerutil.Env{
+			ServerHost: "tel-example",
+			ServerPort: 8081,
+
+			ManagerNamespace:         "default",
+			AgentRegistry:            "ghcr.io/telepresenceio",
+			AgentImageName:           "tel2",
+			AgentImageTag:            "2.14.0",
+			AgentPort:                9900,
+			AgentAppProtocolStrategy: appProtoStrategy,
+		}
+
+		ctx := dlog.NewTestContext(t, false)
+		ctx = managerutil.WithEnv(ctx, env)
+		agentmap.GeneratorConfigFunc = env.GeneratorConfig
+
+		ctx = k8sapi.WithJoinedClientSetInterface(ctx, clientset, argorolloutsfake.NewSimpleClientset())
+		ctx = informer.WithFactory(ctx, "")
+		ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
+		require.NoError(t, err)
+		cw := NewWatcher("")
+		cw.DisableRollouts()
+		cw.Start(ctx)
+		require.NoError(t, cw.StartWatchers(ctx))
+
 		gc, err := agentmap.GeneratorConfigFunc("ghcr.io/telepresenceio/tel2:2.13.3")
 		require.NoError(t, err)
 		actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
@@ -787,24 +799,13 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		assert.Equal(t, expectedConfig, actualConfig, "configs differ")
 	}
 
-	ctx = k8sapi.WithJoinedClientSetInterface(ctx, clientset, argorolloutsfake.NewSimpleClientset())
-	ctx = informer.WithFactory(ctx, "")
-	ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
-	require.NoError(t, err)
-	cw := NewWatcher("")
-	cw.DisableRollouts()
-	cw.Start(ctx)
-	require.NoError(t, cw.StartWatchers(ctx))
-
 	for _, test := range tests {
 		test := test // pin it
-		agentmap.GeneratorConfigFunc = env.GeneratorConfig
 		t.Run(test.name, func(t *testing.T) {
-			runFunc(t, ctx, &test)
+			runFunc(t, &test, k8sapi.Http2Probe)
 		})
 	}
 
-	env.AgentAppProtocolStrategy = k8sapi.PortName
 	test := testInput{
 		"AppProtocolStrategy named and named grpc port without appProtocol",
 		&podGRPCPort,
@@ -840,22 +841,11 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 		"",
 	}
 	t.Run(test.name, func(t *testing.T) {
-		runFunc(t, ctx, &test)
+		runFunc(t, &test, k8sapi.PortName)
 	})
 }
 
 func TestTrafficAgentInjector(t *testing.T) {
-	env := &managerutil.Env{
-		ServerHost: "tel-example",
-		ServerPort: 8081,
-
-		ManagerNamespace:  "default",
-		AgentRegistry:     "ghcr.io/telepresenceio",
-		AgentImageName:    "tel2",
-		AgentImageTag:     "2.13.3",
-		AgentPort:         9900,
-		AgentInjectPolicy: agentconfig.WhenEnabled,
-	}
 	one := int32(1)
 
 	podSuffix := "-6699c6cb54-"
@@ -1600,7 +1590,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 				Spec: core.PodSpec{
 					InitContainers: []core.Container{{
 						Name:  agentconfig.InitContainerName,
-						Image: env.AgentRegistry + "/" + env.AgentImageName + ":" + env.AgentImageTag,
+						Image: "ghcr.io/telepresenceio/tel2:2.13.3",
 						Args:  []string{"agent-init"},
 						VolumeMounts: []core.VolumeMount{{
 							Name:      agentconfig.ConfigVolumeName,
@@ -1830,6 +1820,17 @@ func TestTrafficAgentInjector(t *testing.T) {
 		test := test // pin it
 		t.Run(test.name, func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
+			env := &managerutil.Env{
+				ServerHost: "tel-example",
+				ServerPort: 8081,
+
+				ManagerNamespace:  "default",
+				AgentRegistry:     "ghcr.io/telepresenceio",
+				AgentImageName:    "tel2",
+				AgentImageTag:     "2.13.3",
+				AgentPort:         9900,
+				AgentInjectPolicy: agentconfig.WhenEnabled,
+			}
 			ctx = managerutil.WithEnv(ctx, env)
 			agentmap.GeneratorConfigFunc = env.GeneratorConfig
 			ctx = k8sapi.WithJoinedClientSetInterface(ctx, createClientSet(), argorolloutsfake.NewSimpleClientset())
@@ -1854,6 +1855,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 			cw.DisableRollouts()
 			cw.Start(ctx)
 			require.NoError(t, cw.StartWatchers(ctx))
+			time.Sleep(time.Second)
 
 			var actualPatch PatchOps
 			var actualErr error
