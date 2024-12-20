@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
+	"os/exec" //nolint:depguard //  We want no logging and no soft-context signal handling
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
