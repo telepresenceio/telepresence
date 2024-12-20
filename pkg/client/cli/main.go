@@ -44,7 +44,7 @@ func InitContext(ctx context.Context) context.Context {
 		ctx = userd.WithNewSessionFunc(ctx, trafficmgr.NewSession)
 	case rootd.ProcessName:
 		client.DisplayName = "OSS Root Daemon"
-		proc.SetRunningInContainer(false) // We never start the root daemon as a container.
+		proc.SetRunningInContainer(false) // We never start the root daemon as a container. 
 		ctx = rootd.WithNewServiceFunc(ctx, rootd.NewService)
 		ctx = rootd.WithNewSessionFunc(ctx, rootd.NewSession)
 	default:
