@@ -70,6 +70,13 @@ message AgentInfo {
   reserved 6;
 }
 
+// PortMapping describes a mapping from a port number in the intercepted container to
+// a port on the client for --from-pod and or vice versa when using --to-pod.
+message PortMapping {
+  int32 from = 1;
+  int32 to = 2;
+}
+
 // InterceptSpec contains static information about an intercept. It is shared by
 // all running agent instances.
 message InterceptSpec {
@@ -102,10 +109,23 @@ message InterceptSpec {
   // to control what these values are.
   repeated string mechanism_args = 9;
 
+  // The host that the target_ports are routed to.
   string target_host = 6;
 
-  // The port on the workstation that the intercept is redirected to
-  int32 target_port = 7;
+  // Ports that will be forwarded from the intercepting pod's IP address
+  // to the target_host, using the following syntax:
+  //
+  // PORT = port-decl ["/" protocol ]
+  // port-decl = port-spec [ ":" uint16 ]
+  // protocol = "TCP" | "UDP"
+  // port-spec = name | uint16
+  //
+  // If two numbers are used, they signify source:destination.
+  repeated string pod_ports = 5;
+
+  // Ports that will be forwarded from the intercepting client's localhost
+  // to the intercepted pod. Uses the same syntax as target_ports.
+  repeated string local_ports = 18;
 
   // Identifier for the service or container port: either the name or port number
   // optionally followed by a "/TCP" or "/UDP"
@@ -131,13 +151,11 @@ message InterceptSpec {
   // is owned by some kind of routing mechanism (such as nginx).
   string container_name = 24;
 
-  // The resolved container port
+  // The resolved container port that is intercepted.
   int32 container_port = 23;
 
-  // Extra ports that will be forwarded from the intercepting client's localhost
-  // to the intercepted pod. Each entry is a string containing a port number followed
-  // by an optional "/TCP" or "/UDP".
-  repeated string local_ports = 18;
+  // The port on the workstation that the intercepted container_port is redirected to.
+  int32 target_port = 7;
 
   // The delay imposed by a call roundtrip between the traffic-agent and
   // the client on the workstation. This delay is added to the dial_timeout
@@ -325,6 +343,7 @@ message PreparedIntercept {
   string protocol = 10; // TCP or UDP
   string container_name = 11;
   int32 container_port = 12;
+  repeated string pod_ports = 13;
 }
 
 message UpdateInterceptRequest {

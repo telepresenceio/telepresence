@@ -28,6 +28,11 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: One single invocation of the Telepresence intercept command can now intercept multiple ports.
+        body: >-
+          It is now possible to intercept multiple ports with one single invocation of `telepresence intercept` by just
+          repeating the `--port` flag.
+      - type: feature
         title: Unify how Traffic Manager selects namespaces
         body: |-
           The definition of what namespaces that a Traffic Manager would manage use was scattered into several Helm

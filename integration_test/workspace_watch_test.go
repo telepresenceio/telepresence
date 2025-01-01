@@ -40,7 +40,6 @@ func (s *notConnectedSuite) Test_WorkspaceListener() {
 				return
 			}
 			spec := ir.InterceptSpec
-			spec.ServiceName = pi.ServiceName
 			spec.ServicePort = pi.ServicePort
 			spec.ServicePortName = pi.ServicePortName
 			spec.ServiceUid = pi.ServiceUid

@@ -458,9 +458,8 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	var sessionDone <-chan struct{}
 	var filter func(id string, info *rpc.InterceptInfo) bool
 	if sessionID == "" {
-		// No sessonID; watch everything
 		filter = func(id string, info *rpc.InterceptInfo) bool {
-			return true
+			return info.Disposition != rpc.InterceptDispositionType_REMOVED && !state.IsChildIntercept(info.Spec)
 		}
 	} else {
 		var err error
@@ -469,7 +468,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		}
 
 		if agent := s.state.GetAgent(sessionID); agent != nil {
-			// sessionID refers to an agent session
+			// sessionID refers to an agent session. Include everything for the agent, including pod-port children.
 			filter = func(id string, info *rpc.InterceptInfo) bool {
 				if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
 					// Don't return intercepts for different agents.
@@ -493,9 +492,11 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 				}
 			}
 		} else {
-			// sessionID refers to a client session
+			// sessionID refers to a client session.
 			filter = func(id string, info *rpc.InterceptInfo) bool {
-				return info.ClientSession.SessionId == sessionID && info.Disposition != rpc.InterceptDispositionType_REMOVED
+				return info.ClientSession.SessionId == sessionID &&
+					info.Disposition != rpc.InterceptDispositionType_REMOVED &&
+					!state.IsChildIntercept(info.Spec)
 			}
 		}
 	}
@@ -590,7 +591,6 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 // CreateIntercept lets a client create an intercept.
 func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
-	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
 	dlog.Debugf(ctx, "CreateIntercept %s called", ciReq.InterceptSpec.Name)
 
@@ -605,13 +605,13 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		}
 	}
 
-	client, interceptInfo, err := s.state.AddIntercept(ctx, sessionID, s.clusterInfo.ID(), ciReq)
+	client, interceptInfo, err := s.state.AddIntercept(ctx, ciReq)
 	if err != nil {
 		return nil, err
 	}
 
 	if ciReq.InterceptSpec.Replace {
-		err := s.state.AddInterceptFinalizer(interceptInfo.Id, s.state.RestoreAppContainer)
+		err = s.state.AddInterceptFinalizer(interceptInfo.Id, s.state.RestoreAppContainer)
 		if err != nil {
 			// The intercept's been created but we can't finalize it...
 			dlog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptInfo.Id, err)
@@ -685,7 +685,11 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	sessionID := rIReq.GetSession().GetSessionId()
 	ceptID := rIReq.Id
 
-	dlog.Debugf(ctx, "ReviewIntercept called: %s - %s", ceptID, rIReq.Disposition)
+	if rIReq.Disposition == rpc.InterceptDispositionType_AGENT_ERROR {
+		dlog.Errorf(ctx, "ReviewIntercept called: %s - %s: %s", ceptID, rIReq.Disposition, rIReq.Message)
+	} else {
+		dlog.Debugf(ctx, "ReviewIntercept called: %s - %s", ceptID, rIReq.Disposition)
+	}
 
 	agent := s.state.GetActiveAgent(sessionID)
 	if agent == nil {

@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
+	"strconv"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type Ingress struct {
@@ -28,10 +28,12 @@ type Info struct {
 	WorkloadKind  string            `json:"workload_kind,omitempty"   yaml:"workload_kind,omitempty"`
 	TargetHost    string            `json:"target_host,omitempty"     yaml:"target_host,omitempty"`
 	TargetPort    int32             `json:"target_port,omitempty"     yaml:"target_port,omitempty"`
+	PodPorts      []string          `json:"pod_ports,omitempty"       yaml:"pod_ports,omitempty"`
 	ServiceUID    string            `json:"service_uid,omitempty"     yaml:"service_uid,omitempty"`
 	ServicePortID string            `json:"service_port_id,omitempty" yaml:"service_port_id,omitempty"` // ServicePortID is deprecated. Use PortID
 	PortID        string            `json:"port_id,omitempty"         yaml:"port_id,omitempty"`
 	ContainerPort int32             `json:"container_port,omitempty"  yaml:"container_port,omitempty"`
+	Protocol      string            `json:"protocol,omitempty"        yaml:"protocol,omitempty"`
 	Environment   map[string]string `json:"environment,omitempty"     yaml:"environment,omitempty"`
 	Mount         *mount.Info       `json:"mount,omitempty"           yaml:"mount,omitempty"`
 	FilterDesc    string            `json:"filter_desc,omitempty"     yaml:"filter_desc,omitempty"`
@@ -83,10 +85,12 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		WorkloadKind:  spec.WorkloadKind,
 		TargetHost:    spec.TargetHost,
 		TargetPort:    spec.TargetPort,
+		PodPorts:      spec.PodPorts,
 		Mount:         m,
 		ServiceUID:    spec.ServiceUid,
 		PortID:        spec.PortIdentifier,
 		ContainerPort: spec.ContainerPort,
+		Protocol:      spec.Protocol,
 		PodIP:         ii.PodIp,
 		Environment:   ii.Environment,
 		FilterDesc:    ii.MechanismArgsDesc,
@@ -124,26 +128,44 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 		kvf.Add("ID", ii.ID)
 	}
 
-	kvf.Add(
-		"Destination",
-		net.JoinHostPort(ii.TargetHost, fmt.Sprintf("%d", ii.TargetPort)),
-	)
-
+	// Show all ports as mappings from containter port to local port.
+	pkv := ioutil.DefaultKeyValueFormatter()
+	pkv.Indent = ""
+	pkv.Separator = " -> "
 	if ii.PortID != "" {
-		if ii.ServiceUID == "" {
-			kvf.Add("Container Port Identifier", ii.PortID)
-		} else {
-			kvf.Add("Service Port Identifier", ii.PortID)
-		}
+		pm, _ := agentconfig.NewPortIdentifier(ii.Protocol, strconv.Itoa(int(ii.ContainerPort)))
+		pkv.Add(pm.String(), fmt.Sprintf("%d %s", ii.TargetPort, ii.Protocol))
 	}
-	if ii.debug {
-		m := "http"
-		if ii.Global {
-			m = "tcp"
+	for _, pp := range ii.PodPorts {
+		pm := agentconfig.PortMapping(pp)
+		to := pm.To()
+		pkv.Add(pm.From().String(), fmt.Sprintf("%d %s", to.Port, to.Proto))
+	}
+	kvf.Add("Intercepting", fmt.Sprintf("%s -> %s\n%s", ii.PodIP, ii.TargetHost, pkv))
+
+	if !ii.Global {
+		kvf.Add("Intercepting", func() string {
+			if ii.FilterDesc != "" {
+				return ii.FilterDesc
+			}
+			if ii.Global {
+				return `using mechanism "tcp"`
+			}
+			return fmt.Sprintf("using mechanism=%q with args=%q", "http", ii.HttpFilter)
+		}())
+
+		if ii.PreviewURL != "" {
+			previewURL := ii.PreviewURL
+			// Right now SystemA gives back domains with the leading "https://", but
+			// let's not rely on that.
+			if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
+				previewURL = "https://" + previewURL
+			}
+			kvf.Add("Preview URL", previewURL)
 		}
-		kvf.Add("Mechanism", m)
-		kvf.Add("Mechanism Command", fmt.Sprintf("%q", ii.FilterDesc))
-		kvf.Add("Metadata", fmt.Sprintf("%q", ii.Metadata))
+		if in := ii.Ingress; in != nil {
+			kvf.Add("Layer 5 Hostname", in.L5Host)
+		}
 	}
 
 	if m := ii.Mount; m != nil {
@@ -154,30 +176,8 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 		}
 	}
 
-	kvf.Add("Intercepting", func() string {
-		if ii.FilterDesc != "" {
-			return ii.FilterDesc
-		}
-		if ii.Global {
-			return `using mechanism "tcp"`
-		}
-		return fmt.Sprintf("using mechanism=%q with args=%q", "http", ii.HttpFilter)
-	}())
-	if ii.ServiceUID == "" {
-		kvf.Add("Address", iputil.JoinHostPort(ii.PodIP, uint16(ii.ContainerPort)))
-	}
-
-	if ii.PreviewURL != "" {
-		previewURL := ii.PreviewURL
-		// Right now SystemA gives back domains with the leading "https://", but
-		// let's not rely on that.
-		if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
-			previewURL = "https://" + previewURL
-		}
-		kvf.Add("Preview URL", previewURL)
-	}
-	if in := ii.Ingress; in != nil {
-		kvf.Add("Layer 5 Hostname", in.L5Host)
+	if len(ii.Metadata) > 0 {
+		kvf.Add("Metadata", fmt.Sprintf("%q", ii.Metadata))
 	}
 	return kvf.WriteTo(w)
 }

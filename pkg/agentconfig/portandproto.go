@@ -36,7 +36,7 @@ func ParseProtocol(protocol string) (core.Protocol, error) {
 	case core.ProtocolUDP, core.ProtocolTCP:
 		return pr, nil
 	default:
-		return "", fmt.Errorf("unsupported protocol: %s", pr)
+		return core.ProtocolTCP, fmt.Errorf("unsupported protocol: %s", pr)
 	}
 }
 
@@ -58,6 +58,8 @@ func NewPortAndProto(s string) (PortAndProto, error) {
 	return pp, err
 }
 
+// String will consistently yield the identifier without the protocol suffix when the protocol is TCP
+// and otherwise always use the suffix "/UDP".
 func (pp PortAndProto) String() string {
 	if pp.Proto == core.ProtocolTCP {
 		return strconv.Itoa(int(pp.Port))

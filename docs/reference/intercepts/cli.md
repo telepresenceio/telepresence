@@ -111,32 +111,22 @@ intercepted
 ## Intercepting multiple ports
 
 It is possible to intercept more than one service and/or service port that are using the same workload. You do this
-by creating more than one intercept that identify the same workload using the `--workload` flag.
+by repeating the `--port` flag.
 
 Let's assume that we have a service `multi-echo` with the two ports `http` and `grpc`. They are both
 targeting the same `multi-echo` deployment.
 
 ```console
-$ telepresence intercept multi-echo-http --workload multi-echo --port 8080:http
+$ telepresence intercept multi-echo-http --workload multi-echo --port 8080:http --port 8443:grpc
 Using Deployment multi-echo
 intercepted
     Intercept name         : multi-echo-http
     State                  : ACTIVE
     Workload kind          : Deployment
-    Destination            : 127.0.0.1:8080
-    Service Port Identifier: http
+    Intercepting           : 10.1.54.120 -> 127.0.0.1
+        8080 -> 8080 TCP
+        8443 -> 8443 TCP
     Volume Mount Point     : /tmp/telfs-893700837
-    Intercepting           : all TCP requests
-$ telepresence intercept multi-echo-grpc --workload multi-echo --port 8443:grpc --mechanism tcp
-Using Deployment multi-echo
-intercepted
-    Intercept name         : multi-echo-grpc
-    State                  : ACTIVE
-    Workload kind          : Deployment
-    Destination            : 127.0.0.1:8443
-    Service Port Identifier: extra
-    Volume Mount Point     : /tmp/telfs-1277723591
-    Intercepting           : all TCP requests
 ```
 
 ## Port-forwarding an intercepted container's sidecars

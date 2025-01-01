@@ -36,7 +36,7 @@ import (
 type State interface {
 	AddAgent(*rpc.AgentInfo, time.Time) string
 	AddClient(*rpc.ClientInfo, time.Time) string
-	AddIntercept(context.Context, string, string, *rpc.CreateInterceptRequest) (*rpc.ClientInfo, *rpc.InterceptInfo, error)
+	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.ClientInfo, *rpc.InterceptInfo, error)
 	AddInterceptFinalizer(string, InterceptFinalizer) error
 	AddSessionConsumptionMetrics(metrics *rpc.TunnelMetrics)
 	AgentsLookupDNS(context.Context, string, *rpc.DNSRequest) (dnsproxy.RRs, int, error)
@@ -63,7 +63,7 @@ type State interface {
 	GetInterceptActiveStatus() *prometheus.GaugeVec
 	HasAgent(name, namespace string) bool
 	MarkSession(*rpc.RemainRequest, time.Time) bool
-	NewInterceptInfo(string, *rpc.SessionInfo, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
+	NewInterceptInfo(string, *rpc.CreateInterceptRequest) *rpc.InterceptInfo
 	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	EnsureAgent(context.Context, string, string) ([]*rpc.AgentInfo, error)
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
@@ -542,89 +542,6 @@ func (s *state) WatchWorkloads(ctx context.Context, sessionID string) (ch <-chan
 }
 
 // Intercepts //////////////////////////////////////////////////////////////////////////////////////
-
-func (s *state) AddIntercept(ctx context.Context, sessionID, managerID string, cir *rpc.CreateInterceptRequest) (client *rpc.ClientInfo, ret *rpc.InterceptInfo, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	client = s.GetClient(sessionID)
-	if client == nil {
-		return nil, nil, status.Errorf(codes.NotFound, "session %q not found", sessionID)
-	}
-
-	spec := cir.InterceptSpec
-	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
-	installID := client.GetInstallId()
-	clientSession := rpc.SessionInfo{
-		SessionId:        sessionID,
-		ManagerInstallId: managerID,
-		InstallId:        &installID,
-	}
-
-	cept := s.self.NewInterceptInfo(interceptID, &clientSession, cir)
-
-	// Wrap each potential-state-change in a
-	//
-	//     if cept.Disposition == rpc.InterceptDispositionType_WAITING { … }
-	//
-	// so that we don't need to worry about different state-changes stomping on eachother.
-	if cept.Disposition == rpc.InterceptDispositionType_WAITING {
-		if errCode, errMsg := s.checkAgentsForIntercept(cept); errCode != 0 {
-			cept.Disposition = errCode
-			cept.Message = errMsg
-		}
-	}
-
-	if existingValue, hasConflict := s.intercepts.LoadOrStore(cept.Id, cept); hasConflict {
-		if existingValue.Disposition != rpc.InterceptDispositionType_REMOVED {
-			return nil, nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
-		} else {
-			s.intercepts.Store(cept.Id, cept)
-		}
-	}
-
-	s.interceptStates.Store(interceptID, newInterceptState(cept.Id))
-	return client, cept, nil
-}
-
-func (s *state) NewInterceptInfo(interceptID string, session *rpc.SessionInfo, ciReq *rpc.CreateInterceptRequest) *rpc.InterceptInfo {
-	return &rpc.InterceptInfo{
-		Spec:          ciReq.InterceptSpec,
-		Disposition:   rpc.InterceptDispositionType_WAITING,
-		Message:       "Waiting for Agent approval",
-		Id:            interceptID,
-		ClientSession: session,
-		ModifiedAt:    timestamppb.Now(),
-	}
-}
-
-func (s *state) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
-	is, ok := s.interceptStates.Load(interceptID)
-	if !ok {
-		return status.Errorf(codes.NotFound, "no such intercept %s", interceptID)
-	}
-	is.addFinalizer(finalizer)
-	return nil
-}
-
-// getAgentsInterceptedByClient returns the session IDs for each agent that are currently
-// intercepted by the client with the given client session ID.
-func (s *state) getAgentsInterceptedByClient(clientSessionID string) map[string]*rpc.AgentInfo {
-	intercepts := s.intercepts.LoadAllMatching(func(_ string, ii *rpc.InterceptInfo) bool {
-		return ii.ClientSession.SessionId == clientSessionID
-	})
-	if len(intercepts) == 0 {
-		return nil
-	}
-	return s.agents.LoadAllMatching(func(_ string, ai *rpc.AgentInfo) bool {
-		for _, ii := range intercepts {
-			if ai.Name == ii.Spec.Agent && ai.Namespace == ii.Spec.Namespace {
-				return true
-			}
-		}
-		return false
-	})
-}
 
 // getAgentsInNamespace returns the session IDs the agents in the given namespace.
 func (s *state) getAgentsInNamespace(namespace string) map[string]*rpc.AgentInfo {

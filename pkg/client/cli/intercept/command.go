@@ -30,12 +30,12 @@ type Command struct {
 	EnvFlags      env.Flags
 	DockerFlags   docker.Flags
 	MountFlags    mount.Flags
-	Name          string // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
-	AgentName     string // --workload || Command[0] // only valid if !localOnly
-	Port          string // --port
-	ServiceName   string // --service
-	ContainerName string // --container
-	Address       string // --address
+	Name          string   // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
+	AgentName     string   // --workload || Command[0] // only valid if !localOnly
+	Ports         []string // --port
+	ServiceName   string   // --service
+	ContainerName string   // --container
+	Address       string   // --address
 
 	Replace bool // whether --replace was passed
 
@@ -55,11 +55,10 @@ type Command struct {
 func (c *Command) AddFlags(cmd *cobra.Command) {
 	flagSet := cmd.Flags()
 	flagSet.StringVarP(&c.AgentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet, StatefulSet, Rollout) to intercept, if different from <name>")
-	flagSet.StringVarP(&c.Port, "port", "p", "", ``+
-		`Local port to forward to. If intercepting a service with multiple ports, `+
-		`use <local port>:<svcPortIdentifier>, where the identifier is the port name or port number. `+
+	flagSet.StringSliceVarP(&c.Ports, "port", "p", nil, ``+
+		`Local ports to forward to. Use <local port>:<identifier> to uniquely identify service ports, where the <identifier> is the port name or number. `+
 		`With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or `+
-		`<local port>:<container port>:<svcPortIdentifier>.`,
+		`<local port>:<container port>:<identifier>.`,
 	)
 
 	flagSet.StringVar(&c.Address, "address", "127.0.0.1", ``+
@@ -73,7 +72,7 @@ func (c *Command) AddFlags(cmd *cobra.Command) {
 		"Name of container that provides the environment and mounts for the intercept. Defaults to the container matching the targetPort")
 
 	flagSet.StringSliceVar(&c.ToPod, "to-pod", []string{}, ``+
-		`An additional port to forward from the intercepted pod, will be made available at localhost:PORT `+
+		`An additional port to forward to the intercepted pod, will available for connections to localhost:PORT. `+
 		`Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. `+
 		`Use <port>/UDP for UDP ports`)
 
@@ -108,10 +107,10 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	if c.AgentName == "" {
 		c.AgentName = c.Name
 	}
-	if c.Port == "" {
+	if len(c.Ports) == 0 {
 		// Port defaults to the targeted container port unless a default is explicitly set in the client config.
 		if dp := client.GetConfig(cmd.Context()).Intercept().DefaultPort; dp != 0 {
-			c.Port = strconv.Itoa(dp)
+			c.Ports = []string{strconv.Itoa(dp)}
 		}
 	}
 	if err := c.MountFlags.Validate(cmd); err != nil {

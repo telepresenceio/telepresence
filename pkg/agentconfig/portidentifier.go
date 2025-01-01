@@ -80,6 +80,18 @@ func (spi PortIdentifier) ProtoAndNameOrNumber() (core.Protocol, string, uint16)
 	return p, s, 0
 }
 
+// String will consistently yield the identifier without the protocol suffix when the protocol is TCP
+// and otherwise always use the suffix "/UDP".
 func (spi PortIdentifier) String() string {
-	return string(spi)
+	p, s, n := spi.ProtoAndNameOrNumber()
+	switch {
+	case s == "" && p == core.ProtocolTCP:
+		return strconv.Itoa(int(n))
+	case s != "" && p == core.ProtocolTCP:
+		return s
+	case s == "":
+		return fmt.Sprintf("%d/%s", n, p)
+	default:
+		return fmt.Sprintf("%s/%s", s, p)
+	}
 }

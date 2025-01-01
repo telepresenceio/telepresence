@@ -9,6 +9,10 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.22.0
 <Note>
+	<Title type="feature">One single invocation of the Telepresence intercept command can now intercept multiple ports.</Title>
+	<Body>It is now possible to intercept multiple ports with one single invocation of `telepresence intercept` by just repeating the `--port` flag.</Body>
+</Note>
+<Note>
 	<Title type="feature" docs="install/manager#static-versus-dynamic-namespace-selection">Unify how Traffic Manager selects namespaces</Title>
 	<Body>The definition of what namespaces that a Traffic Manager would manage use was scattered into several Helm
 chart values, such as `manager.Rbac.namespaces`, `client.Rbac.namespaces`, and

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	core "k8s.io/api/core/v1"
@@ -57,17 +58,48 @@ type BasicGeneratorConfig struct {
 	SecurityContext     *core.SecurityContext
 }
 
+func portsFromContainerPortsAnnotation(wl k8sapi.Workload) (ports []agentconfig.PortIdentifier, err error) {
+	pod := wl.GetPodTemplate()
+	cpa := pod.GetAnnotations()[ContainerPortsAnnotation]
+	switch cpa {
+	case "":
+		return nil, nil
+	case "all":
+		cns := pod.Spec.Containers
+		for i := range cns {
+			for _, pn := range cns[i].Ports {
+				pi := pn.Name
+				if pi == "" {
+					pi = strconv.Itoa(int(pn.ContainerPort))
+				}
+				if pn.Protocol != core.ProtocolTCP {
+					pi += "/" + string(pn.Protocol)
+				}
+				ports = append(ports, agentconfig.PortIdentifier(pi))
+			}
+		}
+	default:
+		ports, err = portsFromAnnotationValue(wl, ContainerPortsAnnotation, cpa)
+	}
+	return ports, err
+}
+
 func portsFromAnnotation(wl k8sapi.Workload, annotation string) (ports []agentconfig.PortIdentifier, err error) {
 	if cpa := wl.GetPodTemplate().GetAnnotations()[annotation]; cpa != "" {
-		cps := strings.Split(cpa, ",")
-		ports = make([]agentconfig.PortIdentifier, len(cps))
-		for i, cp := range cps {
-			pi := agentconfig.PortIdentifier(cp)
-			if err = pi.Validate(); err != nil {
-				return nil, fmt.Errorf("unable to parse annotation %s of workload %s.%s: %w", annotation, wl.GetName(), wl.GetNamespace(), err)
-			}
-			ports[i] = pi
+		ports, err = portsFromAnnotationValue(wl, annotation, cpa)
+	}
+	return ports, err
+}
+
+func portsFromAnnotationValue(wl k8sapi.Workload, annotation, value string) (ports []agentconfig.PortIdentifier, err error) {
+	cps := strings.Split(value, ",")
+	ports = make([]agentconfig.PortIdentifier, len(cps))
+	for i, cp := range cps {
+		pi := agentconfig.PortIdentifier(cp)
+		if err = pi.Validate(); err != nil {
+			return nil, fmt.Errorf("unable to parse annotation %s of workload %s.%s: %w", annotation, wl.GetName(), wl.GetNamespace(), err)
 		}
+		ports[i] = pi
 	}
 	return ports, nil
 }
@@ -133,7 +165,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 		ccs = appendAgentContainerConfigs(ctx, svcImpl, pod, ports, agentPortNumberFunc, ccs, existingConfig, cfg.AppProtocolStrategy, ignoredVolumeMounts)
 	}
 
-	ports, err = portsFromAnnotation(wl, ContainerPortsAnnotation)
+	ports, err = portsFromContainerPortsAnnotation(wl)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +176,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 	}
 
 	// Append other containers even though they aren't directly interceptable. They might be fronted by a
-	// dispatching container that is, or they might be an ingest candidates.
+	// dispatching container that is, or they might be candidates for `ingest`.
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name == agentconfig.ContainerName {

@@ -40,9 +40,7 @@ func Result(r *connector.InterceptResult, err error) error {
 			"Cannot create an intercept in namespace %q. A workstation cannot have simultaneous intercepts in different namespaces. Leave all intercepts in namespace %q first.",
 			nss[1], nss[0])
 	case common.InterceptError_LOCAL_TARGET_IN_USE:
-		spec := r.InterceptInfo.Spec
-		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
-			spec.TargetHost, spec.TargetPort, spec.Name)
+		msg = r.ErrorText
 	case common.InterceptError_NO_ACCEPTABLE_WORKLOAD:
 		msg = fmt.Sprintf("No interceptable deployment, replicaset, or statefulset matching %s found", r.ErrorText)
 	case common.InterceptError_AMBIGUOUS_MATCH:

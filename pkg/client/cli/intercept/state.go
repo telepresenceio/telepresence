@@ -88,14 +88,34 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	ud := daemon.GetUserClient(ctx)
 
 	// Parse port into spec based on how it's formatted
-	var err error
-	s.localPort, s.dockerPort, spec.PortIdentifier, err = parsePort(s.Port, s.DockerFlags.Run, ud.Containerized())
-	if err != nil {
-		return nil, err
+	s.localPort, s.dockerPort, spec.PortIdentifier = 0, 0, ""
+	if len(s.Ports) > 0 {
+		var err error
+		s.localPort, s.dockerPort, spec.PortIdentifier, err = parsePort(s.Ports[0], s.DockerFlags.Run, ud.Containerized())
+		if err != nil {
+			return nil, err
+		}
+		for i := 1; i < len(s.Ports); i++ {
+			pm := s.Ports[i]
+			if colIdx := strings.IndexByte(pm, ':'); colIdx > 0 {
+				// The "--port" arg puts local port first, but it's the destination in the pod-port mapping.
+				to := pm[:colIdx]
+				from := pm[colIdx+1:]
+				if slashIdx := strings.IndexByte(from, '/'); slashIdx > 0 {
+					from = from[:slashIdx]
+					to += from[slashIdx:]
+				}
+				pm = from + ":" + to
+			}
+			if err = agentconfig.PortMapping(pm).Validate(); err != nil {
+				return nil, errcat.User.New(err)
+			}
+			spec.PodPorts = append(spec.PodPorts, pm)
+		}
 	}
 
 	spec.TargetPort = int32(s.localPort)
-	if _, err = netip.ParseAddr(s.Address); err != nil {
+	if _, err := netip.ParseAddr(s.Address); err != nil {
 		return nil, fmt.Errorf("--address %s is not a valid IP address", s.Address)
 	}
 	spec.TargetHost = s.Address

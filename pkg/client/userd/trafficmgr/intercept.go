@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
+	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
@@ -333,15 +335,93 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 	defer s.currentInterceptsLock.Unlock()
 	spec := ir.Spec
 	for _, iCept := range s.currentIntercepts {
-		switch {
-		case iCept.Spec.Name == spec.Name:
+		if iCept.Spec.Name == spec.Name {
 			return InterceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.New(spec.Name))
-		case spec.TargetPort != 0 && iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost:
-			return &rpc.InterceptResult{
-				Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
-				ErrorText:     spec.Name,
-				ErrorCategory: int32(errcat.User),
-				InterceptInfo: iCept.InterceptInfo,
+		}
+	}
+	return nil
+}
+
+// allBusyLocalPorts returns the sum of all ports that the intercept forwards to and all ports
+// that are forwarded from.
+func allBusyLocalPorts(spec *manager.InterceptSpec) []agentconfig.PortAndProto {
+	targetPort := spec.TargetPort
+	if targetPort == 0 {
+		targetPort = spec.ContainerPort
+	}
+	ports := make([]agentconfig.PortAndProto, 0, len(spec.LocalPorts)+len(spec.PodPorts)+1)
+	ports = append(ports, agentconfig.PortAndProto{
+		Port:  uint16(targetPort),
+		Proto: core.Protocol(spec.Protocol),
+	})
+	for _, lp := range spec.LocalPorts {
+		pp, _ := agentconfig.NewPortAndProto(lp)
+		ports = append(ports, pp)
+	}
+	for _, ps := range spec.PodPorts {
+		pm := agentconfig.PortMapping(ps)
+		ports = append(ports, pm.To())
+	}
+	return ports
+}
+
+// ensureUniqueLocalPorts returns the sum of all local ports that the intercept will forward to, and all
+// local ports that the client will forward from. Also ensures that there are no conflicts among those ports.
+// The cluster-side of the port mappings are not checked here because we rely on the PrepareIntercept
+// call to already have done that.
+func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedIntercept) (map[agentconfig.PortAndProto]struct{}, error) {
+	targetPort := spec.TargetPort
+	if targetPort == 0 {
+		targetPort = pi.ContainerPort
+	}
+
+	ports := make(map[agentconfig.PortAndProto]struct{}, len(spec.LocalPorts)+len(spec.PodPorts)+1)
+	ports[agentconfig.PortAndProto{
+		Port:  uint16(targetPort),
+		Proto: core.Protocol(pi.Protocol),
+	}] = struct{}{}
+
+	for _, lp := range spec.LocalPorts {
+		pp, err := agentconfig.NewPortAndProto(lp)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := ports[pp]; ok {
+			return nil, fmt.Errorf("multiple use of port %s on %s", pp, spec.TargetHost)
+		}
+		ports[pp] = struct{}{}
+	}
+	for _, ps := range pi.PodPorts {
+		pm := agentconfig.PortMapping(ps)
+		if err := pm.Validate(); err != nil {
+			return nil, err
+		}
+		pp := pm.To()
+		if _, ok := ports[pp]; ok {
+			return nil, fmt.Errorf("multiple use of port %s on %s", pp, spec.TargetHost)
+		}
+		ports[pp] = struct{}{}
+	}
+	return ports, nil
+}
+
+func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.PreparedIntercept) *rpc.InterceptResult {
+	ports, err := ensureUniqueLocalPorts(spec, ir)
+	if err != nil {
+		return InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.New(err))
+	}
+
+	s.currentInterceptsLock.Lock()
+	defer s.currentInterceptsLock.Unlock()
+	for _, ci := range s.currentIntercepts {
+		ciSpec := ci.Spec
+		for _, blp := range allBusyLocalPorts(ciSpec) {
+			if _, ok := ports[blp]; ok {
+				return &rpc.InterceptResult{
+					Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
+					ErrorText:     fmt.Sprintf("Port %s is already in use by intercept %s", net.JoinHostPort(ciSpec.TargetHost, blp.String()), ciSpec.Name),
+					ErrorCategory: int32(errcat.User),
+				}
 			}
 		}
 	}
@@ -367,10 +447,7 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		return nil, nil
 	}
 
-	mgrIr := &manager.CreateInterceptRequest{
-		Session:       s.SessionInfo(),
-		InterceptSpec: spec,
-	}
+	mgrIr := self.NewCreateInterceptRequest(spec)
 	if er := self.InterceptProlog(c, mgrIr); er != nil {
 		return nil, er
 	}
@@ -386,11 +463,8 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 	if pi.Error != "" {
 		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.Category(pi.ErrorCategory).New(pi.Error))
 	}
-	if spec.TargetPort == 0 {
-		spec.TargetPort = pi.ContainerPort
-		if er := s.ensureNoInterceptConflict(ir); er != nil {
-			return nil, er
-		}
+	if er := s.ensureNoPortConflict(spec, pi); er != nil {
+		return nil, er
 	}
 
 	iInfo := &interceptInfo{preparedIntercept: pi}
@@ -430,7 +504,6 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 	if pi.ServicePort > 0 || pi.ServicePortName != "" {
 		// Make spec port identifier unambiguous.
-		spec.ServiceName = pi.ServiceName
 		spec.ServicePortName = pi.ServicePortName
 		spec.ServicePort = pi.ServicePort
 		pti, err := iInfo.PortIdentifier()
@@ -439,9 +512,15 @@ func (s *session) AddIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		}
 		spec.PortIdentifier = pti.String()
 	}
+	dlog.Debugf(c, "pi.Protocol = %s", pi.Protocol)
 	spec.Protocol = pi.Protocol
 	spec.ContainerPort = pi.ContainerPort
+	spec.PodPorts = pi.PodPorts
 	result = iInfo.InterceptResult()
+
+	if spec.TargetPort == 0 {
+		spec.TargetPort = pi.ContainerPort
+	}
 
 	spec.ServiceUid = result.ServiceUid
 	spec.WorkloadKind = result.WorkloadKind
