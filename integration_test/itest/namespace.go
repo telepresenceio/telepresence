@@ -22,6 +22,7 @@ type NamespacePair interface {
 	ApplyApp(ctx context.Context, name, workload string)
 	ApplyEchoService(ctx context.Context, name string, port int)
 	ApplyTemplate(ctx context.Context, path string, values any)
+	DeleteApp(ctx context.Context, name string)
 	DeleteTemplate(ctx context.Context, path string, values any)
 	AppNamespace() string
 	TelepresenceConnect(ctx context.Context, args ...string) string
@@ -162,6 +163,13 @@ func (s *nsPair) ApplyEchoService(ctx context.Context, name string, port int) {
 func (s *nsPair) ApplyApp(ctx context.Context, name, workload string) {
 	getT(ctx).Helper()
 	ApplyApp(ctx, name, s.AppNamespace(), workload)
+}
+
+// DeleteApp calls kubectl delete -n <namespace> -f on the given app + .yaml found in testdata/k8s relative
+// to the directory returned by GetCurrentDirectory.
+func (s *nsPair) DeleteApp(ctx context.Context, name string) {
+	getT(ctx).Helper()
+	DeleteApp(ctx, name, s.AppNamespace())
 }
 
 func (s *nsPair) RolloutStatusWait(ctx context.Context, workload string) error {

@@ -43,6 +43,15 @@ func ApplyApp(ctx context.Context, name, namespace, workload string) {
 	require.NoError(t, RolloutStatusWait(ctx, namespace, workload))
 }
 
+// DeleteApp calls kubectl delete -n <namespace> -f on the given app + .yaml found in testdata/k8s relative
+// to the directory returned by GetWorkingDir.
+func DeleteApp(ctx context.Context, name, namespace string) {
+	t := getT(ctx)
+	t.Helper()
+	manifest := filepath.Join("testdata", "k8s", name+".yaml")
+	require.NoError(t, Kubectl(ctx, namespace, "delete", "-f", manifest), "failed to delete %s", manifest)
+}
+
 type AppPort struct {
 	ServicePortName   string
 	ServicePortNumber uint16
