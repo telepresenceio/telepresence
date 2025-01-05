@@ -1163,7 +1163,9 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers
 		svc = svc[:slashIdx]
 	}
 	expectedOutput := fmt.Sprintf("%s from intercept at /", wl)
-	require.Eventually(getT(ctx), func() bool {
+	dlog.Infof(ctx, "pinging %s, expecting output: %s", net.JoinHostPort(svc, svcPort), expectedOutput)
+
+	ping := func() bool {
 		// condition
 		ips, err := net.DefaultResolver.LookupIP(ctx, "ip", svc)
 		if err != nil {
@@ -1203,11 +1205,11 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers
 			return false
 		}
 		return true
-	},
-		time.Minute,   // waitFor
-		5*time.Second, // polling interval
-		`body of %q equals %q`, "http://"+svc, expectedOutput,
-	)
+	}
+	if ping() {
+		return
+	}
+	require.Eventually(getT(ctx), ping, time.Minute, 5*time.Second, `body of %q equals %q`, "http://"+svc, expectedOutput)
 }
 
 func WithConfig(c context.Context, modifierFunc func(config client.Config)) context.Context {
