@@ -40,10 +40,9 @@ func EnsureNetwork(ctx context.Context, name string) error {
 	// Make an attempt to create the network with IPv6 enabled. This will fail unless the user has enabled
 	// IPv6 in /etc/docker/daemon.json.
 	rsp, err := cli.NetworkCreate(ctx, name, types.NetworkCreate{
-		CheckDuplicate: false,
-		Driver:         "bridge",
-		Scope:          "local",
-		EnableIPv6:     true,
+		Driver:     "bridge",
+		Scope:      "local",
+		EnableIPv6: boolP(true),
 	})
 
 	if err == nil {
@@ -67,10 +66,9 @@ func EnsureNetwork(ctx context.Context, name string) error {
 
 	// First, create a dummy network without IPv6 so that we get a proper IPAM config
 	dummyNet, err := cli.NetworkCreate(ctx, fmt.Sprintf("tp-dummy-%08x", rand.Int31()), types.NetworkCreate{
-		CheckDuplicate: false,
-		Driver:         "bridge",
-		Scope:          "local",
-		EnableIPv6:     false,
+		Driver:     "bridge",
+		Scope:      "local",
+		EnableIPv6: boolP(false),
 	})
 	if err != nil {
 		return nil
@@ -102,11 +100,10 @@ func EnsureNetwork(ctx context.Context, name string) error {
 
 		// Create the IPv6 enabled network
 		_, err = cli.NetworkCreate(ctx, name, types.NetworkCreate{
-			CheckDuplicate: false,
-			Driver:         "bridge",
-			Scope:          "local",
-			EnableIPv6:     true,
-			IPAM:           ipam,
+			Driver:     "bridge",
+			Scope:      "local",
+			EnableIPv6: boolP(true),
+			IPAM:       ipam,
 		})
 		if err == nil {
 			return nil
@@ -115,4 +112,8 @@ func EnsureNetwork(ctx context.Context, name string) error {
 		dlog.Debug(ctx, err)
 	}
 	return err
+}
+
+func boolP(b bool) *bool {
+	return &b
 }
