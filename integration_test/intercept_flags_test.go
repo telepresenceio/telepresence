@@ -121,7 +121,6 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		s.Run(tt.name, func() {
 			ctx := s.Context()
 			expectedOutput := regexp.MustCompile(tt.iceptName + ` from intercept at`)

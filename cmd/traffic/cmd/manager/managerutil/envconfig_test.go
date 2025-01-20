@@ -84,7 +84,6 @@ func TestEnvconfig(t *testing.T) {
 	}
 
 	for tcName, tc := range testcases {
-		tc := tc // Capture loop variable...
 		t.Run(tcName, func(t *testing.T) {
 			t.Parallel()
 			lookup := func(key string) (string, bool) {

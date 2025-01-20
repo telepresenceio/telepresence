@@ -146,8 +146,6 @@ func (s *mountsSuite) Test_CollidingMounts() {
 	}
 
 	for i, tt := range tests {
-		i := i
-		tt := tt
 		s.Run(tt.name, func() {
 			ctx := s.Context()
 			require := s.Require()

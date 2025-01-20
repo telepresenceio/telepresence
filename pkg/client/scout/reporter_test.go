@@ -264,7 +264,6 @@ func TestInstallID(t *testing.T) {
 	defer func() { version.Version = ov }()
 
 	for tcName, tcData := range testcases {
-		tcData := tcData
 		t.Run(tcName, func(t *testing.T) {
 			if tcData.InputGOOS != runtime.GOOS {
 				t.Skip()
@@ -449,7 +448,6 @@ func TestReport(t *testing.T) {
 		},
 	}
 	for tcName, tcData := range testcases {
-		tcData := tcData
 		t.Run(tcName, func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, true)
 			origEnv := os.Environ()

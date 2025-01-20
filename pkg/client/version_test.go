@@ -100,7 +100,6 @@ func TestGetInstallMechanism(t *testing.T) {
 		return nil
 	}
 	for tcName, tcData := range testcases {
-		tcData := tcData
 		t.Run(tcName, func(t *testing.T) {
 			// Create the fake binary for our test
 			// We include the tcName in the filePath, so we don't have to worry about

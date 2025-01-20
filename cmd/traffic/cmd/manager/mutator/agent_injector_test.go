@@ -794,7 +794,6 @@ func TestTrafficAgentConfigGenerator(t *testing.T) {
 	f.WaitForCacheSync(ctx.Done())
 
 	for _, test := range tests {
-		test := test // pin it
 		agentmap.GeneratorConfigFunc = env.GeneratorConfig
 		t.Run(test.name, func(t *testing.T) {
 			runFunc(t, ctx, &test)
@@ -1814,7 +1813,6 @@ func TestTrafficAgentInjector(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test // pin it
 		t.Run(test.name, func(t *testing.T) {
 			ctx := dlog.NewTestContext(t, false)
 			ctx = managerutil.WithEnv(ctx, env)

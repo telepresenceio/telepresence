@@ -358,7 +358,6 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 	logFile := filepath.Join(filelocation.AppUserLogDir(s.Context()), "daemon.log")
 
 	for _, tt := range tests {
-		tt := tt
 		s.Run(tt.name, func() {
 			ctx := itest.WithKubeConfigExtension(s.Context(), func(cluster *api.Cluster) map[string]any {
 				return map[string]any{

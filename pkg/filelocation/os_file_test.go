@@ -87,7 +87,6 @@ func TestUser(t *testing.T) {
 	}
 	origEnv := os.Environ()
 	for tcName, tcData := range testcases {
-		tcData := tcData
 		t.Run(tcName, func(t *testing.T) {
 			if runtime.GOOS == "windows" {
 				splitAndRejoin := func(path *string) {

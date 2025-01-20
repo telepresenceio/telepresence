@@ -73,7 +73,6 @@ func (s *podCIDRSuite) Test_PodCIDRStrategy() {
 	vFile := filepath.Join(vDir, "values.yaml")
 
 	for _, tt := range tests {
-		tt := tt
 		s.Run(tt.name, func() {
 			rq := s.Require()
 			vy, err := yaml.Marshal(tt.values)

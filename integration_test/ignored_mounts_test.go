@@ -56,7 +56,6 @@ func (s *mountsSuite) Test_IgnoredMounts() {
 	defer cancel()
 
 	for _, tt := range tests {
-		tt := tt
 		s.Run(tt.name, func() {
 			tpl := struct {
 				Annotations map[string]string
