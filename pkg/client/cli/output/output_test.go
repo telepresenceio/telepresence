@@ -23,8 +23,8 @@ func TestWithOutput(t *testing.T) {
 	re := func(cmd *cobra.Command, args []string) error {
 		stdout := cmd.OutOrStdout()
 		stderr := cmd.ErrOrStderr()
-		fmt.Fprint(stdout, expectedREStdout)
-		fmt.Fprint(stderr, expectedREStderr)
+		_, _ = fmt.Fprint(stdout, expectedREStdout)
+		_, _ = fmt.Fprint(stderr, expectedREStderr)
 		return nil
 	}
 
