@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/network"
 	dockerClient "github.com/docker/docker/client"
 
@@ -19,7 +18,7 @@ func EnsureNetwork(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	resource, err := cli.NetworkInspect(ctx, name, types.NetworkInspectOptions{})
+	resource, err := cli.NetworkInspect(ctx, name, network.InspectOptions{})
 	if err != nil {
 		if !dockerClient.IsErrNotFound(err) {
 			return fmt.Errorf("docker network inspect failed: %w", err)
@@ -73,7 +72,7 @@ func EnsureNetwork(ctx context.Context, name string) error {
 	if err != nil {
 		return nil
 	}
-	resource, err = cli.NetworkInspect(ctx, dummyNet.ID, types.NetworkInspectOptions{})
+	resource, err = cli.NetworkInspect(ctx, dummyNet.ID, network.InspectOptions{})
 	if dummyErr := cli.NetworkRemove(ctx, dummyNet.ID); dummyErr != nil {
 		dlog.Warnf(ctx, "failed to remove network %s: %v", dummyNet.ID, dummyErr)
 	}
