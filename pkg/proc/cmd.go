@@ -19,6 +19,7 @@ func StdCommand(ctx context.Context, exe string, args ...string) *dexec.Cmd {
 	cmd.DisableLogging = true
 	cmd.Stdout = dos.Stdout(ctx)
 	cmd.Stderr = dos.Stderr(ctx)
+	//nolint:govet // dlog.Debugf() does not have an equivalent function that doesn't take a formatting string.
 	dlog.Debugf(ctx, shellquote.ShellString(exe, args))
 	return cmd
 }

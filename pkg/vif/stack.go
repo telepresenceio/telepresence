@@ -137,6 +137,7 @@ func forwardTCP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *tcp
 		if err != nil {
 			msg := fmt.Sprintf("forward TCP %s: %s", idStringer(id), err)
 			span.SetStatus(codes.Error, msg)
+			//nolint:govet // dlog.Errorf() does not have an equivalent function that doesn't take a formatting string.
 			dlog.Errorf(ctx, msg)
 		}
 		span.End()
@@ -230,6 +231,7 @@ func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp
 	if err != nil {
 		msg := fmt.Sprintf("forward UDP %s: %s", idStringer(id), err)
 		span.SetStatus(codes.Error, msg)
+		//nolint:govet // dlog.Errorf() does not have an equivalent function that doesn't take a formatting string.
 		dlog.Errorf(ctx, msg)
 		return
 	}
