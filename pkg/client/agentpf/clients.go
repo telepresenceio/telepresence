@@ -155,7 +155,7 @@ func (ac *client) setIntercepted(ctx context.Context, k string, status bool) {
 			return
 		}
 
-		// This agent is no longer intercepting. Stop the dial watcher
+		// This agent is no longer intercepting. Stop the dial watcher.
 		dlog.Debugf(ctx, "Agent %s changed to not intercepted", k)
 		ac.Lock()
 		cdw := ac.cancelDialWatch
