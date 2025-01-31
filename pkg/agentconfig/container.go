@@ -25,7 +25,7 @@ func AgentContainer(
 
 	eachConfiguredContainer(confCns, config, func(app *core.Container, cc *Container) {
 		if cc.Replace {
-			// Simply inherit the ports of the replaced container
+			// Simply inherit the ports of the replaced container.
 			ports = append(ports, app.Ports...)
 		} else {
 			for _, ic := range PortUniqueIntercepts(cc) {
