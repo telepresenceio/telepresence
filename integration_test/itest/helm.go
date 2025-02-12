@@ -94,47 +94,6 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]any, r
 	return settings
 }
 
-func (s *cluster) InstallTrafficManager(ctx context.Context, values map[string]any) error {
-	chartFilename, err := s.self.PackageHelmChart(ctx)
-	if err != nil {
-		return err
-	}
-	return s.installChart(ctx, false, chartFilename, values)
-}
-
-// InstallTrafficManagerVersion performs a helm install of a specific version of the traffic-manager using
-// the helm registry at https://app.getambassador.io. It is assumed that the image to use for the traffic-manager
-// can be pulled from the standard registry at ghcr.io/telepresenceio, and that the traffic-manager image is
-// configured using DEV_AGENT_IMAGE.
-//
-// The intent is to simulate connection to an older cluster from the current client.
-func (s *cluster) InstallTrafficManagerVersion(ctx context.Context, version string, values map[string]any) error {
-	chartFilename, err := s.pullHelmChart(ctx, version)
-	if err != nil {
-		return err
-	}
-	return s.installChart(ctx, true, chartFilename, values)
-}
-
-func (s *cluster) installChart(ctx context.Context, release bool, chartFilename string, values map[string]any) error {
-	settings := s.self.GetSetArgsForHelm(ctx, values, release)
-
-	ctx = WithWorkingDir(ctx, GetOSSRoot(ctx))
-	nss := GetNamespaces(ctx)
-	args := []string{"install", "-n", nss.Namespace, "--wait"}
-	args = append(args, settings...)
-	args = append(args, "traffic-manager", chartFilename)
-
-	err := Run(ctx, "helm", args...)
-	if err == nil {
-		err = RolloutStatusWait(ctx, nss.Namespace, "deploy/traffic-manager")
-		if err == nil {
-			s.self.CapturePodLogs(ctx, "traffic-manager", "", nss.Namespace)
-		}
-	}
-	return err
-}
-
 func (s *cluster) TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, settings ...string) string {
 	logFile, err := s.self.TelepresenceHelmInstall(ctx, upgrade, settings...)
 	require.NoError(getT(ctx), err)
@@ -248,20 +207,6 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 	logFileName := s.self.CapturePodLogs(ctx, agentmap.ManagerAppName, "", nss.Namespace)
 	return logFileName, nil
-}
-
-func (s *cluster) pullHelmChart(ctx context.Context, version string) (string, error) {
-	if err := Run(ctx, "helm", "repo", "add", "datawire", "https://app.getambassador.io"); err != nil {
-		return "", err
-	}
-	if err := Run(ctx, "helm", "repo", "update"); err != nil {
-		return "", err
-	}
-	dir := getT(ctx).TempDir()
-	if err := Run(WithWorkingDir(ctx, dir), "helm", "pull", "datawire/telepresence", "--version", version); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, fmt.Sprintf("telepresence-%s.tgz", version)), nil
 }
 
 func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace string, args ...string) {

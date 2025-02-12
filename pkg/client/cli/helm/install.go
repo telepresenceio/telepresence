@@ -54,6 +54,7 @@ type Request struct {
 	CreateNamespace bool
 	Crds            bool
 	NoHooks         bool
+	Version         string
 }
 
 func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) error {
@@ -134,19 +135,22 @@ func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClien
 	return helmConfig, nil
 }
 
-func GetValues(ctx context.Context) map[string]any {
+func GetValues(ctx context.Context, req *Request) map[string]any {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images()
 	imageRegistry := imgConfig.Registry(ctx)
-	imageTag := strings.TrimPrefix(client.Version(), "v")
-	values := map[string]any{
+	imageTag := req.Version
+	if imageTag == "" {
+		imageTag = strings.TrimPrefix(client.Version(), "v")
+	}
+	vs := map[string]any{
 		"image": map[string]any{
 			"registry": imageRegistry,
 			"tag":      imageTag,
 		},
 	}
 	if !clientConfig.Grpc().MaxReceiveSizeV.IsZero() {
-		values["grpc"] = map[string]any{
+		vs["grpc"] = map[string]any{
 			"maxReceiveSize": clientConfig.Grpc().MaxReceiveSizeV.String(),
 		}
 	}
@@ -173,19 +177,19 @@ func GetValues(ctx context.Context) map[string]any {
 		if wr != "" {
 			image["registry"] = wr
 		}
-		values["agent"] = map[string]any{"image": image}
+		vs["agent"] = map[string]any{"image": image}
 	}
 
 	if apc := clientConfig.Intercept().AppProtocolStrategy; apc != k8sapi.Http2Probe {
-		values["agentInjector"] = map[string]any{"appProtocolStrategy": apc.String()}
+		vs["agentInjector"] = map[string]any{"appProtocolStrategy": apc.String()}
 	}
 	if clientConfig.TelepresenceAPI().Port != 0 {
-		values["telepresenceAPI"] = map[string]any{
+		vs["telepresenceAPI"] = map[string]any{
 			"port": clientConfig.TelepresenceAPI().Port,
 		}
 	}
 
-	return values
+	return vs
 }
 
 func timedRun(ctx context.Context, run func(time.Duration) error) error {
@@ -217,7 +221,7 @@ func installNew(
 	req *Request,
 	values map[string]any,
 ) error {
-	dlog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, getTrafficManagerVersion(values))
+	dlog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, chrt.Metadata.Version)
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -225,6 +229,7 @@ func installNew(
 	install.Wait = true
 	install.CreateNamespace = req.CreateNamespace
 	install.DisableHooks = req.NoHooks
+	install.Version = chrt.Metadata.Version
 	return timedRun(ctx, func(timeout time.Duration) error {
 		install.Timeout = timeout
 		_, err := install.Run(chrt, values)
@@ -241,7 +246,7 @@ func upgradeExisting(
 	req *Request,
 	values map[string]any,
 ) error {
-	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, client.Version())
+	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, chrt.Metadata.Version)
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Wait = true
@@ -249,6 +254,7 @@ func upgradeExisting(
 	upgrade.ResetValues = req.ResetValues
 	upgrade.ReuseValues = req.ReuseValues
 	upgrade.DisableHooks = req.NoHooks
+	upgrade.Version = chrt.Metadata.Version
 	return timedRun(ctx, func(timeout time.Duration) error {
 		upgrade.Timeout = timeout
 		_, err := upgrade.Run(releaseName, chrt, values)
@@ -359,7 +365,7 @@ func ensureIsInstalled(
 	}
 
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
-	// In those cases, an uninstall should clean everything up and leave us ready to install again
+	// In those cases, uninstalling should clean everything up and leave us ready to install again
 	if existing != nil && (existing.Info.Status != release.StatusDeployed) {
 		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
 			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
@@ -380,22 +386,26 @@ func ensureIsInstalled(
 
 	var vals map[string]any
 	if len(providedVals) > 0 {
-		vals = chartutil.CoalesceTables(providedVals, GetValuesFunc(ctx))
+		vals = chartutil.CoalesceTables(providedVals, GetValuesFunc(ctx, req))
 	} else {
 		// No values were provided. This means that an upgrade should retain existing values unless
 		// reset-values is true.
 		if req.Type == Upgrade && !req.ResetValues {
 			req.ReuseValues = true
 		}
-		vals = GetValuesFunc(ctx)
+		vals = GetValuesFunc(ctx, req)
 	}
 
 	version := getTrafficManagerVersion(vals)
 
 	var chrt *chart.Chart
-	if crd {
+	switch {
+	case crd:
 		chrt, err = loadCRDChart(version)
-	} else {
+	case req.Version != "":
+		version = req.Version
+		chrt, err = pullCoreChart(ctx, helmConfig, "oci://ghcr.io/telepresenceio/telepresence-oss", version)
+	default:
 		chrt, err = loadCoreChart(version)
 	}
 	if err != nil {

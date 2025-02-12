@@ -56,6 +56,7 @@ func helmInstall() *cobra.Command {
 	flags.BoolVarP(&ha.NoHooks, "no-hooks", "", false, "prevent hooks from running during install")
 	flags.BoolVarP(&upgrade, "upgrade", "u", false, "replace the traffic manager if it already exists")
 	flags.BoolVar(&ha.CreateNamespace, "create-namespace", true, "create a namespace for the traffic-manager if not present")
+	flags.StringVar(&ha.Version, "version", "", "the telepresence version if different from the client's version. May be a range (e.g. ^2.21.0)")
 	ha.addValueSettingFlags(flags)
 	ha.addCRDsFlags(flags)
 	uf := flags.Lookup("upgrade")
@@ -86,6 +87,7 @@ func helmUpgrade() *cobra.Command {
 	flags.BoolVarP(&ha.ReuseValues, "reuse-values", "", false,
 		"when upgrading, reuse the last release's values and merge in any overrides from the command line via --set and -f")
 	flags.BoolVarP(&ha.CreateNamespace, "create-namespace", "", true, "create the release namespace if not present")
+	flags.StringVar(&ha.Version, "version", "", "the telepresence version if different from the client's version. May be a range (e.g. ^2.21.0)")
 	ha.rq = daemon.InitRequest(cmd)
 	return cmd
 }
