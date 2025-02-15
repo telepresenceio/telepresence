@@ -354,6 +354,8 @@ type Timeouts struct {
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect"`
 	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
+	PrivateTrafficAgentArrival time.Duration `json:"trafficAgentArrival"`
+	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
 	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite"`
 	// PrivateFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
 	PrivateFtpShutdown time.Duration `json:"ftpShutdown"`
@@ -373,6 +375,7 @@ const (
 	TimeoutRoundtripLatency
 	TimeoutTrafficManagerAPI
 	TimeoutTrafficManagerConnect
+	TimeoutTrafficAgentArrival
 	TimeoutFtpReadWrite
 	TimeoutFtpShutdown
 	TimeoutContainerShutdown
@@ -418,6 +421,8 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
 		timeoutVal = t.PrivateTrafficManagerConnect
+	case TimeoutTrafficAgentArrival:
+		timeoutVal = t.PrivateTrafficAgentArrival
 	case TimeoutFtpReadWrite:
 		timeoutVal = t.PrivateFtpReadWrite
 	case TimeoutFtpShutdown:
@@ -478,6 +483,9 @@ func (e timeoutError) Error() string {
 	case TimeoutTrafficManagerConnect:
 		yamlName = "trafficManagerConnect"
 		humanName = "port-forward connection to the traffic manager"
+	case TimeoutTrafficAgentArrival:
+		yamlName = "trafficAgentArrival"
+		humanName = "waiting for traffic agent arrival"
 	case TimeoutFtpReadWrite:
 		yamlName = "ftpReadWrite"
 		humanName = "FTP client read/write"
@@ -515,6 +523,7 @@ const (
 	defaultTimeoutsRoundtripLatency      = 2 * time.Second
 	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
 	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
+	defaultTimeoutsTrafficAgentArrival   = 60 * time.Second
 	defaultTimeoutsFtpReadWrite          = 1 * time.Minute
 	defaultTimeoutsFtpShutdown           = 2 * time.Minute
 	defaultTimeoutsContainerShutdown     = 0
@@ -531,6 +540,7 @@ var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
 	PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
 	PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
+	PrivateTrafficAgentArrival:   defaultTimeoutsTrafficAgentArrival,
 	PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
 	PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
 	PrivateContainerShutdown:     defaultTimeoutsContainerShutdown,

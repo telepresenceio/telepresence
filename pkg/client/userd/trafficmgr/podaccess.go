@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/netip"
 	"sync"
-	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -105,7 +104,8 @@ func (pa *podAccess) startForwards(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) error {
-	if client.GetConfig(ctx).Cluster().AgentPortForward {
+	cc := client.GetConfig(ctx)
+	if cc.Cluster().AgentPortForward {
 		// An agent port-forward to the pod with a designated to the podIP is necessary to
 		// mount or port-forward to localhost.
 		dlog.Debugf(ctx, "Waiting for root-daemon to receive agent IP %s", pa.podIP)
@@ -115,7 +115,7 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 		}
 		rsp, err := rd.WaitForAgentIP(ctx, &daemon.WaitForAgentIPRequest{
 			Ip:      ip.AsSlice(),
-			Timeout: durationpb.New(10 * time.Second),
+			Timeout: durationpb.New(cc.Timeouts().Get(client.TimeoutTrafficAgentArrival)),
 		})
 		switch status.Code(err) {
 		case codes.Unavailable: // Unavailable means that the feature disabled. This is OK, the traffic-manager will do the forwarding
