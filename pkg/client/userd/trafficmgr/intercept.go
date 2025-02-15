@@ -469,7 +469,7 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 		return nil, nil
 	}
 
-	if len(spec.PodPorts) > 0 && s.compareFinalizedManagerVersion(2, 22, 0) < 0 {
+	if (spec.PortIdentifier == "all" || len(spec.PodPorts) > 0) && s.compareFinalizedManagerVersion(2, 22, 0) < 0 {
 		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.Newf(
 			"traffic-manager version %s has no support for multi-port intercepts", s.managerVersion))
 	}
