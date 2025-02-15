@@ -59,7 +59,6 @@ func includeElement(list any, element proto.Message) (ok, found bool) {
 	listKind := reflect.TypeOf(list).Kind()
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Println("ERR", e)
 			ok = false
 			found = false
 		}

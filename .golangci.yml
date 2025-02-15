@@ -53,11 +53,6 @@ linters-settings:
         - gotest.tools:    { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
         - gotest.tools/v2: { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
         - gotest.tools/v3: { recommendations: ['github.com/stretchr/testify', 'github.com/google/go-cmp/cmp'] }
-  forbidigo:
-    forbid:
-      - '^os\.(DirEntry|FileInfo|FileMode|PathError)$' # deprecated in Go 1.16, import them from 'io/fs' instead
-      - '\.Readdir$' # deprecated in Go 1.16, use ReadDir instead
-    exclude_godoc_examples: false
 
   gocyclo:
     min-complexity: 35
@@ -71,7 +66,6 @@ linters-settings:
 
   nolintlint:
     allow-unused: true # Needed because there's some linters disabled for 1.18
-    allow-leading-space: false
     require-explanation: true
     require-specific: true
     allow-no-explanation:

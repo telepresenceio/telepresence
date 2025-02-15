@@ -31,6 +31,8 @@ bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 # https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
 export DOCKER_BUILDKIT := 1
 
+GOLANGCI_VERSION:=v1.64.5
+
 .PHONY: FORCE
 FORCE:
 
@@ -392,8 +394,6 @@ shellscripts += ./packaging/windows-package.sh
 .PHONY: lint lint-rpc lint-go
 
 lint: lint-rpc lint-go
-
-GOLANGCI_VERSION:=v1.63.4
 
 lint-go: lint-deps ## (QA) Run the golangci-lint
 	$(eval badimports = $(shell find cmd integration_test pkg -name '*.go' | grep -v '/mocks/' | xargs $(tools/gosimports) --local github.com/datawire/,github.com/telepresenceio/ -l))

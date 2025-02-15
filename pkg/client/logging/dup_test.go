@@ -84,7 +84,7 @@ func testDupToStdHelper() int {
 		return 1
 	}
 
-	fmt.Println("this is stdout")
+	fmt.Fprintln(os.Stdout, "this is stdout")
 	fmt.Fprintln(os.Stderr, "this is stderr")
 	panic("this is panic")
 }

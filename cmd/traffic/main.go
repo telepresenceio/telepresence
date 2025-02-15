@@ -43,7 +43,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		fmt.Println("traffic: unknown command:", name)
+		_, _ = fmt.Fprintln(os.Stderr, "traffic: unknown command:", name)
 		os.Exit(127)
 	}
 }

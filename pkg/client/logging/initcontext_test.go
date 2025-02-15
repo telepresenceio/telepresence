@@ -122,7 +122,7 @@ func TestInitContext(t *testing.T) {
 		defer closeLog(t)
 
 		msg := "some message"
-		println(msg)
+		println(msg) //nolint:forbidigo // we're testing this builtin function
 		check.FileExists(logFile)
 		time.Sleep(30 * time.Millisecond)
 		bs, err := os.ReadFile(logFile)

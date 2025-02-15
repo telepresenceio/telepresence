@@ -129,6 +129,8 @@ func Main() error {
 		gitDescVer.Patch++
 	}
 
+	out := os.Stdout
+
 	// If an additional arg has been used, we include it in the tag
 	if len(os.Args) >= 2 {
 		// gitDescVer.Pre[0] contains the number of commits since the last tag and the
@@ -140,7 +142,7 @@ func Main() error {
 		if err != nil {
 			return fmt.Errorf("unable to git rev-parse: %w", err)
 		}
-		if _, err := fmt.Printf("v%d.%d.%d-%s-%s\n", gitDescVer.Major, gitDescVer.Minor, gitDescVer.Patch, os.Args[1], shortHash); err != nil {
+		if _, err = fmt.Fprintf(out, "v%d.%d.%d-%s-%s\n", gitDescVer.Major, gitDescVer.Minor, gitDescVer.Patch, os.Args[1], shortHash); err != nil {
 			return fmt.Errorf("unable to printf: %w", err)
 		}
 		return nil
@@ -163,9 +165,9 @@ func Main() error {
 		b64 := base64.RawURLEncoding.EncodeToString(md5Out)
 		b64 = strings.ReplaceAll(b64, "_", "Z")
 		b64 = strings.ReplaceAll(b64, "-", "z")
-		_, err = fmt.Printf("v%s-%s\n", gitDescVer, b64)
+		_, err = fmt.Fprintf(out, "v%s-%s\n", gitDescVer, b64)
 	} else {
-		_, err = fmt.Printf("v%s\n", gitDescVer)
+		_, err = fmt.Fprintf(out, "v%s\n", gitDescVer)
 	}
 	return err
 }
