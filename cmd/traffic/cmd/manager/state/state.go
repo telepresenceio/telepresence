@@ -342,14 +342,16 @@ func (s *state) consolidateAgentSessionIntercepts(ctx context.Context, agent *Ag
 
 		if errCode, errMsg := s.checkAgentsForIntercept(intercept); errCode != rpc.InterceptDispositionType_UNSPECIFIED {
 			// No agents matching this intercept are available, so the intercept is now dormant or in error.
-			dlog.Debugf(ctx, "Intercept %q no longer has available agents. Setting it disposition to %s", interceptID, errCode)
+			dlog.Debugf(ctx, "Intercept %q no longer has available agents. Setting its disposition to %s", interceptID, errCode)
 			s.UpdateIntercept(interceptID, func(intercept *Intercept) {
+				intercept.PodIp = ""
+				intercept.PodName = ""
 				intercept.Disposition = errCode
 				intercept.Message = errMsg
 			})
 		} else if agent.PodIp == intercept.PodIp {
 			// The agent is about to die, but apparently more agents are present. Let some other agent pick it up then.
-			dlog.Debugf(ctx, "Intercept %q lost its agent pod %s(%s). Setting it disposition to WAITING", interceptID, agent.PodName, agent.PodIp)
+			dlog.Debugf(ctx, "Intercept %q lost its agent pod %s(%s). Setting its disposition to WAITING", interceptID, agent.PodName, agent.PodIp)
 			s.UpdateIntercept(interceptID, func(intercept *Intercept) {
 				intercept.PodIp = ""
 				intercept.PodName = ""
