@@ -678,7 +678,6 @@ func (s *session) ensureWatchers(ctx context.Context,
 ) {
 	managerHasWatcherSupport := s.compareFinalizedManagerVersion(2, 20, 0) > 0
 
-	dlog.Debugf(ctx, "Ensure watchers %v", namespaces)
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
 	for _, ns := range namespaces {
@@ -704,7 +703,6 @@ func (s *session) ensureWatchers(ctx context.Context,
 		}
 	}
 	wg.Wait()
-	dlog.Debugf(ctx, "watchers for %q synced", namespaces)
 }
 
 func (s *session) WorkloadInfoSnapshot(
@@ -896,6 +894,7 @@ func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*com
 		if status.Code(err) == codes.Unimplemented {
 			return s.legacyUninstall(ctx, ur)
 		}
+		dlog.Errorf(ctx, "uninstall agents failed: %v", err)
 	}
 	return errcat.ToResult(err), nil
 }
