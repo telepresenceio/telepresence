@@ -116,7 +116,7 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 		if tp == nil {
 			tp = s.getAgentClient(destAddr)
 			if tp != nil {
-				dlog.Debugf(c, "Opening traffic-agent tunnel for id %s", id)
+				dlog.Debugf(c, "Opening traffic-agent tunnel for id %s using agent %s", id, tp)
 			} else {
 				tp = tunnel.ManagerProxyProvider(s.managerClient)
 				dlog.Debugf(c, "Opening traffic-manager tunnel for id %s", id)

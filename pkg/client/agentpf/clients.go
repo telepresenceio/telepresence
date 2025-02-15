@@ -48,7 +48,7 @@ func (ac *client) String() string {
 		return "<nil>"
 	}
 	ai := ac.info
-	return fmt.Sprintf("%s.%s:%d", ai.PodName, ai.Namespace, ai.ApiPort)
+	return fmt.Sprintf("%s(%s), port %d, dormant %t", ai.PodName, net.IP(ai.PodIp), ai.ApiPort, ac.dormant())
 }
 
 func (ac *client) ensureConnect(ctx context.Context) (err error) {
@@ -78,8 +78,10 @@ func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.C
 		// Client was closed.
 		return nil, io.EOF
 	}
+	dlog.Tracef(ctx, "%s(%s) creating Tunnel over gRPC", ac, net.IP(ac.info.PodIp))
 	tc, err := cli.Tunnel(ctx, opts...)
 	if err != nil {
+		dlog.Tracef(ctx, "%s(%s) failed to create Tunnel over gRPC: %v", ac, net.IP(ac.info.PodIp), err)
 		return nil, err
 	}
 	atomic.AddInt32(&ac.tunnelCount, 1)
@@ -117,8 +119,8 @@ func (ac *client) connect(ctx context.Context, deleteMe func()) {
 	ac.cancelClient = func() {
 		// Need to run this in a separate thread to avoid deadlock.
 		go func() {
-			ac.Lock()
 			conn.Close()
+			ac.Lock()
 			ac.cancelClient = nil
 			ac.cli = nil
 			ac.infant.Store(true)
