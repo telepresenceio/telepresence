@@ -94,7 +94,7 @@ func (s *connectedSuite) successfulIngest(tp, wl string) {
 				return false
 			}
 			if strings.Contains(stdout, wl) {
-				dlog.Errorf(ctx, "Expected %q to not contain %q", wl, stdout)
+				dlog.Errorf(ctx, "Expected %q to not contain %q", stdout, wl)
 				return false
 			}
 			return true
@@ -113,6 +113,9 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsReplicaSet() {
 }
 
 func (s *connectedSuite) Test_SuccessfullyInterceptsStatefulSet() {
+	if !s.ManagerIsVersion(">2.21.x") {
+		s.T().Skip("Not part of compatibility tests. StatefulSet rollouts fail intermittently in versions < 2.22.0")
+	}
 	s.successfulIntercept("StatefulSet", "ss-echo", "9092")
 }
 
@@ -133,6 +136,9 @@ func (s *connectedSuite) Test_SuccessfullyIngestsReplicaSet() {
 }
 
 func (s *connectedSuite) Test_SuccessfullyIngestsStatefulSet() {
+	if !s.ManagerIsVersion(">2.21.x") {
+		s.T().Skip("Not part of compatibility tests. StatefulSet rollouts fail intermittently in versions < 2.22.0")
+	}
 	s.successfulIngest("StatefulSet", "ss-echo")
 }
 

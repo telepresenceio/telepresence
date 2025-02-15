@@ -32,7 +32,7 @@ func (s *cliSuite) Test_Version() {
 		s.Require().NoError(err)
 	}
 	s.Empty(stderr)
-	s.Regexp(fmt.Sprintf(`Client\s*: %s`, regexp.QuoteMeta(s.TelepresenceVersion())), stdout)
+	s.Regexp(fmt.Sprintf(`Client\s*: v%s`, regexp.QuoteMeta(s.ClientVersion().String())), stdout)
 }
 
 func (s *cliSuite) Test_VersionWithInvalidKubeContext() {
@@ -43,7 +43,7 @@ func (s *cliSuite) Test_VersionWithInvalidKubeContext() {
 		s.Require().NoError(err)
 	}
 
-	s.Regexp(fmt.Sprintf(`Client\s*: %s`, regexp.QuoteMeta(s.TelepresenceVersion())), stdout)
+	s.Regexp(fmt.Sprintf(`Client\s*: v%s`, regexp.QuoteMeta(s.ClientVersion().String())), stdout)
 }
 
 func (s *cliSuite) Test_Help() {

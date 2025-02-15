@@ -30,11 +30,12 @@ func (s *connectedSuite) Test_ListExcludesTM() {
 
 func (s *connectedSuite) Test_ReportsAllVersions() {
 	stdout := itest.TelepresenceOk(s.Context(), "version")
-	rxVer := regexp.QuoteMeta(s.TelepresenceVersion())
-	s.Regexp(fmt.Sprintf(`Client\s*: %s`, rxVer), stdout)
-	s.Regexp(fmt.Sprintf(`Root Daemon\s*: %s`, rxVer), stdout)
-	s.Regexp(fmt.Sprintf(`User Daemon\s*: %s`, rxVer), stdout)
-	s.Regexp(fmt.Sprintf(`Traffic Manager\s*: %s`, rxVer), stdout)
+	rxVer := regexp.QuoteMeta(s.ClientVersion().String())
+	s.Regexp(fmt.Sprintf(`Client\s*: v%s`, rxVer), stdout)
+	s.Regexp(fmt.Sprintf(`Root Daemon\s*: v%s`, rxVer), stdout)
+	s.Regexp(fmt.Sprintf(`User Daemon\s*: v%s`, rxVer), stdout)
+	mgrVer := regexp.QuoteMeta(s.ManagerVersion().String())
+	s.Regexp(fmt.Sprintf(`Traffic Manager\s*: v%s`, mgrVer), stdout)
 }
 
 func (s *connectedSuite) Test_Status() {

@@ -31,6 +31,9 @@ func init() {
 }
 
 func (s *replaceSuite) SetupSuite() {
+	if !s.ManagerIsVersion(">2.21.x") {
+		s.T().Skip("Not part of compatibility tests. The replace command was introduced in 2.22")
+	}
 	s.Suite.SetupSuite()
 	s.tplPath = filepath.Join("testdata", "k8s", "generic.goyaml")
 	s.tpl = &itest.Generic{

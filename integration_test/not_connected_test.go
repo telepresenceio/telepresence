@@ -111,10 +111,10 @@ func (s *notConnectedSuite) Test_ReportsNotConnected() {
 	s.TelepresenceConnect(ctx)
 	itest.TelepresenceDisconnectOk(ctx)
 	stdout := itest.TelepresenceOk(ctx, "version")
-	rxVer := regexp.QuoteMeta(s.TelepresenceVersion())
-	s.Regexp(fmt.Sprintf(`Client\s*: %s`, rxVer), stdout)
-	s.Regexp(fmt.Sprintf(`Root Daemon\s*: %s`, rxVer), stdout)
-	s.Regexp(fmt.Sprintf(`User Daemon\s*: %s`, rxVer), stdout)
+	rxVer := regexp.QuoteMeta(s.ClientVersion().String())
+	s.Regexp(fmt.Sprintf(`Client\s*: v%s`, rxVer), stdout)
+	s.Regexp(fmt.Sprintf(`Root Daemon\s*: v%s`, rxVer), stdout)
+	s.Regexp(fmt.Sprintf(`User Daemon\s*: v%s`, rxVer), stdout)
 	s.Regexp(`Traffic Manager\s*: not connected`, stdout)
 }
 

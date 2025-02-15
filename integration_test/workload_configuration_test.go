@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -70,10 +71,14 @@ func (s *workloadConfigurationSuite) Test_InterceptsDeploymentWithDisabledReplic
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 
+	verb := "engage"
+	if !s.ClientIsVersion(">2.21.x") {
+		verb = "intercept"
+	}
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list")
-			return err == nil && strings.Contains(stdout, fmt.Sprintf("%s: ready to engage", wl))
+			return err == nil && strings.Contains(stdout, fmt.Sprintf("%s: ready to %s", wl, verb))
 		},
 		6*time.Second, // waitFor
 		2*time.Second, // polling interval
@@ -91,7 +96,7 @@ func (s *workloadConfigurationSuite) Test_InterceptsReplicaSetWithDisabledDeploy
 	ctx := s.Context()
 	require := s.Require()
 
-	wl, tp := "echo-one", "Deployment"
+	wl, tp := "echo-easy", "Deployment"
 	s.ApplyApp(ctx, wl, strings.ToLower(tp)+"/"+wl)
 	defer s.DeleteSvcAndWorkload(ctx, strings.ToLower(tp), wl)
 
@@ -103,13 +108,20 @@ func (s *workloadConfigurationSuite) Test_InterceptsReplicaSetWithDisabledDeploy
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 
-	require.Eventually(
+	verb := "engage"
+	if !s.ClientIsVersion(">2.21.x") {
+		verb = "intercept"
+	}
+	expect := fmt.Sprintf("%s: ready to %s", interceptableWl, verb)
+	require.Eventuallyf(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list")
-			return err == nil && strings.Contains(stdout, fmt.Sprintf("%s: ready to engage", interceptableWl))
+			dlog.Info(ctx, stdout)
+			return err == nil && strings.Contains(stdout, expect)
 		},
 		6*time.Second, // waitFor
 		2*time.Second, // polling interval
+		"expected %q was never produced", expect,
 	)
 
 	stdout := itest.TelepresenceOk(ctx, "intercept", interceptableWl)

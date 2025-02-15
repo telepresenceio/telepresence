@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -33,9 +34,13 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	s.ApplyApp(ctx, jobname, deployname)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", jobname)
 
+	verb := "engage"
+	if !s.ClientIsVersion(">2.21.x") {
+		verb = "intercept"
+	}
 	s.Eventually(func() bool {
 		stdout, _, err = itest.Telepresence(ctx, "list", "--agents")
-		return err == nil && strings.Contains(stdout, jobname+": ready to engage (traffic-agent already installed)")
+		return err == nil && strings.Contains(stdout, fmt.Sprintf("%s: ready to %s (traffic-agent already installed)", jobname, verb))
 	}, 30*time.Second, 3*time.Second)
 
 	stdout = itest.TelepresenceOk(ctx, "helm", "uninstall", "-n", s.ManagerNamespace())

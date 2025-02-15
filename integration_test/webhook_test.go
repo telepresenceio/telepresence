@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -29,9 +30,13 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
 
 	require := s.Require()
+	verb := "engage"
+	if !s.ClientIsVersion(">2.21.x") {
+		verb = "intercept"
+	}
 	require.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
-		return err == nil && strings.Contains(stdout, "echo-auto-inject: ready to engage (traffic-agent already installed)")
+		return err == nil && strings.Contains(stdout, fmt.Sprintf("echo-auto-inject: ready to %s (traffic-agent already installed)", verb))
 	},
 		20*time.Second, // waitFor
 		2*time.Second,  // polling interval
@@ -60,5 +65,5 @@ func (s *notConnectedSuite) Test_AgentImageFromConfig() {
 
 	st := itest.TelepresenceStatusOk(ctx)
 	s.Require().NotNil(st.TrafficManager)
-	s.Equal(s.Registry()+"/imageFromConfig:0.0.1", st.TrafficManager.TrafficAgent)
+	s.Equal(s.ManagerRegistry()+"/imageFromConfig:0.0.1", st.TrafficManager.TrafficAgent)
 }

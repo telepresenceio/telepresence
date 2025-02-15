@@ -76,9 +76,13 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 
 	oldValues, err := getValues()
 	rq.NoError(err)
+	args := []string{"helm", "upgrade", "--namespace", is.ManagerNamespace()}
+	if !is.ManagerVersion().EQ(version.Structured) {
+		args = append(args, "--version", is.ManagerVersion().String())
+	}
 
 	is.Run("default reuse-values", func() {
-		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace())
+		itest.TelepresenceOk(is.Context(), args...)
 		newValues, err := getValues()
 		if is.NoError(err) {
 			is.Equal(oldValues, newValues)
@@ -87,7 +91,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 
 	is.Run("default reset-values", func() {
 		// Setting a value means that the default behavior is to reset old values.
-		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace(), "--set", "apiPort=8765")
+		itest.TelepresenceOk(is.Context(), append(args, "--set", "apiPort=8765")...)
 		newValues, err := getValues()
 		if is.NoError(err) {
 			is.Equal(8765.0, newValues["apiPort"])
@@ -97,7 +101,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 
 	is.Run("explicit reuse-values", func() {
 		// Set new value and enforce merge with of old values.
-		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace(), "--set", "logLevel=debug", "--reuse-values")
+		itest.TelepresenceOk(is.Context(), append(args, "--set", "logLevel=debug", "--reuse-values")...)
 		newValues, err := getValues()
 		if is.NoError(err) {
 			is.Equal(8765.0, newValues["apiPort"])
@@ -107,7 +111,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 
 	is.Run("explicit reset-values", func() {
 		// Enforce reset of old values.
-		itest.TelepresenceOk(is.Context(), "helm", "upgrade", "--namespace", is.ManagerNamespace(), "--reset-values")
+		itest.TelepresenceOk(is.Context(), append(args, "--reset-values")...)
 		newValues, err := getValues()
 		if is.NoError(err) {
 			is.False(containsKey(newValues, "apiPort"))  // Should be back at default

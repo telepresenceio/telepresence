@@ -69,9 +69,13 @@ func (s *helmSuite) Test_HelmWebhookInjectsInManagedNamespace() {
 	s.ApplyApp(ctx, "echo-auto-inject", "deploy/echo-auto-inject")
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
 
+	verb := "engage"
+	if !s.ClientIsVersion(">2.21.x") {
+		verb = "intercept"
+	}
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
-		return err == nil && strings.Contains(stdout, "echo-auto-inject: ready to engage (traffic-agent already installed)")
+		return err == nil && strings.Contains(stdout, fmt.Sprintf("echo-auto-inject: ready to %s (traffic-agent already installed)", verb))
 	},
 		20*time.Second, // waitFor
 		2*time.Second,  // polling interval
@@ -83,9 +87,13 @@ func (s *helmSuite) Test_HelmWebhookDoesntInjectInUnmanagedNamespace() {
 	itest.ApplyApp(ctx, "echo-auto-inject", s.appSpace2, "deploy/echo-auto-inject")
 	defer itest.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject", s.appSpace2)
 
+	verb := "engage"
+	if !s.ClientIsVersion(">2.21.x") {
+		verb = "intercept"
+	}
 	s.Never(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--namespace", s.appSpace2, "--agents")
-		return err == nil && strings.Contains(stdout, "echo-auto-inject: ready to engage (traffic-agent already installed)")
+		return err == nil && strings.Contains(stdout, fmt.Sprintf("echo-auto-inject: ready to %s (traffic-agent already installed)", verb))
 	},
 		10*time.Second, // waitFor
 		2*time.Second,  // polling interval

@@ -111,7 +111,7 @@ func (th *trafficManager) DoWithTrafficManager(ctx context.Context, f func(conte
 		Namespace: th.AppNamespace(),
 		InstallId: "xxx",
 		Product:   "telepresence",
-		Version:   th.TelepresenceVersion(),
+		Version:   th.ClientVersion().String(),
 	})
 	if err != nil {
 		return err

@@ -34,9 +34,7 @@ func (s *argoRolloutsSuite) SetupSuite() {
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	rq := s.Require()
-	if itest.Kubectl(ctx, "", "get", "namespaces", "argo-rollouts") != nil {
-		itest.CreateNamespaces(ctx, "argo-rollouts")
-	}
+	itest.CreateNamespaces(ctx, "argo-rollouts")
 	arExe := filepath.Join(itest.BuildOutput(ctx), "bin", "kubectl-argo-rollouts")
 	if runtime.GOOS == "windows" {
 		arExe += ".exe"
@@ -49,6 +47,10 @@ func (s *argoRolloutsSuite) SetupSuite() {
 	rq.NoError(err)
 	dlog.Info(ctx, out)
 	rq.NoError(itest.Kubectl(ctx, "argo-rollouts", "apply", "-f", "https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml"))
+}
+
+func (s *argoRolloutsSuite) TearDownSuite() {
+	itest.DeleteNamespaces(s.Context(), "argo-rollouts")
 }
 
 func downloadKubectlArgoRollouts(ctx context.Context, arExe string) error {

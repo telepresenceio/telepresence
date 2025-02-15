@@ -45,6 +45,9 @@ type namespaceData struct {
 }
 
 func (s *nsSuite) SetupSuite() {
+	if !s.ManagerIsVersion(">2.21.x") {
+		s.T().Skip("Not part of compatibility tests. Namespace selector was introduced in 2.22.0")
+	}
 	s.nss = []namespaceData{
 		{
 			"manager",

@@ -38,9 +38,6 @@ func (s *interceptFlagSuite) SetupSuite() {
 		s.T().Skip("Mount tests don't run on darwin due to macFUSE issues")
 		return
 	}
-	if s.CompatVersion() != "" {
-		s.T().Skip("Not part of compatibility suite")
-	}
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	s.serviceName = "hello"
@@ -131,6 +128,11 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			jsOut := itest.TelepresenceOk(ctx, args...)
 			agentCaptureCtx, agentCaptureCancel := context.WithCancel(ctx)
 			s.CapturePodLogs(agentCaptureCtx, s.serviceName, "traffic-agent", s.AppNamespace())
+
+			defer func() {
+				_, _, err := itest.Telepresence(ctx, "uninstall", s.serviceName)
+				s.NoError(err)
+			}()
 
 			defer func() {
 				agentCaptureCancel()

@@ -64,11 +64,15 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	assert.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list")
 		if err != nil {
+			dlog.Errorf(ctx, "%s: %v", stdout, err)
 			return false
 		}
 		if match := rx.FindStringSubmatch(stdout); match != nil {
-			return match[1] == "ACTIVE"
+			if match[1] == "ACTIVE" {
+				return true
+			}
 		}
+		dlog.Info(ctx, stdout)
 		return false
 	}, 30*time.Second, 3*time.Second)
 

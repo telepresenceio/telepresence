@@ -15,6 +15,9 @@ import (
 // unnamed ports targets different container ports in the same workload and the same
 // container.
 func (s *connectedSuite) Test_MultipleUnnamedServicePorts() {
+	if !s.ManagerIsVersion(">2.21.x") {
+		s.T().Skip(`Not part of compatibility tests. No support for port annotation "all" in Versions < 2.22.0`)
+	}
 	ctx := s.Context()
 	dep := "echo-double-one-unnamed"
 	s.ApplyApp(ctx, dep, "deploy/"+dep)

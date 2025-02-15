@@ -140,9 +140,25 @@ func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
 		Items      []core.Pod `json:"items"`
 	}{}
 	require.NoError(json.Unmarshal([]byte(stdout), &items))
-	require.False(slices.ContainsFunc(items.Items, func(pod core.Pod) bool {
-		return slices.ContainsFunc(pod.Spec.Containers, func(container core.Container) bool { return container.Name == "echo" })
-	}))
+	pods := items.Items
+	var echoContainer *core.Container
+	for pi := range pods {
+		cns := pods[pi].Spec.Containers
+		for ci := range cns {
+			container := &cns[ci]
+			if container.Name == "echo" {
+				echoContainer = container
+				break
+			}
+		}
+	}
+	if s.ManagerIsVersion(">2.21.x") {
+		require.Nil(echoContainer)
+	} else {
+		require.NotNil(echoContainer)
+		require.Equal(echoContainer.Image, "alpine:latest")
+		require.True(slices.Equal(echoContainer.Args, []string{"sleep", "infinity"}))
+	}
 
 	// Intercept again, this time without the --container flag
 	itest.TelepresenceOk(ctx, "leave", svc)

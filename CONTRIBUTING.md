@@ -1,61 +1,66 @@
-# Developing Telepresence 2
+# Developing Telepresence
 
-## Set up your environment
+## Development environment
 
-### Development environment
+### Building
 
- - `TELEPRESENCE_REGISTRY` (required) is the Docker registry that
-   `make push-images` pushes the `tel2` and `telepresence` image to.
-   For most developers, the easiest thing is to set it to
-   `docker.io/USERNAME`.
+The Open Source version of Telepresence consists of three artifacts.
+- The `telepresence` binary. This is the binary that runs on the client.
+  The same binary is used for the command line interface, the user daemon,
+  and the root daemon.
+- The `telepresence` docker image. Used by the container acting as both the
+  user and root daemon when using `telepresence connect --docker`.
+- The `tel2` docker image. Used by the traffic-manager and traffic-agent
+  container.
 
- - `TELEPRESENCE_VERSION` (optional) is the "vSEMVER" string to
-   compile-in to the binary and Docker image, if set.  Otherwise,
-   `make` will automatically set this based on the current Git commit
-   and the current time.
+- `TELEPRESENCE_REGISTRY` (required) is the Docker registry that
+  `make push-images` pushes the `tel2` and `telepresence` image to.
+  For most developers, the easiest thing is to set it to
+  `docker.io/USERNAME`.
 
- - `DTEST_KUBECONFIG` (optional) is the cluster that is used by tests,
-   if set.  Otherwise the tests will automatically use a K3s cluster
-   running locally in Docker.  It is not normally necessary to set
-   this, but it is useful to set it in order to test against different
-   Kubernetes versions/configurations than what
-   https://github.com/datawire/dtest uses.
+- `TELEPRESENCE_VERSION` (optional) is the "vSEMVER" string to
+  compile-in to the telepresence binary and the telepresence and tel2
+  Docker images, if set.  Otherwise, `make` will automatically set
+  this based on the version found in the CHANGELOG.yml and a hash
+  computed for the source.
 
- - `DTEST_REGISTRY` (optional) is the Docker registry that images are
-   pushed to by the tests, if set.  Otherwise, the tests will
-   automatically use a registry running locally in Docker
-   ("localhost:5000").  The tests will push images named `tel2` with
-   various version tags.  It is not necessary to set this unless you
-   have set `DTEST_KUBECONFIG`.
+The output of `make help` has a bit more information.
 
-   If `DTEST_KUBECONFIG` is pointing to a pre-existing cluster, and you
-   would like the `DTEST_REGISTRY` to point to a private registry that is
-   hosted in that cluster, then you can use `make private-registry`. It
-   will deploy a registry and set it up so that it is reachable at
-   `localhost:5000`, both from the cluster and from the local workstation.
+### Run Telepresence in a local cluster
 
- - `DEV_TELEPRESENCE_VERSION` (optional) if set to a version such as
-   `v2.12.1-alpha.0`, the integration tests will assume that this version
-   is pre-built and available, both as a CLI client (accessible from the
-   current runtime path), and also pre-pushed into a pre-existing cluster
-   accessible from `DTEST_KUBECONFIG`. In other words, if this is set, no
-   no binaries will be built or pushed so the development + test cycle
-   can be quit rapid.
+Using the Kubernetes bundled with Docker Desktop is a quick and easy way to
+develop Telepresence, because, when using this setup, there's no need to push
+images to a registry. Kubernetes will find them in Docker's local cache
+after they have been built.
 
- - `DEV_CLIENT_IMAGE` (optional) can be set to the fully qualified name of
-   an alternative image to use for the docker image used for the containerized
-   daemon when running in docker mode.
+Example building everything, install traffic-manager (with log-level debug),
+and connect to it.
+```bash
+export TELEPRESENCE_VERSION=v2.22.0-alpha.0
+export DEV_CLIENT_REGISTRY=local
+make build client-image tel2-image
+alias tel=./build-output/bin/telepresence
+tel helm install --set logLevel=debug,image.pullPolicy=Never,agent.image.pullPolicy=Never
+tel connect
+```
 
- - `DEV_MANAGER_IMAGE` (optional) can be set to the fully qualified name of
-   an alternative image to use for the traffic manager.
+### Environment Variables for Integration Testing
 
- - `DEV_AGENT_IMAGE` (optional) can be set to the fully qualified name of
-   an alternative image to use for the traffic agent.
-
- - `DEV_USERD_PROFILING_PORT` and `DEV_ROOTD_PROFILING_PORT` (optional) if
-   set, will cause the `telepresence connect` calls in the integration tests
-   to start daemons where pprof is enabled (see
-   [Profiling the daemons](#profiling_the_daemons) below).
+| Environment Name           | Description                                   | Default                   |
+|----------------------------|-----------------------------------------------|---------------------------|
+| `DEV_KUBECONFIG`           | Cluster configuration used by the tests       | Kubernetes default        |
+| `DEV_CLIENT_REGISTRY`      | Docker registry for the client image          | "ghcr.io/telepresenceio"  |
+| `DEV_MANAGER_REGISTRY`     | Docker registry for the traffic-manager image | Client registry           |
+| `DEV_AGENT_REGISTRY`       | Docker registry for the traffic-agent image   | Traffic-manager registry  |
+| `DEV_CLIENT_IMAGE`         | Name of the client image                      | "telepresence"            |
+| `DEV_MANAGER_IMAGE`        | Name of the traffic-manager image             | "tel2"                    |
+| `DEV_AGENT_IMAGE`          | Name of the traffic-agent image               | Traffic-manager image     |
+| `DEV_CLIENT_VERSION`       | Client version                                | ${TELEPRESENCE_VERSION#v} |
+| `DEV_MANAGER_VERSION`      | Traffic-manager version                       | Client version            |
+| `DEV_AGENT_VERSION`        | Traffic-agent image version                   | Traffic-manager version   |
+| `DEV_USERD_PROFILING_PORT` | start user daemon with pprof is enabled       |                           |
+| `DEV_ROOTD_PROFILING_PORT` | start root daemon with pprof is enabled       |                           |
+| `TEST_SUITE`               | Regexp matching test suite name(s)            |                           |
 
 The above environment can optionally be provided in a `itest.yml` file
 that is placed adjacent to the normal `config.yml` file used to configure
@@ -64,181 +69,48 @@ Telepresence. The `itest.yml` currently has only one single entry, the
 
 ```yaml
 Env:
-  DEV_TELEPRESENCE_VERSION: v2.12.1-alpha.0
-  DTEST_KUBECONFIG: /home/thhal/.kube/testconfig
+  DEV_CLIENT_VERSION: v2.22.0-alpha.0
+  DEV_KUBECONFIG: /home/thhal/.kube/testconfig
 ```
 
-The output of `make help` has a bit more information.
+## Running integration tests
 
-### Running integration tests
+Integration tests can be run using `go test ./integration_test/...`. For individual tests, use the
+`-m.testify=<pattern>` flag. Verbose output using the `-v` flag is also recommended, because the
+tests are built with human-readable output in mind and timestamps can be compared to timestamps
+found in the telepresence logs.
 
-Integration tests can be run using `go test ./integration_test/...`. For
-individual tests, use the `-m.testify=<pattern>` flag. Verbose output using
-the `-v` flag is also recommended, because the tests are built with human
-readable output in mind and timestamps can be compared to timestamps found
-in the telepresence logs.
+### Using Docker Desktop with Kubernetes enabled
 
-Example of running one test with existing cluster and registry:
-```
-make private-registry
-export DTEST_KUBECONFIG=<your kubeconfig>
-export DTEST_REGISTRY=localhost:5000
+Using the Kubernetes embedded with Docker is a quick and easy way to run
+integration tests, because, when using this setup, there's no need to push
+images to a registry. Kubernetes will find them in Docker's local cache
+after they have been built.
+
+The integration tests will automatically use `pullPolicy=Never` when the DEV_CLIENT_REGISTRY` is set to
+"local", and hence instruct Kubernetes to either find the images in the local cache or fail.
+See [local cluster](#run-telepresence-in-a-local-cluster) above.
+
+```bash
+export TELEPRESENCE_VERSION=v2.22.0-alpha.0
+export DEV_CLIENT_REGISTRY=local
+make build client-image tel2-image
 go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
 ```
 
-The user running the integration tests needs to be in the docker group.
-
-If you run these tests on a Mac, localhost won't work. Please use the docker hub, or this value for the registry:
-
-```cli
-export DTEST_REGISTRY=host.docker.internal:5000
-```
-
-You must also set this in your docker engine settings: 
-
-```json
-{
-   "insecure-registries": [
-     "host.docker.internal:5000"
-   ]
-}
-```
-
-The test takes about a minute to complete when using an existing cluster
-and a private registry created by `make private-registry`. During that time
-it:
-- builds the traffic-manager image
-- pushes the image to the registry
-- builds the client binary
-- creates two namespaces for the test
-- performs a helm install of a namespace scoped traffic-manager
-- runs the test
-- uninstalls the traffic-manager
-- deletes the namespaces
-
-The first two can be omitted (and are omitted when the tests run
-from CI) by building the binary using `make build`.
-Example of running test with existing client and traffic-mananager:
-
-```
-make private-registry
-export TELEPRESENCE_VERSION=v2.12.1-alpha.0
-export TELEPRESENCE_REGISTRY=localhost:5000
-make build
-make push-images
-export DTEST_KUBECONFIG=<your kubeconfig>
-export DTEST_REGISTRY=$TELEPRESENCE_REGISTRY
-export DEV_TELEPRESENCE_VERSION=$TELEPRESENCE_VERSION
-
-# Run any number of indivitual test with this setup
+### Run an individual test:
+```bash
 go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
 ```
 
-The `DEV_TELEPRESENCE_VERSION` tells the integration test that a client and
-a traffic-manager of that version has been prebuilt and pushed. This usually
-shortens the time for the test with about 20 seconds.
-
-### Runtime environment
-
- - The main thing is that in your `~/.config/telepresence/config.yml`
-   (`~/Library/Application Support/telepresence/config.yml` on macOS)
-   file you set `images.registry` to match the `TELEPRESENCE_REGISTRY`
-   environment variable. See https://www.telepresence.io/docs/reference/config
-   for more information.
-
- - `TELEPRESENCE_VERSION` is is the "vSEMVER" string used by the
-   `telepresence` binary *if* one was not compiled in (for example, if
-   you're running it with `go run ./cmd/telepresence` rather than
-   having built it with `make build`).
-
- - `TELEPRESENCE_AGENT_IMAGE` is is the "name:vSEMVER" string used when
-   the telepresence auto-installs the traffic-manager unless the config.yml
-   overrides it by defining `images.agentImage`.
-
- - You will need have a `~/.kube/config` file (or set `KUBECONFIG` to
-   point to a different file) file in order to connect to a cluster;
-   same as any other Kubernetes tool.
-
- - You will need to have [mockgen](https://github.com/golang/mock) installed
-   to generate new or updated testing mocks for interfaces.
-
- - You will need to have [argo-rollouts](https://github.com/argoproj/argo-rollouts) (including kubectl-argo-rollouts) installed
-   if you interact with functionality that relies on it.
-
-## Build the binary, push the image
-
-The easiest thing to do to get going:
-
-```console
-$ TELEPRESENCE_REGISTRY=docker.io/thhal make build push-images # use .\build-aux\winmake.bat build on windows
-[make] TELEPRESENCE_VERSION=v2.12.1-19-g37085c2d7-1655891839
-... # Lots of output
-2.12.1-19-g37085c2d7-1655891839: digest: sha256:40fe852f8d8026a89f196293f37ae8c462c765c85572150d26263d78c43cdd4b size: 1157
+### Run an integration test suite:
+```bash
+TEST_SUITE='^WorkloadConfiguration$' go test ./integration_test... -v
 ```
-
-This has 3 primary outputs:
- 1. The `./build-output/bin/telepresence` executable binary
- 2. The `${TELEPRESENCE_REGISTRY}/tel2` Docker image
- 3. The `${TELEPRESENCE_REGISTRY}/telepresence` Docker image
-
-It essentially does 4 separate tasks:
- 1. `make build` to build the `./build-output/bin/telepresence`
-    executable binary
- 2. `make tel2-image` to build the `${TELEPRESENCE_REGISTRY}/tel2` Docker
-    image.
- 3. `make client-image` to build the `${TELEPRESENCE_REGISTRY}/telepresence` Docker
-   image.
- 4. `make push-images` to push the `${TELEPRESENCE_REGISTRY}/tel2` and `${TELEPRESENCE_REGISTRY}/telepresence`
-    Docker images.
-
-You can run any of those tasks separately, but be warned: The
-`TELEPRESENCE_VERSION` for all 4 needs to agree, and `make` includes a
-timestamp in the default `TELEPRESENCE_VERSION`; if you run the tasks
-separately you will need to explicitly set the `TELEPRESENCE_VERSION`
-environment variable so that they all agree.
-
-When working on just the command-line binary, it is often useful to
-run it simply using `go run ./cmd/telepresence` rather than compiling
-it first; but be warned: When run this way it won't know its own
-version number (`telepresence version` will report "v0.0.0-devel")
-unless you set the `TELEPRESENCE_VERSION` environment variable, you
-will want to set it to the version of a previously-pushed Docker
-image.
-
-You may think that the initial suggestion of running `make build
-push-images` all the time (so that every build gets new matching
-version numbers) would be terribly slow.  However, This is not as slow
-as you might think; both `go` and `docker` are very good about reusing
-existing builds and avoiding unnecessary work.
-
-## Run the tests
-
-Running the tests does *not* require having previously built or pushed
-anything.
-
-The tests make use of `sudo`; it is useful to get in the habit of
-running a no-op `sudo` command to pre-emptively prompt for your
-password to avoid having to notice when the prompt appears in the test
-output.
-
-```console
-$ sudo id
-[sudo] password for lukeshu:
-uid=0(root) gid=0(root) groups=0(root)
-
-$ make check-unit
-[make] TELEPRESENCE_VERSION=v2.6.7-20-g9de10e316-1655892249
-...
-```
-
-The first time you run the tests, you should use `make check`, to get
-`make` to automatically create the requisite `heml` tool
-binaries.  However, after that initial run, you can instead use
-`gotestsum` or `go test` if you prefer.
 
 ### Test metric collection
 
-**When running in CI,** `make check-unit` and `make check-integration` this `test-report` tool will
+**When running in CI,** `make check-unit` and `make check-integration` the `test-report` tool will
 visually modify test output; this happens even running locally, since the json output to go test
 is piped to the tool anyway:
 
@@ -265,25 +137,25 @@ you would pass to make. `winmake.bat` will run `make` from inside a Docker conta
 
 ### Log output
 
-There are two logs:
- - the `connector.log` log file which contains output from the
-   background-daemon parts of Telepresence that run as your regular
-   user: the interaction with the traffic-manager and the cluster
-   (traffic-manager and traffic-agent installs, intercepts, port
-   forwards, etc.), and
- - the `daemon.log` log file which contains output from the parts of
-   telepresence that run as the "root" administrator user: the
-   networking changes and services that happen on your workstation.
+There are three logs:
+- the `connector.log` log file which contains output from the
+  background-daemon parts of Telepresence that run as your regular
+  user: the interaction with the traffic-manager and the cluster
+  (traffic-manager and traffic-agent installs, intercepts, port
+  forwards, etc.), and
+- the `daemon.log` log file which contains output from the parts of
+  telepresence that run as the "root" administrator user: the
+  networking changes and services that happen on your workstation.
+- the `cli.log` log file which contains output from the command line
+  interface.
 
 The location of both logs is:
 
- - on macOS: `~/Library/Logs/telepresence/`
- - on GNU/Linux: `~/.cache/telepresence/logs/`
- - on Windows `"%USERPROFILE%\AppData\Local\logs"`
+- on macOS: `~/Library/Logs/telepresence/`
+- on GNU/Linux: `~/.cache/telepresence/logs/`
+- on Windows `"%USERPROFILE%\AppData\Local\logs"`
 
-The logs are rotating and a new log is created every time Telepresence
-creates a new connection to the cluster, e.g. on `telepresence
-connect` after a `telepresence quit` that terminated the last session.
+The logs are rotating daily.
 
 #### Watching the logs
 
@@ -358,21 +230,3 @@ This creates a ServiceAccount, ClusterRole, and ClusterRoleBinding
 which can be used with kubectl (`kubectl config use-context
 telepresence-test-developer`) to work in a RBAC-restricted
 environment.
-
-### Errors from `make generate`
-
-#### Missing go.sum entries
-If you get an error like this:
-
-```
-cd tools/src/go-mkopensource && GOOS= GOARCH= go build -o /home/andres/source/production/telepresence/tools/bin/go-mkopensource $(sed -En 's,^import "(.*)".*,\1,p' pin.go)
-missing go.sum entry for module providing package github.com/datawire/go-mkopensource; to add:
-	go mod download github.com/datawire/go-mkopensource
-```
-
-Add the missing entries by going to the folder that caused the failure (in this case it's
-/home/andres/source/production/telepresence/tools/bin/go-mkopensource) and run the command provided by go:
-
-```
-go mod download github.com/datawire/go-mkopensource
-```

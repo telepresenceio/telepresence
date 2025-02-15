@@ -66,6 +66,9 @@ func (s *largeFilesSuite) ServiceCount() int {
 }
 
 func (s *largeFilesSuite) SetupSuite() {
+	if !s.ManagerIsVersion(">2.21.x") {
+		s.T().Skip("Not part of compatibility tests. Not enough transfer stability in versions < 2.22.0")
+	}
 	s.Suite.SetupSuite()
 	ctx := s.Context()
 	wg := sync.WaitGroup{}
