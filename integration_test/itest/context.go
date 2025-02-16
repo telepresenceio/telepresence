@@ -199,3 +199,16 @@ func GetGlobalHarness(ctx context.Context) Cluster {
 	}
 	panic("No globalHarness in context")
 }
+
+type exeContextKey struct{}
+
+func WithExecutable(ctx context.Context, exe string) context.Context {
+	return context.WithValue(ctx, exeContextKey{}, exe)
+}
+
+func GetExecutable(ctx context.Context) string {
+	if user, ok := ctx.Value(exeContextKey{}).(string); ok {
+		return user
+	}
+	panic("No executable in context")
+}

@@ -107,6 +107,13 @@ func (s *argoRolloutsSuite) Test_SuccessfullyInterceptsArgoRollout() {
 	itest.TelepresenceOk(ctx, "leave", svc)
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.NotContains(stdout, svc+": intercepted")
+
+	if !s.ClientIsVersion(">2.21.x") && s.ManagerIsVersion(">2.21.x") {
+		// An <2.22.0 client will not be able to uninstall an agent when the traffic-manager is >=2.22.0
+		// because the client will attempt to remove the entry in the telepresence-agents configmap. It
+		// is no longer present in versions >=2.22.0
+		return
+	}
 	itest.TelepresenceOk(ctx, "uninstall", svc)
 
 	require.Eventually(

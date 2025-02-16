@@ -56,6 +56,15 @@ func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClien
 	return helmConfig, nil
 }
 
+func (is *installSuite) AmendSuiteContext(ctx context.Context) context.Context {
+	if !(is.ManagerVersion().EQ(is.ClientVersion()) || is.ClientIsVersion(">2.21.x")) {
+		// Need to use the built executable because the client version doesn't handle the --version flag.
+		exe, _ := is.Executable()
+		ctx = itest.WithExecutable(ctx, exe)
+	}
+	return ctx
+}
+
 func (is *installSuite) Test_UpgradeRetainsValues() {
 	ctx := is.Context()
 	rq := is.Require()
@@ -77,7 +86,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 	oldValues, err := getValues()
 	rq.NoError(err)
 	args := []string{"helm", "upgrade", "--namespace", is.ManagerNamespace()}
-	if !is.ManagerVersion().EQ(version.Structured) {
+	if !(is.ManagerVersion().EQ(is.ClientVersion()) || is.ManagerVersion().LT(version.Structured)) {
 		args = append(args, "--version", is.ManagerVersion().String())
 	}
 

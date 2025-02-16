@@ -34,14 +34,13 @@ func (s *connectedSuite) successfulIntercept(tp, wl, port string) {
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.NotContains(stdout, wl+": intercepted")
 
-	itest.TelepresenceDisconnectOk(ctx)
-
-	dfltCtx := itest.WithUser(ctx, "default")
-	itest.TelepresenceOk(dfltCtx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
-	itest.TelepresenceOk(dfltCtx, "uninstall", wl)
-	itest.TelepresenceDisconnectOk(dfltCtx)
-	s.TelepresenceConnect(ctx)
-
+	if !s.ClientIsVersion(">2.21.x") && s.ManagerIsVersion(">2.21.x") {
+		// An <2.22.0 client will not be able to uninstall an agent when the traffic-manager is >=2.22.0
+		// because the client will attempt to remove the entry in the telepresence-agents configmap. It
+		// is no longer present in versions >=2.22.0
+		return
+	}
+	itest.TelepresenceOk(ctx, "uninstall", wl)
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
@@ -78,14 +77,14 @@ func (s *connectedSuite) successfulIngest(tp, wl string) {
 	stdout = itest.TelepresenceOk(ctx, "list", "--ingests")
 	require.NotContains(stdout, wl+": ingested")
 
-	itest.TelepresenceDisconnectOk(ctx)
+	if !s.ClientIsVersion(">2.21.x") && s.ManagerIsVersion(">2.21.x") {
+		// An <2.22.0 client will not be able to uninstall an agent when the traffic-manager is >=2.22.0
+		// because the client will attempt to remove the entry in the telepresence-agents configmap. It
+		// is no longer present in versions >=2.22.0
+		return
+	}
 
-	dfltCtx := itest.WithUser(ctx, "default")
-	itest.TelepresenceOk(dfltCtx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
-	itest.TelepresenceOk(dfltCtx, "uninstall", wl)
-	itest.TelepresenceDisconnectOk(dfltCtx)
-	s.TelepresenceConnect(ctx)
-
+	itest.TelepresenceOk(ctx, "uninstall", wl)
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
@@ -99,8 +98,8 @@ func (s *connectedSuite) successfulIngest(tp, wl string) {
 			}
 			return true
 		},
-		180*time.Second, // waitFor
-		6*time.Second,   // polling interval
+		60*time.Second, // waitFor
+		6*time.Second,  // polling interval
 	)
 }
 

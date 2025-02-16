@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"fmt"
@@ -162,30 +163,32 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	}
 	t := getT(ctx)
 
-	v := dos.Getenv(ctx, "DEV_CLIENT_VERSION")
-	if v == "" {
-		tv, ok := dos.LookupEnv(ctx, "TELEPRESENCE_VERSION")
-		require.True(t, ok, "DEV_CLIENT_VERSION or TELEPRESENCE_VERSION must be set")
-		v = strings.TrimPrefix(tv, "v")
-	}
+	v := dos.Getenv(ctx, "TELEPRESENCE_VERSION")
+	require.NotEmpty(t, v, "TELEPRESENCE_VERSION must be set")
 	var err error
-	s.clientVersion, err = semver.Parse(v)
+	version.Structured, err = semver.Parse(strings.TrimPrefix(v, "v"))
 	require.NoError(t, err)
+	version.Version = v
 
-	v = dos.Getenv(ctx, "DEV_MANAGER_VERSION")
-	if v == "" {
-		s.managerVersion = s.clientVersion
+	if v = dos.Getenv(ctx, "DEV_CLIENT_VERSION"); v != "" {
+		s.clientVersion, err = semver.Parse(v)
+		require.NoError(t, err)
 	} else {
+		s.clientVersion = version.Structured
+	}
+
+	if v = dos.Getenv(ctx, "DEV_MANAGER_VERSION"); v != "" {
 		s.managerVersion, err = semver.Parse(v)
 		require.NoError(t, err)
+	} else {
+		s.managerVersion = s.clientVersion
 	}
 
-	v = dos.Getenv(ctx, "DEV_AGENT_VERSION")
-	if v == "" {
-		s.agentVersion = s.managerVersion
-	} else {
+	if v = dos.Getenv(ctx, "DEV_AGENT_VERSION"); v != "" {
 		s.agentVersion, err = semver.Parse(v)
 		require.NoError(t, err)
+	} else {
+		s.agentVersion = s.managerVersion
 	}
 
 	s.clientRegistry = dos.Getenv(ctx, "DEV_CLIENT_REGISTRY")
@@ -207,9 +210,6 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 		require.True(t, len(lr.Precedence) > 0, "Unable to figure out KUBECONFIG")
 		s.kubeConfig = lr.Precedence[0]
 	}
-
-	version.Version = "v" + s.clientVersion.String()
-	version.Structured = s.clientVersion
 
 	s.clientImage = dos.Getenv(ctx, "DEV_CLIENT_IMAGE")
 	if s.clientImage == "" {
@@ -255,7 +255,15 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 		exe = "telepresence.exe"
 	}
 	s.executable = filepath.Join(BuildOutput(ctx), "bin", exe)
-	dlog.Infof(ctx, "Using binary %s", s.executable)
+
+	var executable string
+	if !s.clientVersion.EQ(version.Structured) {
+		executable = s.downloadBinary(ctx, t, s.clientVersion)
+	} else {
+		executable = s.executable
+	}
+	dlog.Infof(ctx, "Using binary %s", executable)
+	ctx = WithExecutable(ctx, executable)
 
 	if ipv6, err := strconv.ParseBool("DEV_IPV6_CLUSTER"); err == nil {
 		s.ipv6 = ipv6
@@ -274,6 +282,57 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	s.ensureQuit(ctx)
 	_ = Run(ctx, "kubectl", "delete", "ns", "-l", "purpose=tp-cli-testing")
 	return ctx
+}
+
+func (s *cluster) downloadBinary(ctx context.Context, t testing.TB, v semver.Version) string {
+	path := filepath.Join(BuildOutput(ctx), "downloads")
+	err := os.MkdirAll(path, 0o755)
+	require.NoError(t, err)
+	cdPath := filepath.Join(path, "telepresence-"+v.String())
+	if _, err := os.Stat(cdPath); err == nil {
+		return cdPath
+	}
+
+	cdURL := "https://github.com/telepresenceio/telepresence/releases/download/v%s/telepresence-%s-%s"
+	cdURL = fmt.Sprintf(cdURL, v, runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		cdURL += ".zip"
+		cdPath += ".zip"
+	}
+	dlog.Infof(ctx, "Downloading telepresence binary from %s", cdURL)
+	cdFile, err := os.Create(cdPath)
+	require.NoError(t, err)
+	rsp, err := http.Get(cdURL)
+	require.NoError(t, err)
+	bdy := rsp.Body
+	_, err = io.Copy(cdFile, bdy)
+	bdy.Close()
+	require.NoError(t, err)
+	if runtime.GOOS == "windows" {
+		require.NoError(t, cdFile.Close())
+		unzip(t, cdFile.Name(), cdPath)
+		return filepath.Join(cdPath, "telepresence.exe")
+	} else {
+		require.NoError(t, cdFile.Chmod(0o755))
+		require.NoError(t, cdFile.Close())
+		return cdFile.Name()
+	}
+}
+
+func unzip(t testing.TB, zipFile, dir string) {
+	uz, err := zip.OpenReader(zipFile)
+	require.NoError(t, err)
+	defer uz.Close()
+	for _, f := range uz.File {
+		rc, err := f.Open()
+		require.NoError(t, err)
+		out, err := os.OpenFile(filepath.Join(dir, f.Name), os.O_CREATE|os.O_WRONLY, f.FileInfo().Mode())
+		require.NoError(t, err)
+		_, err = io.Copy(out, rc)
+		rc.Close()
+		out.Close()
+		require.NoError(t, err)
+	}
 }
 
 func (s *cluster) tearDown(ctx context.Context) {
@@ -714,8 +773,7 @@ func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
 		}
 		args = append(args, rest...)
 	}
-	exe, _ := gh.Executable()
-	cmd := Command(ctx, exe, args...)
+	cmd := Command(ctx, GetExecutable(ctx), args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	return cmd

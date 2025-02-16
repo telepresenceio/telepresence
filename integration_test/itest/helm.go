@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -13,11 +14,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	rbac "k8s.io/api/rbac/v1"
-	sigsYaml "sigs.k8s.io/yaml"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -28,7 +31,7 @@ func (s *cluster) PackageHelmChart(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.self.ClientVersion().String()); err != nil {
+	if err := telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, "telepresence", s.self.ManagerVersion().String()); err != nil {
 		_ = fh.Close()
 		return "", err
 	}
@@ -163,24 +166,93 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		if s.ManagerIsVersion(">2.21.x") {
 			vx.Namespaces = managedNamespaces
 		} else {
-			// Older versions require the TestUser to have update permission on the telepresence-agents configmap.
 			if !slices.Contains(managedNamespaces, nss.Namespace) {
 				managedNamespaces = append(managedNamespaces, nss.Namespace)
 			}
-			clientRbac.Namespaced = true
-			clientRbac.Namespaces = managedNamespaces
-			managerRbac.Namespaced = true
-			managerRbac.Namespaces = managedNamespaces
-		}
-		for _, ns := range managedNamespaces {
-			err := Kubectl(ctx, ns, "create", "role", "tele-update-config", "--verb=update", "--resource=configmaps", "--resource-name=telepresence-agents")
-			if err != nil && !strings.Contains(err.Error(), "already exists") {
-				return "", err
+			svcAccArg := "--serviceaccount=" + nss.Namespace + ":" + TestUser
+
+			if !s.ManagerIsVersion(">2.21.x") {
+				clientRbac.Namespaced = true
+				clientRbac.Namespaces = managedNamespaces
+				managerRbac.Namespaced = true
+				managerRbac.Namespaces = managedNamespaces
+				role := "tele-update-config"
+
+				// Agent is removed by removing its entry in the telepresence-agents configmap
+				for _, ns := range managedNamespaces {
+					err := Kubectl(ctx, ns, "create", "role", role, "--verb=update", "--resource=configmaps", "--resource-name=telepresence-agents")
+					if err != nil && !strings.Contains(err.Error(), "already exists") {
+						return "", err
+					}
+					err = Kubectl(ctx, ns, "create", "rolebinding", role, "--role", role, svcAccArg)
+					if err != nil && !strings.Contains(err.Error(), "already exists") {
+						return "", err
+					}
+				}
 			}
-			err = Kubectl(ctx, ns, "create", "rolebinding", "tele-update-config",
-				"--role=tele-update-config", "--serviceaccount="+nss.Namespace+":"+TestUser)
-			if err != nil && !strings.Contains(err.Error(), "already exists") {
-				return "", err
+		}
+
+		if !s.ClientIsVersion(">2.21.x") && s.ManagerIsVersion(">2.21.x") {
+			// Clients older than 2.22.0 need several additional permissions.
+			role := "tele-client"
+			for _, ns := range managedNamespaces {
+				r := rbac.Role{
+					TypeMeta: meta.TypeMeta{
+						APIVersion: "rbac.authorization.k8s.io/v1",
+						Kind:       "Role",
+					},
+					ObjectMeta: meta.ObjectMeta{
+						Name:      role,
+						Namespace: ns,
+					},
+					Rules: []rbac.PolicyRule{
+						{
+							Verbs:     []string{"get", "list", "watch"},
+							APIGroups: []string{"apps"},
+							Resources: []string{"deployments", "replicasets", "statefulsets"},
+						},
+						{
+							Verbs:     []string{"get", "list", "watch"},
+							APIGroups: []string{"argoproj.io"},
+							Resources: []string{"rollouts"},
+						},
+						{
+							Verbs:     []string{"get", "list", "watch"},
+							APIGroups: []string{""},
+							Resources: []string{"services"},
+						},
+					},
+				}
+				rj, err := yaml.Marshal(&r)
+				if err != nil {
+					return "", err
+				}
+				rb := rbac.RoleBinding{
+					TypeMeta: meta.TypeMeta{
+						APIVersion: "rbac.authorization.k8s.io/v1",
+						Kind:       "RoleBinding",
+					},
+					ObjectMeta: meta.ObjectMeta{
+						Name:      role,
+						Namespace: ns,
+					},
+					Subjects: subjects,
+					RoleRef: rbac.RoleRef{
+						APIGroup: "rbac.authorization.k8s.io",
+						Kind:     "Role",
+						Name:     role,
+					},
+				}
+				rbj, err := yaml.Marshal(&rb)
+				if err != nil {
+					return "", err
+				}
+				rj = append(rj, []byte("\n---\n")...)
+				rj = append(rj, rbj...)
+				err = Kubectl(dos.WithStdin(ctx, bytes.NewReader(rj)), ns, "apply", "-f", "-")
+				if err != nil {
+					return "", err
+				}
 			}
 		}
 	} else {
@@ -199,7 +271,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		vx.Agent.Image.PullPolicy = pp
 	}
 
-	ss, err := sigsYaml.Marshal(&vx)
+	ss, err := yaml.Marshal(&vx)
 	if err != nil {
 		return "", err
 	}
@@ -213,8 +285,16 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		verb = "upgrade"
 	}
 	args := []string{"helm", verb, "-n", nss.Namespace, "-f", valuesFile}
-	if !s.ManagerVersion().EQ(version.Structured) {
-		args = append(args, "--version", s.ManagerVersion().String())
+	if !s.ManagerVersion().EQ(s.ClientVersion()) {
+		if !s.ClientIsVersion(">2.21.x") {
+			// Need to use the built executable because the client version doesn't handle the --version flag.
+			ctx = WithExecutable(ctx, s.executable)
+			if !s.ManagerVersion().EQ(version.Structured) {
+				args = append(args, "--version", s.ManagerVersion().String())
+			}
+		} else {
+			args = append(args, "--version", s.ManagerVersion().String())
+		}
 	}
 	args = append(args, settings...)
 

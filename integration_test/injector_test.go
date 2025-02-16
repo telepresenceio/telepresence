@@ -18,6 +18,9 @@ import (
 // injection of a traffic-agent.
 // See ticket https://github.com/telepresenceio/telepresence/issues/3441 for more info.
 func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject() {
+	if !s.ClientIsVersion(">2.21.x") {
+		s.T().Skip("Not part of compatibility tests.")
+	}
 	ctx := s.Context()
 	rq := s.Require()
 
@@ -49,9 +52,7 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 		}
 	}()
 
-	// Uninstall the agent. This will remove it from the telepresence-agents configmap. It must also
-	// uninstall from the agent, even though the webhook is muted, because there will be a rollout and
-	// without the webhook, the default is that the pod has no agent.
+	// Uninstall the agent.
 	itest.TelepresenceOk(ctx, "uninstall", s.ServiceName())
 
 	oneContainer := func() bool {

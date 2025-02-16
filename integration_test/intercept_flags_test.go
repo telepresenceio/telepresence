@@ -129,10 +129,13 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			agentCaptureCtx, agentCaptureCancel := context.WithCancel(ctx)
 			s.CapturePodLogs(agentCaptureCtx, s.serviceName, "traffic-agent", s.AppNamespace())
 
-			defer func() {
-				_, _, err := itest.Telepresence(ctx, "uninstall", s.serviceName)
-				s.NoError(err)
-			}()
+			if !s.ManagerIsVersion(">2.21.x") {
+				// Circumvent bug in 2.21.x
+				defer func() {
+					_, _, err := itest.Telepresence(ctx, "uninstall", s.serviceName)
+					s.NoError(err)
+				}()
+			}
 
 			defer func() {
 				agentCaptureCancel()

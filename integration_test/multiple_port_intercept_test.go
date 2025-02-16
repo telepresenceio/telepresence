@@ -37,7 +37,7 @@ func init() {
 }
 
 func (s *multiportInterceptSuite) SetupSuite() {
-	if !s.ManagerIsVersion(">2.21.x") {
+	if !(s.ManagerIsVersion(">2.21.x") && s.ClientIsVersion(">2.21.x")) {
 		s.T().Skip("Not part of compatibility tests. Support for multiport intercept was introduced in 2.22")
 	}
 	s.Suite.SetupSuite()

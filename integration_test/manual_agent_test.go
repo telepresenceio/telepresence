@@ -20,7 +20,7 @@ func (s *notConnectedSuite) Test_ManualAgent() {
 }
 
 func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
-	if !s.ManagerIsVersion(">2.21.x") {
+	if !(s.ManagerIsVersion(">2.21.x") && s.ClientIsVersion(">2.21.x")) {
 		s.T().Skip("Not part of compatibility tests. Manual setup changed in 2.22.0")
 	}
 	require := s.Require()
