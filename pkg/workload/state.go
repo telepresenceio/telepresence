@@ -1,10 +1,9 @@
 package workload
 
 import (
-	"sort"
+	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
-	core "k8s.io/api/core/v1"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -22,68 +21,29 @@ const (
 
 func deploymentState(d *appsv1.Deployment) State {
 	conds := d.Status.Conditions
-	sort.Slice(conds, func(i, j int) bool {
-		ci := conds[i]
-		cj := conds[j]
-
-		// Put all false statuses last in the list
-		if ci.Status == core.ConditionFalse {
-			return false
-		}
-		if cj.Status == core.ConditionFalse {
-			return true
-		}
-
-		if cmp := ci.LastUpdateTime.Compare(cj.LastUpdateTime.Time); cmp != 0 {
-			return cmp > 0
-		}
-		// Transition time is rounded to seconds, so if they are equal, we need to prioritize
-		// using the Type. This isn't ideal, but it is what it is.
-
-		// Failure beats the rest
-		if ci.Type == appsv1.DeploymentReplicaFailure {
-			return true
-		}
-		if cj.Type == appsv1.DeploymentReplicaFailure {
-			return false
-		}
-
-		// Available beats Progressing
-		if ci.Type == appsv1.DeploymentAvailable {
-			return true
-		}
-		if cj.Type == appsv1.DeploymentAvailable {
-			return false
-		}
-
-		// Statuses are exactly equal. This shouldn't happen.
-		return true
-	})
-	for _, c := range conds {
-		if c.Status != core.ConditionTrue {
-			// Only false will follow after this
-			break
-		}
-		switch c.Type {
-		case appsv1.DeploymentProgressing:
-			return StateProgressing
-		case appsv1.DeploymentAvailable:
-			return StateAvailable
-		case appsv1.DeploymentReplicaFailure:
-			return StateFailure
-		}
+	if slices.ContainsFunc(conds, func(c appsv1.DeploymentCondition) bool {
+		return c.Status == "True" && c.Type == appsv1.DeploymentReplicaFailure
+	}) {
+		return StateFailure
 	}
-	if len(conds) == 0 {
+	if slices.ContainsFunc(conds, func(c appsv1.DeploymentCondition) bool {
+		return c.Status == "True" && c.Type == appsv1.DeploymentAvailable
+	}) {
+		return StateAvailable
+	}
+	if slices.ContainsFunc(conds, func(c appsv1.DeploymentCondition) bool {
+		return c.Status == "True" && c.Type == appsv1.DeploymentProgressing
+	}) {
 		return StateProgressing
 	}
 	return StateUnknown
 }
 
 func replicaSetState(d *appsv1.ReplicaSet) State {
-	for _, c := range d.Status.Conditions {
-		if c.Type == appsv1.ReplicaSetReplicaFailure && c.Status == core.ConditionTrue {
-			return StateFailure
-		}
+	if slices.ContainsFunc(d.Status.Conditions, func(c appsv1.ReplicaSetCondition) bool {
+		return c.Status == "True" && c.Type == appsv1.ReplicaSetReplicaFailure
+	}) {
+		return StateFailure
 	}
 	return StateAvailable
 }
@@ -94,26 +54,19 @@ func statefulSetState(_ *appsv1.StatefulSet) State {
 
 func rolloutSetState(r *argorollouts.Rollout) State {
 	conds := r.Status.Conditions
-	sort.Slice(conds, func(i, j int) bool {
-		return conds[i].LastTransitionTime.Compare(conds[j].LastTransitionTime.Time) > 0
-	})
-	for _, c := range conds {
-		switch c.Type {
-		case argorollouts.RolloutProgressing:
-			if c.Status == core.ConditionTrue {
-				return StateProgressing
-			}
-		case argorollouts.RolloutAvailable:
-			if c.Status == core.ConditionTrue {
-				return StateAvailable
-			}
-		case argorollouts.RolloutReplicaFailure:
-			if c.Status == core.ConditionTrue {
-				return StateFailure
-			}
-		}
+	if slices.ContainsFunc(conds, func(c argorollouts.RolloutCondition) bool {
+		return c.Status == "True" && c.Type == argorollouts.RolloutReplicaFailure
+	}) {
+		return StateFailure
 	}
-	if len(conds) == 0 {
+	if slices.ContainsFunc(conds, func(c argorollouts.RolloutCondition) bool {
+		return c.Status == "True" && c.Type == argorollouts.RolloutAvailable
+	}) {
+		return StateAvailable
+	}
+	if slices.ContainsFunc(conds, func(c argorollouts.RolloutCondition) bool {
+		return c.Status == "True" && c.Type == argorollouts.RolloutProgressing
+	}) {
 		return StateProgressing
 	}
 	return StateUnknown
