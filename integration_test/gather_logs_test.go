@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
@@ -95,14 +96,6 @@ func (s *multipleInterceptsSuite) TestGatherLogs_NoK8sLogs() {
 
 func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	const svc = "echo"
-	require := s.Require()
-	defer func() {
-		ctx := s.Context()
-		itest.TelepresenceDisconnectOk(ctx)
-		stdout := s.TelepresenceConnect(ctx)
-		require.Contains(stdout, "Connected to context")
-	}()
-
 	ctx := s.Context()
 	itest.TelepresenceDisconnectOk(ctx)
 
@@ -118,7 +111,15 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 		Namespace: s.ManagerNamespace(),
 		Selector:  labels.SelectorFromNames(otherOne, otherTwo),
 	}), true)
-	defer s.RollbackTM(ctx)
+
+	require := s.Require()
+	defer func() {
+		so, se, err := itest.Telepresence(ctx, "quit")
+		dlog.Debug(ctx, so, se, err)
+		s.RollbackTM(ctx)
+		stdout := s.TelepresenceConnect(ctx)
+		require.Contains(stdout, "Connected to context")
+	}()
 
 	itest.TelepresenceDisconnectOk(ctx)
 	itest.ApplyEchoService(ctx, svc, otherOne, 8083)

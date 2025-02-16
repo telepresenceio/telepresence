@@ -170,8 +170,6 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		}
 		if err != nil {
 			dlog.Error(ctx, err.Error())
-		} else {
-			s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		}
 	}
 
@@ -213,6 +211,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		soft, softCancel := context.WithCancel(dcontext.WithSoftness(ctx))
 		wch := make(chan struct{})
 		go runDockerRun(soft, wch)
+		s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		assertInterceptResponse(ctx)
 		softCancel()
 		assertNotIntercepted(ctx)
@@ -223,6 +222,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		ctx := s.Context()
 		wch := make(chan struct{})
 		go runDockerRun(ctx, wch)
+		s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		assertInterceptResponse(ctx)
 		itest.TelepresenceOk(ctx, "leave", svc)
 		select {
@@ -238,6 +238,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		ctx := s.Context()
 		wch := make(chan struct{})
 		go runDockerRun(ctx, wch)
+		s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		assertInterceptResponse(ctx)
 		itest.TelepresenceDisconnectOk(ctx)
 		select {
