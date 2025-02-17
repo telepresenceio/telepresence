@@ -114,6 +114,7 @@ func (s *argoRolloutsSuite) Test_SuccessfullyInterceptsArgoRollout() {
 		// is no longer present in versions >=2.22.0
 		return
 	}
+	time.Sleep(3 * time.Second)
 	itest.TelepresenceOk(ctx, "uninstall", svc)
 
 	require.Eventually(
