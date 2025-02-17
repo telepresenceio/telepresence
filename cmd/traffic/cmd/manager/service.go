@@ -324,6 +324,7 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 				}
 				ap := &rpc.AgentPodInfo{
 					WorkloadName: a.Name,
+					PodId:        a.PodUid,
 					PodName:      a.PodName,
 					Namespace:    a.Namespace,
 					PodIp:        aip.AsSlice(),

@@ -16,11 +16,13 @@ import (
 	"k8s.io/kubectl/pkg/polymorphichelpers"
 	"k8s.io/kubectl/pkg/util/podutils"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa podAddress, err error) {
+func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa *podAddress, err error) {
 	// Get the service.
+	pa = new(podAddress)
 	pa.fromSvc = true
 	pa.namespace = namespace
 	svcObj, err := k8sapi.GetService(ctx, name, namespace)
@@ -56,6 +58,7 @@ func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 	}
 	pa.name = pod.Name
 	pa.port, err = containerPortByServicePort(svc, pod, svcPortNumber)
+	pa.podID = pod.UID
 	if err != nil {
 		return pa, fmt.Errorf("cannot find first container port %s.%s: %v", pod.Name, pod.Namespace, err)
 	}
@@ -112,10 +115,11 @@ func containerPortByName(pod *core.Pod, name string) (uint16, error) {
 	return 0, fmt.Errorf("pod '%s' does not have a named port '%s'", pod.Name, name)
 }
 
-func resolve(ctx context.Context, addr string) (pa podAddress, err error) {
-	kind, name, namespace, port, err := parseAddr(addr)
+func resolve(ctx context.Context, addr string) (pa *podAddress, err error) {
+	kind, name, namespace, port, podID, err := parseAddr(addr)
 	if err != nil {
-		return podAddress{}, err
+		dlog.Errorf(ctx, "cannot resolve addr %s: %v", addr, err)
+		return nil, err
 	}
 
 	if kind == "svc" {
@@ -123,8 +127,12 @@ func resolve(ctx context.Context, addr string) (pa podAddress, err error) {
 		return resolveSvcToPod(ctx, name, namespace, port)
 	}
 
+	var pn uint16
 	if p, err := strconv.ParseUint(port, 10, 16); err == nil {
-		return podAddress{name: name, namespace: namespace, port: uint16(p)}, nil
+		pn = uint16(p)
+	}
+	if pn != 0 && podID != "" {
+		return &podAddress{name: name, namespace: namespace, port: pn, podID: podID}, nil
 	}
 
 	// Get the pod.
@@ -133,14 +141,17 @@ func resolve(ctx context.Context, addr string) (pa podAddress, err error) {
 		return pa, fmt.Errorf("unable to get %s %s.%s: %w", kind, name, namespace, err)
 	}
 	pod, _ := k8sapi.PodImpl(podObj)
-	pn, err := containerPortByName(pod, port)
-	if err != nil {
-		return pa, err
+	if pn == 0 {
+		pn, err = containerPortByName(pod, port)
+		if err != nil {
+			return pa, err
+		}
 	}
-	return podAddress{
+	return &podAddress{
 		name:      pod.Name,
 		namespace: pod.Namespace,
 		port:      pn,
+		podID:     pod.UID,
 	}, nil
 }
 

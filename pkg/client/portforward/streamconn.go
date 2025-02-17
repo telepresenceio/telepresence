@@ -13,6 +13,7 @@ import (
 
 	"github.com/puzpuzpuz/xsync/v3"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
@@ -49,19 +50,14 @@ type podConn struct {
 
 type dialerKey struct{}
 
-type qnKey struct {
-	name      string
-	namespace string
-}
-
 type config struct {
-	cache      *xsync.MapOf[qnKey, PodConnection]
+	cache      *xsync.MapOf[types.UID, PodConnection]
 	restConfig *rest.Config
 }
 
 func WithRestConfig(ctx context.Context, restConfig *rest.Config) context.Context {
 	return context.WithValue(ctx, dialerKey{}, &config{
-		cache:      xsync.NewMapOf[qnKey, PodConnection](),
+		cache:      xsync.NewMapOf[types.UID, PodConnection](),
 		restConfig: restConfig,
 	})
 }
@@ -79,9 +75,15 @@ func Dialer(ctx context.Context) func(ctx context.Context, address string) (net.
 func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net.Conn, error) {
 	pa, err := parsePodAddr(addr)
 	if err != nil {
+		dlog.Error(logCtx, err)
 		return nil, err
 	}
-	key := qnKey{name: pa.name, namespace: pa.namespace}
+	key := pa.podID
+	if key == "" {
+		err = errors.New("pod ID is empty")
+		dlog.Error(logCtx, err)
+		return nil, err
+	}
 	pc, _ := cfg.cache.Compute(key, func(pc PodConnection, loaded bool) (PodConnection, bool) {
 		if loaded {
 			return pc, false

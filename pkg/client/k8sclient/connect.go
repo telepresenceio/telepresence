@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
@@ -41,8 +42,14 @@ func ConnectToAgent(
 	ctx context.Context,
 	podName, namespace string,
 	port uint16,
+	podID types.UID,
 ) (*grpc.ClientConn, agent.AgentClient, *manager.VersionInfo2, error) {
-	grpcAddr := fmt.Sprintf("pod/%s.%s:%d", podName, namespace, port)
+	var grpcAddr string
+	if podID == "" {
+		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", podName, namespace, port)
+	} else {
+		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", podName, namespace, port, podID)
+	}
 	conn, err := dialClusterGRPC(ctx, grpcAddr)
 	if err != nil {
 		return nil, nil, nil, err

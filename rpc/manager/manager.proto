@@ -589,6 +589,7 @@ message AgentImageFQN {
 }
 
 message AgentPodInfo {
+  string pod_id = 7;
   string pod_name = 1;
   string namespace = 2;
   bytes pod_ip = 3;

@@ -6,7 +6,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/resolver"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type podAddress struct {
@@ -14,9 +16,18 @@ type podAddress struct {
 	name      string
 	namespace string
 	port      uint16
+	podID     types.UID
 }
 
-func parseAddr(addr string) (kind, name, namespace, port string, err error) {
+func parseAddr(fullAddr string) (kind, name, namespace, port string, podID types.UID, err error) {
+	addr := fullAddr
+	if hash := strings.LastIndex(fullAddr, "#"); hash > 0 {
+		id := addr[hash+1:]
+		addr = addr[:hash]
+		if _, err := uuid.Parse(id); err == nil {
+			podID = types.UID(id)
+		}
+	}
 	if slash := strings.Index(addr, "/"); slash < 0 {
 		kind = "pod"
 	} else {
@@ -29,13 +40,13 @@ func parseAddr(addr string) (kind, name, namespace, port string, err error) {
 			namespace = name[dot+1:]
 			name = name[:dot]
 		}
-		return kind, name, namespace, port, nil
+		return kind, name, namespace, port, podID, nil
 	}
-	return "", "", "", "", fmt.Errorf("%q is not a valid [<kind>/]<name[.namespace]>:<port-number>", addr)
+	return "", "", "", "", "", fmt.Errorf("%q is not a valid [<kind>/]<name[.namespace]>:<port-number>[#<uid>]", fullAddr)
 }
 
 func parsePodAddr(addr string) (podAddress, error) {
-	kind, name, namespace, port, err := parseAddr(addr)
+	kind, name, namespace, port, podId, err := parseAddr(addr)
 	if err != nil {
 		return podAddress{}, err
 	}
@@ -45,6 +56,7 @@ func parsePodAddr(addr string) (podAddress, error) {
 				name:      name,
 				namespace: namespace,
 				port:      uint16(pn),
+				podID:     podId,
 			}, nil
 		}
 	}
@@ -52,7 +64,7 @@ func parsePodAddr(addr string) (podAddress, error) {
 }
 
 func (pa *podAddress) String() string {
-	return fmt.Sprintf("%s.%s:%d", pa.name, pa.namespace, pa.port)
+	return fmt.Sprintf("%s.%s:%d#%s", pa.name, pa.namespace, pa.port, pa.podID)
 }
 
 func (pa *podAddress) state() resolver.State {

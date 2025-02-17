@@ -96,13 +96,13 @@ func (d *svcResolver) watcher() {
 		if err != nil {
 			// Report error to the underlying grpc.ClientConn.
 			d.cc.ReportError(err)
-		} else if pa != d.lastPA {
+		} else if *pa != d.lastPA {
 			err = d.cc.UpdateState(pa.state())
 		}
 
 		if err == nil {
 			// Success resolving, wait for the next ResolveNow.
-			d.lastPA = pa
+			d.lastPA = *pa
 			ebo.Reset()
 			select {
 			case <-d.ctx.Done():
