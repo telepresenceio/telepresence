@@ -124,9 +124,6 @@ func (ac *client) connect(ctx context.Context, deleteMe func()) {
 			ac.cancelClient = nil
 			ac.cli = nil
 			ac.infant.Store(true)
-			for len(ac.ready) > 0 {
-				<-ac.ready
-			}
 			ac.Unlock()
 		}()
 	}
@@ -172,14 +169,15 @@ func (ac *client) cancel() bool {
 }
 
 func (ac *client) setIntercepted(ctx context.Context, k string, status bool) {
-	ac.RLock()
-	aci := ac.info.Intercepted
+	ac.Lock()
+	oldStatus := ac.info.Intercepted
+	ac.info.Intercepted = status
 	cdw := ac.cancelDialWatch
-	ac.RUnlock()
+	ac.Unlock()
+	if status == oldStatus {
+		return
+	}
 	if status {
-		if aci {
-			return
-		}
 		dlog.Debugf(ctx, "Agent %s changed to intercepted", k)
 		go func() {
 			if err := ac.startDialWatcher(ctx); err != nil {
@@ -187,10 +185,12 @@ func (ac *client) setIntercepted(ctx context.Context, k string, status bool) {
 			}
 		}()
 		// This agent is now intercepting. Start a dial watcher.
-	} else if aci && cdw != nil {
+	} else {
 		// This agent is no longer intercepting. Stop the dial watcher
 		dlog.Debugf(ctx, "Agent %s changed to not intercepted", k)
-		cdw()
+		if cdw != nil {
+			cdw()
+		}
 	}
 }
 
@@ -205,7 +205,11 @@ func (ac *client) startDialWatcher(ctx context.Context) error {
 func (ac *client) startDialWatcherReady(ctx context.Context) error {
 	ac.RLock()
 	cli := ac.cli
+	running := ac.cancelDialWatch != nil
 	ac.RUnlock()
+	if running {
+		return nil
+	}
 	if cli == nil {
 		return fmt.Errorf("agent connection closed")
 	}
@@ -220,7 +224,6 @@ func (ac *client) startDialWatcherReady(ctx context.Context) error {
 	}
 
 	ac.Lock()
-	ac.info.Intercepted = true
 	ac.cancelDialWatch = func() {
 		ac.Lock()
 		ac.info.Intercepted = false
