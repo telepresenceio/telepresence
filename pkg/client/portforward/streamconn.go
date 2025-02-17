@@ -185,8 +185,10 @@ func (pc *podConn) Dial(ctx context.Context, remotePort uint16) (conn net.Conn, 
 		switch {
 		case err != nil:
 			dlog.Errorf(ctx, "error reading from error stream for port %d: %v", remotePort, err)
+			pc.onClose()
 		case len(message) > 0:
 			dlog.Errorf(ctx, "error forwarding to %d: %v", remotePort, string(message))
+			pc.onClose()
 		}
 	}()
 
