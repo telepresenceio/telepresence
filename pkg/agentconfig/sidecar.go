@@ -15,22 +15,16 @@ const (
 	// ConfigMap is the name of the ConfigMap that contains the agent configs.
 	ConfigMap = "telepresence-agents"
 
-	ContainerName            = "traffic-agent"
-	InitContainerName        = "tel-agent-init"
-	AnnotationVolumeName     = "traffic-annotations"
-	AnnotationMountPoint     = "/tel_pod_info"
-	TerminatingTLSVolumeName = "traffic-terminating-tls"
-	TerminatingTLSMountPoint = "/terminating_tls"
-	OriginatingTLSVolumeName = "traffic-originating-tls"
-	OriginatingTLSMountPoint = "/originating_tls"
-	MountPrefixApp           = "/tel_app_mounts"
-	ExportsVolumeName        = "export-volume"
-	ExportsMountPoint        = "/tel_app_exports"
-	TempVolumeName           = "tel-agent-tmp"
-	TempMountPoint           = "/tmp"
-	EnvPrefix                = "_TEL_"
-	EnvPrefixAgent           = EnvPrefix + "AGENT_"
-	EnvPrefixApp             = EnvPrefix + "APP_"
+	ContainerName     = "traffic-agent"
+	InitContainerName = "tel-agent-init"
+	MountPrefixApp    = "/tel_app_mounts"
+	ExportsVolumeName = "export-volume"
+	ExportsMountPoint = "/tel_app_exports"
+	TempVolumeName    = "tel-agent-tmp"
+	TempMountPoint    = "/tmp"
+	EnvPrefix         = "_TEL_"
+	EnvPrefixAgent    = EnvPrefix + "AGENT_"
+	EnvPrefixApp      = EnvPrefix + "APP_"
 
 	// EnvAgentConfig is the environment variable where the traffic-agent finds its own config.
 	EnvAgentConfig = "AGENT_CONFIG"
@@ -49,20 +43,16 @@ const (
 
 	DomainPrefix = "telepresence.getambassador.io/"
 
-	RestartedAtAnnotation                = DomainPrefix + "restartedAt"
-	ManualInjectAnnotation               = DomainPrefix + "manually-injected"
-	InjectAnnotation                     = DomainPrefix + "inject-" + ContainerName
-	InjectIgnoreVolumeMounts             = DomainPrefix + "inject-ignore-volume-mounts"
-	VolumeMountPolicies                  = DomainPrefix + "mount-policies"
-	TerminatingTLSSecretAnnotation       = DomainPrefix + "inject-terminating-tls-secret"
-	OriginatingTLSSecretAnnotation       = DomainPrefix + "inject-originating-tls-secret"
-	ConfigAnnotation                     = DomainPrefix + "agent-config"
-	ReplacedContainerAnnotationPrefix    = DomainPrefix + "replaced-container."
-	LegacyTerminatingTLSSecretAnnotation = "getambassador.io/inject-terminating-tls-secret"
-	LegacyOriginatingTLSSecretAnnotation = "getambassador.io/inject-originating-tls-secret"
-	WorkloadNameLabel                    = "telepresence.io/workloadName"
-	WorkloadKindLabel                    = "telepresence.io/workloadKind"
-	WorkloadEnabledLabel                 = "telepresence.io/workloadEnabled"
+	RestartedAtAnnotation             = DomainPrefix + "restartedAt"
+	ManualInjectAnnotation            = DomainPrefix + "manually-injected"
+	InjectAnnotation                  = DomainPrefix + "inject-" + ContainerName
+	InjectIgnoreVolumeMounts          = DomainPrefix + "inject-ignore-volume-mounts"
+	VolumeMountPolicies               = DomainPrefix + "mount-policies"
+	ConfigAnnotation                  = DomainPrefix + "agent-config"
+	ReplacedContainerAnnotationPrefix = DomainPrefix + "replaced-container."
+	WorkloadNameLabel                 = "telepresence.io/workloadName"
+	WorkloadKindLabel                 = "telepresence.io/workloadKind"
+	WorkloadEnabledLabel              = "telepresence.io/workloadEnabled"
 )
 
 type ReplacePolicy int

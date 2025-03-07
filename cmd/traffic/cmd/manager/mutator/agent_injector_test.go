@@ -1212,8 +1212,6 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
-    - mountPath: /tel_pod_info
-      name: traffic-annotations
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1221,13 +1219,6 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
-  - downwardAPI:
-      items:
-      - fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations
-        path: annotations
-    name: traffic-annotations
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1311,8 +1302,6 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
-    - mountPath: /tel_pod_info
-      name: traffic-annotations
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1320,13 +1309,6 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
-  - downwardAPI:
-      items:
-      - fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations
-        path: annotations
-    name: traffic-annotations
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1459,8 +1441,6 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
-    - mountPath: /tel_pod_info
-      name: traffic-annotations
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1468,13 +1448,6 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
-  - downwardAPI:
-      items:
-      - fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations
-        path: annotations
-    name: traffic-annotations
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1576,8 +1549,6 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
-    - mountPath: /tel_pod_info
-      name: traffic-annotations
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1585,13 +1556,6 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
-  - downwardAPI:
-      items:
-      - fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations
-        path: annotations
-    name: traffic-annotations
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1693,8 +1657,6 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
-    - mountPath: /tel_pod_info
-      name: traffic-annotations
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1702,13 +1664,6 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
-  - downwardAPI:
-      items:
-      - fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations
-        path: annotations
-    name: traffic-annotations
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1855,15 +1810,11 @@ matchExpressions:
 							TerminationMessagePolicy: "File",
 							VolumeMounts: []core.VolumeMount{
 								{
-									Name:      "traffic-annotations",
-									MountPath: "/tel_pod_info",
-								},
-								{
-									Name:      "export-volume",
+									Name:      agentconfig.ExportsVolumeName,
 									MountPath: "/tel_app_exports",
 								},
 								{
-									Name:      "tel-agent-tmp",
+									Name:      agentconfig.TempVolumeName,
 									MountPath: "/tmp",
 								},
 							},
@@ -1874,9 +1825,20 @@ matchExpressions:
 							},
 						},
 					},
-					Volumes: []core.Volume{{
-						Name: agentconfig.AnnotationVolumeName,
-					}},
+					Volumes: []core.Volume{
+						{
+							Name: agentconfig.ExportsVolumeName,
+							VolumeSource: core.VolumeSource{
+								EmptyDir: &core.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: agentconfig.TempVolumeName,
+							VolumeSource: core.VolumeSource{
+								EmptyDir: &core.EmptyDirVolumeSource{},
+							},
+						},
+					},
 				},
 			},
 			true,
@@ -1979,22 +1941,10 @@ matchExpressions:
     - mountPath: /tel_app_mounts/some-container/var/run/secrets/kubernetes.io/serviceaccount
       name: $(_TEL_APP_A_TOKEN_VOLUME)
       readOnly: true
-    - mountPath: /tel_pod_info
-      name: traffic-annotations
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
-- op: add
-  path: /spec/volumes/-
-  value:
-    downwardAPI:
-      items:
-      - fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations
-        path: annotations
-    name: traffic-annotations
 - op: add
   path: /spec/volumes/-
   value:

@@ -95,10 +95,6 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 	})
 	mounts = append(mounts,
 		core.VolumeMount{
-			Name:      AnnotationVolumeName,
-			MountPath: AnnotationMountPoint,
-		},
-		core.VolumeMount{
 			Name:      ExportsVolumeName,
 			MountPath: ExportsMountPoint,
 		},
@@ -107,31 +103,6 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 			MountPath: TempMountPoint,
 		},
 	)
-	if _, ok := a.Pod.ObjectMeta.Annotations[LegacyTerminatingTLSSecretAnnotation]; ok {
-		mounts = append(mounts, core.VolumeMount{
-			Name:      TerminatingTLSVolumeName,
-			MountPath: TerminatingTLSMountPoint,
-		})
-	}
-	if _, ok := a.Pod.ObjectMeta.Annotations[LegacyOriginatingTLSSecretAnnotation]; ok {
-		mounts = append(mounts, core.VolumeMount{
-			Name:      OriginatingTLSVolumeName,
-			MountPath: OriginatingTLSMountPoint,
-		})
-	}
-	if _, ok := a.Pod.ObjectMeta.Annotations[TerminatingTLSSecretAnnotation]; ok {
-		mounts = append(mounts, core.VolumeMount{
-			Name:      TerminatingTLSVolumeName,
-			MountPath: TerminatingTLSMountPoint,
-		})
-	}
-
-	if _, ok := a.Pod.ObjectMeta.Annotations[OriginatingTLSSecretAnnotation]; ok {
-		mounts = append(mounts, core.VolumeMount{
-			Name:      OriginatingTLSVolumeName,
-			MountPath: OriginatingTLSMountPoint,
-		})
-	}
 
 	if len(efs) == 0 {
 		efs = nil

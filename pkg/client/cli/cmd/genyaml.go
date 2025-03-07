@@ -439,7 +439,7 @@ func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 		Short: "Generate YAML for the traffic-agent volume.",
 		Long:  "Generate YAML for the traffic-agent volume. See genyaml for more info on what this means",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return info.run(cmd, flags.Map(kubeFlags))
+			return info.run()
 		},
 	}
 	fs := cmd.Flags()
@@ -450,47 +450,7 @@ func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 	return cmd
 }
 
-func (g *genVolumeInfo) run(cmd *cobra.Command, kubeFlags map[string]string) error {
-	ctx, err := g.WithJoinedClientSetInterface(cmd.Context(), kubeFlags)
-	if err != nil {
-		return err
-	}
-
-	cm, err := g.loadConfigMapEntry()
-	if err != nil {
-		return err
-	}
-	if g.inputFile == "" {
-		g.workloadName = cm.WorkloadName
-	}
-
-	wl, err := g.loadWorkload(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Sanity check
-	if wl.GetName() != cm.WorkloadName {
-		return errcat.User.Newf("name %q of loaded workload is different from %q loaded configmap entry", wl.GetName(), cm.WorkloadName)
-	}
-	if wl.GetKind() != cm.WorkloadKind {
-		return errcat.User.Newf("kind %q of loaded workload is different from %q loaded configmap entry", wl.GetKind(), cm.WorkloadKind)
-	}
-
-	podTpl := wl.GetPodTemplate()
-
-	if g.workloadName == "" {
-		g.workloadName = wl.GetName()
-	}
-
-	volumes := agentconfig.AgentVolumes(g.workloadName, &core.Pod{
-		TypeMeta: meta.TypeMeta{
-			Kind:       "pod",
-			APIVersion: "v1",
-		},
-		ObjectMeta: podTpl.ObjectMeta,
-		Spec:       podTpl.Spec,
-	})
-
+func (g *genVolumeInfo) run() error {
+	volumes := agentconfig.AgentVolumes()
 	return g.writeObjToOutput(&volumes)
 }

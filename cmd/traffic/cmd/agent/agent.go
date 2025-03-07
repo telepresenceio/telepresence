@@ -57,7 +57,7 @@ func AppEnvironment(ctx context.Context, mounts agentconfig.MountPolicies, ag *a
 	// Add prefixed variables separately last, so that we can
 	// ensure that they have higher precedence.
 	for _, env := range osEnv {
-		if !strings.HasPrefix(env, agentconfig.EnvPrefix) && !strings.Contains(env, "_TELEPRESENCE_MOUNTS=") {
+		if !(strings.HasPrefix(env, agentconfig.EnvPrefix) || strings.HasPrefix(env, prefix)) {
 			pair := strings.SplitN(env, "=", 2)
 			if len(pair) == 2 {
 				k := pair[0]
