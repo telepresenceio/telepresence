@@ -234,7 +234,7 @@ deployed, and you will be able to intercept the given ports as if they were serv
 
 ```yaml
       annotations:
-        telepresence.getambassador.io/inject-container-ports: http
+        telepresence.io/inject-container-ports: http
 ```
 
 The annotation value is a comma separated list of port identifiers consisting of either the name or the port number of a container
@@ -261,7 +261,7 @@ port, optionally suffixed with `/TCP` or `/UDP`
          labels:
            app: echo-no-svc
          annotations:
-           telepresence.getambassador.io/inject-container-ports: http
+           telepresence.io/inject-container-ports: http
        spec:
          automountServiceAccountToken: false
          containers:

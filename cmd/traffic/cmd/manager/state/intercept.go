@@ -570,7 +570,7 @@ func (s *state) getOrCreateAgentConfig(
 	spec *rpc.InterceptSpec,
 	rp agentconfig.ReplacePolicy,
 ) (sce agentconfig.SidecarExt, err error) {
-	enabled, err := checkInterceptAnnotations(wl)
+	enabled, err := checkInterceptAnnotations(ctx, wl)
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +629,7 @@ func (s *state) getOrCreateAgentConfig(
 	})
 }
 
-func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
+func checkInterceptAnnotations(ctx context.Context, wl k8sapi.Workload) (bool, error) {
 	pod := wl.GetPodTemplate()
 	a := pod.Annotations
 	if a == nil {
@@ -637,8 +637,8 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 	}
 
 	webhookEnabled := true
-	manuallyManaged := a[agentconfig.ManualInjectAnnotation] == "true"
-	ia := a[agentconfig.InjectAnnotation]
+	manuallyManaged := agentconfig.GetAnnotation(ctx, pod.ObjectMeta.Annotations, agentconfig.ManualInjectAnnotation, agentconfig.LegacyManualInjectAnnotation) == "true"
+	ia := agentconfig.GetAnnotation(ctx, a, agentconfig.InjectAnnotation, agentconfig.LegacyInjectAnnotation)
 	switch ia {
 	case "":
 		webhookEnabled = !manuallyManaged
@@ -648,7 +648,7 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 	default:
 		return false, errcat.User.Newf(
 			"%s is not a valid value for the %s.%s/%s annotation",
-			ia, wl.GetName(), wl.GetNamespace(), agentconfig.ManualInjectAnnotation)
+			ia, wl.GetName(), wl.GetNamespace(), agentconfig.InjectAnnotation)
 	}
 
 	if !manuallyManaged {

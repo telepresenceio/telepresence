@@ -110,6 +110,13 @@ items:
           Users can now use the Helm value `agent.initSecurityContext` to override the default securityContext for the
           Telepresence init-container.
       - type: change
+        title: Use telepresence.io as annotation prefix instead of telepresence.getambassador.io
+        body: >-
+          The workload and pod annotations used by Telepresence will now use the prefix `telepresence.io` instead of
+          `telepresence.getambassador.io`. The new prefix is consistent with the prefix used by labels, and it also
+          matches the host name of the documentation site. Annotations using the old name will still work, but warnings
+          will be logged when they are encountered.
+      - type: change
         title: Make the DNS recursion check configurable and turn it off by default.
         body: >-
           Very few systems experience a DNS recursion lookup problem. It can only occur when the cluster runs locally

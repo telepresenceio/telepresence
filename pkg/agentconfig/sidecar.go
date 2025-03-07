@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"context"
 	"reflect"
 
 	"github.com/go-json-experiment/json"
@@ -8,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -42,7 +44,7 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
-	DomainPrefix = "telepresence.getambassador.io/"
+	DomainPrefix = "telepresence.io/"
 
 	ConfigAnnotation                  = DomainPrefix + "agent-config"
 	ContainerPortsAnnotation          = DomainPrefix + "inject-container-ports"
@@ -52,15 +54,32 @@ const (
 	ReplacedContainerAnnotationPrefix = DomainPrefix + "replaced-container."
 	RestartedAtAnnotation             = DomainPrefix + "restartedAt"
 	ServiceNameAnnotation             = DomainPrefix + "inject-service-name"
-	// ServicePortAnnotation is deprecated. Use plural form instead.
-	ServicePortAnnotation         = DomainPrefix + "inject-service-port"
-	ServicePortsAnnotation        = DomainPrefix + "inject-service-ports"
-	VolumeMountPoliciesAnnotation = DomainPrefix + "mount-policies"
+	ServicePortsAnnotation            = DomainPrefix + "inject-service-ports"
+	VolumeMountPoliciesAnnotation     = DomainPrefix + "mount-policies"
 
-	WorkloadNameLabel    = "telepresence.io/workloadName"
-	WorkloadKindLabel    = "telepresence.io/workloadKind"
-	WorkloadEnabledLabel = "telepresence.io/workloadEnabled"
+	LegacyDomainPrefix             = "telepresence.getambassador.io/"
+	LegacyContainerPortsAnnotation = LegacyDomainPrefix + "inject-container-ports"
+	LegacyInjectAnnotation         = LegacyDomainPrefix + "inject-" + ContainerName
+	LegacyInjectIgnoreVolumeMounts = LegacyDomainPrefix + "inject-ignore-volume-mounts"
+	LegacyManualInjectAnnotation   = LegacyDomainPrefix + "manually-injected"
+	LegacyServiceNameAnnotation    = LegacyDomainPrefix + "inject-service-name"
+	LegacyServicePortAnnotation    = LegacyDomainPrefix + "inject-service-port"
+
+	WorkloadNameLabel    = DomainPrefix + "workloadName"
+	WorkloadKindLabel    = DomainPrefix + "workloadKind"
+	WorkloadEnabledLabel = DomainPrefix + "workloadEnabled"
 )
+
+func GetAnnotation(ctx context.Context, annotations map[string]string, key, deprecatedKey string) string {
+	value, ok := annotations[key]
+	if !ok {
+		value, ok = annotations[deprecatedKey]
+		if ok {
+			dlog.Warningf(ctx, "Annotation %q is deprecated. Use %q instead", key, value)
+		}
+	}
+	return value
+}
 
 type ReplacePolicy int
 

@@ -46,9 +46,9 @@ type BasicGeneratorConfig struct {
 	MountPolicies       agentconfig.MountPolicies
 }
 
-func portsFromContainerPortsAnnotation(wl k8sapi.Workload) (ports []agentconfig.PortIdentifier, err error) {
+func portsFromContainerPortsAnnotation(ctx context.Context, wl k8sapi.Workload) (ports []agentconfig.PortIdentifier, err error) {
 	pod := wl.GetPodTemplate()
-	cpa := pod.GetAnnotations()[agentconfig.ContainerPortsAnnotation]
+	cpa := agentconfig.GetAnnotation(ctx, pod.GetAnnotations(), agentconfig.ContainerPortsAnnotation, agentconfig.LegacyContainerPortsAnnotation)
 	switch cpa {
 	case "":
 		return nil, nil
@@ -68,13 +68,6 @@ func portsFromContainerPortsAnnotation(wl k8sapi.Workload) (ports []agentconfig.
 		}
 	default:
 		ports, err = portsFromAnnotationValue(wl, agentconfig.ContainerPortsAnnotation, cpa)
-	}
-	return ports, err
-}
-
-func portsFromAnnotation(wl k8sapi.Workload, annotation string) (ports []agentconfig.PortIdentifier, err error) {
-	if cpa := wl.GetPodTemplate().GetAnnotations()[annotation]; cpa != "" {
-		ports, err = portsFromAnnotationValue(wl, annotation, cpa)
 	}
 	return ports, err
 }
@@ -119,7 +112,8 @@ func (cfg *BasicGeneratorConfig) Generate(
 		}
 	}
 
-	svcs, err := FindServicesForPod(ctx, pod, pod.Annotations[agentconfig.ServiceNameAnnotation])
+	ann := agentconfig.GetAnnotation(ctx, pod.Annotations, agentconfig.ServiceNameAnnotation, agentconfig.LegacyServiceNameAnnotation)
+	svcs, err := FindServicesForPod(ctx, pod, ann)
 	if err != nil {
 		return nil, err
 	}
@@ -135,18 +129,15 @@ func (cfg *BasicGeneratorConfig) Generate(
 		return p
 	}
 
-	ports, err := portsFromAnnotation(wl, agentconfig.ServicePortsAnnotation)
-	if err == nil && len(ports) == 0 {
-		// Check singular form.
-		ports, err = portsFromAnnotation(wl, agentconfig.ServicePortAnnotation)
-		if len(ports) > 0 {
-			dlog.Warningf(ctx, "the %q annotation is deprecated. Use plural form %q instead", agentconfig.ServicePortAnnotation, agentconfig.ServicePortsAnnotation)
-		}
+	var ports []agentconfig.PortIdentifier
+	ann = agentconfig.GetAnnotation(ctx, pod.Annotations, agentconfig.ServicePortsAnnotation, agentconfig.LegacyServicePortAnnotation)
+	if ann != "" {
+		ports, err = portsFromAnnotationValue(wl, agentconfig.ServicePortsAnnotation, ann)
 	}
 	if err != nil {
 		return nil, err
 	}
-	cfg.MountPolicies, err = cfg.MountPolicies.AddAnnotations(pod.Annotations)
+	cfg.MountPolicies, err = cfg.MountPolicies.AddAnnotations(ctx, pod.Annotations)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +147,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 		ccs = cfg.appendAgentContainerConfigs(ctx, svcImpl, pod, ports, agentPortNumberFunc, ccs, existingConfig)
 	}
 
-	ports, err = portsFromContainerPortsAnnotation(wl)
+	ports, err = portsFromContainerPortsAnnotation(ctx, wl)
 	if err != nil {
 		return nil, err
 	}

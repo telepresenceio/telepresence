@@ -82,13 +82,14 @@ namespaceSelector:
 </Note>
 <Note>
 	<Title type="feature">Improved control over how remote volumes are mounted using mount policies</Title>
-	<Body>
-Mount policies, that affects how the telepresence traffic-agent shares the pod's volumes, and also how the
+	<Body>Mount policies, that affects how the telepresence traffic-agent shares the pod's volumes, and also how the
 client will mount them, can now be provided using the Helm chart value `agent.mountPolicies` or as JSON
 object in the workload annotation `telepresence.io/mount-policies`. A mount policy is applied to a volume
 or to all paths matching a path-prefix (distinguished by checking if first character is a '/'), and can
 be one of `Ignore`, `Local`, `Remote`, or `RemoteReadOnly`.
-  </Body>
+
+Mount policies deprecates the `telepresenceio.getambassador.com/ignore-volume-mounts` annotation. It will
+still work but will be removed in a future release.</Body>
 </Note>
 <Note>
 	<Title type="feature">List output includes workload kind.</Title>
@@ -101,6 +102,10 @@ The output of the `telepresence list` command will now include the workload kind
 	<Body>
 Users can now use the Helm value `agent.initSecurityContext` to override the default securityContext for the Telepresence init-container.
   </Body>
+</Note>
+<Note>
+	<Title type="change">Use telepresence.io as annotation prefix instead of telepresence.getambassador.io</Title>
+	<Body>The workload and pod annotations used by Telepresence will now use the prefix `telepresence.io` instead of `telepresence.getambassador.io`. The new prefix is consistent with the prefix used by labels, and it also matches the host name of the documentation site. Annotations using the old name will still work, but warnings will be logged when they are encountered.</Body>
 </Note>
 <Note>
 	<Title type="change">Make the DNS recursion check configurable and turn it off by default.</Title>

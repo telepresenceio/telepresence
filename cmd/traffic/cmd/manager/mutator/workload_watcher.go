@@ -51,8 +51,8 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		return
 	}
 	tpl := wl.GetPodTemplate()
-	ia, ok := tpl.Annotations[agentconfig.InjectAnnotation]
-	if !ok {
+	ia := agentconfig.GetAnnotation(ctx, tpl.Annotations, agentconfig.InjectAnnotation, agentconfig.LegacyInjectAnnotation)
+	if ia == "" {
 		return
 	}
 	if oldWl != nil && cmp.Equal(oldWl.GetPodTemplate(), tpl,

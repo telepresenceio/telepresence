@@ -58,7 +58,7 @@ and in sync as far as GitOps workflows (such as ArgoCD) are concerned.
 
 The injection will happen on demand the first time an attempt is made to replace, ingest, or intercept the workload.
 
-If you want to prevent that the injection ever happens, simply add the `telepresence.getambassador.io/inject-traffic-agent: disabled`
+If you want to prevent that the injection ever happens, simply add the `telepresence.io/inject-traffic-agent: disabled`
 annotation to your workload template's annotations:
 
 ```diff
@@ -68,7 +68,7 @@ annotation to your workload template's annotations:
        labels:
          service: your-service
 +      annotations:
-+        telepresence.getambassador.io/inject-traffic-agent: disabled
++        telepresence.io/inject-traffic-agent: disabled
      spec:
        containers:
 ```
@@ -85,8 +85,8 @@ for an intercept, but you can explicitly define that only one service and/or por
        labels:
          service: your-service
        annotations:
-+        telepresence.getambassador.io/inject-service-name: my-service
-+        telepresence.getambassador.io/inject-service-port: https
++        telepresence.io/inject-service-name: my-service
++        telepresence.io/inject-service-ports: https
      spec:
        containers:
 ```
@@ -95,7 +95,7 @@ for an intercept, but you can explicitly define that only one service and/or por
 
 Telepresence enables control over what volumes that will be shared with connecting clients using mount policies. A
 policy can be declared for a volume name, or for paths matching a path prefix, and can be added either as a Helm
-chart value using `agents.mountPolicies` or using the workload annotation `telepresence.getambassador.io/mount-policies`.
+chart value using `agents.mountPolicies` or using the workload annotation `telepresence.io/mount-policies`.
 
 Possible Mount Policies are:
 
@@ -115,26 +115,26 @@ agents:
     private: Ignore
 ```
 
-Example using the `telepresence.getambassador.io/mount-policies` annotation:
+Example using the `telepresence.io/mount-policies` annotation:
 ```yaml
 spec:
   template:
     metadata:
       annotations:
-        'telepresence.getambassador.io/mount-policies': '{"/tmp":"Local","certs":"RemoteReadOnly","private":"Ignore"}'
+        'telepresence.io/mount-policies': '{"/tmp":"Local","certs":"RemoteReadOnly","private":"Ignore"}'
 ```
 
-The annotation `telepresence.getambassador.io/inject-ignore-volume-mounts` can be used if the objective is to just ignore
-volume mounts, but it's recommended to always use the `telepresence.getambassador.io/mount-policies` annotation.
+The annotation `telepresence.io/inject-ignore-volume-mounts` can be used if the objective is to just ignore
+volume mounts, but it's recommended to always use the `telepresence.io/mount-policies` annotation.
 
-Example using the `telepresence.getambassador.io/inject-ignore-volume-mounts` annotation:
+Example using the `telepresence.io/inject-ignore-volume-mounts` annotation:
 
 ```yaml
  spec:
    template:
      metadata:
        annotations:
-         telepresence.getambassador.io/inject-ignore-volume-mounts: "private"
+         telepresence.io/inject-ignore-volume-mounts: "private"
 ```
 
 The example is equivalent to:
@@ -143,7 +143,7 @@ The example is equivalent to:
    template:
      metadata:
        annotations:
-         telepresence.getambassador.io/mount-policies: '{"private":"Ignore"}'
+         telepresence.io/mount-policies: '{"private":"Ignore"}'
 ```
 
 ### Note on Numeric Ports
@@ -183,7 +183,7 @@ spec:
   template:
     metadata:
       annotations:
-        telepresence.getambassador.io/inject-traffic-agent: enabled
+        telepresence.io/inject-traffic-agent: enabled
       labels:
         service: your-service
     spec:

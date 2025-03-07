@@ -29,8 +29,8 @@ spec:
       labels:
         service: echo-auto-headless
       annotations:
-        telepresence.getambassador.io/inject-traffic-agent: enabled
-        telepresence.getambassador.io/inject-service-port: "8080"
+        telepresence.io/inject-traffic-agent: enabled
+        telepresence.io/inject-service-ports: "8080"
     spec:
       containers:
         - name: echo-auto-headless

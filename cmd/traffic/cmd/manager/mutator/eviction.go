@@ -102,8 +102,8 @@ func (c *configWatcher) evictPods(ctx context.Context, wl k8sapi.Workload, pods 
 			dlog.Debugf(ctx, "Skipping pod %s because it is already deleted", pod.Name)
 			continue
 		}
-		a := pod.ObjectMeta.Annotations
-		if v, ok := a[agentconfig.ManualInjectAnnotation]; ok && v == "true" {
+		v := agentconfig.GetAnnotation(ctx, pod.ObjectMeta.Annotations, agentconfig.ManualInjectAnnotation, agentconfig.LegacyManualInjectAnnotation)
+		if v == "true" {
 			dlog.Tracef(ctx, "Skipping pod %s because it is managed manually", pod.Name)
 			continue
 		}

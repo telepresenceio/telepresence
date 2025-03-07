@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -75,8 +76,8 @@ func AgentVolumes() []core.Volume {
 
 type MountPolicies map[string]MountPolicy
 
-func (iv MountPolicies) AddAnnotations(annotations map[string]string) (MountPolicies, error) {
-	ignores, err := iv.getIgnoreAnnotations(annotations)
+func (iv MountPolicies) AddAnnotations(ctx context.Context, annotations map[string]string) (MountPolicies, error) {
+	ignores, err := iv.getIgnoreAnnotations(ctx, annotations)
 	if err != nil {
 		return nil, err
 	}
@@ -135,11 +136,8 @@ func (iv MountPolicies) getPolicyAnnotations(annotations map[string]string) (mps
 	return mps, err
 }
 
-func (iv MountPolicies) getIgnoreAnnotations(annotations map[string]string) (ignores []string, err error) {
-	vma, ok := annotations[InjectIgnoreVolumeMounts]
-	if !ok {
-		return nil, nil
-	}
+func (iv MountPolicies) getIgnoreAnnotations(ctx context.Context, annotations map[string]string) (ignores []string, err error) {
+	vma := GetAnnotation(ctx, annotations, InjectIgnoreVolumeMounts, LegacyInjectIgnoreVolumeMounts)
 	vma = strings.TrimSpace(vma)
 	if len(vma) == 0 {
 		return nil, nil

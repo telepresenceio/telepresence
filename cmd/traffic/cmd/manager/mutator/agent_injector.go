@@ -108,7 +108,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
 	env := managerutil.GetEnv(ctx)
 
-	ia := pod.Annotations[agentconfig.InjectAnnotation]
+	ia := agentconfig.GetAnnotation(ctx, pod.Annotations, agentconfig.InjectAnnotation, agentconfig.LegacyInjectAnnotation)
 
 	var scx agentconfig.SidecarExt
 	switch ia {
