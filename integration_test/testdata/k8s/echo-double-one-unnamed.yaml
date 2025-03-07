@@ -13,7 +13,7 @@ spec:
   template:
     metadata:
       annotations:
-        telepresence.getambassador.io/inject-container-ports: all
+        telepresence.io/inject-container-ports: all
       labels:
         app: echo-double-one-unnamed
     spec:

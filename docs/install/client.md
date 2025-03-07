@@ -21,17 +21,17 @@ brew install telepresenceio/telepresence/telepresence-oss
 
 ## OR download the binary for your platform
 
-### Intel Macs
+### AMD (Intel) Macs
 
 ```shell
 # 1. Download the binary.
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
 ```
 
-### Apple silicon Macs
+### ARM (Apple Silicon) Macs
 
 ```shell
 # 1. Ensure that no old binary exists. This is very important because Silicon macs track the executable's signature
@@ -39,7 +39,7 @@ sudo chmod a+x /usr/local/bin/telepresence
 sudo rm -f /usr/local/bin/telepresence
 
 # 2. Download the binary.
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
 
 # 3. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
@@ -50,7 +50,11 @@ sudo chmod a+x /usr/local/bin/telepresence
 
 ```shell
 # 1. Download the latest binary (~95 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-linux-amd64 -o /usr/local/bin/telepresence
+# AMD
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64 -o /usr/local/bin/telepresence
+
+# ARM
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-arm64 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
@@ -68,7 +72,7 @@ We've developed a Powershell script to simplify the process of installing telepr
 # from PowerShell as Administrator.
 
 # 1. Download the latest windows zip containing telepresence.exe and its dependencies (~50 MB):
-Invoke-WebRequest https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-windows-amd64.zip -OutFile telepresence.zip
+Invoke-WebRequest https://github.com/telepresenceio/telepresence/releases/download/v2.21.3/telepresence-windows-amd64.zip -OutFile telepresence.zip
 
 # 2. Unzip the telepresence.zip file to the desired directory, then remove the zip file:
 Expand-Archive -Path telepresence.zip -DestinationPath telepresenceInstaller/telepresence
@@ -93,7 +97,7 @@ Remove-Item telepresenceInstaller -Recurse -Confirm:$false -Force
 # from PowerShell as Administrator.
 
 # 1. Download the latest windows zip containing telepresence.exe and its dependencies (~50 MB):
-Invoke-WebRequest https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-windows-arm64.zip -OutFile telepresence.zip
+Invoke-WebRequest https://github.com/telepresenceio/telepresence/releases/download/v2.21.3/telepresence-windows-arm64.zip -OutFile telepresence.zip
 
 # 2. Unzip the telepresence.zip file to the desired directory, then remove the zip file:
 Expand-Archive -Path telepresence.zip -DestinationPath telepresenceInstaller/telepresence
@@ -126,18 +130,22 @@ Use these URLs to download an older version for your OS (including older nightly
 <Platform.MacOSTab>
 
 ```shell
-# Intel Macs
-https://app.getambassador.io/download/tel2oss/releases/download/vx.y.z/telepresence-darwin-amd64
+# AMD (Intel) Macs
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-darwin-amd64
 
-# Apple silicon Macs
-https://app.getambassador.io/download/tel2oss/releases/download/vx.y.z/telepresence-darwin-arm64
+# ARM (Apple Silicon) Macs
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-darwin-arm64
 ```
 
 </Platform.MacOSTab>
 <Platform.GNULinuxTab>
 
 ```
-https://app.getambassador.io/download/tel2oss/releases/download/vx.y.z/telepresence-linux-amd64
+# AMD
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-linux-amd64
+
+# ARM
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-linux-arm64
 ```
 
 </Platform.GNULinuxTab>
@@ -145,10 +153,10 @@ https://app.getambassador.io/download/tel2oss/releases/download/vx.y.z/teleprese
 
 ```
 # Windows AMD64
-https://app.getambassador.io/download/tel2oss/releases/download/vx.y.z/telepresence-windows-amd64.exe
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-amd64.zip
 
 # Windows ARM64
-https://app.getambassador.io/download/tel2oss/releases/download/vx.y.z/telepresence-windows-arm64.exe
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-arm64.zip
 ```
 
 </Platform.WindowsTab>

@@ -83,7 +83,7 @@ func generateKeyTriplet(mgrNamespace string) (crtPem, keyPem, caPem []byte, err 
 	caCert := &x509.Certificate{
 		SerialNumber: big.NewInt(0xefecab0),
 		Subject: pkix.Name{
-			Organization: []string{"getambassador.io"},
+			Organization: []string{"telepresence.io"},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(1, 0, 0),
@@ -114,7 +114,7 @@ func generateKeyTriplet(mgrNamespace string) (crtPem, keyPem, caPem []byte, err 
 		SerialNumber: big.NewInt(0xefecab1),
 		Subject: pkix.Name{
 			CommonName:   commonName,
-			Organization: []string{"getambassador.io"},
+			Organization: []string{"telepresence.io"},
 		},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().AddDate(10, 0, 0), // Valid 10 years

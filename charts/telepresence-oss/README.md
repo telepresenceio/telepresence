@@ -1,6 +1,6 @@
 # Telepresence
 
-[Telepresence](https://www.getambassador.io/products/telepresence/) is a tool
+[Telepresence](https://telepresence.io/) is a tool
 that allows for local development of microservices running in a remote
 Kubernetes cluster.
 

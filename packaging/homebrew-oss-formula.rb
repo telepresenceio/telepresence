@@ -5,7 +5,7 @@ class __FORMULA_NAME__ < Formula
   homepage "https://telepresence.io"
   version "__NEW_VERSION__"
 
-  BASE_URL = "https://app.getambassador.io/download/tel2oss/releases/download"
+  BASE_URL = "https://github.com/telepresenceio/telepresence/releases/download"
   ARCH = Hardware::CPU.arm? ? "arm64" : "amd64"
   OPERATING_SYSTEM = OS.mac? ? "darwin" : "linux"
   PACKAGE_NAME = "telepresence-#{OPERATING_SYSTEM}-#{ARCH}"

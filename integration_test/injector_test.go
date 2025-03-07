@@ -59,7 +59,7 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 	// Break the TLS by temporally disabling the agent-injector service. We do this by the port of the
 	// service that the webhook is calling.
 	wh := "agent-injector-webhook-" + s.ManagerNamespace()
-	pmf := `{"webhooks":[{"name": "agent-injector-%s.getambassador.io", "clientConfig": {"service": {"name": "agent-injector", "port": %d}}}]}`
+	pmf := `{"webhooks":[{"name": "agent-injector-%s.telepresence.io", "clientConfig": {"service": {"name": "agent-injector", "port": %d}}}]}`
 	rq.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "patch", "mutatingwebhookconfiguration", wh,
 		"--patch", fmt.Sprintf(pmf, s.ManagerNamespace(), 8443)))
 	portRestored := false

@@ -8,10 +8,9 @@ then
 fi
 
 VERSION="${1}"
-PACKAGE_NAME="${2:?Can be 'tel2' or 'tel2oss'}"
-GITHUB_USER="${3:-$(git config get user.name)}"
-GITHUB_EMAIL="${4:-$(git config get user.email)}"
-GITHUB_TOKEN="${5}"
+GITHUB_USER="${2:-$(git config get user.name)}"
+GITHUB_EMAIL="${3:-$(git config get user.email)}"
+GITHUB_TOKEN="${4}"
 
 ARCH=(amd64 arm64)
 OS=(darwin linux)
@@ -24,15 +23,9 @@ cd "${WORK_DIR}"
 echo "Working in ${WORK_DIR}"
 
 BUILD_HOMEBREW_DIR=homebrew
-if [ "${PACKAGE_NAME}" == 'tel2' ]; then
-    FORMULA_NAME="Telepresence"
-    FORMULA_FILE="${MY_PATH}/homebrew-formula.rb"
-    FORMULA="Formula/telepresence.rb"
-elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
-    FORMULA_NAME="TelepresenceOss"
-    FORMULA_FILE="${MY_PATH}/homebrew-oss-formula.rb"
-    FORMULA="Formula/telepresence-oss.rb"
-fi
+FORMULA_NAME="TelepresenceOss"
+FORMULA_FILE="${MY_PATH}/homebrew-oss-formula.rb"
+FORMULA="Formula/telepresence-oss.rb"
 
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
@@ -44,14 +37,10 @@ for this_os in "${OS[@]}"; do
 
         # We should only be updating homebrew with a version of telepresence that
         # already exists, so let's download it
-        if [ "${PACKAGE_NAME}" == 'tel2' ]; then
-            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/${this_os}/${this_arch}/v${VERSION}/telepresence"
-        elif [ "${PACKAGE_NAME}" == 'tel2oss' ]; then
-            DOWNLOAD_PATH="/download/${PACKAGE_NAME}/releases/download/v${VERSION}/telepresence-${this_os}-${this_arch}"
-        fi
+        DOWNLOAD_PATH="/download/v${VERSION}/telepresence-${this_os}-${this_arch}"
         echo "Downloading ${DOWNLOAD_PATH}"
         mkdir -p "${WORK_DIR}/${this_os}/${this_arch}/"
-        curl -fL "https://app.getambassador.io/${DOWNLOAD_PATH}" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
+        curl -fL "https://github.com/telepresenceio/telepresence/releases${DOWNLOAD_PATH}" -o "${WORK_DIR}/${this_os}/${this_arch}/telepresence"
         declare -x "TARBALL_HASH_${this_os}_${this_arch}"="$(shasum -a 256 "${WORK_DIR}/${this_os}/${this_arch}/telepresence" | cut -f 1 -d " ")"
         tmp_var=TARBALL_HASH_${this_os}_${this_arch}
         echo "${tmp_var} == ${!tmp_var}"
@@ -125,13 +114,14 @@ git config --local user.name "${GITHUB_USER}"
 
 git add "${FORMULA}"
 git commit -m "Release ${VERSION}"
-git tag --message "Release ${VERSION}" "${VERSION}"
 
 # This cat is just so we can see the formula in case
 # the git permissions are incorrect and we can't publish
 # the change. Once we know the automation is working, we can
 # remove it.
 cat "${FORMULA}"
+
+git tag --message "Release ${VERSION}" "${VERSION}"
 git push origin "${VERSION}" main
 
 # Clean up the working directory

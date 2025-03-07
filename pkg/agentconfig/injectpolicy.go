@@ -12,7 +12,7 @@ var epNames = [...]string{"OnDemand", "WhenEnabled", "Never"} //nolint:gocheckno
 
 const (
 	// OnDemand tells the injector to inject the traffic-agent the first time someone makes an attempt
-	// to intercept the workload, even if the telepresence.getambassador.io/inject-traffic-agent is
+	// to intercept the workload, even if the telepresence.io/inject-traffic-agent is
 	// missing.
 	//
 	// OnDemand has lower priority than the annotation. If the annotation is set to "enabled", then
@@ -23,7 +23,7 @@ const (
 	OnDemand InjectPolicy = iota
 
 	// WhenEnabled tells the injector to inject the traffic-agent in advance into all pods that are
-	// created or updated when the telepresence.getambassador.io/inject-traffic-agent annotation is
+	// created or updated when the telepresence.io/inject-traffic-agent annotation is
 	// present and set to "enabled".
 	WhenEnabled
 

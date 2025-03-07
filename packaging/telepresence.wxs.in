@@ -1,12 +1,12 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Telepresence" Language="1033" Codepage="1252" Version="TELEPRESENCE_VERSION"
-    Manufacturer="Ambassador Labs" InstallerVersion="100" ProductCode="*"
+    Manufacturer="Telepresence Community" InstallerVersion="100" ProductCode="*"
     UpgradeCode="fdac1021-3405-4097-84e3-1e683ba9eee5">
-    <SummaryInformation Keywords="Installer" Description="Ambassador's Telepresence Installer"
-      Manufacturer="Ambassador Labs" />
+    <SummaryInformation Keywords="Installer" Description="Telepresence Installer"
+      Manufacturer="Telepresence Community" />
 
     <Media Id="1" Cabinet="Sample.cab" EmbedCab="yes" DiskPrompt="CD-ROM #1" />
-    <Property Id="DiskPrompt" Value="Ambassador's Telepresence Installer" />
+    <Property Id="DiskPrompt" Value="Telepresence Installer" />
 
     <Feature Id="Complete" Level="1">
       <ComponentRef Id="MainExecutable" />
@@ -16,7 +16,7 @@
     </Feature>
 
     <StandardDirectory Id="ProgramFilesFolder">
-      <Directory Id="Ambassador" Name="Ambassador">
+      <Directory Id="TelepresenceOSS" Name="TelepresenceOSS">
         <Directory Id="INSTALLDIR" Name="Telepresence">
 
           <Component Id="MainExecutable" Guid="*">

@@ -25,7 +25,7 @@ Traffic Agent container on `Deployments`, `ReplicaSets`, `StatefulSets`, and `Ar
 installed the first time a user makes a `telepresence replace WORKLOAD`, `telepresence ingest WORKLOAD`,
 `telepresence intercept WORKLOAD`, or a `telepresence connect --proxy-via CIDR=WORKLAOD`.
 
-A Traffic Agent may also be installed up front by adding a `telepresence.getambassador.io/inject-traffic-agent: enabled`
+A Traffic Agent may also be installed up front by adding a `telepresence.io/inject-traffic-agent: enabled`
 annotation to the WORKLOADS pod template.
 
 ### Sidecar injection
@@ -49,7 +49,7 @@ namespace.
 
 ### Disable Traffic Agent in a workload
 
-The Traffic Agent installation can be completely disabled by adding a `telepresence.getambassador.io/inject-traffic-agent: disabled`
+The Traffic Agent installation can be completely disabled by adding a `telepresence.io/inject-traffic-agent: disabled`
 annotation to the WORKLOADS pod template. This will prevent all attempts to do anything with the workload that will
 require a Traffic Agent.
 
@@ -67,7 +67,7 @@ The following are the Helm chart values to disable the workload types:
 ### Enable ArgoRollouts
 
 In order to use `ArgoRollouts`, you must pass the Helm chart value `workloads.argoRollouts.enabled=true` when installing the traffic-manager.
-It is recommended to set the pod template annotation `telepresence.getambassador.io/inject-traffic-agent: enabled` to avoid creation of unwanted
+It is recommended to set the pod template annotation `telepresence.io/inject-traffic-agent: enabled` to avoid creation of unwanted
 revisions.
 
 > [!NOTE]

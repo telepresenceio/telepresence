@@ -134,26 +134,23 @@ jobs:
           body: |
             ## Official Release Artifacts
             ### Linux
-               - 📦 [telepresence-linux-amd64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-linux-amd64)
-               - 📦 [telepresence-linux-arm64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-linux-arm64)
+               - 📦 [telepresence-linux-amd64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-amd64)
+               - 📦 [telepresence-linux-arm64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-arm64)
             ### OSX Darwin
-               - 📦 [telepresence-darwin-amd64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64)
-               - 📦 [telepresence-darwin-arm64](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64)
+               - 📦 [telepresence-darwin-amd64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64)
+               - 📦 [telepresence-darwin-arm64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64)
             ### Windows
-               - 📦 [telepresence-windows-amd64.zip](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
-               - 📦 [telepresence-windows-arm64.zip](https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}/telepresence-windows-arm64.zip)
+               - 📦 [telepresence-windows-amd64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
+               - 📦 [telepresence-windows-arm64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-arm64.zip)
 
-            For more builds across platforms and architectures, see the `Assets` section below.
-            And for more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start/).
-
-            ![Assets](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)
+            For more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start/).
       - uses: actions/checkout@v4
         if: ${{ steps.semver_check.outputs.make_latest == 'true' }}
       - name: Update Homebrew
         if: ${{ steps.semver_check.outputs.make_latest == 'true' }}
         run: |
           v=${{ github.ref_name }}
-          packaging/homebrew-package.sh "${v#v}" tel2oss "${{ vars.GH_BOT_USER }}" "${{ vars.GH_BOT_EMAIL }}" "${{ secrets.HOMEBREW_TAP_TOKEN }}"
+          packaging/homebrew-package.sh "${v#v}" "${{ vars.GH_BOT_USER }}" "${{ vars.GH_BOT_EMAIL }}" "${{ secrets.HOMEBREW_TAP_TOKEN }}"
 
   test-release:
     needs:
@@ -174,7 +171,7 @@ jobs:
     steps:
       - name: download binary
         env:
-          DOWNLOAD_URL: "https://app.getambassador.io/download/tel2oss/releases/download/${{ github.ref_name }}"
+          DOWNLOAD_URL: "https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}"
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "macOS" ]; then

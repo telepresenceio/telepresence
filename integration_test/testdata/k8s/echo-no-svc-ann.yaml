@@ -15,7 +15,7 @@ spec:
         app: echo-no-svc-ann
         budget: telepresence-test
       annotations:
-        telepresence.getambassador.io/inject-container-ports: http
+        telepresence.io/inject-container-ports: http
     spec:
       automountServiceAccountToken: false
       containers:

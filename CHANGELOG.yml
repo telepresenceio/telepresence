@@ -110,6 +110,11 @@ items:
           Users can now use the Helm value `agent.initSecurityContext` to override the default securityContext for the
           Telepresence init-container.
       - type: change
+        title: Let download page use direct links to GitHub
+        body: >-
+          The download links on the release page now points directly to the assets on the download page, instead of
+          using being routed from getambassador.io/download/tel2oss/releases.
+      - type: change
         title: Use telepresence.io as annotation prefix instead of telepresence.getambassador.io
         body: >-
           The workload and pod annotations used by Telepresence will now use the prefix `telepresence.io` instead of

@@ -27,21 +27,20 @@ brew upgrade telepresenceio/telepresence/telepresence-oss
 
 ```shell
 # 1. Download the binary.
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-amd64
 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
 ```
 
-### Apple silicon Macs
+### ARM (Apple Silicon) Macs
 
 ```shell
 # 1. Ensure that no old binary exists. This is very important because Silicon macs track the executable's signature
 # and just updating it in place will not work.
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-amd64 -o /usr/local/bin/telepresence
 
 # 2. Download the binary.
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64 -o /usr/local/bin/telepresence
 
 # 3. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
@@ -50,8 +49,13 @@ sudo chmod a+x /usr/local/bin/telepresence
 <Platform.GNULinuxTab>
 
 ```shell
+
 # 1. Download the latest binary (~95 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-linux-amd64 -o /usr/local/bin/telepresence
+### Intel
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64 -o /usr/local/bin/telepresence
+
+### ARM
+sudo curl -fL https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-arm64 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
@@ -60,11 +64,13 @@ sudo chmod a+x /usr/local/bin/telepresence
 </Platform.GNULinuxTab>
 <Platform.WindowsTab>
 
-To upgrade Telepresence,[Click here to download the Telepresence binary](https://app.getambassador.io/download/tel2oss/releases/download/$dlVersion$/telepresence-windows-amd64.zip).
+To upgrade Telepresence,Click [here](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-amd64.zip)
+to download the Intel Telepresence binary or [here](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-arm64.zip)
+to download the ARM Telepresence binary.
 
 Once you have the binary downloaded and unzipped you will need to do a few things:
 
-1. Rename the binary from `telepresence-windows-amd64.exe` to `telepresence.exe`
+1. Rename the binary from `telepresence-windows-[amd64|arm64].exe` to `telepresence.exe`
 2. Move the binary to `C:\Program Files (x86)\$USER\Telepresence\`
 
 </Platform.WindowsTab>
@@ -73,5 +79,3 @@ Once you have the binary downloaded and unzipped you will need to do a few thing
 
 The Telepresence CLI contains an embedded Helm chart. See [Install/Uninstall the Traffic Manager](manager.md) if you want to also upgrade
 the Traffic Manager in your cluster.
-
-![scarf](https://static.scarf.sh/a.png?x-pxid=d842651a-2e4d-465a-98e1-4808722c01ab)

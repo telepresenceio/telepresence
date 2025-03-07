@@ -1,10 +1,10 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Bundle Name="Telepresence" Manufacturer="Ambassador Labs" Version="TELEPRESENCE_VERSION"
+  <Bundle Name="Telepresence" Manufacturer="Telepresence Community" Version="TELEPRESENCE_VERSION"
     UpgradeCode="82fd5464-dd21-44bd-a44d-053cea4da740">
 
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication Theme="hyperlinkSidebarLicense"
-        LicenseUrl="https://www.getambassador.io/eula/enterprise"
+        LicenseUrl="https://www.apache.org/licenses/LICENSE-2.0"
         xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal" LogoSideFile="sidebar.png"
         SuppressOptionsUI="yes" ShowVersion="yes" />
     </BootstrapperApplication>

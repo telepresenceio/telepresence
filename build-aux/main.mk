@@ -359,7 +359,7 @@ promote-to-stable: ## (Release) Update stable.txt in S3
 		--body $(BUILDDIR)/stable.txt
 ifeq ($(GOHOSTOS), darwin)
 # Since the enterprise version is built from a different makefile, we only use the oss target here. Ref: https://github.com/telepresenceio/telepresence/pull/3626#issuecomment-2200150895
-	packaging/homebrew-package.sh $(TELEPRESENCE_SEMVER) "tel2oss"
+	packaging/homebrew-package.sh $(TELEPRESENCE_SEMVER)
 endif
 
 # Prerequisites:

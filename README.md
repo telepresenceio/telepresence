@@ -28,10 +28,6 @@ A few quick ways to start using Telepresence:
 * **Contributor's Guide:** [Guide](https://github.com/telepresenceio/telepresence/blob/release/v2/CONTRIBUTING.md)
 * **Meetings:** Check out our community [meeting schedule](https://github.com/telepresenceio/telepresence/blob/release/v2/MEETING_SCHEDULE.md) for opportunities to interact with Telepresence developers
 
-## Enterprise Version
-
-Find out more about Telepresence Enterprise and related products at [getambassador.io](https://www.getambassador.io/products/telepresence).
-
 ## Walkthrough
 
 ### Install an interceptable service:
@@ -230,8 +226,8 @@ Labels:           app=hello
                   pod-template-hash=75b7c6d484
                   telepresence.io/workloadEnabled=true
                   telepresence.io/workloadName=hello
-Annotations:      telepresence.getambassador.io/inject-traffic-agent: enabled
-                  telepresence.getambassador.io/restartedAt: 2024-01-07T00:01:33Z
+Annotations:      telepresence.io/inject-traffic-agent: enabled
+                  telepresence.io/restartedAt: 2024-01-07T00:01:33Z
 Status:           Running
 IP:               10.244.0.89
 IPs:
@@ -426,8 +422,6 @@ When Telepresence 2 connects to a Kubernetes cluster, it
 When a locally running application makes a network request to a service in the cluster, Telepresence will resolve the name to an address within the cluster.
 The operating system then sees that the TUN device has an address in the same subnet as the address of the outgoing packets and sends them to `tel0`.
 Telepresence is on the other side of `tel0` and picks up the packets, injecting them into the cluster through a gRPC connection with Traffic Manager.
-
-For a more in-depth overview, checkout our blog post: [Implementing Telepresence Networking with a TUN device](https://blog.getambassador.io/implementing-telepresence-networking-with-a-tun-device-a23a786d51e9)
 
 ## Troubleshooting
 

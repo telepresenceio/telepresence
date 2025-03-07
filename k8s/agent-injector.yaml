@@ -19,7 +19,7 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: agent-injector-webhook
 webhooks:
-  - name: agent-injector.getambassador.io
+  - name: agent-injector.telepresence.io
     clientConfig:
       service:
         name: agent-injector
