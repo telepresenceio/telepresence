@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -437,8 +437,8 @@ func (a *anonymizer) getPodName(podName string) string {
 
 	// we want to special case the traffic-manager so we can easily distinguish
 	// between that and the traffic-agents
-	if strings.Contains(name, agentmap.ManagerAppName) {
-		anonPodName = fmt.Sprintf("%s.%s", agentmap.ManagerAppName, anonNamespace)
+	if strings.Contains(name, agentconfig.ManagerAppName) {
+		anonPodName = fmt.Sprintf("%s.%s", agentconfig.ManagerAppName, anonNamespace)
 	} else {
 		anonPodName = fmt.Sprintf("pod-%d.%s", len(a.podNames)+1, anonNamespace)
 	}

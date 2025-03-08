@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -86,7 +86,7 @@ func canGetDefaultTrafficManagerService(ctx context.Context) bool {
 	ok, err := k8sapi.CanI(ctx, &auth.ResourceAttributes{
 		Verb:      "get",
 		Resource:  "services",
-		Name:      agentmap.ManagerAppName,
+		Name:      agentconfig.ManagerAppName,
 		Namespace: defaultManagerNamespace,
 	})
 	return err == nil && ok

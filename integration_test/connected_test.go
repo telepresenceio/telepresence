@@ -5,7 +5,7 @@ import (
 	"regexp"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
 type connectedSuite struct {
@@ -25,7 +25,7 @@ func init() {
 
 func (s *connectedSuite) Test_ListExcludesTM() {
 	stdout := itest.TelepresenceOk(s.Context(), "list", "-n", s.ManagerNamespace())
-	s.NotContains(stdout, agentmap.ManagerAppName)
+	s.NotContains(stdout, agentconfig.ManagerAppName)
 }
 
 func (s *connectedSuite) Test_ReportsAllVersions() {

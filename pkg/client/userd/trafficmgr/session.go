@@ -39,7 +39,6 @@ import (
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -475,8 +474,8 @@ func (s *session) Remain(ctx context.Context) error {
 func CheckTrafficManagerService(ctx context.Context, namespace string) error {
 	dlog.Debug(ctx, "checking that traffic-manager exists")
 	coreV1 := k8sapi.GetK8sInterface(ctx).CoreV1()
-	if _, err := coreV1.Services(namespace).Get(ctx, agentmap.ManagerAppName, meta.GetOptions{}); err != nil {
-		msg := fmt.Sprintf("unable to get service %s in %s: %v", agentmap.ManagerAppName, namespace, err)
+	if _, err := coreV1.Services(namespace).Get(ctx, agentconfig.ManagerAppName, meta.GetOptions{}); err != nil {
+		msg := fmt.Sprintf("unable to get service %s in %s: %v", agentconfig.ManagerAppName, namespace, err)
 		se := &k8serrors.StatusError{}
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {

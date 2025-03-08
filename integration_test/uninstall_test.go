@@ -8,7 +8,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
 func (s *notConnectedSuite) Test_Uninstall() {
@@ -19,7 +19,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 
 	names := func() (string, error) {
 		return itest.KubectlOut(ctx, s.ManagerNamespace(),
-			"get", "svc,deploy", agentmap.ManagerAppName,
+			"get", "svc,deploy", agentconfig.ManagerAppName,
 			"--ignore-not-found",
 			"-o", "jsonpath={.items[*].metadata.name}")
 	}

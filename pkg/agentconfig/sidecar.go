@@ -16,6 +16,7 @@ const (
 	ConfigMap = "telepresence-agents"
 
 	ContainerName     = "traffic-agent"
+	ManagerAppName    = "traffic-manager"
 	InitContainerName = "tel-agent-init"
 	MountPrefixApp    = "/tel_app_mounts"
 	ExportsVolumeName = "export-volume"
@@ -43,16 +44,22 @@ const (
 
 	DomainPrefix = "telepresence.getambassador.io/"
 
-	RestartedAtAnnotation             = DomainPrefix + "restartedAt"
-	ManualInjectAnnotation            = DomainPrefix + "manually-injected"
+	ConfigAnnotation                  = DomainPrefix + "agent-config"
+	ContainerPortsAnnotation          = DomainPrefix + "inject-container-ports"
 	InjectAnnotation                  = DomainPrefix + "inject-" + ContainerName
 	InjectIgnoreVolumeMounts          = DomainPrefix + "inject-ignore-volume-mounts"
-	VolumeMountPolicies               = DomainPrefix + "mount-policies"
-	ConfigAnnotation                  = DomainPrefix + "agent-config"
+	ManualInjectAnnotation            = DomainPrefix + "manually-injected"
 	ReplacedContainerAnnotationPrefix = DomainPrefix + "replaced-container."
-	WorkloadNameLabel                 = "telepresence.io/workloadName"
-	WorkloadKindLabel                 = "telepresence.io/workloadKind"
-	WorkloadEnabledLabel              = "telepresence.io/workloadEnabled"
+	RestartedAtAnnotation             = DomainPrefix + "restartedAt"
+	ServiceNameAnnotation             = DomainPrefix + "inject-service-name"
+	// ServicePortAnnotation is deprecated. Use plural form instead.
+	ServicePortAnnotation         = DomainPrefix + "inject-service-port"
+	ServicePortsAnnotation        = DomainPrefix + "inject-service-ports"
+	VolumeMountPoliciesAnnotation = DomainPrefix + "mount-policies"
+
+	WorkloadNameLabel    = "telepresence.io/workloadName"
+	WorkloadKindLabel    = "telepresence.io/workloadKind"
+	WorkloadEnabledLabel = "telepresence.io/workloadEnabled"
 )
 
 type ReplacePolicy int

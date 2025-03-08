@@ -158,7 +158,7 @@ func FindServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 			if k8sErrors.IsNotFound(err) {
 				return nil, fmt.Errorf(
 					"unable to find service %s specified by annotation %s declared in pod %s.%s",
-					svcName, ServiceNameAnnotation, pod.Name, pod.Namespace)
+					svcName, agentconfig.ServiceNameAnnotation, pod.Name, pod.Namespace)
 			}
 			return nil, err
 		}

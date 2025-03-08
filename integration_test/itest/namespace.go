@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
@@ -131,14 +131,14 @@ func (s *nsPair) tearDown(ctx context.Context) {
 func (s *nsPair) RollbackTM(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	err := Command(ctx, "helm", "rollback", "--no-hooks", "--wait", "--namespace", s.ManagerNamespace(), agentmap.ManagerAppName).Run()
+	err := Command(ctx, "helm", "rollback", "--no-hooks", "--wait", "--namespace", s.ManagerNamespace(), agentconfig.ManagerAppName).Run()
 	t := getT(ctx)
 	require.NoError(t, err)
-	require.NoError(t, RolloutStatusWait(ctx, s.Namespace, "deploy/"+agentmap.ManagerAppName))
+	require.NoError(t, RolloutStatusWait(ctx, s.Namespace, "deploy/"+agentconfig.ManagerAppName))
 	assert.Eventually(t, func() bool {
-		return len(RunningPodNames(ctx, agentmap.ManagerAppName, s.Namespace)) == 1
+		return len(RunningPodNames(ctx, agentconfig.ManagerAppName, s.Namespace)) == 1
 	}, 30*time.Second, 5*time.Second)
-	s.CapturePodLogs(ctx, agentmap.ManagerAppName, "", s.Namespace)
+	s.CapturePodLogs(ctx, agentconfig.ManagerAppName, "", s.Namespace)
 }
 
 func (s *nsPair) AppNamespace() string {

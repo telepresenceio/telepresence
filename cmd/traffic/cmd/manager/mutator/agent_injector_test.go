@@ -55,7 +55,7 @@ const mgrNs = "default"
 func TestTrafficAgentConfigGenerator(t *testing.T) {
 	managerConfig := core.ConfigMap{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      agentmap.ManagerAppName,
+			Name:      agentconfig.ManagerAppName,
 			Namespace: mgrNs,
 		},
 		Data: map[string]string{"namespace-selector.yaml": ` 
@@ -90,7 +90,7 @@ matchExpressions:
 		return meta.ObjectMeta{
 			Name:            podName(name),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
 			Labels:          map[string]string{labelKey: name},
 			OwnerReferences: podOwner(name),
 		}
@@ -216,7 +216,7 @@ matchExpressions:
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("named-and-numeric"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": "named-port", "app": "numeric-port"},
 			OwnerReferences: podOwner("named-and-numeric"),
 		},
@@ -275,7 +275,7 @@ matchExpressions:
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("multi-port"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": "multi-port"},
 			OwnerReferences: podOwner("multi-port"),
 		},
@@ -315,7 +315,7 @@ matchExpressions:
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("multi-container"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": "multi-port"},
 			OwnerReferences: podOwner("multi-container"),
 		},
@@ -927,7 +927,7 @@ func TestTrafficAgentInjector(t *testing.T) {
 	one := int32(1)
 	managerConfig := core.ConfigMap{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      agentmap.ManagerAppName,
+			Name:      agentconfig.ManagerAppName,
 			Namespace: mgrNs,
 		},
 		Data: map[string]string{"namespace-selector.yaml": ` 
@@ -964,7 +964,7 @@ matchExpressions:
 		return meta.ObjectMeta{
 			Name:            podName(name),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
 			Labels:          map[string]string{"service": name},
 			OwnerReferences: podOwner(name),
 			UID:             types.UID(uuid.New().String()),
@@ -1138,7 +1138,7 @@ matchExpressions:
 			"Skip Precondition: No name/namespace",
 			&core.Pod{
 				ObjectMeta: meta.ObjectMeta{Annotations: map[string]string{
-					InjectAnnotation: "enabled",
+					agentconfig.InjectAnnotation: "enabled",
 				}},
 			},
 			false,
@@ -1350,8 +1350,8 @@ matchExpressions:
 					Namespace: "some-ns",
 					Labels:    map[string]string{"service": "named-port"},
 					Annotations: map[string]string{
-						InjectAnnotation:      "enabled",
-						ServiceNameAnnotation: "khruangbin",
+						agentconfig.InjectAnnotation:      "enabled",
+						agentconfig.ServiceNameAnnotation: "khruangbin",
 					},
 					OwnerReferences: podOwner("named-port"),
 				},
@@ -1382,8 +1382,8 @@ matchExpressions:
 					Namespace: "some-ns",
 					Labels:    map[string]string{"service": "named-port"},
 					Annotations: map[string]string{
-						InjectAnnotation:      "enabled",
-						ServiceNameAnnotation: "named-port",
+						agentconfig.InjectAnnotation:      "enabled",
+						agentconfig.ServiceNameAnnotation: "named-port",
 					},
 					OwnerReferences: podOwner("named-port"),
 				},

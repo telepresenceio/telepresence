@@ -148,7 +148,7 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 		ns := k8s.GetManagerNamespace(ctx)
 		podsAPI := coreAPI.Pods(ns)
 		selector := labels.SelectorFromSet(labels.Set{
-			"app":          agentmap.ManagerAppName,
+			"app":          agentconfig.ManagerAppName,
 			"telepresence": "manager",
 		})
 		podList, err := podsAPI.List(ctx, meta.ListOptions{LabelSelector: selector.String()})
@@ -161,7 +161,7 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 			pod := &podList.Items[0]
 			podAndNs := fmt.Sprintf("%s.%s", pod.Name, ns)
 			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
-			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentmap.ManagerAppName, request.GetPodYaml, false)
+			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ManagerAppName, request.GetPodYaml, false)
 		case len(podList.Items) > 1:
 			err = fmt.Errorf("multiple traffic managers found in namespace %s using selector %s", ns, selector.String())
 			dlog.Error(ctx, err)

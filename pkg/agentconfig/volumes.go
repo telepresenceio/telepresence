@@ -120,7 +120,7 @@ func (iv MountPolicies) ToRPC() map[string]int32 {
 }
 
 func (iv MountPolicies) getPolicyAnnotations(annotations map[string]string) (mps MountPolicies, err error) {
-	vma, ok := annotations[VolumeMountPolicies]
+	vma, ok := annotations[VolumeMountPoliciesAnnotation]
 	if !ok {
 		return nil, nil
 	}

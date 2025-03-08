@@ -29,7 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -111,8 +111,8 @@ func NewService(ctx context.Context, configWatcher config.Watcher) (Service, *dg
 
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
-	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentmap.ManagerAppName, ns)
-	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentmap.ManagerAppName, ns, ret.dotClusterDomain)
+	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
+	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
 
 	ret.self = ret
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{

@@ -17,7 +17,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -243,7 +243,7 @@ func (kc *Cluster) determineTrafficManagerNamespace(c context.Context) (string, 
 	// Search for the traffic-manager in mapped namespaces
 	nss := kc.GetCurrentNamespaces(true)
 	for _, ns := range nss {
-		if _, err := k8sapi.GetService(c, agentmap.ManagerAppName, ns); err == nil {
+		if _, err := k8sapi.GetService(c, agentconfig.ManagerAppName, ns); err == nil {
 			return ns, nil
 		}
 	}

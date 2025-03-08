@@ -18,7 +18,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
@@ -27,7 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-const ManagerAppName = agentmap.ManagerAppName
+const ManagerAppName = agentconfig.ManagerAppName
 
 type installSuite struct {
 	itest.Suite
@@ -79,7 +79,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 	rq.NoError(err)
 
 	getValues := func() (map[string]any, error) {
-		return action.NewGetValues(helmConfig).Run(agentmap.ManagerAppName)
+		return action.NewGetValues(helmConfig).Run(agentconfig.ManagerAppName)
 	}
 	containsKey := func(m map[string]any, key string) bool {
 		_, ok := m[key]
@@ -151,7 +151,7 @@ func (is *installSuite) Test_HelmTemplateInstall() {
 		"managerRbac.create": true,
 	}, false)
 	require.NoError(err)
-	values = append([]string{"template", agentmap.ManagerAppName, chart, "-n", is.ManagerNamespace()}, values...)
+	values = append([]string{"template", agentconfig.ManagerAppName, chart, "-n", is.ManagerNamespace()}, values...)
 	manifest, err := itest.Output(ctx, "helm", values...)
 	require.NoError(err)
 	out := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
@@ -161,8 +161,8 @@ func (is *installSuite) Test_HelmTemplateInstall() {
 		// Sometimes the traffic-agents configmap gets wiped, causing the delete command to fail, hence we don't require.NoError
 		_ = itest.Kubectl(dos.WithStdin(logCtx, strings.NewReader(manifest)), "", "delete", "-f", "-")
 	}()
-	require.NoError(itest.RolloutStatusWait(ctx, is.ManagerNamespace(), "deploy/"+agentmap.ManagerAppName))
-	is.CapturePodLogs(ctx, agentmap.ManagerAppName, "", is.ManagerNamespace())
+	require.NoError(itest.RolloutStatusWait(ctx, is.ManagerNamespace(), "deploy/"+agentconfig.ManagerAppName))
+	is.CapturePodLogs(ctx, agentconfig.ManagerAppName, "", is.ManagerNamespace())
 	stdout := is.TelepresenceConnect(ctx)
 	is.Contains(stdout, "Connected to context")
 	itest.TelepresenceQuitOk(ctx)

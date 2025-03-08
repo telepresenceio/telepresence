@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
@@ -195,10 +195,10 @@ func (s *nsSuite) Test_NamespacesDynamic() {
 	})
 
 	restartCount := func() int {
-		pods := itest.RunningPods(ctx, agentmap.ManagerAppName, s.managerNamespace())
+		pods := itest.RunningPods(ctx, agentconfig.ManagerAppName, s.managerNamespace())
 		if len(pods) == 1 {
 			for _, cs := range pods[0].Status.ContainerStatuses {
-				if cs.Name == agentmap.ManagerAppName {
+				if cs.Name == agentconfig.ManagerAppName {
 					return int(cs.RestartCount)
 				}
 			}
@@ -280,7 +280,7 @@ func (s *nsSuite) Test_NamespacesStatic() {
 
 	getPodName := func() (podName string) {
 		rq.Eventually(func() bool {
-			pods := itest.RunningPods(ctx, agentmap.ManagerAppName, s.managerNamespace())
+			pods := itest.RunningPods(ctx, agentconfig.ManagerAppName, s.managerNamespace())
 			if len(pods) == 1 {
 				podName = pods[0].Name
 				return true

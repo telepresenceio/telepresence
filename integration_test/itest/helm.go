@@ -19,7 +19,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -301,10 +301,10 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	if _, _, err = Telepresence(WithUser(ctx, "default"), args...); err != nil {
 		return "", err
 	}
-	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/"+agentmap.ManagerAppName); err != nil {
+	if err = RolloutStatusWait(ctx, nss.Namespace, "deploy/"+agentconfig.ManagerAppName); err != nil {
 		return "", err
 	}
-	logFileName := s.self.CapturePodLogs(ctx, agentmap.ManagerAppName, "", nss.Namespace)
+	logFileName := s.self.CapturePodLogs(ctx, agentconfig.ManagerAppName, "", nss.Namespace)
 
 	if !s.ManagerIsVersion(">2.21.x") {
 		// Give the manager time to perform rollouts, listen to telepresence-agents configmap, etc.
@@ -322,7 +322,7 @@ func (s *cluster) UninstallTrafficManager(ctx context.Context, managerNamespace 
 	TelepresenceOk(ctx, append([]string{"helm", "uninstall", "--manager-namespace", managerNamespace}, args...)...)
 
 	// Helm uninstall does deletions asynchronously, so let's wait until the deployment is gone
-	assert.Eventually(t, func() bool { return len(RunningPodNames(ctx, agentmap.ManagerAppName, managerNamespace)) == 0 },
+	assert.Eventually(t, func() bool { return len(RunningPodNames(ctx, agentconfig.ManagerAppName, managerNamespace)) == 0 },
 		60*time.Second, 4*time.Second, "traffic-manager deployment was not removed")
 	TelepresenceQuitOk(ctx)
 }

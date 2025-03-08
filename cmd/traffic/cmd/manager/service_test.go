@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -233,7 +234,7 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 
 	_, err = fakeClient.CoreV1().ConfigMaps(mgrNs).Create(ctx, &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentmap.ManagerAppName,
+			Name:      agentconfig.ManagerAppName,
 			Namespace: mgrNs,
 		},
 		Data: map[string]string{"namespace-selector.yaml": ` 

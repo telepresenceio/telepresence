@@ -638,7 +638,7 @@ func checkInterceptAnnotations(wl k8sapi.Workload) (bool, error) {
 
 	webhookEnabled := true
 	manuallyManaged := a[agentconfig.ManualInjectAnnotation] == "true"
-	ia := a[mutator.InjectAnnotation]
+	ia := a[agentconfig.InjectAnnotation]
 	switch ia {
 	case "":
 		webhookEnabled = !manuallyManaged
