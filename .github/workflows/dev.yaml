@@ -133,9 +133,9 @@ jobs:
       - uses: ./.github/actions/upload-logs
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
-        if: always()
+        if: ${{ always() }}
   purge_images:
-    if: github.event.label.name == 'ok to test' || github.event.label.name == 'compatibility test'
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -146,7 +146,6 @@ jobs:
       - name: Delete tel2 and telepresence image
         uses: dataaxiom/ghcr-cleanup-action@v1
         continue-on-error: true
-        if: always()
         with:
           owner: telepresenceio
           packages: tel2,telepresence
@@ -158,6 +157,7 @@ jobs:
           owner: telepresenceio
           packages: tel2,telepresence
           token: ${{ secrets.GITHUB_TOKEN }}
+          delete-untagged: true
           delete-ghost-images: true
           delete-partial-images: true
           delete-orphaned-images: true
