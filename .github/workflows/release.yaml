@@ -94,15 +94,17 @@ jobs:
       - name: Determine if version is RC, TEST, or GA
         id: semver_check
         run: |
-          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+$ ]]; then
+          v=${{ github.ref_name }}
+          echo "semver=${v#v}" >> "$GITHUB_OUTPUT"
+          if [[ "${v}" =~ ^v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+$ ]]; then
             echo "make_latest=false" >> $GITHUB_OUTPUT
             echo "draft=false" >> $GITHUB_OUTPUT
             echo "prerelease=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+$ ]]; then
+          elif [[ "${v}" =~ ^v[0-9]+.[0-9]+.[0-9]+-test.[0-9]+$ ]]; then
             echo "make_latest=false" >> $GITHUB_OUTPUT
             echo "draft=false" >> $GITHUB_OUTPUT
             echo "prerelease=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+.[0-9]+.[0-9]+-draft.[0-9]+$ ]]; then
+          elif [[ "${v}" =~ ^v[0-9]+.[0-9]+.[0-9]+-draft.[0-9]+$ ]]; then
             echo "make_latest=false" >> $GITHUB_OUTPUT
             echo "draft=true" >> $GITHUB_OUTPUT
             echo "prerelease=false" >> $GITHUB_OUTPUT
@@ -142,6 +144,9 @@ jobs:
             ### Windows
                - 📦 [telepresence-windows-amd64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
                - 📦 [telepresence-windows-arm64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-arm64.zip)
+
+            ### Helm Chart
+               - 📦 [Telepresence Helm Chart](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss/${{ steps.semver_check.outputs.semver }})
 
             For more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start/).
       - uses: actions/checkout@v4

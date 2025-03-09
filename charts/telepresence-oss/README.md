@@ -13,7 +13,7 @@ their services.
 The telepresence binary embeds the helm chart, so the easiest way to install is:
 
 ```sh
-$ telepresence helm install [--set x=y | --values &lt;values file&gt;]
+$ telepresence helm install [--set x=y | --values <values file>]
 ```
 
 ## Configuration

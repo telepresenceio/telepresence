@@ -360,7 +360,6 @@ properties:
   isCI:
     description: isCI can be set to force the traffic-manager namespace to be "ambassador"
     type: boolean
-    default: false
 
   livenessProbe:
     description: Define livenessProbe for the traffic-manager
