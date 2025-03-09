@@ -35,8 +35,8 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
-	github.com/telepresenceio/go-fuseftp v0.6.2
-	github.com/telepresenceio/go-fuseftp/rpc v0.6.2
+	github.com/telepresenceio/go-fuseftp v0.6.4
+	github.com/telepresenceio/go-fuseftp/rpc v0.6.4
 	github.com/telepresenceio/telepresence/rpc/v2 v2.21.1
 	github.com/vishvananda/netlink v1.3.0
 	golang.org/x/net v0.35.0

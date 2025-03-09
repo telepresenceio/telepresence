@@ -399,10 +399,10 @@ github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
-github.com/telepresenceio/go-fuseftp v0.6.2 h1:toJSnNuIBTKuXw52sJ16XgHMGrk7qQHlwWFBE0/iONw=
-github.com/telepresenceio/go-fuseftp v0.6.2/go.mod h1:EXH+oL5GalxZ/pZV5MCHFYW3aLW1SRxV5wSedWoSS2g=
-github.com/telepresenceio/go-fuseftp/rpc v0.6.2 h1:UGd7LpDNDYBrUi5X1TOG1u/ZvhJgn42y3NIp/6p8WkM=
-github.com/telepresenceio/go-fuseftp/rpc v0.6.2/go.mod h1:jLvPHOWARcSRV5b1zxRYbv4Sa5VlMZxpnyTpCKrlPzA=
+github.com/telepresenceio/go-fuseftp v0.6.4 h1:V+UseWKDgH9Txr1WW37FwY42P/dBj7/gzpbN85Tnzfc=
+github.com/telepresenceio/go-fuseftp v0.6.4/go.mod h1:EXH+oL5GalxZ/pZV5MCHFYW3aLW1SRxV5wSedWoSS2g=
+github.com/telepresenceio/go-fuseftp/rpc v0.6.4 h1:N+sZsqjd3yI3v4HSCIuD46F3tfGrQZUfMG5eqsoyazI=
+github.com/telepresenceio/go-fuseftp/rpc v0.6.4/go.mod h1:jLvPHOWARcSRV5b1zxRYbv4Sa5VlMZxpnyTpCKrlPzA=
 github.com/vishvananda/netlink v1.3.0 h1:X7l42GfcV4S6E4vHTsw48qbrV+9PVojNfIhZcwQdrZk=
 github.com/vishvananda/netlink v1.3.0/go.mod h1:i6NetklAujEcC6fK0JPjT8qSwWyO0HLn4UKG+hGqeJs=
 github.com/vishvananda/netns v0.0.4/go.mod h1:SpkAiCQRtJ6TvvxPnOSyH3BMl6unz3xZlaprSwhNNJM=
