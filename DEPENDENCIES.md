@@ -20,7 +20,7 @@ following Free and Open Source software:
     github.com/cenkalti/backoff/v4                                 v4.3.0                                MIT license
     github.com/cespare/xxhash/v2                                   v2.3.0                                MIT license
     github.com/chai2010/gettext-go                                 v1.0.3                                3-clause BSD license
-    github.com/containerd/containerd                               v1.7.26                               Apache License 2.0
+    github.com/containerd/containerd                               v1.7.27                               Apache License 2.0
     github.com/containerd/errdefs                                  v1.0.0                                Apache License 2.0
     github.com/containerd/log                                      v0.1.0                                Apache License 2.0
     github.com/containerd/platforms                                v0.2.1                                Apache License 2.0
