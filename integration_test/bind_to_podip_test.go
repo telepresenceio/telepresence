@@ -10,7 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 )
 
 func (s *connectedSuite) Test_BindToPodIP() {
@@ -43,7 +43,7 @@ func (s *connectedSuite) Test_BindToPodIP() {
 					},
 				},
 				Annotations: map[string]string{
-					agentconfig.InjectAnnotation: "enabled",
+					annotation.InjectTrafficAgent: "enabled",
 				},
 			}
 			s.ApplyTemplate(ctx, tplPath, tpl)

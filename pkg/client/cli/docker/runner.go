@@ -18,18 +18,17 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/spinner"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Runner struct {
@@ -128,8 +127,8 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 	return nil
 }
 
-func (s *Runner) adjustMounts(ctx context.Context, runFlags *RunFlags, args []string) ([]string, agentconfig.MountPolicies, error) {
-	var mounts agentconfig.MountPolicies
+func (s *Runner) adjustMounts(ctx context.Context, runFlags *RunFlags, args []string) ([]string, types.MountPolicies, error) {
+	var mounts types.MountPolicies
 	if m := s.Mount; m != nil {
 		mounts = maps.Clone(m.Mounts)
 		if runFlags != nil {
@@ -146,7 +145,7 @@ func (s *Runner) adjustMounts(ctx context.Context, runFlags *RunFlags, args []st
 			}
 		}
 		for path, mp := range mounts {
-			if mp == agentconfig.MountPolicyLocal {
+			if mp == types.MountPolicyLocal {
 				if s.localMountDir == "" {
 					var err error
 					s.localMountDir, err = os.MkdirTemp("", "telfs-local-*")
@@ -202,11 +201,11 @@ func (s *Runner) start(ctx context.Context, name, envFile string, runFlags *RunF
 		for path, policy := range mounts {
 			ro := ""
 			switch policy {
-			case agentconfig.MountPolicyIgnore, agentconfig.MountPolicyLocal:
-			case agentconfig.MountPolicyRemoteReadOnly:
+			case types.MountPolicyIgnore, types.MountPolicyLocal:
+			case types.MountPolicyRemoteReadOnly:
 				ro = ",ro"
 				fallthrough
-			case agentconfig.MountPolicyRemote:
+			case types.MountPolicyRemote:
 				ourArgs = append(ourArgs, "--mount", fmt.Sprintf("type=bind,src=%s,dst=%s%s", filepath.Join(s.Mount.LocalDir, path), path, ro))
 			}
 		}
@@ -217,28 +216,23 @@ func (s *Runner) start(ctx context.Context, name, envFile string, runFlags *RunF
 	} else {
 		daemonName := ud.DaemonID().ContainerName()
 		ourArgs = append(ourArgs, "--network", "container:"+daemonName)
-		maps.DeleteFunc(mounts, func(s string, policy agentconfig.MountPolicy) bool {
-			return policy == agentconfig.MountPolicyIgnore || policy == agentconfig.MountPolicyLocal
+		maps.DeleteFunc(mounts, func(s string, policy types.MountPolicy) bool {
+			return policy == types.MountPolicyIgnore || policy == types.MountPolicyLocal
 		})
 		if len(mounts) > 0 {
-			pluginName, err := docker.EnsureVolumePlugin(ctx)
-			if err != nil {
-				ioutil.Printf(output.Err(ctx), "Remote mount disabled: %s\n", err)
-			} else {
-				container := s.Environment["TELEPRESENCE_CONTAINER"]
-				m := s.Mount
-				w.volumes, w.err = docker.StartVolumeMounts(ctx, pluginName, daemonName, container, m.Port, mounts, m.ReadOnly)
-				if w.err != nil {
-					dlog.Error(ctx, w.err)
-					return w
+			container := s.Environment["TELEPRESENCE_CONTAINER"]
+			m := s.Mount
+			w.volumes, w.err = docker.CreateVolumes(ctx, daemonName, m.Port, container, mounts, m.ReadOnly)
+			if w.err != nil {
+				dlog.Error(ctx, w.err)
+				return w
+			}
+			for vol, path := range w.volumes {
+				ro := ""
+				if m.ReadOnly || mounts.Get("", path) == types.MountPolicyRemoteReadOnly {
+					ro = ":ro"
 				}
-				for vol, path := range w.volumes {
-					ro := ""
-					if m.ReadOnly || mounts.Get("", path) == agentconfig.MountPolicyRemoteReadOnly {
-						ro = ":ro"
-					}
-					ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s%s", vol, path, ro))
-				}
+				ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s%s", vol, path, ro))
 			}
 		}
 	}
@@ -360,7 +354,7 @@ func EnsureStopContainer(ctx context.Context, containerID string, volumes []stri
 			time.Sleep(200 * time.Millisecond)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			docker.StopVolumeMounts(ctx, volumes)
+			docker.RemoveVolumes(ctx, volumes)
 		}()
 	}
 	sigCh := make(chan os.Signal, 1)

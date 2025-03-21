@@ -13,6 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
@@ -51,14 +52,14 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		return
 	}
 	tpl := wl.GetPodTemplate()
-	ia := agentconfig.GetAnnotation(ctx, tpl.Annotations, agentconfig.InjectAnnotation, agentconfig.LegacyInjectAnnotation)
+	ia := annotation.GetAnnotation(ctx, tpl.Annotations, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent)
 	if ia == "" {
 		return
 	}
 	if oldWl != nil && cmp.Equal(oldWl.GetPodTemplate(), tpl,
 		cmpopts.IgnoreFields(meta.ObjectMeta{}, "Namespace", "UID", "ResourceVersion", "CreationTimestamp", "DeletionTimestamp"),
 		cmpopts.IgnoreMapEntries(func(k, _ string) bool {
-			return k == agentconfig.RestartedAtAnnotation
+			return k == annotation.RestartedAt
 		})) {
 		return
 	}

@@ -13,12 +13,12 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type podAccess struct {
@@ -134,7 +134,7 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 
 func (pa *podAccess) workerPortForward(ctx context.Context, port string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	pp, err := agentconfig.NewPortAndProto(port)
+	pp, err := types.NewPortAndProto(port)
 	if err != nil {
 		dlog.Errorf(ctx, "malformed extra port %q: %v", port, err)
 		return

@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Ingress struct {
@@ -53,7 +53,7 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		m = &mount.Info{Error: mountError.Error()}
 	} else if ii.MountPoint != "" {
 		m = mount.NewInfo(ctx,
-			ii.Environment, ii.FtpPort, ii.SftpPort, ii.ClientMountPoint, ii.MountPoint, ii.PodIp, agentconfig.MountPoliciesFromRPC(ii.Mounts), ro)
+			ii.Environment, uint16(ii.FtpPort), uint16(ii.SftpPort), ii.ClientMountPoint, ii.MountPoint, ii.PodIp, types.MountPoliciesFromRPC(ii.Mounts), ro)
 	}
 	info := &Info{
 		ID:            ii.Id,
@@ -122,11 +122,11 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 	pkv.Indent = ""
 	pkv.Separator = " -> "
 	if ii.ContainerPort != 0 {
-		pm, _ := agentconfig.NewPortIdentifier(ii.Protocol, strconv.Itoa(int(ii.ContainerPort)))
+		pm, _ := types.NewPortIdentifier(ii.Protocol, strconv.Itoa(int(ii.ContainerPort)))
 		pkv.Add(pm.String(), fmt.Sprintf("%d %s", ii.TargetPort, ii.Protocol))
 	}
 	for _, pp := range ii.PodPorts {
-		pm := agentconfig.PortMapping(pp)
+		pm := types.PortMapping(pp)
 		to := pm.To()
 		pkv.Add(pm.From().String(), fmt.Sprintf("%d %s", to.Port, to.Proto))
 	}

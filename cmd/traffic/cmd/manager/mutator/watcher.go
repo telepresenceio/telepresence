@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
@@ -98,7 +99,7 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 		wls := make(map[workloadKey]agentconfig.SidecarExt, len(wp.pods))
 		podsOfInterest := make([]*core.Pod, 0, len(wp.pods))
 		for _, pod := range wp.pods {
-			cfgJSON, ok := pod.ObjectMeta.Annotations[agentconfig.ConfigAnnotation]
+			cfgJSON, ok := pod.ObjectMeta.Annotations[annotation.Config]
 			if !ok {
 				continue
 			}

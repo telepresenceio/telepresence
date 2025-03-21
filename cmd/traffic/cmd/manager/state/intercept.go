@@ -28,10 +28,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	types2 "github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // PrepareIntercept ensures that the given request can be matched against the intercept configuration of
@@ -153,7 +155,7 @@ func prepareAllContainerPorts(cn *agentconfig.Container, pi *rpc.PreparedInterce
 
 func (s *state) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container, cr *rpc.CreateInterceptRequest, pi *rpc.PreparedIntercept) (err error) {
 	spec := cr.InterceptSpec
-	portID := agentconfig.PortIdentifier(spec.PortIdentifier)
+	portID := types2.PortIdentifier(spec.PortIdentifier)
 	containerOnly := cn != nil
 
 	var ic *agentconfig.Intercept
@@ -166,16 +168,16 @@ func (s *state) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container,
 		return err
 	}
 
-	uniqueContainerPorts := make(map[agentconfig.PortAndProto]struct{})
-	uniqueContainerPorts[agentconfig.PortAndProto{Proto: ic.Protocol, Port: ic.ContainerPort}] = struct{}{}
+	uniqueContainerPorts := make(map[types2.PortAndProto]struct{})
+	uniqueContainerPorts[types2.PortAndProto{Proto: ic.Protocol, Port: ic.ContainerPort}] = struct{}{}
 
 	var podPorts []string
 	if len(spec.PodPorts) > 0 {
-		uniqueTargets := make(map[agentconfig.PortAndProto]struct{})
-		uniqueTargets[agentconfig.PortAndProto{Proto: ic.Protocol, Port: uint16(spec.TargetPort)}] = struct{}{}
+		uniqueTargets := make(map[types2.PortAndProto]struct{})
+		uniqueTargets[types2.PortAndProto{Proto: ic.Protocol, Port: uint16(spec.TargetPort)}] = struct{}{}
 		podPorts = make([]string, len(spec.PodPorts))
 		for i, pms := range spec.PodPorts {
-			pm := agentconfig.PortMapping(pms)
+			pm := types2.PortMapping(pms)
 			var pmIc *agentconfig.Intercept
 			if containerOnly {
 				pmIc, err = findContainerIntercept(ac, cn, pm.From())
@@ -192,7 +194,7 @@ func (s *state) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container,
 			}
 			uniqueTargets[to] = struct{}{}
 
-			from := agentconfig.PortAndProto{Proto: pmIc.Protocol, Port: pmIc.ContainerPort}
+			from := types2.PortAndProto{Proto: pmIc.Protocol, Port: pmIc.ContainerPort}
 			if _, ok := uniqueContainerPorts[from]; ok {
 				return fmt.Errorf("multiple port definitions using container port %s", from)
 			}
@@ -277,7 +279,7 @@ func (s *state) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 
 	// Add one child intercept for each pod-port.
 	for _, pms := range spec.PodPorts {
-		pm := agentconfig.PortMapping(pms)
+		pm := types2.PortMapping(pms)
 		from, to, err := pm.FromNumberAndTo()
 		if err != nil {
 			// Did PrepareIntercept create an invalid pod_port?
@@ -426,7 +428,7 @@ func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	}
 
 	if !managerutil.AgentInjectorEnabled(parentCtx) {
-		cfgJSON, ok := wl.GetPodTemplate().Annotations[agentconfig.ConfigAnnotation]
+		cfgJSON, ok := wl.GetPodTemplate().Annotations[annotation.Config]
 		if !ok {
 			msg := fmt.Sprintf("agent-injector is disabled and no agent has been added manually for %s", wl)
 			return nil, nil, status.Error(codes.FailedPrecondition, msg)
@@ -642,8 +644,8 @@ func checkInterceptAnnotations(ctx context.Context, wl k8sapi.Workload) (bool, e
 	}
 
 	webhookEnabled := true
-	manuallyManaged := agentconfig.GetAnnotation(ctx, pod.ObjectMeta.Annotations, agentconfig.ManualInjectAnnotation, agentconfig.LegacyManualInjectAnnotation) == "true"
-	ia := agentconfig.GetAnnotation(ctx, a, agentconfig.InjectAnnotation, agentconfig.LegacyInjectAnnotation)
+	manuallyManaged := annotation.GetAnnotation(ctx, pod.ObjectMeta.Annotations, annotation.ManuallyInjected, annotation.LegacyManuallyInjected) == "true"
+	ia := annotation.GetAnnotation(ctx, a, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent)
 	switch ia {
 	case "":
 		webhookEnabled = !manuallyManaged
@@ -653,7 +655,7 @@ func checkInterceptAnnotations(ctx context.Context, wl k8sapi.Workload) (bool, e
 	default:
 		return false, errcat.User.Newf(
 			"%s is not a valid value for the %s.%s/%s annotation",
-			ia, wl.GetName(), wl.GetNamespace(), agentconfig.InjectAnnotation)
+			ia, wl.GetName(), wl.GetNamespace(), annotation.InjectTrafficAgent)
 	}
 
 	if !manuallyManaged {
@@ -671,7 +673,7 @@ func checkInterceptAnnotations(ctx context.Context, wl k8sapi.Workload) (bool, e
 	if an == nil {
 		return false, errcat.User.Newf(
 			"annotation %s.%s/%s=true but pod has no traffic-agent container",
-			wl.GetName(), wl.GetNamespace(), agentconfig.ManualInjectAnnotation)
+			wl.GetName(), wl.GetNamespace(), annotation.ManuallyInjected)
 	}
 	return true, nil
 }
@@ -871,11 +873,11 @@ func findContainer(ac *agentconfig.Sidecar, spec *rpc.InterceptSpec) (foundCN *a
 
 // findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port or container port.
 func findIntercept(ac *agentconfig.Sidecar, spec *rpc.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
-	return findIntercept2(ac, spec.ServiceName, spec.ContainerName, agentconfig.PortIdentifier(spec.PortIdentifier))
+	return findIntercept2(ac, spec.ServiceName, spec.ContainerName, types2.PortIdentifier(spec.PortIdentifier))
 }
 
 // findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port or container port.
-func findIntercept2(ac *agentconfig.Sidecar, serviceName, containerName string, pi agentconfig.PortIdentifier) (
+func findIntercept2(ac *agentconfig.Sidecar, serviceName, containerName string, pi types2.PortIdentifier) (
 	foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error,
 ) {
 	for _, cn := range ac.Containers {
@@ -945,7 +947,7 @@ func findIntercept2(ac *agentconfig.Sidecar, serviceName, containerName string, 
 }
 
 // findContainerIntercept finds the intercept configuration that matches container port.
-func findContainerIntercept(ac *agentconfig.Sidecar, cn *agentconfig.Container, pi agentconfig.PortIdentifier) (*agentconfig.Intercept, error) {
+func findContainerIntercept(ac *agentconfig.Sidecar, cn *agentconfig.Container, pi types2.PortIdentifier) (*agentconfig.Intercept, error) {
 	for _, ic := range cn.Intercepts {
 		if agentconfig.IsInterceptForContainer(pi, ic) {
 			return ic, nil

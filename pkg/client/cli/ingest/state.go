@@ -11,7 +11,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	cliDocker "github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
@@ -21,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type State interface {
@@ -66,7 +66,7 @@ func (s *state) CreateRequest() (*rpc.IngestRequest, error) {
 	}
 
 	for _, toPod := range s.ToPod {
-		pp, err := agentconfig.NewPortAndProto(toPod)
+		pp, err := types.NewPortAndProto(toPod)
 		if err != nil {
 			return nil, err
 		}

@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -41,7 +42,7 @@ var DisplayName = "OSS Traffic Agent" //nolint:gochecknoglobals // extension poi
 // AppEnvironment returns the environment visible to this agent together with environment variables
 // explicitly declared for the app container and minus the environment variables provided by this
 // config.
-func AppEnvironment(ctx context.Context, mounts agentconfig.MountPolicies, ag *agentconfig.Container) (map[string]string, error) {
+func AppEnvironment(ctx context.Context, mounts types.MountPolicies, ag *agentconfig.Container) (map[string]string, error) {
 	osEnv := dos.Environ(ctx)
 	prefix := agentconfig.EnvPrefixApp + ag.EnvPrefix
 	fullEnv := make(map[string]string, len(osEnv))
@@ -81,10 +82,10 @@ func AppEnvironment(ctx context.Context, mounts agentconfig.MountPolicies, ag *a
 		var localMounts, remoteMounts []string
 		for path, policy := range mounts {
 			switch policy {
-			case agentconfig.MountPolicyIgnore:
-			case agentconfig.MountPolicyRemote, agentconfig.MountPolicyRemoteReadOnly:
+			case types.MountPolicyIgnore:
+			case types.MountPolicyRemote, types.MountPolicyRemoteReadOnly:
 				remoteMounts = append(remoteMounts, path)
-			case agentconfig.MountPolicyLocal:
+			case types.MountPolicyLocal:
 				localMounts = append(localMounts, path)
 			}
 		}
@@ -202,14 +203,14 @@ func sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 		s.AddContainerState(cn.Name, NewContainerState(s, cn, ci.MountPoint, ci.Environment))
 
 		// Group the container's intercepts by agent port
-		icStates := make(map[agentconfig.PortAndProto][]*agentconfig.Intercept, len(cn.Intercepts))
+		icStates := make(map[types.PortAndProto][]*agentconfig.Intercept, len(cn.Intercepts))
 		for _, ic := range cn.Intercepts {
 			ap := ic.AgentPort
 			if cn.Replace == agentconfig.ReplacePolicyContainer {
 				// Listen to replaced container's original port.
 				ap = ic.ContainerPort
 			}
-			k := agentconfig.PortAndProto{Port: ap, Proto: ic.Protocol}
+			k := types.PortAndProto{Port: ap, Proto: ic.Protocol}
 			icStates[k] = append(icStates[k], ic)
 		}
 

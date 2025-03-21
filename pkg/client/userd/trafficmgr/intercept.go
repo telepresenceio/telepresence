@@ -32,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // intercept tracks the life-cycle of an intercept, dictated by the intercepts
@@ -319,14 +320,14 @@ func (s *interceptInfo) InterceptResult() *rpc.InterceptResult {
 	}
 }
 
-func (s *interceptInfo) PortIdentifier() (agentconfig.PortIdentifier, error) {
+func (s *interceptInfo) PortIdentifier() (types.PortIdentifier, error) {
 	var spi string
 	if s.preparedIntercept.ServicePortName == "" {
 		spi = strconv.Itoa(int(s.preparedIntercept.ServicePort))
 	} else {
 		spi = s.preparedIntercept.ServicePortName
 	}
-	return agentconfig.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
+	return types.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
 }
 
 func (s *interceptInfo) PreparedIntercept() *manager.PreparedIntercept {
@@ -355,22 +356,22 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 
 // allBusyLocalPorts returns the sum of all ports that the intercept forwards to and all ports
 // that are forwarded from.
-func allBusyLocalPorts(spec *manager.InterceptSpec) []agentconfig.PortAndProto {
+func allBusyLocalPorts(spec *manager.InterceptSpec) []types.PortAndProto {
 	targetPort := spec.TargetPort
 	if targetPort == 0 {
 		targetPort = spec.ContainerPort
 	}
-	ports := make([]agentconfig.PortAndProto, 0, len(spec.LocalPorts)+len(spec.PodPorts)+1)
-	ports = append(ports, agentconfig.PortAndProto{
+	ports := make([]types.PortAndProto, 0, len(spec.LocalPorts)+len(spec.PodPorts)+1)
+	ports = append(ports, types.PortAndProto{
 		Port:  uint16(targetPort),
 		Proto: core.Protocol(spec.Protocol),
 	})
 	for _, lp := range spec.LocalPorts {
-		pp, _ := agentconfig.NewPortAndProto(lp)
+		pp, _ := types.NewPortAndProto(lp)
 		ports = append(ports, pp)
 	}
 	for _, ps := range spec.PodPorts {
-		pm := agentconfig.PortMapping(ps)
+		pm := types.PortMapping(ps)
 		ports = append(ports, pm.To())
 	}
 	return ports
@@ -380,20 +381,20 @@ func allBusyLocalPorts(spec *manager.InterceptSpec) []agentconfig.PortAndProto {
 // local ports that the client will forward from. Also ensures that there are no conflicts among those ports.
 // The cluster-side of the port mappings are not checked here because we rely on the PrepareIntercept
 // call to already have done that.
-func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedIntercept) (map[agentconfig.PortAndProto]struct{}, error) {
+func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedIntercept) (map[types.PortAndProto]struct{}, error) {
 	targetPort := spec.TargetPort
 	if targetPort == 0 {
 		targetPort = pi.ContainerPort
 	}
 
-	ports := make(map[agentconfig.PortAndProto]struct{}, len(spec.LocalPorts)+len(pi.PodPorts)+1)
-	ports[agentconfig.PortAndProto{
+	ports := make(map[types.PortAndProto]struct{}, len(spec.LocalPorts)+len(pi.PodPorts)+1)
+	ports[types.PortAndProto{
 		Port:  uint16(targetPort),
 		Proto: core.Protocol(pi.Protocol),
 	}] = struct{}{}
 
 	for _, lp := range spec.LocalPorts {
-		pp, err := agentconfig.NewPortAndProto(lp)
+		pp, err := types.NewPortAndProto(lp)
 		if err != nil {
 			return nil, err
 		}
@@ -403,7 +404,7 @@ func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedInt
 		ports[pp] = struct{}{}
 	}
 	for _, ps := range pi.PodPorts {
-		pm := agentconfig.PortMapping(ps)
+		pm := types.PortMapping(ps)
 		if err := pm.Validate(); err != nil {
 			return nil, err
 		}

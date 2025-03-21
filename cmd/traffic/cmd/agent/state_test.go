@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 const (
@@ -24,7 +25,7 @@ const (
 )
 
 func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.State) {
-	f := forwarder.NewInterceptor(agentconfig.PortAndProto{Proto: core.ProtocolTCP, Port: 1111}, tunnel.AgentToProxied, appHost, appPort)
+	f := forwarder.NewInterceptor(types.PortAndProto{Proto: core.ProtocolTCP, Port: 1111}, tunnel.AgentToProxied, appHost, appPort)
 	go func() {
 		if err := f.Serve(context.Background(), nil); err != nil {
 			dlog.Error(ctx, err)

@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	core "k8s.io/api/core/v1"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 )
 
 func InitContainer(config *Sidecar) *core.Container {
@@ -21,7 +23,7 @@ func InitContainer(config *Sidecar) *core.Container {
 				ValueFrom: &core.EnvVarSource{
 					FieldRef: &core.ObjectFieldSelector{
 						APIVersion: "v1",
-						FieldPath:  fmt.Sprintf("metadata.annotations['%s']", ConfigAnnotation),
+						FieldPath:  fmt.Sprintf("metadata.annotations['%s']", annotation.Config),
 					},
 				},
 			},

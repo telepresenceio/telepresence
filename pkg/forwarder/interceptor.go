@@ -11,10 +11,10 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Interceptor interface {
@@ -50,7 +50,7 @@ type interceptor struct {
 	intercept *manager.InterceptInfo
 }
 
-func NewInterceptor(from agentconfig.PortAndProto, tag tunnel.Tag, targetHost string, targetPort uint16) Interceptor {
+func NewInterceptor(from types.PortAndProto, tag tunnel.Tag, targetHost string, targetPort uint16) Interceptor {
 	switch from.Proto {
 	case core.ProtocolTCP:
 		return newTCP(from.Port, tag, targetHost, targetPort)

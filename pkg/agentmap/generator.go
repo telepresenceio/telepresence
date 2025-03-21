@@ -14,7 +14,9 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 var TrafficManagerSelector = labels.SelectorFromSet(map[string]string{ //nolint:gochecknoglobals // constant
@@ -43,12 +45,12 @@ type BasicGeneratorConfig struct {
 	AppProtocolStrategy k8sapi.AppProtocolStrategy
 	SecurityContext     *core.SecurityContext
 	InitSecurityContext *core.SecurityContext
-	MountPolicies       agentconfig.MountPolicies
+	MountPolicies       types.MountPolicies
 }
 
-func portsFromContainerPortsAnnotation(ctx context.Context, wl k8sapi.Workload) (ports []agentconfig.PortIdentifier, err error) {
+func portsFromContainerPortsAnnotation(ctx context.Context, wl k8sapi.Workload) (ports []types.PortIdentifier, err error) {
 	pod := wl.GetPodTemplate()
-	cpa := agentconfig.GetAnnotation(ctx, pod.GetAnnotations(), agentconfig.ContainerPortsAnnotation, agentconfig.LegacyContainerPortsAnnotation)
+	cpa := annotation.GetAnnotation(ctx, pod.GetAnnotations(), annotation.InjectContainerPorts, annotation.LegacyInjectContainerPorts)
 	switch cpa {
 	case "":
 		return nil, nil
@@ -63,20 +65,20 @@ func portsFromContainerPortsAnnotation(ctx context.Context, wl k8sapi.Workload) 
 				if pn.Protocol != core.ProtocolTCP {
 					pi += "/" + string(pn.Protocol)
 				}
-				ports = append(ports, agentconfig.PortIdentifier(pi))
+				ports = append(ports, types.PortIdentifier(pi))
 			}
 		}
 	default:
-		ports, err = portsFromAnnotationValue(wl, agentconfig.ContainerPortsAnnotation, cpa)
+		ports, err = portsFromAnnotationValue(wl, annotation.InjectContainerPorts, cpa)
 	}
 	return ports, err
 }
 
-func portsFromAnnotationValue(wl k8sapi.Workload, annotation, value string) (ports []agentconfig.PortIdentifier, err error) {
+func portsFromAnnotationValue(wl k8sapi.Workload, annotation, value string) (ports []types.PortIdentifier, err error) {
 	cps := strings.Split(value, ",")
-	ports = make([]agentconfig.PortIdentifier, len(cps))
+	ports = make([]types.PortIdentifier, len(cps))
 	for i, cp := range cps {
-		pi := agentconfig.PortIdentifier(cp)
+		pi := types.PortIdentifier(cp)
 		if err = pi.Validate(); err != nil {
 			return nil, fmt.Errorf("unable to parse annotation %s of %s: %w", annotation, wl, err)
 		}
@@ -112,7 +114,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 		}
 	}
 
-	ann := agentconfig.GetAnnotation(ctx, pod.Annotations, agentconfig.ServiceNameAnnotation, agentconfig.LegacyServiceNameAnnotation)
+	ann := annotation.GetAnnotation(ctx, pod.Annotations, annotation.InjectServiceName, annotation.LegacyInjectServiceName)
 	svcs, err := FindServicesForPod(ctx, pod, ann)
 	if err != nil {
 		return nil, err
@@ -129,10 +131,10 @@ func (cfg *BasicGeneratorConfig) Generate(
 		return p
 	}
 
-	var ports []agentconfig.PortIdentifier
-	ann = agentconfig.GetAnnotation(ctx, pod.Annotations, agentconfig.ServicePortsAnnotation, agentconfig.LegacyServicePortAnnotation)
+	var ports []types.PortIdentifier
+	ann = annotation.GetAnnotation(ctx, pod.Annotations, annotation.InjectServicePorts, annotation.LegacyInjectServicePort)
 	if ann != "" {
-		ports, err = portsFromAnnotationValue(wl, agentconfig.ServicePortsAnnotation, ann)
+		ports, err = portsFromAnnotationValue(wl, annotation.InjectServicePorts, ann)
 	}
 	if err != nil {
 		return nil, err
@@ -194,7 +196,7 @@ func (cfg *BasicGeneratorConfig) appendAgentContainerConfigs(
 	ctx context.Context,
 	svc *core.Service,
 	pod *core.PodTemplateSpec,
-	portAnnotations []agentconfig.PortIdentifier,
+	portAnnotations []types.PortIdentifier,
 	agentPortNumberFunc func(int32) uint16,
 	ccs []*agentconfig.Container,
 	existingConfig agentconfig.SidecarExt,
@@ -244,14 +246,14 @@ nextSvcPort:
 
 func (cfg *BasicGeneratorConfig) newContainerConfig(cn *core.Container, index int, ics []*agentconfig.Intercept, rp agentconfig.ReplacePolicy) *agentconfig.Container {
 	// Create the concrete MountPolicies that map mount path to policy
-	var mps agentconfig.MountPolicies
+	var mps types.MountPolicies
 	for i := range cn.VolumeMounts {
 		vm := &cn.VolumeMounts[i]
 		path := vm.MountPath
 		vp := cfg.MountPolicies.Get(vm.Name, path)
-		if vp != agentconfig.MountPolicyIgnore {
+		if vp != types.MountPolicyIgnore {
 			if mps == nil {
-				mps = make(agentconfig.MountPolicies, len(cn.VolumeMounts))
+				mps = make(types.MountPolicies, len(cn.VolumeMounts))
 			}
 			mps[path] = vp
 		}
@@ -261,7 +263,7 @@ func (cfg *BasicGeneratorConfig) newContainerConfig(cn *core.Container, index in
 	if len(mps) > 0 {
 		mounts = make([]string, 0, len(mps))
 		for key, mp := range mps {
-			if mp == agentconfig.MountPolicyRemote || mp == agentconfig.MountPolicyRemoteReadOnly {
+			if mp == types.MountPolicyRemote || mp == types.MountPolicyRemoteReadOnly {
 				mounts = append(mounts, key)
 			}
 		}
@@ -278,7 +280,7 @@ func (cfg *BasicGeneratorConfig) newContainerConfig(cn *core.Container, index in
 	}
 }
 
-func findContainerPort(cns []core.Container, p agentconfig.PortIdentifier) (*core.Container, *core.ContainerPort) {
+func findContainerPort(cns []core.Container, p types.PortIdentifier) (*core.Container, *core.ContainerPort) {
 	proto, name, num := p.ProtoAndNameOrNumber()
 	for n := range cns {
 		cn := &cns[n]
@@ -298,7 +300,7 @@ func findContainerPort(cns []core.Container, p agentconfig.PortIdentifier) (*cor
 func (cfg *BasicGeneratorConfig) appendServiceLessAgentContainerConfigs(
 	ctx context.Context,
 	pod *core.PodTemplateSpec,
-	portAnnotations []agentconfig.PortIdentifier,
+	portAnnotations []types.PortIdentifier,
 	agentPortNumberFunc func(int32) uint16,
 	ccs []*agentconfig.Container,
 	existingConfig agentconfig.SidecarExt,
@@ -402,7 +404,7 @@ func getContainerPortAppProtocol(ctx context.Context, aps k8sapi.AppProtocolStra
 // filterServicePorts iterates through a list of ports in a service and
 // only returns the ports that match the given nameOrNumber. All ports will
 // be returned if nameOrNumber is equal to the empty string.
-func filterServicePorts(svc *core.Service, portAnnotations []agentconfig.PortIdentifier) []core.ServicePort {
+func filterServicePorts(svc *core.Service, portAnnotations []types.PortIdentifier) []core.ServicePort {
 	ports := svc.Spec.Ports
 	if len(portAnnotations) == 0 {
 		return ports

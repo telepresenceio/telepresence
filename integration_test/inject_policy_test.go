@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
 
@@ -136,7 +137,7 @@ func (is *installSuite) applyOrDeleteMultipleServices(svcCount int, applyOrDelet
 				Registry: "datawire",
 				Image:    "quote:0.5.0",
 				Annotations: map[string]string{
-					agentconfig.InjectAnnotation: "enabled",
+					annotation.InjectTrafficAgent: "enabled",
 				},
 				Labels: map[string]string{
 					"multi-service-test": "inject",

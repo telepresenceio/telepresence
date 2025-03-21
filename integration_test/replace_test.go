@@ -9,7 +9,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 )
 
 type replaceSuite struct {
@@ -78,7 +78,7 @@ func (s *replaceSuite) SetupSuite() {
 			},
 		},
 		Annotations: map[string]string{
-			agentconfig.InjectAnnotation: "enabled",
+			annotation.InjectTrafficAgent: "enabled",
 		},
 	}
 	ctx := s.Context()

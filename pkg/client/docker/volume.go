@@ -13,16 +13,18 @@ import (
 	"time"
 
 	"github.com/blang/semver/v4"
-	"github.com/docker/docker/api/types"
+	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/volume"
 	dockerClient "github.com/docker/docker/client"
 	"github.com/go-json-experiment/json"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // EnsureVolumePlugin checks if the telemount plugin is installed and installs it if that is
@@ -49,7 +51,7 @@ func EnsureVolumePlugin(ctx context.Context) (string, error) {
 		return pn, installVolumePlugin(ctx, pn)
 	}
 	if !pi.Enabled {
-		err = cli.PluginEnable(ctx, pn, types.PluginEnableOptions{Timeout: 5})
+		err = cli.PluginEnable(ctx, pn, dockerTypes.PluginEnableOptions{Timeout: 5})
 	}
 	dlog.Debugf(ctx, "using volume plugin: %s", pn)
 	return pn, err
@@ -164,28 +166,48 @@ func getLatestPluginVersion(ctx context.Context, pluginName string) (ver semver.
 	return ver, err
 }
 
-func StartVolumeMounts(ctx context.Context, pluginName, dcName, container string, sftpPort int32, mounts agentconfig.MountPolicies, ro bool) (map[string]string, error) {
-	host, err := ContainerIP(ctx, dcName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieved container ip for %s: %w", dcName, err)
-	}
-
+// CreateVolumes creates the volumes necessary when mounting volumes required by when engaging the remote container.
+// The sftpPort is the port where the daemon container provides access to the remote sftp-server.
+// The mounts are provided as a map of mount policies keyed by paths.
+// Each volume is given the name of the remote container suffixed by a dash and a sequence number, starting at 0.
+// Returns a map of paths keyed by volume names.
+func CreateVolumes(
+	ctx context.Context,
+	daemonContainer string,
+	sftpPort uint16,
+	remoteContainer string,
+	mounts types.MountPolicies,
+	ro bool,
+) (map[string]string, error) {
+	var host, plugin string
 	vols := make(map[string]string)
 	i := 0
 	for dir, policy := range mounts {
 		volRO := ro
 		switch policy {
-		case agentconfig.MountPolicyIgnore:
+		case types.MountPolicyIgnore:
 			continue
-		case agentconfig.MountPolicyLocal:
+		case types.MountPolicyLocal:
 			// Mount using a local binding, unless user already provided a mount.
-		case agentconfig.MountPolicyRemoteReadOnly:
+		case types.MountPolicyRemoteReadOnly:
 			volRO = true
 			fallthrough
-		case agentconfig.MountPolicyRemote:
-			v := fmt.Sprintf("%s-%d", container, i)
+		case types.MountPolicyRemote:
+			var err error
+			if plugin == "" {
+				host, err = ContainerIP(ctx, daemonContainer)
+				if err != nil {
+					return nil, fmt.Errorf("failed to retrieved remoteContainer ip for %s: %w", daemonContainer, err)
+				}
+				plugin, err = EnsureVolumePlugin(ctx)
+				if err != nil {
+					ioutil.Printf(output.Err(ctx), "Remote mount disabled: %s\n", err)
+					return nil, nil
+				}
+			}
+			v := fmt.Sprintf("%s-%d", remoteContainer, i)
 			i++
-			if err := startVolumeMount(ctx, pluginName, host, sftpPort, v, container, dir, volRO); err != nil {
+			if err = createVolume(ctx, plugin, host, sftpPort, v, remoteContainer, dir, volRO); err != nil {
 				return vols, err
 			}
 			vols[v] = dir
@@ -194,15 +216,15 @@ func StartVolumeMounts(ctx context.Context, pluginName, dcName, container string
 	return vols, nil
 }
 
-func StopVolumeMounts(ctx context.Context, vols []string) {
+func RemoveVolumes(ctx context.Context, vols []string) {
 	for _, vol := range vols {
-		if err := stopVolumeMount(ctx, vol); err != nil {
+		if err := removeVolume(ctx, vol); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}
 }
 
-func startVolumeMount(ctx context.Context, pluginName, host string, port int32, volumeName, container, dir string, ro bool) error {
+func createVolume(ctx context.Context, pluginName, host string, port uint16, volumeName, container, dir string, ro bool) error {
 	cli, err := GetClient(ctx)
 	if err != nil {
 		return err
@@ -240,7 +262,7 @@ func startVolumeMount(ctx context.Context, pluginName, host string, port int32, 
 	return err
 }
 
-func stopVolumeMount(ctx context.Context, volume string) error {
+func removeVolume(ctx context.Context, volume string) error {
 	cli, err := GetClient(ctx)
 	if err != nil {
 		return err

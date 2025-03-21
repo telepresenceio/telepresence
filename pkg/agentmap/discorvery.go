@@ -17,6 +17,7 @@ import (
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/informers/externalversions/rollouts/v1alpha1"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -158,7 +159,7 @@ func FindServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 			if k8sErrors.IsNotFound(err) {
 				return nil, fmt.Errorf(
 					"unable to find service %s specified by annotation %s declared in pod %s.%s",
-					svcName, agentconfig.ServiceNameAnnotation, pod.Name, pod.Namespace)
+					svcName, annotation.InjectServiceName, pod.Name, pod.Namespace)
 			}
 			return nil, err
 		}

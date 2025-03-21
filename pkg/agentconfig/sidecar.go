@@ -1,16 +1,16 @@
 package agentconfig
 
 import (
-	"context"
 	"reflect"
 
 	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 const (
@@ -44,42 +44,10 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
-	DomainPrefix = "telepresence.io/"
-
-	ConfigAnnotation                  = DomainPrefix + "agent-config"
-	ContainerPortsAnnotation          = DomainPrefix + "inject-container-ports"
-	InjectAnnotation                  = DomainPrefix + "inject-" + ContainerName
-	InjectIgnoreVolumeMounts          = DomainPrefix + "inject-ignore-volume-mounts"
-	ManualInjectAnnotation            = DomainPrefix + "manually-injected"
-	ReplacedContainerAnnotationPrefix = DomainPrefix + "replaced-container."
-	RestartedAtAnnotation             = DomainPrefix + "restartedAt"
-	ServiceNameAnnotation             = DomainPrefix + "inject-service-name"
-	ServicePortsAnnotation            = DomainPrefix + "inject-service-ports"
-	VolumeMountPoliciesAnnotation     = DomainPrefix + "mount-policies"
-
-	LegacyDomainPrefix             = "telepresence.getambassador.io/"
-	LegacyContainerPortsAnnotation = LegacyDomainPrefix + "inject-container-ports"
-	LegacyInjectAnnotation         = LegacyDomainPrefix + "inject-" + ContainerName
-	LegacyInjectIgnoreVolumeMounts = LegacyDomainPrefix + "inject-ignore-volume-mounts"
-	LegacyManualInjectAnnotation   = LegacyDomainPrefix + "manually-injected"
-	LegacyServiceNameAnnotation    = LegacyDomainPrefix + "inject-service-name"
-	LegacyServicePortAnnotation    = LegacyDomainPrefix + "inject-service-port"
-
-	WorkloadNameLabel    = DomainPrefix + "workloadName"
-	WorkloadKindLabel    = DomainPrefix + "workloadKind"
-	WorkloadEnabledLabel = DomainPrefix + "workloadEnabled"
+	WorkloadNameLabel    = annotation.DomainPrefix + "workloadName"
+	WorkloadKindLabel    = annotation.DomainPrefix + "workloadKind"
+	WorkloadEnabledLabel = annotation.DomainPrefix + "workloadEnabled"
 )
-
-func GetAnnotation(ctx context.Context, annotations map[string]string, key, deprecatedKey string) string {
-	value, ok := annotations[key]
-	if !ok {
-		value, ok = annotations[deprecatedKey]
-		if ok {
-			dlog.Warningf(ctx, "Annotation %q is deprecated. Use %q instead", key, value)
-		}
-	}
-	return value
-}
 
 type ReplacePolicy int
 
@@ -108,7 +76,7 @@ type Intercept struct {
 	ServiceName string `json:"serviceName,omitzero"`
 
 	// UID of intercepted service
-	ServiceUID types.UID `json:"serviceUID,omitzero"`
+	ServiceUID k8sTypes.UID `json:"serviceUID,omitzero"`
 
 	// Name of intercepted service port
 	ServicePortName string `json:"servicePortName,omitzero"`
@@ -152,7 +120,7 @@ type Container struct {
 	// Mounts controls how the traffic-agent makes mounts available for this container. Each
 	// policy is keyed with either the name of a volume or by a path prefix that matches the mounted
 	// path.
-	Mounts MountPolicies `json:"mounts,omitempty"`
+	Mounts types.MountPolicies `json:"mounts,omitempty"`
 
 	// MountPaths are the actual mount points that are mounted by this container
 	// Deprecated: Use Mounts.
@@ -211,7 +179,7 @@ type Sidecar struct {
 
 	// MountPolicies controls how the agent will handle new mounts that might arrive when
 	// the pod is created.
-	MountPolicies MountPolicies `json:"mountPolicies,omitzero"`
+	MountPolicies types.MountPolicies `json:"mountPolicies,omitzero"`
 
 	// The intercepts managed by the agent
 	Containers []*Container `json:"containers,omitempty"`

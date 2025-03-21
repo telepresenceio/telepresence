@@ -1,8 +1,10 @@
 package agentconfig
 
+import "github.com/telepresenceio/telepresence/v2/pkg/types"
+
 // IsInterceptForService returns true when the given PortIdentifier is equal to the
 // config's ServicePortName, or can be parsed to an integer equal to the config's ServicePort.
-func IsInterceptForService(pi PortIdentifier, ic *Intercept) bool {
+func IsInterceptForService(pi types.PortIdentifier, ic *Intercept) bool {
 	proto, name, num := pi.ProtoAndNameOrNumber()
 	if pi.HasProto() && proto != ic.Protocol {
 		return false
@@ -15,7 +17,7 @@ func IsInterceptForService(pi PortIdentifier, ic *Intercept) bool {
 
 // IsInterceptForContainer returns true when the given PortIdentifier is equal to the
 // config's ContainerPort, or can be parsed to an integer equal to the config's ContainerPort.
-func IsInterceptForContainer(pi PortIdentifier, ic *Intercept) bool {
+func IsInterceptForContainer(pi types.PortIdentifier, ic *Intercept) bool {
 	proto, name, num := pi.ProtoAndNameOrNumber()
 	if pi.HasProto() && proto != ic.Protocol {
 		return false
@@ -31,10 +33,10 @@ func IsInterceptForContainer(pi PortIdentifier, ic *Intercept) bool {
 // This method should always be used when iterating the intercepts, except for when an
 // intercept is identified via a service.
 func PortUniqueIntercepts(cn *Container) []*Intercept {
-	um := make(map[PortAndProto]struct{}, len(cn.Intercepts))
+	um := make(map[types.PortAndProto]struct{}, len(cn.Intercepts))
 	ics := make([]*Intercept, 0, len(cn.Intercepts))
 	for _, ic := range cn.Intercepts {
-		k := PortAndProto{ic.AgentPort, ic.Protocol}
+		k := types.PortAndProto{Port: ic.AgentPort, Proto: ic.Protocol}
 		if _, ok := um[k]; !ok {
 			um[k] = struct{}{}
 			ics = append(ics, ic)

@@ -1,11 +1,29 @@
-package agentconfig
+package types
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
+
+	core "k8s.io/api/core/v1"
 )
 
 type PortMapping string
+
+func NewPortMapping(from PortIdentifier, to uint16) PortMapping {
+	p, s, n := from.ProtoAndNameOrNumber()
+	switch {
+	case s == "" && p == core.ProtocolTCP:
+		s = fmt.Sprintf("%d:%d", n, to)
+	case s == "":
+		s = fmt.Sprintf("%d:%d/%s", n, to, p)
+	case p == core.ProtocolTCP:
+		s = fmt.Sprintf("%s:%d", s, to)
+	default:
+		s = fmt.Sprintf("%s:%d/%s", s, to, p)
+	}
+	return PortMapping(s)
+}
 
 func (p PortMapping) String() string {
 	return string(p)

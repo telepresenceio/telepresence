@@ -24,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -108,17 +109,17 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
 	env := managerutil.GetEnv(ctx)
 
-	ia := agentconfig.GetAnnotation(ctx, pod.Annotations, agentconfig.InjectAnnotation, agentconfig.LegacyInjectAnnotation)
+	ia := annotation.GetAnnotation(ctx, pod.Annotations, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent)
 
 	var scx agentconfig.SidecarExt
 	switch ia {
 	case "false", "disabled":
-		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, agentconfig.InjectAnnotation)
+		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, annotation.InjectTrafficAgent)
 		return nil, nil
 	case "":
 		if env.AgentInjectPolicy != agentconfig.OnDemand {
 			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q annotation; skipping`,
-				pod.Name, pod.Namespace, agentconfig.ContainerName, agentconfig.InjectAnnotation)
+				pod.Name, pod.Namespace, agentconfig.ContainerName, annotation.InjectTrafficAgent)
 			return nil, nil
 		}
 		fallthrough
@@ -153,21 +154,21 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 	default:
-		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, agentconfig.InjectAnnotation)
+		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, annotation.InjectTrafficAgent)
 	}
 	return createPatch(ctx, scx.AgentConfig(), pod)
 }
 
 func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod) (PatchOps, error) {
 	var patches PatchOps
-	var annotations map[string]string
+	var anns map[string]string
 	patches = addInitContainer(pod, config, patches)
-	patches, annotations = addAgentContainer(ctx, pod, config, patches)
+	patches, anns = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
 	patches = addAgentVolumes(pod, patches)
 	patches = hidePorts(pod, config, patches)
-	annotations[agentconfig.InjectAnnotation] = "enabled"
-	patches = addPodAnnotations(pod, annotations, patches)
+	anns[annotation.InjectTrafficAgent] = "enabled"
+	patches = addPodAnnotations(pod, anns, patches)
 	patches = addPodLabels(ctx, pod, config, patches)
 	patches = maybeRemoveAppContainer(pod, config, patches)
 

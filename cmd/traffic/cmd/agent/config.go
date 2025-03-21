@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"k8s.io/apimachinery/pkg/types"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Config interface {
@@ -21,14 +22,14 @@ type Config interface {
 	HasRemoteMounts() bool
 	PodName() string
 	PodIP() string
-	PodUID() types.UID
+	PodUID() k8sTypes.UID
 }
 
 type config struct {
 	sidecarExt agentconfig.SidecarExt
 	podName    string
 	podIP      string
-	podUID     types.UID
+	podUID     k8sTypes.UID
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
@@ -63,7 +64,7 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	if !ok {
 		return nil, errors.New("missing POD_UID")
 	}
-	c.podUID = types.UID(podUID)
+	c.podUID = k8sTypes.UID(podUID)
 	for _, cn := range sc.Containers {
 		err = addAppMounts(ctx, sc.MountPolicies, cn)
 		if err != nil {
@@ -73,14 +74,14 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	return &c, nil
 }
 
-func (c *config) PodUID() types.UID {
+func (c *config) PodUID() k8sTypes.UID {
 	return c.podUID
 }
 
 func (c *config) HasRemoteMounts() bool {
 	for _, cn := range c.AgentConfig().Containers {
 		for _, p := range cn.Mounts {
-			if p == agentconfig.MountPolicyRemote || p == agentconfig.MountPolicyRemoteReadOnly {
+			if p == types.MountPolicyRemote || p == types.MountPolicyRemoteReadOnly {
 				return true
 			}
 		}
@@ -107,7 +108,7 @@ func (c *config) PodIP() string {
 // addAppMounts adds each of the mounts present under the containers MountPoint as a
 // symlink under the agentconfig.ExportsMountPoint/<container mount>/.
 // Returns MountPolicies keyed by the full path of each mount.
-func addAppMounts(ctx context.Context, mps agentconfig.MountPolicies, ag *agentconfig.Container) error {
+func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container) error {
 	dlog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
 	if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
@@ -135,7 +136,7 @@ func addAppMounts(ctx context.Context, mps agentconfig.MountPolicies, ag *agentc
 		}
 		for _, mount := range mounts {
 			switch mps.Get("", "/"+mount.Name()) {
-			case agentconfig.MountPolicyIgnore, agentconfig.MountPolicyLocal:
+			case types.MountPolicyIgnore, types.MountPolicyLocal:
 			default:
 				subDir := filepath.Join(ag.MountPoint, mount.Name())
 				if err = dos.Symlink(ctx, subDir, filepath.Join(cnMountPoint, mount.Name())); err != nil {
@@ -151,7 +152,7 @@ func addAppMounts(ctx context.Context, mps agentconfig.MountPolicies, ag *agentc
 	// Verify that all mounts exists, so that the client doesn't attempt to mount nonexistent paths
 	for path, policy := range ag.Mounts {
 		mp := filepath.Join(cnMountPoint, path)
-		if policy == agentconfig.MountPolicyRemote || policy == agentconfig.MountPolicyRemoteReadOnly {
+		if policy == types.MountPolicyRemote || policy == types.MountPolicyRemoteReadOnly {
 			_, err := dos.Stat(ctx, mp)
 			if err != nil {
 				dlog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
@@ -162,7 +163,7 @@ func addAppMounts(ctx context.Context, mps agentconfig.MountPolicies, ag *agentc
 	return nil
 }
 
-func mountVRS(ctx context.Context, mps agentconfig.MountPolicies, ag *agentconfig.Container, cnMountPoint string) error {
+func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container, cnMountPoint string) error {
 	const vrsDir = "/var/run/secrets"
 	// Capture /var/run/secrets subdirs that has been injected but not added by the injector.
 	vrs, err := dos.ReadDir(ctx, vrsDir)
@@ -182,10 +183,10 @@ func mountVRS(ctx context.Context, mps agentconfig.MountPolicies, ag *agentconfi
 		subDir := filepath.Join(vrsDir, vr.Name())
 		mp := mps.Get("", subDir)
 		switch mp {
-		case agentconfig.MountPolicyIgnore:
+		case types.MountPolicyIgnore:
 			continue
-		case agentconfig.MountPolicyLocal:
-		case agentconfig.MountPolicyRemote, agentconfig.MountPolicyRemoteReadOnly:
+		case types.MountPolicyLocal:
+		case types.MountPolicyRemote, types.MountPolicyRemoteReadOnly:
 			if _, err = dos.Stat(ctx, filepath.Join(vrsExportDir, vr.Name())); err == nil {
 				break
 			}
@@ -210,7 +211,7 @@ func mountVRS(ctx context.Context, mps agentconfig.MountPolicies, ag *agentconfi
 		}
 		if !found {
 			if ag.Mounts == nil {
-				ag.Mounts = agentconfig.MountPolicies{subDir: mp}
+				ag.Mounts = types.MountPolicies{subDir: mp}
 			} else {
 				ag.Mounts[subDir] = mp
 			}

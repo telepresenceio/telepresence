@@ -1,4 +1,4 @@
-package agentconfig
+package types
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ import (
 
 // PortIdentifier identifies a port (service or container) unambiguously using
 // the notation <name or number>/<protocol>. A named port will always be identified
-// using the name and the protocol will only be appended when it is not TCP.
+// using the name, and the protocol will only be appended when it is not TCP.
 type PortIdentifier string
 
 // ValidatePort validates a port string. An error is returned if the string isn't a

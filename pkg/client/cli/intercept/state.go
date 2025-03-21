@@ -15,7 +15,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	cliDocker "github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
@@ -26,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type State interface {
@@ -109,7 +109,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 				}
 				pm = from + ":" + to
 			}
-			if err = agentconfig.PortMapping(pm).Validate(); err != nil {
+			if err = types.PortMapping(pm).Validate(); err != nil {
 				return nil, errcat.User.New(err)
 			}
 			spec.PodPorts = append(spec.PodPorts, pm)
@@ -123,7 +123,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.TargetHost = s.Address
 
 	for _, toPod := range s.ToPod {
-		pp, err := agentconfig.NewPortAndProto(toPod)
+		pp, err := types.NewPortAndProto(toPod)
 		if err != nil {
 			return nil, err
 		}
@@ -342,7 +342,7 @@ func parsePort(portSpec string, dockerRun, containerized bool) (local uint16, do
 	}
 
 	if p := portMapping[0]; p != "" {
-		if local, err = agentconfig.ParseNumericPort(p); err != nil {
+		if local, err = types.ParseNumericPort(p); err != nil {
 			return portError()
 		}
 	}
@@ -352,11 +352,11 @@ func parsePort(portSpec string, dockerRun, containerized bool) (local uint16, do
 	case 2:
 		if p := portMapping[1]; p != "" {
 			if dockerRun && !containerized {
-				if docker, err = agentconfig.ParseNumericPort(p); err != nil {
+				if docker, err = types.ParseNumericPort(p); err != nil {
 					return portError()
 				}
 			} else {
-				if err := agentconfig.ValidatePort(p); err != nil {
+				if err := types.ValidatePort(p); err != nil {
 					return portError()
 				}
 				svcPortId = p
@@ -370,11 +370,11 @@ func parsePort(portSpec string, dockerRun, containerized bool) (local uint16, do
 		if !dockerRun {
 			return portError()
 		}
-		if docker, err = agentconfig.ParseNumericPort(portMapping[1]); err != nil {
+		if docker, err = types.ParseNumericPort(portMapping[1]); err != nil {
 			return portError()
 		}
 		svcPortId = portMapping[2]
-		if err := agentconfig.ValidatePort(svcPortId); err != nil {
+		if err := types.ValidatePort(svcPortId); err != nil {
 			return portError()
 		}
 	default:

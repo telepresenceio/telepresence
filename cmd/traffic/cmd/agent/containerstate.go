@@ -6,6 +6,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type containerState struct {
@@ -19,7 +20,7 @@ func (c *containerState) MountPoint() string {
 	return c.mountPoint
 }
 
-func (c *containerState) Mounts() agentconfig.MountPolicies {
+func (c *containerState) Mounts() types.MountPolicies {
 	return c.container.Mounts
 }
 

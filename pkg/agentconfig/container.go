@@ -11,10 +11,12 @@ import (
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type ContainerBuilder struct {
-	MountPolicies MountPolicies
+	MountPolicies types.MountPolicies
 	Pod           *core.Pod
 	Config        *Sidecar
 }
@@ -57,7 +59,7 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 			ValueFrom: &core.EnvVarSource{
 				FieldRef: &core.ObjectFieldSelector{
 					APIVersion: "v1",
-					FieldPath:  fmt.Sprintf("metadata.annotations['%s']", ConfigAnnotation),
+					FieldPath:  fmt.Sprintf("metadata.annotations['%s']", annotation.Config),
 				},
 			},
 		},
@@ -108,19 +110,19 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 		efs = nil
 	}
 
-	annotations := make(map[string]string)
+	anns := make(map[string]string)
 	a.eachConfiguredContainer(confCns, func(app *core.Container, cc *Container) {
 		if cc.Replace == ReplacePolicyContainer {
 			cnJson, err := json.Marshal(app)
 			if err != nil {
 				dlog.Errorf(ctx, "unable to marshal container %s.%s/%s to json: %v", a.Config.WorkloadName, a.Config.Namespace, app.Name, err)
 			}
-			annotations[ReplaceAnnotationKey(cc.Name)] = string(cnJson)
+			anns[annotation.ReplaceAnnotationKey(cc.Name)] = string(cnJson)
 		}
 	})
 
 	cfg, _ := MarshalTight(a.Config)
-	annotations[ConfigAnnotation] = cfg
+	anns[annotation.Config] = cfg
 
 	if len(ports) == 0 {
 		ports = nil
@@ -157,11 +159,7 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 	}
 	ac.SecurityContext = appSc
 
-	return ac, annotations
-}
-
-func ReplaceAnnotationKey(cn string) string {
-	return ReplacedContainerAnnotationPrefix + cn
+	return ac, anns
 }
 
 // Find the security context of the first container (with both intercepts and a set security context) and ensure
@@ -204,7 +202,7 @@ func (a *ContainerBuilder) configuredContainers(ctx context.Context) []*core.Con
 			app := &cns[i]
 			if app.Name == ContainerName {
 				// The pod might hold JSON of replaced containers from an earlier patch
-				annName := ReplacedContainerAnnotationPrefix + cc.Name
+				annName := annotation.ReplacedContainerPrefix + cc.Name
 				if appJson, ok := a.Pod.ObjectMeta.Annotations[annName]; ok {
 					var cn core.Container
 					err := json.Unmarshal([]byte(appJson), &cn)

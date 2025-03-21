@@ -11,10 +11,10 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // State reflects the current state of the agent.
@@ -42,7 +42,7 @@ type ContainerState interface {
 	Name() string
 	ReplaceContainer() bool
 	MountPoint() string
-	Mounts() agentconfig.MountPolicies
+	Mounts() types.MountPolicies
 	Env() map[string]string
 }
 

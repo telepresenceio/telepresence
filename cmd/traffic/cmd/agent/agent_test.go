@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos/aferofs"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 const (
@@ -41,10 +42,10 @@ var testConfig = agentconfig.Sidecar{
 		EnvPrefix:  "A_",
 		MountPoint: "/tel_app_mounts/test-echo",
 		MountPaths: []string{"/home/bob"},
-		Mounts: map[string]agentconfig.MountPolicy{
-			"/tmp":          agentconfig.MountPolicyLocal,
-			"/home/bob":     agentconfig.MountPolicyRemote,
-			"/home/brianna": agentconfig.MountPolicyRemoteReadOnly,
+		Mounts: map[string]types.MountPolicy{
+			"/tmp":          types.MountPolicyLocal,
+			"/home/bob":     types.MountPolicyRemote,
+			"/home/brianna": types.MountPolicyRemoteReadOnly,
 		},
 		Intercepts: []*agentconfig.Intercept{
 			{

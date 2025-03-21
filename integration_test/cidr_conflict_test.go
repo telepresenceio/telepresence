@@ -12,7 +12,7 @@ import (
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
@@ -59,7 +59,7 @@ func (s *cidrConflictSuite) SetupSuite() {
 			},
 		},
 		Annotations: map[string]string{
-			agentconfig.InjectAnnotation: "enabled",
+			annotation.InjectTrafficAgent: "enabled",
 		},
 	}
 	s.ApplyTemplate(s.Context(), filepath.Join("testdata", "k8s", "generic.goyaml"), &tpl)

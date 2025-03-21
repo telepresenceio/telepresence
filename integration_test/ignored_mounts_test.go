@@ -10,7 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 )
 
@@ -62,7 +62,7 @@ func (s *mountsSuite) Test_IgnoredMounts() {
 				Annotations map[string]string
 			}{
 				Annotations: map[string]string{
-					agentconfig.InjectIgnoreVolumeMounts: strings.Join(tt.ignored, ","),
+					annotation.InjectIgnoreVolumeMounts: strings.Join(tt.ignored, ","),
 				},
 			}
 			ctx := s.Context()

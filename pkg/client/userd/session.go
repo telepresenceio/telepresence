@@ -16,9 +16,9 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type ConnectRequest interface {
@@ -33,7 +33,7 @@ type WatchWorkloadsStream interface {
 type InterceptInfo interface {
 	InterceptResult() *rpc.InterceptResult
 	PreparedIntercept() *manager.PreparedIntercept
-	PortIdentifier() (agentconfig.PortIdentifier, error)
+	PortIdentifier() (types.PortIdentifier, error)
 }
 
 type KubeConfig interface {

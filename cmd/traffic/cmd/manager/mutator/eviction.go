@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -84,7 +85,7 @@ func (c *configWatcher) EvictAllPodsWithAgentConfig(ctx context.Context, namespa
 
 func (c *configWatcher) evictPodsWithAgentConfigMismatch(ctx context.Context, wl k8sapi.Workload, pods []*core.Pod, cfgJSON string) error {
 	pods = slices.DeleteFunc(pods, func(pod *core.Pod) bool {
-		if pod.Annotations[agentconfig.ConfigAnnotation] == cfgJSON {
+		if pod.Annotations[annotation.Config] == cfgJSON {
 			dlog.Tracef(ctx, "Keeping pod %s because its config is still valid", pod.Name)
 			return true
 		}
@@ -102,7 +103,7 @@ func (c *configWatcher) evictPods(ctx context.Context, wl k8sapi.Workload, pods 
 			dlog.Debugf(ctx, "Skipping pod %s because it is already deleted", pod.Name)
 			continue
 		}
-		v := agentconfig.GetAnnotation(ctx, pod.ObjectMeta.Annotations, agentconfig.ManualInjectAnnotation, agentconfig.LegacyManualInjectAnnotation)
+		v := annotation.GetAnnotation(ctx, pod.ObjectMeta.Annotations, annotation.ManuallyInjected, annotation.LegacyManuallyInjected)
 		if v == "true" {
 			dlog.Tracef(ctx, "Skipping pod %s because it is managed manually", pod.Name)
 			continue
@@ -186,20 +187,20 @@ func retryEvictPod(ctx context.Context, wl k8sapi.Workload, pod *core.Pod, repli
 
 // generateRestartAnnotationPatch generates a JSON patch that adds or updates the annotation
 // We need to use this particular patch type because argo-rollouts do not support strategic merge patches.
-func generateRestartAnnotationPatch(annotations map[string]string) string {
+func generateRestartAnnotationPatch(anns map[string]string) string {
 	basePointer := "/spec/template/metadata/annotations"
 	pointer := fmt.Sprintf(
 		basePointer+"/%s",
-		strings.ReplaceAll(agentconfig.RestartedAtAnnotation, "/", "~1"),
+		strings.ReplaceAll(annotation.RestartedAt, "/", "~1"),
 	)
 
-	if _, ok := annotations[agentconfig.RestartedAtAnnotation]; ok {
+	if _, ok := anns[annotation.RestartedAt]; ok {
 		return fmt.Sprintf(
 			`[{"op": "replace", "path": "%s", "value": "%s"}]`, pointer, time.Now().Format(time.RFC3339),
 		)
 	}
 
-	if len(annotations) == 0 {
+	if len(anns) == 0 {
 		return fmt.Sprintf(
 			`[{"op": "add", "path": "%s", "value": {}}, {"op": "add", "path": "%s", "value": "%s"}]`, basePointer, pointer, time.Now().Format(time.RFC3339),
 		)

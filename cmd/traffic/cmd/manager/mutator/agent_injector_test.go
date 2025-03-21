@@ -31,9 +31,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
+	types2 "github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -90,7 +92,7 @@ matchExpressions:
 		return meta.ObjectMeta{
 			Name:            podName(name),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{annotation.InjectTrafficAgent: "enabled"},
 			Labels:          map[string]string{labelKey: name},
 			OwnerReferences: podOwner(name),
 		}
@@ -216,7 +218,7 @@ matchExpressions:
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("named-and-numeric"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{annotation.InjectTrafficAgent: "enabled"},
 			Labels:          map[string]string{"service": "named-port", "app": "numeric-port"},
 			OwnerReferences: podOwner("named-and-numeric"),
 		},
@@ -275,7 +277,7 @@ matchExpressions:
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("multi-port"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{annotation.InjectTrafficAgent: "enabled"},
 			Labels:          map[string]string{"service": "multi-port"},
 			OwnerReferences: podOwner("multi-port"),
 		},
@@ -315,7 +317,7 @@ matchExpressions:
 		ObjectMeta: meta.ObjectMeta{
 			Name:            podName("multi-container"),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{annotation.InjectTrafficAgent: "enabled"},
 			Labels:          map[string]string{"service": "multi-port"},
 			OwnerReferences: podOwner("multi-container"),
 		},
@@ -555,8 +557,8 @@ matchExpressions:
 						Name:       "some-container",
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/some-container",
-						Mounts: map[string]agentconfig.MountPolicy{
-							"/var/run/secrets/kubernetes.io/serviceaccount": agentconfig.MountPolicyRemote,
+						Mounts: map[string]types2.MountPolicy{
+							"/var/run/secrets/kubernetes.io/serviceaccount": types2.MountPolicyRemote,
 						},
 						MountPaths: []string{"/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
@@ -609,8 +611,8 @@ matchExpressions:
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/some-container",
-						Mounts: map[string]agentconfig.MountPolicy{
-							"/var/run/secrets/kubernetes.io/serviceaccount": agentconfig.MountPolicyRemote,
+						Mounts: map[string]types2.MountPolicy{
+							"/var/run/secrets/kubernetes.io/serviceaccount": types2.MountPolicyRemote,
 						},
 						MountPaths: []string{"/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
@@ -713,9 +715,9 @@ matchExpressions:
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/named-port-container",
-						Mounts: map[string]agentconfig.MountPolicy{
-							"/home/bob": agentconfig.MountPolicyRemote,
-							"/var/run/secrets/kubernetes.io/serviceaccount": agentconfig.MountPolicyRemote,
+						Mounts: map[string]types2.MountPolicy{
+							"/home/bob": types2.MountPolicyRemote,
+							"/var/run/secrets/kubernetes.io/serviceaccount": types2.MountPolicyRemote,
 						},
 						MountPaths: []string{"/home/bob", "/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
@@ -780,8 +782,8 @@ matchExpressions:
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/multi-port-container",
-						Mounts: map[string]agentconfig.MountPolicy{
-							"/home/bob": agentconfig.MountPolicyRemote,
+						Mounts: map[string]types2.MountPolicy{
+							"/home/bob": types2.MountPolicyRemote,
 						},
 						MountPaths: []string{"/home/bob"},
 					},
@@ -817,8 +819,8 @@ matchExpressions:
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/http-container",
-						Mounts: map[string]agentconfig.MountPolicy{
-							"/home/bob": agentconfig.MountPolicyRemote,
+						Mounts: map[string]types2.MountPolicy{
+							"/home/bob": types2.MountPolicyRemote,
 						},
 						MountPaths: []string{"/home/bob"},
 					},
@@ -964,7 +966,7 @@ matchExpressions:
 		return meta.ObjectMeta{
 			Name:            podName(name),
 			Namespace:       "some-ns",
-			Annotations:     map[string]string{agentconfig.InjectAnnotation: "enabled"},
+			Annotations:     map[string]string{annotation.InjectTrafficAgent: "enabled"},
 			Labels:          map[string]string{"service": name},
 			OwnerReferences: podOwner(name),
 			UID:             types.UID(uuid.New().String()),
@@ -973,7 +975,7 @@ matchExpressions:
 
 	podObjectMetaInjected := func(name string, sidecar *agentconfig.Sidecar) meta.ObjectMeta {
 		pm := podObjectMeta(name)
-		pm.Annotations[agentconfig.ConfigAnnotation] = marshalConfig(t, sidecar)
+		pm.Annotations[annotation.Config] = marshalConfig(t, sidecar)
 		pm.Labels[agentconfig.WorkloadNameLabel] = name
 		pm.Labels[agentconfig.WorkloadKindLabel] = "Deployment"
 		pm.Labels[agentconfig.WorkloadEnabledLabel] = "true"
@@ -1138,7 +1140,7 @@ matchExpressions:
 			"Skip Precondition: No name/namespace",
 			&core.Pod{
 				ObjectMeta: meta.ObjectMeta{Annotations: map[string]string{
-					agentconfig.InjectAnnotation: "enabled",
+					annotation.InjectTrafficAgent: "enabled",
 				}},
 			},
 			false,
@@ -1350,8 +1352,8 @@ matchExpressions:
 					Namespace: "some-ns",
 					Labels:    map[string]string{"service": "named-port"},
 					Annotations: map[string]string{
-						agentconfig.InjectAnnotation:      "enabled",
-						agentconfig.ServiceNameAnnotation: "khruangbin",
+						annotation.InjectTrafficAgent: "enabled",
+						annotation.InjectServiceName:  "khruangbin",
 					},
 					OwnerReferences: podOwner("named-port"),
 				},
@@ -1382,8 +1384,8 @@ matchExpressions:
 					Namespace: "some-ns",
 					Labels:    map[string]string{"service": "named-port"},
 					Annotations: map[string]string{
-						agentconfig.InjectAnnotation:      "enabled",
-						agentconfig.ServiceNameAnnotation: "named-port",
+						annotation.InjectTrafficAgent: "enabled",
+						annotation.InjectServiceName:  "named-port",
 					},
 					OwnerReferences: podOwner("named-port"),
 				},

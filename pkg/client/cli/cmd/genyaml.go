@@ -21,6 +21,7 @@ import (
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -418,12 +419,12 @@ func (g *genAnnotationsInfo) run() error {
 	if err != nil {
 		return err
 	}
-	annotations := map[string]string{
-		agentconfig.InjectAnnotation:       "enabled",
-		agentconfig.ManualInjectAnnotation: "true",
-		agentconfig.ConfigAnnotation:       cmJSON,
+	anns := map[string]string{
+		annotation.InjectTrafficAgent: "enabled",
+		annotation.ManuallyInjected:   "true",
+		annotation.Config:             cmJSON,
 	}
-	return g.writeObjToOutput(annotations)
+	return g.writeObjToOutput(anns)
 }
 
 type genVolumeInfo struct {
