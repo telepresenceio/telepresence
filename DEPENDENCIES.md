@@ -165,7 +165,7 @@ following Free and Open Source software:
     gopkg.in/inf.v0                                                v0.9.1                                3-clause BSD license
     gopkg.in/yaml.v3                                               v3.0.1                                Apache License 2.0, MIT license
     gvisor.dev/gvisor                                              v0.0.0-20250318191406-9e676ea1de20    Apache License 2.0, MIT license
-    helm.sh/helm/v3                                                v3.17.2                               Apache License 2.0
+    helm.sh/helm/v3                                                v3.17.3                               Apache License 2.0
     k8s.io/api                                                     v0.32.3                               Apache License 2.0
     k8s.io/apiextensions-apiserver                                 v0.32.3                               Apache License 2.0
     k8s.io/apimachinery                                            v0.32.3                               3-clause BSD license, Apache License 2.0
