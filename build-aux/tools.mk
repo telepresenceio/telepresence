@@ -39,7 +39,7 @@ clobber-tools:
 # Install protoc under $TOOLSDIR. A protoc that is already installed locally
 # cannot be trusted since this must be the exact same version as used when
 # running CI. If it isn't, the generate-check will fail.
-PROTOC_VERSION=21.9
+PROTOC_VERSION=30.2
 ifeq ($(GOHOSTARCH),arm64)
   PROTOC_ARCH=aarch_64
   PROTOLINT_ARCH=arm64
@@ -70,7 +70,7 @@ $(TOOLSDIR)/$(PROTOC_ZIP):
 # ===============
 #
 tools/protolint = $(TOOLSBINDIR)/protolint$(EXE)
-PROTOLINT_VERSION=0.42.0
+PROTOLINT_VERSION=0.52.0
 PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(GOHOSTOS)_$(PROTOLINT_ARCH).tar.gz
 $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
