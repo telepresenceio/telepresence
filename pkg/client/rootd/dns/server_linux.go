@@ -35,7 +35,7 @@ var errResolveDNotConfigured = errors.New("resolved not configured")
 func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(netip.Addr, *net.UDPAddr)) error {
 	if proc.RunningInContainer() {
 		// Don't bother with systemd-resolved when running in a docker container
-		return s.runOverridingServer(c, dev)
+		return s.runOverridingServer(c, dev, configureDNS)
 	}
 
 	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
@@ -43,13 +43,13 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		err = nil
 		if c.Err() == nil {
 			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev)
+			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev, configureDNS)
 		}
 	}
 	return err
 }
 
-func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
+func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configureDNS func(netip.Addr, *net.UDPAddr)) error {
 	if !s.LocalIP.IsValid() {
 		rf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
 		if err != nil {
@@ -122,6 +122,9 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 		return s.Run(c, serverStarted, listeners, pool)
 	})
 
+	dnsIP := s.RemoteIP
+	configureDNS(dnsIP, dnsResolverAddr)
+
 	if proc.RunningInContainer() {
 		g.Go("Local DNS", func(c context.Context) error {
 			select {
@@ -181,10 +184,14 @@ func (s *Server) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 func runNatTableCmd(c context.Context, args ...string) error {
 	// We specifically don't want to use the cancellation of 'ctx' here, because we don't ever
 	// want to leave things in a half-cleaned-up state.
+	c = context.WithoutCancel(c)
 	args = append([]string{"-t", "nat"}, args...)
 	cmd := dexec.CommandContext(c, "iptables", args...)
-	cmd.DisableLogging = dlog.MaxLogLevel(c) < dlog.LogLevelDebug
-	dlog.Debug(c, shellquote.ShellString("iptables", args))
+	if dlog.MaxLogLevel(c) >= dlog.LogLevelTrace {
+		dlog.Trace(c, shellquote.ShellString("iptables", args))
+	} else {
+		cmd.DisableLogging = true
+	}
 	return cmd.Run()
 }
 
