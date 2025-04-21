@@ -16,6 +16,12 @@ Similar to an `ingest`, a `wiretap` will always enforce read-only status on all 
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Control whether the initContainer injection is enabled/disabled</Title>
+	<Body>
+The initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart. This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Human friendly progress reporting</Title>
 	<Body>
 Telepresence now uses a progress reporter that is very similar to the one used by Docker compose. The implementation is a variation of that reporter's source code, so big thanks to the Docker compose CLI authors for making it available as OSS.
@@ -52,9 +58,10 @@ command.
   </Body>
 </Note>
 <Note>
-	<Title type="feature">added agent.initContainer.enabled parameter that can be set in values.yaml to control whether the initContainer injection is enabled/disabled</Title>
+	<Title type="bugfix">Let containerized daemon consistently use the same port for gRPC</Title>
 	<Body>
-To fix Issue #3868:  Request to add config in values.yaml to disable initContainer injection. Now the initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart.  This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions
+The port used for the containerized gRPC was randomly selected using the hosts network namespace. This is now changed so that the port used by the container is preset and configurable and then mapped to a random port on the host.
+The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
   </Body>
 </Note>
 ## Version 2.22.6 <span style={{fontSize:'16px'}}>(June  3)</span>

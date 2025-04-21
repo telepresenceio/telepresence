@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -156,25 +157,23 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 func ExistingDaemon(ctx context.Context, info *daemon.Info) (context.Context, error) {
 	var err error
 	var conn *grpc.ClientConn
-	if info.InDocker {
+	if info.InDocker() {
 		// The host relies on that the daemon has exposed a port to localhost
-		// We must use an IP here to avoid that a IPv6 zone is picked up and incorrectly
-		// parsed by the gRPC dns resolver. See https://github.com/grpc/grpc-go/issues/7882
-		conn, err = docker.ConnectDaemon(ctx, fmt.Sprintf("127.0.0.1:%d", info.DaemonPort))
+		conn, err = docker.ConnectDaemon(ctx, netip.AddrPortFrom(netip.IPv4Unspecified(), info.DaemonPort))
 		if err != nil {
 			return ctx, err
 		}
-		return newUserDaemon(ctx, conn, info.DaemonID())
+		return newUserDaemon(ctx, conn, info)
 	}
-	return ExistingHostDaemon(ctx, info.DaemonID())
+	return ExistingHostDaemon(ctx, info)
 }
 
-func ExistingHostDaemon(ctx context.Context, id *daemon.Identifier) (context.Context, error) {
+func ExistingHostDaemon(ctx context.Context, info *daemon.Info) (context.Context, error) {
 	// Try dialing the host daemon using the well-known socket.
 	socketName := socket.UserDaemonPath(ctx)
 	conn, err := socket.Dial(ctx, socketName, false)
 	if err == nil {
-		ctx, err = newUserDaemon(ctx, conn, id)
+		ctx, err = newUserDaemon(ctx, conn, info)
 		if err != nil {
 			// User daemon is not responding. Make an attempt to delete the lingering socket.
 			if rmErr := os.Remove(socketName); rmErr != nil {
@@ -241,7 +240,7 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 		if errors.Is(err, fs.ErrNotExist) && !cr.Docker {
 			// Try dialing the host daemon using the well-known socket.
 			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx), false); sockErr == nil {
-				return newUserDaemon(ctx, conn, daemonID)
+				return newUserDaemon(ctx, conn, info)
 			}
 		}
 		return ctx, err
@@ -250,6 +249,75 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 		return ctx, errcat.User.New("exposed ports differ. Please quit and reconnect")
 	}
 	return ExistingDaemon(ctx, info)
+}
+
+func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *daemon.Request) (context.Context, *daemon.Info, *grpc.ClientConn, error) {
+	// Ensure that the logfile is present before the daemon starts so that it isn't created with
+	// permissions from the docker container.
+	logDir := filelocation.AppUserLogDir(ctx)
+	logFile := filepath.Join(logDir, "connector.log")
+	if _, err := os.Stat(logFile); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return ctx, nil, nil, err
+		}
+		fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o666)
+		if err != nil {
+			return ctx, nil, nil, err
+		}
+		_ = fh.Close()
+	}
+	ctx = docker.EnableClient(ctx)
+
+	// An initialized kubernetes interface is required by LaunchDaemon, because it is necessary
+	// when checking if the containerized daemon is connecting to a k3s control plane node.
+	ctx, kc, err := client.NewKubeconfig(ctx, cr.KubeFlags, cr.ManagerNamespace)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+	var ki *kubernetes.Clientset
+	ki, err = kubernetes.NewForConfig(kc.RestConfig)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+	info, conn, err := docker.LaunchDaemon(k8sapi.WithK8sInterface(ctx, ki), daemonID)
+	return ctx, info, conn, err
+}
+
+func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, cr *daemon.Request) (context.Context, *daemon.Info, *grpc.ClientConn, error) {
+	args := []string{connectorDaemon, "connector-foreground"}
+	if cr.UserDaemonProfilingPort > 0 {
+		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
+	}
+	if proc.IsAdmin() {
+		// No use having multiple daemons when running as root.
+		args = append(args, "--embed-network")
+	}
+	dlog.Debugf(ctx, "Creating daemon info file %s (runs on host, or both CLI and daemon runs in container)", daemonID.Name)
+	info := &daemon.Info{
+		DaemonPort:   0,
+		Name:         daemonID.Name,
+		KubeContext:  daemonID.KubeContext,
+		Namespace:    daemonID.Namespace,
+		ExposedPorts: cr.ExposedPorts,
+		Hostname:     cr.Hostname,
+	}
+	err := daemon.SaveInfo(ctx, info, daemonID.InfoFileName())
+	if err != nil {
+		return ctx, nil, nil, err
+	}
+	defer func() {
+		if err != nil {
+			file := daemonID.InfoFileName()
+			dlog.Debugf(ctx, "Deleting daemon info %s due to launch error: %v", file, err)
+			_ = daemon.DeleteInfo(ctx, file)
+		}
+	}()
+
+	if err = proc.StartInBackground(false, args...); err != nil {
+		return ctx, nil, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
+	}
+	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), true)
+	return ctx, info, conn, err
 }
 
 func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, required bool) (context.Context, bool, error) {
@@ -287,75 +355,16 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 	}
 
 	var conn *grpc.ClientConn
+	var info *daemon.Info
 	if cr.Docker {
-		// Ensure that the logfile is present before the daemon starts so that it isn't created with
-		// permissions from the docker container.
-		logDir := filelocation.AppUserLogDir(ctx)
-		logFile := filepath.Join(logDir, "connector.log")
-		if _, err := os.Stat(logFile); err != nil {
-			if !errors.Is(err, fs.ErrNotExist) {
-				return ctx, false, err
-			}
-			fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o666)
-			if err != nil {
-				return ctx, false, err
-			}
-			_ = fh.Close()
-		}
-		ctx = docker.EnableClient(ctx)
-
-		// An initialized kubernetes interface is required by LaunchDaemon, because it is necessary
-		// when checking if the containerized daemon is connecting to a k3s control plane node.
-		var kc *client.Kubeconfig
-		ctx, kc, err = client.NewKubeconfig(ctx, cr.KubeFlags, cr.ManagerNamespace)
-		if err != nil {
-			return ctx, false, err
-		}
-		var ki *kubernetes.Clientset
-		ki, err = kubernetes.NewForConfig(kc.RestConfig)
-		if err != nil {
-			return ctx, false, err
-		}
-		conn, err = docker.LaunchDaemon(k8sapi.WithK8sInterface(ctx, ki), daemonID, cr.NetworkAliases)
+		ctx, info, conn, err = launchDockerDaemon(ctx, daemonID, cr)
 	} else {
-		args := []string{connectorDaemon, "connector-foreground"}
-		if cr.UserDaemonProfilingPort > 0 {
-			args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
-		}
-		if proc.IsAdmin() {
-			// No use having multiple daemons when running as root.
-			args = append(args, "--embed-network")
-		}
-		dlog.Debugf(ctx, "Creating daemon info file %s (runs on host, or both CLI and daemon runs in container)", daemonID.Name)
-		err = daemon.SaveInfo(ctx,
-			&daemon.Info{
-				DaemonPort:   0,
-				Name:         daemonID.Name,
-				KubeContext:  daemonID.KubeContext,
-				Namespace:    daemonID.Namespace,
-				ExposedPorts: cr.ExposedPorts,
-				Hostname:     cr.Hostname,
-			}, daemonID.InfoFileName())
-		if err != nil {
-			return ctx, false, err
-		}
-		defer func() {
-			if err != nil {
-				file := daemonID.InfoFileName()
-				dlog.Debugf(ctx, "Deleting daemon info %s due to launch error: %v", file, err)
-				_ = daemon.DeleteInfo(ctx, file)
-			}
-		}()
-
-		if err = proc.StartInBackground(false, args...); err != nil {
-			return ctx, false, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
-		}
-		conn, err = socket.Dial(ctx, socket.UserDaemonPath(ctx), true)
+		ctx, info, conn, err = launchHostDaemon(ctx, daemonID, connectorDaemon, cr)
 	}
 	if err != nil {
 		return ctx, false, err
 	}
-	ctx, err = newUserDaemon(ctx, conn, daemonID)
+	ctx, err = newUserDaemon(ctx, conn, info)
 	return ctx, err == nil, err
 }
 
@@ -377,11 +386,11 @@ func getConnectorVersion(ctx context.Context, cc connector.ConnectorClient) (*co
 	err := backoff.Retry(func() (err error) {
 		vi, err = cc.Version(ctx, &emptypb.Empty{})
 		return err
-	}, &b)
+	}, backoff.WithContext(&b, ctx))
 	return vi, err
 }
 
-func newUserDaemon(ctx context.Context, conn *grpc.ClientConn, daemonID *daemon.Identifier) (context.Context, error) {
+func newUserDaemon(ctx context.Context, conn *grpc.ClientConn, info *daemon.Info) (context.Context, error) {
 	vi, err := getConnectorVersion(ctx, connector.NewConnectorClient(conn))
 	if err != nil {
 		return ctx, err
@@ -390,7 +399,7 @@ func newUserDaemon(ctx context.Context, conn *grpc.ClientConn, daemonID *daemon.
 	if err != nil {
 		return ctx, fmt.Errorf("unable to parse version obtained from connector daemon: %w", err)
 	}
-	ctx = daemon.WithUserClient(ctx, daemon.NewUserClientFunc(conn, daemonID, v, vi.Name, vi.Executable))
+	ctx = daemon.WithUserClient(ctx, daemon.NewUserClientFunc(conn, info, v, vi.Name, vi.Executable))
 	return ctx, nil
 }
 
@@ -482,12 +491,7 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 			request.ManagerNamespace = ci.ManagerNamespace
 			request.Name = ci.ConnectionName
 
-			userD.SetDaemonID(&daemon.Identifier{
-				Name:          ci.ConnectionName,
-				KubeContext:   ci.ClusterContext,
-				Namespace:     ci.Namespace,
-				Containerized: userD.Containerized(),
-			})
+			userD.SetConnectionInfo(ci.ConnectionName, ci.ClusterContext, ci.Namespace)
 		}
 		if session != nil {
 			session.UserClient = userD
@@ -515,21 +519,6 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 	}
 
 	daemonID := userD.DaemonID()
-	if !userD.Containerized() {
-		dlog.Debugf(ctx, "Creating daemon info file %s (runs on host)", daemonID.Name)
-		err = daemon.SaveInfo(ctx,
-			&daemon.Info{
-				InDocker:     false,
-				Name:         daemonID.Name,
-				KubeContext:  daemonID.KubeContext,
-				Namespace:    daemonID.Namespace,
-				ExposedPorts: request.ExposedPorts,
-				Hostname:     request.Hostname,
-			}, daemonID.InfoFileName())
-		if err != nil {
-			return nil, errcat.NoDaemonLogs.New(err)
-		}
-	}
 	progress.Write(ctx, progress.WorkingEvent(daemonID.Name, fmt.Sprintf("Connecting to context %s, namespace %s", daemonID.KubeContext, daemonID.Namespace)))
 	if ci, err = userD.Connect(ctx, request.ConnectRequest); err != nil {
 		if !userD.Containerized() {

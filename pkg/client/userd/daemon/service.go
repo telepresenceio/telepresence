@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +82,7 @@ type service struct {
 	rootSessionInProc bool
 
 	// The TCP address that the daemon listens to. Will be nil if the daemon listens to a unix socket.
-	daemonAddress *net.TCPAddr
+	daemonAddress netip.AddrPort
 
 	// Possibly extended version of the service. Use when calling interface methods.
 	self userd.Service
@@ -128,7 +129,7 @@ func (s *service) As(ptr any) {
 }
 
 func (s *service) ListenerAddress(ctx context.Context) string {
-	if s.daemonAddress != nil {
+	if s.daemonAddress.IsValid() {
 		return s.daemonAddress.String()
 	}
 	return "unix:" + socket.UserDaemonPath(ctx)
@@ -407,13 +408,13 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
-	var daemonAddress *net.TCPAddr
+	var daemonAddress netip.AddrPort
 	if addr, _ := flags.GetString(addressFlag); addr != "" {
 		lc := net.ListenConfig{}
 		if grpcListener, err = lc.Listen(c, "tcp", addr); err != nil {
 			return err
 		}
-		daemonAddress = grpcListener.Addr().(*net.TCPAddr)
+		daemonAddress = grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
 	} else {
 		socketPath := socket.UserDaemonPath(c)
 		dlog.Infof(c, "Starting socket listener for %s", socketPath)
