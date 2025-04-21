@@ -6,6 +6,7 @@ import (
 	"io"
 	"maps"
 	"math"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -224,7 +225,7 @@ func (s *Runner) start(ctx context.Context, name, envFile string, runFlags *RunF
 		if len(mounts) > 0 {
 			container := s.Environment["TELEPRESENCE_CONTAINER"]
 			m := s.Mount
-			w.volumes, w.err = docker.CreateVolumes(ctx, daemonName, m.Port, container, mounts, m.ReadOnly)
+			w.volumes, w.err = docker.CreateVolumes(ctx, netip.AddrPortFrom(ud.DaemonInfo().ContainerIP, m.Port), container, mounts, m.ReadOnly)
 			if w.err != nil {
 				dlog.Error(ctx, w.err)
 				return w

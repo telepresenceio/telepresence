@@ -9,6 +9,12 @@ The new `telepresence wiretap` command introduces a read-only form of an `interc
 Similar to an `ingest`, a `wiretap` will always enforce read-only status on all volume mounts, and since that makes the `wiretap` completely read-only, there's no limit to how many simultaneous wiretaps that can be served. In fact, a `wiretap` and an `intercept` on the same port can run simultaneously.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Control whether the initContainer injection is enabled/disabled</div></div>
+<div style="margin-left: 15px">
+
+The initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart. This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Human friendly progress reporting</div></div>
 <div style="margin-left: 15px">
 
@@ -45,10 +51,11 @@ A "Legacy Telepresence command used" warning has been printed for several years 
 command.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">added agent.initContainer.enabled parameter that can be set in values.yaml to control whether the initContainer injection is enabled/disabled</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Let containerized daemon consistently use the same port for gRPC</div></div>
 <div style="margin-left: 15px">
 
-To fix Issue #3868:  Request to add config in values.yaml to disable initContainer injection. Now the initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart.  This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions
+The port used for the containerized gRPC was randomly selected using the hosts network namespace. This is now changed so that the port used by the container is preset and configurable and then mapped to a random port on the host.
+The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
 </div>
 
 ## Version 2.22.6 <span style="font-size: 16px;">(June  3)</span>

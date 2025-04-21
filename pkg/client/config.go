@@ -680,6 +680,41 @@ type Grpc struct {
 	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
 	// Overrides the gRPC default of 4MB.
 	MaxReceiveSizeV resource.Quantity `json:"maxReceiveSize"`
+
+	// DaemonPort is the port where the containerized daemon exposes its Connector service. It will be exposed to a
+	// randomly selected port on the host that the Telepresence CLI will connect to. The daemonPort defaults to 4038.
+	DaemonPort uint16 `json:"daemonPort"`
+}
+
+var defaultGrpc = Grpc{ //nolint:gochecknoglobals // constant
+	DaemonPort: 4038,
+}
+
+func (g *Grpc) defaults() DefaultsAware {
+	return &defaultGrpc
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (g *Grpc) merge(o *Grpc) {
+	mergeNonDefaults(g, o)
+}
+
+// IsZero controls whether this element will be included in marshalled output.
+func (g *Grpc) IsZero() bool {
+	return g == nil || *g == defaultGrpc
+}
+
+func (g *Grpc) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(g))
+}
+
+func (g *Grpc) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	// Prevent that the original object is cleared when an empty object is decoded by passing the address
+	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
+	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
+	type wt Grpc
+	wp := (*wt)(g)
+	return json.UnmarshalDecode(in, &wp)
 }
 
 func (g *Grpc) MaxReceiveSize() int64 {
@@ -689,17 +724,6 @@ func (g *Grpc) MaxReceiveSize() int64 {
 		}
 	}
 	return 0
-}
-
-func (g *Grpc) merge(o *Grpc) {
-	if !o.MaxReceiveSizeV.IsZero() {
-		g.MaxReceiveSizeV = o.MaxReceiveSizeV
-	}
-}
-
-// IsZero controls whether this element will be included in marshalled output.
-func (g *Grpc) IsZero() bool {
-	return g == nil || g.MaxReceiveSizeV.IsZero()
 }
 
 type TelepresenceAPI struct {
@@ -719,6 +743,7 @@ var defaultTelemount = Telemount{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "telemount",
+	Tag:         "0.1.6",
 }
 
 func (tm *Telemount) defaults() DefaultsAware {
@@ -1023,7 +1048,7 @@ var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
 	TimeoutsV:        defaultTimeouts,
 	LogLevelsV:       defaultLogLevels,
 	ImagesV:          defaultImages,
-	GrpcV:            Grpc{},
+	GrpcV:            defaultGrpc,
 	TelepresenceAPIV: TelepresenceAPI{},
 	InterceptV:       defaultIntercept,
 	ClusterV:         defaultCluster,
