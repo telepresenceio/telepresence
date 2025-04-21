@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -151,6 +152,21 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 	if s == nil {
 		return ctx, nil
 	}
+
+	if s.Started && s.Containerized() {
+		rootCfg, err := s.GetRootClientConfig()
+		if err != nil {
+			return ctx, err
+		}
+		if len(rootCfg.Routing().Subnets) > 0 {
+			ctx = docker.EnableClient(ctx)
+			err = createTelerouteNetwork(ctx, s.DaemonInfo())
+			if err != nil {
+				return ctx, err
+			}
+		}
+	}
+
 	return daemon.WithSession(ctx, s), nil
 }
 
@@ -529,4 +545,40 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 		return nil, err
 	}
 	return connectResult(ctx, ci, true)
+}
+
+func createTelerouteNetwork(ctx context.Context, info *daemon.Info) error {
+	teleroutePlugin, err := docker.EnsureNetworkPlugin(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Make an attempt to create the network with IPv6 enabled. This will fail unless the user has enabled
+	// IPv6 in /etc/docker/daemon.json.
+	cn := info.Name
+	cli, err := docker.GetClient(ctx)
+	if err != nil {
+		return errcat.NoDaemonLogs.New(err)
+	}
+
+	teleroutePort := client.GetConfig(ctx).Grpc().TeleroutePort
+	err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort)
+	if err != nil && strings.Contains(err.Error(), fmt.Sprintf("%s already exists", cn)) && teleroute.IsTelerouteNetwork(ctx, cli, cn) {
+		var disconnected []string
+		disconnected, err = teleroute.RemoveNetwork(ctx, cli, cn)
+		if err == nil {
+			err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort)
+			if err == nil {
+				teleroute.ReconnectNetwork(ctx, cli, cn, disconnected)
+			}
+		}
+	}
+	if err != nil {
+		return errcat.NoDaemonLogs.Newf("Unable to create network %s: %v", cn, err)
+	}
+	err = teleroute.NetworkGC(ctx, cli)
+	if err != nil {
+		return errcat.NoDaemonLogs.Newf("Unable to garbage collect teleroute networks: %v", err)
+	}
+	return nil
 }

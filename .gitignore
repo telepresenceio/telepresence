@@ -50,4 +50,5 @@ fuseftp.bits
 # Vagrant
 .vagrant/
 tests.log
+/cmd/teleroute/rpc/
 

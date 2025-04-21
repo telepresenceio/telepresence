@@ -16,6 +16,12 @@ Telepresence now uses a progress reporter that is very similar to the one used b
 A new global `--progress <progress>` flag was added. It defaults to "auto" which means that the style is chosen depending on whether the command runs from a tty type terminal. Other possible values are "plain", "quiet", and "json". `--progress quiet` is implied when formatted output is chosen using `--output json|yaml`.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add the ability to use a name for the target host, and defer its resolution</div></div>
+<div style="margin-left: 15px">
+
+Knowing the IP of the local service that acts as the handler service for an intercept, replace, or wiretap is not possible until that service has been started, and telepresence will therefore now accept a name for the `--address` flag. The name is not resolved by the daemon until a request is made to the engaged container on a port that is routed to the local service.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add intercept.mountsRoot to the client configuration</div></div>
 <div style="margin-left: 15px">
 

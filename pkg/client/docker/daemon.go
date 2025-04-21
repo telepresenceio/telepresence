@@ -71,7 +71,6 @@ func ClientImage(ctx context.Context) string {
 func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr netip.AddrPort) (opts []string, err error) {
 	opts = []string{
 		"--name", daemonID.ContainerName(),
-		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
 		"--sysctl", "net.ipv6.conf.all.disable_ipv6=0",
 		"--device", "/dev/net/tun:/dev/net/tun",
@@ -111,6 +110,7 @@ func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 		"--name", "docker-" + daemonID.String(),
 		"--address", netip.AddrPortFrom(netip.IPv4Unspecified(), grpcCfg.DaemonPort).String(),
 		"--embed-network",
+		"--teleroute-port", strconv.Itoa(int(grpcCfg.TeleroutePort)),
 	}
 }
 

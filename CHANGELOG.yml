@@ -47,6 +47,13 @@ items:
           chosen depending on whether the command runs from a tty type terminal. Other possible values are "plain",
           "quiet", and "json". `--progress quiet` is implied when formatted output is chosen using `--output json|yaml`.
       - type: feature
+        title: Add the ability to use a name for the target host, and defer its resolution
+        body: >-
+          Knowing the IP of the local service that acts as the handler service for an intercept, replace, or wiretap
+          is not possible until that service has been started, and telepresence will therefore now accept a name for the
+          `--address` flag. The name is not resolved by the daemon until a request is made to the engaged container on a
+          port that is routed to the local service.
+      - type: feature
         title: Add intercept.mountsRoot to the client configuration
         body: >-
           The new `intercept.mountsRoot` can be set to a directory that will be used as the root for all automatically

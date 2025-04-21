@@ -1,0 +1,36 @@
+syntax = "proto3";
+package telepresence.teleroute;
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/teleroute";
+
+service Teleroute {
+  // Version returns the semantic version of the daemon.
+  rpc Info(google.protobuf.Empty) returns (InfoResponse);
+
+  // EnslaveVIF will create bridge interface and then make that bridge the master
+  // for both the Telepresence VIF and the veth interface found using the given prefix.
+  rpc EnslaveVIF(EnslaveRequest) returns (google.protobuf.Empty);
+
+  // WatchRoutes returns the CIDRs currently mapped by the VIF.
+  rpc WatchRoutes(google.protobuf.Empty) returns (stream Routes);
+}
+
+message InfoResponse {
+  // version is the semver version of the Telepresence Daemon.
+  string version = 1;
+
+  // dnsServer in netip.AddrPort binary form
+  bytes dns_server = 2;
+}
+
+message EnslaveRequest {
+  // interface_name is the veth interface that is moved into the Telepresence daemon's network namespace
+  // to be bridged with the VIF.
+  string interface_name = 1;
+}
+
+message Routes {
+  // Each route in netip.Prefix binary form
+  repeated bytes routes = 1;
+}

@@ -277,7 +277,7 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 			us.Hostname = di.Hostname
 			us.ExposedPorts = di.ExposedPorts
 		}
-		us.ContainerNetwork = "container:" + userD.DaemonID().ContainerName()
+		us.ContainerNetwork = userD.DaemonID().ContainerName()
 		if us.versionName == "" {
 			us.versionName = "Daemon"
 		}
@@ -349,6 +349,21 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		if rootCfg, err := daemon.GetRootClientConfig(rStatus); err == nil {
 			rs.DNS = rootCfg.DNS().ToSnake()
 			rs.RoutingSnake = rootCfg.Routing().ToSnake()
+			if us.InDocker {
+				rs.DNS.LocalIP = userD.DaemonInfo().ContainerIP
+				if len(rs.Subnets) == 0 {
+					// No teleroute network is started when there are no subnets to route.
+					// DNS is exposed on port 53 on the containerized daemon, so the
+					// IP that it exposes on the default bridge can be used for DNS.
+					rs.DNS.LocalIP = userD.DaemonInfo().ContainerIP
+					us.ContainerNetwork = "default bridge"
+				} else {
+					// The RemoteIP is exposed via the teleroute network, and should be
+					// preferred because the default bridge is not automatically available
+					// when connecting to another network.
+					rs.DNS.LocalIP = rs.DNS.RemoteIP
+				}
+			}
 		}
 	}
 

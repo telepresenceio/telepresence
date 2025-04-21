@@ -21,6 +21,7 @@ import (
 	"github.com/blang/semver/v4"
 	dns2 "github.com/miekg/dns"
 	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/vishvananda/netlink"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -38,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
@@ -48,6 +50,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -194,6 +197,7 @@ type Session struct {
 
 	// daemon runs as part of a pod-daemon setup.
 	podDaemon bool
+	routesCh  chan []netip.Prefix
 }
 
 type NewSessionFunc func(context.Context, *rpc.NetworkConfig) (context.Context, *Session, error)
@@ -362,6 +366,7 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		proxyClusterSvcs:      true,
 		vifReady:              make(chan error, 2),
 		done:                  make(chan struct{}),
+		routesCh:              make(chan []netip.Prefix, 2),
 		podDaemon:             isPodDaemon,
 		localTranslationTable: xsync.NewMapOf[netip.Addr, netip.Addr](),
 		virtualIPs:            xsync.NewMapOf[netip.Addr, agentVIP](),
@@ -389,6 +394,12 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 
 	s.dnsServer = dns.NewServer(cfg.DNS(), s.clusterLookup)
 	s.SetTopLevelDomains(c, nil)
+
+	// Terminate the routes watcher
+	go func() {
+		<-c.Done()
+		close(s.routesCh)
+	}()
 	return c, s, nil
 }
 
@@ -778,10 +789,14 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		}
 	}
 	dnsRouted := false
-	for _, sn := range subnets {
-		if sn.Contains(dnsAddr) {
-			dnsRouted = true
-			break
+	if proc.RunningInContainer() {
+		dnsRouted = true
+	} else {
+		for _, sn := range subnets {
+			if sn.Contains(dnsAddr) {
+				dnsRouted = true
+				break
+			}
 		}
 	}
 	if runtime.GOOS != "darwin" && !dnsRouted {
@@ -792,18 +807,21 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		dnsRouted = true
 	}
 
-	if len(subnets) > 0 && s.tunVif == nil {
-		var err error
-		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator(ctx)); err != nil {
-			return fmt.Errorf("NewTunnelVIF: %w", err)
-		}
-	}
-
 	if dnsRouted {
 		d := mgrInfo.Dns
 		dlog.Infof(ctx, "Setting cluster DNS to %s", dnsAddr)
 		dlog.Infof(ctx, "Setting cluster domain to %q", d.ClusterDomain)
 		s.dnsServer.SetClusterDNS(d, dnsAddr)
+	}
+	return s.reconcileSubnets(ctx, mgrInfo, subnets)
+}
+
+func (s *Session) reconcileSubnets(ctx context.Context, mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {
+	if len(subnets) > 0 && s.tunVif == nil {
+		var err error
+		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator(ctx)); err != nil {
+			return fmt.Errorf("NewTunnelVIF: %w", err)
+		}
 	}
 
 	proxy, neverProxy, neverProxyOverrides := computeNeverProxyOverrides(ctx, subnets, s.neverProxySubnets)
@@ -814,7 +832,7 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	rt := s.tunVif.Router
 	rt.UpdateWhitelist(s.allowConflictingSubnets)
 
-	err = rt.ValidateRoutes(ctx, proxy)
+	err := rt.ValidateRoutes(ctx, proxy)
 	if err != nil {
 		if s.vipGenerator != nil || !client.GetConfig(ctx).Routing().AutoResolveConflicts {
 			return err
@@ -837,7 +855,17 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	}
 
 	dlog.Debugf(ctx, "UpdatingRoutes %s, %s, %s", proxy, s.effectiveNeverProxy, neverProxyOverrides)
-	return rt.UpdateRoutes(ctx, proxy, s.effectiveNeverProxy, neverProxyOverrides)
+	err = rt.UpdateRoutes(ctx, proxy, s.effectiveNeverProxy, neverProxyOverrides)
+	if err != nil {
+		return err
+	}
+	sns := slices.Clone(rt.GetRoutedSubnets())
+	select {
+	case <-ctx.Done():
+	case s.routesCh <- sns:
+	default:
+	}
+	return nil
 }
 
 func computeNeverProxyOverrides(ctx context.Context, subnets, nvp []netip.Prefix) (proxy, neverProxy, neverProxyOverrides []netip.Prefix) {
@@ -1027,7 +1055,7 @@ func (s *Session) run(c context.Context, initErrs chan error) error {
 	defer cancelGroup()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	if err := s.Start(c, g); err != nil {
+	if err := s.Start(c, g, 0); err != nil {
 		defer close(initErrs)
 		initErrs <- err
 		return err
@@ -1036,7 +1064,7 @@ func (s *Session) run(c context.Context, initErrs chan error) error {
 	return g.Wait()
 }
 
-func (s *Session) Start(c context.Context, g *dgroup.Group) error {
+func (s *Session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16) error {
 	if rmc, ok := s.managerClient.(interface{ RealManagerClient() manager.ManagerClient }); ok {
 		clusterCfg := client.GetConfig(c).Cluster()
 		if clusterCfg.AgentPortForward && clusterCfg.ConnectFromRootDaemon {
@@ -1111,7 +1139,18 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 
 	if s.tunVif != nil {
 		g.Go("vif", s.tunVif.Run)
-		return s.waitForProxyViaWorkloads(c)
+		err := s.waitForProxyViaWorkloads(c)
+		if err != nil {
+			return err
+		}
+		if teleroutePort > 0 {
+			vl, err := netlink.LinkByIndex(int(s.tunVif.Device.Index()))
+			if err != nil {
+				return fmt.Errorf("failed to lookup vif by index: %w", err)
+			}
+			ts := teleroute.NewServer(s.routesCh, s.dnsServer.RemoteIP, vl, teleroutePort)
+			g.Go("teleroute", ts.Serve)
+		}
 	}
 	return nil
 }

@@ -34,6 +34,7 @@ type Service interface {
 	FuseFTPMgr() remotefs.FuseFTPManager
 
 	RootSessionInProcess() bool
+	TeleroutePort() uint16
 	WithSession(context.Context, func(context.Context, Session) error) error
 
 	PostConnectRequest(context.Context, ConnectRequest) error

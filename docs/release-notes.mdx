@@ -23,6 +23,12 @@ A new global `--progress <progress>` flag was added. It defaults to "auto" which
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Add the ability to use a name for the target host, and defer its resolution</Title>
+	<Body>
+Knowing the IP of the local service that acts as the handler service for an intercept, replace, or wiretap is not possible until that service has been started, and telepresence will therefore now accept a name for the `--address` flag. The name is not resolved by the daemon until a request is made to the engaged container on a port that is routed to the local service.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Add intercept.mountsRoot to the client configuration</Title>
 	<Body>
 The new `intercept.mountsRoot` can be set to a directory that will be used as the root for all automatically generated mount directories. The default is to use the platforms temp directory.

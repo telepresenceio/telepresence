@@ -31,6 +31,13 @@ func EnsureVolumePlugin(ctx context.Context) (string, error) {
 	return ensurePlugin(ctx, "volume", &cfg)
 }
 
+// EnsureNetworkPlugin checks if the telemount plugin is installed and installs it if that is
+// not the case. The plugin is also enabled.
+func EnsureNetworkPlugin(ctx context.Context) (string, error) {
+	cfg := client.DockerImage(client.GetConfig(ctx).Intercept().Teleroute)
+	return ensurePlugin(ctx, "network", &cfg)
+}
+
 func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImage) (string, error) {
 	cli, err := GetClient(ctx)
 	if err != nil {

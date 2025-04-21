@@ -84,6 +84,9 @@ type service struct {
 	// The TCP address that the daemon listens to. Will be nil if the daemon listens to a unix socket.
 	daemonAddress netip.AddrPort
 
+	// Port where root daemon (or rather the embedded root daemon) starts the teleroute service.
+	teleroutePort uint16
+
 	// Possibly extended version of the service. Use when calling interface methods.
 	self userd.Service
 }
@@ -147,6 +150,10 @@ func (s *service) RootSessionInProcess() bool {
 	return s.rootSessionInProc
 }
 
+func (s *service) TeleroutePort() uint16 {
+	return s.teleroutePort
+}
+
 func (s *service) Server() *grpc.Server {
 	return s.srv
 }
@@ -174,10 +181,11 @@ func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOpti
 }
 
 const (
-	nameFlag         = "name"
-	addressFlag      = "address"
-	embedNetworkFlag = "embed-network"
-	pprofFlag        = "pprof"
+	nameFlag          = "name"
+	addressFlag       = "address"
+	embedNetworkFlag  = "embed-network"
+	pprofFlag         = "pprof"
+	teleroutePortFlag = "teleroute-port"
 )
 
 // Command returns the CLI sub-command for "connector-foreground".
@@ -195,6 +203,7 @@ func Command() *cobra.Command {
 	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.UserDaemonPath(context.Background()))
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
+	flags.Uint16(teleroutePortFlag, 0, "start teleroute server on the given port")
 	return c
 }
 
@@ -277,7 +286,7 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 	}
 	go runAliveAndCancellation(ctx, cancel, daemonID)
 
-	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config)
+	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config, wg)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 		cancel()
 		if s.rootSessionInProc {
@@ -476,6 +485,10 @@ func run(cmd *cobra.Command, _ []string) error {
 	si.As(&s)
 	s.rootSessionInProc = rootSessionInProc
 	s.daemonAddress = daemonAddress
+	if tp, err := flags.GetUint16(teleroutePortFlag); err == nil && tp > 0 {
+		dlog.Debugf(c, "Using teleroute %d", tp)
+		s.teleroutePort = tp
+	}
 
 	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, userd.ProcessName); err != nil {
 		return err
