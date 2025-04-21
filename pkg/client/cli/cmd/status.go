@@ -346,12 +346,9 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		}
 		rs.Version = rStatus.Version.Version
 		rs.APIVersion = rStatus.Version.ApiVersion
-		if obc := rStatus.OutboundConfig; obc != nil {
-			rootCfg := client.GetDefaultConfig()
-			if err := client.UnmarshalJSON(obc.ClientConfig, rootCfg, true); err == nil {
-				rs.DNS = rootCfg.DNS().ToSnake()
-				rs.RoutingSnake = rootCfg.Routing().ToSnake()
-			}
+		if rootCfg, err := daemon.GetRootClientConfig(rStatus); err == nil {
+			rs.DNS = rootCfg.DNS().ToSnake()
+			rs.RoutingSnake = rootCfg.Routing().ToSnake()
 		}
 	}
 

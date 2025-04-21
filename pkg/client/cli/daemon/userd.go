@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -29,16 +31,17 @@ type UserClient interface {
 	DaemonPort() int
 	DaemonID() *Identifier
 	Executable() string
+	DaemonInfo() *Info
 	Name() string
 	Semver() semver.Version
-	SetDaemonID(*Identifier)
 	AddHandler(ctx context.Context, id string, cmd *dexec.Cmd, containerName string) error
+	SetConnectionInfo(name string, clusterContext string, namespace string)
 }
 
 type userClient struct {
 	connector.ConnectorClient
 	conn       *grpc.ClientConn
-	daemonID   *Identifier
+	info       *Info
 	version    semver.Version
 	executable string
 	name       string
@@ -46,8 +49,8 @@ type userClient struct {
 
 var NewUserClientFunc = NewUserClient //nolint:gochecknoglobals // extension point
 
-func NewUserClient(conn *grpc.ClientConn, daemonID *Identifier, version semver.Version, name string, executable string) UserClient {
-	return &userClient{ConnectorClient: connector.NewConnectorClient(conn), conn: conn, daemonID: daemonID, version: version, name: name, executable: executable}
+func NewUserClient(conn *grpc.ClientConn, info *Info, version semver.Version, name string, executable string) UserClient {
+	return &userClient{ConnectorClient: connector.NewConnectorClient(conn), conn: conn, info: info, version: version, name: name, executable: executable}
 }
 
 type Session struct {
@@ -90,12 +93,16 @@ func (u *userClient) Conn() *grpc.ClientConn {
 	return u.conn
 }
 
+func (u *userClient) DaemonInfo() *Info {
+	return u.info
+}
+
 func (u *userClient) Containerized() bool {
-	return u.daemonID.Containerized
+	return u.info.InDocker()
 }
 
 func (u *userClient) DaemonID() *Identifier {
-	return u.daemonID
+	return u.info.DaemonID()
 }
 
 func (u *userClient) Executable() string {
@@ -111,7 +118,7 @@ func (u *userClient) Semver() semver.Version {
 }
 
 func (u *userClient) DaemonPort() int {
-	if u.daemonID.Containerized {
+	if u.info.InDocker() {
 		addr := u.conn.Target()
 		if lc := strings.LastIndexByte(addr, ':'); lc >= 0 {
 			if port, err := strconv.Atoi(addr[lc+1:]); err == nil {
@@ -122,8 +129,8 @@ func (u *userClient) DaemonPort() int {
 	return -1
 }
 
-func (u *userClient) SetDaemonID(daemonID *Identifier) {
-	u.daemonID = daemonID
+func (u *userClient) SetConnectionInfo(name string, clusterContext string, namespace string) {
+	u.info.SetConnectionInfo(name, clusterContext, namespace)
 }
 
 func (u *userClient) AddHandler(ctx context.Context, id string, cmd *dexec.Cmd, containerName string) error {
@@ -159,6 +166,22 @@ func (s *Session) GetAgentConfig(ctx context.Context, workload string) (*agentco
 		return nil, err
 	}
 	return scx.AgentConfig(), nil
+}
+
+func (s *Session) GetRootClientConfig() (client.Config, error) {
+	return GetRootClientConfig(s.Info.GetDaemonStatus())
+}
+
+func GetRootClientConfig(ds *daemon.DaemonStatus) (client.Config, error) {
+	data := ds.GetOutboundConfig().GetClientConfig()
+	if data == nil {
+		return nil, errors.New("no outbound config")
+	}
+	cfg := client.GetDefaultConfig()
+	if err := client.UnmarshalJSON(data, cfg, true); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // GetCommandKubeConfig will return the fully resolved client.Kubeconfig for the given command.

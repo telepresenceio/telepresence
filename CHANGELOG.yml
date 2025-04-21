@@ -75,6 +75,14 @@ items:
           A "Legacy Telepresence command used" warning has been printed for several years now, and the mapping for the
           `--swap-deployment` was the `intercept` command, which is very confusing today since we now have the `replace`
           command.
+      - type: bugfix
+        title: Let containerized daemon consistently use the same port for gRPC
+        body: >-
+          The port used for the containerized gRPC was randomly selected using the hosts network namespace. This is now
+          changed so that the port used by the container is preset and configurable and then mapped to a random port
+          on the host.
+          
+          The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
   - version: 2.22.4
     date: 2025-04-26
     notes:

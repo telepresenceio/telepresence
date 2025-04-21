@@ -3,7 +3,7 @@ package mount
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -81,12 +81,12 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 	if ud.Containerized() {
 		// Mounts will be facilitated by the Telemount plug-in connecting to our LocalMountPort
 		if f.LocalMountPort == 0 {
-			var lma []*net.TCPAddr
+			var lma []netip.AddrPort
 			lma, err = client.FreePortsTCP(1)
 			if err != nil {
 				return err
 			}
-			f.LocalMountPort = uint16(lma[0].Port)
+			f.LocalMountPort = lma[0].Port()
 		}
 		return nil
 	}

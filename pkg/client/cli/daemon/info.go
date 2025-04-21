@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,19 +19,30 @@ import (
 )
 
 type Info struct {
-	Options      map[string]string `json:"options,omitempty"`
-	InDocker     bool              `json:"in_docker,omitempty"`
-	Name         string            `json:"name,omitempty"`
-	KubeContext  string            `json:"kube_context,omitempty"`
-	Namespace    string            `json:"namespace,omitempty"`
-	DaemonPort   int               `json:"daemon_port,omitempty"`
-	ExposedPorts []string          `json:"exposed_ports,omitempty"`
-	Hostname     string            `json:"hostname,omitempty"`
+	Name         string     `json:"name,omitempty"`
+	KubeContext  string     `json:"kube_context,omitempty"`
+	Namespace    string     `json:"namespace,omitempty"`
+	DaemonPort   uint16     `json:"daemon_port,omitempty"`
+	ExposedPorts []string   `json:"exposed_ports,omitempty"`
+	Hostname     string     `json:"hostname,omitempty"`
+	ContainerPID int        `json:"container_pid,omitempty"`
+	ContainerIP  netip.Addr `json:"container_ip,omitempty"`
+	ContainerID  string     `json:"container_id,omitempty"`
 }
 
 func (info *Info) DaemonID() *Identifier {
-	id, _ := NewIdentifier(info.Name, info.KubeContext, info.Namespace, info.InDocker)
+	id, _ := NewIdentifier(info.Name, info.KubeContext, info.Namespace, info.InDocker())
 	return id
+}
+
+func (info *Info) InDocker() bool {
+	return info.ContainerPID != 0
+}
+
+func (info *Info) SetConnectionInfo(name string, clusterContext string, namespace string) {
+	info.Name = name
+	info.KubeContext = clusterContext
+	info.Namespace = namespace
 }
 
 const (
