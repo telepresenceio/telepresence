@@ -150,3 +150,16 @@ for Telepresence to connect to your cluster.
 ## `too many files open` error when running `telepresence connect` on Linux
 
 If `telepresence connect` on linux fails with a message in the logs `too many files open`, then check if `fs.inotify.max_user_instances` is set too low. Check the current settings with `sysctl fs.inotify.max_user_instances` and increase it temporarily with `sudo sysctl -w fs.inotify.max_user_instances=512`. For more information about permanently increasing it see [Kernel inotify watch limit reached](https://unix.stackexchange.com/a/13757/514457).
+
+## DNS does not resolve in GitLab pipeline
+
+If services are not resolved after running `telepresence connect` in GitLab pipeline, check if they can be reached directly via the IP. If that is the case, the nameserver is probably not configured correctly and can be fixed by setting the kube-dns as the nameserver in `/etc/resolv.conf`:
+```bash
+# namespace variable needs to be set beforehand
+kube_dns_service_ip="$(kubectl get svc -n kube-system kube-dns -o jsonpath='{.spec.clusterIP}')"
+cat > /etc/resolv.conf <<EOF
+nameserver ${kube_dns_service_ip}
+search ${namespace}.svc.cluster.local svc.cluster.local cluster.local
+options ndots:5
+EOF
+```
