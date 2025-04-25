@@ -36,7 +36,7 @@ func InitProgressWriter(cmd *cobra.Command) {
 	if output.WantsFormatted(cmd) {
 		mode = progress.ModeQuiet
 	} else if progress.IsNoOp(ctx) {
-		if pf := cmd.Flag("progress"); pf != nil && pf.Changed {
+		if pf := cmd.Flag(global.FlagProgress); pf != nil && pf.Changed {
 			mode = progress.Mode(pf.Value.String())
 		} else if me, ok := dos.LookupEnv(ctx, "TELEPRESENCE_PROGRESS"); ok {
 			mode = progress.Mode(me)

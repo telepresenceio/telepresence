@@ -1,6 +1,7 @@
 package global
 
 import (
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -32,4 +33,10 @@ func Flags(hasKubeFlags bool) *pflag.FlagSet {
 	flags.String(FlagOutput, "default", "Set the output format, supported values are 'json', 'yaml', and 'default'")
 	flags.String(FlagProgress, "auto", `Set type of progress output (auto, tty, plain, json, quiet)`)
 	return flags
+}
+
+func SetProgressQuiet(cmd *cobra.Command) {
+	pf := cmd.Flag(FlagProgress)
+	_ = pf.Value.Set("quiet")
+	pf.Changed = true
 }
