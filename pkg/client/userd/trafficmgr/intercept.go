@@ -111,8 +111,8 @@ func (ic *intercept) localPorts() []string {
 	return ps
 }
 
-func (ic *intercept) podAccess(rd daemon.DaemonClient) *podAccess {
-	pa := &podAccess{
+func (ic *intercept) podAccess() *podAccess {
+	return &podAccess{
 		ctx:              ic.ctx,
 		localPorts:       ic.localPorts(),
 		workload:         ic.Spec.Agent,
@@ -127,10 +127,6 @@ func (ic *intercept) podAccess(rd daemon.DaemonClient) *podAccess {
 		mounter:          &ic.Mounter,
 		wg:               &ic.wg,
 	}
-	if err := pa.ensureAccess(ic.ctx, rd); err != nil {
-		dlog.Error(ic.ctx, err)
-	}
-	return pa
 }
 
 func (s *session) watchInterceptsHandler(ctx context.Context) error {
@@ -183,24 +179,32 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, pat *podAccessTra
 		}
 		s.currentInterceptsLock.Unlock()
 
+		pa := ic.podAccess()
 		var err error
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
 			ns := ii.Spec.Namespace
 			if s.Namespace != ns {
 				err = errcat.User.Newf("active intercepts in both namespace %s and %s", ns, s.Namespace)
+			} else {
+				err = pa.ensureAccess(ic.ctx, s.rootDaemon)
 			}
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
 		}
 
 		// Notify waiters for active intercepts
-		pa := ic.podAccess(s.rootDaemon)
 		if aw != nil {
 			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
 			ir := interceptResult{
-				intercept:  ic,
-				err:        err,
-				mountsDone: pat.getOrCreateMountsDone(pa),
+				intercept: ic,
+				err:       err,
+			}
+			if err == nil {
+				ir.mountsDone = pat.getOrCreateMountsDone(pa)
+			} else {
+				md := make(chan struct{})
+				close(md)
+				ir.mountsDone = md
 			}
 			select {
 			case aw.waitCh <- ir:
