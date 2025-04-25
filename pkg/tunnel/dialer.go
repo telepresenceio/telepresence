@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -123,6 +124,7 @@ func NewConnEndpointTTL(
 }
 
 func (h *dialer) Start(ctx context.Context) {
+	sr := GetSyntheticIPResolver(ctx)
 	go func() {
 		defer close(h.done)
 
@@ -136,6 +138,19 @@ func (h *dialer) Start(ctx context.Context) {
 
 			dlog.Tracef(ctx, "   %s %s, dialing", tag, id)
 			d := net.Dialer{Timeout: h.stream.DialTimeout()}
+			dst := id.Destination()
+			dstAddr := dst.Addr()
+			if dstAddr.Is6() {
+				addr, err := sr.Resolve(dstAddr)
+				if err != nil {
+					dlog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
+					h.connected = notConnected
+					return
+				}
+				if addr != dstAddr {
+					id = NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(addr, dst.Port()))
+				}
+			}
 			conn, err := d.DialContext(ctx, id.DestinationProtocolString(), id.Destination().String())
 			if err != nil {
 				dlog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)

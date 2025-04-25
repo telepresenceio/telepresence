@@ -7,12 +7,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
@@ -484,6 +486,22 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 			"traffic-manager version %s has no support for multi-port intercepts", s.managerVersion))
 	}
 
+	_, err := netip.ParseAddr(spec.TargetHost)
+	if err != nil {
+		// The targetHost is not a valid IP. Treat it as a name and create a synthetic IP for it.
+		rndIP, err := uuid.NewRandom()
+		if err != nil {
+			return nil, InterceptError(common.InterceptError_INTERNAL, err)
+		}
+		targetIP := netip.AddrFrom16(rndIP)
+		if s.syntheticIPs == nil {
+			s.syntheticIPs = make(map[netip.Addr]string)
+		}
+		dlog.Debugf(c, "Replacing target host %s with synthetic IP %s", spec.TargetHost, targetIP)
+		s.syntheticIPs[targetIP] = spec.TargetHost
+		spec.TargetHost = targetIP.String()
+	}
+
 	mgrIr := self.NewCreateInterceptRequest(spec)
 	if er := self.InterceptProlog(c, mgrIr); er != nil {
 		return nil, er
@@ -506,6 +524,24 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 	iInfo := &interceptInfo{preparedIntercept: pi}
 	return iInfo, nil
+}
+
+func (s *session) Resolve(addr netip.Addr) (netip.Addr, error) {
+	if n, ok := s.syntheticIPs[addr]; ok {
+		ips, err := net.LookupIP(n)
+		if err != nil {
+			return addr, err
+		}
+		if len(ips) == 0 {
+			return addr, fmt.Errorf("unable to resolve %s", n)
+		}
+		addr, _ = netip.AddrFromSlice(ips[0])
+	}
+	return addr, nil
+}
+
+func (s *session) ResolveName(addr netip.Addr) string {
+	return s.syntheticIPs[addr]
 }
 
 func (s *session) NewCreateInterceptRequest(spec *manager.InterceptSpec) *manager.CreateInterceptRequest {

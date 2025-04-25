@@ -54,6 +54,7 @@ const (
 	Connector_SetDNSExcludes_FullMethodName          = "/telepresence.connector.Connector/SetDNSExcludes"
 	Connector_SetDNSMappings_FullMethodName          = "/telepresence.connector.Connector/SetDNSMappings"
 	Connector_GetAgentConfig_FullMethodName          = "/telepresence.connector.Connector/GetAgentConfig"
+	Connector_ResolveSyntheticIP_FullMethodName      = "/telepresence.connector.Connector/ResolveSyntheticIP"
 )
 
 // ConnectorClient is the client API for Connector service.
@@ -137,6 +138,9 @@ type ConnectorClient interface {
 	SetDNSMappings(ctx context.Context, in *daemon.SetDNSMappingsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetAgentConfig returns the agent configuration for a specific workload.
 	GetAgentConfig(ctx context.Context, in *manager.AgentConfigRequest, opts ...grpc.CallOption) (*manager.AgentConfigResponse, error)
+	// ResolveSyntheticIP resolves a synthetic IP into a name and optionally
+	// the first IP for that name when the daemon performs a DNS lookup.
+	ResolveSyntheticIP(ctx context.Context, in *ResolveSyntheticRequest, opts ...grpc.CallOption) (*ResolveSyntheticResponse, error)
 }
 
 type connectorClient struct {
@@ -466,6 +470,16 @@ func (c *connectorClient) GetAgentConfig(ctx context.Context, in *manager.AgentC
 	return out, nil
 }
 
+func (c *connectorClient) ResolveSyntheticIP(ctx context.Context, in *ResolveSyntheticRequest, opts ...grpc.CallOption) (*ResolveSyntheticResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveSyntheticResponse)
+	err := c.cc.Invoke(ctx, Connector_ResolveSyntheticIP_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility.
@@ -547,6 +561,9 @@ type ConnectorServer interface {
 	SetDNSMappings(context.Context, *daemon.SetDNSMappingsRequest) (*emptypb.Empty, error)
 	// GetAgentConfig returns the agent configuration for a specific workload.
 	GetAgentConfig(context.Context, *manager.AgentConfigRequest) (*manager.AgentConfigResponse, error)
+	// ResolveSyntheticIP resolves a synthetic IP into a name and optionally
+	// the first IP for that name when the daemon performs a DNS lookup.
+	ResolveSyntheticIP(context.Context, *ResolveSyntheticRequest) (*ResolveSyntheticResponse, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -649,6 +666,9 @@ func (UnimplementedConnectorServer) SetDNSMappings(context.Context, *daemon.SetD
 }
 func (UnimplementedConnectorServer) GetAgentConfig(context.Context, *manager.AgentConfigRequest) (*manager.AgentConfigResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAgentConfig not implemented")
+}
+func (UnimplementedConnectorServer) ResolveSyntheticIP(context.Context, *ResolveSyntheticRequest) (*ResolveSyntheticResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolveSyntheticIP not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 func (UnimplementedConnectorServer) testEmbeddedByValue()                   {}
@@ -1222,6 +1242,24 @@ func _Connector_GetAgentConfig_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_ResolveSyntheticIP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveSyntheticRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ResolveSyntheticIP(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_ResolveSyntheticIP_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ResolveSyntheticIP(ctx, req.(*ResolveSyntheticRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1348,6 +1386,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAgentConfig",
 			Handler:    _Connector_GetAgentConfig_Handler,
+		},
+		{
+			MethodName: "ResolveSyntheticIP",
+			Handler:    _Connector_ResolveSyntheticIP_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

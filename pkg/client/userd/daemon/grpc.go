@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -562,6 +563,30 @@ func (s *service) LeaveIngest(ctx context.Context, request *rpc.IngestIdentifier
 	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
 		response, err = session.LeaveIngest(ctx, request)
 		return err
+	})
+	return response, err
+}
+
+func (s *service) ResolveSyntheticIP(ctx context.Context, request *rpc.ResolveSyntheticRequest) (response *rpc.ResolveSyntheticResponse, err error) {
+	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+		ip, ok := netip.AddrFromSlice(request.Ip)
+		if !ok {
+			return status.Errorf(codes.InvalidArgument, "invalid IP")
+		}
+		n := session.ResolveName(ip)
+		if n == "" {
+			return status.Errorf(codes.NotFound, "found no match for synthetic IP %s", ip)
+		}
+		response = &rpc.ResolveSyntheticResponse{Name: n}
+		if !request.NameOnly {
+			ip, err = session.Resolve(ip)
+			if err != nil {
+				response = nil
+				return status.Error(codes.NotFound, err.Error())
+			}
+			response.ResolvedIp = ip.AsSlice()
+		}
+		return nil
 	})
 	return response, err
 }
