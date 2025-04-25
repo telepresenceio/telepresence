@@ -83,7 +83,6 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.MechanismArgs = s.MechanismArgs
 	spec.Wiretap = s.Wiretap
 	spec.Agent = s.AgentName
-	spec.TargetHost = "127.0.0.1"
 	spec.NoDefaultPort = s.NoDefaultPort
 
 	for _, toPod := range s.ToPod {
@@ -124,10 +123,14 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	}
 
 	spec.TargetPort = int32(s.localPort)
-	if _, err := netip.ParseAddr(s.Address); err != nil {
-		return nil, fmt.Errorf("--address %s is not a valid IP address", s.Address)
+	switch {
+	case s.Address != "":
+		spec.TargetHost = s.Address
+	case s.handlerContainer != "":
+		spec.TargetHost = s.handlerContainer
+	default:
+		spec.TargetHost = "127.0.0.1"
 	}
-	spec.TargetHost = s.Address
 	return ir, nil
 }
 

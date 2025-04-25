@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -46,6 +47,7 @@ type NamespaceListener func(context.Context)
 type Session interface {
 	restapi.AgentState
 	KubeConfig
+	tunnel.SyntheticIPResolver
 
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) *rpc.InterceptResult
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/user"
 	"slices"
@@ -54,6 +55,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
@@ -150,6 +152,10 @@ type session struct {
 
 	// Possibly extended version of the session. Use when calling interface methods.
 	self userd.Session
+
+	// Synthetic IPs are generated when the targetIP is a hostname, so that we can defer the
+	// lookup of that host until the time when it is dialed.
+	syntheticIPs map[netip.Addr]string
 }
 
 func NewSession(
@@ -275,6 +281,8 @@ func NewSession(
 			patcher.AnnotateNetworkConfig(ctx, oi, konfig.CurrentContext)
 		}
 	}
+
+	ctx = tunnel.WithSyntheticIPResolver(ctx, tmgr)
 
 	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi, cr.IsPodDaemon)
 	if err != nil {
