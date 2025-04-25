@@ -141,7 +141,7 @@ func (ts *server) EnslaveVIF(ctx context.Context, request *rpc.EnslaveRequest) (
 	if err != nil {
 		return nil, err
 	}
-	veth, err := lookup(request.InterfaceName)
+	vifVeth, err := lookup(request.InterfaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (ts *server) EnslaveVIF(ctx context.Context, request *rpc.EnslaveRequest) (
 	if err != nil {
 		return nil, err
 	}
-	err = setMaster(veth, br)
+	err = setMaster(vifVeth, br)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (ts *server) EnslaveVIF(ctx context.Context, request *rpc.EnslaveRequest) (
 	if err != nil {
 		return nil, err
 	}
-	err = setUp(veth)
+	err = setUp(vifVeth)
 	if err != nil {
 		return nil, err
 	}
