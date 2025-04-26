@@ -3,9 +3,9 @@ package intercept
 import (
 	"context"
 	"fmt"
-	"net/netip"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 
 	grpcCodes "google.golang.org/grpc/codes"
@@ -326,11 +326,7 @@ func (s *state) runCommand(ctx context.Context) error {
 		Mount:         s.info.Mount,
 	}
 	if s.dockerPort != 0 {
-		dr.PublishedPorts = append(dr.PublishedPorts, cliDocker.PublishedPort{
-			HostAddrPort:  netip.AddrPortFrom(netip.IPv4Unspecified(), s.localPort),
-			Protocol:      "tcp",
-			ContainerPort: s.dockerPort,
-		})
+		s.Cmdline = slices.Insert(s.Cmdline, 0, fmt.Sprintf("-p %d:%d", s.localPort, s.dockerPort))
 	}
 	return dr.Run(ctx, s.WaitMessage, s.Cmdline...)
 }

@@ -14,17 +14,16 @@ import (
 )
 
 type Flags struct {
-	Run            bool           // --docker-run
-	Debug          bool           // set if --docker-debug was used
-	BuildOptions   []string       // --docker-build-opt key=value, // Optional flag to docker build can be repeated (but not comma separated)
-	PublishedPorts PublishedPorts // --publish Port mappings that the container will expose on localhost
-	Context        string         // Set to build or debug by Validate function
-	Image          string
-	Mount          string // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
-	build          string // --docker-build DIR | URL
-	debug          string // --docker-debug DIR | URL
-	args           []string
-	imageIndex     int
+	Run          bool     // --docker-run
+	Debug        bool     // set if --docker-debug was used
+	BuildOptions []string // --docker-build-opt key=value, // Optional flag to docker build can be repeated (but not comma separated)
+	Context      string   // Set to build or debug by Validate function
+	Image        string
+	Mount        string // --docker-mount // where to mount in a docker container. Defaults to mount unless mount is "true" or "false".
+	build        string // --docker-build DIR | URL
+	debug        string // --docker-debug DIR | URL
+	args         []string
+	imageIndex   int
 }
 
 func (f *Flags) AddFlags(flagSet *pflag.FlagSet, what string) {
@@ -44,10 +43,6 @@ func (f *Flags) AddFlags(flagSet *pflag.FlagSet, what string) {
 
 	flagSet.StringVar(&f.Mount, "docker-mount", "", ``+
 		`The volume mount point in docker. Defaults to same as "--mount"`)
-
-	flagSet.Var(&f.PublishedPorts,
-		"publish", ``+
-			`Ports that the container will publish. See docker run --publish for more info.`)
 }
 
 func (f *Flags) Validate(args []string) error {
@@ -72,9 +67,6 @@ func (f *Flags) Validate(args []string) error {
 	if !f.Run {
 		if f.Mount != "" {
 			return errcat.User.Newf("--docker-mount must be used together with %s", alts)
-		}
-		if len(f.PublishedPorts) > 0 {
-			return errcat.User.Newf("--publish must be used together with %s", alts)
 		}
 		return nil
 	}

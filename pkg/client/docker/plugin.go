@@ -15,6 +15,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	dockerTypes "github.com/docker/docker/api/types"
+	network2 "github.com/docker/docker/api/types/network"
 	dockerClient "github.com/docker/docker/client"
 	"github.com/go-json-experiment/json"
 
@@ -43,14 +44,7 @@ func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImag
 	if err != nil {
 		return "", err
 	}
-	pn := pluginName(cfg)
-	if pt := cfg.Tag; pt != "" {
-		pn += "-" + pt
-	} else if lv, err := latestPluginVersion(ctx, pn, pluginType, cfg); err == nil {
-		pn += "-" + lv.String()
-	} else {
-		dlog.Warnf(ctx, "failed to get latest version of docker %s plugin %s: %v", pluginType, pn, err)
-	}
+	pn := latestPluginName(ctx, cfg, pluginType)
 	pi, _, err := cli.PluginInspectWithRaw(ctx, pn)
 	if err != nil {
 		if !dockerClient.IsErrNotFound(err) {
@@ -67,6 +61,18 @@ func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImag
 
 func pluginName(tm *client.DockerImage) string {
 	return fmt.Sprintf("%s/%s/%s:%s", tm.Registry, tm.Namespace, tm.Repository, runtime.GOARCH)
+}
+
+func latestPluginName(ctx context.Context, cfg *client.DockerImage, pluginType string) string {
+	pn := pluginName(cfg)
+	if pt := cfg.Tag; pt != "" {
+		pn += "-" + pt
+	} else if lv, err := latestPluginVersion(ctx, pn, pluginType, cfg); err == nil {
+		pn += "-" + lv.String()
+	} else {
+		dlog.Warnf(ctx, "failed to get latest version of docker %s plugin %s: %v", pluginType, pn, err)
+	}
+	return pn
 }
 
 func installPlugin(ctx context.Context, pluginName string) error {
@@ -169,24 +175,48 @@ func getLatestPluginVersion(ctx context.Context, pluginName string, cfg *client.
 	return ver, err
 }
 
-// ContainerPidAndIP returns the process ID of the container with the given name along with it's associated IP in the default bridge network.
-func ContainerPidAndIP(ctx context.Context, name string) (pid int, addr netip.Addr, err error) {
+type ContainerInfo struct {
+	ID   string
+	Name string
+	Pid  int
+	IP   netip.Addr
+}
+
+// GetContainerInfo returns the name and process ID of the container with the given ID along with its associated IP in the given network.
+func GetContainerInfo(ctx context.Context, cid string, network string) (*ContainerInfo, error) {
 	cli, err := GetClient(ctx)
 	if err != nil {
-		return 0, addr, err
+		return nil, err
 	}
-	ci, err := cli.ContainerInspect(ctx, name)
+	ci, err := cli.ContainerInspect(ctx, cid)
 	if err != nil {
-		return 0, addr, fmt.Errorf("docker container inspect %s: %w", "userd", err)
+		return nil, fmt.Errorf("docker container inspect %s: %w", "userd", err)
 	}
+
 	if ns := ci.NetworkSettings; ns != nil {
-		if tn, ok := ns.Networks["bridge"]; ok {
-			addr, err = netip.ParseAddr(tn.IPAddress)
+		if network == "" {
+			nts, err := cli.NetworkList(ctx, network2.ListOptions{})
 			if err != nil {
-				return 0, addr, err
+				return nil, fmt.Errorf("docker network list %s: %w", cid, err)
 			}
-			return ci.State.Pid, addr, nil
+			cfg := client.DockerImage(client.GetConfig(ctx).Intercept().Teleroute)
+			pluginNamePrefix := pluginName(&cfg)
+			for _, n := range nts {
+				if strings.HasPrefix(n.Driver, pluginNamePrefix) {
+					if _, ok := n.Containers[ci.ID]; ok {
+						network = n.Name
+						break
+					}
+				}
+			}
+		}
+		if tn, ok := ns.Networks[network]; ok {
+			addr, err := netip.ParseAddr(tn.IPAddress)
+			if err != nil {
+				return nil, err
+			}
+			return &ContainerInfo{ID: ci.ID, Pid: ci.State.Pid, IP: addr, Name: ci.Name}, nil
 		}
 	}
-	return 0, addr, os.ErrNotExist
+	return nil, os.ErrNotExist
 }

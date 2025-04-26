@@ -597,24 +597,27 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 	cmd.DisableLogging = true
 	cmd.Stderr = &stdErr
 	cmd.Stdout = &stdOut
-	if err := cmd.Run(); err != nil {
-		errStr := strings.TrimSpace(stdErr.String())
-		if errStr == "" {
-			errStr = err.Error()
-		}
-		return nil, fmt.Errorf("launch of daemon container failed: %s", errStr)
-	}
+	err := cmd.Run()
 	cid := strings.TrimSpace(stdOut.String())
-	pid, ip, err := ContainerPidAndIP(ctx, cid)
+	errStr := strings.TrimSpace(stdErr.String())
+	if errStr != "" || err != nil {
+		err = fmt.Errorf("launch of daemon container failed: %s%s: %w", cid, errStr, err)
+		dlog.Error(ctx, err)
+		return nil, err
+	}
+
+	// The teleroute network plugin communicates with the daemon over the default bridge network
+	cni, err := GetContainerInfo(ctx, cid, "bridge")
 	if err != nil {
 		progress.Write(ctx, progress.ErrorMessageEvent("daemon", err.Error()))
+		return nil, err
 	}
 	cr := daemon.GetRequest(ctx)
 	dlog.Debugf(ctx, "Creating daemon info file %s (runs in container)", daemonID.Name)
 	info := &daemon.Info{
 		ContainerID:  cid,
-		ContainerPID: pid,
-		ContainerIP:  ip,
+		ContainerPID: cni.Pid,
+		ContainerIP:  cni.IP,
 		DaemonPort:   port,
 		Name:         daemonID.Name,
 		KubeContext:  daemonID.KubeContext,

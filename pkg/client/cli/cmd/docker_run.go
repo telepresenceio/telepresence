@@ -2,22 +2,19 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"slices"
-	"strings"
 	"sync/atomic"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	cliDocker "github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -43,60 +40,16 @@ func dockerRunCmd() *cobra.Command {
 	return cmd
 }
 
-func findAndParseFlag(flags *pflag.FlagSet, flagName string, args []string) ([]string, error) {
-	if i := slices.Index(args, "--"+flagName); i >= 0 && i+1 < len(args) {
-		if err := flags.Parse(args[i : i+2]); err != nil {
-			return nil, err
-		}
-		args = slices.Delete(args, i, i+2)
-	} else if i = slices.IndexFunc(args, func(s string) bool { return strings.HasPrefix(s, "--"+flagName+"=") }); i >= 0 {
-		if err := flags.Parse(args[i : i+1]); err != nil {
-			return nil, err
-		}
-		args = slices.Delete(args, i, i+1)
-	}
-	return args, nil
-}
-
-func parseFlags(cmd *cobra.Command, args []string) (*cliDocker.RunFlags, []string, error) {
-	// The command has all flag parsing disabled, but we must check for the global flags. Luckily, these flags do not conflict with
-	// the docker run flags.
-	opts := cmd.Flags()
-	var err error
-	for _, n := range global.FlagNames {
-		args, err = findAndParseFlag(opts, n, args)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	runFlags, args, err := cliDocker.ParseRunFlags(args)
-	if err != nil {
-		return nil, nil, err
-	}
-	return runFlags, args, nil
-}
-
 func runDockerRunCLI(cmd *cobra.Command, args []string) error {
 	return errcat.NoDaemonLogs.New(runDockerRun(cmd, args))
 }
 
 func runDockerRun(cmd *cobra.Command, args []string) error {
-	opts, args, err := parseFlags(cmd, args)
-	if err != nil {
-		return err
-	}
-
 	if slices.Contains(args, "--help") {
 		return proc.StdCommand(cmd.Context(), cliDocker.Exe, slices.Insert(args, 0, "run")...).Run()
 	}
 
-	for _, n := range opts.Networks {
-		if strings.HasPrefix(n, "container:") {
-			return errors.New("this command adds the daemon container network. Adding another container network is not possible")
-		}
-	}
-
-	err = connect.InitCommand(cmd)
+	err := connect.InitCommand(cmd)
 	if err != nil {
 		return err
 	}
@@ -110,16 +63,23 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 	if !ud.Containerized() {
 		return fmt.Errorf("%s requires that --docker was used when the connection was established", cmd.UseLine())
 	}
-
 	cidFileName, err := ioutil.CreateTempName("", "docker-run*.cid")
 	if err != nil {
 		return err
 	}
 
-	daemonName := ud.DaemonID().ContainerName()
-	ctx = dos.WithStdio(ctx, cmd)
+	dockerOpts := []string{"run", "--cidfile", cidFileName}
+	dns, nwName, err := cliDocker.GetDaemonContainerNetworkInfo(ctx)
+	if err != nil {
+		return err
+	}
+	dockerOpts = append(dockerOpts, "--dns", dns.String())
+	if nwName != "" {
+		dockerOpts = append(dockerOpts, "--network", nwName)
+	}
 
-	cc := proc.StdCommand(ctx, cliDocker.Exe, slices.Insert(args, 0, "run", "--cidfile", cidFileName, "--network", "container:"+daemonName)...)
+	ctx = dos.WithStdio(ctx, cmd)
+	cc := proc.StdCommand(ctx, cliDocker.Exe, slices.Insert(args, 0, dockerOpts...)...)
 	cc.Stdin = dos.Stdin(ctx)
 	cc.Env = dos.Environ(ctx)
 	tty := flags.HasOption("tty", 't', args)
@@ -142,23 +102,18 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx = docker.EnableClient(ctx)
+	cni, err := docker.GetContainerInfo(ctx, containerID, nwName)
+	if err != nil {
+		return err
+	}
+	progress.Write(ctx, progress.DoneEvent(cni.Name, fmt.Sprintf("Started container %s with IP %s", cni.Name, cni.IP)))
 
 	var exited, signalled atomic.Bool
 	done := make(chan error, 1)
-	if !tty {
+	if tty {
+		close(done)
+	} else {
 		go cliDocker.EnsureStopContainer(ctx, containerID, nil, &exited, &signalled, done)
-	}
-
-	if len(opts.Networks) > 0 {
-		ns := make([]cliDocker.Network, len(opts.Networks))
-		for i, n := range opts.Networks {
-			ns[i] = cliDocker.Network{Name: n}
-		}
-		connectCancel, err := cliDocker.ConnectNetworksToDaemon(ctx, daemonName, ns)
-		defer connectCancel()
-		if err != nil {
-			return err
-		}
 	}
 
 	err = cc.Wait()
