@@ -9,6 +9,28 @@ The new `telepresence wiretap` command introduces a read-only form of an `interc
 Similar to an `ingest`, a `wiretap` will always enforce read-only status on all volume mounts, and since that makes the `wiretap` completely read-only, there's no limit to how many simultaneous wiretaps that can be served. In fact, a `wiretap` and an `intercept` on the same port can run simultaneously.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Add Telepresence Docker Network Plugin "Teleroute"](reference/teleroute)</div></div>
+<div style="margin-left: 15px">
+
+The new Teleroute plugin makes it possible for containers to use the Telepresence daemon's VIF without having
+to change their network mode, i.e. a `--network container:<daemon container>` is no longer needed. Instead,
+a container can use a custom network that is created when the Telepresence daemon connects to the cluster.
+This network uses the new driver "teleroute" which is provided by Telepresence.
+
+With the Teleroute Docker network plugin in place, there's no longer a need for special handling of network
+related docker flags, and the following changes have been made:
+
+1. The Teleroute Docker network driver will be installed unless it is already present.
+2. A Teleroute network will be created when starting the Telepresence daemon as a container. This network will
+   then communicate with that container and expose the same CIDRs as the daemon's VIF.
+3. A container started with `telepresence curl`, or
+   `telepresence {ingest|intercept|replace|wiretap} --docker-{run|build|debug}` will no longer change its
+   network mode using `--network container:<daemon container>`, instead it will use
+   `--network <name of teleroute network>`.
+4. As a consequence of #3, published ports and other networks that are added, no longer need special handling
+   using socat containers, so all of that has been removed.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Human friendly progress reporting</div></div>
 <div style="margin-left: 15px">
 
@@ -49,6 +71,13 @@ The `telepresence` CLI command will no longer support legacy flags such as:
 A "Legacy Telepresence command used" warning has been printed for several years now, and the mapping for the
 `--swap-deployment` was the `intercept` command, which is very confusing today since we now have the `replace`
 command.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Let containerized daemon consistently use the same port for gRPC</div></div>
+<div style="margin-left: 15px">
+
+The port used for the containerized gRPC was randomly selected using the hosts network namespace. This is now changed so that the port used by the container is preset and configurable and then mapped to a random port on the host.
+The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
 </div>
 
 ## Version 2.22.4 <span style="font-size: 16px;">(April 26)</span>

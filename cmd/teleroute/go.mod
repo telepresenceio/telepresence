@@ -4,12 +4,11 @@ go 1.24
 
 require (
 	github.com/docker/go-plugins-helpers v0.0.0-20240701071450-45e2431495c8
-	github.com/go-json-experiment/json v0.0.0-20250223041408-d3c622f1b874
 	github.com/puzpuzpuz/xsync/v4 v4.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/telepresenceio/telepresence/rpc/v2 v2.23.0
 	github.com/vishvananda/netlink v1.3.0
-	google.golang.org/grpc v1.71.1
+	google.golang.org/grpc v1.72.0
 	google.golang.org/protobuf v1.36.6
 )
 
@@ -25,7 +24,7 @@ require (
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250409194420-de1ac958c67a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250422160041-2d3770c4ea7f // indirect
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

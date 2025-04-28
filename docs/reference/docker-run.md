@@ -1,6 +1,6 @@
 ---
-title: Using Docker for intercepts
-description: How a Telepresence intercept can run a Docker container with configured environment and volume mounts.
+title: Using Docker for engagements
+description: How a Telepresence engagement can run a Docker container with configured environment and volume mounts.
 toc_min_heading_level: 2
 toc_max_heading_level: 2
 ---
@@ -18,75 +18,69 @@ $ telepresence connect --docker
 
 ### The telepresence curl command
 
-The network interface that is added when connecting using `telepresence connect --docker` will not be accessible directly from the host computer. It is confined to the telepresence daemon container, and there you should not expect to be able to curl your cluster resources directly.
+The network interface that is added when connecting using `telepresence connect --docker` will not be accessible
+directly from the host computer. It is confined to the telepresence daemon container.
 
-You can use the `telepresence curl` command to curl your cluster resources. This command will run curl in a docker container that shares the network of the daemon container.
+You can use the `telepresence curl` command to curl your cluster resources. It will run curl in a docker container that
+shares the network and DNS of the daemon container.
 
 ### The telepresence docker-run command
 
-The `telepresence docker-run` command will start a container that automatically shares the daemon container network. It
-will also circumvent Docker limitations that prevent containers that share another container's network to also make
-ports available using `--publish`, `--expose`, or adding additional networks using `--network`.
-
-To achieve this, Telepresence temporarily adds the necessary network to the containerized daemon. This allows the new
-container to join the  same network. Additionally, Telepresence starts extra socat containers to handle port mappings,
-ensuring that the desired ports are exposed to the local environment.
-
-> [!NOTE]
-> If you use `telepresence docker-run` to run a command that lasts longer than the `telepresence connect --docker` that
-> was in effect when it started, then it will lose its network. In other words, when using `telepresence docker-run`,
-> you must always rerun after a `telepresence quit`/`telepresence connect --docker`.
+You can use the `telepresence docker-run` command to start a container that shares the network and DNS of the daemon
+container.
 
 ### The replace/ingest/intercept/wiretap --docker-run flag
 
-If you want your replace, ingest, intercept, or wiretap to use another Docker container, you can use the `--docker-run` flag. It will establish the engagement,
-run your container in the foreground, then automatically end the engagement when the container exits.
+You can use the `--docker-run` flag if you want your `replace`, `ingest`, `intercept`, or `wiretap` to use a local
+handler that runs in a container. It will establish the engagement, run your container in the foreground, and then
+automatically end the engagement when the container exits. It will also ensure that the container shares the network
+and DNS of the daemon container.
 
-After establishing a connection to a cluster using `telepresence connect --docker`, the container started when using `--docker-run` will share
-the same network as the containerized daemon that maintains the connection. This enables seamless communication between your local development
-environment and the remote cluster.
+Please note that there your flags are divided into three groups when using `--docker-run`
 
-The `docker run` flags `--network`, `--publish`, or `--expose` are all available, just as with the `docker-run` command.
+- General flags and arguments passed to the telepresence `replace`, `ingest`, `intercept`, or `wiretap` such as the
+  workload name or the port to intercept. The `--docker-run` flag is in itself an example of a general flag.
+- Flags and arguments passed to the `docker run` command such as `--env A=B`.
+- Flags and arguments passed to the container that is started.
 
-```console
-$ telepresence replace <workload_name> --container <container_name> --docker-run -- <docker run flags> <image> <container arguments>
+The syntax of the command is
 ```
-OR
-```console
-$ telepresence ingest <workload_name> --container <container_name> --docker-run -- <docker run flags> <image> <container arguments>
+$ telepresence replace <general flags and args> -- <docker run flags and args> <image> <container flags and args>
 ```
-OR
-```console
-$ telepresence intercept <workload_name> --port <port> --docker-run -- <docker run flags> <image> <container arguments>
-```
-OR
-```console
-$ telepresence wiretap <workload_name> --port <port> --docker-run -- <docker run flags> <image> <container arguments>
-```
+
+In essence, everything after the stand-alone double dash `--` is sent to the `docker run`.
 
 The `--` separates flags intended for `telepresence replace/ingest/intercept/wiretap` from flags intended for `docker run`.
 
-It's recommended that you always use the `--docker-run` in combination with a connection started with the `telepresence connect --docker`,
-because that makes everything less intrusive:
+It's recommended that you always use the `--docker-run` in combination with a connection started with the
+`telepresence connect --docker`, because that makes everything less intrusive:
 
 - No admin user access is needed. Network modifications are confined to a Docker network.
 - There's no need for special filesystem mount software like MacFUSE or WinFSP. The volume mounts happen in the Docker engine.
 
 The following happens under the hood when both flags are in use:
 
-- The network of for the engagement handler will be set to the same as the network used by the daemon. This guarantees that the
-  handler can access the Telepresence VIF, and hence have access the cluster.
-- Volume mounts will be automatic and made using the Telemount Docker volume plugin so that all volumes exposed by the targeted
-  remote container are mounted on the local handler container.
+- The local container will use a network controlled by the Teleroute network driver. This guarantees that the handler
+  can access the Telepresence VIF, and hence access the cluster.
+- The local container is configured to use DNS provided by the daemon container.
+- Volume mounts will be automatic and made using the Telemount Docker volume plugin so that all volumes exposed by the
+  targeted remote container are mounted on the local handler container.
 - The environment of the remote container becomes the environment of the local handler container.
 
 ### The docker-build flag
 
-The `--docker-build <docker context>` and the repeatable `docker-build-opt key=value` flags enable container's to be build on the fly by the replace/ingest/intercept/wiretap command.
+The `--docker-build <docker context>` and the repeatable `docker-build-opt key=value` flags enable containers to be
+built on the fly by the replace/ingest/intercept/wiretap command.
 
-When using `--docker-build`, the image name used in the argument list must be verbatim `IMAGE`. The word acts as a placeholder and will be replaced by the ID of the image that is built.
+When using `--docker-build`, the image name used in the argument list must be verbatim `IMAGE`. The word acts as a
+placeholder and will be replaced by the ID of the image that is built. The presence of the word `IMAGE` is hence what
+separates the flags and arguments sent to `docker run` from the ones sent to the container.
 
 The `--docker-build` flag implies `--docker-run`.
+
+### The docker-debug flag
+
+This flag is just like --docker-build, but allows a debugger to run inside the container with relaxed security.
 
 ## Using docker-run flag without docker
 
@@ -125,7 +119,7 @@ Telepresence will automatically pass some relevant flags to Docker to connect th
 When used with a container based daemon:
 - `--rm` Mandatory, because the volume mounts cannot be removed until the container is removed.
 - `-v <telemount volume>:<docker mount dir>` Volume mount specifications propagated from the engaged container
-- `--network container:<name of containerized daemon>` Network is shared with the containerized daemon
+- `--network <name of containerized daemon>` Network is shared with the containerized daemon
 
 When used with a daemon that isn't container based:
 - `--dns-search tel2-search` Enables single label name lookups in the connected namespace

@@ -158,7 +158,7 @@ func (e linkNotFound) Unwrap() error {
 }
 
 func (ns *networkState) createBridge() (err error) {
-	bn := fmt.Sprintf("tel-%08x", rand.Int31())
+	bn := fmt.Sprintf("tbrs-%08x", rand.Int31())
 	err = netlink.LinkAdd(&netlink.Bridge{
 		LinkAttrs: netlink.LinkAttrs{
 			Name: bn,
