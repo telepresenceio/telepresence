@@ -45,6 +45,12 @@ A "Legacy Telepresence command used" warning has been printed for several years 
 command.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Helm chart schema type for nodeSelector was incorrect</div></div>
+<div style="margin-left: 15px">
+
+The Helm chart schema for the `nodeSelector` value was incorrect. Kubernetes defines different types for nodeSelector (inside PodSpec objects) and NodeSelector (inside NodeAffinity, VolumeNodeAffinity and a bunch of other places). The schema was changed to use the correct type. The name `nodeSelector` is still used in the Helm chart so this change is backwards compatible.
+</div>
+
 ## Version 2.22.4 <span style="font-size: 16px;">(April 26)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Don't require internet access when installing the traffic-manager using Helm</div></div>
 <div style="margin-left: 15px">
@@ -145,7 +151,7 @@ Key differences between `replace` and `intercept`:
 
 1. **Scope:** The `replace` command targets and affects an entire container, impacting all its traffic, while
    an `intercept` targets specific services and/or service/container ports.
-2. **Port Declarations:** Remote ports specified using the `--port` flag are container ports. 
+2. **Port Declarations:** Remote ports specified using the `--port` flag are container ports.
 3. **No Default Port:** A `replace` can occur without intercepting any ports.
 4. **Container State:** During a `replace`, the original container is no longer active within the cluster.
 
