@@ -576,7 +576,9 @@ $defs:
   localObjectReference:
     $ref: "#/definitions/io.k8s.api.core.v1.LocalObjectReference"
   nodeSelector:
-    $ref: "#/definitions/io.k8s.api.core.v1.NodeSelector"
+    type: object
+    additionalProperties:
+      type: string
   resourceRequirements:
     $ref: "#/definitions/io.k8s.api.core.v1.ResourceRequirements"
   podSecurityContext:
