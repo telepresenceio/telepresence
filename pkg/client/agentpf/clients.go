@@ -98,7 +98,13 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		conn, cli, _, err := k8sclient.ConnectToAgent(ctx, dialCtx, ai.PodName, ai.Namespace, uint16(ai.ApiPort), types.UID(ai.PodId))
 		if err != nil {
 			ac.connectErr = err
+
+			// There's a risk for deadlock here, because of the Range iteration of the map that performs cancel. This cancel will block
+			// because we're holding the lock now, and since the Range iteration holds a lock for the entry that we're about to delete,
+			// that delete will block. So we let a potential cancel call continue by unlocking before we delete.
+			ac.Unlock()
 			ac.remove()
+			ac.Lock() // Must of course lock again to prevent panic by the pending unlock.
 			return nil, err
 		}
 
