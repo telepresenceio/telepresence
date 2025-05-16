@@ -34,6 +34,11 @@ items:
           nodeSelector (inside PodSpec objects) and NodeSelector (inside NodeAffinity, VolumeNodeAffinity and a
           bunch of other places). The schema was changed to use the correct type. The name `nodeSelector` is still
           used in the Helm chart so this change is backwards compatible.
+      - type: bugfix
+        title: Pods with container ports named the same caused intercept to fail
+        body: >-
+          Intercept container ports now have numbers appended to them if there are multiple
+          ports from multiple containers with the same name.
   - version: 2.22.4
     date: 2025-04-26
     notes:
