@@ -26,6 +26,7 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 	ports := make([]core.ContainerPort, 0, 5)
 	confCns := a.configuredContainers(ctx)
 
+	names := make(map[string]int)
 	a.eachConfiguredContainer(confCns, func(app *core.Container, cc *Container) {
 		switch cc.Replace {
 		case ReplacePolicyContainer:
@@ -33,8 +34,27 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 			ports = append(ports, app.Ports...)
 		case ReplacePolicyIntercept:
 			for _, ic := range PortUniqueIntercepts(cc) {
+				name := ic.ContainerPortName
+
+				if _, ok := names[name]; ok {
+					// if name already exists, append a number to it
+					names[ic.ContainerPortName]++
+					// convert number to string
+					number := "-" + strconv.Itoa(names[ic.ContainerPortName])
+					// if string length of name plus number is greater than 15
+					if len(ic.ContainerPortName)+len(number) > 15 {
+						// truncate name to 15 characters
+						name = ic.ContainerPortName[:15-len(number)] + number
+					} else {
+						name = ic.ContainerPortName + number
+					}
+				} else {
+					name = ic.ContainerPortName
+					names[ic.ContainerPortName] = 1
+				}
+
 				ports = append(ports, core.ContainerPort{
-					Name:          ic.ContainerPortName,
+					Name:          name,
 					ContainerPort: int32(ic.AgentPort),
 					Protocol:      ic.Protocol,
 				})
