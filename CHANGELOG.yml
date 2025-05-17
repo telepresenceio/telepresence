@@ -38,7 +38,8 @@ items:
         title: Pods with container ports named the same caused intercept to fail
         body: >-
           Intercept container ports now have numbers appended to them if there are multiple
-          ports from multiple containers with the same name.
+          ports from multiple containers with the same name. This bugfix works around an issue
+          where Kubernetes allows multiple port definitions in a pod spec to have the same name.
   - version: 2.22.4
     date: 2025-04-26
     notes:
