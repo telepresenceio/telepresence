@@ -36,7 +36,9 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 			for _, ic := range PortUniqueIntercepts(cc) {
 				name := ic.ContainerPortName
 
-				if _, ok := names[name]; ok {
+				// We don't want to apply duplication logic to empty strings
+				// as - is not a valid starting character for port names.
+				if _, ok := names[name]; ok && ic.ContainerPortName != "" {
 					// if name already exists, append a number to it
 					names[ic.ContainerPortName]++
 					// convert number to string
@@ -48,9 +50,11 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 					} else {
 						name = ic.ContainerPortName + number
 					}
-				} else {
+				} else if ic.ContainerPortName != "" {
 					name = ic.ContainerPortName
 					names[ic.ContainerPortName] = 1
+				} else {
+					name = ic.ContainerPortName
 				}
 
 				ports = append(ports, core.ContainerPort{
