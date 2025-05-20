@@ -36,21 +36,23 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 				// We don't want to apply duplication logic to empty strings
 				// as - is not a valid starting character for port names.
 				if name != "" {
-					if _, ok := names[name]; ok {
+					if n, ok := names[name]; ok {
 						// if name already exists, append a number to it
-						names[ic.ContainerPortName]++
-						// convert number to string
-						number := "-" + strconv.Itoa(names[ic.ContainerPortName])
+
+						n++
+						names[name] = n
+
+						// convert to numeric name suffix
+						suffix := "-" + strconv.Itoa(n)
 						// if string length of name plus number is greater than 15
-						if len(ic.ContainerPortName)+len(number) > 15 {
+						if len(name) + len(suffix) > 15 {
 							// truncate name to 15 characters
-							name = ic.ContainerPortName[:15-len(number)] + number
-						} else {
-							name = ic.ContainerPortName + number
+							name = name[:15-len(suffix)]
 						}
+
+						name += suffix
 					} else {
-						name = ic.ContainerPortName
-						names[ic.ContainerPortName] = 1
+						names[name] = 1
 					}
 				}
 
