@@ -80,6 +80,9 @@ func SetLinkDNS(c context.Context, networkIndex int, ips ...net.IP) error {
 	})
 }
 
+// Set at an arbitrary value.
+const maxDomainsPerBatch = 100
+
 func SetLinkDomains(c context.Context, networkIndex int, domains ...string) error {
 	return withDBus(c, func(conn *dbus.Conn) error {
 		dds := make([]resolvedDomain, 0, len(domains))
@@ -94,8 +97,20 @@ func SetLinkDomains(c context.Context, networkIndex int, domains ...string) erro
 			}
 			dds = append(dds, resolvedDomain{Name: domain, RoutingOnly: routing})
 		}
-		return conn.Object("org.freedesktop.resolve1", "/org/freedesktop/resolve1").CallWithContext(
-			c, "org.freedesktop.resolve1.Manager.SetLinkDomains", 0, int32(networkIndex), dds).Err
+		for i := 0; i < len(dds); i += maxDomainsPerBatch {
+			end := i + maxDomainsPerBatch
+			if end > len(dds) {
+				end = len(dds)
+			}
+			if err := conn.Object("org.freedesktop.resolve1", "/org/freedesktop/resolve1").CallWithContext(
+				c, "org.freedesktop.resolve1.Manager.SetLinkDomains", 0, int32(networkIndex), dds[i:end]).Err; err != nil {
+				return fmt.Errorf(
+					"SetLinkDomains failed for network index %d, batch %d-%d (count=%d): %w",
+					networkIndex, i, end, end-i, err,
+				)
+			}
+		}
+		return nil
 	})
 }
 

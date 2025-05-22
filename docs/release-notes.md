@@ -51,6 +51,14 @@ command.
 The Helm chart schema for the `nodeSelector` value was incorrect. Kubernetes defines different types for nodeSelector (inside PodSpec objects) and NodeSelector (inside NodeAffinity, VolumeNodeAffinity and a bunch of other places). The schema was changed to use the correct type. The name `nodeSelector` is still used in the Helm chart so this change is backwards compatible.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Telepresence fails to connect with many namespaces due to DBus message size limit</div></div>
+<div style="margin-left: 15px">
+
+On Ubuntu-based Linux machines, Telepresence failed to connect when the user had access to a large number of Kubernetes namespaces. This was caused by exceeding the system's DBus message size limit, which resulted in misleading errors like "unable to determine the traffic-manager namespace" or "User Daemon: Not running, Root Daemon: Not running". The root cause was an excessively long argument list generated when querying all namespaces, overwhelming DBus and leading to truncated or unclear error messages.
+A workaround using `--mapped-namespaces` was possible, but it degraded stability and usability by requiring frequent manual reconnections and maintenance of namespace lists. This fix ensures that Telepresence can handle environments with many namespaces gracefully by chunking queries or managing requests internally to stay within DBus limits.
+This issue affected only Linux environments (Ubuntu 22.04 and 24.04) and was not reproducible on macOS.
+</div>
+
 ## Version 2.22.4 <span style="font-size: 16px;">(April 26)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Don't require internet access when installing the traffic-manager using Helm</div></div>
 <div style="margin-left: 15px">
