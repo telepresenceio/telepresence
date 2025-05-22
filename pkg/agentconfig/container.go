@@ -45,7 +45,7 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 						// convert to numeric name suffix
 						suffix := "-" + strconv.Itoa(n)
 						// if string length of name plus number is greater than 15
-						if len(name) + len(suffix) > 15 {
+						if len(name)+len(suffix) > 15 {
 							// truncate name to 15 characters
 							name = name[:15-len(suffix)]
 						}
