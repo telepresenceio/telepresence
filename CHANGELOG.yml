@@ -83,6 +83,11 @@ items:
           bunch of other places). The schema was changed to use the correct type. The name `nodeSelector` is still
           used in the Helm chart so this change is backwards compatible.
       - type: bugfix
+        title: Don't include k8s-defs.json to chart package
+        body: >-
+          The k8s-defs.json was unnecessarily included to the Helm chart package and this increased the Helm release
+          secret size so much that it could prevent installation of the Helm chart depending on k8s settings. To fix
+          this k8s-defs.json is not included to the Helm chart anymore.
         title: Pods with container ports named the same caused intercept to fail
         body: >-
           Intercept container ports now have numbers appended to them if there are multiple
