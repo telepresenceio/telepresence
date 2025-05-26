@@ -55,6 +55,10 @@ The Helm chart schema for the `nodeSelector` value was incorrect. Kubernetes def
 <div style="margin-left: 15px">
 
 The k8s-defs.json was unnecessarily included to the Helm chart package and this increased the Helm release secret size so much that it could prevent installation of the Helm chart depending on k8s settings. To fix this k8s-defs.json is not included to the Helm chart anymore.
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pods with container ports named the same caused intercept to fail</div></div>
+<div style="margin-left: 15px">
+
+Intercept container ports now have numbers appended to them if there are multiple ports from multiple containers with the same name. This bugfix works around an issue where Kubernetes allows multiple port definitions in a pod spec to have the same name.
 </div>
 
 ## Version 2.22.4 <span style="font-size: 16px;">(April 26)</span>

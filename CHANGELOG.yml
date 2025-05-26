@@ -88,6 +88,11 @@ items:
           The k8s-defs.json was unnecessarily included to the Helm chart package and this increased the Helm release
           secret size so much that it could prevent installation of the Helm chart depending on k8s settings. To fix
           this k8s-defs.json is not included to the Helm chart anymore.
+        title: Pods with container ports named the same caused intercept to fail
+        body: >-
+          Intercept container ports now have numbers appended to them if there are multiple
+          ports from multiple containers with the same name. This bugfix works around an issue
+          where Kubernetes allows multiple port definitions in a pod spec to have the same name.
   - version: 2.22.4
     date: 2025-04-26
     notes:
