@@ -32,9 +32,9 @@ rules:
   - list
   - get
   - watch
+{{- if .agentInjector.enabled }}
 - apiGroups:
   - ""
-{{- if .agentInjector.enabled }}
   resources:
   - pods/eviction
   verbs:
