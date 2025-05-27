@@ -85,8 +85,6 @@ jobs:
       - name: Start minikube
         if: runner.os == 'Linux'
         uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: v1.32.5
       - name: Build client
         run: make build
       - name: Run integration tests
