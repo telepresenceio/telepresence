@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"slices"
 	"sync"
 
@@ -94,14 +93,14 @@ func (ss *clusterInfoSubscribers) subscriberLoop(ctx context.Context, rec interf
 }
 
 func clusterInfoEqual(a, b *rpc.ClusterInfo) bool {
-	if len(a.PodSubnets) != len(b.PodSubnets) ||
-		a.ServiceSubnet != b.ServiceSubnet ||
-		a.Dns.ClusterDomain != b.Dns.ClusterDomain ||
-		!net.IP(a.Dns.KubeIp).Equal(b.Dns.KubeIp) {
+	if len(a.PodSubnets) != len(b.PodSubnets) || a.Dns.ClusterDomain != b.Dns.ClusterDomain {
 		return false
 	}
 	ipNetEQ := func(a, b *rpc.IPNet) bool {
 		return a.Mask == b.Mask && bytes.Equal(a.Ip, b.Ip)
+	}
+	if !slices.EqualFunc(a.ServiceCidrs, b.ServiceCidrs, bytes.Equal) {
+		return false
 	}
 	if !slices.EqualFunc(a.PodSubnets, b.PodSubnets, ipNetEQ) {
 		return false

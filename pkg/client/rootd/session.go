@@ -38,6 +38,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/bwcompat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
@@ -117,8 +118,8 @@ type Session struct {
 	// dnsLocalAddr is the address of the local DNS Service.
 	dnsLocalAddr *net.UDPAddr
 
-	// serviceSubnet reported by the traffic-manager
-	serviceSubnet netip.Prefix
+	// serviceSubnets reported by the traffic-manager
+	serviceSubnets []netip.Prefix
 
 	// podSubnets reported by the traffic-manager
 	podSubnets []netip.Prefix
@@ -637,11 +638,9 @@ func (s *Session) createSubnetForDNSOnly(ctx context.Context, mgrInfo *manager.C
 	avoid = append(avoid, s.alsoProxySubnets...)
 	avoid = append(avoid, s.neverProxySubnets...)
 
-	// Avoid the service subnet. It might be mapped with iptables (if running bare-metal) and
+	// Avoid the service subnets. They might be mapped with iptables (if running bare-metal) and
 	// hence invisible when listing known routes.
-	if mgrInfo.ServiceSubnet != nil {
-		avoid = append(avoid, iputil.RPCToPrefix(mgrInfo.ServiceSubnet))
-	}
+	avoid = append(avoid, s.serviceSubnets...)
 
 	// Avoid the pod subnets. They are probably visible as known routes, but we add them to
 	// the avoid table to be sure.
@@ -717,28 +716,29 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		return nil
 	}
 	dlog.Debugf(ctx, "WatchClusterInfo update")
-	if mgrInfo.Dns == nil {
-		// Older traffic-manager. Use deprecated mgrInfo fields for DNS
-		mgrInfo.Dns = &manager.DNS{
-			ClusterDomain: mgrInfo.ClusterDomain,
-		}
-	}
+	bwcompat.FixLegacyClusterInfo(mgrInfo)
+
 	if mgrInfo.Routing == nil {
 		mgrInfo.Routing = &manager.Routing{}
 	}
 
-	s.serviceSubnet = netip.Prefix{}
+	s.serviceSubnets = nil
 	s.podSubnets = nil
 
 	var subnets []netip.Prefix
+
 	if s.proxyClusterSvcs {
-		if mgrInfo.ServiceSubnet != nil {
-			cidr := iputil.RPCToPrefix(mgrInfo.ServiceSubnet)
+		for _, sb := range mgrInfo.ServiceCidrs {
+			var cidr netip.Prefix
+			err = cidr.UnmarshalBinary(sb)
+			if err != nil {
+				return err
+			}
 			if s.shouldProxySubnet(ctx, "service", cidr) {
 				dlog.Infof(ctx, "Adding service subnet %s", cidr)
 				subnets = append(subnets, cidr)
 			}
-			s.serviceSubnet = cidr
+			s.serviceSubnets = append(s.serviceSubnets, cidr)
 		}
 	}
 
@@ -1193,10 +1193,8 @@ func (s *Session) consolidateProxyViaWorkloads(ctx context.Context) []string {
 			desiredVips[pvx.Workload] = append(desiredVips[pvx.Workload], s.podSubnets...)
 			snCount += len(s.podSubnets)
 		case "service":
-			if s.serviceSubnet.IsValid() {
-				desiredVips[pvx.Workload] = append(desiredVips[pvx.Workload], s.serviceSubnet)
-				snCount++
-			}
+			desiredVips[pvx.Workload] = append(desiredVips[pvx.Workload], s.serviceSubnets...)
+			snCount += len(s.serviceSubnets)
 		default:
 			sn, err := netip.ParsePrefix(pvx.Subnet)
 			if err != nil {
