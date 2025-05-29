@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: kube-registry-ctl
+  namespace: kube-system
+  labels:
+    k8s-app: kube-registry
+    controller: yep
+spec:
+  replicas: 1
+  selector:
+    k8s-app: kube-registry
+    controller: yep
+  template:
+    metadata:
+      labels:
+        k8s-app: kube-registry
+        controller: yep
+    spec:
+      containers:
+        - name: registry
+          image: registry:2
+          resources:
+            # keep request = limit to keep this container in guaranteed class
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          env:
+            - name: REGISTRY_HTTP_ADDR
+              value: :5000
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+          volumeMounts:
+            - name: image-store
+              mountPath: /var/lib/registry
+          ports:
+            - containerPort: 5000
+              name: registry
+              protocol: TCP
+      volumes:
+        - name: image-store
+          hostPath:
+            path: /data/registry/
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-registry
+  namespace: kube-system
+  labels:
+    k8s-app: kube-registry
+spec:
+  selector:
+    k8s-app: kube-registry
+  ports:
+    - name: registry
+      port: 5000
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-registry-proxy
+  namespace: kube-system
+  labels:
+    k8s-app: kube-registry
+    kubernetes.io/cluster-service: "true"
+spec:
+  selector:
+    matchLabels:
+      k8s-app: kube-registry-pod
+  template:
+    metadata:
+      labels:
+        k8s-app: kube-registry-pod
+    spec:
+      containers:
+        - name: kube-registry-proxy
+          image: gcr.io/google_containers/kube-registry-proxy:0.4
+          resources:
+            limits:
+              cpu: 100m
+              memory: 50Mi
+          env:
+            - name: REGISTRY_HOST
+              value: kube-registry.kube-system.svc.cluster.local
+            - name: REGISTRY_PORT
+              value: "5000"
+          ports:
+            - name: registry
+              containerPort: 80
+              hostPort: 5000

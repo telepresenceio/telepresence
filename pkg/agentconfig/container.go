@@ -24,14 +24,40 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 	ports := make([]core.ContainerPort, 0, 5)
 	confCns := a.configuredContainers(ctx)
 
+	names := make(map[string]int)
 	a.eachConfiguredContainer(confCns, func(app *core.Container, cc *Container) {
 		if cc.Replace == ReplacePolicyContainer {
 			// Simply inherit the ports of the replaced container
 			ports = append(ports, app.Ports...)
 		} else if cc.Replace == ReplacePolicyIntercept {
 			for _, ic := range PortUniqueIntercepts(cc) {
+				name := ic.ContainerPortName
+
+				// We don't want to apply duplication logic to empty strings
+				// as - is not a valid starting character for port names.
+				if name != "" {
+					if n, ok := names[name]; ok {
+						// if name already exists, append a number to it
+
+						n++
+						names[name] = n
+
+						// convert to numeric name suffix
+						suffix := "-" + strconv.Itoa(n)
+						// if string length of name plus number is greater than 15
+						if len(name)+len(suffix) > 15 {
+							// truncate name to 15 characters
+							name = name[:15-len(suffix)]
+						}
+
+						name += suffix
+					} else {
+						names[name] = 1
+					}
+				}
+
 				ports = append(ports, core.ContainerPort{
-					Name:          ic.ContainerPortName,
+					Name:          name,
 					ContainerPort: int32(ic.AgentPort),
 					Protocol:      ic.Protocol,
 				})

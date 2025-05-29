@@ -178,6 +178,8 @@ func WriteChart(helmChartDir DirType, out io.Writer, chartName, version string, 
 			if err = addFile(tarWriter, baseDir, filename, content); err != nil {
 				return err
 			}
+		case fmt.Sprintf("%s/k8s-defs.json", chartName):
+			// Don't include k8s-defs.json to the chart package
 		default:
 			content, err := fs.ReadFile(baseDir, filename)
 			if err != nil {

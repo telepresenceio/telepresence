@@ -98,15 +98,19 @@ func NewService(ctx context.Context, configWatcher config.Watcher) (Service, *dg
 		configWatcher: configWatcher,
 	}
 
+	var err error
 	if managerutil.AgentInjectorEnabled(ctx) {
-		var err error
 		ctx, err = WithAgentImageRetrieverFunc(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 		if err != nil {
 			dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
 		}
 	}
 	// These are context dependent so build them once the pool is up
-	ret.clusterInfo = cluster.NewInfo(ctx)
+	ret.clusterInfo, err = cluster.NewInfo(ctx)
+	if err != nil {
+		dlog.Errorf(ctx, "unable to initialize cluster info: %v", err)
+		return nil, nil, err
+	}
 	ret.state = state.NewStateFunc(ctx)
 
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
