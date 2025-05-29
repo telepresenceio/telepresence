@@ -537,7 +537,11 @@ message IPNet {
 // ClusterInfo contains information that the root daemon needs in order to
 // establish outbound traffic to the cluster.
 message ClusterInfo {
-  // service_subnet is the Kubernetes service subnet
+  // The service_cidrs reported by NetworkingV1().ServiceCIDRs() in netip.Prefix binary form.
+  repeated bytes service_cidrs = 1;
+
+  // service_subnet is the Kubernetes service subnet.
+  // Deprecated: use service_cidrs
   IPNet service_subnet = 2;
 
   // pod_subnets are the subnets used for Kubenetes pods.
@@ -564,13 +568,9 @@ message ClusterInfo {
   // DNS configuration
   DNS dns = 7;
 
-  // kube_dns_ip is the IP address of the kube-dns.kube-system service,
-  // Deprecated: Use dns.kube_ip
-  bytes kube_dns_ip = 1;
-
   // cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
   // Deprecated: Use dns.cluster_domain
-  string cluster_domain = 4;
+  reserved 4;
 }
 
 message Routing {

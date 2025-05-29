@@ -135,19 +135,19 @@ agent:
 ################################################################################
 ## Telepresence API Server Configuration
 ################################################################################
-telepresenceAPI:
+telepresenceAPI: {}
   # The port on agent's localhost where the API service can be found
   # Default: 0
-  port: 0
+  # port: 0
 
 ################################################################################
 ## Prometheus Server Configuration
 ################################################################################
-prometheus:
+prometheus: {}
   # Set this port number to enable a prometheus metrics http server for the
   # traffic manager
   # Default: 0
-  port: 0
+  # port: 0
 
 # Values specific to the helm chart hooks for managing upgrade/deleting
 hooks:

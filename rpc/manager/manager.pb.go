@@ -2938,7 +2938,10 @@ func (x *IPNet) GetMask() int32 {
 // establish outbound traffic to the cluster.
 type ClusterInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// service_subnet is the Kubernetes service subnet
+	// The service_cidrs reported by NetworkingV1().ServiceCIDRs() in netip.Prefix binary form.
+	ServiceCidrs [][]byte `protobuf:"bytes,1,rep,name=service_cidrs,json=serviceCidrs,proto3" json:"service_cidrs,omitempty"`
+	// service_subnet is the Kubernetes service subnet.
+	// Deprecated: use service_cidrs
 	ServiceSubnet *IPNet `protobuf:"bytes,2,opt,name=service_subnet,json=serviceSubnet,proto3" json:"service_subnet,omitempty"`
 	// pod_subnets are the subnets used for Kubenetes pods.
 	PodSubnets []*IPNet `protobuf:"bytes,3,rep,name=pod_subnets,json=podSubnets,proto3" json:"pod_subnets,omitempty"`
@@ -2955,13 +2958,7 @@ type ClusterInfo struct {
 	// Router configuration
 	Routing *Routing `protobuf:"bytes,6,opt,name=routing,proto3" json:"routing,omitempty"`
 	// DNS configuration
-	Dns *DNS `protobuf:"bytes,7,opt,name=dns,proto3" json:"dns,omitempty"`
-	// kube_dns_ip is the IP address of the kube-dns.kube-system service,
-	// Deprecated: Use dns.kube_ip
-	KubeDnsIp []byte `protobuf:"bytes,1,opt,name=kube_dns_ip,json=kubeDnsIp,proto3" json:"kube_dns_ip,omitempty"`
-	// cluster_domain is the domain of the cluster, ending with a dot, e.g. "cluster.local."
-	// Deprecated: Use dns.cluster_domain
-	ClusterDomain string `protobuf:"bytes,4,opt,name=cluster_domain,json=clusterDomain,proto3" json:"cluster_domain,omitempty"`
+	Dns           *DNS `protobuf:"bytes,7,opt,name=dns,proto3" json:"dns,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2994,6 +2991,13 @@ func (x *ClusterInfo) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ClusterInfo.ProtoReflect.Descriptor instead.
 func (*ClusterInfo) Descriptor() ([]byte, []int) {
 	return file_manager_manager_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ClusterInfo) GetServiceCidrs() [][]byte {
+	if x != nil {
+		return x.ServiceCidrs
+	}
+	return nil
 }
 
 func (x *ClusterInfo) GetServiceSubnet() *IPNet {
@@ -3057,20 +3061,6 @@ func (x *ClusterInfo) GetDns() *DNS {
 		return x.Dns
 	}
 	return nil
-}
-
-func (x *ClusterInfo) GetKubeDnsIp() []byte {
-	if x != nil {
-		return x.KubeDnsIp
-	}
-	return nil
-}
-
-func (x *ClusterInfo) GetClusterDomain() string {
-	if x != nil {
-		return x.ClusterDomain
-	}
-	return ""
 }
 
 type Routing struct {
@@ -4414,8 +4404,9 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\bresponse\x18\x03 \x01(\v2!.telepresence.manager.DNSResponseR\bresponse\"+\n" +
 	"\x05IPNet\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\fR\x02ip\x12\x12\n" +
-	"\x04mask\x18\x02 \x01(\x05R\x04mask\"\x8c\x04\n" +
-	"\vClusterInfo\x12B\n" +
+	"\x04mask\x18\x02 \x01(\x05R\x04mask\"\xf0\x03\n" +
+	"\vClusterInfo\x12#\n" +
+	"\rservice_cidrs\x18\x01 \x03(\fR\fserviceCidrs\x12B\n" +
 	"\x0eservice_subnet\x18\x02 \x01(\v2\x1b.telepresence.manager.IPNetR\rserviceSubnet\x12<\n" +
 	"\vpod_subnets\x18\x03 \x03(\v2\x1b.telepresence.manager.IPNetR\n" +
 	"podSubnets\x12$\n" +
@@ -4426,9 +4417,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	" \x01(\x05R\x0finjectorSvcPort\x12*\n" +
 	"\x11injector_svc_host\x18\v \x01(\tR\x0finjectorSvcHost\x127\n" +
 	"\arouting\x18\x06 \x01(\v2\x1d.telepresence.manager.RoutingR\arouting\x12+\n" +
-	"\x03dns\x18\a \x01(\v2\x19.telepresence.manager.DNSR\x03dns\x12\x1e\n" +
-	"\vkube_dns_ip\x18\x01 \x01(\fR\tkubeDnsIp\x12%\n" +
-	"\x0ecluster_domain\x18\x04 \x01(\tR\rclusterDomain\"\xfa\x01\n" +
+	"\x03dns\x18\a \x01(\v2\x19.telepresence.manager.DNSR\x03dnsJ\x04\b\x04\x10\x05\"\xfa\x01\n" +
 	"\aRouting\x12I\n" +
 	"\x12also_proxy_subnets\x18\x01 \x03(\v2\x1b.telepresence.manager.IPNetR\x10alsoProxySubnets\x12K\n" +
 	"\x13never_proxy_subnets\x18\x02 \x03(\v2\x1b.telepresence.manager.IPNetR\x11neverProxySubnets\x12W\n" +

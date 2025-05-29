@@ -75,6 +75,21 @@ items:
           A "Legacy Telepresence command used" warning has been printed for several years now, and the mapping for the
           `--swap-deployment` was the `intercept` command, which is very confusing today since we now have the `replace`
           command.
+  - version: 2.22.5
+    date: 2025-05-29
+    notes:
+      - type: bugfix
+        title: Unable to correctly determine service CIDR with Kubernetes >= 1.33
+        body: >-
+          Starting with Kubernetes 1.33, the strategy of extracting the cluster's service CIDR from an error message no
+          longer works because the error message has changed. The root cause for this is that Kubernetes introduced the
+          ability to use [Multiple Service CIDRs](https://gist.github.com/aojea/c20eb117bf1c1214f8bba26c495be9c7). Since
+          `ServiceCIDR` is now a resource, it can be easily retrieved (and modified) using standard Kubernetes client
+          API calls, and this is what the traffic manager will use going forward.
+
+          The fix required an addition to the traffic-manager's RBAC, granting it sufficient permissions to list
+          `networking.k8s.io/servicecidrs`. A future enhancement will allow the traffic manager to watch for service
+          CIDR changes.
       - type: bugfix
         title: Helm chart schema type for nodeSelector was incorrect
         body: >-
@@ -83,16 +98,17 @@ items:
           bunch of other places). The schema was changed to use the correct type. The name `nodeSelector` is still
           used in the Helm chart so this change is backwards compatible.
       - type: bugfix
-        title: Don't include k8s-defs.json to chart package
-        body: >-
-          The k8s-defs.json was unnecessarily included to the Helm chart package and this increased the Helm release
-          secret size so much that it could prevent installation of the Helm chart depending on k8s settings. To fix
-          this k8s-defs.json is not included to the Helm chart anymore.
         title: Pods with container ports named the same caused intercept to fail
         body: >-
           Intercept container ports now have numbers appended to them if there are multiple
           ports from multiple containers with the same name. This bugfix works around an issue
           where Kubernetes allows multiple port definitions in a pod spec to have the same name.
+      - type: bugfix
+        title: Don't include k8s-defs.json to chart package
+        body: >-
+          The k8s-defs.json was unnecessarily included to the Helm chart package and this increased the Helm release
+          secret size so much that it could prevent installation of the Helm chart depending on k8s settings. To fix
+          this k8s-defs.json is not included to the Helm chart anymore.
   - version: 2.22.4
     date: 2025-04-26
     notes:

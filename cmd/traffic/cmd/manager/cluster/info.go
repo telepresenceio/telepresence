@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	supportedKubeAPIVersion = "1.17.0"
+	supportedKubeAPIVersion = "1.28.0"
 )
 
 type Info interface {
@@ -66,7 +66,7 @@ type info struct {
 
 const IDZero = "00000000-0000-0000-0000-000000000000"
 
-func NewInfo(ctx context.Context) Info {
+func NewInfo(ctx context.Context) (Info, error) {
 	env := managerutil.GetEnv(ctx)
 	oi := info{}
 	ki := k8sapi.GetK8sInterface(ctx)
@@ -75,21 +75,23 @@ func NewInfo(ctx context.Context) Info {
 	dc := ki.Discovery()
 	info, err := dc.ServerVersion()
 	if err != nil {
-		dlog.Errorf(ctx, "error getting server information: %s", err)
-	} else {
-		gitVer, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
-		if err != nil {
-			dlog.Errorf(ctx, "error converting version %s to semver: %s", info.GitVersion, err)
-		}
-		supGitVer, err := semver.Parse(supportedKubeAPIVersion)
-		if err != nil {
-			dlog.Errorf(ctx, "error converting known version %s to semver: %s", supportedKubeAPIVersion, err)
-		}
-		if gitVer.LT(supGitVer) {
-			dlog.Errorf(ctx,
-				"kubernetes server versions older than %s are not supported, using %s .",
-				supportedKubeAPIVersion, info.GitVersion)
-		}
+		return nil, fmt.Errorf("error getting Kubernetes server information: %w", err)
+	}
+
+	k8sVersion, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing Kubernetes server information %q: %w", info.GitVersion, err)
+	}
+
+	dlog.Infof(ctx, "Kubernetes server version %s", k8sVersion)
+	supGitVer, err := semver.Parse(supportedKubeAPIVersion)
+	if err != nil {
+		dlog.Errorf(ctx, "error converting known version %s to semver: %s", supportedKubeAPIVersion, err)
+	}
+	if k8sVersion.LT(supGitVer) {
+		dlog.Errorf(ctx,
+			"kubernetes server versions older than %s might work OK but are not supported, using %s .",
+			supportedKubeAPIVersion, k8sVersion)
 	}
 
 	client := ki.CoreV1()
@@ -113,50 +115,78 @@ func NewInfo(ctx context.Context) Info {
 
 	dlog.Infof(ctx, "Enabled support for the following workload kinds: %v", env.EnabledWorkloadKinds)
 
-	// make an attempt to create a service with ClusterIP that is out of range and then
-	// check the error message for the correct range as suggested tin the second answer here:
-	//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
-	// This requires an additional permission to create a service, which the traffic-manager
-	// should have.
-	svc := corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind: "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: env.ManagerNamespace,
-			Name:      "t2-tst-dummy",
-		},
-		Spec: corev1.ServiceSpec{
-			Ports:     []corev1.ServicePort{{Port: 443}},
-			ClusterIP: dummyIP,
-		},
-	}
-
-	if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, metav1.CreateOptions{}); err != nil {
-		svcCIDRrx := regexp.MustCompile(`range of valid IPs is (.*)$`)
-		if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
-			if cidr, err := netip.ParsePrefix(match[1]); err != nil {
-				dlog.Errorf(ctx, "unable to parse service CIDR %q", match[1])
-			} else {
-				dlog.Infof(ctx, "Extracting service subnet %v from create service error message", cidr)
-				oi.ServiceSubnet = iputil.PrefixToRPC(cidr)
-			}
+	if k8sVersion.GE(semver.MustParse("1.33.0")) { // The ServiceCIDRs() API was introduced in version 1.33
+		svcCIDRs, err := ki.NetworkingV1().ServiceCIDRs().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			dlog.Errorf(ctx, "error listing service CIDRs: %v", err)
 		} else {
-			dlog.Errorf(ctx, "unable to extract service subnet from error message %q", err.Error())
+			itms := svcCIDRs.Items
+			dlog.Debugf(ctx, "Found %d service CIDRs", len(itms))
+			for _, itm := range itms {
+				for _, cidr := range itm.Spec.CIDRs {
+					dlog.Infof(ctx, "Found service CIDR %s", cidr)
+					pfx, err := netip.ParsePrefix(cidr)
+					if err != nil {
+						dlog.Errorf(ctx, "error parsing service CIDR %s: %s", cidr, err)
+						continue
+					}
+					sc, _ := pfx.MarshalBinary()
+					oi.ServiceCidrs = append(oi.ServiceCidrs, sc)
+				}
+			}
+		}
+	} else {
+		// make an attempt to create a service with ClusterIP that is out of range and then
+		// check the error message for the correct range as suggested tin the second answer here:
+		//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
+		// This requires an additional permission to create a service, which the traffic-manager
+		// should have.
+		svc := corev1.Service{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "Service",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: env.ManagerNamespace,
+				Name:      "t2-tst-dummy",
+			},
+			Spec: corev1.ServiceSpec{
+				Ports:     []corev1.ServicePort{{Port: 443}},
+				ClusterIP: dummyIP,
+			},
+		}
+		if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, metav1.CreateOptions{}); err != nil {
+			svcCIDRrx := regexp.MustCompile(`range of valid IPs is (.*)$`)
+			if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
+				if pfx, err := netip.ParsePrefix(match[1]); err != nil {
+					dlog.Errorf(ctx, "unable to parse service CIDR %q", match[1])
+				} else {
+					dlog.Infof(ctx, "Extracting service subnet %v from create service error message", pfx)
+					sc, _ := pfx.MarshalBinary()
+					oi.ServiceCidrs = [][]byte{sc}
+				}
+			} else {
+				dlog.Errorf(ctx, "unable to extract service subnet from error message %q", err.Error())
+			}
 		}
 	}
 
-	if oi.ServiceSubnet == nil && len(oi.InjectorSvcIp) > 0 {
+	if len(oi.ServiceCidrs) == 0 && len(oi.InjectorSvcIp) > 0 {
 		// Using a "kubectl cluster-info dump" or scanning all services generates a lot of unwanted traffic
 		// and would quite possibly also require elevated permissions, so instead, we derive the service subnet
 		// from the agent-injector service IP (the traffic-manager has clusterIP=None). This is cheating but
 		// a cluster may only have one service subnet and the mask is unlikely to cover less than half the bits.
-		ip := net.IP(oi.InjectorSvcIp)
+		ip, _ := netip.AddrFromSlice(oi.InjectorSvcIp)
+		if ip.Is4In6() {
+			ip = netip.AddrFrom4(ip.As4())
+		}
 		dlog.Infof(ctx, "Deriving serviceSubnet from %s (the IP of agent-injector.%s)", ip, env.ManagerNamespace)
-		bits := len(ip) * 8
-		ones := bits / 2
-		mask := net.CIDRMask(ones, bits) // will yield a 16 bit mask on IPv4 and 64 bit mask on IPv6.
-		oi.ServiceSubnet = &rpc.IPNet{Ip: ip.Mask(mask), Mask: int32(ones)}
+		bits := 12
+		if ip.Is6() {
+			bits = 64
+		}
+		pfx := netip.PrefixFrom(ip, bits)
+		sc, _ := pfx.MarshalBinary()
+		oi.ServiceCidrs = [][]byte{sc}
 	}
 
 	podCIDRStrategy := env.PodCIDRStrategy
@@ -219,7 +249,7 @@ func NewInfo(ctx context.Context) Info {
 	default:
 		dlog.Errorf(ctx, "invalid POD_CIDR_STRATEGY %q", podCIDRStrategy)
 	}
-	return &oi
+	return &oi, nil
 }
 
 func getClusterDomain(ctx context.Context, svcIp net.IP, env *managerutil.Env) string {
@@ -433,8 +463,6 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 	}
 
 	ci := &rpc.ClusterInfo{
-		ServiceSubnet:   oi.ServiceSubnet,
-		PodSubnets:      make([]*rpc.IPNet, len(oi.PodSubnets)),
 		ManagerPodIp:    oi.ManagerPodIp,
 		ManagerPodPort:  oi.ManagerPodPort,
 		InjectorSvcIp:   oi.InjectorSvcIp,
@@ -442,10 +470,14 @@ func (oi *info) clusterInfo() *rpc.ClusterInfo {
 		InjectorSvcHost: oi.InjectorSvcHost,
 		Routing:         rt,
 		Dns:             oi.Dns,
-		KubeDnsIp:       oi.Dns.KubeIp,
-		ClusterDomain:   oi.Dns.ClusterDomain,
 	}
-	copy(ci.PodSubnets, oi.PodSubnets)
+	if len(oi.ServiceCidrs) > 0 {
+		var pfx netip.Prefix
+		_ = pfx.UnmarshalBinary(oi.ServiceCidrs[0])
+		ci.ServiceSubnet = iputil.PrefixToRPC(pfx)
+		ci.ServiceCidrs = slices.Clone(oi.ServiceCidrs)
+	}
+	ci.PodSubnets = slices.Clone(oi.PodSubnets)
 	return ci
 }
 

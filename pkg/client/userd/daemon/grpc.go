@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -22,11 +23,13 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/bwcompat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -503,8 +506,14 @@ func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rp
 				}
 				return err
 			}
-			if mgrInfo.ServiceSubnet != nil {
-				svcSubnets = append(svcSubnets, mgrInfo.ServiceSubnet)
+			bwcompat.FixLegacyClusterInfo(mgrInfo)
+			for _, sn := range mgrInfo.ServiceCidrs {
+				var sb netip.Prefix
+				err = sb.UnmarshalBinary(sn)
+				if err != nil {
+					return err
+				}
+				svcSubnets = append(svcSubnets, iputil.PrefixToRPC(sb))
 			}
 			podSubnets = append(podSubnets, mgrInfo.PodSubnets...)
 		}
