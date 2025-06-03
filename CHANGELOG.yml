@@ -24,6 +24,16 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.22.6
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Regression causing "unexpected slice size" with older traffic-managers.
+        body: >-
+          Older traffic-managers have a different way of reporting the service-subnet. The new way, using a
+          list of subnets reused a proto slice in the GRPC message that was expected to be empty, but older
+          traffic-managers will pass the IP of the kube-dns here. It cannot be parsed as a list of
+          subnets. A check that remedies this mismatch was inserted.
   - version: 2.22.5
     date: 2025-05-29
     notes:
