@@ -26,6 +26,7 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         uses: golangci/golangci-lint-action@v6
         with:
+          version: v1.64.8
           args: --timeout 8m ./...
       - name: Lint (limited on windows)
         if: ${{ runner.os == 'Windows' }}
