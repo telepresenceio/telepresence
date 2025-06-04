@@ -51,6 +51,13 @@ A "Legacy Telepresence command used" warning has been printed for several years 
 command.
   </Body>
 </Note>
+## Version 2.22.6 <span style={{fontSize:'16px'}}>(June  3)</span>
+<Note>
+	<Title type="bugfix">Regression causing "unexpected slice size" with older traffic-managers.</Title>
+	<Body>
+Older traffic-managers have a different way of reporting the service-subnet. The new way, using a list of subnets reused a proto slice in the GRPC message that was expected to be empty, but older traffic-managers will pass the IP of the kube-dns here. It cannot be parsed as a list of subnets. A check that remedies this mismatch was inserted.
+  </Body>
+</Note>
 ## Version 2.22.5 <span style={{fontSize:'16px'}}>(May 29)</span>
 <Note>
 	<Title type="bugfix">Unable to correctly determine service CIDR with Kubernetes >= 1.33</Title>

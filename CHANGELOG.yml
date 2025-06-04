@@ -75,6 +75,16 @@ items:
           A "Legacy Telepresence command used" warning has been printed for several years now, and the mapping for the
           `--swap-deployment` was the `intercept` command, which is very confusing today since we now have the `replace`
           command.
+  - version: 2.22.6
+    date: 2025-06-03
+    notes:
+      - type: bugfix
+        title: Regression causing "unexpected slice size" with older traffic-managers.
+        body: >-
+          Older traffic-managers have a different way of reporting the service-subnet. The new way, using a
+          list of subnets reused a proto slice in the GRPC message that was expected to be empty, but older
+          traffic-managers will pass the IP of the kube-dns here. It cannot be parsed as a list of
+          subnets. A check that remedies this mismatch was inserted.
   - version: 2.22.5
     date: 2025-05-29
     notes:
