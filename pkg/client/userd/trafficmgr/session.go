@@ -162,6 +162,7 @@ func NewSession(
 	ctx context.Context,
 	cri userd.ConnectRequest,
 	config *client.Kubeconfig,
+	wg *sync.WaitGroup,
 ) (rc context.Context, _ userd.Session, info *rpc.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 
@@ -284,7 +285,7 @@ func NewSession(
 
 	ctx = tunnel.WithSyntheticIPResolver(ctx, tmgr)
 
-	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi, cr.IsPodDaemon)
+	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon)
 	if err != nil {
 		tmgr.managerConn.Close()
 		return ctx, nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
@@ -1028,7 +1029,7 @@ func (s *session) getNetworkInfo(ctx context.Context, cr *rpc.ConnectRequest) *r
 	}
 }
 
-func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkConfig, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
+func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
 	// establish a connection to the root daemon gRPC grpcService
 	dlog.Info(ctx, "Connecting to root daemon...")
 	svc := userd.GetService(ctx)
@@ -1038,10 +1039,21 @@ func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkCon
 		if err != nil {
 			return nil, err
 		}
-		if err = rootSession.Start(ctx, dgroup.NewGroup(ctx, dgroup.GroupConfig{})); err != nil {
+		g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+		if err = rootSession.Start(ctx, g, svc.TeleroutePort()); err != nil {
 			return nil, err
 		}
 		rd = rootSession
+
+		// Give in-proc root session services a chance to clean up.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := g.Wait()
+			if err != nil && !errors.Is(err, context.Canceled) {
+				dlog.Errorf(ctx, "root session exited with error: %v", err)
+			}
+		}()
 	} else {
 		var conn *grpc.ClientConn
 		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx), true)

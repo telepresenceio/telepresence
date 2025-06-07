@@ -17,6 +17,14 @@ import (
 // dispatched as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
 func Start(ctx context.Context, env map[string]string, exe string, args ...string) (*dexec.Cmd, error) {
+	cmd := CommandStd(ctx, env, exe, args...)
+	return cmd, StartCmd(ctx, cmd)
+}
+
+// CommandStd will create a command based on the given executable with given args and env, and return the command.
+// The signals are dispatched as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
+// and os.Interrupt on Windows).
+func CommandStd(ctx context.Context, env map[string]string, exe string, args ...string) *dexec.Cmd {
 	cmd := CommandContext(ctx, exe, args...)
 	cmd.DisableLogging = true
 	cmd.Stdout = dos.Stdout(ctx)
@@ -26,12 +34,16 @@ func Start(ctx context.Context, env map[string]string, exe string, args ...strin
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+	return cmd
+}
 
-	dlog.Debug(ctx, shellquote.ShellString(exe, args))
+// StartCmd will run the given command with debug logging.
+func StartCmd(ctx context.Context, cmd *dexec.Cmd) error {
+	dlog.Debug(ctx, shellquote.ShellArgsString(cmd.Args))
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("%s: %w", shellquote.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %w", shellquote.ShellArgsString(cmd.Args), err)
 	}
-	return cmd, nil
+	return nil
 }
 
 // Wait will wait for the Process of the command to finish.

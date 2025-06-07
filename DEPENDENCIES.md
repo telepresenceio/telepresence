@@ -21,6 +21,7 @@ following Free and Open Source software:
     github.com/chai2010/gettext-go                                 v1.0.3                                3-clause BSD license
     github.com/containerd/containerd                               v1.7.27                               Apache License 2.0
     github.com/containerd/errdefs                                  v1.0.0                                Apache License 2.0
+    github.com/containerd/errdefs/pkg                              v0.3.0                                Apache License 2.0
     github.com/containerd/log                                      v0.1.0                                Apache License 2.0
     github.com/containerd/platforms                                v0.2.1                                Apache License 2.0
     github.com/coreos/go-iptables                                  v0.8.0                                Apache License 2.0
@@ -32,7 +33,7 @@ following Free and Open Source software:
     github.com/datawire/go-ftpserver                               v0.1.3                                Apache License 2.0
     github.com/davecgh/go-spew                                     v1.1.2-0.20180830191138-d8f796af33cc  ISC license
     github.com/distribution/reference                              v0.6.0                                Apache License 2.0
-    github.com/docker/docker                                       v28.1.1+incompatible                  Apache License 2.0
+    github.com/docker/docker                                       v28.2.1+incompatible                  Apache License 2.0
     github.com/docker/go-connections                               v0.5.0                                Apache License 2.0
     github.com/docker/go-units                                     v0.5.0                                Apache License 2.0
     github.com/emicklei/go-restful/v3                              v3.12.2                               MIT license
@@ -48,7 +49,7 @@ following Free and Open Source software:
     github.com/go-errors/errors                                    v1.5.1                                MIT license
     github.com/go-gorp/gorp/v3                                     v3.1.0                                MIT license
     github.com/go-json-experiment/json                             v0.0.0-20250517221953-25912455fbc8    3-clause BSD license
-    github.com/go-logr/logr                                        v1.4.2                                Apache License 2.0
+    github.com/go-logr/logr                                        v1.4.3                                Apache License 2.0
     github.com/go-logr/stdr                                        v1.2.2                                Apache License 2.0
     github.com/go-openapi/jsonpointer                              v0.21.1                               Apache License 2.0
     github.com/go-openapi/jsonreference                            v0.21.0                               Apache License 2.0
@@ -150,14 +151,14 @@ following Free and Open Source software:
     golang.zx2c4.com/wintun                                        v0.0.0-20230126152724-0fa3db229ce2    MIT license
     golang.zx2c4.com/wireguard                                     v0.0.0-20250521234502-f333402bd9cb    MIT license
     golang.zx2c4.com/wireguard/windows                             v0.5.3                                MIT license
-    google.golang.org/genproto/googleapis/rpc                      v0.0.0-20250519155744-55703ea1f237    Apache License 2.0
+    google.golang.org/genproto/googleapis/rpc                      v0.0.0-20250528174236-200df99c418a    Apache License 2.0
     google.golang.org/grpc                                         v1.72.2                               Apache License 2.0
     google.golang.org/protobuf                                     v1.36.6                               3-clause BSD license
     gopkg.in/evanphx/json-patch.v4                                 v4.12.0                               3-clause BSD license
     gopkg.in/inf.v0                                                v0.9.1                                3-clause BSD license
     gopkg.in/yaml.v3                                               v3.0.1                                Apache License 2.0, MIT license
     gvisor.dev/gvisor                                              v0.0.0-20250523182742-eede7a881b20    Apache License 2.0, MIT license
-    helm.sh/helm/v3                                                v3.18.0                               Apache License 2.0
+    helm.sh/helm/v3                                                v3.18.1                               Apache License 2.0
     k8s.io/api                                                     v0.33.1                               Apache License 2.0
     k8s.io/apiextensions-apiserver                                 v0.33.1                               Apache License 2.0
     k8s.io/apimachinery                                            v0.33.1                               3-clause BSD license, Apache License 2.0

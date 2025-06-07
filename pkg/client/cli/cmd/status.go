@@ -277,7 +277,7 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 			us.Hostname = di.Hostname
 			us.ExposedPorts = di.ExposedPorts
 		}
-		us.ContainerNetwork = "container:" + userD.DaemonID().ContainerName()
+		us.ContainerNetwork = userD.DaemonID().ContainerName()
 		if us.versionName == "" {
 			us.versionName = "Daemon"
 		}
@@ -349,6 +349,15 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		if rootCfg, err := daemon.GetRootClientConfig(rStatus); err == nil {
 			rs.DNS = rootCfg.DNS().ToSnake()
 			rs.RoutingSnake = rootCfg.Routing().ToSnake()
+			if us.InDocker {
+				if len(rs.Subnets) == 0 {
+					// No teleroute network is started when there are no subnets to route.
+					// DNS is exposed on port 53 on the containerized daemon, so the
+					// IP that it exposes on the default bridge can be used for DNS.
+					rs.DNS.LocalAddress = netip.AddrPortFrom(userD.DaemonInfo().ContainerIP, 53)
+					us.ContainerNetwork = "default bridge"
+				}
+			}
 		}
 	}
 
@@ -485,11 +494,11 @@ func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 	if d.Error != "" {
 		dnsKvf.Add("Error", d.Error)
 	}
-	if d.LocalIP.IsValid() {
-		dnsKvf.Add("Local IP", d.LocalIP.String())
+	if d.LocalAddress.IsValid() {
+		dnsKvf.Add("Local address", d.LocalAddress.String())
 	}
-	if d.RemoteIP.IsValid() {
-		dnsKvf.Add("Remote IP", d.RemoteIP.String())
+	if d.VIFAddress.IsValid() {
+		dnsKvf.Add("VIF Address", d.VIFAddress.String())
 	}
 	dnsKvf.Add("Exclude suffixes", fmt.Sprintf("%v", d.ExcludeSuffixes))
 	dnsKvf.Add("Include suffixes", fmt.Sprintf("%v", d.IncludeSuffixes))

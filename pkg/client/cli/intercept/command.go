@@ -171,7 +171,12 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 		// Can't mix JSON or env output on stdout with progress monitor.
 		global.SetProgressQuiet(cmd)
 	}
-	return c.DockerFlags.Validate(c.Cmdline)
+	err := c.DockerFlags.Validate(c.Cmdline)
+	if err != nil {
+		return err
+	}
+	dlog.Debugf(cmd.Context(), "Docker flags = %v", c.DockerFlags)
+	return nil
 }
 
 func (c *Command) ValidateReplace(cmd *cobra.Command, positional []string) error {

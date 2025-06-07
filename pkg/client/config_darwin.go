@@ -1,3 +1,3 @@
 package client
 
-const defaultDockerAddHostGateway = false
+const defaultAddHostGateway = false

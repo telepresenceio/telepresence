@@ -17,10 +17,10 @@ type ConnPool struct {
 	finished   chan *dns.Conn
 	clients    clientQueue
 	cancel     context.CancelFunc
-	remoteAddr netip.Addr
+	remoteAddr netip.AddrPort
 }
 
-func NewConnPool(addr netip.Addr, poolSize int) (*ConnPool, error) {
+func NewConnPool(addr netip.AddrPort, poolSize int) (*ConnPool, error) {
 	cCtx, cCancel := context.WithCancel(context.Background())
 	pool := &ConnPool{
 		items:      make(map[*dns.Conn]bool, poolSize),
@@ -31,7 +31,7 @@ func NewConnPool(addr netip.Addr, poolSize int) (*ConnPool, error) {
 	}
 	heap.Init(&pool.clients)
 	for i := 0; i < poolSize; i++ {
-		conn, err := dns.Dial("udp", netip.AddrPortFrom(addr, 53).String())
+		conn, err := dns.Dial("udp", addr.String())
 		if err != nil {
 			return nil, fmt.Errorf("unable to create DNS conn to %s: %w", addr, err)
 		}
@@ -41,17 +41,17 @@ func NewConnPool(addr netip.Addr, poolSize int) (*ConnPool, error) {
 	return pool, nil
 }
 
-func (cp *ConnPool) LocalAddrs() []*net.UDPAddr {
-	retval := make([]*net.UDPAddr, len(cp.items))
+func (cp *ConnPool) LocalAddrs() []netip.AddrPort {
+	retval := make([]netip.AddrPort, len(cp.items))
 	i := 0
 	for conn := range cp.items {
-		retval[i] = conn.LocalAddr().(*net.UDPAddr)
+		retval[i] = conn.LocalAddr().(*net.UDPAddr).AddrPort()
 		i++
 	}
 	return retval
 }
 
-func (cp *ConnPool) RemoteAddr() netip.Addr {
+func (cp *ConnPool) RemoteAddr() netip.AddrPort {
 	return cp.remoteAddr
 }
 

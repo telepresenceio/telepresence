@@ -62,14 +62,11 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			if err != nil {
 				return nil, err
 			}
-			if !localIP.IsValid() {
-				continue
-			}
 			mask, ok := mask.(*route.Inet4Addr)
 			if !ok {
 				continue
 			}
-			var gwIP netip.Addr
+			gwIP := netip.IPv4Unspecified()
 			if gwAddr, ok := gw.(*route.Inet4Addr); ok {
 				gwIP = netip.AddrFrom4(gwAddr.IP)
 			}
@@ -77,25 +74,23 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			ones, _ := ip4Mask.Size()
 			routedNet := netip.PrefixFrom(netip.AddrFrom4(a.IP), ones)
 			routes = append(routes, &Route{
-				Interface: iface,
-				Gateway:   gwIP,
-				LocalIP:   localIP,
-				RoutedNet: routedNet,
-				Default:   ones == 0,
+				InterfaceIndex: iface.Index,
+				InterfaceName:  iface.Name,
+				Gateway:        gwIP,
+				LocalIP:        localIP,
+				RoutedNet:      routedNet,
+				Default:        ones == 0,
 			})
 		case *route.Inet6Addr:
 			localIP, err := interfaceLocalIP(iface, false)
 			if err != nil {
 				return nil, err
 			}
-			if !localIP.IsValid() {
-				continue
-			}
 			mask, ok := mask.(*route.Inet6Addr)
 			if !ok {
 				continue
 			}
-			var gwIP netip.Addr
+			gwIP := netip.IPv6Unspecified()
 			if gwAddr, ok := gw.(*route.Inet6Addr); ok {
 				gwIP = netip.AddrFrom16(gwAddr.IP)
 			}
@@ -108,11 +103,12 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			}
 			routedNet := netip.PrefixFrom(netip.AddrFrom16(a.IP), i*8)
 			routes = append(routes, &Route{
-				Interface: iface,
-				Gateway:   gwIP,
-				LocalIP:   localIP,
-				RoutedNet: routedNet,
-				Default:   i == 0,
+				InterfaceIndex: iface.Index,
+				InterfaceName:  iface.Name,
+				Gateway:        gwIP,
+				LocalIP:        localIP,
+				RoutedNet:      routedNet,
+				Default:        i == 0,
 			})
 		}
 	}
@@ -149,6 +145,10 @@ func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse gateway %s: %v", gateway, err)
 		}
+	} else if ip.Is4() {
+		gatewayIp = netip.IPv4Unspecified()
+	} else {
+		gatewayIp = netip.IPv6Unspecified()
 	}
 	localIP, err := interfaceLocalIP(iface, ip.Is4())
 	if err != nil {
@@ -169,11 +169,12 @@ func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	}
 	isDefault = isDefault || ones == 0
 	return &Route{
-		RoutedNet: routed,
-		LocalIP:   localIP,
-		Interface: iface,
-		Gateway:   gatewayIp,
-		Default:   isDefault,
+		RoutedNet:      routed,
+		LocalIP:        localIP,
+		InterfaceIndex: iface.Index,
+		InterfaceName:  iface.Name,
+		Gateway:        gatewayIp,
+		Default:        isDefault,
 	}, nil
 }
 
@@ -220,15 +221,25 @@ func newRouteMessage(rtm, seq int, subnet netip.Prefix, gw netip.Addr) *route.Ro
 	var mask route.Addr
 	if subnet.Addr().Is4() {
 		mask = toRoute4Mask(subnet.Bits())
+		if !gw.IsValid() {
+			gw = netip.IPv4Unspecified()
+		}
 	} else {
 		mask = toRoute6Mask(subnet.Bits())
+		if !gw.IsValid() {
+			gw = netip.IPv6Unspecified()
+		}
+	}
+	flags := unix.RTF_UP | unix.RTF_STATIC | unix.RTF_CLONING
+	if !gw.IsUnspecified() {
+		flags |= unix.RTF_GATEWAY
 	}
 	return &route.RouteMessage{
 		Version: unix.RTM_VERSION,
 		ID:      uintptr(os.Getpid()),
 		Seq:     seq,
 		Type:    rtm,
-		Flags:   unix.RTF_UP | unix.RTF_STATIC | unix.RTF_CLONING | unix.RTF_GATEWAY,
+		Flags:   flags,
 		Addrs: []route.Addr{
 			unix.RTAX_DST:     toRouteAddr(subnet.Addr()),
 			unix.RTAX_GATEWAY: toRouteAddr(gw),

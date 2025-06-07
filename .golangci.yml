@@ -132,6 +132,8 @@ linters:
       allow-no-explanation:
         - gocognit
       allow-unused: true
+    prealloc:
+      range-loops: false
     staticcheck:
       checks:
         - all

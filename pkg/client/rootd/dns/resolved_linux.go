@@ -16,7 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS func(netip.Addr, *net.UDPAddr)) error {
+func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
 	// Connect to ResolveD via DBUS.
 	if !dbus.IsResolveDRunning(c) {
 		dlog.Error(c, "systemd-resolved is not running")
@@ -35,8 +35,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	if err != nil {
 		return err
 	}
-	dnsIP := s.RemoteIP
-	configureDNS(dnsIP, dnsResolverAddr)
+	configureDNS(s.VIFAddress, dnsResolverAddr)
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
@@ -44,8 +43,11 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	initDone := make(chan struct{})
 
 	g.Go("Server", func(c context.Context) error {
-		dlog.Infof(c, "Configuring DNS IP %s", dnsIP)
-		if err = dbus.SetLinkDNS(c, int(dev.Index()), dnsIP.AsSlice()); err != nil {
+		dlog.Infof(c, "Configuring DNS IP %s", s.VIFAddress)
+		if s.VIFAddress.Port() != 53 {
+			return fmt.Errorf("DBUS link only accepts DNS address with port 53, got %s", s.VIFAddress)
+		}
+		if err = dbus.SetLinkDNS(c, int(dev.Index()), s.VIFAddress.Addr().AsSlice()); err != nil {
 			dlog.Error(c, err)
 			initDone <- struct{}{}
 			return errResolveDNotConfigured
@@ -56,7 +58,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 			c, cancel := context.WithTimeout(context.WithoutCancel(c), time.Second)
 			defer cancel()
 			dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
-			configureDNS(netip.Addr{}, nil) // Don't route from TUN-device
+			configureDNS(netip.AddrPort{}, netip.AddrPort{}) // Don't route from TUN-device
 			if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
 				dlog.Error(c, err)
 			}

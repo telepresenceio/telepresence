@@ -3,7 +3,6 @@ package vif
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/netip"
 	"runtime"
 	"slices"
@@ -20,7 +19,7 @@ type Router struct {
 	// The routing table that will be used to route packets
 	routingTable routing.Table
 	// A list of never proxied routes that have already been added to routing table
-	staticOverrides []*routing.Route
+	staticOverrides []routing.Route
 	// The subnets that are currently being routed
 	routedSubnets []netip.Prefix
 	// The subnets that are allowed to be routed even in the presence of conflicting routes
@@ -53,7 +52,7 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 			}
 		}
 		for _, er := range table {
-			if r == er.RoutedNet && er.Interface.Name == rt.device.Name() {
+			if r == er.RoutedNet && er.InterfaceName == rt.device.Name() {
 				// Route is already in the routing table.
 				return true
 			}
@@ -68,7 +67,7 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 		dlog.Tracef(ctx, "checking for overlap with route %q", tr)
 		if (tr.RoutedNet.Bits() == 0 || tr.Default) || // Default route, overlapped if needed
 			subnet.IsHalfOfDefault(tr.RoutedNet) || // OpenVPN covers half the address space with a /1 route and the other half with another. This is its way of doing a default route.
-			tr.Interface.Name == rt.device.Name() { // This is the interface we're routing through, so we can overlap it
+			tr.InterfaceName == rt.device.Name() { // This is the interface we're routing through, so we can overlap it
 			continue
 		}
 		for _, r := range nonWhitelisted {
@@ -118,17 +117,17 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 		}
 	}
 
-	var staticNets []netip.Prefix
+	ourIdx := int(rt.device.Index())
+	ourName := rt.device.Name()
+	var staticRoutes []routing.Route
 	for _, sn := range added {
-		var err error
-		bits := sn.Bits()
-		if sn.Addr().Is4() && bits > 30 {
-			staticNets = append(staticNets, sn)
+		if sn.IsSingleIP() {
+			staticRoutes = append(staticRoutes, routing.NewRoute(sn, ourIdx, ourName))
 			continue
 		}
 
 		// On linux, this adds a link, so it's still relevant after adding a static route.
-		if err = rt.device.AddSubnet(ctx, sn); err != nil {
+		if err := rt.device.AddSubnet(ctx, sn); err != nil {
 			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
 			continue
 		}
@@ -138,108 +137,64 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 			// to our own routing table.
 			if slices.ContainsFunc(rt.whitelistedSubnets, func(r netip.Prefix) bool { return r.Overlaps(sn) }) {
 				dlog.Debugf(ctx, "Using static route for %s because it is an override", sn)
-				staticNets = append(staticNets, sn)
+				staticRoutes = append(staticRoutes, routing.NewRoute(sn, ourIdx, ourName))
 			}
 		}
 	}
-	return rt.addStaticOverrides(ctx, dontProxy, dontProxyOverrides, staticNets)
-}
-
-func (rt *Router) addStaticOverrides(ctx context.Context, neverProxy, neverProxyOverrides, staticNets []netip.Prefix) (err error) {
-	desired := make([]*routing.Route, 0, len(neverProxy)+len(neverProxyOverrides))
 	dr, err := routing.DefaultRoute(ctx)
 	if err != nil {
 		return err
 	}
-	for _, sn := range neverProxy {
-		// All subnets in neverProxy have been verified as being routed by the TUN-device, so we
-		// route them to the default route instead.
-		desired = append(desired, &routing.Route{
-			LocalIP:   dr.LocalIP,
-			RoutedNet: sn,
-			Interface: dr.Interface,
-			Gateway:   dr.Gateway,
-			Default:   false,
-		})
+
+	// All subnets in neverProxy have been verified as being routed by the TUN-device, so we
+	// route them to the default device.
+	for _, sn := range dontProxy {
+		staticRoutes = append(staticRoutes, routing.NewRoute(sn, dr.InterfaceIndex, dr.InterfaceName))
 	}
 
-	for _, sn := range neverProxyOverrides {
-		r, err := routing.GetRoute(ctx, sn)
-		if err != nil {
-			dlog.Error(ctx, err)
-		} else {
-			desired = append(desired, &routing.Route{
-				LocalIP:   r.LocalIP,
-				RoutedNet: sn,
-				Interface: r.Interface,
-				Gateway:   r.Gateway,
-				Default:   r.Default,
-			})
-		}
+	// ... except for the never proxy overrides, which will be routed to our device.
+	for _, sn := range dontProxyOverrides {
+		staticRoutes = append(staticRoutes, routing.NewRoute(sn, ourIdx, ourName))
 	}
 
-	ifd, err := net.InterfaceByIndex(int(rt.device.Index()))
-	if err != nil {
-		return err
-	}
-	addrs, err := ifd.Addrs()
-	if err != nil {
-		return err
-	}
-	for _, sn := range staticNets {
-		var pr *routing.Route
-		ip4 := sn.Addr().Is4()
-		if dr.Interface.Index == ifd.Index && ip4 == dr.LocalIP.Is4() {
-			pr = dr
-		} else {
-			for _, addr := range addrs {
-				pfx, err := netip.ParsePrefix(addr.String())
-				if err != nil {
-					return err
-				}
-				if ip4 != pfx.Addr().Is4() {
-					continue
-				}
-				pr, err = routing.GetRoute(ctx, pfx)
-				if err != nil {
-					return err
-				}
-				if pr.Gateway.IsValid() {
-					// Address families match and we have a gateway. It doesn't get any better.
-					break
-				}
-			}
-			if pr == nil {
-				pr = &routing.Route{
-					Interface: ifd,
-				}
-			}
-
-			desired = append(desired, &routing.Route{
-				LocalIP:   pr.LocalIP,
-				Gateway:   pr.Gateway,
-				RoutedNet: sn,
-				Interface: ifd,
-			})
-		}
-	}
-
-	for _, r := range desired {
-		dlog.Debugf(ctx, "Adding static route %s", r)
+	addRts, removeRts := rt.createRoutesDelta(staticRoutes)
+	for i := range addRts {
+		r := &addRts[i]
 		if err = rt.routingTable.Add(ctx, r); err != nil {
 			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
 		}
 	}
-	rt.staticOverrides = desired
+	for i := range removeRts {
+		r := &removeRts[i]
+		if err = rt.routingTable.Remove(ctx, r); err != nil {
+			dlog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
+		}
+	}
+	rt.staticOverrides = staticRoutes
 	return nil
+}
+
+func (rt *Router) createRoutesDelta(rs []routing.Route) (added, removed []routing.Route) {
+	for _, r := range rs {
+		if !slices.Contains(rt.staticOverrides, r) {
+			added = append(added, r)
+		}
+	}
+	for _, r := range rt.staticOverrides {
+		if !slices.Contains(rs, r) {
+			removed = append(removed, r)
+		}
+	}
+	return added, removed
 }
 
 func (rt *Router) dropStaticOverrides(ctx context.Context) {
 	// Remove all current static routes so that they don't affect the routes for subnets
 	// that we're about to add.
-	for _, c := range rt.staticOverrides {
-		if err := rt.routingTable.Remove(ctx, c); err != nil {
-			dlog.Errorf(ctx, "failed to remove static route %s: %v", c, err)
+	for i := range rt.staticOverrides {
+		r := &rt.staticOverrides[i]
+		if err := rt.routingTable.Remove(ctx, r); err != nil {
+			dlog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
 		}
 	}
 	rt.staticOverrides = nil
@@ -252,4 +207,8 @@ func (rt *Router) Close(ctx context.Context) {
 		}
 	}
 	rt.dropStaticOverrides(ctx)
+}
+
+func (rt *Router) Table() routing.Table {
+	return rt.routingTable
 }

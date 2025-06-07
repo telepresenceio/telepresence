@@ -176,11 +176,12 @@ func (x *DNSMapping) GetAliasFor() string {
 // DNS configuration for the local DNS resolver
 type DNSConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// local_ip is the address of the local DNS server. Only used by Linux systems that have no
-	// systemd-resolved configured. Defaults to the first line of /etc/resolv.conf
-	LocalIp []byte `protobuf:"bytes,1,opt,name=local_ip,json=localIp,proto3" json:"local_ip,omitempty"`
-	// remote_ip is the address of the kube-dns.kube-system, dns-default.openshift-dns, or similar service,
-	RemoteIp []byte `protobuf:"bytes,2,opt,name=remote_ip,json=remoteIp,proto3" json:"remote_ip,omitempty"`
+	// local_address is the address and port of the local DNS server.
+	// In netip.AddrPort binary form.
+	LocalAddress []byte `protobuf:"bytes,1,opt,name=local_address,json=localAddress,proto3" json:"local_address,omitempty"`
+	// vif_address is the address and port that the DNS server uses on the Telepresence VIF. Only used by Linux systems.
+	// In netip.AddrPort binary form.
+	VifAddress []byte `protobuf:"bytes,2,opt,name=vif_address,json=vifAddress,proto3" json:"vif_address,omitempty"`
 	// Suffixes to exclude
 	ExcludeSuffixes []string `protobuf:"bytes,3,rep,name=exclude_suffixes,json=excludeSuffixes,proto3" json:"exclude_suffixes,omitempty"`
 	// Suffixes to include. Has higher prio than the excludes
@@ -230,16 +231,16 @@ func (*DNSConfig) Descriptor() ([]byte, []int) {
 	return file_daemon_daemon_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *DNSConfig) GetLocalIp() []byte {
+func (x *DNSConfig) GetLocalAddress() []byte {
 	if x != nil {
-		return x.LocalIp
+		return x.LocalAddress
 	}
 	return nil
 }
 
-func (x *DNSConfig) GetRemoteIp() []byte {
+func (x *DNSConfig) GetVifAddress() []byte {
 	if x != nil {
-		return x.RemoteIp
+		return x.VifAddress
 	}
 	return nil
 }
@@ -691,10 +692,11 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\n" +
 	"DNSMapping\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\talias_for\x18\x02 \x01(\tR\baliasFor\"\xf3\x02\n" +
-	"\tDNSConfig\x12\x19\n" +
-	"\blocal_ip\x18\x01 \x01(\fR\alocalIp\x12\x1b\n" +
-	"\tremote_ip\x18\x02 \x01(\fR\bremoteIp\x12)\n" +
+	"\talias_for\x18\x02 \x01(\tR\baliasFor\"\x81\x03\n" +
+	"\tDNSConfig\x12#\n" +
+	"\rlocal_address\x18\x01 \x01(\fR\flocalAddress\x12\x1f\n" +
+	"\vvif_address\x18\x02 \x01(\fR\n" +
+	"vifAddress\x12)\n" +
 	"\x10exclude_suffixes\x18\x03 \x03(\tR\x0fexcludeSuffixes\x12)\n" +
 	"\x10include_suffixes\x18\x04 \x03(\tR\x0fincludeSuffixes\x12\x1a\n" +
 	"\bexcludes\x18\b \x03(\tR\bexcludes\x12;\n" +

@@ -6,17 +6,19 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
 )
 
 type Route struct {
-	LocalIP   netip.Addr
-	RoutedNet netip.Prefix
-	Interface *net.Interface
-	Gateway   netip.Addr
-	Default   bool
+	InterfaceIndex int
+	InterfaceName  string
+	LocalIP        netip.Addr
+	RoutedNet      netip.Prefix
+	Gateway        netip.Addr
+	Default        bool
 }
 
 type Table interface {
@@ -43,6 +45,23 @@ func DefaultRoute(ctx context.Context) (*Route, error) {
 		}
 	}
 	return nil, errors.New("unable to find a default route")
+}
+
+// NewRoute creates a new non-default route for the given prefix, interface index, and name.
+func NewRoute(rn netip.Prefix, ifIdx int, ifName string) Route {
+	var unSpec netip.Addr
+	if rn.Addr().Is4() {
+		unSpec = netip.IPv4Unspecified()
+	} else {
+		unSpec = netip.IPv6Unspecified()
+	}
+	return Route{
+		RoutedNet:      rn.Masked(),
+		InterfaceIndex: ifIdx,
+		InterfaceName:  ifName,
+		LocalIP:        unSpec,
+		Gateway:        unSpec,
+	}
 }
 
 type rtError string
@@ -77,15 +96,26 @@ func (r *Route) Routes(ip netip.Addr) bool {
 }
 
 func (r *Route) String() string {
-	isDefault := " (default)"
-	if !r.Default {
-		isDefault = ""
+	bf := strings.Builder{}
+	if !r.RoutedNet.Addr().IsUnspecified() {
+		bf.WriteString(r.RoutedNet.String())
+		bf.WriteByte(' ')
 	}
-	gw := ""
-	if r.Gateway.IsValid() {
-		gw = fmt.Sprintf(", gw %s", r.Gateway)
+	if !r.LocalIP.IsUnspecified() {
+		bf.WriteString("via ")
+		bf.WriteString(r.LocalIP.String())
+		bf.WriteByte(' ')
 	}
-	return fmt.Sprintf("%s via %s dev %s%s%s", r.RoutedNet, r.LocalIP, r.Interface.Name, gw, isDefault)
+	bf.WriteString("dev ")
+	bf.WriteString(r.InterfaceName)
+	if !r.Gateway.IsUnspecified() {
+		bf.WriteString(" gw ")
+		bf.WriteString(r.Gateway.String())
+	}
+	if r.Default {
+		bf.WriteString(" (default)")
+	}
+	return bf.String()
 }
 
 // AddStatic adds a specific route. This can be used to prevent certain IP addresses
@@ -122,5 +152,8 @@ func interfaceLocalIP(iface *net.Interface, ipv4 bool) (netip.Addr, error) {
 		}
 		return ip, nil
 	}
-	return netip.Addr{}, nil
+	if ipv4 {
+		return netip.IPv4Unspecified(), nil
+	}
+	return netip.IPv6Unspecified(), nil
 }
