@@ -118,6 +118,7 @@ func Wait(ctx context.Context, svc *grpc.Server) {
 	<-ctx.Done()
 	hardCtx := dcontext.HardContext(ctx)
 	if hardCtx != ctx {
+		dlog.Debugf(ctx, "wait context has softness")
 		dead := make(chan struct{})
 		go func() {
 			dlog.Debug(ctx, "Initiating soft shutdown")
@@ -132,6 +133,7 @@ func Wait(ctx context.Context, svc *grpc.Server) {
 			Stop(ctx, svc, 5*time.Second)
 		}
 	} else {
+		dlog.Debugf(ctx, "wait context has no softness")
 		Stop(ctx, svc, 5*time.Second)
 	}
 }

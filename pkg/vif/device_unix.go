@@ -8,7 +8,7 @@ import (
 	"net/netip"
 )
 
-func (d *device) setDNS(context.Context, string, netip.Addr, []string) (err error) {
+func (d *device) setDNS(context.Context, string, netip.AddrPort, []string) (err error) {
 	// DNS is configured by other means than through the actual device
 	return nil
 }

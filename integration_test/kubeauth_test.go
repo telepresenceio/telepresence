@@ -37,7 +37,7 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 	}
 
 	// Ensure that the k8screds program is built and ready.
-	binDir := s.T().TempDir()
+	binDir := itest.TempDir(ctx)
 	k8sCredsBinary := filepath.Join(binDir, "k8screds")
 	if runtime.GOOS == "windows" {
 		k8sCredsBinary += ".exe"
@@ -86,7 +86,7 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 			}
 		}
 
-		// Retrieve the current size of the connector.lgo so that we can scan the messages that appear after connect
+		// Retrieve the current size of the connector.log so that we can scan the messages that appear after connect
 		ctx := s.Context()
 		rq := s.Require()
 		logSize := int64(0)

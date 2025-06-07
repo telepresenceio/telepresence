@@ -29,17 +29,14 @@ type device struct {
 	isTAP          bool
 }
 
-func RandomMAC() (net.HardwareAddr, error) {
+func RandomMAC() net.HardwareAddr {
 	addr := make([]byte, 6)
-	_, err := cryptoRand.Read(addr)
-	if err != nil {
-		return nil, err
-	}
+	_, _ = cryptoRand.Read(addr)
 	// Clear multicast
 	addr[0] &^= 1
 	// Set the local bit
 	addr[0] |= 2
-	return addr, nil
+	return addr
 }
 
 func openTun(ctx context.Context) (*device, error) {
@@ -128,10 +125,7 @@ func (d *device) createLinkEndpoint() (stack.LinkEndpoint, error) {
 		PacketDispatchMode: fdbased.RecvMMsg,
 	}
 	if d.isTAP {
-		mac, err := RandomMAC()
-		if err != nil {
-			return nil, err
-		}
+		mac := RandomMAC()
 		opts.EthernetHeader = true
 		opts.Address = tcpip.LinkAddress(mac)
 	}

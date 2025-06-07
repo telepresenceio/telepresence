@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -104,6 +105,7 @@ func quitDockerDaemons(ctx context.Context) {
 		ud := daemon.GetUserClient(udCtx)
 		_, _ = ud.Quit(ctx, &emptypb.Empty{})
 		_ = ud.Close()
+		maybeDeleteNetwork(ctx, ud.DaemonInfo())
 		progress.Write(ctx, progress.DoneEvent(id, "Quit").Info())
 	}
 	if err = daemon.WaitUntilAllVanishes(ctx, 5*time.Second); err != nil {
@@ -151,6 +153,21 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 	if s == nil {
 		return ctx, nil
 	}
+
+	if s.Started && s.Containerized() {
+		rootCfg, err := s.GetRootClientConfig()
+		if err != nil {
+			return ctx, err
+		}
+		if len(rootCfg.Routing().Subnets) > 0 {
+			ctx = docker.EnableClient(ctx)
+			err = createTelerouteNetwork(ctx, s.DaemonInfo())
+			if err != nil {
+				return ctx, err
+			}
+		}
+	}
+
 	return daemon.WithSession(ctx, s), nil
 }
 
@@ -206,6 +223,7 @@ func Disconnect(ctx context.Context) {
 		switch {
 		case err == nil:
 			progress.Write(ctx, progress.DoneEvent(id, "Disconnected").Info())
+			maybeDeleteNetwork(ctx, ud.DaemonInfo())
 		case status.Code(err) == codes.Unavailable:
 			progress.Write(ctx, progress.DoneEvent(id, "Not connected").Info())
 		default:
@@ -238,9 +256,18 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 	info, err := daemon.LoadMatchingInfo(ctx, match)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) && !cr.Docker {
-			// Try dialing the host daemon using the well-known socket.
+			// Try dialing the host daemon using the well-known socket. If we find one, the daemon is running,
+			// but it is not yet connected.
 			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx), false); sockErr == nil {
-				return newUserDaemon(ctx, conn, info)
+				// Provide a daemon.Info that reflects the expected connection. It will be adjusted when
+				// the connection attempt succeeds.
+				return newUserDaemon(ctx, conn, &daemon.Info{
+					Name:         daemonID.Name,
+					KubeContext:  daemonID.KubeContext,
+					Namespace:    daemonID.Namespace,
+					ExposedPorts: cr.ExposedPorts,
+					Hostname:     cr.Hostname,
+				})
 			}
 		}
 		return ctx, err
@@ -267,6 +294,10 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 		_ = fh.Close()
 	}
 	ctx = docker.EnableClient(ctx)
+	_, err := docker.EnsureNetworkPlugin(ctx)
+	if err != nil {
+		return ctx, nil, nil, err
+	}
 
 	// An initialized kubernetes interface is required by LaunchDaemon, because it is necessary
 	// when checking if the containerized daemon is connecting to a k3s control plane node.
@@ -529,4 +560,51 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 		return nil, err
 	}
 	return connectResult(ctx, ci, true)
+}
+
+func createTelerouteNetwork(ctx context.Context, info *daemon.Info) error {
+	// Make an attempt to create the network with IPv6 enabled. This will fail unless the user has enabled
+	// IPv6 in /etc/docker/daemon.json.
+	cn := info.Name
+	cli, err := docker.GetClient(ctx)
+	if err != nil {
+		return errcat.NoDaemonLogs.New(err)
+	}
+
+	teleroutePlugin := docker.NetworkPluginName(ctx)
+	teleroutePort := client.GetConfig(ctx).Grpc().TeleroutePort
+	err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort)
+	if err != nil && strings.Contains(err.Error(), fmt.Sprintf("%s already exists", cn)) && teleroute.IsTelerouteNetwork(ctx, cli, cn) {
+		var disconnected []string
+		disconnected, err = teleroute.RemoveNetwork(ctx, cli, cn)
+		if err == nil {
+			err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort)
+			if err == nil {
+				teleroute.ReconnectNetwork(ctx, cli, cn, disconnected)
+			}
+		}
+	}
+	if err != nil {
+		return errcat.NoDaemonLogs.Newf("Unable to create network %s: %v", cn, err)
+	}
+	err = teleroute.NetworkGC(ctx, cli)
+	if err != nil {
+		return errcat.NoDaemonLogs.Newf("Unable to garbage collect teleroute networks: %v", err)
+	}
+	return nil
+}
+
+func maybeDeleteNetwork(ctx context.Context, info *daemon.Info) {
+	// Wait for container exit.
+	ctx = docker.EnableClient(ctx)
+	dc, err := docker.GetClient(ctx)
+	if err == nil {
+		err = docker.WaitForExit(ctx, dc, info.ContainerID, 3*time.Second)
+		if err == nil {
+			err = teleroute.NetworkGC(ctx, dc)
+		}
+	}
+	if err != nil {
+		dlog.Error(ctx, err)
+	}
 }

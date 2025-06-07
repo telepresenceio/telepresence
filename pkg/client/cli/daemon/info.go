@@ -180,7 +180,7 @@ func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) 
 		case 0:
 			return nil, os.ErrNotExist
 		case 1:
-			return infos[0], err
+			return infos[0], nil
 		default:
 			return nil, MultipleDaemonsError(infos)
 		}
@@ -189,7 +189,7 @@ func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) 
 	if err != nil {
 		return nil, err
 	}
-	var found string
+	var found []string
 	for _, file := range files {
 		name := file.Name()
 		if !strings.HasSuffix(name, ".json") {
@@ -197,17 +197,18 @@ func LoadMatchingInfo(ctx context.Context, match *regexp.Regexp) (*Info, error) 
 		}
 		// If a match is given, then strip ".json" and apply it.
 		if match.MatchString(name[:len(name)-5]) {
-			if found != "" {
-				return nil, errcat.User.New(
-					InfoMatchError(fmt.Sprintf("the expression %q does not uniquely identify a running daemon", match.String())))
-			}
-			found = name
+			found = append(found, name)
 		}
 	}
-	if found == "" {
+	switch len(found) {
+	case 0:
 		return nil, os.ErrNotExist
+	case 1:
+		return LoadInfo(ctx, found[0])
+	default:
+		return nil, errcat.User.New(
+			InfoMatchError(fmt.Sprintf("the expression %q matches multiple running daemons: %s", match.String(), found)))
 	}
-	return LoadInfo(ctx, found)
 }
 
 // CancelWhenRmFromCache watches for the file to be removed from the cache, then calls cancel.

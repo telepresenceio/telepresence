@@ -73,8 +73,8 @@ Env:
   DEV_CLIENT_VERSION: v2.22.0-alpha.0
   DEV_KUBECONFIG: /home/thhal/.kube/testconfig
 Config:
-  cluster:
-    dockerAddHostGateway: false
+  docker:
+    addHostGateway: false
 ```
 
 ## Running integration tests

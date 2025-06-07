@@ -2,23 +2,27 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"math"
 	"net/netip"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/docker/docker/errdefs"
+	"github.com/containerd/errdefs"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
@@ -49,27 +53,15 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 		runArgs := args[:s.imageIndex]
 		args = args[s.imageIndex:]
 		var err error
+		origRunArgs := slices.Clone(runArgs)
 		runFlags, runArgs, err = ParseRunFlags(runArgs)
 		if err != nil {
+			dlog.Debugf(ctx, "error parsing run-flags %v: %v", origRunArgs, err)
 			return err
 		}
 		s.imageIndex = len(runArgs)
 		if len(runArgs) > 0 {
 			args = append(runArgs, args...)
-		}
-		if pps := runFlags.PublishedPorts; len(pps) > 0 {
-			s.PublishedPorts = append(s.PublishedPorts, pps...)
-		}
-		if nts := runFlags.Networks; len(nts) > 0 {
-			ns := make([]Network, len(nts))
-			for i, n := range nts {
-				ns[i] = Network{Name: n}
-			}
-			connectCancel, err := ConnectNetworksToDaemon(ctx, ud.DaemonID().ContainerName(), ns)
-			defer connectCancel()
-			if err != nil {
-				return err
-			}
 		}
 	}
 
@@ -106,11 +98,11 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 	outRdr, outWrt := io.Pipe()
 	procCtx = dos.WithStdout(procCtx, outWrt)
 
-	w := s.start(procCtx, s.ContainerName, envFile, runFlags, args)
+	w := s.start(procCtx, envFile, runFlags, args)
 	if w.err == nil {
-		w.err = ud.AddHandler(ctx, s.Environment["TELEPRESENCE_INTERCEPT_ID"], w.cmd, w.name)
+		w.err = ud.AddHandler(ctx, s.Environment["TELEPRESENCE_INTERCEPT_ID"], w.cmd, w.cni.Name)
 		progress.Write(ctx, progress.StartedEvent(s.ContainerName))
-	} else {
+	} else if !errors.Is(w.err, fs.ErrNotExist) {
 		w.err = progress.MaybeWriteError(ctx, s.ContainerName, w.err)
 	}
 
@@ -170,17 +162,23 @@ func (s *Runner) adjustMounts(ctx context.Context, runFlags *RunFlags, args []st
 	return args, mounts, nil
 }
 
-func (s *Runner) start(ctx context.Context, name, envFile string, runFlags *RunFlags, args []string) *waiter {
+func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, args []string) *waiter {
 	ourArgs := []string{
 		"run",
 		"--env-file", envFile,
 	}
-	w := &waiter{name: name}
+	w := &waiter{}
 	w.mount = s.Mount
 
 	if s.Debug {
 		ourArgs = append(ourArgs, "--security-opt", "apparmor=unconfined", "--cap-add", "SYS_PTRACE")
 	}
+	cidFileName, err := ioutil.CreateTempName("", "docker-run*.cid")
+	if err != nil {
+		w.err = err
+		return w
+	}
+	ourArgs = append(ourArgs, "--cidfile", cidFileName)
 
 	// "--rm" is mandatory when using --docker-run, because without it, the name cannot be reused and
 	// the volumes cannot be removed.
@@ -198,7 +196,9 @@ func (s *Runner) start(ctx context.Context, name, envFile string, runFlags *RunF
 		return w
 	}
 
+	hasRemoteMounts := false
 	ud := daemon.GetUserClient(ctx)
+	var nwName string
 	if !ud.Containerized() {
 		// The process is containerized but the user daemon runs on the host
 		for path, policy := range mounts {
@@ -209,16 +209,21 @@ func (s *Runner) start(ctx context.Context, name, envFile string, runFlags *RunF
 				ro = ",ro"
 				fallthrough
 			case types.MountPolicyRemote:
+				hasRemoteMounts = true
 				ourArgs = append(ourArgs, "--mount", fmt.Sprintf("type=bind,src=%s,dst=%s%s", filepath.Join(s.Mount.LocalDir, path), path, ro))
 			}
 		}
 		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
-		for _, p := range s.PublishedPorts {
-			ourArgs = append(ourArgs, "-p", p.String())
-		}
 	} else {
-		daemonName := ud.DaemonID().ContainerName()
-		ourArgs = append(ourArgs, "--network", "container:"+daemonName)
+		var dns netip.Addr
+		dns, nwName, w.err = GetDaemonContainerNetworkInfo(ctx)
+		if w.err != nil {
+			return w
+		}
+		ourArgs = append(ourArgs, "--dns", dns.String())
+		if nwName != "" {
+			ourArgs = append(ourArgs, "--network", nwName)
+		}
 		maps.DeleteFunc(mounts, func(s string, policy types.MountPolicy) bool {
 			return policy == types.MountPolicyIgnore || policy == types.MountPolicyLocal
 		})
@@ -236,84 +241,87 @@ func (s *Runner) start(ctx context.Context, name, envFile string, runFlags *RunF
 					ro = ":ro"
 				}
 				ourArgs = append(ourArgs, "-v", fmt.Sprintf("%s:%s%s", vol, path, ro))
+				hasRemoteMounts = true
 			}
 		}
 	}
 
+	if hasRemoteMounts {
+		// Give the mounter some time to effectively complete the remote mounts before we start the container that will use them.
+		time.Sleep(client.GetConfig(ctx).Intercept().MountCompletionDelay)
+	}
+
 	args = append(ourArgs, args...)
-	w.cmd, w.err = proc.Start(context.WithoutCancel(ctx), nil, "docker", args...)
+	w.cmd = proc.CommandStd(ctx, nil, Exe, args...)
+	proc.CreateNewProcessGroup(w.cmd.Cmd)
+	w.err = proc.StartCmd(ctx, w.cmd)
 	if w.err != nil {
 		return w
 	}
 
-	if ud.Containerized() {
-		// Using a -p <publicPort>:<privatePort> directly on the started container was not possible because it
-		// inherits the containerized daemons network config. That config includes the "telepresence" network though,
-		// so we can now create socat listeners that dispatch from this network to the daemon containers network.
-		daemonID := ud.DaemonID().ContainerName()
-		for _, p := range s.PublishedPorts {
-			var portCancel context.CancelFunc
-			portCancel, w.err = startPortPublisher(ctx, daemonID, p)
-			w.procsToCancel = append(w.procsToCancel, portCancel)
-			if w.err != nil {
-				return w
-			}
+	var containerID string
+	containerID, err = ReadContainerID(ctx, cidFileName)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			dlog.Error(ctx, err)
 		}
+		// Container didn't start. The reason is returned by the waiter.
+		w.err = w.cmd.Wait()
+		return w
 	}
+	w.cni, w.err = docker.GetContainerInfo(ctx, containerID, nwName)
 	return w
+}
+
+func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, networkName string, err error) {
+	ud := daemon.GetUserClient(ctx)
+	info := ud.DaemonInfo()
+	status, err := ud.Status(ctx, &empty.Empty{})
+	if err != nil {
+		return dns, "", err
+	}
+
+	rootCfg, err := daemon.GetRootClientConfig(status.DaemonStatus)
+	if err != nil {
+		return dns, "", err
+	}
+
+	if len(rootCfg.Routing().Subnets) > 0 {
+		xi, err := docker.GetContainerInfo(ctx, info.ContainerID, info.Name)
+		if err == nil {
+			dns = xi.IP
+		} else {
+			dns = rootCfg.DNS().VIFAddress.Addr()
+		}
+		networkName = info.Name
+	} else {
+		// The daemon doesn't route any subnets because it found that the container already had access
+		// to the cluster resources. It's then assumed that other containers will have that too.
+		// This means that:
+		//
+		//   1. This container will find the IP of the daemon container using the default bridge network.
+		//   2. The IP of the daemon container can act as the DNS IP.
+		dns = info.ContainerIP
+	}
+	return dns, networkName, nil
 }
 
 type waiter struct {
 	cmd *dexec.Cmd
 
+	// Info about the running container
+	cni *docker.ContainerInfo
+
 	// err is the error (if any) produced by the run
 	err error
-
-	// name of container to stop when the run ends
-	name string
 
 	mount *mount.Info
 
 	// volume mounts as name -> path.
 	volumes map[string]string
-
-	procsToCancel []context.CancelFunc
-}
-
-func startPortPublisher(ctx context.Context, daemonID string, p PublishedPort) (context.CancelFunc, error) {
-	portCtx, portCancel := context.WithCancel(ctx)
-	cidFileName, err := ioutil.CreateTempName("", "docker-run*.cid")
-	if err != nil {
-		return portCancel, err
-	}
-	_, err = proc.Start(portCtx, nil, "docker",
-		"run", "--cidfile", cidFileName, "--rm", "--network", "telepresence", "-p", p.String(), "alpine/socat",
-		fmt.Sprintf("%s-listen:%d,fork,reuseaddr", p.Protocol, p.ContainerPort),
-		fmt.Sprintf("%s-connect:%s:%d", p.Protocol, daemonID, p.ContainerPort))
-	if err != nil {
-		return portCancel, err
-	}
-	cid, err := ReadContainerID(ctx, cidFileName)
-	if err != nil {
-		return portCancel, err
-	}
-	return func() {
-		if cli, err := docker.GetClient(ctx); err == nil {
-			_ = cli.ContainerKill(context.WithoutCancel(ctx), cid, "")
-		}
-		portCancel()
-	}, nil
 }
 
 func (w *waiter) wait(ctx context.Context) error {
-	if len(w.procsToCancel) > 0 {
-		defer func() {
-			for _, cancel := range w.procsToCancel {
-				cancel()
-			}
-		}()
-	}
-
 	if w.err != nil {
 		dlog.Error(ctx, w.err)
 		return errcat.NoDaemonLogs.New(w.err)
@@ -331,10 +339,11 @@ func (w *waiter) wait(ctx context.Context) error {
 		volNames[i] = vol
 		i++
 	}
-	afterExitCtx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := make(chan error, 1)
-	go EnsureStopContainer(afterExitCtx, w.name, volNames, &exited, &signalled, done)
+
+	go EnsureStopContainer(ctx, w.cni.Name, w.cni.ID, volNames, &exited, &signalled, done)
 
 	err := w.cmd.Wait()
 	exited.Store(true)
@@ -350,7 +359,9 @@ func (w *waiter) wait(ctx context.Context) error {
 	return errcat.NoDaemonLogs.New(err)
 }
 
-func EnsureStopContainer(ctx context.Context, containerID string, volumes []string, exited, signalled *atomic.Bool, done chan<- error) {
+func EnsureStopContainer(ctx context.Context, name, containerID string, volumes []string, exited, signalled *atomic.Bool, done chan<- error) {
+	dlog.Debugf(ctx, "EnsureStopContainer %s", name)
+	defer dlog.Debugf(ctx, "EnsureStopContainer %s ended", name)
 	defer close(done)
 	if len(volumes) > 0 {
 		defer func() {
@@ -367,33 +378,43 @@ func EnsureStopContainer(ctx context.Context, containerID string, volumes []stri
 	}()
 	select {
 	case <-ctx.Done():
+		dlog.Debugf(ctx, "EnsureStopContainer %s: Context done", name)
 	case <-sigCh:
-		signalled.Store(true)
+		dlog.Debugf(ctx, "EnsureStopContainer %s: Signalled", name)
 	}
+	signalled.Store(true)
 	if exited.Load() {
-		dlog.Debugf(ctx, "No need to stop container %s. It already exited", containerID)
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
 	ctx = docker.EnableClient(ctx)
 	err := docker.StopContainer(ctx, containerID)
-	if err != nil && errdefs.IsNotFound(err) {
-		err = nil
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			err = nil
+		} else {
+			err = fmt.Errorf("EnsureStopContainer %s: %w", name, err)
+		}
 	}
 	done <- err
 }
 
+// ReadContainerID reads the containerID that docker run --cidfile <cidfils> writes to a file, and then
+// removes the file. It returns fs.ErrNotExist if no such file has been produced within 200 ms.
 func ReadContainerID(ctx context.Context, cidFile string) (containerID string, err error) {
+	defer func() {
+		_ = os.Remove(cidFile)
+	}()
 	err = backoff.Retry(func() error {
 		cid, err := os.ReadFile(cidFile)
 		if err != nil {
 			return err
 		}
 		if len(cid) == 0 {
-			return exec.ErrNotFound
+			return fs.ErrNotExist
 		}
 		containerID = string(cid)
 		return nil
-	}, backoff.WithContext(backoff.NewConstantBackOff(10*time.Millisecond), ctx))
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Millisecond), 200), ctx))
 	return containerID, err
 }

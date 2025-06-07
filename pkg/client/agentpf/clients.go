@@ -195,11 +195,9 @@ func (ac *client) refresh(ctx context.Context, ai *manager.AgentPodInfo) {
 	}
 	if ai.Intercepted {
 		dlog.Debugf(ctx, "Agent %s(%s) changed to intercepted", ai.PodName, net.IP(ai.PodIp))
-		go func() {
-			if _, err := ac.ensureConnectLocked(ctx); err != nil {
-				dlog.Errorf(ctx, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
-			}
-		}()
+		if _, err := ac.ensureConnectLocked(ctx); err != nil {
+			dlog.Errorf(ctx, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
+		}
 	} else {
 		// This agent is no longer intercepting. Stop the dial watcher
 		dlog.Debugf(ctx, "Agent %s(%s) changed to not intercepted", ai.PodName, net.IP(ai.PodIp))
@@ -231,7 +229,7 @@ func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
 	}
 
 	go func() {
-		err := tunnel.DialWaitLoop(ctx, tunnel.ClientToAgent, tunnel.AgentProvider(ac.cli), watcher, tunnel.SessionID(ac.session.SessionId))
+		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), watcher, tunnel.SessionID(ac.session.SessionId))
 		if err != nil {
 			// The traffic-agent closed the dial wait loop, which means that it's terminating.
 			dlog.Error(ctx, err)

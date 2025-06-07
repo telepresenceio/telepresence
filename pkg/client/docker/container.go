@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 
 	"github.com/datawire/dlib/dlog"
@@ -27,13 +28,18 @@ func StopContainer(ctx context.Context, nameOrID string) error {
 	}
 	_, err = cli.ContainerInspect(ctx, nameOrID)
 	if err != nil {
-		dlog.Errorf(ctx, "Failed to inspect container %s: %v", nameOrID, err)
+		if errdefs.IsNotFound(err) {
+			err = nil
+		} else {
+			dlog.Errorf(ctx, "Failed to inspect container %s: %v", nameOrID, err)
+		}
 		return err
 	}
 	err = cli.ContainerStop(ctx, nameOrID, opts)
 	if err != nil {
-		dlog.Errorf(ctx, "Failed to stop container %s: %v", nameOrID, err)
-		return fmt.Errorf("failed to stop container %s: %v", nameOrID, err)
+		err = fmt.Errorf("failed to stop container %s: %v", nameOrID, err)
+		dlog.Error(ctx, err)
+		return err
 	}
 	dlog.Debugf(ctx, "Container %s stopped", nameOrID)
 	return nil

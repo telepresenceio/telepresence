@@ -1144,9 +1144,8 @@ func WithKubeConfigExtension(ctx context.Context, extProducer func(*api.Cluster)
 }
 
 func WithKubeConfig(ctx context.Context, cfg *api.Config) context.Context {
-	t := getT(ctx)
-	kubeconfigFileName := filepath.Join(t.TempDir(), "kubeconfig")
-	require.NoError(t, clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
+	kubeconfigFileName := filepath.Join(TempDir(ctx), "kubeconfig")
+	require.NoError(getT(ctx), clientcmd.WriteToFile(*cfg, kubeconfigFileName), "unable to write modified kubeconfig")
 	return WithEnv(ctx, map[string]string{"KUBECONFIG": kubeconfigFileName})
 }
 

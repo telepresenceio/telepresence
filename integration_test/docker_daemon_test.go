@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -71,8 +72,9 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_hostDaemonNoConflict() {
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_alsoProxy32() {
+	const ipToTest = "10.10.74.1"
 	ctx := s.Context()
-	s.TelepresenceConnect(ctx, "--docker", "--also-proxy", "169.254.169.254/32", "--name", "ax")
+	s.TelepresenceConnect(ctx, "--docker", "--also-proxy", ipToTest+"/32", "--name", "ax")
 	itest.TelepresenceOk(ctx, "loglevel", "trace")
 	defer itest.TelepresenceOk(ctx, "loglevel", "debug")
 
@@ -91,7 +93,7 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_alsoProxy32() {
 
 	// Make an attempt to curl the also-proxied IP. The attempt will fail (there's nothing at the
 	// other end), and that's OK. We're just interested in seeing it logged.
-	_, _, _ = itest.Telepresence(ctx, "curl", "--silent", "--max-time", "1", "169.254.169.254") //nolint:dogsled // X
+	_, _, _ = itest.Telepresence(ctx, "curl", "--silent", "--max-time", "1", ipToTest) //nolint:dogsled // X
 
 	// Verify that the attempt is visible in the root log.
 	_, err = rootLog.Seek(pos, io.SeekStart)
@@ -102,14 +104,15 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_alsoProxy32() {
 	// mustHaveWanted caters for cases where the default behavior from the system's resolver
 	// is to not send unwanted queries to our resolver at all (based on search and routes).
 	// It is forced to true for inclusion tests.
+	strToFind := fmt.Sprintf("%s:80, code STREAM_INFO", ipToTest)
 	for scn.Scan() {
 		txt := scn.Text()
-		if strings.Contains(txt, "169.254.169.254:80, code STREAM_INFO") {
+		if strings.Contains(txt, strToFind) {
 			found = true
 			break
 		}
 	}
-	s.Truef(found, "Unable to find %q", "169.254.169.254:80, code STREAM_INFO")
+	s.Truef(found, "Unable to find %q", strToFind)
 }
 
 func (s *dockerDaemonSuite) Test_DockerDaemon_daemonHostNotConflict() {

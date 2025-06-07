@@ -21,7 +21,7 @@ const (
 	recursionTestTimeout    = 1500 * time.Millisecond
 )
 
-func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(netip.Addr, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
 		return err
@@ -30,7 +30,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	if err != nil {
 		return err
 	}
-	configureDNS(s.RemoteIP, dnsAddr)
+	configureDNS(s.VIFAddress, dnsAddr)
 
 	var pool FallbackPool
 	if client.GetConfig(c).OSSpecific().Network.DNSWithFallback {
@@ -45,7 +45,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 					dlog.Warn(c, err)
 					continue
 				}
-				p, err := NewConnPool(addr, 10)
+				p, err := NewConnPool(netip.AddrPortFrom(addr, 53), 10)
 				if err == nil {
 					dlog.Infof(c, "Using fallback DNS server: %s", dnsServer)
 					pool = p
@@ -68,7 +68,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		defer func() {
 			c, cancel := context.WithTimeout(context.WithoutCancel(c), 5*time.Second)
 			s.Lock()
-			_ = dev.SetDNS(c, s.clusterDomain, s.RemoteIP, nil)
+			_ = dev.SetDNS(c, s.clusterDomain, s.VIFAddress, nil)
 			s.Unlock()
 			cancel()
 		}()
@@ -83,7 +83,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 
 func (s *Server) updateRouterDNS(c context.Context, dev vif.Device) error {
 	s.Lock()
-	err := dev.SetDNS(c, s.clusterDomain, s.RemoteIP, s.search)
+	err := dev.SetDNS(c, s.clusterDomain, s.VIFAddress, s.search)
 	s.Unlock()
 	s.flushDNS()
 	if err != nil {
