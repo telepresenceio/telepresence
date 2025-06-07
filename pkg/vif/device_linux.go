@@ -2,6 +2,7 @@ package vif
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	"fmt"
 	"net"
 	"net/netip"
@@ -14,6 +15,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
@@ -24,9 +26,23 @@ type device struct {
 	name           string
 	endPoint       stack.LinkEndpoint
 	interfaceIndex uint32
+	isTAP          bool
 }
 
-func openTun(_ context.Context) (*device, error) {
+func RandomMAC() (net.HardwareAddr, error) {
+	addr := make([]byte, 6)
+	_, err := cryptoRand.Read(addr)
+	if err != nil {
+		return nil, err
+	}
+	// Clear multicast
+	addr[0] &^= 1
+	// Set the local bit
+	addr[0] |= 2
+	return addr, nil
+}
+
+func openTun(ctx context.Context) (*device, error) {
 	// https://www.kernel.org/doc/html/latest/networking/tuntap.html
 
 	fd, err := unix.Open(devicePath, unix.O_RDWR, 0)
@@ -40,8 +56,13 @@ func openTun(_ context.Context) (*device, error) {
 		}
 	}()
 
-	ifr, err := unix.NewIfreq("tel%d")
-	ifr.SetUint16(unix.IFF_TAP | unix.IFF_NO_PI)
+	ifr, _ := unix.NewIfreq("tel%d")
+	useTAP := client.GetConfig(ctx).Routing().UseTAP
+	if useTAP {
+		ifr.SetUint16(unix.IFF_TAP | unix.IFF_NO_PI)
+	} else {
+		ifr.SetUint16(unix.IFF_TUN | unix.IFF_NO_PI)
+	}
 
 	err = unix.IoctlSetInt(fd, unix.TUNSETIFF, int(uintptr(unsafe.Pointer(ifr))))
 	if err != nil {
@@ -68,7 +89,7 @@ func openTun(_ context.Context) (*device, error) {
 		return nil, fmt.Errorf("failed to set link UP: %w", err)
 	}
 	attrs := link.Attrs()
-	return &device{fd: fd, name: name, interfaceIndex: uint32(attrs.Index)}, nil
+	return &device{fd: fd, name: name, interfaceIndex: uint32(attrs.Index), isTAP: useTAP}, nil
 }
 
 func (d *device) addSubnet(_ context.Context, pfx netip.Prefix) error {
@@ -83,7 +104,7 @@ func (d *device) addSubnet(_ context.Context, pfx netip.Prefix) error {
 	return nil
 }
 
-func (d *device) removeSubnet(ctx context.Context, pfx netip.Prefix) error {
+func (d *device) removeSubnet(_ context.Context, pfx netip.Prefix) error {
 	link, err := netlink.LinkByIndex(int(d.interfaceIndex))
 	if err != nil {
 		return err
@@ -101,17 +122,20 @@ func (d *device) createLinkEndpoint() (stack.LinkEndpoint, error) {
 	if err != nil {
 		return nil, err
 	}
-	mac, err := net.ParseMAC("40:38:ab:ac:0d:e0")
-	if err != nil {
-		return nil, err
-	}
-	ep, err := fdbased.New(&fdbased.Options{
+	opts := &fdbased.Options{
 		FDs:                []int{d.fd},
 		MTU:                mtu,
 		PacketDispatchMode: fdbased.RecvMMsg,
-		EthernetHeader:     true,
-		Address:            tcpip.LinkAddress(mac),
-	})
+	}
+	if d.isTAP {
+		mac, err := RandomMAC()
+		if err != nil {
+			return nil, err
+		}
+		opts.EthernetHeader = true
+		opts.Address = tcpip.LinkAddress(mac)
+	}
+	ep, err := fdbased.New(opts)
 	if err != nil {
 		return nil, err
 	}

@@ -876,6 +876,7 @@ type Routing struct {
 	RecursionBlockTreads   int            `json:"recursionBlockTreads,omitempty"`
 	VirtualSubnet          netip.Prefix   `json:"virtualSubnet"`
 	AutoResolveConflicts   bool           `json:"autoResolveConflicts"`
+	UseTAP                 bool           `json:"useTAP"`
 
 	// For backward compatibility.
 	OldAlsoProxy        []netip.Prefix `json:"alsoProxy,omitempty"`
@@ -928,6 +929,9 @@ func (r *Routing) merge(o *Routing) {
 	}
 	if o.AutoResolveConflicts != defaultAutoResolveConflicts { //nolint:staticcheck // keep for the semantic clarity
 		r.AutoResolveConflicts = o.AutoResolveConflicts
+	}
+	if o.UseTAP {
+		r.UseTAP = o.UseTAP
 	}
 }
 
@@ -1116,8 +1120,10 @@ type RoutingSnake struct {
 	NeverProxy             []netip.Prefix `json:"never_proxy_subnets"`
 	AllowConflicting       []netip.Prefix `json:"allow_conflicting_subnets"`
 	RecursionBlockDuration time.Duration  `json:"recursion_block_duration"`
+	RecursionBlockTreads   int            `json:"recursion_block_treads"`
 	VirtualSubnet          netip.Prefix   `json:"virtual_subnet"`
 	AutoResolveConflicts   bool           `json:"auto_resolve_conflicts"`
+	UseTAP                 bool           `json:"use_tap"`
 }
 
 type DNS struct {
@@ -1219,11 +1225,15 @@ func DNSFromRPC(s *daemon.DNSConfig) *DNS {
 
 func (r *Routing) ToSnake() *RoutingSnake {
 	return &RoutingSnake{
-		Subnets:              r.Subnets,
-		AlsoProxy:            r.AlsoProxy,
-		NeverProxy:           r.NeverProxy,
-		AllowConflicting:     r.AllowConflicting,
-		AutoResolveConflicts: r.AutoResolveConflicts,
+		Subnets:                r.Subnets,
+		AlsoProxy:              r.AlsoProxy,
+		NeverProxy:             r.NeverProxy,
+		AllowConflicting:       r.AllowConflicting,
+		AutoResolveConflicts:   r.AutoResolveConflicts,
+		RecursionBlockDuration: r.RecursionBlockDuration,
+		RecursionBlockTreads:   r.RecursionBlockTreads,
+		VirtualSubnet:          r.VirtualSubnet,
+		UseTAP:                 r.UseTAP,
 	}
 }
 
