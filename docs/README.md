@@ -32,6 +32,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
     - [Configure intercept using CLI](reference/engagements/cli.md)
     - [Traffic Agent Sidecar](reference/engagements/sidecar.md)
     - [Target a specific container](reference/engagements/container.md)
+  - [Telepresence Docker Plugins](reference/plugins.md)
   - [Volume mounts](reference/volume.md)
   - [DNS resolution](reference/dns.md)
   - [RBAC](reference/rbac.md)

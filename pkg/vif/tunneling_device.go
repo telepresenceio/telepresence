@@ -2,8 +2,15 @@ package vif
 
 import (
 	"context"
+	"errors"
+	"net"
+	"net/netip"
 
 	"github.com/hashicorp/go-multierror"
+	"gvisor.dev/gvisor/pkg/tcpip"
+	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/datawire/dlib/dlog"
@@ -13,6 +20,7 @@ import (
 
 type TunnelingDevice struct {
 	stack  *stack.Stack
+	nicID  tcpip.NICID
 	Device Device
 	Router *Router
 	table  routing.Table
@@ -31,13 +39,14 @@ func NewTunnelingDevice(ctx context.Context, tunnelStreamCreator tunnel.StreamCr
 	if err != nil {
 		return nil, err
 	}
-	netStack, err := NewStack(ctx, ep, tunnelStreamCreator)
+	netStack, nicID, err := NewStack(ctx, ep, tunnelStreamCreator)
 	if err != nil {
 		return nil, err
 	}
 	router := NewRouter(dev, routingTable)
 	return &TunnelingDevice{
 		stack:  netStack,
+		nicID:  nicID,
 		Device: dev,
 		Router: router,
 		table:  routingTable,
@@ -55,8 +64,80 @@ func (vif *TunnelingDevice) Close(ctx context.Context) error {
 	return result
 }
 
+func (vif *TunnelingDevice) AddStaticNeighbor(addr netip.Addr, linkAddr net.HardwareAddr) error {
+	var proto tcpip.NetworkProtocolNumber
+	var tAddr tcpip.Address
+	if addr.Is4() {
+		proto = ipv4.ProtocolNumber
+		tAddr = tcpip.AddrFrom4(addr.As4())
+	} else {
+		proto = ipv6.ProtocolNumber
+		tAddr = tcpip.AddrFrom16(addr.As16())
+	}
+	tErr := vif.stack.AddStaticNeighbor(vif.nicID, proto, tAddr, tcpip.LinkAddress(linkAddr))
+	if tErr != nil {
+		return errors.New(tErr.String())
+	}
+	return nil
+}
+
+func (vif *TunnelingDevice) RemoveNeighbor(addr netip.Addr) error {
+	var proto tcpip.NetworkProtocolNumber
+	var tAddr tcpip.Address
+	if addr.Is4() {
+		proto = ipv4.ProtocolNumber
+		tAddr = tcpip.AddrFrom4(addr.As4())
+	} else {
+		proto = ipv6.ProtocolNumber
+		tAddr = tcpip.AddrFrom16(addr.As16())
+	}
+	tErr := vif.stack.RemoveNeighbor(vif.nicID, proto, tAddr)
+	if tErr != nil {
+		return errors.New(tErr.String())
+	}
+	return nil
+}
+
+func (vif *TunnelingDevice) DialTCP(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {
+	p, a := vif.toFullAddr(addr)
+	return gonet.DialContextTCP(ctx, vif.stack, a, p)
+}
+
+func (vif *TunnelingDevice) DialUDP(_ context.Context, addr, returnAddr netip.AddrPort) (net.Conn, error) {
+	var fa, rfa *tcpip.FullAddress
+	var p tcpip.NetworkProtocolNumber
+	if addr.IsValid() {
+		var a tcpip.FullAddress
+		p, a = vif.toFullAddr(addr)
+		fa = &a
+	}
+	if returnAddr.IsValid() {
+		var a tcpip.FullAddress
+		_, a = vif.toFullAddr(addr)
+		fa = &a
+	}
+	return gonet.DialUDP(vif.stack, fa, rfa, p)
+}
+
 func (vif *TunnelingDevice) Run(ctx context.Context) (err error) {
 	vif.stack.Wait()
-	dlog.Debug(ctx, "vif ended")
+	dlog.Debug(ctx, "VIF ended")
 	return nil
+}
+
+func (vif *TunnelingDevice) toFullAddr(ap netip.AddrPort) (tcpip.NetworkProtocolNumber, tcpip.FullAddress) {
+	fa := tcpip.FullAddress{
+		NIC:  vif.nicID,
+		Port: ap.Port(),
+	}
+	a := ap.Addr()
+	var p tcpip.NetworkProtocolNumber
+	if a.Is4() {
+		p = ipv4.ProtocolNumber
+		fa.Addr = tcpip.AddrFrom4(a.As4())
+	} else {
+		p = ipv6.ProtocolNumber
+		fa.Addr = tcpip.AddrFrom16(a.As16())
+	}
+	return p, fa
 }

@@ -54,6 +54,8 @@
           link: reference/engagements/sidecar
         - title: Target a specific container
           link: reference/engagements/container
+    - title: Telepresence Docker Plugins
+      link: reference/plugins
     - title: Volume mounts
       link: reference/volume
     - title: DNS resolution

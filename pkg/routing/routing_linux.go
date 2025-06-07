@@ -27,6 +27,10 @@ var (
 	srcIdx          = findInterfaceRe.SubexpIndex("src")     //nolint:gochecknoglobals // constant
 )
 
+type LinuxTable interface {
+	RouteToNetlink(route *Route) *netlink.Route
+}
+
 type table struct {
 	index int
 	rule  *netlink.Rule
@@ -77,11 +81,14 @@ msgLoop:
 }
 
 func rowAsRoute(rt *rtmsg, msg *syscall.NetlinkMessage) (*Route, error) {
+	var unspec netip.Addr
 	ipv4 := false
 	switch rt.Family {
 	case syscall.AF_INET:
 		ipv4 = true
+		unspec = netip.IPv4Unspecified()
 	case syscall.AF_INET6:
+		unspec = netip.IPv6Unspecified()
 	default:
 		return nil, nil
 	}
@@ -90,8 +97,8 @@ func rowAsRoute(rt *rtmsg, msg *syscall.NetlinkMessage) (*Route, error) {
 		return nil, fmt.Errorf("failed to parse netlink route attributes: %w", err)
 	}
 
-	var gw netip.Addr
-	var dstNet netip.Prefix
+	gw := unspec
+	dstNet := netip.PrefixFrom(unspec, 0)
 	var ifaceIdx int
 	for _, attr := range attrs {
 		switch attr.Attr.Type {
@@ -108,20 +115,7 @@ func rowAsRoute(rt *rtmsg, msg *syscall.NetlinkMessage) (*Route, error) {
 		return nil, nil
 	}
 
-	dfltGw := false
-	// Default route -- just make the dstNet 0.0.0.0
-	if gw.IsValid() && !dstNet.IsValid() {
-		dfltGw = true
-		if ipv4 {
-			dstNet = netip.PrefixFrom(netip.IPv4Unspecified(), 0)
-		} else {
-			dstNet = netip.PrefixFrom(netip.IPv6Unspecified(), 0)
-		}
-	}
-	if !dstNet.IsValid() {
-		return nil, nil
-	}
-
+	dfltGw := dstNet.Addr().IsUnspecified() && !gw.IsUnspecified()
 	iface, err := net.InterfaceByIndex(ifaceIdx)
 	if err != nil {
 		// This is not an atomic operation. An intercept may vanish while we're creating this table. When that
@@ -136,9 +130,10 @@ func rowAsRoute(rt *rtmsg, msg *syscall.NetlinkMessage) (*Route, error) {
 		return nil, err
 	}
 	return &Route{
-		LocalIP:   srcIP,
-		RoutedNet: dstNet,
-		Interface: iface,
+		LocalIP:        srcIP,
+		RoutedNet:      dstNet,
+		InterfaceIndex: iface.Index,
+		InterfaceName:  iface.Name,
 		// gw might be nil here, indicating a local route, i.e. directly connected without the packets having to go through a gateway.
 		Gateway: gw,
 		Default: dfltGw,
@@ -159,12 +154,15 @@ func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 		return nil, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, msg)
 	}
 	var gatewayIP netip.Addr
-	gw := match[gwidx]
-	if gw != "" {
+	if gw := match[gwidx]; gw != "" {
 		gatewayIP, err = netip.ParseAddr(gw)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse gateway IP %s: %w", gw, err)
 		}
+	} else if ip.Is4() {
+		gatewayIP = netip.IPv4Unspecified()
+	} else {
+		gatewayIP = netip.IPv6Unspecified()
 	}
 	iface, err := net.InterfaceByName(match[devIdx])
 	if err != nil {
@@ -175,10 +173,11 @@ func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 		return nil, fmt.Errorf("unable to parse local IP %s: %w", match[srcIdx], err)
 	}
 	return &Route{
-		Gateway:   gatewayIP,
-		Interface: iface,
-		RoutedNet: routedNet,
-		LocalIP:   localIP,
+		Gateway:        gatewayIP,
+		InterfaceIndex: iface.Index,
+		InterfaceName:  iface.Name,
+		RoutedNet:      routedNet,
+		LocalIP:        localIP,
 	}, nil
 }
 
@@ -221,12 +220,12 @@ func openTable(ctx context.Context) (Table, error) {
 	}, nil
 }
 
-func (t *table) routeToNetlink(route *Route) *netlink.Route {
+func (t *table) RouteToNetlink(route *Route) *netlink.Route {
 	rn := route.RoutedNet
 	return &netlink.Route{
 		Dst:       subnet.PrefixToIPNet(rn),
 		Table:     t.index,
-		LinkIndex: route.Interface.Index,
+		LinkIndex: route.InterfaceIndex,
 		Gw:        route.Gateway.AsSlice(),
 		Src:       route.LocalIP.AsSlice(),
 	}
@@ -237,7 +236,7 @@ func (t *table) Close(ctx context.Context) error {
 }
 
 func (t *table) Add(ctx context.Context, r *Route) error {
-	route := t.routeToNetlink(r)
+	route := t.RouteToNetlink(r)
 	if err := netlink.RouteAdd(route); err != nil {
 		return fmt.Errorf("netlink.RouteAdd: %w", err)
 	}
@@ -245,7 +244,7 @@ func (t *table) Add(ctx context.Context, r *Route) error {
 }
 
 func (t *table) Remove(ctx context.Context, r *Route) error {
-	route := t.routeToNetlink(r)
+	route := t.RouteToNetlink(r)
 	if err := netlink.RouteDel(route); err != nil {
 		return fmt.Errorf("netlink.RouteDel: %w", err)
 	}
@@ -253,24 +252,34 @@ func (t *table) Remove(ctx context.Context, r *Route) error {
 }
 
 func (r *Route) addStatic(ctx context.Context) error {
-	return dexec.CommandContext(ctx, "ip", "route", "add", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
+	return dexec.CommandContext(ctx, "ip", "route", "add", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.InterfaceName).Run()
 }
 
 func (r *Route) removeStatic(ctx context.Context) error {
-	return dexec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.Interface.Name).Run()
+	return dexec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.InterfaceName).Run()
 }
 
 func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
 	// On Linux, when we ask about an IP address assigned to the machine, the OS will give us a loopback route
-	if osRoute.LocalIP == osRoute.RoutedNet.Addr() && osRoute.Interface.Flags&net.FlagLoopback != 0 {
-		addrs, err := tableRoute.Interface.Addrs()
+	if osRoute.LocalIP == osRoute.RoutedNet.Addr() {
+		osIf, err := net.InterfaceByIndex(osRoute.InterfaceIndex)
 		if err != nil {
 			return false, err
 		}
-		for _, addr := range addrs {
-			dlog.Tracef(ctx, "Checking address %s against %s", addr, osRoute.RoutedNet.Addr())
-			if a, ok := netip.AddrFromSlice(iputil.Normalize(addr.(*net.IPNet).IP)); ok && a == osRoute.LocalIP {
-				return true, nil
+		if osIf.Flags&net.FlagLoopback != 0 {
+			tbIf, err := net.InterfaceByIndex(tableRoute.InterfaceIndex)
+			if err != nil {
+				return false, err
+			}
+			addrs, err := tbIf.Addrs()
+			if err != nil {
+				return false, err
+			}
+			for _, addr := range addrs {
+				dlog.Tracef(ctx, "Checking address %s against %s", addr, osRoute.RoutedNet.Addr())
+				if a, ok := netip.AddrFromSlice(iputil.Normalize(addr.(*net.IPNet).IP)); ok && a == osRoute.LocalIP {
+					return true, nil
+				}
 			}
 		}
 	}

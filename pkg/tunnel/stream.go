@@ -28,16 +28,18 @@ type (
 )
 
 const (
-	TunToClient        = Tag("T⇄C")
-	ClientToAgent      = Tag("C⇄A")
-	ClientToDNS        = Tag("C⇄D")
-	AgentToClient      = Tag("A⇄C")
-	AgentToProxied     = Tag("A⇄P")
-	ClientToFileServer = Tag("C⇄F")
-	ClientToManager    = Tag("C⇄M")
-	ManagerToClient    = Tag("M⇄C")
-	AgentToManager     = Tag("A⇄M")
-	ManagerToAgent     = Tag("M⇄A")
+	TunToClient        = Tag("TUN⇄CLI")
+	TunToDNS           = Tag("TUN⇄DNS")
+	DnsToTun           = Tag("DNS⇄TUN")
+	ClientToAgent      = Tag("CLI⇄AGN")
+	ClientToDNS        = Tag("CLI⇄DNS")
+	AgentToClient      = Tag("AGN⇄CLI")
+	AgentToProxied     = Tag("AGN⇄PRX")
+	ClientToFileServer = Tag("CLI⇄FSV")
+	ClientToManager    = Tag("CLI⇄MGR")
+	ManagerToClient    = Tag("MGR⇄CLI")
+	AgentToManager     = Tag("AGN⇄MGR")
+	ManagerToAgent     = Tag("MGR⇄AGN")
 )
 
 // Endpoint is an endpoint for a Stream such as a Dialer or a bidirectional pipe.

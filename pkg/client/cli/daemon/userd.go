@@ -98,7 +98,7 @@ func (u *userClient) DaemonInfo() *Info {
 }
 
 func (u *userClient) Containerized() bool {
-	return u.info.InDocker()
+	return u.info != nil && u.info.InDocker()
 }
 
 func (u *userClient) DaemonID() *Identifier {

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
@@ -71,10 +72,10 @@ func ClientImage(ctx context.Context) string {
 func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr netip.AddrPort) (opts []string, err error) {
 	opts = []string{
 		"--name", daemonID.ContainerName(),
-		"--network", "telepresence",
 		"--cap-add", "NET_ADMIN",
 		"--sysctl", "net.ipv6.conf.all.disable_ipv6=0",
 		"--device", "/dev/net/tun:/dev/net/tun",
+		"--pid", "host",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
 		"-p", fmt.Sprintf("%s:%d/tcp", hostAddr, client.GetConfig(ctx).Grpc().DaemonPort),
@@ -97,7 +98,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	if env.ScoutDisable {
 		opts = append(opts, "-e", "SCOUT_DISABLE=1")
 	}
-	if client.GetConfig(ctx).Cluster().DockerAddHostGateway {
+	if client.GetConfig(ctx).Docker().AddHostGateway {
 		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
 	}
 	return opts, nil
@@ -111,6 +112,7 @@ func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 		"--name", "docker-" + daemonID.String(),
 		"--address", netip.AddrPortFrom(netip.IPv4Unspecified(), grpcCfg.DaemonPort).String(),
 		"--embed-network",
+		"--teleroute-port", strconv.Itoa(int(grpcCfg.TeleroutePort)),
 	}
 }
 
@@ -140,6 +142,52 @@ const (
 	kubeAuthPortFile = kubeauth.CommandName + ".port"
 )
 
+type ContainerInfo struct {
+	ID   string
+	Name string
+	Pid  int
+	IP   netip.Addr
+}
+
+// GetContainerInfo returns the name and process ID of the container with the given ID along with its associated IP in the given network.
+func GetContainerInfo(ctx context.Context, cid string, network string) (*ContainerInfo, error) {
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxInterval = 300 * time.Millisecond
+	bo.MaxElapsedTime = time.Second
+	var info *ContainerInfo
+	err = backoff.Retry(func() error {
+		ci, err := cli.ContainerInspect(ctx, cid)
+		if err != nil {
+			// The container in question no longer exists
+			return backoff.Permanent(err)
+		}
+		var addr netip.Addr
+		if network != "" {
+			ns := ci.NetworkSettings
+			if ns == nil {
+				return os.ErrNotExist
+			}
+			tn, ok := ns.Networks[network]
+			if !ok || tn.IPAddress == "" {
+				// retry the operation if this happens
+				return fmt.Errorf("container %s has no IP address in network %s", ci.Name, network)
+			}
+			addr, err = netip.ParseAddr(tn.IPAddress)
+			if err != nil {
+				return backoff.Permanent(fmt.Errorf("failed to parse IPAddress of network %s: %w", network, err))
+			}
+		}
+		info = &ContainerInfo{ID: ci.ID, Pid: ci.State.Pid, IP: addr, Name: ci.Name}
+		return nil
+	}, backoff.WithContext(bo, ctx))
+	return info, err
+}
+
 func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
 	pb, err := os.ReadFile(portFile)
 	if err != nil {
@@ -160,6 +208,7 @@ func readPortFile(ctx context.Context, portFile string, configFiles []string) (u
 }
 
 func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, error) {
+	dlog.Debugf(ctx, "Starting authenticator service using portFile %s", portFile)
 	// remove any stale port file
 	_ = os.Remove(portFile)
 
@@ -185,6 +234,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 			}
 			continue
 		}
+		dlog.Debugf(ctx, "Authenticator service started on port %d", port)
 		return port, nil
 	}
 	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), kubeauth.CommandName)
@@ -227,17 +277,16 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		func(configFiles []string) (string, string, error) {
 			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
 			if err != nil {
+				dlog.Errorf(ctx, "failed to start k8s authenticator service: %v", err)
 				return "", "", err
 			}
 
 			// The telepresence command that will run in order to retrieve the credentials from the authenticator service
 			// will run in a container, so the first argument must be a path that finds the telepresence executable and
-			// the second must be an address that will find the host's port, not the container's localhost.
-
-			// Default is localhost in caller, but it is overridden when using WSL because "host.docker.internal" will
-			// be the Windows host
+			// the second must be an address that will find the host's port, not the container's localhost. The host
+			// in this case is the client performing the authentication (as opposed to the Docker VM, when one is used).
 			kubeAuthHost := "host.docker.internal"
-			if proc.RunningInWSL() {
+			if !client.GetConfig(ctx).Docker().AddHostGateway {
 				r, err := routing.DefaultRoute(ctx)
 				if err != nil {
 					return "", "", err
@@ -275,6 +324,8 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 		if host == "localhost" {
 			addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
 			err = nil
+		} else {
+			err = fmt.Errorf(`invalid host IP "%s"`, host)
 		}
 	}
 	if err != nil {
@@ -597,24 +648,27 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 	cmd.DisableLogging = true
 	cmd.Stderr = &stdErr
 	cmd.Stdout = &stdOut
-	if err := cmd.Run(); err != nil {
-		errStr := strings.TrimSpace(stdErr.String())
-		if errStr == "" {
-			errStr = err.Error()
-		}
-		return nil, fmt.Errorf("launch of daemon container failed: %s", errStr)
-	}
+	err := cmd.Run()
 	cid := strings.TrimSpace(stdOut.String())
-	pid, ip, err := ContainerPidAndIP(ctx, cid)
+	errStr := strings.TrimSpace(stdErr.String())
+	if errStr != "" || err != nil {
+		err = fmt.Errorf("launch of daemon container failed: %s%s: %w", cid, errStr, err)
+		dlog.Error(ctx, err)
+		return nil, err
+	}
+
+	// The teleroute network plugin communicates with the daemon over the default bridge network
+	cni, err := GetContainerInfo(ctx, cid, "bridge")
 	if err != nil {
 		progress.Write(ctx, progress.ErrorMessageEvent("daemon", err.Error()))
+		return nil, err
 	}
 	cr := daemon.GetRequest(ctx)
 	dlog.Debugf(ctx, "Creating daemon info file %s (runs in container)", daemonID.Name)
 	info := &daemon.Info{
 		ContainerID:  cid,
-		ContainerPID: pid,
-		ContainerIP:  ip,
+		ContainerPID: cni.Pid,
+		ContainerIP:  cni.IP,
 		DaemonPort:   port,
 		Name:         daemonID.Name,
 		KubeContext:  daemonID.KubeContext,
@@ -623,4 +677,24 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 		Hostname:     cr.Hostname,
 	}
 	return info, daemon.SaveInfo(ctx, info, daemonID.InfoFileName())
+}
+
+func WaitForExit(ctx context.Context, cli *dockerClient.Client, id string, maxTime time.Duration) error {
+	const exitPollInterval = 200 * time.Millisecond
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(exitPollInterval):
+	}
+	stillRunning := fmt.Errorf("container %s is still running", id)
+	opts := container.ListOptions{Filters: filters.NewArgs(filters.Arg("id", id))}
+	return backoff.Retry(func() error {
+		lst, err := cli.ContainerList(ctx, opts)
+		if err != nil {
+			err = backoff.Permanent(err)
+		} else if len(lst) > 0 {
+			err = stillRunning
+		}
+		return err
+	}, backoff.WithContext(backoff.NewExponentialBackOff(backoff.WithInitialInterval(exitPollInterval), backoff.WithMaxElapsedTime(maxTime)), ctx))
 }

@@ -1,7 +1,6 @@
 package tunnel
 
 import (
-	"net"
 	"net/netip"
 	"testing"
 
@@ -22,62 +21,62 @@ var (
 func TestConnIDFromUDP(t *testing.T) {
 	tests := []struct {
 		name string
-		src  *net.UDPAddr
-		dst  *net.UDPAddr
+		src  netip.AddrPort
+		dst  netip.AddrPort
 		want string
 	}{
 		{
 			name: "ipv4-ipv4",
-			src:  &net.UDPAddr{IP: ipv4a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4a, 4),
+			dst:  netip.AddrPortFrom(ipv4b, 8),
 			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv4-ipv6",
-			src:  &net.UDPAddr{IP: ipv4a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4a, 4),
+			dst:  netip.AddrPortFrom(ipv6b, 8),
 			want: "udp 192.168.0.1:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
 		},
 		{
 			name: "ipv4-ipv4as6",
-			src:  &net.UDPAddr{IP: ipv4a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4Asv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4a, 4),
+			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
 			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv6-ipv4",
-			src:  &net.UDPAddr{IP: ipv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4b, 8),
 			want: "udp [2a05:d014:153d:d732:a2d3::15]:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv6-ipv6",
-			src:  &net.UDPAddr{IP: ipv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv6a, 4),
+			dst:  netip.AddrPortFrom(ipv6b, 8),
 			want: "udp [2a05:d014:153d:d732:a2d3::15]:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
 		},
 		{
 			name: "ipv6-ipv4as6",
-			src:  &net.UDPAddr{IP: ipv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4Asv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
 			want: "udp [2a05:d014:153d:d732:a2d3::15]:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv4as6-ipv4",
-			src:  &net.UDPAddr{IP: ipv4Asv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4b, 8),
 			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv4as6-ipv6",
-			src:  &net.UDPAddr{IP: ipv4Asv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
+			dst:  netip.AddrPortFrom(ipv6b, 8),
 			want: "udp 192.168.0.1:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
 		},
 		{
 			name: "ipv4as6-ipv4as6",
-			src:  &net.UDPAddr{IP: ipv4Asv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4Asv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
 			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 	}
@@ -229,62 +228,62 @@ func TestConnID_Destination(t *testing.T) {
 func TestConnID_areBothIPv4(t *testing.T) {
 	tests := []struct {
 		name string
-		src  *net.UDPAddr
-		dst  *net.UDPAddr
+		src  netip.AddrPort
+		dst  netip.AddrPort
 		want bool
 	}{
 		{
 			name: "ipv4-ipv4",
-			src:  &net.UDPAddr{IP: ipv4a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4a, 4),
+			dst:  netip.AddrPortFrom(ipv4b, 8),
 			want: true,
 		},
 		{
 			name: "ipv4-ipv6",
-			src:  &net.UDPAddr{IP: ipv4a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4a, 4),
+			dst:  netip.AddrPortFrom(ipv6b, 8),
 			want: false,
 		},
 		{
 			name: "ipv4-ipv4as6",
-			src:  &net.UDPAddr{IP: ipv4a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4Asv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4a, 4),
+			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
 			want: true,
 		},
 		{
 			name: "ipv6-ipv4",
-			src:  &net.UDPAddr{IP: ipv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4b, 8),
 			want: false,
 		},
 		{
 			name: "ipv6-ipv6",
-			src:  &net.UDPAddr{IP: ipv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv6a, 4),
+			dst:  netip.AddrPortFrom(ipv6b, 8),
 			want: false,
 		},
 		{
 			name: "ipv6-ipv4as6",
-			src:  &net.UDPAddr{IP: ipv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4Asv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
 			want: false,
 		},
 		{
 			name: "ipv4as6-ipv4",
-			src:  &net.UDPAddr{IP: ipv4Asv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4b, 8),
 			want: true,
 		},
 		{
 			name: "ipv4as6-ipv6",
-			src:  &net.UDPAddr{IP: ipv4Asv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
+			dst:  netip.AddrPortFrom(ipv6b, 8),
 			want: false,
 		},
 		{
 			name: "ipv4as6-ipv4as6",
-			src:  &net.UDPAddr{IP: ipv4Asv6a.AsSlice(), Port: 4},
-			dst:  &net.UDPAddr{IP: ipv4Asv6b.AsSlice(), Port: 8},
+			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
+			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
 			want: true,
 		},
 	}

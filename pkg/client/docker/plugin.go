@@ -7,15 +7,13 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"net/netip"
-	"os"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/blang/semver/v4"
+	"github.com/containerd/errdefs"
 	dockerTypes "github.com/docker/docker/api/types"
-	dockerClient "github.com/docker/docker/client"
 	"github.com/go-json-experiment/json"
 
 	"github.com/datawire/dlib/dlog"
@@ -24,11 +22,28 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
+const (
+	pluginTypeVolume  = "volume"
+	pluginTypeNetwork = "network"
+)
+
 // EnsureVolumePlugin checks if the telemount plugin is installed and installs it if that is
 // not the case. The plugin is also enabled.
 func EnsureVolumePlugin(ctx context.Context) (string, error) {
-	cfg := client.DockerImage(client.GetConfig(ctx).Intercept().Telemount)
-	return ensurePlugin(ctx, "volume", &cfg)
+	cfg := client.DockerImage(client.GetConfig(ctx).Docker().Telemount)
+	return ensurePlugin(ctx, pluginTypeVolume, &cfg)
+}
+
+// EnsureNetworkPlugin checks if the telemount plugin is installed and installs it if that is
+// not the case. The plugin is also enabled.
+func EnsureNetworkPlugin(ctx context.Context) (string, error) {
+	cfg := client.DockerImage(client.GetConfig(ctx).Docker().Teleroute)
+	return ensurePlugin(ctx, pluginTypeNetwork, &cfg)
+}
+
+func NetworkPluginName(ctx context.Context) string {
+	cfg := client.DockerImage(client.GetConfig(ctx).Docker().Teleroute)
+	return latestPluginName(ctx, &cfg, pluginTypeNetwork)
 }
 
 func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImage) (string, error) {
@@ -36,17 +51,10 @@ func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImag
 	if err != nil {
 		return "", err
 	}
-	pn := pluginName(cfg)
-	if pt := cfg.Tag; pt != "" {
-		pn += "-" + pt
-	} else if lv, err := latestPluginVersion(ctx, pn, pluginType, cfg); err == nil {
-		pn += "-" + lv.String()
-	} else {
-		dlog.Warnf(ctx, "failed to get latest version of docker %s plugin %s: %v", pluginType, pn, err)
-	}
+	pn := latestPluginName(ctx, cfg, pluginType)
 	pi, _, err := cli.PluginInspectWithRaw(ctx, pn)
 	if err != nil {
-		if !dockerClient.IsErrNotFound(err) {
+		if !errdefs.IsNotFound(err) {
 			dlog.Errorf(ctx, "docker plugin inspect: %v", err)
 		}
 		return pn, installPlugin(ctx, pn)
@@ -60,6 +68,18 @@ func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImag
 
 func pluginName(tm *client.DockerImage) string {
 	return fmt.Sprintf("%s/%s/%s:%s", tm.Registry, tm.Namespace, tm.Repository, runtime.GOARCH)
+}
+
+func latestPluginName(ctx context.Context, cfg *client.DockerImage, pluginType string) string {
+	pn := pluginName(cfg)
+	if pt := cfg.Tag; pt != "" {
+		pn += "-" + pt
+	} else if lv, err := latestPluginVersion(ctx, pn, pluginType, cfg); err == nil {
+		pn += "-" + lv.String()
+	} else {
+		dlog.Warnf(ctx, "failed to get latest version of docker %s plugin %s: %v", pluginType, pn, err)
+	}
+	return pn
 }
 
 func installPlugin(ctx context.Context, pluginName string) error {
@@ -115,13 +135,15 @@ type repsResponse struct {
 
 func getLatestPluginVersion(ctx context.Context, pluginName string, cfg *client.DockerImage) (ver semver.Version, err error) {
 	dlog.Debugf(ctx, "Checking for latest version of %s", pluginName)
-	if cfg.RegistryAPI == "ghcr.io/v2" {
-		// This registryAPI has on support for anonymous queries, so we hardcode a default for the 0.1.6 version here for now.
-		tag := cfg.Tag
-		if tag == "debug" {
-			return zeroVersion, nil
-		}
+	tag := cfg.Tag
+	if tag == "debug" {
+		return zeroVersion, nil
+	}
+	if tag != "" {
 		return semver.Parse(tag)
+	}
+	if cfg.RegistryAPI == "ghcr.io/v2" {
+		return ver, fmt.Errorf("a tag for plugin %s must be set the client's docker config because the ghcr.io/v2 registry does not support anonymous queries", pluginName)
 	}
 	url := fmt.Sprintf("https://%s/namespaces/%s/repositories/%s/tags", cfg.RegistryAPI, cfg.Namespace, cfg.Repository)
 	var rq *http.Request
@@ -160,26 +182,4 @@ func getLatestPluginVersion(ctx context.Context, pluginName string, cfg *client.
 	}
 	dlog.Debugf(ctx, "Found latest version of %s to be %s", pluginName, ver)
 	return ver, err
-}
-
-// ContainerPidAndIP returns the process ID of the container with the given name along with it's associated IP in the default bridge network.
-func ContainerPidAndIP(ctx context.Context, name string) (pid int, addr netip.Addr, err error) {
-	cli, err := GetClient(ctx)
-	if err != nil {
-		return 0, addr, err
-	}
-	ci, err := cli.ContainerInspect(ctx, name)
-	if err != nil {
-		return 0, addr, fmt.Errorf("docker container inspect %s: %w", "userd", err)
-	}
-	if ns := ci.NetworkSettings; ns != nil {
-		if tn, ok := ns.Networks["bridge"]; ok {
-			addr, err = netip.ParseAddr(tn.IPAddress)
-			if err != nil {
-				return 0, addr, err
-			}
-			return ci.State.Pid, addr, nil
-		}
-	}
-	return 0, addr, os.ErrNotExist
 }
