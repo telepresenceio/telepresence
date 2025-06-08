@@ -45,6 +45,12 @@ A "Legacy Telepresence command used" warning has been printed for several years 
 command.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">added agent.initContainer.enabled parameter that can be set in values.yaml to control whether the initContainer injection is enabled/disabled</div></div>
+<div style="margin-left: 15px">
+
+To fix Issue #3868:  Request to add config in values.yaml to disable initContainer injection. Now the initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart.  This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions
+</div>
+
 ## Version 2.22.6 <span style="font-size: 16px;">(June  3)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Regression causing "unexpected slice size" with older traffic-managers.</div></div>
 <div style="margin-left: 15px">

@@ -56,6 +56,7 @@ func TestEnvconfig(t *testing.T) {
 		ServerPort:                   8081,
 		EnabledWorkloadKinds:         []k8sapi.Kind{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
 		MaxNamespaceSpecificWatchers: 10,
+		AgentInitContainerEnabled:    true,
 	}
 
 	testcases := map[string]struct {

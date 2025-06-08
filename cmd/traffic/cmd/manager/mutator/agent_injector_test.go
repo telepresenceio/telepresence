@@ -861,7 +861,8 @@ matchExpressions:
 			AgentPort:                9900,
 			AgentAppProtocolStrategy: appProtoStrategy,
 
-			EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
+			EnabledWorkloadKinds:      k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
+			AgentInitContainerEnabled: true,
 		}
 		ctx = managerutil.WithEnv(ctx, env)
 		ctx = setupAgentInjector(t, ctx, clientset)
@@ -1341,7 +1342,8 @@ matchExpressions:
 `,
 			"",
 			&managerutil.Env{
-				APIPort: 9981,
+				APIPort:                   9981,
+				AgentInitContainerEnabled: true,
 			},
 		},
 		{
@@ -1992,7 +1994,8 @@ matchExpressions:
 				AgentPort:         9900,
 				AgentInjectPolicy: agentconfig.WhenEnabled,
 
-				EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
+				EnabledWorkloadKinds:      k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
+				AgentInitContainerEnabled: true,
 			}
 			ctx = managerutil.WithEnv(ctx, env)
 			if test.envAdditions != nil {

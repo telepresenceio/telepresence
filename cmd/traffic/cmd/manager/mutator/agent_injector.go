@@ -162,7 +162,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod) (PatchOps, error) {
 	var patches PatchOps
 	var anns map[string]string
-	patches = addInitContainer(pod, config, patches)
+	patches = addInitContainer(ctx, pod, config, patches)
 	patches, anns = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
 	patches = addAgentVolumes(pod, patches)
@@ -204,7 +204,11 @@ func (a *agentInjector) Uninstall(ctx context.Context) {
 	a.agentConfigs.DeleteMapsAndRolloutAll(ctx)
 }
 
-func needInitContainer(config *agentconfig.Sidecar) bool {
+func needInitContainer(ctx context.Context, config *agentconfig.Sidecar) bool {
+	if !managerutil.GetEnv(ctx).AgentInitContainerEnabled {
+		dlog.Info(ctx, "Injection of initContainer is disabled in the config. It is enabled by default and can be modified by setting agent.initContainer.enabled in values.yaml")
+		return false
+	}
 	for _, cc := range config.Containers {
 		if cc.Replace == agentconfig.ReplacePolicyIntercept {
 			for _, ic := range cc.Intercepts {
@@ -233,8 +237,8 @@ func maybeRemoveAppContainer(pod *core.Pod, config *agentconfig.Sidecar, patches
 	return patches
 }
 
-func addInitContainer(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
-	if !needInitContainer(config) {
+func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
+	if !needInitContainer(ctx, config) {
 		for i, oc := range pod.Spec.InitContainers {
 			if agentconfig.InitContainerName == oc.Name {
 				return append(patches, PatchOperation{

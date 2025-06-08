@@ -75,6 +75,12 @@ items:
           A "Legacy Telepresence command used" warning has been printed for several years now, and the mapping for the
           `--swap-deployment` was the `intercept` command, which is very confusing today since we now have the `replace`
           command.
+      - type: feature 
+        title: added agent.initContainer.enabled parameter that can be set in values.yaml to control whether the initContainer injection is enabled/disabled
+        body: >-
+          To fix Issue #3868:  Request to add config in values.yaml to disable initContainer injection.
+          Now the initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart. 
+          This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions
   - version: 2.22.6
     date: 2025-06-03
     notes:

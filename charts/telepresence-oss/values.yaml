@@ -131,6 +131,8 @@ agent:
     "/tmp": Local
   image:
     pullPolicy: IfNotPresent
+  initContainer:
+    enabled: true
 
 ################################################################################
 ## Telepresence API Server Configuration
