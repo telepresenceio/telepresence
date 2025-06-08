@@ -6,13 +6,14 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/containerd/errdefs v1.0.0
 	github.com/coreos/go-iptables v0.8.0
 	github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99
 	github.com/datawire/dlib v1.3.1
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/datawire/go-ftpserver v0.1.3
-	github.com/docker/docker v28.2.1+incompatible
+	github.com/docker/docker v28.2.2+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-json-experiment/json v0.0.0-20250517221953-25912455fbc8
@@ -40,22 +41,21 @@ require (
 	github.com/telepresenceio/go-fuseftp/rpc v0.6.6
 	github.com/telepresenceio/telepresence/rpc/v2 v2.22.6
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
-	golang.org/x/net v0.40.0
+	golang.org/x/net v0.41.0
 	golang.org/x/sys v0.33.0
 	golang.org/x/term v0.32.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	golang.zx2c4.com/wireguard/windows v0.5.3
-	google.golang.org/grpc v1.72.2
+	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
-	gvisor.dev/gvisor v0.0.0-20250523182742-eede7a881b20
-	helm.sh/helm/v3 v3.18.1
+	gvisor.dev/gvisor v0.0.0-20250606001031-fa4c4dd86b43
+	helm.sh/helm/v3 v3.18.2
 	k8s.io/api v0.33.1
 	k8s.io/apimachinery v0.33.1
 	k8s.io/cli-runtime v0.33.1
 	k8s.io/client-go v0.33.1
 	k8s.io/kubectl v0.33.1
-	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979
+	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -74,7 +74,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/containerd/containerd v1.7.27 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
@@ -88,7 +87,7 @@ require (
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
-	github.com/fclairamb/ftpserverlib v0.25.0 // indirect
+	github.com/fclairamb/ftpserverlib v0.26.0 // indirect
 	github.com/fclairamb/go-log v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
@@ -147,7 +146,7 @@ require (
 	github.com/rubenv/sql-migrate v1.8.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
-	github.com/spf13/cast v1.8.0 // indirect
+	github.com/spf13/cast v1.9.2 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/winfsp/cgofuse v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
@@ -160,15 +159,15 @@ require (
 	go.opentelemetry.io/otel v1.36.0 // indirect
 	go.opentelemetry.io/otel/metric v1.36.0 // indirect
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
-	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/crypto v0.39.0 // indirect
+	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
-	golang.org/x/time v0.11.0 // indirect
-	golang.org/x/tools v0.33.0 // indirect
+	golang.org/x/sync v0.15.0 // indirect
+	golang.org/x/text v0.26.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
+	golang.org/x/tools v0.34.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250603155806-513f23925822 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
