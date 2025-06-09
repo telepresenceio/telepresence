@@ -280,6 +280,7 @@ matchExpressions:
 		PodCIDRs: []netip.Prefix{
 			netip.PrefixFrom(netip.AddrFrom4([4]byte{192, 168, 0, 0}), 16),
 		},
+		AgentInitContainerEnabled: true,
 	}
 	ctx = managerutil.WithEnv(ctx, &env)
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))

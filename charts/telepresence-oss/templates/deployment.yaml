@@ -139,6 +139,10 @@ spec:
           - name: AGENT_MOUNT_POLICIES
             value: '{{ toJson .mountPolicies }}'
           {{- end }}
+          {{- with .initContainer }}
+          - name: AGENT_INIT_CONTAINER_ENABLED
+            value: {{ .enabled | quote  }}
+          {{- end }}
           {{- with .image }}
           {{- if .name }}
           - name: AGENT_IMAGE_NAME
@@ -172,7 +176,7 @@ spec:
           {{- end }}
           {{- with fromJsonArray (include "traffic-manager.namespaces" $) }}
           {{- /*
-           This environment variable it not used, it's here to force a redeploy of the traffic manager when the list
+           This environment variable is not used, it's here to force a redeploy of the traffic manager when the list
            changes, because it updates roles and rolebindings and potentially also changes from roles to clusterroles or
            vice versa.
            */}}

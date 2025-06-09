@@ -33,6 +33,14 @@ properties:
             - RemoteReadOnly
             - Local
             - Ignore
+      initContainer:
+        description: Configuration for the init-container that runs before the traffic-agent
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            description: Enable/Disable the init-container
+            type: boolean
       image:
         type: object
         additionalProperties: false
