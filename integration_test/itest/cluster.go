@@ -457,7 +457,9 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
 	config.Intercept().UseFtp = true
-	config.Intercept().MountsRoot = TempDir(c)
+	if s.ClientIsVersion(">=2.23.0") {
+		config.Intercept().MountsRoot = TempDir(c)
+	}
 	config.Routing().RecursionBlockDuration = 10 * time.Millisecond
 	config = config.Merge(client.GetConfig(c))
 
