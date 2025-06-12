@@ -7,17 +7,19 @@ import (
 )
 
 // NewPipe creates a pair of Streams connected using two channels.
-func NewPipe(id ConnID, sessionID SessionID) (Stream, Stream) {
+func NewPipe(id ConnID, sessionID SessionID, tagA, tagB Tag) (Stream, Stream) {
 	out := make(chan Message, 1)
 	in := make(chan Message, 1)
 	return &channelStream{
 			id:     id,
 			sid:    sessionID,
+			tag:    tagA,
 			recvCh: in,
 			sendCh: out,
 		}, &channelStream{
 			id:     id,
 			sid:    sessionID,
+			tag:    tagB,
 			recvCh: out,
 			sendCh: in,
 		}
@@ -26,6 +28,7 @@ func NewPipe(id ConnID, sessionID SessionID) (Stream, Stream) {
 type channelStream struct {
 	id     ConnID
 	sid    SessionID
+	tag    Tag
 	recvCh <-chan Message
 	sendCh chan<- Message
 }
@@ -34,7 +37,7 @@ func (s channelStream) SetTag(_ Tag) {
 }
 
 func (s channelStream) Tag() Tag {
-	return "AcB"
+	return s.tag
 }
 
 func (s channelStream) ID() ConnID {

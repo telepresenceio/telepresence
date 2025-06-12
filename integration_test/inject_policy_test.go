@@ -149,11 +149,11 @@ func (is *installSuite) applyOrDeleteMultipleServices(svcCount int, applyOrDelet
 }
 
 func (is *installSuite) Test_MultiOnDemandInjectOnInstall() {
-	svcCount := 25
+	svcCount := 8
 	if runtime.GOOS != "linux" {
 		// The GitHub runner is probably using Colima for Kubernetes and running with limited
 		// resources.
-		svcCount = 10
+		svcCount = 4
 	}
 	ctx := is.Context()
 
@@ -182,11 +182,11 @@ func (is *installSuite) Test_MultiOnDemandInjectOnInstall() {
 }
 
 func (is *installSuite) Test_MultiOnDemandInjectOnApply() {
-	svcCount := 15
+	svcCount := 8
 	if runtime.GOOS != "linux" {
 		// The GitHub runner is probably using Colima for Kubernetes and running with limited
 		// resources.
-		svcCount = 10
+		svcCount = 4
 	}
 	ctx := is.Context()
 

@@ -14,7 +14,7 @@ type Device interface {
 	Name() string
 	AddSubnet(context.Context, netip.Prefix) error
 	RemoveSubnet(context.Context, netip.Prefix) error
-	SetDNS(context.Context, string, netip.Addr, []string) (err error)
+	SetDNS(context.Context, string, netip.AddrPort, []string) (err error)
 	WaitForDevice()
 }
 
@@ -46,7 +46,7 @@ func (d *device) NewLinkEndpoint() (stack.LinkEndpoint, error) {
 }
 
 // SetDNS sets the DNS configuration for the device on the windows platform.
-func (d *device) SetDNS(ctx context.Context, clusterDomain string, server netip.Addr, domains []string) (err error) {
+func (d *device) SetDNS(ctx context.Context, clusterDomain string, server netip.AddrPort, domains []string) (err error) {
 	return d.setDNS(ctx, clusterDomain, server, domains)
 }
 

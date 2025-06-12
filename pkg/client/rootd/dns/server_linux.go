@@ -32,10 +32,10 @@ const (
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(netip.Addr, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
 	if proc.RunningInContainer() {
 		// Don't bother with systemd-resolved when running in a docker container
-		return s.runOverridingServer(c, dev)
+		return s.runContainerServer(c, dev, configureDNS)
 	}
 
 	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
@@ -43,14 +43,14 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		err = nil
 		if c.Err() == nil {
 			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev)
+			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev, configureDNS)
 		}
 	}
 	return err
 }
 
-func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
-	if !s.LocalIP.IsValid() {
+func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
+	if !s.LocalAddress.IsValid() {
 		rf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -62,8 +62,8 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			if err != nil {
 				return fmt.Errorf("nameserver IP %q in /etc/resolv.conf is invalid: %v", nsAddr, err)
 			}
-			s.LocalIP = addr
-			dlog.Infof(c, "Automatically set -dns=%s", addr)
+			s.LocalAddress = netip.AddrPortFrom(addr, 53)
+			dlog.Infof(c, "Automatically set dns=%s", s.LocalAddress)
 		}
 
 		// The search entries in /etc/resolv.conf are not intended for this resolver so
@@ -84,7 +84,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			}
 		}
 	}
-	if !s.LocalIP.IsValid() {
+	if !s.LocalAddress.IsValid() {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
@@ -96,12 +96,12 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	if err != nil {
 		return err
 	}
-	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port)
+	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 
 	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	pool, err := NewConnPool(s.LocalIP, 10)
+	pool, err := NewConnPool(s.LocalAddress, 10)
 	if err != nil {
 		return err
 	}
@@ -114,13 +114,15 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
-		// Server will close the listener, so no need to close it here.
+		// The server will close the listener, so no need to close it here.
 		s.processSearchPaths(g, func(c context.Context, _ vif.Device) error {
 			s.flushDNS()
 			return nil
 		}, dev)
 		return s.Run(c, serverStarted, listeners, pool)
 	})
+
+	configureDNS(s.VIFAddress, dnsResolverAddr)
 
 	if proc.RunningInContainer() {
 		g.Go("Local DNS", func(c context.Context) error {
@@ -152,7 +154,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.LocalIP, dnsResolverAddr, pool.LocalAddrs())
+			err := routeDNS(c, s.LocalAddress, dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {
 				return err
 			}
@@ -169,6 +171,36 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device) error {
 	return g.Wait()
 }
 
+func (s *Server) runContainerServer(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
+	lc := &net.ListenConfig{}
+	l, err := lc.ListenPacket(c, "udp", ":53")
+	if err != nil {
+		return err
+	}
+
+	dnsResolverAddr, err := splitToUDPAddr(l.LocalAddr())
+	if err != nil {
+		return err
+	}
+	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
+
+	serverStarted := make(chan struct{})
+	serverDone := make(chan struct{})
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go("Server", func(c context.Context) error {
+		defer close(serverDone)
+		// The server will close the listener, so no need to close it here.
+		s.processSearchPaths(g, func(c context.Context, _ vif.Device) error {
+			s.flushDNS()
+			return nil
+		}, dev)
+		return s.Run(c, serverStarted, []net.PacketConn{l}, nil)
+	})
+
+	configureDNS(s.VIFAddress, dnsResolverAddr)
+	return g.Wait()
+}
+
 func (s *Server) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 	listener, err := newLocalUDPListener(c)
 	if err != nil {
@@ -181,10 +213,14 @@ func (s *Server) dnsListeners(c context.Context) ([]net.PacketConn, error) {
 func runNatTableCmd(c context.Context, args ...string) error {
 	// We specifically don't want to use the cancellation of 'ctx' here, because we don't ever
 	// want to leave things in a half-cleaned-up state.
+	c = context.WithoutCancel(c)
 	args = append([]string{"-t", "nat"}, args...)
 	cmd := dexec.CommandContext(c, "iptables", args...)
-	cmd.DisableLogging = dlog.MaxLogLevel(c) < dlog.LogLevelDebug
-	dlog.Debug(c, shellquote.ShellString("iptables", args))
+	if dlog.MaxLogLevel(c) >= dlog.LogLevelTrace {
+		dlog.Trace(c, shellquote.ShellString("iptables", args))
+	} else {
+		cmd.DisableLogging = true
+	}
 	return cmd.Run()
 }
 
@@ -194,7 +230,7 @@ const tpDNSChain = "TELEPRESENCE_DNS"
 // that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
 // uses a fallback, that fallback reaches the original DNS service.
-func routeDNS(c context.Context, dnsIP netip.Addr, toAddr *net.UDPAddr, localDNSs []*net.UDPAddr) (err error) {
+func routeDNS(c context.Context, dnsAddress netip.AddrPort, toAddr netip.AddrPort, localDNSs []netip.AddrPort) (err error) {
 	// create the chain
 	unrouteDNS(c)
 
@@ -208,8 +244,8 @@ func routeDNS(c context.Context, dnsIP netip.Addr, toAddr *net.UDPAddr, localDNS
 	for _, localDNS := range localDNSs {
 		if err = runNatTableCmd(c, "-A", tpDNSChain,
 			"-p", "udp",
-			"--source", localDNS.IP.String(),
-			"--sport", strconv.Itoa(localDNS.Port),
+			"--source", localDNS.Addr().String(),
+			"--sport", strconv.Itoa(int(localDNS.Port())),
 			"-j", "RETURN",
 		); err != nil {
 			return err
@@ -218,8 +254,8 @@ func routeDNS(c context.Context, dnsIP netip.Addr, toAddr *net.UDPAddr, localDNS
 	// This rule redirects all packets intended for the DNS service to our local DNS service
 	if err = runNatTableCmd(c, "-A", tpDNSChain,
 		"-p", "udp",
-		"--dest", dnsIP.String()+"/32",
-		"--dport", "53",
+		"--dest", dnsAddress.Addr().String()+"/32",
+		"--dport", strconv.Itoa(int(dnsAddress.Port())),
 		"-j", "DNAT",
 		"--to-destination", toAddr.String(),
 	); err != nil {

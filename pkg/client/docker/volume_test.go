@@ -20,7 +20,8 @@ func Test_getLatestPluginVersion(t *testing.T) {
 	require.NoError(t, err)
 	c = client.WithConfig(c, cfg)
 
-	ver, err := getLatestPluginVersion(c, pluginName(c))
+	di := client.DockerImage(cfg.Docker().Telemount)
+	ver, err := getLatestPluginVersion(c, pluginName(&di), &di)
 	require.NoError(t, err)
 	require.True(t, ver.EQ(zeroVersion) || semver.MustParse("0.1.3").LT(ver))
 }

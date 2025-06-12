@@ -1,6 +1,9 @@
 package client
 
-import "net"
+import (
+	"net"
+	"net/netip"
+)
 
 // FreePortsTCP uses net.Listen repeatedly to choose free TCP ports for the localhost. It then immediately closes
 // the listeners and returns the addresses that were allocated.
@@ -9,9 +12,9 @@ import "net"
 // before they are actually used. The chances are slim though, since tests show that in most cases (at least on
 // macOS and Linux), the same address isn't allocated for a while even if the allocation is made from different
 // processes.
-func FreePortsTCP(count int) ([]*net.TCPAddr, error) {
+func FreePortsTCP(count int) ([]netip.AddrPort, error) {
 	ls := make([]net.Listener, 0, count)
-	as := make([]*net.TCPAddr, count)
+	as := make([]netip.AddrPort, count)
 	defer func() {
 		for _, l := range ls {
 			_ = l.Close()
@@ -23,7 +26,7 @@ func FreePortsTCP(count int) ([]*net.TCPAddr, error) {
 			return nil, err
 		} else {
 			ls = append(ls, l)
-			as[i] = l.Addr().(*net.TCPAddr)
+			as[i] = l.Addr().(*net.TCPAddr).AddrPort()
 		}
 	}
 	return as, nil

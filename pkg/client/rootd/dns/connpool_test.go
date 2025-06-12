@@ -24,13 +24,13 @@ func TestConnPoolConcurrency(t *testing.T) {
 		Net:     "udp",
 		Timeout: TIMEOUT_S * time.Second,
 	}
-	pool, err := NewConnPool(netip.MustParseAddr("8.8.8.8"), 5)
+	pool, err := NewConnPool(netip.MustParseAddrPort("8.8.8.8:53"), 5)
 	if err != nil {
 		t.Log(err)
 		t.FailNow()
 	}
 	defer pool.Close()
-	errors := make(chan error)
+	errors := make(chan error, TOTAL_THREADS*REQUESTS_PER_THREAD)
 	wg := &sync.WaitGroup{}
 	wg.Add(TOTAL_THREADS)
 	for i := 0; i < TOTAL_THREADS; i++ {
@@ -43,14 +43,14 @@ func TestConnPoolConcurrency(t *testing.T) {
 				ctx, cancel := context.WithTimeout(ctx, TIMEOUT_S*time.Second)
 				_, _, err := pool.Exchange(ctx, dc, msg)
 				cancel()
-				errors <- err
+				if err != nil {
+					errors <- err
+				}
 			}
 		}(i)
 	}
-	go func() {
-		wg.Wait()
-		close(errors)
-	}()
+	wg.Wait()
+	close(errors)
 	for err := range errors {
 		if err != nil {
 			t.Error(err)

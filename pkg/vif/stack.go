@@ -20,17 +20,21 @@ import (
 	"gvisor.dev/gvisor/pkg/waiter"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-func NewStack(ctx context.Context, dev stack.LinkEndpoint, streamCreator tunnel.StreamCreator) (*stack.Stack, error) {
+func NewStack(ctx context.Context, dev stack.LinkEndpoint, streamCreator tunnel.StreamCreator) (*stack.Stack, tcpip.NICID, error) {
+	pfs := []stack.NetworkProtocolFactory{
+		ipv4.NewProtocol,
+		ipv6.NewProtocol,
+	}
+	if client.GetConfig(ctx).Routing().UseTAP {
+		pfs = append(pfs, arp.NewProtocol)
+	}
 	s := stack.New(stack.Options{
-		NetworkProtocols: []stack.NetworkProtocolFactory{
-			ipv4.NewProtocol,
-			ipv6.NewProtocol,
-			arp.NewProtocol,
-		},
+		NetworkProtocols: pfs,
 		TransportProtocols: []stack.TransportProtocolFactory{
 			icmp.NewProtocol4,
 			icmp.NewProtocol6,
@@ -40,29 +44,31 @@ func NewStack(ctx context.Context, dev stack.LinkEndpoint, streamCreator tunnel.
 		HandleLocal: false,
 	})
 	if err := setDefaultOptions(s); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	if err := setNIC(ctx, s, dev); err != nil {
-		return nil, err
+	nicID, err := setNIC(ctx, s, dev)
+	if err != nil {
+		return nil, 0, err
 	}
 	setTCPHandler(ctx, s, streamCreator)
 	setUDPHandler(ctx, s, streamCreator)
-	return s, nil
+	return s, nicID, nil
 }
 
 // maxInFlight specifies the max number of in-flight connection attempts.
 const maxInFlight = 1024
 
-// keepAliveIdle is used as the very first alive interval. Subsequent intervals
+// keepAliveIdle is used as the very first keep-alive interval. Subsequent intervals
 // use keepAliveInterval.
-const keepAliveIdle = 60 * time.Second
+const keepAliveIdle = 18 * time.Second
 
-// keepAliveInterval is the interval between sending keep-alive packets.
-const keepAliveInterval = 30 * time.Second
+// keepAliveInterval is the interval between sending keep-alive packets. We keep this fairly short
+// because we don't worry too much about draining batteries on cellphones.
+const keepAliveInterval = 9 * time.Second
 
 // keepAliveCount is the max number of keep-alive probes that can be sent
 // before the connection is killed due to lack of response.
-const keepAliveCount = 9
+const keepAliveCount = 10
 
 type idStringer stack.TransportEndpointID
 
@@ -90,16 +96,19 @@ func setDefaultOptions(s *stack.Stack) error {
 	return nil
 }
 
-func setNIC(ctx context.Context, s *stack.Stack, ep stack.LinkEndpoint) error {
+func setNIC(ctx context.Context, s *stack.Stack, ep stack.LinkEndpoint) (tcpip.NICID, error) {
 	nicID := s.NextNICID()
 	if err := s.CreateNICWithOptions(nicID, ep, stack.NICOptions{Name: "tel", Context: ctx}); err != nil {
-		return fmt.Errorf("create NIC failed: %s", err)
+		return 0, fmt.Errorf("create NIC failed: %s", err)
 	}
 	if err := s.SetPromiscuousMode(nicID, true); err != nil {
-		return fmt.Errorf("SetPromiscuousMode(%d, %t): %s", nicID, true, err)
+		return 0, fmt.Errorf("SetPromiscuousMode(%d, %t): %s", nicID, true, err)
 	}
 	if err := s.SetSpoofing(nicID, true); err != nil {
-		return fmt.Errorf("SetSpoofing(%d, %t): %s", nicID, true, err)
+		return 0, fmt.Errorf("SetSpoofing(%d, %t): %s", nicID, true, err)
+	}
+	if err := s.SetNICAddress(nicID, ep.LinkAddress()); err != nil {
+		return 0, fmt.Errorf("SetNICAddress(%d, %s): %s", nicID, ep.LinkAddress(), err)
 	}
 	s.SetRouteTable([]tcpip.Route{
 		{
@@ -111,13 +120,14 @@ func setNIC(ctx context.Context, s *stack.Stack, ep stack.LinkEndpoint) error {
 			NIC:         nicID,
 		},
 	})
-	return nil
+	return nicID, nil
 }
 
 func forwardTCP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *tcp.ForwarderRequest) {
 	var ep tcpip.Endpoint
 	var err tcpip.Error
 	id := fr.ID()
+	dlog.Tracef(ctx, "Forward TCP %s", idStringer(id))
 	defer func() {
 		if err != nil {
 			msg := fmt.Sprintf("forward TCP %s: %s", idStringer(id), err)
@@ -228,7 +238,7 @@ func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, stre
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := streamCreator(ctx, id)
 	if err != nil {
-		dlog.Errorf(ctx, "forward %s: %s", id, err)
+		dlog.Errorf(ctx, "forward %s: %v", id, err)
 		cancel()
 		return
 	}

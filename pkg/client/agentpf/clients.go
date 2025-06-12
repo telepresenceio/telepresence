@@ -98,7 +98,13 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		conn, cli, _, err := k8sclient.ConnectToAgent(ctx, dialCtx, ai.PodName, ai.Namespace, uint16(ai.ApiPort), types.UID(ai.PodId))
 		if err != nil {
 			ac.connectErr = err
+
+			// There's a risk for deadlock here, because of the Range iteration of the map that performs cancel. This cancel will block
+			// because we're holding the lock now, and since the Range iteration holds a lock for the entry that we're about to delete,
+			// that delete will block. So we let a potential cancel call continue by unlocking before we delete.
+			ac.Unlock()
 			ac.remove()
+			ac.Lock() // Must of course lock again to prevent panic by the pending unlock.
 			return nil, err
 		}
 
@@ -189,11 +195,9 @@ func (ac *client) refresh(ctx context.Context, ai *manager.AgentPodInfo) {
 	}
 	if ai.Intercepted {
 		dlog.Debugf(ctx, "Agent %s(%s) changed to intercepted", ai.PodName, net.IP(ai.PodIp))
-		go func() {
-			if _, err := ac.ensureConnectLocked(ctx); err != nil {
-				dlog.Errorf(ctx, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
-			}
-		}()
+		if _, err := ac.ensureConnectLocked(ctx); err != nil {
+			dlog.Errorf(ctx, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
+		}
 	} else {
 		// This agent is no longer intercepting. Stop the dial watcher
 		dlog.Debugf(ctx, "Agent %s(%s) changed to not intercepted", ai.PodName, net.IP(ai.PodIp))
@@ -225,7 +229,7 @@ func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
 	}
 
 	go func() {
-		err := tunnel.DialWaitLoop(ctx, tunnel.ClientToAgent, tunnel.AgentProvider(ac.cli), watcher, tunnel.SessionID(ac.session.SessionId))
+		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), watcher, tunnel.SessionID(ac.session.SessionId))
 		if err != nil {
 			// The traffic-agent closed the dial wait loop, which means that it's terminating.
 			dlog.Error(ctx, err)

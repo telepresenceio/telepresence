@@ -329,22 +329,22 @@ curl the name "echo-no-svc". Since there's no service by that name, there's no D
 > A service-less intercept utilizes an `initContainer` that requires `NET_ADMIN` capabilities.
 > If your cluster administrator has disabled them, you will only be able to intercept services using symbolic target ports.
 
-## Specifying the intercept traffic target
+## Specifying the engagement traffic target
 
-By default, it's assumed that your local app is reachable on `127.0.0.1`, and intercepted traffic will be sent to that IP
-at the port given by `--port`. If you wish to change this behavior and send traffic to a different IP address, you can use the `--address` parameter
-to `telepresence intercept`. Say your machine is configured to respond to HTTP requests for an intercept on `172.16.0.19:8080`. You would run this as:
+By default, it's assumed that your local app is reachable on `127.0.0.1` or on the IP of the local container that is
+running that app, and intercepted traffic will be sent to that address at the port given by `--port`. If you wish to
+change this behavior and send traffic to a different address, you can use the `--address` parameter  to
+`telepresence intercept/replace/wiretap`. Say your machine is configured to respond to HTTP requests for an intercept
+on a container named "stoic_galois". You would run this as:
 
 ```console
-$ telepresence intercept my-service --address 172.16.0.19 --port 8080
-Using Deployment echo-easy
-   Intercept name         : echo-easy
-   State                  : ACTIVE
-   Workload kind          : Deployment
-   Destination            : 172.16.0.19:8080
-   Service Port Identifier: proxied
-   Volume Mount Point     : /var/folders/j8/kzkn41mx2wsd_ny9hrgd66fc0000gp/T/telfs-517018422
-   Intercepting           : all TCP connections
+$ telepresence intercept my-service --address stoic-galois --port 8080
+Using Deployment my-service
+   Intercept name: my-service
+   State         : ACTIVE
+   Workload kind : Deployment
+   Intercepting  : 127.0.0.1 -> stoic-galois
+       8080 -> 8080 TCP
 ```
 
 ## Replacing a running workload

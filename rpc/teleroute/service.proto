@@ -1,0 +1,63 @@
+syntax = "proto3";
+package telepresence.teleroute;
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/teleroute";
+
+service Teleroute {
+  rpc Connect(ConnectRequest) returns (stream Info);
+
+  rpc CreateEndpoint(CreateEndpointRequest) returns (google.protobuf.Empty);
+
+  rpc RemoveEndpoint(EndpointIdentifier) returns (google.protobuf.Empty);
+
+  rpc Join(EndpointIdentifier) returns (JoinResponse);
+
+  rpc Leave(EndpointIdentifier) returns (google.protobuf.Empty);
+}
+
+message ConnectRequest {
+  // Gateways sent to CreateNetwork in netip.Prefix binary form
+  repeated bytes gateways = 1;
+
+  // The host pid of the connecting plugin
+  int64 pid = 2;
+}
+
+message CreateEndpointRequest {
+  // The id of this endpoint.
+  string id = 1;
+
+  // The joining container's IP address in netip.Addr binary form
+  bytes address = 2;
+
+  // Set to true if this is the daemon endpoint
+  bool daemon = 3;
+}
+
+message EndpointIdentifier {
+  // The endpoint ID.
+  string id = 1;
+}
+
+message JoinResponse {
+  // The name of the container interface of the veth-pair.
+  string interface_src_name = 1;
+
+  // The prefix to use when the container interface is renamed.
+  string interface_dst_prefix = 2;
+
+  repeated bytes routes = 3;
+
+  bytes via = 4;
+
+  bytes gw_ip_v4 = 5;
+
+  bytes gw_ip_v6 = 6;
+
+  bool disable_gw = 7;
+}
+
+message Info {
+  map<string,string> info = 1;
+}

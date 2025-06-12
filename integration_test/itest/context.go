@@ -160,6 +160,24 @@ func WithEnv(ctx context.Context, env dos.MapEnv) context.Context {
 	return client.WithEnv(ctx, evx)
 }
 
+// WithoutEnv prevents environment variables to be used by the Command function.
+func WithoutEnv(ctx context.Context, keysToRemove []string) context.Context {
+	env := getEnv(ctx)
+	if env == nil {
+		return ctx
+	}
+	env = maps.Copy(env)
+	for _, key := range keysToRemove {
+		delete(env, key)
+	}
+	ctx = context.WithValue(ctx, envContextKey{}, env)
+	evx, err := client.LoadEnvWith((&envCtxLookuper{ctx}).Lookup)
+	if err != nil {
+		getT(ctx).Fatal(err)
+	}
+	return client.WithEnv(ctx, evx)
+}
+
 type userContextkey struct{}
 
 func WithUser(ctx context.Context, clusterUser string) context.Context {

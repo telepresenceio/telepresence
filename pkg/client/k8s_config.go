@@ -127,10 +127,10 @@ func (ke *kubeconfigExtension) asConfig() Config {
 			dns.Mappings = keDns.Mappings
 		}
 		if keDns.LocalIP.IsValid() {
-			dns.LocalIP = keDns.LocalIP
+			dns.LocalAddress = netip.AddrPortFrom(keDns.LocalIP, 53)
 		}
 		if keDns.RemoteIP.IsValid() {
-			dns.RemoteIP = keDns.RemoteIP
+			dns.VIFAddress = netip.AddrPortFrom(keDns.RemoteIP, 53)
 		}
 		if keDns.LookupTimeout.Duration != 0 {
 			dns.LookupTimeout = keDns.LookupTimeout.Duration

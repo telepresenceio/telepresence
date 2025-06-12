@@ -51,7 +51,31 @@ Values for `client.cluster` controls aspects on how client's connection to the t
 | `mappedNamespaces`        | Namespaces that will be mapped by default.                                            | [sequence][yaml-seq] of [strings][yaml-str] | `[]`            |
 | `connectFromRootDaeamon`  | Make connections to the cluster directly from the root daemon.                        | [boolean][yaml-bool]                        | `true`          |
 | `agentPortForward`        | Let telepresence-client use port-forwards directly to agents                          | [boolean][yaml-bool]                        | `true`          |
-| `dockerAddHostGateway`    | Add `--add-host host.docker.internal:host-gateway` when starting the daemon in docker | [boolean][yaml-bool]                        | `true` on linux |
+
+### Docker
+Values for the `client.docker` provides docker specific options.
+
+| Field            | Description                                                                           | Type                                        | Default         |
+|------------------|---------------------------------------------------------------------------------------|---------------------------------------------|-----------------|
+| `addHostGateway` | Add `--add-host host.docker.internal:host-gateway` when starting the daemon in docker | [boolean][yaml-bool]                        | `true` on linux |
+| `telemount`      | Configuration of the image containing the telemount Docker volume plugin              | Image |
+| `teleroute`      | Configuration of the image containing the teleroute Docker network plugin             | Image |
+
+#### Image
+
+The Image objects for `client.docker.telemount` and `client.docker.teleroute` provides information on how to download the
+image from a registry.
+
+The repositoryAPI must be capable of listing available tags if the tag is set to an empty string. The `ghcr.io/v2` API
+does not support this for anonymous users, hence the default tags.
+
+| Field         | Description                                      | Type               | Default               |
+|---------------|--------------------------------------------------|--------------------|-----------------------|
+| `registryAPI` | The URL used when connecting to the registry API | [string][yaml-str] | `ghcr.io/v2`          |
+| `registry`    | The name of the registry                         | [string][yaml-str] | `ghcr.io`             |
+| `namespace`   | The namespace of the component                   | [string][yaml-str] | `telepresenceio`      |
+| `repository`  | The name of the component registry               | [string][yaml-str] | `telemount/teleroute` |
+| `tag`         | The component tag                                | [string][yaml-str] | `0.1.6/0.3.0`         |
 
 ### DNS
 
@@ -74,7 +98,7 @@ client:
   dns:
     includeSuffixes: [.private]
     excludeSuffixes: [.se, .com, .io, .net, .org, .ru]
-    localIP: 8.8.8.8
+    localAddress: 172.12.0.53
     lookupTimeout: 30s
 ```
 

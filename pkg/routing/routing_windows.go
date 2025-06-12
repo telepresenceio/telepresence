@@ -36,18 +36,17 @@ func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP netip.Addr) (*Route, err
 	}
 	if !localIP.IsValid() {
 		localIP, err = interfaceLocalIP(iface, dst.Addr().Is4())
-		if err != nil || !localIP.IsValid() {
+		if err != nil {
 			return nil, err
 		}
 	}
-	ip := dst.Addr()
-	routedNet := netip.PrefixFrom(ip, dst.Bits())
 	return &Route{
-		LocalIP:   localIP,
-		Gateway:   gw,
-		RoutedNet: routedNet,
-		Interface: iface,
-		Default:   dst.Bits() == 0,
+		LocalIP:        localIP,
+		Gateway:        gw,
+		RoutedNet:      dst,
+		InterfaceIndex: iface.Index,
+		InterfaceName:  iface.Name,
+		Default:        dst.Addr().IsUnspecified(),
 	}, nil
 }
 
@@ -141,17 +140,21 @@ func (r *Route) addStatic(ctx context.Context) error {
 	} else {
 		maskSize = 128
 	}
-	mask := net.CIDRMask(r.RoutedNet.Bits(), maskSize)
-	cmd := proc.CommandContext(ctx,
-		"route",
+	args := []string{
 		"ADD",
 		ip.String(),
-		"MASK",
-		maskToIP(mask).String(),
-		r.Gateway.String(),
-		"IF",
-		strconv.Itoa(r.Interface.Index),
-	)
+	}
+	if r.RoutedNet.Bits() < maskSize {
+		mask := net.CIDRMask(r.RoutedNet.Bits(), maskSize)
+		args = append(args, "MASK", maskToIP(mask).String())
+	}
+
+	// Contrary to what the usage printout says, he gateway must be appended even if it is unspecified. If it is missing,
+	// the command just prints its usage and exits with code -1.
+	args = append(args, r.Gateway.String())
+
+	args = append(args, "IF", strconv.Itoa(r.InterfaceIndex))
+	cmd := proc.CommandContext(ctx, "route", args...)
 	cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {

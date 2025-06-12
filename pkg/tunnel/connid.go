@@ -13,8 +13,8 @@ import (
 // is suitable as a map key.
 type ConnID string
 
-func ConnIDFromUDP(src, dst *net.UDPAddr) ConnID {
-	return NewConnID(ipproto.UDP, src.AddrPort(), dst.AddrPort())
+func ConnIDFromUDP(src, dst netip.AddrPort) ConnID {
+	return NewConnID(ipproto.UDP, src, dst)
 }
 
 // NewConnID returns a new ConnID for the given values.

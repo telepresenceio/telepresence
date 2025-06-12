@@ -107,6 +107,7 @@ type Config interface {
 	TelepresenceAPI() *TelepresenceAPI
 	Intercept() *Intercept
 	Cluster() *Cluster
+	Docker() *Docker
 	DNS() *DNS
 	Routing() *Routing
 	DestructiveMerge(Config)
@@ -123,6 +124,7 @@ type BaseConfig struct {
 	TelepresenceAPIV TelepresenceAPI `json:"telepresenceAPI,omitzero"`
 	InterceptV       Intercept       `json:"intercept,omitzero"`
 	ClusterV         Cluster         `json:"cluster,omitzero"`
+	DockerV          Docker          `json:"docker,omitzero"`
 	DNSV             DNS             `json:"dns,omitzero"`
 	RoutingV         Routing         `json:"routing,omitzero"`
 
@@ -165,6 +167,10 @@ func (c *BaseConfig) Intercept() *Intercept {
 
 func (c *BaseConfig) Cluster() *Cluster {
 	return &c.ClusterV
+}
+
+func (c *BaseConfig) Docker() *Docker {
+	return &c.DockerV
 }
 
 func (c *BaseConfig) DNS() *DNS {
@@ -248,6 +254,7 @@ func (c *BaseConfig) DestructiveMerge(lc Config) {
 	c.TelepresenceAPIV.merge(lc.TelepresenceAPI())
 	c.InterceptV.merge(lc.Intercept())
 	c.ClusterV.merge(lc.Cluster())
+	c.DockerV.merge(lc.Docker())
 	c.DNSV.merge(lc.DNS())
 	c.RoutingV.merge(lc.Routing())
 }
@@ -680,6 +687,46 @@ type Grpc struct {
 	// MaxReceiveSize is the maximum message size in bytes the client can receive in a gRPC call or stream message.
 	// Overrides the gRPC default of 4MB.
 	MaxReceiveSizeV resource.Quantity `json:"maxReceiveSize"`
+
+	// DaemonPort is the port where the containerized daemon exposes its Connector service. It will be exposed to a
+	// randomly selected port on the host that the Telepresence CLI will connect to. The daemonPort defaults to 4038.
+	DaemonPort uint16 `json:"daemonPort"`
+
+	// TeleroutePort is the port where the containerized daemon exposes its Teleroute service that the Teleroute
+	// Docker Network plugin will connect to.
+	TeleroutePort uint16 `json:"teleroutePort"`
+}
+
+var defaultGrpc = Grpc{ //nolint:gochecknoglobals // constant
+	DaemonPort:    4038,
+	TeleroutePort: 4039,
+}
+
+func (g *Grpc) defaults() DefaultsAware {
+	return &defaultGrpc
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (g *Grpc) merge(o *Grpc) {
+	mergeNonDefaults(g, o)
+}
+
+// IsZero controls whether this element will be included in marshalled output.
+func (g *Grpc) IsZero() bool {
+	return g == nil || *g == defaultGrpc
+}
+
+func (g *Grpc) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(g))
+}
+
+func (g *Grpc) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	// Prevent that the original object is cleared when an empty object is decoded by passing the address
+	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
+	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
+	type wt Grpc
+	wp := (*wt)(g)
+	return json.UnmarshalDecode(in, &wp)
 }
 
 func (g *Grpc) MaxReceiveSize() int64 {
@@ -689,17 +736,6 @@ func (g *Grpc) MaxReceiveSize() int64 {
 		}
 	}
 	return 0
-}
-
-func (g *Grpc) merge(o *Grpc) {
-	if !o.MaxReceiveSizeV.IsZero() {
-		g.MaxReceiveSizeV = o.MaxReceiveSizeV
-	}
-}
-
-// IsZero controls whether this element will be included in marshalled output.
-func (g *Grpc) IsZero() bool {
-	return g == nil || g.MaxReceiveSizeV.IsZero()
 }
 
 type TelepresenceAPI struct {
@@ -712,39 +748,9 @@ func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
 	}
 }
 
-type Telemount DockerImage
-
-var defaultTelemount = Telemount{ //nolint:gochecknoglobals // constant
-	RegistryAPI: "ghcr.io/v2",
-	Registry:    "ghcr.io",
-	Namespace:   "telepresenceio",
-	Repository:  "telemount",
-}
-
-func (tm *Telemount) defaults() DefaultsAware {
-	return &defaultTelemount
-}
-
-func (tm *Telemount) IsZero() bool {
-	return *tm == defaultTelemount
-}
-
-func (tm *Telemount) MarshalJSONTo(out *jsontext.Encoder) error {
-	return json.MarshalEncode(out, mapWithoutDefaults(tm))
-}
-
-func (tm *Telemount) UnmarshalJSONFrom(in *jsontext.Decoder) error {
-	// Prevent that the original object is cleared when an empty object is decoded by passing the address
-	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
-	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Telemount
-	wp := (*wt)(tm)
-	return json.UnmarshalDecode(in, &wp)
-}
-
 var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
-	AppProtocolStrategy: k8sapi.Http2Probe,
-	Telemount:           defaultTelemount,
+	AppProtocolStrategy:  k8sapi.Http2Probe,
+	MountCompletionDelay: 300 * time.Millisecond,
 }
 
 type DockerImage struct {
@@ -756,11 +762,11 @@ type DockerImage struct {
 }
 
 type Intercept struct {
-	AppProtocolStrategy k8sapi.AppProtocolStrategy `json:"appProtocolStrategy"`
-	DefaultPort         int                        `json:"defaultPort"`
-	UseFtp              bool                       `json:"useFtp"`
-	Telemount           Telemount                  `json:"telemount,omitzero"`
-	MountsRoot          string                     `json:"mountsRoot"`
+	AppProtocolStrategy  k8sapi.AppProtocolStrategy `json:"appProtocolStrategy"`
+	DefaultPort          int                        `json:"defaultPort"`
+	UseFtp               bool                       `json:"useFtp"`
+	MountsRoot           string                     `json:"mountsRoot"`
+	MountCompletionDelay time.Duration              `json:"mountCompletionDelay"`
 }
 
 func (ic *Intercept) defaults() DefaultsAware {
@@ -799,9 +805,6 @@ type Cluster struct {
 
 	// deprecated, use Routing.VirtualSubnet
 	OldVirtualIPSubnet string `json:"virtualIPSubnet"`
-
-	// If set, add flag "--add-host=host.docker.internal:host-gateway" when starting the containerized daemon container
-	DockerAddHostGateway bool `json:"dockerAddHostGateway"`
 }
 
 // This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
@@ -812,7 +815,6 @@ var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
 	DefaultManagerNamespace: defaultDefaultManagerNamespace,
 	ConnectFromRootDaemon:   true,
 	AgentPortForward:        true,
-	DockerAddHostGateway:    defaultDockerAddHostGateway,
 }
 
 func (cc *Cluster) defaults() DefaultsAware {
@@ -842,6 +844,108 @@ func (cc *Cluster) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	return json.UnmarshalDecode(in, &wp)
 }
 
+type Telemount DockerImage
+
+var defaultTelemount = Telemount{ //nolint:gochecknoglobals // constant
+	RegistryAPI: "ghcr.io/v2",
+	Registry:    "ghcr.io",
+	Namespace:   "telepresenceio",
+	Repository:  "telemount",
+	Tag:         "0.1.6",
+}
+
+func (tm *Telemount) defaults() DefaultsAware {
+	return &defaultTelemount
+}
+
+func (tm *Telemount) IsZero() bool {
+	return *tm == defaultTelemount
+}
+
+func (tm *Telemount) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(tm))
+}
+
+func (tm *Telemount) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	// Prevent that the original object is cleared when an empty object is decoded by passing the address
+	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
+	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
+	type wt Telemount
+	wp := (*wt)(tm)
+	return json.UnmarshalDecode(in, &wp)
+}
+
+type Teleroute DockerImage
+
+var defaultTeleroute = Teleroute{ //nolint:gochecknoglobals // constant
+	RegistryAPI: "ghcr.io/v2",
+	Registry:    "ghcr.io",
+	Namespace:   "telepresenceio",
+	Repository:  "teleroute",
+	Tag:         "0.3.0",
+}
+
+func (tr *Teleroute) defaults() DefaultsAware {
+	return &defaultTeleroute
+}
+
+func (tr *Teleroute) IsZero() bool {
+	return *tr == defaultTeleroute
+}
+
+func (tr *Teleroute) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(tr))
+}
+
+func (tr *Teleroute) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	// Prevent that the original object is cleared when an empty object is decoded by passing the address
+	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
+	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
+	type wt Teleroute
+	wp := (*wt)(tr)
+	return json.UnmarshalDecode(in, &wp)
+}
+
+type Docker struct {
+	// If set, add flag "--add-host=host.docker.internal:host-gateway" when starting the containerized daemon container
+	AddHostGateway bool      `json:"addHostGateway"`
+	Telemount      Telemount `json:"telemount,omitzero"`
+	Teleroute      Teleroute `json:"teleroute,omitzero"`
+}
+
+var defaultDocker = Docker{ //nolint:gochecknoglobals // constant
+	AddHostGateway: defaultAddHostGateway,
+	Telemount:      defaultTelemount,
+	Teleroute:      defaultTeleroute,
+}
+
+func (d *Docker) defaults() DefaultsAware {
+	return &defaultDocker
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (d *Docker) merge(o *Docker) {
+	mergeNonDefaults(d, o)
+}
+
+// IsZero controls whether this element will be included in marshaled output.
+func (d *Docker) IsZero() bool {
+	return d == nil || isDefault(d)
+}
+
+func (d *Docker) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(d))
+}
+
+func (d *Docker) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	// Prevent that the original object is cleared when an empty object is decoded by passing the address
+	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
+	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
+	type wt Docker
+	wp := (*wt)(d)
+	return json.UnmarshalDecode(in, &wp)
+}
+
 type Routing struct {
 	Subnets                []netip.Prefix `json:"subnets,omitempty"`
 	AlsoProxy              []netip.Prefix `json:"alsoProxySubnets,omitempty"`
@@ -851,6 +955,7 @@ type Routing struct {
 	RecursionBlockTreads   int            `json:"recursionBlockTreads,omitempty"`
 	VirtualSubnet          netip.Prefix   `json:"virtualSubnet"`
 	AutoResolveConflicts   bool           `json:"autoResolveConflicts"`
+	UseTAP                 bool           `json:"useTAP"`
 
 	// For backward compatibility.
 	OldAlsoProxy        []netip.Prefix `json:"alsoProxy,omitempty"`
@@ -904,6 +1009,9 @@ func (r *Routing) merge(o *Routing) {
 	if o.AutoResolveConflicts != defaultAutoResolveConflicts { //nolint:staticcheck // keep for the semantic clarity
 		r.AutoResolveConflicts = o.AutoResolveConflicts
 	}
+	if o.UseTAP {
+		r.UseTAP = o.UseTAP
+	}
 }
 
 // IsZero controls whether this element will be included in marshalled output.
@@ -928,8 +1036,8 @@ func (d *DNS) Equal(o *DNS) bool {
 	if d == nil || o == nil {
 		return d == o
 	}
-	return o.LocalIP == d.LocalIP &&
-		o.RemoteIP == d.RemoteIP &&
+	return o.LocalAddress == d.LocalAddress &&
+		o.VIFAddress == d.VIFAddress &&
 		o.LookupTimeout == d.LookupTimeout &&
 		slices.Equal(o.IncludeSuffixes, d.IncludeSuffixes) &&
 		slices.Equal(o.ExcludeSuffixes, d.ExcludeSuffixes) &&
@@ -973,7 +1081,16 @@ func (d *DNS) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
 	type wt DNS
 	wp := (*wt)(d)
-	return json.UnmarshalDecode(in, &wp)
+	err := json.UnmarshalDecode(in, &wp)
+	if err == nil {
+		if d.LocalIP.IsValid() && !d.LocalAddress.IsValid() {
+			d.LocalAddress = netip.AddrPortFrom(d.LocalIP, 53)
+		}
+		if d.RemoteIP.IsValid() && !d.VIFAddress.IsValid() {
+			d.VIFAddress = netip.AddrPortFrom(d.RemoteIP, 53)
+		}
+	}
+	return err
 }
 
 type configKey struct{}
@@ -1023,10 +1140,11 @@ var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
 	TimeoutsV:        defaultTimeouts,
 	LogLevelsV:       defaultLogLevels,
 	ImagesV:          defaultImages,
-	GrpcV:            Grpc{},
+	GrpcV:            defaultGrpc,
 	TelepresenceAPIV: TelepresenceAPI{},
 	InterceptV:       defaultIntercept,
 	ClusterV:         defaultCluster,
+	DockerV:          defaultDocker,
 	DNSV:             defaultDNS,
 	RoutingV:         defaultRouting,
 }
@@ -1091,45 +1209,60 @@ type RoutingSnake struct {
 	NeverProxy             []netip.Prefix `json:"never_proxy_subnets"`
 	AllowConflicting       []netip.Prefix `json:"allow_conflicting_subnets"`
 	RecursionBlockDuration time.Duration  `json:"recursion_block_duration"`
+	RecursionBlockTreads   int            `json:"recursion_block_treads"`
 	VirtualSubnet          netip.Prefix   `json:"virtual_subnet"`
 	AutoResolveConflicts   bool           `json:"auto_resolve_conflicts"`
+	UseTAP                 bool           `json:"use_tap"`
 }
 
 type DNS struct {
-	Error           string        `json:"error"`
-	LocalIP         netip.Addr    `json:"localIP"`
-	RemoteIP        netip.Addr    `json:"remoteIP"`
-	IncludeSuffixes []string      `json:"includeSuffixes"`
-	ExcludeSuffixes []string      `json:"excludeSuffixes"`
-	Excludes        []string      `json:"excludes"`
-	Mappings        DNSMappings   `json:"mappings"`
-	LookupTimeout   time.Duration `json:"lookupTimeout"`
-	RecursionCheck  bool          `json:"recursionCheck"`
+	Error string `json:"error"`
+
+	// LocalIP
+	// Deprecated: Use LocalAddress.
+	LocalIP netip.Addr `json:"localIP"`
+
+	// RemoteIP
+	// Deprecated: Use VIFAddress.
+	RemoteIP netip.Addr `json:"remoteIP"`
+
+	LocalAddress    netip.AddrPort `json:"localAddress"`
+	VIFAddress      netip.AddrPort `json:"vifAddress"`
+	IncludeSuffixes []string       `json:"includeSuffixes"`
+	ExcludeSuffixes []string       `json:"excludeSuffixes"`
+	Excludes        []string       `json:"excludes"`
+	Mappings        DNSMappings    `json:"mappings"`
+	LookupTimeout   time.Duration  `json:"lookupTimeout"`
+	RecursionCheck  bool           `json:"recursionCheck"`
 }
 
 // DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
-	Error           string        `json:"error"`
-	LocalIP         netip.Addr    `json:"local_ip"`
-	RemoteIP        netip.Addr    `json:"remote_ip"`
-	IncludeSuffixes []string      `json:"include_suffixes"`
-	ExcludeSuffixes []string      `json:"exclude_suffixes"`
-	Excludes        []string      `json:"excludes"`
-	Mappings        DNSMappings   `json:"mappings"`
-	LookupTimeout   time.Duration `json:"lookup_timeout"`
-	RecursionCheck  bool          `json:"recursion_check"`
+	Error           string         `json:"error"`
+	LocalAddress    netip.AddrPort `json:"local_address"`
+	VIFAddress      netip.AddrPort `json:"vif_address"`
+	IncludeSuffixes []string       `json:"include_suffixes"`
+	ExcludeSuffixes []string       `json:"exclude_suffixes"`
+	Excludes        []string       `json:"excludes"`
+	Mappings        DNSMappings    `json:"mappings"`
+	LookupTimeout   time.Duration  `json:"lookup_timeout"`
+	RecursionCheck  bool           `json:"recursion_check"`
 }
 
 func (d *DNS) ToRPC() *daemon.DNSConfig {
 	rd := daemon.DNSConfig{
-		LocalIp:         d.LocalIP.AsSlice(),
-		RemoteIp:        d.RemoteIP.AsSlice(),
 		ExcludeSuffixes: d.ExcludeSuffixes,
 		IncludeSuffixes: d.IncludeSuffixes,
 		Excludes:        d.Excludes,
 		LookupTimeout:   durationpb.New(d.LookupTimeout),
 		RecursionCheck:  d.RecursionCheck,
 		Error:           d.Error,
+	}
+	if d.LocalAddress.IsValid() {
+		rd.LocalAddress, _ = d.LocalAddress.MarshalBinary()
+	}
+	if d.VIFAddress.IsValid() {
+		rd.VifAddress, _ = d.VIFAddress.MarshalBinary()
 	}
 	if len(d.Mappings) > 0 {
 		rd.Mappings = make([]*daemon.DNSMapping, len(d.Mappings))
@@ -1145,8 +1278,8 @@ func (d *DNS) ToRPC() *daemon.DNSConfig {
 
 func (d *DNS) ToSnake() *DNSSnake {
 	return &DNSSnake{
-		LocalIP:         d.LocalIP,
-		RemoteIP:        d.RemoteIP,
+		LocalAddress:    d.LocalAddress,
+		VIFAddress:      d.VIFAddress,
 		ExcludeSuffixes: d.ExcludeSuffixes,
 		IncludeSuffixes: d.IncludeSuffixes,
 		Excludes:        d.Excludes,
@@ -1180,11 +1313,11 @@ func DNSFromRPC(s *daemon.DNSConfig) *DNS {
 		RecursionCheck:  s.RecursionCheck,
 		Error:           s.Error,
 	}
-	if ip, ok := netip.AddrFromSlice(s.LocalIp); ok {
-		c.LocalIP = ip
+	if len(s.LocalAddress) > 0 {
+		_ = c.LocalAddress.UnmarshalBinary(s.LocalAddress)
 	}
-	if ip, ok := netip.AddrFromSlice(s.RemoteIp); ok {
-		c.RemoteIP = ip
+	if len(s.VifAddress) > 0 {
+		_ = c.VIFAddress.UnmarshalBinary(s.VifAddress)
 	}
 	if s.LookupTimeout != nil {
 		c.LookupTimeout = s.LookupTimeout.AsDuration()
@@ -1194,11 +1327,15 @@ func DNSFromRPC(s *daemon.DNSConfig) *DNS {
 
 func (r *Routing) ToSnake() *RoutingSnake {
 	return &RoutingSnake{
-		Subnets:              r.Subnets,
-		AlsoProxy:            r.AlsoProxy,
-		NeverProxy:           r.NeverProxy,
-		AllowConflicting:     r.AllowConflicting,
-		AutoResolveConflicts: r.AutoResolveConflicts,
+		Subnets:                r.Subnets,
+		AlsoProxy:              r.AlsoProxy,
+		NeverProxy:             r.NeverProxy,
+		AllowConflicting:       r.AllowConflicting,
+		AutoResolveConflicts:   r.AutoResolveConflicts,
+		RecursionBlockDuration: r.RecursionBlockDuration,
+		RecursionBlockTreads:   r.RecursionBlockTreads,
+		VirtualSubnet:          r.VirtualSubnet,
+		UseTAP:                 r.UseTAP,
 	}
 }
 

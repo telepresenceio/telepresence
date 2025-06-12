@@ -165,11 +165,15 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			mounts := ii.Mount.Mounts
 			require.True(len(mounts) > 2)
 			dlog.Infof(ctx, "Mounts = %v", mounts)
-			for mount := range mounts {
-				st, err := os.Stat(filepath.Join(ii.Mount.LocalDir, mount))
-				require.NoError(err)
-				require.True(st.IsDir())
-			}
+			require.Eventually(func() bool {
+				for mount := range mounts {
+					st, err := os.Stat(filepath.Join(ii.Mount.LocalDir, mount))
+					if !(err == nil && st.IsDir()) {
+						return false
+					}
+				}
+				return true
+			}, 10*time.Second, 2*time.Second)
 
 			require.Eventually(func() bool {
 				out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", iputil.JoinHostPort(s.serviceName, tt.port))

@@ -27,7 +27,7 @@ type device struct {
 	dev            tun.Device
 	ctx            context.Context
 	name           string
-	dns            netip.Addr
+	dns            netip.AddrPort
 	interfaceIndex uint32
 	luid           winipcfg.LUID
 	wb             bytes.Buffer
@@ -131,15 +131,15 @@ func (d *device) removeSubnet(_ context.Context, subnet netip.Prefix) error {
 	return d.getLUID().DeleteIPAddress(subnet)
 }
 
-func (d *device) setDNS(ctx context.Context, clusterDomain string, server netip.Addr, searchList []string) (err error) {
+func (d *device) setDNS(ctx context.Context, clusterDomain string, server netip.AddrPort, searchList []string) (err error) {
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
 	dlog.Debugf(ctx, "SetDNS server: %s, searchList: %v, domain: %q", server, searchList, clusterDomain)
 	defer dlog.Debug(ctx, "SetDNS done")
 
 	luid := d.getLUID()
-	family := addressFamily(server)
+	family := addressFamily(server.Addr())
 	if d.dns.IsValid() {
-		if oldFamily := addressFamily(d.dns); oldFamily != family {
+		if oldFamily := addressFamily(d.dns.Addr()); oldFamily != family {
 			_ = luid.FlushDNS(oldFamily)
 		}
 	}
@@ -156,7 +156,7 @@ func (d *device) setDNS(ctx context.Context, clusterDomain string, server netip.
 		// put clusterDomain first in list, but retain the order of remaining elements
 		searchList = slices.Insert(slices.Delete(searchList, cdi, cdi+1), 0, clusterDomain)
 	}
-	return luid.SetDNS(family, []netip.Addr{d.dns}, searchList)
+	return luid.SetDNS(family, []netip.Addr{d.dns.Addr()}, searchList)
 }
 
 func addressFamily(ip netip.Addr) winipcfg.AddressFamily {

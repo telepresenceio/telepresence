@@ -50,4 +50,3 @@ fuseftp.bits
 # Vagrant
 .vagrant/
 tests.log
-
