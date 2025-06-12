@@ -286,17 +286,14 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 	args := []string{"helm", verb, "-n", nss.Namespace, "-f", valuesFile}
 	if !s.ManagerVersion().EQ(s.ClientVersion()) {
-		if !s.ClientIsVersion(">2.21.x") {
-			// Need to use the built executable because the client version doesn't handle the --version flag.
-			ctx = WithExecutable(ctx, s.executable)
-			if !s.ManagerVersion().EQ(version.Structured) {
-				args = append(args, "--version", s.ManagerVersion().String())
-			}
-		} else {
+		// Need to use the built executable because the client version doesn't handle the --version flag.
+		ctx = WithExecutable(ctx, s.executable)
+		if !s.ManagerVersion().EQ(version.Structured) {
 			args = append(args, "--version", s.ManagerVersion().String())
 		}
 	}
 	args = append(args, settings...)
+	ctx = WithoutEnv(ctx, []string{"TELEPRESENCE_REGISTRY", "TELEPRESENCE_VERSION"})
 
 	if _, _, err = Telepresence(WithUser(ctx, "default"), args...); err != nil {
 		return "", err

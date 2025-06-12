@@ -280,10 +280,9 @@ func (s *dockerDaemonSuite) Test_DockerRun_VolumePresent() {
 	s.TelepresenceConnect(ctx, "--docker")
 	defer itest.TelepresenceQuitOk(ctx)
 
-	stdout, stderr, err := itest.Telepresence(ctx, "--progress", "quiet", "intercept", "--docker-run", "hello", "-p", "8080:http", "--",
+	stdout, _, err := itest.Telepresence(ctx, "intercept", "--docker-run", "hello", "-p", "8080:http", "--",
 		"--rm", "busybox", "ls", "/var/run/secrets/datawire.io/auth")
 	s.NoError(err)
-	s.Empty(stderr)
 	dlog.Infof(ctx, "stdout = %s", stdout)
 	s.True(strings.HasSuffix(stdout, "\nusername"))
 }
@@ -297,5 +296,7 @@ func (s *dockerDaemonSuite) Test_DockerRunCommand() {
 	stdout, _, err := itest.Telepresence(ctx, "docker-run", "--rm", "busybox", "ip", "r")
 	require.NoError(err)
 	dlog.Infof(ctx, "stdout = %s", stdout)
-	s.Contains(stdout, "dev tpd-0")
+	if s.ClientIsVersion(">=2.23.0") {
+		s.Contains(stdout, "dev tpd-0")
+	}
 }

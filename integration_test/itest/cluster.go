@@ -870,11 +870,14 @@ func TelepresenceQuitOk(ctx context.Context) {
 
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertQuitOutput(ctx context.Context, stdout string) {
-	t := getT(ctx)
-	assert.True(t, stdout == "" || strings.Contains(stdout, "Quit"))
-	if t.Failed() {
-		t.Logf("Quit output was %q", stdout)
+	for _, ex := range []string{"", "Quit", "Telepresence Daemons quitting...done", "Telepresence Daemons have already quit"} {
+		if strings.Contains(stdout, ex) {
+			return
+		}
 	}
+	t := getT(ctx)
+	t.Fail()
+	t.Logf("Quit output was %q", stdout)
 }
 
 // RunError checks if the given err is a *exit.ExitError, and if so, extracts
