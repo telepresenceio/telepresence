@@ -9,11 +9,45 @@ The new `telepresence wiretap` command introduces a read-only form of an `interc
 Similar to an `ingest`, a `wiretap` will always enforce read-only status on all volume mounts, and since that makes the `wiretap` completely read-only, there's no limit to how many simultaneous wiretaps that can be served. In fact, a `wiretap` and an `intercept` on the same port can run simultaneously.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Add Telepresence Docker Network Plugin "Teleroute"](reference/teleroute)</div></div>
+<div style="margin-left: 15px">
+
+The new Teleroute plugin makes it possible for containers to use the Telepresence daemon's VIF without having
+to change their network mode, i.e. a `--network container:<daemon container>` is no longer needed. Instead,
+a container can use a custom network created when the Telepresence daemon connects to the cluster.
+This network uses the new driver "teleroute" which is provided by Telepresence.
+
+With the Teleroute Docker network plugin in place, there's no longer a need for special handling of network
+related docker flags, and the following changes have been made:
+
+1. The Teleroute Docker network driver will be installed unless it is already present.
+2. A Teleroute network will be created when starting the Telepresence daemon as a container. This network will
+   then communicate with that container and expose the same CIDRs as the daemon's VIF.
+3. A container started with `telepresence curl`, or
+   `telepresence {ingest|intercept|replace|wiretap} --docker-{run|build|debug}` will no longer change its
+   network mode using `--network container:<daemon container>`, instead it will use
+   `--network <name of teleroute network>`.
+4. As a consequence of #3, published ports and other networks that are added no longer need special handling
+   using socat containers, so all of that has been removed.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Control whether the initContainer injection is enabled/disabled</div></div>
+<div style="margin-left: 15px">
+
+The initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart. This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Human friendly progress reporting</div></div>
 <div style="margin-left: 15px">
 
 Telepresence now uses a progress reporter that is very similar to the one used by Docker compose. The implementation is a variation of that reporter's source code, so big thanks to the Docker compose CLI authors for making it available as OSS.
 A new global `--progress <progress>` flag was added. It defaults to "auto" which means that the style is chosen depending on whether the command runs from a tty type terminal. Other possible values are "plain", "quiet", and "json". `--progress quiet` is implied when formatted output is chosen using `--output json|yaml`.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add the ability to use a name for the target host, and defer its resolution</div></div>
+<div style="margin-left: 15px">
+
+Knowing the IP of the local service that acts as the handler service for an intercept, replace, or wiretap is not possible until that service has been started, and telepresence will therefore now accept a name for the `--address` flag. The name is not resolved by the daemon until a request is made to the engaged container on a port that is routed to the local service.
 </div>
 
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add intercept.mountsRoot to the client configuration</div></div>
@@ -23,10 +57,10 @@ The new `intercept.mountsRoot` can be set to a directory that will be used as th
 The setting is not used on windows, where the mounts use drive letters.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add cluster.dockerAddHostGateway to the client configuration.</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add docker.addHostGateway to the client configuration.</div></div>
 <div style="margin-left: 15px">
 
-When `cluster.dockerAddHostGateway` is set to `true`, the `docker run` that starts the containerized Telepresence daemon will include the flag `--add-host host.docker.internal:host-gateway`.
+When `docker.addHostGateway` is set to `true`, the `docker run` that starts the containerized Telepresence daemon will include the flag `--add-host host.docker.internal:host-gateway`.
 The flag is set to `true` by default on linux platforms and `false` on other platforms.
 </div>
 
@@ -45,10 +79,17 @@ A "Legacy Telepresence command used" warning has been printed for several years 
 command.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">added agent.initContainer.enabled parameter that can be set in values.yaml to control whether the initContainer injection is enabled/disabled</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Let containerized daemon consistently use the same port for gRPC</div></div>
 <div style="margin-left: 15px">
 
-To fix Issue #3868:  Request to add config in values.yaml to disable initContainer injection. Now the initContainer injection can be optionally disabled by setting the `agent.initContainer.enabled` parameter to false in the `values.yaml` file of the Helm chart.  This feature was added to improve compatibility with systems like OpenShift where the initContainer injection cannot be used due to inability to give initContainer NET_ADMIN permissions
+The port used for the containerized gRPC was randomly selected using the hosts network namespace. This is now changed so that the port used by the container is preset and configurable and then mapped to a random port on the host.
+The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">removed logic to drop search domains from suffix, which causes FQDN domains that consist of multiple labels to have their suffix dropped</div></div>
+<div style="margin-left: 15px">
+
+To fix Issue #3873:  Telepresence DNS Fallback stripping CNAME information from DNS Records The logic that was dropping search domains from the suffix has been removed. This prevents FQDN DNS queries from being forwarded to the cluster for resolution, which fixes the bug where only an A record is returned despite the original nameservers having both CNAME and A records for the entry
 </div>
 
 ## Version 2.22.6 <span style="font-size: 16px;">(June  3)</span>
