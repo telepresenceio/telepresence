@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dexec"
@@ -64,24 +63,6 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 			}
 			s.LocalAddress = netip.AddrPortFrom(addr, 53)
 			dlog.Infof(c, "Automatically set dns=%s", s.LocalAddress)
-		}
-
-		// The search entries in /etc/resolv.conf are not intended for this resolver so
-		// ensure that we strip them off when we send queries to the cluster.
-		for _, sp := range rf.Search {
-			lsp := len(sp)
-			if lsp > 0 {
-				if sp[0] == '.' {
-					sp = sp[1:]
-					lsp--
-				}
-				if lsp > 0 {
-					if sp[lsp-1] != '.' {
-						sp += "."
-					}
-					s.dropSuffixes = append(s.dropSuffixes, strings.ToLower(sp))
-				}
-			}
 		}
 	}
 	if !s.LocalAddress.IsValid() {

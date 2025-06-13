@@ -118,6 +118,11 @@ items:
           on the host.
           
           The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
+      - type: bugfix 
+        title: removed logic to drop search domains from suffix, which causes FQDN domains that consist of multiple labels to have their suffix dropped
+        body: >-
+          To fix Issue #3873:  Telepresence DNS Fallback stripping CNAME information from DNS Records
+          The logic that was dropping search domains from the suffix has been removed. This prevents FQDN DNS queries from being forwarded to the cluster for resolution, which fixes the bug where only an A record is returned despite the original nameservers having both CNAME and A records for the entry
   - version: 2.22.6
     date: 2025-06-03
     notes:

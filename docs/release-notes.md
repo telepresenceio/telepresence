@@ -86,6 +86,12 @@ The port used for the containerized gRPC was randomly selected using the hosts n
 The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">removed logic to drop search domains from suffix, which causes FQDN domains that consist of multiple labels to have their suffix dropped</div></div>
+<div style="margin-left: 15px">
+
+To fix Issue #3873:  Telepresence DNS Fallback stripping CNAME information from DNS Records The logic that was dropping search domains from the suffix has been removed. This prevents FQDN DNS queries from being forwarded to the cluster for resolution, which fixes the bug where only an A record is returned despite the original nameservers having both CNAME and A records for the entry
+</div>
+
 ## Version 2.22.6 <span style="font-size: 16px;">(June  3)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Regression causing "unexpected slice size" with older traffic-managers.</div></div>
 <div style="margin-left: 15px">
