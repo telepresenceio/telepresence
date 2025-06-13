@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,8 +23,9 @@ import (
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
 // reading or writing any messages. The dialer is normally closed by one of the peers.
 const (
-	tcpConnTTL = 2 * time.Hour // Default tcp_keepalive_time on Linux
-	udpConnTTL = 1 * time.Minute
+	tcpConnTTL       = 2 * time.Hour // Default tcp_keepalive_time on Linux
+	udpConnTTL       = 2 * time.Second
+	localDialTimeout = 2 * time.Second
 )
 
 const (
@@ -33,6 +35,11 @@ const (
 	readClosed
 	writeClosed
 )
+
+type Dialer interface {
+	DialTCP(context.Context, netip.AddrPort) (conn net.Conn, err error)
+	DialUDP(context.Context, netip.AddrPort, netip.AddrPort) (conn net.Conn, err error)
+}
 
 type halfReadCloser interface {
 	CloseRead() error
@@ -123,6 +130,7 @@ func NewConnEndpointTTL(
 }
 
 func (h *dialer) Start(ctx context.Context) {
+	sr := GetSyntheticIPResolver(ctx)
 	go func() {
 		defer close(h.done)
 
@@ -134,9 +142,35 @@ func (h *dialer) Start(ctx context.Context) {
 			// Set up the idle timer to close and release this handler when it's been idle for a while.
 			h.connected = connecting
 
-			dlog.Tracef(ctx, "   %s %s, dialing", tag, id)
-			d := net.Dialer{Timeout: h.stream.DialTimeout()}
-			conn, err := d.DialContext(ctx, id.DestinationProtocolString(), id.Destination().String())
+			dto := h.stream.DialTimeout()
+			dst := id.Destination()
+			dstAddr := dst.Addr()
+			if dstAddr.Is6() {
+				addr, err := sr.Resolve(dstAddr)
+				if err != nil {
+					dlog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
+					h.connected = notConnected
+					return
+				}
+				if addr != dstAddr {
+					dlog.Debugf(ctx, "-> %s synthetic destination resolved to %s", id, addr)
+					id = NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(addr, dst.Port()))
+					if dto > localDialTimeout {
+						dto = localDialTimeout
+					}
+				}
+			}
+			dlog.Debugf(ctx, "   %s %s, dialing", tag, id)
+			d := GetDialer(ctx)
+			dtoCtx, cancel := context.WithTimeout(ctx, dto)
+			defer cancel()
+			var conn net.Conn
+			var err error
+			if id.Protocol() == ipproto.UDP {
+				conn, err = d.DialUDP(dtoCtx, netip.AddrPort{}, id.Destination())
+			} else {
+				conn, err = d.DialTCP(dtoCtx, id.Destination())
+			}
 			if err != nil {
 				dlog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
 				if err = h.stream.Send(ctx, NewMessage(DialReject, nil)); err != nil {
@@ -153,7 +187,7 @@ func (h *dialer) Start(ctx context.Context) {
 				dlog.Errorf(ctx, "!> %s %s, failed to send DialOK: %v", tag, id, err)
 				return
 			}
-			dlog.Tracef(ctx, "<- %s %s, dial answered", tag, id)
+			dlog.Debugf(ctx, "<- %s %s, dial answered", tag, id)
 			h.conn = conn
 
 		case connecting:

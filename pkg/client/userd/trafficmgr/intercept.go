@@ -7,12 +7,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
@@ -111,8 +113,8 @@ func (ic *intercept) localPorts() []string {
 	return ps
 }
 
-func (ic *intercept) podAccess(rd daemon.DaemonClient) *podAccess {
-	pa := &podAccess{
+func (ic *intercept) podAccess() *podAccess {
+	return &podAccess{
 		ctx:              ic.ctx,
 		localPorts:       ic.localPorts(),
 		workload:         ic.Spec.Agent,
@@ -127,10 +129,6 @@ func (ic *intercept) podAccess(rd daemon.DaemonClient) *podAccess {
 		mounter:          &ic.Mounter,
 		wg:               &ic.wg,
 	}
-	if err := pa.ensureAccess(ic.ctx, rd); err != nil {
-		dlog.Error(ic.ctx, err)
-	}
-	return pa
 }
 
 func (s *session) watchInterceptsHandler(ctx context.Context) error {
@@ -183,24 +181,32 @@ func (s *session) handleInterceptSnapshot(ctx context.Context, pat *podAccessTra
 		}
 		s.currentInterceptsLock.Unlock()
 
+		pa := ic.podAccess()
 		var err error
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
 			ns := ii.Spec.Namespace
 			if s.Namespace != ns {
 				err = errcat.User.Newf("active intercepts in both namespace %s and %s", ns, s.Namespace)
+			} else {
+				err = pa.ensureAccess(ic.ctx, s.rootDaemon)
 			}
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
 		}
 
 		// Notify waiters for active intercepts
-		pa := ic.podAccess(s.rootDaemon)
 		if aw != nil {
 			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
 			ir := interceptResult{
-				intercept:  ic,
-				err:        err,
-				mountsDone: pat.getOrCreateMountsDone(pa),
+				intercept: ic,
+				err:       err,
+			}
+			if err == nil {
+				ir.mountsDone = pat.getOrCreateMountsDone(pa)
+			} else {
+				md := make(chan struct{})
+				close(md)
+				ir.mountsDone = md
 			}
 			select {
 			case aw.waitCh <- ir:
@@ -480,6 +486,22 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 			"traffic-manager version %s has no support for multi-port intercepts", s.managerVersion))
 	}
 
+	_, err := netip.ParseAddr(spec.TargetHost)
+	if err != nil {
+		// The targetHost is not a valid IP. Treat it as a name and create a synthetic IP for it.
+		rndIP, err := uuid.NewRandom()
+		if err != nil {
+			return nil, InterceptError(common.InterceptError_INTERNAL, err)
+		}
+		targetIP := netip.AddrFrom16(rndIP)
+		if s.syntheticIPs == nil {
+			s.syntheticIPs = make(map[netip.Addr]string)
+		}
+		dlog.Debugf(c, "Replacing target host %s with synthetic IP %s", spec.TargetHost, targetIP)
+		s.syntheticIPs[targetIP] = spec.TargetHost
+		spec.TargetHost = targetIP.String()
+	}
+
 	mgrIr := self.NewCreateInterceptRequest(spec)
 	if er := self.InterceptProlog(c, mgrIr); er != nil {
 		return nil, er
@@ -502,6 +524,24 @@ func (s *session) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest
 
 	iInfo := &interceptInfo{preparedIntercept: pi}
 	return iInfo, nil
+}
+
+func (s *session) Resolve(addr netip.Addr) (netip.Addr, error) {
+	if n, ok := s.syntheticIPs[addr]; ok {
+		ips, err := net.LookupIP(n)
+		if err != nil {
+			return addr, err
+		}
+		if len(ips) == 0 {
+			return addr, fmt.Errorf("unable to resolve %s", n)
+		}
+		addr, _ = netip.AddrFromSlice(ips[0])
+	}
+	return addr, nil
+}
+
+func (s *session) ResolveName(addr netip.Addr) string {
+	return s.syntheticIPs[addr]
 }
 
 func (s *session) NewCreateInterceptRequest(spec *manager.InterceptSpec) *manager.CreateInterceptRequest {

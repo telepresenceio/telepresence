@@ -49,11 +49,16 @@ func TestGetRouteConsistency(t *testing.T) {
 			require.NoError(t, err)
 			route, err := GetRoute(ctx, testNet)
 			require.NoError(t, err)
+			osRouteIf, err := net.InterfaceByIndex(osRoute.InterfaceIndex)
+			require.NoError(t, err)
+
 			// This is about as much as we can actually assert, because OSs tend to create
 			// routes on the fly when, for example, a default route is hit. So there's no guarantee
 			// that the matching "original" route in the table will be identical to the route returned on the fly.
-			if runtime.GOOS == "linux" && osRoute.Interface.Flags&net.FlagLoopback != 0 && osRoute.LocalIP == osRoute.RoutedNet.Addr() {
-				addrs, err := route.Interface.Addrs()
+			if runtime.GOOS == "linux" && osRouteIf.Flags&net.FlagLoopback != 0 && osRoute.LocalIP == osRoute.RoutedNet.Addr() {
+				routeIf, err := net.InterfaceByIndex(route.InterfaceIndex)
+				require.NoError(t, err)
+				addrs, err := routeIf.Addrs()
 				assert.NoError(t, err)
 				assert.True(t, func() bool {
 					for _, addr := range addrs {
@@ -65,7 +70,7 @@ func TestGetRouteConsistency(t *testing.T) {
 					return false
 				}(), "Interface addresses %v don't include route's local IP %s", addrs, osRoute.LocalIP)
 			} else {
-				require.Equal(t, osRoute.Interface.Index, route.Interface.Index, "Routes %s and %s differ", osRoute, route)
+				require.Equal(t, osRoute.InterfaceIndex, route.InterfaceIndex, "Routes %s and %s differ", osRoute, route)
 			}
 			require.True(t, route.RoutedNet.Contains(osRoute.RoutedNet.Addr()) || route.Default, "Route %s doesn't route requested IP %s", route, osRoute.RoutedNet.Addr())
 		})

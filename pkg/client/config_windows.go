@@ -2,7 +2,7 @@ package client
 
 import "net/netip"
 
-const defaultDockerAddHostGateway = false
+const defaultAddHostGateway = false
 
 type OSSpecificConfig struct {
 	Network Network `json:"network,omitzero"`

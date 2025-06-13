@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 )
 
 func curlCmd() *cobra.Command {
@@ -28,5 +29,6 @@ func curlCmd() *cobra.Command {
 }
 
 func runCurl(cmd *cobra.Command, args []string) error {
+	global.SetProgressQuiet(cmd)
 	return runDockerRun(cmd, slices.Insert(args, 0, "--rm", "curlimages/curl"))
 }

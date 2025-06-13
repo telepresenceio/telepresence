@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/netip"
 	"strconv"
 	"strings"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -79,6 +82,20 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		Global:        spec.Mechanism == "tcp",
 		Replace:       spec.NoDefaultPort, // spec.Replace can't be used because it's set by deprecated --replace flag
 		Wiretap:       spec.Wiretap,
+	}
+
+	// Replace potentially synthetic TargetHost
+	targetIP, err := netip.ParseAddr(spec.TargetHost)
+	if err == nil && targetIP.Is6() {
+		if s := daemon.GetSession(ctx); s != nil {
+			r, err := s.ResolveSyntheticIP(ctx, &connector.ResolveSyntheticRequest{
+				Ip:       targetIP.AsSlice(),
+				NameOnly: true,
+			})
+			if err == nil {
+				info.TargetHost = r.Name
+			}
+		}
 	}
 	if spec.ServiceUid != "" {
 		// For backward compatibility in JSON output

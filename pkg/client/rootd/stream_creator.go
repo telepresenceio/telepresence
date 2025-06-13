@@ -17,7 +17,7 @@ import (
 const dnsConnTTL = 5 * time.Second
 
 func (s *Session) isForDNS(ip netip.Addr, port uint16) bool {
-	return s.remoteDnsIP == ip && port == 53
+	return s.vifDNS.Addr() == ip && s.vifDNS.Port() == port
 }
 
 // checkRecursion checks that the given IP is not contained in any of the subnets
@@ -57,9 +57,9 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 		destAddr := id.DestinationAddr()
 		if p == ipproto.UDP {
 			if s.isForDNS(destAddr, id.DestinationPort()) {
-				pipeId := tunnel.NewConnID(p, id.Source(), s.dnsLocalAddr.AddrPort())
+				pipeId := tunnel.NewConnID(p, id.Source(), s.localDNS)
 				dlog.Tracef(c, "Intercept DNS %s to %s", id, pipeId.Destination())
-				from, to := tunnel.NewPipe(pipeId, tunnel.SessionID(s.session.SessionId))
+				from, to := tunnel.NewPipe(pipeId, tunnel.SessionID(s.session.SessionId), tunnel.DnsToTun, tunnel.TunToDNS)
 				tunnel.NewDialerTTL(to, func() {}, dnsConnTTL, nil, nil).Start(c)
 				return from, nil
 			}

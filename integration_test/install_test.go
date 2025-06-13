@@ -61,7 +61,7 @@ func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClien
 }
 
 func (is *installSuite) AmendSuiteContext(ctx context.Context) context.Context {
-	if !(is.ManagerVersion().EQ(is.ClientVersion()) || is.ClientIsVersion(">2.21.x")) {
+	if !is.ManagerVersion().EQ(is.ClientVersion()) {
 		// Need to use the built executable because the client version doesn't handle the --version flag.
 		exe, _ := is.Executable()
 		ctx = itest.WithExecutable(ctx, exe)
@@ -70,9 +70,6 @@ func (is *installSuite) AmendSuiteContext(ctx context.Context) context.Context {
 }
 
 func (is *installSuite) Test_UpgradeRetainsValues() {
-	if is.ClientIsVersion("<2.22.0") && !is.ManagerVersion().EQ(is.ClientVersion()) {
-		is.T().Skip("Not part of compatibility tests. Client < 2.22.0 cannot handle helm --version flag.")
-	}
 	ctx := is.Context()
 	rq := is.Require()
 	is.TelepresenceHelmInstallOK(ctx, false, "--set", "logLevel=debug")
@@ -93,7 +90,7 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 	oldValues, err := getValues()
 	rq.NoError(err)
 	args := []string{"helm", "upgrade", "--namespace", is.ManagerNamespace()}
-	if !is.ManagerVersion().EQ(is.ClientVersion()) {
+	if !is.ManagerVersion().EQ(version.Structured) {
 		args = append(args, "--version", is.ManagerVersion().String())
 	}
 
@@ -185,6 +182,9 @@ func (is *installSuite) Test_FindTrafficManager_notPresent() {
 }
 
 func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
+	if !(is.ManagerVersion().EQ(version.Structured) && is.ClientVersion().EQ(version.Structured)) {
+		is.T().Skip("Not part of compatibility tests.")
+	}
 	require := is.Require()
 	ctx := is.Context()
 
@@ -222,6 +222,9 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 }
 
 func (is *installSuite) Test_RemoveManager_canUninstall() {
+	if !(is.ManagerVersion().EQ(version.Structured) && is.ClientVersion().EQ(version.Structured)) {
+		is.T().Skip("Not part of compatibility tests.")
+	}
 	require := is.Require()
 	ctx := is.Context()
 	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
@@ -235,38 +238,10 @@ func (is *installSuite) Test_RemoveManager_canUninstall() {
 	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(ctx), true, &helm.Request{}))
 }
 
-func (is *installSuite) Test_EnsureManager_upgrades_and_values() {
-	// TODO: In order to properly check that an upgrade works, we need to install
-	//  an older version first, which in turn will entail building that version
-	//  and publishing an image fore it. The way the test looks right now, it just
-	//  terminates with a timeout error.
-	is.T().Skip()
-	require := is.Require()
-	ctx := is.Context()
-	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
-	require.NoError(ensureTrafficManager(ctx, kc))
-	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
-
-	sv := version.Version
-	version.Version = "v3.0.0-bogus"
-	restoreVersion := func() { version.Version = sv }
-	defer restoreVersion()
-	require.Error(ensureTrafficManager(ctx, kc))
-
-	require.Eventually(func() bool {
-		obj, err := k8sapi.GetDeployment(ctx, ManagerAppName, is.ManagerNamespace())
-		if err != nil {
-			return false
-		}
-		deploy, _ := k8sapi.DeploymentImpl(obj)
-		return deploy.Status.ReadyReplicas == int32(1) && deploy.Status.Replicas == int32(1)
-	}, 30*time.Second, 5*time.Second, "timeout waiting for deployment to update")
-
-	restoreVersion()
-	require.NoError(ensureTrafficManager(ctx, kc))
-}
-
 func (is *installSuite) Test_No_Upgrade() {
+	if !(is.ManagerVersion().EQ(version.Structured) && is.ClientVersion().EQ(version.Structured)) {
+		is.T().Skip("Not part of compatibility tests.")
+	}
 	ctx := is.Context()
 	require := is.Require()
 	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
@@ -293,6 +268,9 @@ func (is *installSuite) Test_No_Upgrade() {
 }
 
 func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
+	if !(is.ManagerVersion().EQ(version.Structured) && is.ClientVersion().EQ(version.Structured)) {
+		is.T().Skip("Not part of compatibility tests.")
+	}
 	ctx := is.Context()
 	customNamespace := fmt.Sprintf("custom-%d", os.Getpid())
 	itest.CreateNamespaces(ctx, customNamespace)

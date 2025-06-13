@@ -74,7 +74,7 @@ func (s *RoutingSuite) Test_RouteIsAdded() {
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
 	// Ensure that the route is for the right device
-	s.Require().Equal(device, route.Interface.Name)
+	s.Require().Equal(device, route.InterfaceName)
 }
 
 func (s *RoutingSuite) Test_RouteIsRemoved() {
@@ -89,7 +89,7 @@ func (s *RoutingSuite) Test_RouteIsRemoved() {
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
 
-	s.Require().NotEqual(device, route.Interface.Name)
+	s.Require().NotEqual(device, route.InterfaceName)
 }
 
 func (s *RoutingSuite) Test_RouteIsBlackListed() {
@@ -106,8 +106,8 @@ func (s *RoutingSuite) Test_RouteIsBlackListed() {
 	route, err := routing.GetRoute(ctx, cidrNo)
 	s.Require().NoError(err)
 
-	s.Require().Equal(oldRoute.Interface.Name, route.Interface.Name, "Expected route %s got %s", oldRoute, route)
-	s.Require().NotEqual(device, route.Interface.Name)
+	s.Require().Equal(oldRoute.InterfaceName, route.InterfaceName, "Expected route %s got %s", oldRoute, route)
+	s.Require().NotEqual(device, route.InterfaceName)
 }
 
 func (s *RoutingSuite) Test_RoutingTable() {
@@ -123,7 +123,7 @@ func (s *RoutingSuite) Test_RoutingTable() {
 	deviceFound := false
 	cidrFound := false
 	for _, route := range routes {
-		if route.Interface.Name == device {
+		if route.InterfaceName == device {
 			deviceFound = true
 			s.Require().False(route.Default, fmt.Sprintf("Route %s is default", route.String()))
 			s.Require().False(route.RoutedNet.Bits() == 0, fmt.Sprintf("Route %s has zero mask", route.String()))
@@ -189,7 +189,7 @@ func (s *RoutingSuite) Test_WhitelistedRoutes() {
 	route, err := routing.GetRoute(ctx, ipnet)
 	s.Require().NoError(err)
 	// Ensure that the route is for the right device
-	s.Require().Equal(device2, route.Interface.Name, "Route %s is not for device %s", route, device2)
+	s.Require().Equal(device2, route.InterfaceName, "Route %s is not for device %s", route, device2)
 }
 
 func (s *RoutingSuite) Test_VPNConflicts() {
@@ -238,7 +238,7 @@ func (s *RoutingSuite) Test_VPNConflictsWithWhitelist() {
 	ia = netip.AddrFrom4(ip)
 	route, err := routing.GetRoute(ctx, netip.PrefixFrom(ia, 32))
 	s.Require().NoError(err)
-	s.Require().Equal(device, route.Interface.Name)
+	s.Require().Equal(device, route.InterfaceName)
 }
 
 func (s *RoutingSuite) Test_GetRoute() {
@@ -255,7 +255,7 @@ func (s *RoutingSuite) Test_GetRoute() {
 
 	// We know what this route is supposed to look like cause we just added it. Make sure it matches.
 	s.Require().NoError(err)
-	s.Require().Equal(device, route.Interface.Name)
+	s.Require().Equal(device, route.InterfaceName)
 	s.Require().Equal(cidr, route.RoutedNet)
 	s.Require().False(route.Default)
 	// s.Require().NotNil(route.Gateway) there's no gateway when scope == link, and that's OK.

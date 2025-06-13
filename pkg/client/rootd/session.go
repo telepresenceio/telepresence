@@ -39,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/bwcompat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
@@ -49,6 +50,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -87,6 +89,8 @@ type agentVIP struct {
 type Session struct {
 	tunVif *vif.TunnelingDevice
 
+	teleroute teleroute.Server
+
 	// clientConn is the connection that uses the connector's socket
 	clientConn *grpc.ClientConn
 
@@ -109,14 +113,14 @@ type Session struct {
 	// The local dns server
 	dnsServer *dns.Server
 
-	// remoteDnsIP is the IP of the DNS server attached to the TUN device. This is currently only
+	// vifDNS is the address and port of the DNS server attached to the TUN device. This is currently only
 	// used in conjunction with systemd-resolved. The current macOS and the overriding solution
 	// will dispatch directly to the local DNS Service without going through the TUN device, but
 	// that may change later if we decide to dispatch to the DNS-server in the cluster.
-	remoteDnsIP netip.Addr
+	vifDNS netip.AddrPort
 
-	// dnsLocalAddr is the address of the local DNS Service.
-	dnsLocalAddr *net.UDPAddr
+	// localDNS is the address and port of the local DNS Service.
+	localDNS netip.AddrPort
 
 	// serviceSubnets reported by the traffic-manager
 	serviceSubnets []netip.Prefix
@@ -195,6 +199,7 @@ type Session struct {
 
 	// daemon runs as part of a pod-daemon setup.
 	podDaemon bool
+	routesCh  chan []netip.Prefix
 }
 
 type NewSessionFunc func(context.Context, *rpc.NetworkConfig) (context.Context, *Session, error)
@@ -363,6 +368,7 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		proxyClusterSvcs:      true,
 		vifReady:              make(chan error, 2),
 		done:                  make(chan struct{}),
+		routesCh:              make(chan []netip.Prefix, 2),
 		podDaemon:             isPodDaemon,
 		localTranslationTable: xsync.NewMapOf[netip.Addr, netip.Addr](),
 		virtualIPs:            xsync.NewMapOf[netip.Addr, agentVIP](),
@@ -390,6 +396,12 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 
 	s.dnsServer = dns.NewServer(cfg.DNS(), s.clusterLookup)
 	s.SetTopLevelDomains(c, nil)
+
+	// Terminate the routes watcher
+	go func() {
+		<-c.Done()
+		close(s.routesCh)
+	}()
 	return c, s, nil
 }
 
@@ -498,12 +510,16 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 		r.AllowConflicting = nil
 	}
 	d := mc.DNS()
-	if s.dnsLocalAddr != nil {
-		d.LocalIP, _ = netip.AddrFromSlice(s.dnsLocalAddr.IP)
+	if proc.RunningInContainer() && s.teleroute != nil {
+		d.LocalAddress = netip.AddrPortFrom(s.teleroute.DaemonAddress(), 53)
 	} else {
-		d.LocalIP = netip.Addr{}
+		if s.localDNS.IsValid() {
+			d.LocalAddress = s.localDNS
+		} else {
+			d.LocalAddress = netip.AddrPort{}
+		}
 	}
-	d.RemoteIP = s.remoteDnsIP
+	d.VIFAddress = s.vifDNS
 
 	js, _ := client.MarshalJSON(mc)
 	return &rpc.NetworkConfig{
@@ -512,9 +528,9 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 	}
 }
 
-func (s *Session) configureDNS(dnsIP netip.Addr, dnsLocalAddr *net.UDPAddr) {
-	s.remoteDnsIP = dnsIP
-	s.dnsLocalAddr = dnsLocalAddr
+func (s *Session) configureDNS(vifDNS netip.AddrPort, localDNS netip.AddrPort) {
+	s.vifDNS = vifDNS
+	s.localDNS = localDNS
 }
 
 // shouldProxySubnet returns true unless the given subnet is covered by a subnet in the neverProxySubnets list.
@@ -767,43 +783,51 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	// talk to the traffic-manager directly using the TUN device, so it's safe to use its
 	// IP to impersonate the DNS server. All traffic sent to that IP, will be routed to
 	// the local DNS server.
-	dnsAddr, ok := netip.AddrFromSlice(mgrInfo.ManagerPodIp)
+	vifDNS, ok := netip.AddrFromSlice(mgrInfo.ManagerPodIp)
 	if !ok {
 		return fmt.Errorf("invalid traffic-manager pod ip address")
 	}
 	if s.vipGenerator != nil {
-		dnsAddr, err = s.GetLocalIP(ctx, dnsAddr)
+		vifDNS, err = s.GetLocalIP(ctx, vifDNS)
 		if err != nil {
 			return err
 		}
 	}
 	dnsRouted := false
-	for _, sn := range subnets {
-		if sn.Contains(dnsAddr) {
-			dnsRouted = true
-			break
+	if proc.RunningInContainer() {
+		dnsRouted = true
+	} else {
+		for _, sn := range subnets {
+			if sn.Contains(vifDNS) {
+				dnsRouted = true
+				break
+			}
 		}
 	}
 	if runtime.GOOS != "darwin" && !dnsRouted {
-		dnsAddr, subnets, err = s.defaultRouteDNS(ctx, mgrInfo, dnsAddr, subnets)
+		vifDNS, subnets, err = s.defaultRouteDNS(ctx, mgrInfo, vifDNS, subnets)
 		if err != nil {
 			return err
 		}
 		dnsRouted = true
 	}
 
+	if dnsRouted {
+		d := mgrInfo.Dns
+		dnsAddress := netip.AddrPortFrom(vifDNS, 53)
+		dlog.Infof(ctx, "Setting client DNS to %s", vifDNS)
+		dlog.Infof(ctx, "Setting cluster domain to %q", d.ClusterDomain)
+		s.dnsServer.SetClusterDNS(d, dnsAddress)
+	}
+	return s.reconcileSubnets(ctx, mgrInfo, subnets)
+}
+
+func (s *Session) reconcileSubnets(ctx context.Context, mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {
 	if len(subnets) > 0 && s.tunVif == nil {
 		var err error
 		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator(ctx)); err != nil {
 			return fmt.Errorf("NewTunnelVIF: %w", err)
 		}
-	}
-
-	if dnsRouted {
-		d := mgrInfo.Dns
-		dlog.Infof(ctx, "Setting cluster DNS to %s", dnsAddr)
-		dlog.Infof(ctx, "Setting cluster domain to %q", d.ClusterDomain)
-		s.dnsServer.SetClusterDNS(d, dnsAddr)
 	}
 
 	proxy, neverProxy, neverProxyOverrides := computeNeverProxyOverrides(ctx, subnets, s.neverProxySubnets)
@@ -814,7 +838,7 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	rt := s.tunVif.Router
 	rt.UpdateWhitelist(s.allowConflictingSubnets)
 
-	err = rt.ValidateRoutes(ctx, proxy)
+	err := rt.ValidateRoutes(ctx, proxy)
 	if err != nil {
 		if s.vipGenerator != nil || !client.GetConfig(ctx).Routing().AutoResolveConflicts {
 			return err
@@ -837,7 +861,17 @@ func (s *Session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	}
 
 	dlog.Debugf(ctx, "UpdatingRoutes %s, %s, %s", proxy, s.effectiveNeverProxy, neverProxyOverrides)
-	return rt.UpdateRoutes(ctx, proxy, s.effectiveNeverProxy, neverProxyOverrides)
+	err = rt.UpdateRoutes(ctx, proxy, s.effectiveNeverProxy, neverProxyOverrides)
+	if err != nil {
+		return err
+	}
+	sns := slices.Clone(rt.GetRoutedSubnets())
+	select {
+	case <-ctx.Done():
+	case s.routesCh <- sns:
+	default:
+	}
+	return nil
 }
 
 func computeNeverProxyOverrides(ctx context.Context, subnets, nvp []netip.Prefix) (proxy, neverProxy, neverProxyOverrides []netip.Prefix) {
@@ -1027,7 +1061,7 @@ func (s *Session) run(c context.Context, initErrs chan error) error {
 	defer cancelGroup()
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	if err := s.Start(c, g); err != nil {
+	if err := s.Start(c, g, 0); err != nil {
 		defer close(initErrs)
 		initErrs <- err
 		return err
@@ -1036,14 +1070,14 @@ func (s *Session) run(c context.Context, initErrs chan error) error {
 	return g.Wait()
 }
 
-func (s *Session) Start(c context.Context, g *dgroup.Group) error {
+func (s *Session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16) error {
 	if rmc, ok := s.managerClient.(interface{ RealManagerClient() manager.ManagerClient }); ok {
 		clusterCfg := client.GetConfig(c).Cluster()
 		if clusterCfg.AgentPortForward && clusterCfg.ConnectFromRootDaemon {
 			if k8sclient.CanPortForward(c, s.namespace) {
 				s.agentClients = agentpf.NewClients(s.session)
 				g.Go("agentPods", func(ctx context.Context) error {
-					return s.agentClients.WatchAgentPods(ctx, rmc.RealManagerClient())
+					return s.agentClients.WatchAgentPods(tunnel.WithDialer(ctx, s), rmc.RealManagerClient())
 				})
 			} else {
 				dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
@@ -1073,7 +1107,7 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 		return fmt.Errorf("--proxy-via can only be used when cluster.agentPortForward is enabled")
 	}
 
-	// At this point, we wait until the VIF is ready. It will be, shortly after
+	// At this point, we wait until the VIF is ready. It will be shortly after
 	// the first ClusterInfo is received from the traffic-manager. A timeout
 	// is needed so that we don't wait forever on a traffic-manager that has
 	// been terminated for some reason.
@@ -1111,7 +1145,16 @@ func (s *Session) Start(c context.Context, g *dgroup.Group) error {
 
 	if s.tunVif != nil {
 		g.Go("vif", s.tunVif.Run)
-		return s.waitForProxyViaWorkloads(c)
+		err := s.waitForProxyViaWorkloads(c)
+		if err != nil {
+			return err
+		}
+		if teleroutePort > 0 {
+			s.teleroute, err = teleroute.StartServer(g, s.tunVif, s.routesCh, teleroutePort)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -1327,4 +1370,24 @@ func (s *Session) Done() <-chan struct{} {
 
 func (s *Session) ManagerVersion() semver.Version {
 	return s.managerVersion
+}
+
+func (s *Session) DialTCP(ctx context.Context, addr netip.AddrPort) (conn net.Conn, err error) {
+	var d tunnel.Dialer
+	if s.tunVif == nil || addr.Addr().IsLoopback() {
+		d = tunnel.DefaultDialer{}
+	} else {
+		d = s.tunVif
+	}
+	return d.DialTCP(ctx, addr)
+}
+
+func (s *Session) DialUDP(ctx context.Context, localAddr netip.AddrPort, remoteAddr netip.AddrPort) (conn net.Conn, err error) {
+	var d tunnel.Dialer
+	if s.tunVif == nil || remoteAddr.Addr().IsLoopback() {
+		d = tunnel.DefaultDialer{}
+	} else {
+		d = s.tunVif
+	}
+	return d.DialUDP(ctx, localAddr, remoteAddr)
 }

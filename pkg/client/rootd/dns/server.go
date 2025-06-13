@@ -46,8 +46,8 @@ const (
 
 type FallbackPool interface {
 	Exchange(context.Context, *dns.Client, *dns.Msg) (*dns.Msg, time.Duration, error)
-	RemoteAddr() netip.Addr
-	LocalAddrs() []*net.UDPAddr
+	RemoteAddr() netip.AddrPort
+	LocalAddrs() []netip.AddrPort
 	Close()
 }
 
@@ -400,10 +400,10 @@ func (s *Server) Stop() {
 	}
 }
 
-func (s *Server) SetClusterDNS(dns *manager.DNS, remoteIP netip.Addr) {
+func (s *Server) SetClusterDNS(dns *manager.DNS, vifDNS netip.AddrPort) {
 	s.Lock()
-	if !s.RemoteIP.IsValid() {
-		s.RemoteIP = remoteIP
+	if !s.VIFAddress.IsValid() {
+		s.VIFAddress = vifDNS
 	}
 	if dns != nil {
 		if slices.Equal(s.ExcludeSuffixes, DefaultExcludeSuffixes) && len(dns.ExcludeSuffixes) > 0 {
@@ -546,14 +546,10 @@ func (s *Server) flushDNS() {
 	})
 }
 
-// splitToUDPAddr splits the given address into an UDPAddr. It's
+// splitToUDPAddr splits the given address into an address and port. It's
 // an error if the address is based on a hostname rather than an IP.
-func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
-	ap, err := iputil.SplitToIPPort(netAddr)
-	if err != nil {
-		return nil, err
-	}
-	return net.UDPAddrFromAddrPort(ap), nil
+func splitToUDPAddr(netAddr net.Addr) (netip.AddrPort, error) {
+	return iputil.SplitToIPPort(netAddr)
 }
 
 // RequestCount returns the number of requests that this server has received.
@@ -897,7 +893,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	case dns.TypePTR:
 		// Respond with cluster domain if the queried IP is the IP of this DNS server.
-		if ip, err := dnsproxy.PtrAddress(q.Name); err == nil && ip == s.RemoteIP {
+		if ip, err := dnsproxy.PtrAddress(q.Name); err == nil && ip == s.VIFAddress.Addr() {
 			answer = dnsproxy.RRs{
 				&dns.PTR{
 					Hdr: dnsproxy.NewHeader(q.Name, q.Qtype),

@@ -117,6 +117,10 @@ service Connector {
 
   // GetAgentConfig returns the agent configuration for a specific workload.
   rpc GetAgentConfig(manager.AgentConfigRequest) returns (manager.AgentConfigResponse);
+
+  // ResolveSyntheticIP resolves a synthetic IP into a name and optionally
+  // the first IP for that name when the daemon performs a DNS lookup.
+  rpc ResolveSyntheticIP(ResolveSyntheticRequest) returns (ResolveSyntheticResponse);
 }
 
 // ManagerProxy is a small subset of the traffic-manager API that the
@@ -460,4 +464,20 @@ message ClusterSubnets {
   repeated manager.IPNet pod_subnets = 1;
   // svc_subnets are subnets that services go into
   repeated manager.IPNet svc_subnets = 2;
+}
+
+message ResolveSyntheticRequest {
+  // The synthetic IP to be resolved.
+  bytes ip = 1;
+
+  // Resolve the IP into a name, but do not make an attempt to resolve the name through DNS.
+  bool name_only = 2;
+}
+
+message ResolveSyntheticResponse {
+  // The name that the synthetic IP resolved to.
+  string name = 1;
+
+  // The IP resulting from a DNS lookup using the resolved name.
+  bytes resolved_ip = 2;
 }

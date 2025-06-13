@@ -30,7 +30,7 @@ const (
 //	man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(netip.Addr, *net.UDPAddr)) error {
+func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 
 	listener, err := newLocalUDPListener(c)
@@ -41,7 +41,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	if err != nil {
 		return err
 	}
-	configureDNS(netip.Addr{}, dnsAddr)
+	configureDNS(netip.AddrPort{}, dnsAddr)
 
 	err = os.MkdirAll(resolverDirName, 0o755)
 	if err != nil {
@@ -91,17 +91,15 @@ func (s *Server) removeResolverFiles(c context.Context, resolverDirName string) 
 	return nil
 }
 
-func (s *Server) updateResolverFiles(c context.Context, resolverDirName string, dnsAddr *net.UDPAddr) error {
+func (s *Server) updateResolverFiles(c context.Context, resolverDirName string, dnsAddr netip.AddrPort) error {
 	s.Lock()
 	defer s.Unlock()
 
-	nameservers := []string{dnsAddr.IP.String()}
-	port := dnsAddr.Port
 	newDomainResolveFile := func(domain string) *dnsproxy.ResolveFile {
 		return &dnsproxy.ResolveFile{
-			Port:        port,
+			Port:        int(dnsAddr.Port()),
 			Domain:      domain,
-			Nameservers: nameservers,
+			Nameservers: []string{dnsAddr.Addr().String()},
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"sync/atomic"
 	"time"
 
@@ -19,12 +20,12 @@ type udpListener struct {
 	conn       *net.UDPConn
 	connected  int32
 	done       chan struct{}
-	targetAddr *net.UDPAddr
+	targetAddr netip.AddrPort
 	targets    *Pool
 	creator    func(context.Context, ConnID) (Stream, error)
 }
 
-func NewUDPListener(conn *net.UDPConn, tag Tag, targetAddr *net.UDPAddr, creator func(context.Context, ConnID) (Stream, error)) Endpoint {
+func NewUDPListener(conn *net.UDPConn, tag Tag, targetAddr netip.AddrPort, creator func(context.Context, ConnID) (Stream, error)) Endpoint {
 	state := notConnected
 	if conn != nil {
 		state = connecting
@@ -66,7 +67,7 @@ func (h *udpListener) connToStreamLoop(ctx context.Context) {
 				return
 			}
 			h.ResetIdle()
-			id := ConnIDFromUDP(rr.Addr, h.targetAddr)
+			id := ConnIDFromUDP(rr.Address, h.targetAddr)
 			target, _, err := h.targets.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (Handler, error) {
 				s, err := h.creator(ctx, id)
 				if err != nil {
@@ -126,7 +127,7 @@ func (p *udpStream) Start(ctx context.Context) {
 
 type UdpReadResult struct {
 	Payload []byte
-	Addr    *net.UDPAddr
+	Address netip.AddrPort
 }
 
 // IsTimeout returns true if the given error is a network timeout error.
@@ -136,7 +137,7 @@ func IsTimeout(err error) bool {
 }
 
 // UdpReader continuously reads from a net.PacketConn and writes the resulting payload and
-// reply address to a channel. The loop is cancelled when the connection is closed or when
+// reply address to a channel. The loop is canceled when the connection is closed or when
 // the context is done, at which time the channel is closed.
 func UdpReader(ctx context.Context, tag Tag, conn net.PacketConn, ch chan<- UdpReadResult) {
 	defer close(ch)
@@ -156,7 +157,7 @@ func UdpReader(ctx context.Context, tag Tag, conn net.PacketConn, ch chan<- UdpR
 		if n > 0 {
 			pl := make([]byte, n)
 			copy(pl, buf[:n])
-			ch <- UdpReadResult{pl, addr.(*net.UDPAddr)}
+			ch <- UdpReadResult{pl, addr.(*net.UDPAddr).AddrPort()}
 		}
 		switch {
 		case err == nil, IsTimeout(err):

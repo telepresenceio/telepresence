@@ -1,0 +1,31 @@
+{
+  "description": "Docker network plugin for Telepresence",
+  "documentation": "https://docs.docker.com/engine/extend/plugins/",
+  "entrypoint": [
+    "/bin/docker-network-teleroute"
+  ],
+  "env": [
+    {
+      "name": "DEBUG",
+      "settable": [
+        "value"
+      ],
+      "value": "false"
+    }
+  ],
+  "interface": {
+    "socket": "teleroute.sock",
+    "types": [
+      "docker.networkdriver/1.0"
+    ]
+  },
+  "pidhost": true,
+  "linux": {
+    "capabilities": [
+      "CAP_NET_ADMIN"
+    ]
+  },
+  "network": {
+    "type": "host"
+  }
+ }

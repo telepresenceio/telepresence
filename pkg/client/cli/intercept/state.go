@@ -3,9 +3,9 @@ package intercept
 import (
 	"context"
 	"fmt"
-	"net/netip"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 
 	grpcCodes "google.golang.org/grpc/codes"
@@ -83,7 +83,6 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.MechanismArgs = s.MechanismArgs
 	spec.Wiretap = s.Wiretap
 	spec.Agent = s.AgentName
-	spec.TargetHost = "127.0.0.1"
 	spec.NoDefaultPort = s.NoDefaultPort
 
 	for _, toPod := range s.ToPod {
@@ -124,10 +123,17 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	}
 
 	spec.TargetPort = int32(s.localPort)
-	if _, err := netip.ParseAddr(s.Address); err != nil {
-		return nil, fmt.Errorf("--address %s is not a valid IP address", s.Address)
+	switch {
+	case s.Address != "":
+		spec.TargetHost = s.Address
+	case ud.Containerized() && s.handlerContainer != "":
+		// The name will be translated into a synthetic IP that will be registered with
+		// the daemon. The daemon will reverse the translation when dialing the local
+		// target and use DNS to find the container IP.
+		spec.TargetHost = s.handlerContainer
+	default:
+		spec.TargetHost = "127.0.0.1"
 	}
-	spec.TargetHost = s.Address
 	return ir, nil
 }
 
@@ -323,11 +329,8 @@ func (s *state) runCommand(ctx context.Context) error {
 		Mount:         s.info.Mount,
 	}
 	if s.dockerPort != 0 {
-		dr.PublishedPorts = append(dr.PublishedPorts, cliDocker.PublishedPort{
-			HostAddrPort:  netip.AddrPortFrom(netip.IPv4Unspecified(), s.localPort),
-			Protocol:      "tcp",
-			ContainerPort: s.dockerPort,
-		})
+		s.Cmdline = slices.Insert(s.Cmdline, 0, "-p", fmt.Sprintf("%d:%d", s.localPort, s.dockerPort))
+		dr.AdjustImageIndex(2)
 	}
 	return dr.Run(ctx, s.WaitMessage, s.Cmdline...)
 }

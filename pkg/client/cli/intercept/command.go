@@ -71,9 +71,8 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 		`<local port>:<container port>:<identifier>.`,
 	)
 
-	flagSet.StringVar(&c.Address, "address", "127.0.0.1", ``+
-		`Local address to forward to, Only accepts IP address as a value. `+
-		`e.g. '--address 10.0.0.2'`,
+	flagSet.StringVar(&c.Address, "address", "", ``+
+		`Local address to forward to, e.g. '--address 10.0.0.2' (default "127.0.0.1" or name of container)`,
 	)
 
 	flagSet.StringVar(&c.ServiceName, "service", "", fmt.Sprintf("Optional name of service to %s. Sometimes needed to uniquely identify the intercepted port.", what))
@@ -117,8 +116,8 @@ func (c *Command) AddReplaceFlags(cmd *cobra.Command) {
 		`Use "all" (the default) to forward all ports declared in the replaced container to their corresponding local port. `,
 	)
 
-	flagSet.StringVar(&c.Address, "address", "127.0.0.1", ``+
-		`Local address to forward to, Only accepts IP address as a value,  e.g. '--address 10.0.0.2'`,
+	flagSet.StringVar(&c.Address, "address", "", ``+
+		`Local address to forward to, e.g. '--address 10.0.0.2' (default "127.0.0.1" or name of container)`,
 	)
 
 	flagSet.StringVar(&c.ContainerName, "container", "",
@@ -170,9 +169,14 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	}
 	if c.FormattedOutput || c.EnvFlags.File == "-" {
 		// Can't mix JSON or env output on stdout with progress monitor.
-		_ = cmd.Flag(global.FlagProgress).Value.Set("quiet")
+		global.SetProgressQuiet(cmd)
 	}
-	return c.DockerFlags.Validate(c.Cmdline)
+	err := c.DockerFlags.Validate(c.Cmdline)
+	if err != nil {
+		return err
+	}
+	dlog.Debugf(cmd.Context(), "Docker flags = %v", c.DockerFlags)
+	return nil
 }
 
 func (c *Command) ValidateReplace(cmd *cobra.Command, positional []string) error {

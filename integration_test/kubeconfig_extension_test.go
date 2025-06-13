@@ -178,8 +178,8 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 	rq.True(len(st.RootDaemon.Subnets) > 0)
 	svcCIDR := st.RootDaemon.Subnets[0]
 	ones := svcCIDR.Bits()
-	if ones != 16 || !svcCIDR.Addr().Is4() {
-		s.T().Skip("test requires an IPv4 service subnet with a 16 bit mask")
+	if ones > 16 || !svcCIDR.Addr().Is4() {
+		s.T().Skip("test requires an IPv4 service subnet with a 16 bit mask or smaller")
 	}
 
 	base := svcCIDR.Masked().Addr()
@@ -218,21 +218,13 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 			s.Eventually(func() bool {
 				newRoute, err := routing.GetRoute(ctx, testIP)
 				if err != nil {
+					dlog.Errorf(ctx, "failed to get route for %s: %v", testIP, err)
 					return false
 				}
 				if t.expectEq {
-					if originalRoute.Interface != nil {
-						return newRoute.Interface != nil && originalRoute.Interface.Name == newRoute.Interface.Name
-					}
-					return newRoute.Interface == nil
+					return originalRoute.InterfaceName == newRoute.InterfaceName
 				}
-				if newRoute.Interface == nil {
-					return false
-				}
-				if originalRoute.Interface == nil {
-					return true
-				}
-				return newRoute.Interface.Name != originalRoute.Interface.Name
+				return newRoute.InterfaceName != originalRoute.InterfaceName
 			}, 30*time.Second, 200*time.Millisecond)
 		})
 	}

@@ -103,7 +103,7 @@ jobs:
       - name: Compatibility with older manager and agent
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
-          DEV_MANAGER_VERSION: "2.21.3"
+          DEV_MANAGER_VERSION: "2.22.6"
         uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
@@ -118,7 +118,7 @@ jobs:
       - name: Compatibility with older client
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
-          DEV_CLIENT_VERSION: "2.21.3"
+          DEV_CLIENT_VERSION: "2.22.6"
         uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
