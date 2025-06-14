@@ -86,10 +86,16 @@ The port used for the containerized gRPC was randomly selected using the hosts n
 The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">removed logic to drop search domains from suffix, which causes FQDN domains that consist of multiple labels to have their suffix dropped</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Telepresence fails to start the root daemon on Windows unless current user is the administrator](https://github.com/telepresenceio/telepresence/issues/3875)</div></div>
 <div style="margin-left: 15px">
 
-To fix Issue #3873:  Telepresence DNS Fallback stripping CNAME information from DNS Records The logic that was dropping search domains from the suffix has been removed. This prevents FQDN DNS queries from being forwarded to the cluster for resolution, which fixes the bug where only an A record is returned despite the original nameservers having both CNAME and A records for the entry
+The telepresence CLI starts a user daemon and a root daemon. The latter is started using administrator privileges. On a Windows box, this means that the root daemon runs using a different user account (typically "Administrator") unless the current user can run processes with elevated privileges. The socket used for communication with the root daemon was assumed to reside in `%USERPROFILE%\AppData\Local\telepresence` and was therefore not found by the CLI and the user daemon. The location will henceforth always be based on the `%USERDATA` of the CLI user.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Telepresence DNS Fallback stripping CNAME information from DNS Records.](https://github.com/telepresenceio/telepresence/issues/3873)</div></div>
+<div style="margin-left: 15px">
+
+The fallback DNS server used on Linux systems without a systemd.resolved configuration, would assume that suffixes belonging to the `search` defined in the `/etc/resolved` had been added by the caller. Since this search path was assumed to be intended for the local machine only, the suffix was stripped off prior to sending the name to the cluster for resolution. This made queries fail that relied on the qualified name to resolve CNAME records. The logic stripping the suffix was therefore removed.
 </div>
 
 ## Version 2.22.6 <span style="font-size: 16px;">(June  3)</span>
