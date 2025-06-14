@@ -47,7 +47,7 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) (err error) {
 	if os.Getenv("SCOUT_DISABLE") == "1" {
 		args = append(args, "--disable-metriton")
 	}
-	args = append(args, logDir, filelocation.AppUserConfigDir(ctx))
+	args = append(args, logDir, filelocation.AppUserConfigDir(ctx), socket.RootDaemonPath(ctx))
 	return proc.StartInBackgroundAsRoot(ctx, args...)
 }
 

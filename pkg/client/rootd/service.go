@@ -110,7 +110,7 @@ func Command() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    ProcessName + "-foreground <logging dir> <config dir>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(2),
+		Args:   cobra.ExactArgs(3),
 		Hidden: true,
 		Long:   help(),
 		RunE:   run,
@@ -401,6 +401,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	loggingDir := args[0]
 	configDir := args[1]
+	rootDaemonPath := args[2]
 	c := cmd.Context()
 
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
@@ -436,10 +437,10 @@ func run(cmd *cobra.Command, args []string) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
-	// before other tasks because the CLI client will only wait for a short period of time for
-	// the socket/pipe to appear before it gives up.
-	grpcListener, err := socket.Listen(c, ProcessName, socket.RootDaemonPath(c))
+	// Listen on domain unix domain socket. The listener must be opened before other tasks because
+	// the CLI client will only wait for a short period of time for the socket to appear before it
+	// gives up.
+	grpcListener, err := socket.Listen(c, ProcessName, rootDaemonPath)
 	if err != nil {
 		return err
 	}
