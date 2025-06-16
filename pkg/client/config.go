@@ -110,6 +110,7 @@ type Config interface {
 	Docker() *Docker
 	DNS() *DNS
 	Routing() *Routing
+	Helm() *Helm
 	DestructiveMerge(Config)
 	Merge(priority Config) Config
 }
@@ -127,6 +128,7 @@ type BaseConfig struct {
 	DockerV          Docker          `json:"docker,omitzero"`
 	DNSV             DNS             `json:"dns,omitzero"`
 	RoutingV         Routing         `json:"routing,omitzero"`
+	HelmV            Helm            `json:"helm,omitzero"`
 
 	// This is actually a traffic-manager setting, and controls
 	// the agent's connection to the client.
@@ -179,6 +181,10 @@ func (c *BaseConfig) DNS() *DNS {
 
 func (c *BaseConfig) Routing() *Routing {
 	return &c.RoutingV
+}
+
+func (c *BaseConfig) Helm() *Helm {
+	return &c.HelmV
 }
 
 func (c *BaseConfig) MarshalYAML() ([]byte, error) {
@@ -257,6 +263,7 @@ func (c *BaseConfig) DestructiveMerge(lc Config) {
 	c.DockerV.merge(lc.Docker())
 	c.DNSV.merge(lc.DNS())
 	c.RoutingV.merge(lc.Routing())
+	c.HelmV.merge(lc.Helm())
 }
 
 func (c *BaseConfig) Merge(lc Config) Config {
@@ -566,8 +573,8 @@ func (t *Timeouts) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Timeouts
-	wp := (*wt)(t)
+	type timeouts Timeouts
+	wp := (*timeouts)(t)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -608,8 +615,8 @@ func (ll *LogLevels) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt LogLevels
-	wp := (*wt)(ll)
+	type logLevels LogLevels
+	wp := (*logLevels)(ll)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -650,8 +657,8 @@ func (img *Images) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Images
-	wp := (*wt)(img)
+	type images Images
+	wp := (*images)(img)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -724,8 +731,8 @@ func (g *Grpc) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Grpc
-	wp := (*wt)(g)
+	type grpc Grpc
+	wp := (*grpc)(g)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -791,8 +798,8 @@ func (ic *Intercept) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Intercept
-	wp := (*wt)(ic)
+	type intercept Intercept
+	wp := (*intercept)(ic)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -839,8 +846,8 @@ func (cc *Cluster) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Cluster
-	wp := (*wt)(cc)
+	type cluster Cluster
+	wp := (*cluster)(cc)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -870,8 +877,8 @@ func (tm *Telemount) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Telemount
-	wp := (*wt)(tm)
+	type telemount Telemount
+	wp := (*telemount)(tm)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -901,8 +908,8 @@ func (tr *Teleroute) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Teleroute
-	wp := (*wt)(tr)
+	type teleroute Teleroute
+	wp := (*teleroute)(tr)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -941,8 +948,45 @@ func (d *Docker) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Docker
-	wp := (*wt)(d)
+	type docker Docker
+	wp := (*docker)(d)
+	return json.UnmarshalDecode(in, &wp)
+}
+
+type Helm struct {
+	ChartURL string `json:"chartURL"`
+}
+
+const defaultChartURL = "oci://ghcr.io/telepresenceio/telepresence-oss"
+
+var defaultHelm = Helm{ //nolint:gochecknoglobals // constant
+	ChartURL: defaultChartURL,
+}
+
+func (d *Helm) defaults() DefaultsAware {
+	return &defaultHelm
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (d *Helm) merge(o *Helm) {
+	mergeNonDefaults(d, o)
+}
+
+// IsZero controls whether this element will be included in marshaled output.
+func (d *Helm) IsZero() bool {
+	return d == nil || isDefault(d)
+}
+
+func (d *Helm) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(d))
+}
+
+func (d *Helm) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	// Prevent that the original object is cleared when an empty object is decoded by passing the address
+	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
+	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
+	type helm Helm
+	wp := (*helm)(d)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -1027,8 +1071,8 @@ func (r *Routing) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt Routing
-	wp := (*wt)(r)
+	type routing Routing
+	wp := (*routing)(r)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -1079,8 +1123,8 @@ func (d *DNS) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// Prevent that the original object is cleared when an empty object is decoded by passing the address
 	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
-	type wt DNS
-	wp := (*wt)(d)
+	type dns DNS
+	wp := (*dns)(d)
 	err := json.UnmarshalDecode(in, &wp)
 	if err == nil {
 		if d.LocalIP.IsValid() && !d.LocalAddress.IsValid() {
@@ -1147,6 +1191,7 @@ var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
 	DockerV:          defaultDocker,
 	DNSV:             defaultDNS,
 	RoutingV:         defaultRouting,
+	HelmV:            defaultHelm,
 }
 
 // GetDefaultBaseConfig returns the default configuration settings.

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/go-json-experiment/json"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -27,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 const (
@@ -443,11 +445,14 @@ func ensureIsDeleted(
 	return uninstallExisting(ctx, helmConfig, releaseName, namespace, req)
 }
 
-func getTrafficManagerVersion(values map[string]any) string {
+func getTrafficManagerVersion(values map[string]any) (semver.Version, error) {
 	if img, ok := values["image"].(map[string]any); ok {
 		if tag, ok := img["tag"].(string); ok {
-			return tag
+			v, err := semver.ParseTolerant(tag)
+			if err != nil {
+				return v, fmt.Errorf("unable to parse chart value image.tag %q to a version: %w", tag, err)
+			}
 		}
 	}
-	return strings.TrimPrefix(client.Version(), "v")
+	return version.Structured, nil
 }

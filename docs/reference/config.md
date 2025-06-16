@@ -126,6 +126,12 @@ dns:
   excludes:
     - redis
 ```
+### Helm
+The `client.helm` object contains options for the `telepresence helm` commands
+
+| Field       | Description                                                                                                  | Type               | Default                                         |
+|-------------|--------------------------------------------------------------------------------------------------------------|--------------------|-------------------------------------------------|
+| `chartURL`  | The URL used when downloading the Telepresence Helm chart when the version differs from the embedded version | [string][yaml-str] | `oci://ghcr.io/telepresenceio/telepresence-oss` |
 
 ### Grpc
 The `maxReceiveSize` determines how large a message that the workstation receives via gRPC can be. The default is 4Mi (determined by gRPC). All traffic to and from the cluster is tunneled via gRPC.

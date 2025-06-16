@@ -97,6 +97,12 @@ items:
 
           The flag is set to `true` by default on linux platforms and `false` on
           other platforms.
+      - type: feature
+        title: Client configuration to override the Helm download URL
+        body: >-
+          The default download URL `oci://ghcr.io/telepresenceio/telepresence-oss` used when installing Helm charts with
+          versions that differ from the version of the embedded Helm chart can now be overridden using the client config
+          value `helm.chartURL`.
       - type: change
         title: Dropped support for Telepresence legacy flags
         body: |-

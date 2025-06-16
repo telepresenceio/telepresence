@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/blang/semver/v4"
 	"github.com/go-json-experiment/json"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -17,11 +18,10 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/charts"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-const chartURL = "oci://ghcr.io/telepresenceio/telepresence-oss"
-
-func loadCoreChart(version string) (*chart.Chart, error) {
+func loadCoreChart(version semver.Version) (*chart.Chart, error) {
 	var buf bytes.Buffer
 	if err := charts.WriteChart(charts.DirTypeTelepresence, &buf, charts.TelepresenceChartName, version); err != nil {
 		return nil, err
@@ -37,7 +37,7 @@ func newDefaultRegistryClient(ctx context.Context) (*registry.Client, error) {
 	)
 }
 
-func withDownloadedChart(ctx context.Context, helmConfig *action.Configuration, ref, version string, f func(string) error) error {
+func withDownloadedChart(ctx context.Context, helmConfig *action.Configuration, ref string, version semver.Version, f func(string) error) error {
 	client, err := newDefaultRegistryClient(ctx)
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func withDownloadedChart(ctx context.Context, helmConfig *action.Configuration, 
 		}
 	}()
 	pull := action.NewPullWithOpts(action.WithConfig(helmConfig))
-	pull.Version = version
+	pull.Version = version.String()
 	pull.DestDir = dir
 	pull.Settings = cli.New()
 	pull.SetRegistryClient(client)
@@ -65,7 +65,7 @@ func withDownloadedChart(ctx context.Context, helmConfig *action.Configuration, 
 	return f(filepath.Join(dir, fmt.Sprintf("%s-%s.tgz", charts.TelepresenceChartName, version)))
 }
 
-func pullCoreChart(ctx context.Context, helmConfig *action.Configuration, ref, version string) (c *chart.Chart, err error) {
+func pullCoreChart(ctx context.Context, helmConfig *action.Configuration, ref string, version semver.Version) (c *chart.Chart, err error) {
 	err = withDownloadedChart(ctx, helmConfig, ref, version, func(path string) error {
 		var f *os.File
 		f, err = os.Open(path)
@@ -107,13 +107,23 @@ func loadOrPullChart(ctx context.Context, helmConfig *action.Configuration, req 
 	if err != nil {
 		return nil, nil, err
 	}
+	tmVer, err := getTrafficManagerVersion(vals)
+	if err != nil {
+		return nil, nil, err
+	}
 	if req.Version != "" {
-		chrt, err = pullCoreChart(ctx, helmConfig, chartURL, req.Version)
-	} else {
-		chrt, err = loadCoreChart(getTrafficManagerVersion(vals))
+		ver, err := semver.ParseTolerant(req.Version)
 		if err != nil {
-			err = fmt.Errorf("unable to load built-in helm chart: %w", err)
+			return nil, nil, fmt.Errorf("unable to parse chart version %q: %v", req.Version, err)
 		}
+		if !ver.EQ(tmVer) {
+			chrt, err = pullCoreChart(ctx, helmConfig, client.GetConfig(ctx).Helm().ChartURL, ver)
+			return chrt, vals, err
+		}
+	}
+	chrt, err = loadCoreChart(tmVer)
+	if err != nil {
+		err = fmt.Errorf("unable to load built-in helm chart: %w", err)
 	}
 	return chrt, vals, err
 }
