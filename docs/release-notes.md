@@ -64,6 +64,12 @@ When `docker.addHostGateway` is set to `true`, the `docker run` that starts the 
 The flag is set to `true` by default on linux platforms and `false` on other platforms.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Client configuration to override the Helm download URL</div></div>
+<div style="margin-left: 15px">
+
+The default download URL `oci://ghcr.io/telepresenceio/telepresence-oss` used when installing Helm charts with versions that differ from the version of the embedded Helm chart can now be overridden using the client config value `helm.chartURL`.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Dropped support for Telepresence legacy flags</div></div>
 <div style="margin-left: 15px">
 
