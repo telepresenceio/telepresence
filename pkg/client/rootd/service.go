@@ -108,7 +108,7 @@ func (s *Service) As(ptr any) {
 // Command returns the telepresence sub-command "daemon-foreground".
 func Command() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    ProcessName + "-foreground <logging dir> <config dir>",
+		Use:    ProcessName + "-foreground <logging dir> <config dir> <path to gRPC socket>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(3),
 		Hidden: true,
