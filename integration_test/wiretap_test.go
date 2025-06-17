@@ -1,10 +1,8 @@
 package integration_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -16,7 +14,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type wiretapSuite struct {
@@ -71,7 +68,7 @@ func (s *wiretapSuite) TearDownSuite() {
 	s.DeleteTemplate(s.Context(), s.tplPath, s.tpl)
 }
 
-func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr string, echoTo io.Writer) (int, context.CancelFunc) {
+func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr string, echoTo *chan string) (int, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(ctx)
 	lc := net.ListenConfig{}
 	l, err := lc.Listen(ctx, "tcp", addr)
@@ -80,7 +77,7 @@ func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr strin
 	port := l.Addr().(*net.TCPAddr).Port
 	sc := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ioutil.Printf(echoTo, "Request served by %s on port %d\n", name, port)
+			*echoTo <- fmt.Sprintf("Request served by %s on port %d\n", name, port)
 		}),
 	}
 	go func() {
@@ -100,13 +97,13 @@ func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr strin
 	return port, cancel
 }
 
-func (s *wiretapSuite) Test_MultipleTapsOnOnePort() {
+func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 	ctx := s.Context()
-	out1 := bytes.Buffer{}
+	var out1 chan string
 	localPort1, tap1HandlerCancel := s.startWiretapHandler(ctx, s.svc+"-wt1", ":0", &out1)
 	defer tap1HandlerCancel()
 
-	out2 := bytes.Buffer{}
+	var out2 chan string
 	localPort2, tap2HandlerCancel := s.startWiretapHandler(ctx, s.svc+"-wt2", ":0", &out2)
 	defer tap2HandlerCancel()
 
@@ -143,22 +140,39 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() {
 	})
 
 	s.Run("Verify taps", func() {
+		var ok1, ok2 bool
+		out1 = make(chan string, 5)
+		defer close(out1)
+		out2 = make(chan string, 5)
+		defer close(out2)
 		s.Eventually(func() bool {
 			so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", s.svc)
 			// Output must yield the standard response from the cluster's service
-			if err == nil {
-				dlog.Infof(ctx, "curl output: %s", so)
-				return strings.Contains(so, `Request served by `+podName)
+			if err != nil {
+				dlog.Errorf(ctx, "curl: %s", err)
+				return false
 			}
-			dlog.Errorf(ctx, "curl: %s", err)
-			return false
-		}, 30*time.Second, 3*time.Second)
 
-		// Taps are async, so wait just a bit
-		time.Sleep(500 * time.Millisecond)
-		// Both handlers should have produced output.
-		s.Contains(out1.String(), fmt.Sprintf("Request served by %s-wt1 on port %d\n", s.svc, localPort1))
-		s.Contains(out2.String(), fmt.Sprintf("Request served by %s-wt2 on port %d\n", s.svc, localPort2))
+			dlog.Infof(ctx, "curl output: %s", so)
+			if !strings.Contains(so, `Request served by `+podName) {
+				return false
+			}
+			if !ok1 {
+				select {
+				case out := <-out1:
+					ok1 = strings.Contains(out, fmt.Sprintf("Request served by %s-wt1 on port %d\n", s.svc, localPort1))
+				default:
+				}
+			}
+			if !ok2 {
+				select {
+				case out := <-out2:
+					ok2 = strings.Contains(out, fmt.Sprintf("Request served by %s-wt2 on port %d\n", s.svc, localPort2))
+				default:
+				}
+			}
+			return ok1 && ok2
+		}, 30*time.Second, 3*time.Second)
 
 		so := itest.TelepresenceOk(ctx, "list", "--wiretaps", "--output", "json")
 		var soj listOut
@@ -178,8 +192,10 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() {
 	})
 
 	s.Run("Intercept wiretapped service", func() {
-		out1.Reset()
-		out2.Reset()
+		out1 = make(chan string, 5)
+		defer close(out1)
+		out2 = make(chan string, 5)
+		defer close(out2)
 		so := itest.TelepresenceOk(ctx, "intercept", "--port", fmt.Sprintf("%d:80", localPort3), s.svc)
 		defer itest.TelepresenceOk(ctx, "leave", s.svc)
 
@@ -187,9 +203,24 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() {
 		itest.PingInterceptedEchoServer(ctx, s.svc, "80")
 
 		// Both handlers should have produced output.
-		time.Sleep(500 * time.Millisecond)
-		s.Contains(out1.String(), fmt.Sprintf("Request served by %s-wt1 on port %d\n", s.svc, localPort1))
-		s.Contains(out2.String(), fmt.Sprintf("Request served by %s-wt2 on port %d\n", s.svc, localPort2))
+		var ok1, ok2 bool
+		s.Eventually(func() bool {
+			if !ok1 {
+				select {
+				case out := <-out1:
+					ok1 = strings.Contains(out, fmt.Sprintf("Request served by %s-wt1 on port %d\n", s.svc, localPort1))
+				default:
+				}
+			}
+			if !ok2 {
+				select {
+				case out := <-out2:
+					ok2 = strings.Contains(out, fmt.Sprintf("Request served by %s-wt2 on port %d\n", s.svc, localPort2))
+				default:
+				}
+			}
+			return ok1 && ok2
+		}, 5*time.Second, 3*time.Second)
 
 		so = itest.TelepresenceOk(ctx, "list", "--wiretaps", "--output", "json")
 		var soj listOut
@@ -214,24 +245,41 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() {
 	})
 
 	s.Run("Verify taps after intercept", func() {
-		out1.Reset()
-		out2.Reset()
+		out1 = make(chan string, 5)
+		defer close(out1)
+		out2 = make(chan string, 5)
+		defer close(out2)
 
 		so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", s.svc)
 		s.NoError(err)
 		// Output must yield the standard response from the cluster's service
 		s.Contains(so, `Request served by `+podName)
 
-		// Taps are async, so wait just a bit
-		time.Sleep(500 * time.Millisecond)
-		// Both handlers should have produced output.
-		s.Equal(fmt.Sprintf("Request served by %s-wt1 on port %d\n", s.svc, localPort1), out1.String())
-		s.Equal(fmt.Sprintf("Request served by %s-wt2 on port %d\n", s.svc, localPort2), out2.String())
+		var ok1, ok2 bool
+		s.Eventually(func() bool {
+			if !ok1 {
+				select {
+				case out := <-out1:
+					ok1 = strings.Contains(out, fmt.Sprintf("Request served by %s-wt1 on port %d\n", s.svc, localPort1))
+				default:
+				}
+			}
+			if !ok2 {
+				select {
+				case out := <-out2:
+					ok2 = strings.Contains(out, fmt.Sprintf("Request served by %s-wt2 on port %d\n", s.svc, localPort2))
+				default:
+				}
+			}
+			return ok1 && ok2
+		}, 5*time.Second, 3*time.Second)
 	})
 
 	s.Run("Wiretaps gone", func() {
-		out1.Reset()
-		out2.Reset()
+		out1 = make(chan string, 5)
+		defer close(out1)
+		out2 = make(chan string, 5)
+		defer close(out2)
 
 		itest.TelepresenceOk(ctx, "leave", "wt1")
 		itest.TelepresenceOk(ctx, "leave", "wt2")
@@ -241,10 +289,13 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() {
 		// Out must yield the standard response from the cluster's service
 		s.Contains(so, `Request served by `+podName)
 
-		// Taps are async, so wait just a bit
-		time.Sleep(500 * time.Millisecond)
 		// Handlers should not have produced output.
-		s.Equal(out1.Len(), 0)
-		s.Equal(out2.Len(), 0)
+		select {
+		case out := <-out1:
+			s.Failf("unexpected output from wiretap handler: %q", out)
+		case out := <-out2:
+			s.Failf("unexpected output from wiretap handler: %q", out)
+		case <-time.After(2 * time.Second):
+		}
 	})
 }
