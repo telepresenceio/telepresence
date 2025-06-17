@@ -71,6 +71,12 @@ The flag is set to `true` by default on linux platforms and `false` on other pla
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Client configuration to override the Helm download URL</Title>
+	<Body>
+The default download URL `oci://ghcr.io/telepresenceio/telepresence-oss` used when installing Helm charts with versions that differ from the version of the embedded Helm chart can now be overridden using the client config value `helm.chartURL`.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">Dropped support for Telepresence legacy flags</Title>
 	<Body>
 The `telepresence` CLI command will no longer support legacy flags such as:

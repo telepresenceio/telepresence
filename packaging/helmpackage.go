@@ -42,5 +42,5 @@ func packageHelmChart(filename string, version semver.Version) error {
 		return err
 	}
 	defer fh.Close()
-	return telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, telcharts.TelepresenceChartName, version.String())
+	return telcharts.WriteChart(telcharts.DirTypeTelepresence, fh, telcharts.TelepresenceChartName, version)
 }

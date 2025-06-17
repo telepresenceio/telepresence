@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/blang/semver/v4"
 	"helm.sh/helm/v3/pkg/action"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/datawire/dlib/derror"
 	"github.com/telepresenceio/telepresence/v2/charts"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -20,14 +22,24 @@ func lint(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, 
 		return err
 	}
 
+	tmVer, err := getTrafficManagerVersion(vals)
+	if err != nil {
+		return err
+	}
 	if req.Version != "" {
-		helmConfig, err := getHelmConfig(ctx, clientGetter, namespace)
+		ver, err := semver.ParseTolerant(req.Version)
 		if err != nil {
-			return fmt.Errorf("failed to initialize helm config: %w", err)
+			return fmt.Errorf("unable to parse chart version %q: %v", req.Version, err)
 		}
-		return withDownloadedChart(ctx, helmConfig, chartURL, req.Version, func(s string) error {
-			return runLint(s, namespace, vals, req)
-		})
+		if !ver.EQ(tmVer) {
+			helmConfig, err := getHelmConfig(ctx, clientGetter, namespace)
+			if err != nil {
+				return fmt.Errorf("failed to initialize helm config: %w", err)
+			}
+			return withDownloadedChart(ctx, helmConfig, client.GetConfig(ctx).Helm().ChartURL, ver, func(s string) error {
+				return runLint(s, namespace, vals, req)
+			})
+		}
 	}
 	fh, err := os.CreateTemp("", fmt.Sprintf("%s-*.tgz", charts.TelepresenceChartName))
 	if err != nil {
@@ -36,7 +48,7 @@ func lint(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, 
 	defer func() {
 		_ = os.Remove(fh.Name())
 	}()
-	err = charts.WriteChart(charts.DirTypeTelepresence, fh, charts.TelepresenceChartName, getTrafficManagerVersion(vals))
+	err = charts.WriteChart(charts.DirTypeTelepresence, fh, charts.TelepresenceChartName, tmVer)
 	fh.Close()
 	if err != nil {
 		return err

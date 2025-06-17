@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/blang/semver/v4"
 	"github.com/go-json-experiment/json"
 	"github.com/spf13/afero"
 	"helm.sh/helm/v3/pkg/chart"
@@ -81,7 +82,7 @@ type ChartOverlayFuncDef func(base afero.Fs) (afero.Fs, error)
 var ChartOverlayFunc map[DirType]ChartOverlayFuncDef //nolint:gochecknoglobals // extension point
 
 // WriteChart is a minimal `helm package`.
-func WriteChart(helmChartDir DirType, out io.Writer, chartName, version string, overlays ...fs.FS) error {
+func WriteChart(helmChartDir DirType, out io.Writer, chartName string, version semver.Version, overlays ...fs.FS) error {
 	embedChart := map[DirType]embed.FS{
 		DirTypeTelepresence: TelepresenceFS,
 	}[helmChartDir]
@@ -95,8 +96,6 @@ func WriteChart(helmChartDir DirType, out io.Writer, chartName, version string, 
 		}
 		baseDir = afero.NewIOFS(afero.NewCopyOnWriteFs(base, ovl))
 	}
-
-	version = strings.TrimPrefix(version, "v")
 
 	var filenames []string
 	if err := fs.WalkDir(baseDir, ".", func(filename string, dirent fs.DirEntry, err error) error {
@@ -169,8 +168,9 @@ func WriteChart(helmChartDir DirType, out io.Writer, chartName, version string, 
 			if err := yaml.Unmarshal(content, &dat); err != nil {
 				return err
 			}
-			dat.Version = version
-			dat.AppVersion = version
+			vs := version.String()
+			dat.Version = vs
+			dat.AppVersion = vs
 			content, err = yaml.Marshal(dat)
 			if err != nil {
 				return err
