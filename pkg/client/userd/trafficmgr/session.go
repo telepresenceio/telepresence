@@ -18,7 +18,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/google/uuid"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -115,7 +115,7 @@ type session struct {
 	workloadSubscribers map[uuid.UUID]chan struct{}
 
 	// currentIngests is tracks the ingests that are active in this session.
-	currentIngests *xsync.MapOf[ingestKey, *ingest]
+	currentIngests *xsync.Map[ingestKey, *ingest]
 
 	ingestTracker *podAccessTracker
 
@@ -448,7 +448,7 @@ func connectMgr(
 		managerName:        managerName,
 		managerVersion:     managerVersion,
 		sessionInfo:        si,
-		currentIngests:     xsync.NewMapOf[ingestKey, *ingest](),
+		currentIngests:     xsync.NewMap[ingestKey, *ingest](),
 		ingestTracker:      newPodAccessTracker(),
 		workloads:          make(map[string]map[workloadInfoKey]workloadInfo),
 		interceptWaiters:   make(map[string]*awaitIntercept),

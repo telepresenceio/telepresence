@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -86,14 +86,14 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 	drCh, ok := s.dialWatchers.Load(sessionID)
 	var stCh <-chan tunnel.Stream
 	if ok {
-		awc, _ := s.awaitingForwards.LoadOrCompute(sessionID, func() *xsync.MapOf[tunnel.ConnID, *awaitingForward] {
-			return xsync.NewMapOf[tunnel.ConnID, *awaitingForward]()
+		awc, _ := s.awaitingForwards.LoadOrCompute(sessionID, func() (*xsync.Map[tunnel.ConnID, *awaitingForward], bool) {
+			return xsync.NewMap[tunnel.ConnID, *awaitingForward](), false
 		})
-		aw, _ := awc.LoadOrCompute(id, func() *awaitingForward {
+		aw, _ := awc.LoadOrCompute(id, func() (*awaitingForward, bool) {
 			return &awaitingForward{
 				streamCh: make(chan tunnel.Stream),
 				doneCh:   ctx.Done(),
-			}
+			}, false
 		})
 		stCh = aw.streamCh
 	}

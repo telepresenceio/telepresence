@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -37,12 +37,12 @@ type recursiveBlock struct {
 }
 
 func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
-	var recursionBlockMap *xsync.MapOf[netip.AddrPort, recursiveBlock]
+	var recursionBlockMap *xsync.Map[netip.AddrPort, recursiveBlock]
 	routing := client.GetConfig(ctx).Routing()
 	recursionBlockDuration := routing.RecursionBlockDuration
 	recursionBlockThreads := routing.RecursionBlockTreads
 	if recursionBlockDuration != 0 {
-		recursionBlockMap = xsync.NewMapOf[netip.AddrPort, recursiveBlock]()
+		recursionBlockMap = xsync.NewMap[netip.AddrPort, recursiveBlock]()
 	}
 
 	return func(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
@@ -68,17 +68,17 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 		if recursionBlockDuration > 0 {
 			dst := netip.AddrPortFrom(destAddr, id.DestinationPort())
 			block := false
-			recursionBlockMap.Compute(dst, func(v recursiveBlock, loaded bool) (recursiveBlock, bool) {
+			recursionBlockMap.Compute(dst, func(v recursiveBlock, loaded bool) (recursiveBlock, xsync.ComputeOp) {
 				if loaded {
 					if time.Since(v.start) < recursionBlockDuration {
 						v.count++
 						if v.count < recursionBlockThreads {
-							return v, false
+							return v, xsync.UpdateOp
 						}
 						block = true
 					}
 					v.timer.Stop()
-					return v, true
+					return v, xsync.DeleteOp
 				}
 
 				// Ensure deletion in case it's only called once
@@ -86,7 +86,7 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 					recursionBlockMap.Delete(dst)
 				})
 				v.start = time.Now()
-				return v, false
+				return v, xsync.UpdateOp
 			})
 			if block {
 				return nil, fmt.Errorf("refusing recursive dispatch to %s", dst)

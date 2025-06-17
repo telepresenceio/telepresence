@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
@@ -20,7 +20,7 @@ type suiteServer struct {
 
 func (s *suiteServer) SetupSuite() {
 	s.server = &Server{
-		cache: xsync.NewMapOf[cacheKey, *cacheEntry](),
+		cache: xsync.NewMap[cacheKey, *cacheEntry](),
 	}
 }
 

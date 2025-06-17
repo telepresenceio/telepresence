@@ -134,8 +134,8 @@ func (s *state) startLookup(agentSessionID tunnel.SessionID, rid string, request
 	if as == nil {
 		return nil
 	}
-	rch, _ := as.dnsResponses.LoadOrCompute(rid, func() chan *rpc.DNSResponse {
-		return make(chan *rpc.DNSResponse)
+	rch, _ := as.dnsResponses.LoadOrCompute(rid, func() (chan *rpc.DNSResponse, bool) {
+		return make(chan *rpc.DNSResponse), false
 	})
 
 	// The as.dnsRequests channel may be closed at this point, so guard for panic. And no, we can't read that

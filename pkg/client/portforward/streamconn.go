@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/httpstream"
@@ -51,13 +51,13 @@ type podConn struct {
 type dialerKey struct{}
 
 type config struct {
-	cache      *xsync.MapOf[types.UID, PodConnection]
+	cache      *xsync.Map[types.UID, PodConnection]
 	restConfig *rest.Config
 }
 
 func WithRestConfig(ctx context.Context, restConfig *rest.Config) context.Context {
 	return context.WithValue(ctx, dialerKey{}, &config{
-		cache:      xsync.NewMapOf[types.UID, PodConnection](),
+		cache:      xsync.NewMap[types.UID, PodConnection](),
 		restConfig: restConfig,
 	})
 }
@@ -84,10 +84,7 @@ func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net
 		dlog.Error(logCtx, err)
 		return nil, err
 	}
-	pc, _ := cfg.cache.Compute(key, func(pc PodConnection, loaded bool) (PodConnection, bool) {
-		if loaded {
-			return pc, false
-		}
+	pc, _ := cfg.cache.LoadOrCompute(key, func() (pc PodConnection, cancel bool) {
 		var pd PodDialer
 		pd, err = NewPodDialer(logCtx, cfg.restConfig, pa.name, pa.namespace, client.GetConfig(logCtx).Cluster().ForceSPDY)
 		if err != nil {
@@ -96,10 +93,7 @@ func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net
 		pc, err = pd.Connect(func() {
 			cfg.cache.Delete(key)
 		})
-		if err != nil {
-			return nil, true
-		}
-		return pc, false
+		return pc, err != nil
 	})
 	if err != nil {
 		return nil, err

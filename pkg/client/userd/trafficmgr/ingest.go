@@ -163,7 +163,7 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		return nil, err
 	}
 
-	ig, loaded := s.currentIngests.LoadOrCompute(ik, func() *ingest {
+	ig, loaded := s.currentIngests.LoadOrCompute(ik, func() (*ingest, bool) {
 		ctx, cancel := context.WithCancel(ctx)
 		cancelIngest := func() {
 			s.currentIngests.Delete(ik)
@@ -179,7 +179,7 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 			localMountPoint: rq.MountPoint,
 			localMountPort:  rq.LocalMountPort,
 			localPorts:      rq.LocalPorts,
-		}
+		}, false
 	})
 	if !loaded {
 		s.ingestTracker.initialStart(ig.podAccess(s.rootDaemon))
