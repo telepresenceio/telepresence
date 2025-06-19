@@ -78,7 +78,35 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	ctx = tlog.WithLevelSetter(ctx, logger)
 	return ctx, nil
 }
+func InitStdOutStdErrContext(ctx context.Context, loggingDir string) context.Context {
+	// Use stdout/stderr directly for logging
+	logger := logrus.StandardLogger()
+	logger.SetLevel(logrus.InfoLevel)
+	logger.ReportCaller = false
+	logger.Formatter = tlog.NewFormatter("2006-01-02 15:04:05.0000")
 
+	// Set output to the appropriate device
+	if loggingDir == "/dev/stdout" {
+		logger.SetOutput(os.Stdout)
+	} else {
+		logger.SetOutput(os.Stderr)
+	}
+
+	// Configure the standard logger
+	log.SetOutput(logger.Writer())
+	log.SetPrefix("stdlog : ")
+	log.SetFlags(0)
+
+	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
+
+	// Read the config and set the configured level
+	logLevels := client.GetConfig(ctx).LogLevels()
+	level := logLevels.RootDaemon
+	tlog.SetLogrusLevel(logger, level.String(), false)
+	ctx = tlog.WithLevelSetter(ctx, logger)
+	return ctx
+
+}
 func SummarizeLog(ctx context.Context, name string) (string, error) {
 	filename := filepath.Join(filelocation.AppUserLogDir(ctx), name+".log")
 	file, err := dos.Open(ctx, filename)
