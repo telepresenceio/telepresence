@@ -8,6 +8,12 @@
 The new `telepresence helm version` command prints the version of the helm client that is embedded in the telepresence binary.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Telepresence breaks if config.yml exists but is empty](https://github.com/telepresenceio/telepresence/issues/3887)</div></div>
+<div style="margin-left: 15px">
+
+Telepresence would refuse to connect with a misleading error if the `config.yml` file containing the client's configuration parameters existed but was empty.
+</div>
+
 ## Version 2.23.0 <span style="font-size: 16px;">(June 17)</span>
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">New telepresence wiretap command</div></div>
 <div style="margin-left: 15px">

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -219,6 +220,10 @@ func UnmarshalJSONConfig(data []byte, rejectUnknown bool) (Config, error) {
 }
 
 func ParseConfigYAML(ctx context.Context, path string, data []byte) (Config, error) {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 {
+		return GetDefaultConfig(), nil
+	}
 	data, err := yaml.YAMLToJSON(data)
 	if err != nil {
 		return nil, err

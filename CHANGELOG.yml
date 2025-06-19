@@ -32,6 +32,12 @@ items:
         body: >-
           The new `telepresence helm version` command prints the version of the helm client that is embedded in the
           telepresence binary.
+      - type: bugfix
+        title: Telepresence breaks if config.yml exists but is empty
+        body: >-
+          Telepresence would refuse to connect with a misleading error if the `config.yml` file containing the client's
+          configuration parameters existed but was empty.
+        docs: https://github.com/telepresenceio/telepresence/issues/3887
   - version: 2.23.0
     date: 2025-06-17
     notes:

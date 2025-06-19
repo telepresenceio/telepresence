@@ -14,6 +14,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 The new `telepresence helm version` command prints the version of the helm client that is embedded in the telepresence binary.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/3887">Telepresence breaks if config.yml exists but is empty</Title>
+	<Body>
+Telepresence would refuse to connect with a misleading error if the `config.yml` file containing the client's configuration parameters existed but was empty.
+  </Body>
+</Note>
 ## Version 2.23.0 <span style={{fontSize:'16px'}}>(June 17)</span>
 <Note>
 	<Title type="feature">New telepresence wiretap command</Title>
