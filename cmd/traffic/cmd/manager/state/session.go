@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -40,7 +40,7 @@ type sessionState struct {
 	doneCh              <-chan struct{}
 	cancel              context.CancelFunc
 	lastMarked          int64
-	awaitingBidiPipeMap *xsync.MapOf[tunnel.ConnID, awaitingBidiPipe]
+	awaitingBidiPipeMap *xsync.Map[tunnel.ConnID, awaitingBidiPipe]
 	dials               chan *rpc.DialRequest
 }
 
@@ -152,7 +152,7 @@ func newSessionState(ctx context.Context, id tunnel.SessionID, now time.Time) se
 		cancel:              cancel,
 		lastMarked:          now.UnixNano(),
 		dials:               make(chan *rpc.DialRequest),
-		awaitingBidiPipeMap: xsync.NewMapOf[tunnel.ConnID, awaitingBidiPipe](),
+		awaitingBidiPipeMap: xsync.NewMap[tunnel.ConnID, awaitingBidiPipe](),
 	}
 }
 
@@ -181,7 +181,7 @@ type AgentSession struct {
 	*rpc.AgentInfo
 	sessionState
 	dnsRequests  chan *rpc.DNSRequest
-	dnsResponses *xsync.MapOf[string, chan *rpc.DNSResponse]
+	dnsResponses *xsync.Map[string, chan *rpc.DNSResponse]
 }
 
 func newAgentSessionState(ctx context.Context, id tunnel.SessionID, ai *rpc.AgentInfo, ts time.Time) *AgentSession {
@@ -189,7 +189,7 @@ func newAgentSessionState(ctx context.Context, id tunnel.SessionID, ai *rpc.Agen
 		AgentInfo:    ai,
 		sessionState: newSessionState(ctx, id, ts),
 		dnsRequests:  make(chan *rpc.DNSRequest),
-		dnsResponses: xsync.NewMapOf[string, chan *rpc.DNSResponse](),
+		dnsResponses: xsync.NewMap[string, chan *rpc.DNSResponse](),
 	}
 	return as
 }

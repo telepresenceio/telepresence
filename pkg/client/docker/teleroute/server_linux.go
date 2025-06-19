@@ -11,7 +11,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/vishvananda/netlink"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -60,8 +60,8 @@ type server struct {
 	gateways      []netip.Prefix
 	tap           *vif.TunnelingDevice
 	bridgeIdx     int
-	endpoints     *xsync.MapOf[string, endpoint]
-	endpointCache *xsync.MapOf[netip.Addr, [2]netlink.Link]
+	endpoints     *xsync.Map[string, endpoint]
+	endpointCache *xsync.Map[netip.Addr, [2]netlink.Link]
 	port          uint16
 	daemonAddr    netip.Addr
 }
@@ -72,8 +72,8 @@ func StartServer(g *dgroup.Group, tap *vif.TunnelingDevice, routesCh <-chan []ne
 		done:          make(chan struct{}),
 		tap:           tap,
 		port:          teleroutePort,
-		endpoints:     xsync.NewMapOf[string, endpoint](),
-		endpointCache: xsync.NewMapOf[netip.Addr, [2]netlink.Link](),
+		endpoints:     xsync.NewMap[string, endpoint](),
+		endpointCache: xsync.NewMap[netip.Addr, [2]netlink.Link](),
 	}
 	g.Go("teleroute", ts.serve)
 	return ts, nil
@@ -160,10 +160,10 @@ func (ts *server) createEndpoint(ctx context.Context, request *rpc.CreateEndpoin
 	if request.Daemon {
 		ts.daemonAddr = addr
 	}
-	_, loaded := ts.endpoints.LoadOrCompute(request.Id, func() (ep endpoint) {
-		pair, _ := ts.endpointCache.LoadOrCompute(addr, func() (pair [2]netlink.Link) {
+	_, loaded := ts.endpoints.LoadOrCompute(request.Id, func() (ep endpoint, cancel bool) {
+		pair, _ := ts.endpointCache.LoadOrCompute(addr, func() (pair [2]netlink.Link, cancel bool) {
 			pair, err = ts.createAddressEndpoint(ctx)
-			return
+			return pair, err != nil
 		})
 		if err == nil {
 			ep.vethHost = pair[0]
@@ -172,7 +172,7 @@ func (ts *server) createEndpoint(ctx context.Context, request *rpc.CreateEndpoin
 			ep.vethCont = pair[1]
 			ep.daemon = request.Daemon
 		}
-		return
+		return ep, false
 	})
 	if loaded {
 		return status.Error(codes.AlreadyExists, fmt.Sprintf("endpoint %s already exists", request.Id))

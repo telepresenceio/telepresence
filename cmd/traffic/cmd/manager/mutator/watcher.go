@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/protobuf/types/known/durationpb"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -165,9 +165,9 @@ type inactivation struct {
 
 type configWatcher struct {
 	cancel       context.CancelFunc
-	agentConfigs *xsync.MapOf[string, map[string]agentconfig.SidecarExt]
-	informers    *xsync.MapOf[string, *informersWithCancel]
-	inactivePods *xsync.MapOf[types.UID, inactivation]
+	agentConfigs *xsync.Map[string, map[string]agentconfig.SidecarExt]
+	informers    *xsync.Map[string, *informersWithCancel]
+	inactivePods *xsync.Map[types.UID, inactivation]
 	startedAt    time.Time
 	running      atomic.Bool
 
@@ -175,19 +175,21 @@ type configWatcher struct {
 }
 
 func (c *configWatcher) Delete(name, namespace string) {
-	c.agentConfigs.Compute(namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, bool) {
+	c.agentConfigs.Compute(namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, xsync.ComputeOp) {
 		if loaded {
 			delete(sceMap, name)
-			return sceMap, len(sceMap) == 0
+			if len(sceMap) > 0 {
+				return sceMap, xsync.UpdateOp
+			}
 		}
-		return nil, true
+		return nil, xsync.DeleteOp
 	})
 }
 
 func (c *configWatcher) Update(name, namespace string, updater func(agentconfig.SidecarExt) (agentconfig.SidecarExt, error)) (agentconfig.SidecarExt, error) {
 	var err error
 	var sce agentconfig.SidecarExt
-	c.agentConfigs.Compute(namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, bool) {
+	c.agentConfigs.Compute(namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, xsync.ComputeOp) {
 		if loaded {
 			var ok bool
 			sce, ok = sceMap[name]
@@ -202,14 +204,14 @@ func (c *configWatcher) Update(name, namespace string, updater func(agentconfig.
 					sceMap[name] = sce
 				}
 			}
-			return sceMap, false
+			return sceMap, xsync.UpdateOp
 		} else {
 			sce, err = updater(nil)
 			if err == nil && sce != nil {
 				sceMap = map[string]agentconfig.SidecarExt{name: sce}
-				return sceMap, false
+				return sceMap, xsync.UpdateOp
 			}
-			return nil, true
+			return nil, xsync.CancelOp
 		}
 	})
 	return sce, err
@@ -217,21 +219,21 @@ func (c *configWatcher) Update(name, namespace string, updater func(agentconfig.
 
 func (c *configWatcher) Store(sce agentconfig.SidecarExt) {
 	ag := sce.AgentConfig()
-	c.agentConfigs.Compute(ag.Namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, bool) {
+	c.agentConfigs.Compute(ag.Namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, xsync.ComputeOp) {
 		if loaded {
 			sceMap[ag.AgentName] = sce
 		} else {
 			sceMap = map[string]agentconfig.SidecarExt{ag.AgentName: sce}
 		}
-		return sceMap, false
+		return sceMap, xsync.UpdateOp
 	})
 }
 
 func NewWatcher() Map {
 	w := &configWatcher{
-		informers:    xsync.NewMapOf[string, *informersWithCancel](),
-		inactivePods: xsync.NewMapOf[types.UID, inactivation](),
-		agentConfigs: xsync.NewMapOf[string, map[string]agentconfig.SidecarExt](),
+		informers:    xsync.NewMap[string, *informersWithCancel](),
+		inactivePods: xsync.NewMap[types.UID, inactivation](),
+		agentConfigs: xsync.NewMap[string, map[string]agentconfig.SidecarExt](),
 	}
 	w.self = w
 	return w
@@ -335,11 +337,11 @@ func (c *configWatcher) OnDelete(context.Context, string, string) error {
 // An error is only returned when the configmap holding the configuration could not be loaded for
 // other reasons than it did not exist.
 func (c *configWatcher) Get(key, ns string) (ac agentconfig.SidecarExt) {
-	c.agentConfigs.Compute(ns, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, bool) {
+	c.agentConfigs.Compute(ns, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, xsync.ComputeOp) {
 		if loaded {
 			ac = sceMap[key]
 		}
-		return sceMap, !loaded
+		return nil, xsync.CancelOp
 	})
 	return ac
 }
@@ -436,10 +438,7 @@ func (c *configWatcher) namespacesChangeWatcher(ctx context.Context) error {
 
 			// Start informers for added namespaces
 			for _, ns := range nss {
-				c.informers.Compute(ns, func(iwc *informersWithCancel, loaded bool) (*informersWithCancel, bool) {
-					if loaded {
-						return iwc, false
-					}
+				c.informers.LoadOrCompute(ns, func() (*informersWithCancel, bool) {
 					dlog.Debugf(ctx, "Adding watchers for namespace %s", ns)
 					iwc, err := c.startInformers(ctx, ns)
 					if err != nil {
@@ -496,8 +495,8 @@ func (c *configWatcher) deleteMapsAndRolloutNS(ctx context.Context, ns string, i
 }
 
 func (c *configWatcher) Inactivate(podID types.UID) {
-	c.inactivePods.LoadOrCompute(podID, func() inactivation {
-		return inactivation{Time: time.Now()}
+	c.inactivePods.LoadOrCompute(podID, func() (inactivation, bool) {
+		return inactivation{Time: time.Now()}, false
 	})
 }
 

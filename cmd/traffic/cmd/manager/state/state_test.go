@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -33,8 +33,8 @@ func (s *suiteState) SetupTest() {
 		backgroundCtx:    s.ctx,
 		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
 		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
-		clients:          xsync.NewMapOf[tunnel.SessionID, *ClientSession](),
-		workloadWatchers: xsync.NewMapOf[string, workload.Watcher](),
+		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		workloadWatchers: xsync.NewMap[string, workload.Watcher](),
 		timedLogLevel:    log.NewTimedLevel("debug", log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}

@@ -3,7 +3,7 @@ package informer
 import (
 	"context"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"k8s.io/client-go/informers"
 
 	argorolloutsinformer "github.com/datawire/argo-rollouts-go-client/pkg/client/informers/externalversions"
@@ -22,8 +22,8 @@ func getOpts(ns string) (k8sOpts []informers.SharedInformerOption, argoOpts []ar
 }
 
 func WithFactory(ctx context.Context, ns string) context.Context {
-	if _, ok := ctx.Value(factoryKey{}).(*xsync.MapOf[string, GlobalFactory]); !ok {
-		ctx = context.WithValue(ctx, factoryKey{}, xsync.NewMapOf[string, GlobalFactory]())
+	if _, ok := ctx.Value(factoryKey{}).(*xsync.Map[string, GlobalFactory]); !ok {
+		ctx = context.WithValue(ctx, factoryKey{}, xsync.NewMap[string, GlobalFactory]())
 		if ns == "" {
 			// The cluster wide informer must be created when it is requested as the initial informer because it will act as a
 			// proxy for all other requested informers.
@@ -34,22 +34,22 @@ func WithFactory(ctx context.Context, ns string) context.Context {
 }
 
 func GetFactory(ctx context.Context, ns string) GlobalFactory {
-	fm, ok := ctx.Value(factoryKey{}).(*xsync.MapOf[string, GlobalFactory])
+	fm, ok := ctx.Value(factoryKey{}).(*xsync.Map[string, GlobalFactory])
 	if !ok {
 		return nil
 	}
-	gf, _ := fm.LoadOrCompute(ns, func() GlobalFactory {
+	gf, _ := fm.LoadOrCompute(ns, func() (GlobalFactory, bool) {
 		if ns != "" {
 			// Return the cluster wide factory if one exists.
 			if cw, ok := fm.Load(""); ok {
-				return cw
+				return cw, false
 			}
 		}
 		k8sOpts, argoOpts := getOpts(ns)
 		i := k8sapi.GetJoinedClientSetInterface(ctx)
 		k8sFactory := informers.NewSharedInformerFactoryWithOptions(i, 0, k8sOpts...)
 		argoRolloutFactory := argorolloutsinformer.NewSharedInformerFactoryWithOptions(i, 0, argoOpts...)
-		return NewDefaultGlobalFactory(k8sFactory, argoRolloutFactory)
+		return NewDefaultGlobalFactory(k8sFactory, argoRolloutFactory), false
 	})
 	return gf
 }
@@ -58,7 +58,7 @@ func DropFactory(ctx context.Context, ns string) {
 	if ns == "" {
 		return
 	}
-	if fm, ok := ctx.Value(factoryKey{}).(*xsync.MapOf[string, GlobalFactory]); ok {
+	if fm, ok := ctx.Value(factoryKey{}).(*xsync.Map[string, GlobalFactory]); ok {
 		fm.Delete(ns)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
@@ -23,7 +23,7 @@ type podWatcher struct {
 	ipsMap    map[netip.Addr]struct{}
 	timer     *time.Timer
 	notifyCh  chan subnet.Set
-	informers *xsync.MapOf[string, cache.ResourceEventHandlerRegistration]
+	informers *xsync.Map[string, cache.ResourceEventHandlerRegistration]
 	lock      sync.Mutex // Protects all access to ipsMap
 }
 
@@ -31,7 +31,7 @@ func newPodWatcher(ctx context.Context, managerIP netip.Addr) *podWatcher {
 	w := &podWatcher{
 		ipsMap:    make(map[netip.Addr]struct{}),
 		notifyCh:  make(chan subnet.Set),
-		informers: xsync.NewMapOf[string, cache.ResourceEventHandlerRegistration](),
+		informers: xsync.NewMap[string, cache.ResourceEventHandlerRegistration](),
 	}
 	w.ipsMap[managerIP] = struct{}{}
 
@@ -87,10 +87,7 @@ func (w *podWatcher) refreshWatchers(ctx context.Context) {
 
 	// Register event handlers for namespaces that are no longer managed
 	for _, ns := range nss {
-		w.informers.Compute(ns, func(reg cache.ResourceEventHandlerRegistration, loaded bool) (cache.ResourceEventHandlerRegistration, bool) {
-			if loaded {
-				return reg, false
-			}
+		w.informers.LoadOrCompute(ns, func() (cache.ResourceEventHandlerRegistration, bool) {
 			inf := informer.GetK8sFactory(ctx, ns).Core().V1().Pods().Informer()
 			reg, err := inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 				AddFunc: func(obj any) {

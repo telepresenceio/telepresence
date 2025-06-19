@@ -20,7 +20,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	dns2 "github.com/miekg/dns"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -141,14 +141,14 @@ type Session struct {
 	allowConflictingSubnets []netip.Prefix
 
 	// localTranslationTable maps an IP returned by the cluster's DNS to a virtual IP created by this server.
-	localTranslationTable *xsync.MapOf[netip.Addr, netip.Addr]
+	localTranslationTable *xsync.Map[netip.Addr, netip.Addr]
 
 	// IP addresses that the cluster's DNS resolves that are contained in one of the subnets in this
 	// slice are translated to a virtual IP (cached in the localTranslationTable)
 	localTranslationSubnets []agentSubnet
 
 	// virtualIPs maps a virtual IP to an agent tunnel.
-	virtualIPs *xsync.MapOf[netip.Addr, agentVIP]
+	virtualIPs *xsync.Map[netip.Addr, agentVIP]
 
 	// vipGenerator generates virtual IPs for a given range.
 	vipGenerator vip.Generator
@@ -370,8 +370,8 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		done:                  make(chan struct{}),
 		routesCh:              make(chan []netip.Prefix, 2),
 		podDaemon:             isPodDaemon,
-		localTranslationTable: xsync.NewMapOf[netip.Addr, netip.Addr](),
-		virtualIPs:            xsync.NewMapOf[netip.Addr, agentVIP](),
+		localTranslationTable: xsync.NewMap[netip.Addr, netip.Addr](),
+		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
 	}
 	cfg := client.GetConfig(c)
 	rt := cfg.Routing()
@@ -450,12 +450,9 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 	return answer, rCode, err
 }
 
-func (s *Session) GetLocalIP(ctx context.Context, destinationIP netip.Addr) (netip.Addr, error) {
+func (s *Session) GetLocalIP(_ context.Context, destinationIP netip.Addr) (netip.Addr, error) {
 	var err error
-	va, ok := s.localTranslationTable.Compute(destinationIP, func(existing netip.Addr, loaded bool) (netip.Addr, bool) {
-		if loaded {
-			return existing, false
-		}
+	va, _ := s.localTranslationTable.LoadOrCompute(destinationIP, func() (netip.Addr, bool) {
 		for _, sn := range s.localTranslationSubnets {
 			if sn.Contains(destinationIP) {
 				var nip netip.Addr
@@ -465,8 +462,7 @@ func (s *Session) GetLocalIP(ctx context.Context, destinationIP netip.Addr) (net
 		}
 		return netip.Addr{}, true
 	})
-	if ok {
-		dlog.Debugf(ctx, "using VIP %q for resolved IP %q", va, destinationIP)
+	if err == nil {
 		destinationIP = va
 	}
 	return destinationIP, err

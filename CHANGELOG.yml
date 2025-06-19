@@ -24,6 +24,14 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.1
+    date: 2025-06-17
+    notes:
+      - type: feature
+        title: New telepresence helm version command.
+        body: >-
+          The new `telepresence helm version` command prints the version of the helm client that is embedded in the
+          telepresence binary.
   - version: 2.23.0
     date: 2025-06-17
     notes:

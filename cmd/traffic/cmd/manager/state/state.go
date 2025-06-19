@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -135,10 +135,10 @@ type state struct {
 	allInterceptsFinalizer     allInterceptsFinalizer
 	intercepts                 *watchable.Map[string, *Intercept]              // info for intercepts, keyed by intercept id
 	agents                     *watchable.Map[tunnel.SessionID, *AgentSession] // info for agent sessions, keyed by session id
-	clients                    *xsync.MapOf[tunnel.SessionID, *ClientSession]  // info for client sessions, keyed by session id
+	clients                    *xsync.Map[tunnel.SessionID, *ClientSession]    // info for client sessions, keyed by session id
 	timedLogLevel              log.TimedLevel
 	llSubs                     *loglevelSubscribers
-	workloadWatchers           *xsync.MapOf[string, workload.Watcher] // workload watchers, created on demand and keyed by namespace
+	workloadWatchers           *xsync.Map[string, workload.Watcher] // workload watchers, created on demand and keyed by namespace
 	tunnelCounter              int32
 	tunnelIngressCounter       uint64
 	tunnelEgressCounter        uint64
@@ -171,8 +171,8 @@ func NewState(ctx context.Context) State {
 		backgroundCtx:    ctx,
 		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
 		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
-		clients:          xsync.NewMapOf[tunnel.SessionID, *ClientSession](),
-		workloadWatchers: xsync.NewMapOf[string, workload.Watcher](),
+		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		workloadWatchers: xsync.NewMap[string, workload.Watcher](),
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
@@ -548,11 +548,8 @@ func (s *state) WatchAgents(
 }
 
 func (s *state) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []workload.Event, err error) {
-	ww, _ := s.workloadWatchers.Compute(ns, func(ww workload.Watcher, loaded bool) (workload.Watcher, bool) {
-		if loaded {
-			return ww, false
-		}
-		ww, err = workload.NewWatcher(s.backgroundCtx, ns, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
+	ww, _ := s.workloadWatchers.LoadOrCompute(ns, func() (workload.Watcher, bool) {
+		ww, err := workload.NewWatcher(s.backgroundCtx, ns, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
 		return ww, err != nil // delete if error.
 	})
 	if err != nil {
