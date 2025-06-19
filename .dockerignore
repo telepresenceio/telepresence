@@ -4,6 +4,7 @@
 build-aux/
 build-output/
 !build-output/version.txt
+!build-output/helm-version.txt
 integration_test/
 k8s/
 packaging/

@@ -231,16 +231,18 @@ sshfs-win.msi:
 	curl --fail -L https://github.com/billziss-gh/sshfs-win/releases/download/v3.7.21011/sshfs-win-3.7.21011-x64.msi -o $(BUILDDIR)/sshfs-win.msi
 endif
 
+HELM_VERSION = $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "helm.sh/helm/v3") | .Version')
+
 $(TELEPRESENCE): build-deps FORCE
 ifeq ($(GOHOSTOS),windows)
 $(TELEPRESENCE): build-deps $(BINDIR)/wintun.dll FORCE
 endif
 	mkdir -p $(@D)
 ifeq ($(DOCKER_BUILD),1)
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -trimpath -ldflags="-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -X=$(PKG_VERSION).HelmVersion=$(HELM_VERSION)" -o $@ ./cmd/telepresence
 else
 # -buildmode=pie enables PIE compilation for binary harderning. Default on darwin and windows (since 1.23) but not in linux.
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -buildmode=pie -trimpath -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $@ ./cmd/telepresence
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -buildmode=pie -trimpath -ldflags="-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -X=$(PKG_VERSION).HelmVersion=$(HELM_VERSION)" -o $@ ./cmd/telepresence
 endif
 
 ifeq ($(GOOS),windows)
@@ -263,6 +265,7 @@ endif
 setup-build-dir:
 	mkdir -p $(BUILDDIR)
 	printf $(TELEPRESENCE_VERSION) > $(BUILDDIR)/version.txt ## Pass version in a file instead of a --build-arg to maximize cache usage
+	printf $(HELM_VERSION) > $(BUILDDIR)/helm-version.txt
 
 TELEPRESENCE_SEMVER=$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 CLIENT_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/telepresence:$(TELEPRESENCE_SEMVER)

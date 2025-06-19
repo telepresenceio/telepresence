@@ -9,13 +9,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func helmCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "helm",
 	}
-	cmd.AddCommand(helmInstall(), helmUpgrade(), helmUninstall(), helmLint())
+	cmd.AddCommand(helmInstall(), helmUpgrade(), helmUninstall(), helmLint(), helmVersion())
 	return cmd
 }
 
@@ -144,6 +146,19 @@ func helmLint() *cobra.Command {
 	ha.addValueSettingFlags(flags)
 	ha.rq = daemon.InitRequest(cmd)
 	return cmd
+}
+
+func helmVersion() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Args:  cobra.NoArgs,
+		Short: "Print the version of the Helm client",
+		RunE: func(cmd *cobra.Command, _ []string) (err error) {
+			ioutil.Println(cmd.OutOrStdout(), version.HelmVersion)
+			return nil
+		},
+		ValidArgsFunction: cobra.NoFileCompletions,
+	}
 }
 
 func (ha *HelmCommand) Type() helm.RequestType {

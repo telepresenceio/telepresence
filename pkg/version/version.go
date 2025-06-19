@@ -11,8 +11,9 @@ import (
 // Version is a "vSEMVER" string, and is either populated at build-time using `--ldflags -X`, or at
 // init()-time by inspecting the binary's own debug info.
 var (
-	Version    string         //nolint:gochecknoglobals // constant
-	Structured semver.Version //nolint:gochecknoglobals // constant
+	Version     string         //nolint:gochecknoglobals // constant
+	HelmVersion string         //nolint:gochecknoglobals // constant
+	Structured  semver.Version //nolint:gochecknoglobals // constant
 )
 
 func init() {

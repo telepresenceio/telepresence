@@ -23,7 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-func version() *cobra.Command {
+func versionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:  "version",
 		Args: cobra.NoArgs,

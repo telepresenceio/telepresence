@@ -150,7 +150,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		replaceCmd(),
 		statusCmd(),
 		uninstall(),
-		version(),
+		versionCmd(),
 		wiretapCmd(),
 	)
 }
