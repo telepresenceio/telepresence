@@ -9,6 +9,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -67,6 +68,8 @@ func ConnectToAgent(
 func dialClusterGRPC(ctx context.Context, address string) (*grpc.ClientConn, error) {
 	return grpc.NewClient(portforward.K8sPFScheme+":///"+address, grpc.WithContextDialer(portforward.Dialer(ctx)),
 		grpc.WithResolvers(portforward.NewResolver(ctx)),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
+		grpc.WithIdleTimeout(0),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -278,12 +279,18 @@ func (s *service) serveHTTP(ctx context.Context) error {
 		return err
 	}
 
-	var opts []grpc.ServerOption
+	opts := []grpc.ServerOption{
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    env.ClientConnectionTTL,
+			Timeout: 20 * time.Second,
+		}),
+	}
 	if mz, ok := env.MaxReceiveSize.AsInt64(); ok {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
 	svc := server.New(ctx, opts...)
 	s.self.RegisterServers(svc)
+	dlog.Debugf(ctx, "Serving client connections using idle TTL %s", env.ClientConnectionTTL)
 	return server.Serve(ctx, svc, l)
 }
 

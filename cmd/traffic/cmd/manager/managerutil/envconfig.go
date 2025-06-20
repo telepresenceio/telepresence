@@ -84,6 +84,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorCon
 	return &agentmap.BasicGeneratorConfig{
 		AgentPort:           e.AgentPort,
 		APIPort:             e.APIPort,
+		ClientConnectionTTL: e.ClientConnectionTTL,
 		ManagerPort:         e.ServerPort,
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,

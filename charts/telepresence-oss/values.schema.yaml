@@ -199,7 +199,7 @@ properties:
     type: object
     properties:
       connectionTTL:
-        description: The time that the traffic-manager will retain a client connection without any sign of life from the workstation
+        description: Deprecated use grpc.connectionTTL
         type: string
         $ref: "#/$defs/duration"
       dns:
@@ -267,6 +267,10 @@ properties:
     type: object
     additionalProperties: false
     properties:
+      connectionTTL:
+        description: The time that the traffic-manager or traffic-agent will retain a client connection without any sign of life from the workstation
+        type: string
+        $ref: "#/$defs/duration"
       maxReceiveSize:
         description: maxReceiveSize is a quantity that configures the maximum message size that the traffic manager will service.
         $ref: "#/$defs/quantity"

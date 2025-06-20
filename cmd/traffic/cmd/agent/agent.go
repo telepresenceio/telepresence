@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dgroup"
@@ -274,9 +275,7 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 }
 
 func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv State) (*rpc.AgentInfo, error) {
-	var grpcOpts []grpc.ServerOption
 	ac := config.AgentConfig()
-
 	grpcPortCh := make(chan uint16)
 	g.Go("tunneling", func(ctx context.Context) error {
 		defer close(grpcPortCh)
@@ -289,9 +288,12 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		grpcPortCh <- uint16(grpcAddress.Port)
 
 		dlog.Debugf(ctx, "Listener opened on %s", grpcAddress)
-
-		svc := server.New(ctx, grpcOpts...)
+		svc := server.New(ctx, grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    ac.ClientConnectionTTL,
+			Timeout: 20 * time.Second,
+		}))
 		agent.RegisterAgentServer(svc, srv)
+		dlog.Debugf(ctx, "Serving client connections using idle TTL %s", ac.ClientConnectionTTL)
 		return server.Serve(ctx, svc, grpcListener)
 	})
 

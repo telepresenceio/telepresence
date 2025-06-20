@@ -775,7 +775,7 @@ nextIs:
 var ErrSessionExpired = errors.New("session expired")
 
 func (s *session) remainLoop(c context.Context) error {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer func() {
 		ticker.Stop()
 		c = dcontext.WithoutCancel(c)

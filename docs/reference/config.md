@@ -31,6 +31,7 @@ client:
     agentImage: tel2:$version$ # This overrides the agent image to inject when engaging with a workload
   grpc:
     maxReceiveSize: 10Mi
+    connectionTTL: 48h
   dns:
     includeSuffixes: [.private]
     excludeSuffixes: [.se, .com, .io, .net, .org, .ru]
@@ -134,12 +135,13 @@ The `client.helm` object contains options for the `telepresence helm` commands
 | `chartURL`  | The URL used when downloading the Telepresence Helm chart when the version differs from the embedded version | [string][yaml-str] | `oci://ghcr.io/telepresenceio/telepresence-oss` |
 
 ### Grpc
-The `maxReceiveSize` determines how large a message that the workstation receives via gRPC can be. The default is 4Mi (determined by gRPC). All traffic to and from the cluster is tunneled via gRPC.
 
-The size is measured in bytes. You can express it as a plain integer or as a fixed-point number using E, G, M, or K. You can also use the power-of-two equivalents: Gi, Mi, Ki. For example, the following represent roughly the same value:
-```
-128974848, 129e6, 129M, 123Mi
-```
+All traffic to and from the cluster is tunneled via gRPC over a kubernetes port-forward connection.
+
+| Field             | Description                                                                                   | Type                                    | Default  |
+|-------------------|-----------------------------------------------------------------------------------------------|-----------------------------------------|----------|
+| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive  | [string][go-duration]                   | `24h`    |
+| `maxReceiveSize`  | Max size of a gRCP message.                                                                   | Docker registry name [string][quantity] | `4Mi`    |
 
 ### Images
 Values for `client.images` are strings. These values affect the objects that are deployed in the cluster,
@@ -369,6 +371,7 @@ clusters:
 [yaml-int]: https://yaml.org/type/int.html
 [yaml-seq]: https://yaml.org/type/seq.html
 [yaml-str]: https://yaml.org/type/str.html
+[quantity]: quantity.md
 [go-duration]: https://pkg.go.dev/time#ParseDuration
 [logrus-level]: https://github.com/sirupsen/logrus/blob/v1.8.1/logrus.go#L25-L45
 [cidr]: https://www.geeksforgeeks.org/classless-inter-domain-routing-cidr/

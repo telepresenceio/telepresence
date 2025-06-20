@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -46,6 +47,7 @@ type BasicGeneratorConfig struct {
 	SecurityContext     *core.SecurityContext
 	InitSecurityContext *core.SecurityContext
 	MountPolicies       types.MountPolicies
+	ClientConnectionTTL time.Duration
 }
 
 func portsFromContainerPortsAnnotation(ctx context.Context, wl k8sapi.Workload) (ports []types.PortIdentifier, err error) {
@@ -181,6 +183,7 @@ func (cfg *BasicGeneratorConfig) Generate(
 		ManagerHost:         agentconfig.ManagerAppName + "." + cfg.ManagerNamespace,
 		ManagerPort:         cfg.ManagerPort,
 		APIPort:             cfg.APIPort,
+		ClientConnectionTTL: cfg.ClientConnectionTTL,
 		MountPolicies:       cfg.MountPolicies,
 		Containers:          ccs,
 		InitResources:       cfg.InitResources,
