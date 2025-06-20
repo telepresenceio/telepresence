@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"net"
@@ -541,12 +542,16 @@ func newKubeconfig(
 func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespace string) (context.Context, error) {
 	cfg := GetConfig(ctx)
 	var keCfg Config
+	var data []byte
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
-		if kc, err := UnmarshalJSONConfig(ext.Raw, true); err != nil {
+		data = bytes.TrimSpace(ext.Raw)
+	}
+	if len(data) > 0 {
+		if kc, err := UnmarshalJSONConfig(data, true); err != nil {
 			// Try with legacy kubeconfigExtension
 			dlog.Debug(ctx, "unable to unmarshal extension as client config, trying legacy format")
 			ke := kubeconfigExtension{}
-			if keErr := json.Unmarshal(ext.Raw, &ke); keErr != nil {
+			if keErr := json.Unmarshal(data, &ke); keErr != nil {
 				return ctx, errcat.Config.Newf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
 			}
 			dlog.Debug(ctx, "legacy format was successfully parsed")
