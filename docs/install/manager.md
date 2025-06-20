@@ -206,6 +206,19 @@ Additionally, you can use `clientRbac.create=true` and `managerRbac.create=true`
 
 Before you begin, you must ensure that the [helm command](https://helm.sh/docs/intro/install/) is installed.
 
+### Recommended version
+In general, we recommend that you use a helm binary with a minor version that is less than three numbers below the version
+embedded in the telepresence binary. E.g., for embedded version 3.18.x, use helm >= 3.16.x.
+
+You can check your helm version using:
+```bash
+helm version
+```
+and the Telepresence embedded helm version using:
+```bash
+telepresence helm version
+```
+
 The Telepresence Helm chart is published at GitHub in the ghcr.io repository.
 
 ### Installing

@@ -63,6 +63,15 @@ A command that should always work is:
 $ dscacheutil -q host -a name <name to resolve>
 ```
 
+## Helm install failes with "uncomparable type" error
+
+An attempt to install the traffic-manager using the `helm` command ends with an error similar to: 
+```
+Error: INSTALLATION FAILED: template: telepresence-oss/templates/deployment.yaml:172:22: executing "telepresence-oss/templates/deployment.yaml" at <eq .initSecurityContext nil>: error calling eq: uncomparable type map[string]interface {}: map[capabilities:map[add:[NET_ADMIN]]]
+```
+This will happen when you are using `helm` directly (as opposed to `telepresence helm`) and your helm version is older
+than 3.11.3. To resolve this, you can upgrade your helm to a more recent version.
+
 ## No Sidecar Injected in GKE private clusters
 
 An attempt to `telepresence intercept` results in a timeout, and upon examination of the pods (`kubectl get pods`) it's discovered that the intercept command did not inject a sidecar into the workload's pods:
