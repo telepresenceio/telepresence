@@ -126,7 +126,7 @@ jobs:
           tag: ${{ github.ref_name }}
           body: |
             ## Draft Release
-            For more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start/).
+            For more information, visit our [installation docs](https://www.telepresence.io/docs/latest/quick-start).
       - name: Create release
         if: ${{ steps.semver_check.outputs.draft == 'false' }}
         uses: ncipollo/release-action@v1
@@ -151,7 +151,7 @@ jobs:
             ### Helm Chart
                - 📦 [Telepresence Helm Chart](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss/${{ steps.semver_check.outputs.semver }})
 
-            For more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start/).
+            For more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start).
       - uses: actions/checkout@v4
         if: ${{ steps.semver_check.outputs.make_latest == 'true' }}
       - name: Update Homebrew
