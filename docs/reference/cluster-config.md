@@ -22,7 +22,17 @@ To add configuration, create a yaml file with the configuration values and then 
 ## Client Configuration
 
 It is possible for the Traffic Manager to automatically push config to all
-connecting clients. To learn more about this, please see the [client config docs](config.md#global-configuration)
+connecting clients. To learn more about this, please see the [client config docs](config.md#global-configuration).
+
+## gRCP connections
+
+All traffic to and from the cluster is tunneled via gRPC over a kubernetes port-forward connection. Both the traffic-manager
+and the traffic-agent have gRPC servers that the clients connect to. They are configured using the `grpc` structure.
+
+| Field             | Description                                                                                  | Type                                            | Default  |
+|-------------------|----------------------------------------------------------------------------------------------|-------------------------------------------------|----------|
+| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive | [string](https://pkg.go.dev/time#ParseDuration) | `24h`    |
+| `maxReceiveSize`  | Max size of a gRCP message received by the traffic-manager or traffic-agent                  | [string](quantity.md)                           | `4Mi`    |
 
 ## Traffic Manager Configuration
 

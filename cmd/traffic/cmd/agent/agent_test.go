@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
@@ -27,16 +28,17 @@ const (
 )
 
 var testConfig = agentconfig.Sidecar{
-	Create:       false,
-	AgentImage:   "ghcr.io/telepresenceio/tel2:2.5.4",
-	AgentName:    "test-echo",
-	LogLevel:     "debug",
-	Namespace:    namespace,
-	WorkloadName: "test-echo",
-	WorkloadKind: "Deployment",
-	ManagerHost:  "traffic-manager.ambassador",
-	ManagerPort:  8081,
-	APIPort:      0,
+	Create:              false,
+	AgentImage:          "ghcr.io/telepresenceio/tel2:2.5.4",
+	AgentName:           "test-echo",
+	LogLevel:            "debug",
+	Namespace:           namespace,
+	WorkloadName:        "test-echo",
+	WorkloadKind:        "Deployment",
+	ManagerHost:         "traffic-manager.ambassador",
+	ManagerPort:         8081,
+	APIPort:             0,
+	ClientConnectionTTL: 24 * time.Hour,
 	Containers: []*agentconfig.Container{{
 		Name:       "test-echo",
 		EnvPrefix:  "A_",

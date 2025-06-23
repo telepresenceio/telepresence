@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
@@ -52,6 +53,9 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	}
 	if sc.ManagerPort == 0 {
 		sc.ManagerPort = 8081
+	}
+	if sc.ClientConnectionTTL == 0 {
+		sc.ClientConnectionTTL = 24 * time.Hour
 	}
 	c.podName, ok = dos.LookupEnv(ctx, "_TEL_AGENT_NAME")
 	if !ok {

@@ -448,27 +448,29 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip netip
 	if s.disabled.Load() {
 		return nil
 	}
-	waitOn, ok := s.ipWaiters.LoadOrCompute(ip, func() (chan struct{}, bool) {
-		found := false
+	var cl *client
+	waitOn, _ := s.ipWaiters.LoadOrCompute(ip, func() (chan struct{}, bool) {
 		s.clients.Range(func(k string, ac *client) bool {
 			if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ip == podIP {
-				found = true
+				cl = ac
 				return false
 			}
 			return true
 		})
-		if found {
+		if cl != nil {
 			return nil, true
 		}
 		return make(chan struct{}), false
 	})
-	if ok {
-		if err := s.waitWithTimeout(ctx, timeout, waitOn); err != nil {
-			return err
-		}
+	if cl != nil {
+		_, err := cl.ensureConnect(ctx)
+		return err
 	}
+	if err := s.waitWithTimeout(ctx, timeout, waitOn); err != nil {
+		return err
+	}
+
 	// Ensure that the client we're waiting for is ready.
-	var cl *client
 	s.clients.Range(func(k string, ac *client) bool {
 		if acIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ip == acIP {
 			cl = ac

@@ -33,6 +33,17 @@ items:
           The new `telepresence helm version` command prints the version of the helm client that is embedded in the
           telepresence binary.
       - type: bugfix
+        title: Engagement disconnects after certain amount of time
+        body: |-
+          The configuration parameter `connectionTTL`, controlling how long a client could be completely idle before
+          the traffic-manager or traffic-agent would consider it dead and disconnect (default 24 hours), had no effect.
+          Instead, an engagement would disconnect after 2 hours (the default gRPC `keepAlive.Time` duration). The
+          default of 24 hours is now reinstated.
+          
+          The Helm value `client.connectionTTL` was moved to `grpc.connectionTTL` because it is a server configuration.
+          The old value will still work, but it is deprecated and will be removed eventually.
+        docs: https://github.com/telepresenceio/telepresence/issues/3861
+      - type: bugfix
         title: Telepresence breaks if config.yml exists but is empty
         body: >-
           Telepresence would refuse to connect with a misleading error if the `config.yml` file containing the client's
