@@ -238,8 +238,8 @@ func (h *dialer) startDisconnect(ctx context.Context, reason string, isReader bo
 func (h *dialer) startReaderDisconnect(ctx context.Context, reason string, conn halfCloser) {
 	if atomic.CompareAndSwapInt32(&h.connected, connected, readClosed) || atomic.CompareAndSwapInt32(&h.connected, writeClosed, notConnected) {
 		dlog.Tracef(ctx, "<- %s %s closing connection write: %s", h.stream.Tag(), h.stream.ID(), reason)
-		if err := conn.CloseWrite(); err != nil {
-			dlog.Debugf(ctx, "<! %s %s, CloseWrite failed: %T %v", h.stream.Tag(), h.stream.ID(), err, err)
+		if err := conn.CloseWrite(); err != nil && !strings.HasSuffix(err.Error(), "not connected") {
+			dlog.Debugf(ctx, "<! %s %s, CloseWrite failed: %v", h.stream.Tag(), h.stream.ID(), err)
 		}
 		return
 	}
@@ -303,7 +303,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 				endReason = "EOF was encountered"
 			case errors.Is(err, net.ErrClosed):
 				endReason = "the connection was closed"
-			case strings.Contains(err.Error(), "connection aborted"):
+			case strings.Contains(err.Error(), "aborted"):
 				endReason = "the connection was aborted"
 			default:
 				endReason = fmt.Sprintf("a read error occurred: %T %v", err, err)

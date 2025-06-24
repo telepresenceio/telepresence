@@ -462,7 +462,7 @@ func (s *Session) GetLocalIP(_ context.Context, destinationIP netip.Addr) (netip
 		}
 		return netip.Addr{}, true
 	})
-	if err == nil {
+	if err == nil && va.IsValid() {
 		destinationIP = va
 	}
 	return destinationIP, err
@@ -1160,19 +1160,13 @@ func (s *Session) stop(c context.Context) {
 		// Session already stopped (or is stopping)
 		return
 	}
-	if s.clientConn != nil {
-		dlog.Debug(c, "Closing port-forward to traffic-manager")
-		_ = s.clientConn.Close()
-	}
-
 	dlog.Debug(c, "Bringing down TUN-device")
 
 	scout.Report(c, "incluster_dns_queries",
 		scout.Entry{Key: "total", Value: s.dnsLookups},
 		scout.Entry{Key: "failures", Value: s.dnsFailures})
 
-	cc, cancel := context.WithTimeout(c, time.Second)
-	defer cancel()
+	cc, cancel := context.WithTimeout(context.WithoutCancel(c), time.Second)
 	go func() {
 		s.handlers.CloseAll(cc)
 		cancel()
@@ -1180,8 +1174,19 @@ func (s *Session) stop(c context.Context) {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
+	if s.clientConn != nil {
+		dlog.Debug(c, "Closing port-forward to traffic-manager")
+		// Avoid sporadic hang when the client connection is torn down.
+		cc, cancel = context.WithTimeout(context.WithoutCancel(c), time.Second)
+		go func() {
+			_ = s.clientConn.Close()
+			cancel()
+		}()
+		<-cc.Done()
+	}
+
 	if s.tunVif != nil {
-		cc, cancel := context.WithTimeout(context.WithoutCancel(c), 1*time.Second)
+		cc, cancel = context.WithTimeout(context.WithoutCancel(c), time.Second)
 		defer cancel()
 		if err := s.tunVif.Close(cc); err != nil {
 			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)
