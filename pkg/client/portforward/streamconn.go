@@ -25,39 +25,23 @@ import (
 
 const ProtocolV1Name = "portforward.k8s.io"
 
-// PodDialer can dial a pod to establish a PodConnection.
-type PodDialer interface {
-	Connect(cacheDelete func()) (PodConnection, error)
-}
-
-// PodConnection represents a port agnostic stream connection to a pod. This connection can
-// then be used when creating a port-specific connection to the connected pod.
-type PodConnection interface {
-	httpstream.Connection
-	Dial(ctx context.Context, remotePort uint16) (net.Conn, error)
-}
-
 type podDialer struct {
-	streamDialer httpstream.Dialer
-}
-
-type podConn struct {
-	httpstream.Connection
-	requestID int64
-	refCount  int64
-	onClose   func()
+	streamConn httpstream.Connection
+	requestID  int64
+	refCount   int64
+	onClose    func()
 }
 
 type dialerKey struct{}
 
 type config struct {
-	cache      *xsync.Map[types.UID, PodConnection]
+	podDialers *xsync.Map[types.UID, *podDialer]
 	restConfig *rest.Config
 }
 
 func WithRestConfig(ctx context.Context, restConfig *rest.Config) context.Context {
 	return context.WithValue(ctx, dialerKey{}, &config{
-		cache:      xsync.NewMap[types.UID, PodConnection](),
+		podDialers: xsync.NewMap[types.UID, *podDialer](),
 		restConfig: restConfig,
 	})
 }
@@ -84,24 +68,34 @@ func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net
 		dlog.Error(logCtx, err)
 		return nil, err
 	}
-	pc, _ := cfg.cache.LoadOrCompute(key, func() (pc PodConnection, cancel bool) {
-		var pd PodDialer
-		pd, err = NewPodDialer(logCtx, cfg.restConfig, pa.name, pa.namespace, client.GetConfig(logCtx).Cluster().ForceSPDY)
-		if err != nil {
-			return nil, true
-		}
-		pc, err = pd.Connect(func() {
-			cfg.cache.Delete(key)
-		})
+	pc, _ := cfg.podDialers.LoadOrCompute(key, func() (pc *podDialer, cancel bool) {
+		pc, err = newPodDialer(logCtx, key, cfg, pa.name, pa.namespace)
 		return pc, err != nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return pc.Dial(grpcCtx, pa.port)
+	return pc.dial(grpcCtx, pa.port)
 }
 
-func NewPodDialer(ctx context.Context, config *rest.Config, podName, namespace string, forceSPDY bool) (PodDialer, error) {
+func newPodDialer(ctx context.Context, key types.UID, cfg *config, name, namespace string) (*podDialer, error) {
+	sd, err := newStreamDialer(ctx, cfg.restConfig, name, namespace, client.GetConfig(ctx).Cluster().ForceSPDY)
+	if err != nil {
+		return nil, err
+	}
+	streamConn, protocol, err := sd.Dial(ProtocolV1Name)
+	if err != nil {
+		return nil, fmt.Errorf("error upgrading connection: %s", err)
+	}
+	if protocol != ProtocolV1Name {
+		return nil, fmt.Errorf("unable to negotiate protocol: client supports %q, server returned %q", ProtocolV1Name, protocol)
+	}
+	return &podDialer{streamConn: streamConn, onClose: func() {
+		cfg.podDialers.Delete(key)
+	}}, nil
+}
+
+func newStreamDialer(ctx context.Context, config *rest.Config, podName, namespace string, forceSPDY bool) (httpstream.Dialer, error) {
 	err := setKubernetesDefaults(config)
 	if err != nil {
 		return nil, err
@@ -136,23 +130,10 @@ func NewPodDialer(ctx context.Context, config *rest.Config, podName, namespace s
 	} else {
 		dlog.Debugf(ctx, "Using SPDY based port-forward to pod %s.%s", podName, namespace)
 	}
-	return podDialer{streamDialer: dialer}, nil
+	return dialer, nil
 }
 
-func (pd podDialer) Connect(onClose func()) (PodConnection, error) {
-	var err error
-	var protocol string
-	streamConn, protocol, err := pd.streamDialer.Dial(ProtocolV1Name)
-	if err != nil {
-		return nil, fmt.Errorf("error upgrading connection: %s", err)
-	}
-	if protocol != ProtocolV1Name {
-		return nil, fmt.Errorf("unable to negotiate protocol: client supports %q, server returned %q", ProtocolV1Name, protocol)
-	}
-	return &podConn{Connection: streamConn, onClose: onClose}, nil
-}
-
-func (pc *podConn) Dial(ctx context.Context, remotePort uint16) (conn net.Conn, err error) {
+func (pc *podDialer) dial(ctx context.Context, remotePort uint16) (conn net.Conn, err error) {
 	atomic.AddInt64(&pc.refCount, 1)
 	var dataStream, errorStream httpstream.Stream
 	defer func() {
@@ -160,7 +141,7 @@ func (pc *podConn) Dial(ctx context.Context, remotePort uint16) (conn net.Conn, 
 			atomic.AddInt64(&pc.refCount, -1)
 			if errorStream != nil {
 				errorStream.Close()
-				pc.RemoveStreams(errorStream)
+				pc.streamConn.RemoveStreams(errorStream)
 			}
 		}
 	}()
@@ -171,7 +152,7 @@ func (pc *podConn) Dial(ctx context.Context, remotePort uint16) (conn net.Conn, 
 	headers.Set(core.StreamType, core.StreamTypeError)
 	headers.Set(core.PortHeader, strconv.Itoa(int(remotePort)))
 	headers.Set(core.PortForwardRequestIDHeader, strconv.Itoa(int(requestID)))
-	errorStream, err = pc.CreateStream(headers)
+	errorStream, err = pc.streamConn.CreateStream(headers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating error stream for port %d: %v", remotePort, err)
 	}
@@ -190,22 +171,22 @@ func (pc *podConn) Dial(ctx context.Context, remotePort uint16) (conn net.Conn, 
 
 	// create data stream
 	headers.Set(core.StreamType, core.StreamTypeData)
-	dataStream, err = pc.CreateStream(headers)
+	dataStream, err = pc.streamConn.CreateStream(headers)
 	if err != nil {
 		return nil, fmt.Errorf("error creating forwarding stream for port %d: %v", remotePort, err)
 	}
 	return &portConn{
-		podConn:     pc,
+		dialer:      pc,
 		dataStream:  dataStream,
 		errorStream: errorStream,
 	}, nil
 }
 
-func (pc *podConn) Close() error {
+func (pc *podDialer) Close() error {
 	// Must close before calling onClose, because the close
 	// will release a channel that in some situations will
 	// block the onClose().
-	err := pc.Connection.Close()
+	err := pc.streamConn.Close()
 	if pc.onClose != nil {
 		pc.onClose()
 	}
@@ -214,7 +195,7 @@ func (pc *podConn) Close() error {
 
 // portConn implements net.Conn and represents a connection to a specific port in a pod.
 type portConn struct {
-	*podConn
+	dialer      *podDialer
 	dataStream  httpstream.Stream
 	errorStream httpstream.Stream
 }
@@ -250,9 +231,9 @@ func (pc *portConn) RemoteAddr() net.Addr {
 func (pc *portConn) Close() error {
 	pc.dataStream.Close()
 	pc.errorStream.Close()
-	pc.RemoveStreams(pc.dataStream, pc.errorStream)
-	if atomic.AddInt64(&pc.refCount, -1) == 0 {
-		pc.Close()
+	pc.dialer.streamConn.RemoveStreams(pc.dataStream, pc.errorStream)
+	if atomic.AddInt64(&pc.dialer.refCount, -1) == 0 {
+		return pc.dialer.Close()
 	}
 	return nil
 }
