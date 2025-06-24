@@ -707,6 +707,10 @@ type Grpc struct {
 	// TeleroutePort is the port where the containerized daemon exposes its Teleroute service that the Teleroute
 	// Docker Network plugin will connect to.
 	TeleroutePort uint16 `json:"teleroutePort"`
+
+	// SimulateDisconnect can be set to a duration to simulate a disconnect some time after connecting.
+	// Intended for debugging purposes only.
+	SimulateDisconnect time.Duration `json:"simulateDisconnect"`
 }
 
 var defaultGrpc = Grpc{ //nolint:gochecknoglobals // constant

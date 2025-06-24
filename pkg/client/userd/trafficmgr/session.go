@@ -347,7 +347,8 @@ func connectMgr(
 	installID string,
 	cr *rpc.ConnectRequest,
 ) (*session, error) {
-	tos := client.GetConfig(longLivedCtx).Timeouts()
+	cfg := client.GetConfig(longLivedCtx)
+	tos := cfg.Timeouts()
 
 	ctx, cancel := tos.TimeoutContext(longLivedCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
@@ -361,6 +362,12 @@ func connectMgr(
 	conn, mClient, vi, err := k8sclient.ConnectToManager(longLivedCtx, ctx, mgrNs)
 	if err != nil {
 		return nil, err
+	}
+	if sdc := cfg.Grpc().SimulateDisconnect; sdc > 0 {
+		time.AfterFunc(sdc, func() {
+			dlog.Info(ctx, "Simulated disconnect from manager")
+			conn.Close()
+		})
 	}
 	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
 	if err != nil {
@@ -426,7 +433,6 @@ func connectMgr(
 	}
 
 	var opts []grpc.CallOption
-	cfg := client.GetConfig(ctx)
 	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 		opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
 	}
