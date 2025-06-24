@@ -70,10 +70,9 @@ func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.C
 	go func() {
 		<-ctx.Done()
 		tc := atomic.LoadInt32(&ac.tunnelCount)
-		if tc > 0 {
-			atomic.CompareAndSwapInt32(&ac.tunnelCount, tc, tc-1)
+		if tc > 0 && atomic.CompareAndSwapInt32(&ac.tunnelCount, tc, tc-1) {
+			dlog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), tc-1)
 		}
-		dlog.Debugf(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), atomic.LoadInt32(&ac.tunnelCount))
 	}()
 	atomic.StoreInt64(&ac.lastActive, time.Now().UnixNano())
 	return tc, nil
