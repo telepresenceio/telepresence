@@ -28,6 +28,13 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: The gather-logs command produces no cluster-side logs when connected with --docker
+        body: >-
+          The `telepresence gather-logs` command did not include cluster-side logs when connected using `--docker`,
+          because it tried to store such logs in a temporary directory created by the CLI. The directory was not mounted
+          in the daemon container. This is now changed so that the temporary directory is created under the users
+          cache directory, which is guaranteed to be mounted on the container.
+      - type: bugfix
         title: Docker volume mounts failing when connected using both --docker --proxy-via flags
         body: >-
           The volume mounter would fail when doing a `telepresence connect --docker --proxy-via all=<workload>` followed

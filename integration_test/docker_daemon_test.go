@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	goRuntime "runtime"
+	"slices"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -158,4 +159,15 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_cacheFiles() {
 	_ = df.Close()
 	rq.NoError(err)
 	rq.True(st.HaveSameOwnerAndGroup(rs))
+}
+
+func (s *dockerDaemonSuite) Test_GatherLogsTrafficManager() {
+	ctx := s.Context()
+	outputDir := itest.TempDir(ctx)
+	outputFile := filepath.Join(outputDir, "allLogs.zip")
+	s.TelepresenceConnect(ctx, "--docker")
+	itest.TelepresenceOk(ctx, "gather-logs", "--daemons", "None", "--traffic-agents", "None", "--output-file", outputFile)
+	foundManager, _, _, fileNames := getZipData(s.Require(), outputFile, s.AppNamespace(), s.ManagerNamespace(), "echo-easy")
+	s.Require().True(foundManager)
+	s.Require().True(slices.ContainsFunc(fileNames, func(name string) bool { return strings.HasPrefix(name, "traffic-manager") }))
 }
