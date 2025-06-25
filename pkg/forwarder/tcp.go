@@ -160,14 +160,14 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 	done := make(chan struct{})
 
 	go func() {
-		if _, err := io.Copy(targetConn, clientConn); err != nil {
+		if _, err := io.Copy(targetConn, clientConn); err != nil && ctx.Err() == nil {
 			dlog.Debugf(ctx, "Error clientConn->targetConn: %+v", err)
 		}
 		_ = targetConn.CloseWrite()
 		done <- struct{}{}
 	}()
 	go func() {
-		if _, err := io.Copy(clientConn, targetConn); err != nil {
+		if _, err := io.Copy(clientConn, targetConn); err != nil && ctx.Err() == nil {
 			dlog.Debugf(ctx, "Error targetConn->clientConn: %+v", err)
 		}
 		if hwCloser, ok := clientConn.(interface{ CloseWrite() error }); ok {

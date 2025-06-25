@@ -24,8 +24,17 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Docker volume mounts failing when connected using both --docker --proxy-via flags
+        body: >-
+          The volume mounter would fail when doing a `telepresence connect --docker --proxy-via all=<workload>` followed
+          by an intercept using `--docker-run`, because the bridge that the daemon created would try to access the
+          intercepted pod using its proxied IP. Now, the bridge will instead use the pod's real IP.
   - version: 2.23.1
-    date: 2025-06-17
+    date: 2025-06-24
     notes:
       - type: feature
         title: New telepresence helm version command.
