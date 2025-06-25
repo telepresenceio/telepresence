@@ -244,6 +244,8 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			}
 
 			// Ensure we can create a zip of the logs
+			cacheDir := filelocation.AppUserCacheDir(ctx)
+			require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 			err := gl.gatherLogs(cmd, nil)
 			if tc.errMsg != "" {
 				require.Error(t, err)

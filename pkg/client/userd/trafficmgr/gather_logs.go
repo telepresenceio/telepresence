@@ -20,6 +20,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -122,7 +123,7 @@ func (s *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // connector.LogsRequest and returns them to the caller.
 func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
-	exportDir := request.ExportDir
+	exportDir := filepath.Join(filelocation.AppUserCacheDir(ctx), request.ExportDir)
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
 	resp := &connector.LogsResponse{}
 	result := sync.Map{}

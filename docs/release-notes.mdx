@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.23.2
 <Note>
+	<Title type="bugfix">The gather-logs command produces no cluster-side logs when connected with --docker</Title>
+	<Body>
+The `telepresence gather-logs` command did not include cluster-side logs when connected using `--docker`, because it tried to store such logs in a temporary directory created by the CLI. The directory was not mounted in the daemon container. This is now changed so that the temporary directory is created under the users cache directory, which is guaranteed to be mounted on the container.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Docker volume mounts failing when connected using both --docker --proxy-via flags</Title>
 	<Body>
 The volume mounter would fail when doing a `telepresence connect --docker --proxy-via all=<workload>` followed by an intercept using `--docker-run`, because the bridge that the daemon created would try to access the intercepted pod using its proxied IP. Now, the bridge will instead use the pod's real IP.
