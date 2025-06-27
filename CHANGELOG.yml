@@ -28,6 +28,12 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Adding an alsoProxy subnet with 32-bit mask no longer works on macOS
+        body: >-
+          Routing improvements introduced in 2.23.0 surfaced a problem when using special handling of submets with
+          32-bit masks. The special handling now causes problems on macOS. The logic is now conditioned to only run
+          under linux since it's no longer needed on other operating systems.
+      - type: bugfix
         title: The gather-logs command produces no cluster-side logs when connected with --docker
         body: >-
           The `telepresence gather-logs` command did not include cluster-side logs when connected using `--docker`,
@@ -174,7 +180,7 @@ items:
           and was therefore not found by the CLI and the user daemon. The location will henceforth always be based on the
           `%USERDATA` of the CLI user.
         docs: https://github.com/telepresenceio/telepresence/issues/3875
-      - type: bugfix 
+      - type: bugfix
         title: Telepresence DNS Fallback stripping CNAME information from DNS Records.
         body: >-
           The fallback DNS server used on Linux systems without a systemd.resolved configuration, would assume that

@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.23.2
 <Note>
+	<Title type="bugfix">Adding an alsoProxy subnet with 32-bit mask no longer works on macOS</Title>
+	<Body>
+Routing improvements introduced in 2.23.0 surfaced a problem when using special handling of submets with 32-bit masks. The special handling now causes problems on macOS. The logic is now conditioned to only run under linux since it's no longer needed on other operating systems.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">The gather-logs command produces no cluster-side logs when connected with --docker</Title>
 	<Body>
 The `telepresence gather-logs` command did not include cluster-side logs when connected using `--docker`, because it tried to store such logs in a temporary directory created by the CLI. The directory was not mounted in the daemon container. This is now changed so that the temporary directory is created under the users cache directory, which is guaranteed to be mounted on the container.
