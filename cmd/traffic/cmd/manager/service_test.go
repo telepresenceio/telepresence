@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/require"
@@ -237,13 +238,16 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 			Name:      agentconfig.ManagerAppName,
 			Namespace: mgrNs,
 		},
-		Data: map[string]string{"namespace-selector.yaml": ` 
+		Data: map[string]string{
+			"namespace-selector.yaml": ` 
 matchExpressions:
 - key: kubernetes.io/metadata.name
   operator: In
   values:
     - default
-`},
+`,
+			"agent-state.yaml": `agentStates: {}`,
+		},
 	}, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -281,6 +285,7 @@ matchExpressions:
 			netip.PrefixFrom(netip.AddrFrom4([4]byte{192, 168, 0, 0}), 16),
 		},
 		AgentInitContainerEnabled: true,
+		AgentMaxIdleTime:          24 * time.Hour,
 	}
 	ctx = managerutil.WithEnv(ctx, &env)
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))

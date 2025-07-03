@@ -143,6 +143,10 @@ spec:
           - name: AGENT_MOUNT_POLICIES
             value: '{{ toJson .mountPolicies }}'
           {{- end }}
+          {{- if .maxIdleTime }}
+          - name: AGENT_MAX_IDLE_TIME
+            value: {{ .maxIdleTime }}
+          {{- end }}
           {{- with .initContainer }}
           - name: AGENT_INIT_CONTAINER_ENABLED
             value: {{ .enabled | quote  }}

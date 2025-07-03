@@ -18,3 +18,5 @@ data:
 {{- end }}
   namespace-selector.yaml: |
     {{- toYaml (mustFromJson (include "traffic-manager.namespaceSelector" $)) | nindent 4 }}
+  agent-state.yaml: |
+    agentStates: {}
