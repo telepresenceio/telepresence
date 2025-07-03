@@ -95,6 +95,7 @@ type State interface {
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string)
 	RemoveSession(context.Context, tunnel.SessionID)
+	RemoveAgentSession(context.Context, tunnel.SessionID)
 	SessionDone(tunnel.SessionID) (<-chan struct{}, error)
 	SetTempLogLevel(context.Context, *rpc.LogLevelRequest)
 	SetAllClientSessionsFinalizer(finalizer allClientSessionsFinalizer)
@@ -213,7 +214,7 @@ func (s *state) pruneSessions(ctx context.Context) {
 		return true
 	})
 	for _, sid := range sids {
-		s.removeAgentSession(ctx, sid)
+		s.RemoveAgentSession(ctx, sid)
 	}
 }
 
@@ -306,12 +307,12 @@ func (s *state) RemoveSession(ctx context.Context, id tunnel.SessionID) {
 	if cs, ok := s.clients.LoadAndDelete(id); ok {
 		s.removeClientSession(ctx, cs)
 	} else {
-		s.removeAgentSession(ctx, id)
+		s.RemoveAgentSession(ctx, id)
 	}
 }
 
-// removeAgentSession removes an AgentSession from the set of present session IDs.
-func (s *state) removeAgentSession(ctx context.Context, id tunnel.SessionID) {
+// RemoveAgentSession removes an AgentSession from the set of present session IDs.
+func (s *state) RemoveAgentSession(ctx context.Context, id tunnel.SessionID) {
 	if as, loaded := s.agents.LoadAndDelete(id); loaded {
 		dlog.Debugf(ctx, "AgentSession %s removed. Explicit removal", id)
 		mutator.GetMap(s.backgroundCtx).Inactivate(types.UID(as.PodUid))
@@ -393,7 +394,7 @@ func (s *state) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 	s.agents.Range(func(id tunnel.SessionID, agent *AgentSession) bool {
 		moment := agentMoment
 		if agent.LastMarked().Before(moment) {
-			s.removeAgentSession(ctx, id)
+			s.RemoveAgentSession(ctx, id)
 		}
 		return true
 	})

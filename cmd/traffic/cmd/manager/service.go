@@ -260,6 +260,21 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 	if ok := s.state.MarkSession(req, s.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
+	if agent := s.state.GetAgent(sessionID); agent != nil {
+		// Get the mutator map from context
+		mm := mutator.GetMap(ctx)
+
+		// Get the sidecar configuration for this agent
+		if sidecarExt := mm.Get(agent.Name, agent.Namespace); sidecarExt != nil {
+			// Access the LastEngagementTime
+			lastEngagementTime := sidecarExt.AgentConfig().LastEngagementTime
+			idleTime := time.Since(lastEngagementTime)
+
+			if idleTime > managerutil.GetEnv(ctx).AgentMaxIdleTime {
+				s.state.RemoveAgentSession(ctx, sessionID)
+			}
+		}
+	}
 	s.state.RefreshSessionConsumptionMetrics(sessionID)
 	return &empty.Empty{}, nil
 }
