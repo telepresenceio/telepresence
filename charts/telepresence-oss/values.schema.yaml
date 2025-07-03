@@ -66,6 +66,9 @@ properties:
       logLevel:
         description: Loglevel for the agent, if different from the traffic-manager
         $ref: "#/$defs/logLevel"
+      maxIdleTime:
+        description: maximum time the agent is idle (no engagements to the workload) before it is cleaned up by the traffic manager
+        $ref: "#/$defs/duration"
       port:
         description: Port number of the first port that the agent will use
         type: integer
