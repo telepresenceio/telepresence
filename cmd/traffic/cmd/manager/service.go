@@ -714,6 +714,13 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", ceptID)
 	}
 
+	// Update the LastEngagementTime for the sidecar when an intercept is approved and becomes active
+	if rIReq.Disposition == rpc.InterceptDispositionType_ACTIVE {
+		if err := s.updateSidecarEngagementTime(ctx, intercept.Spec.Agent, intercept.Spec.Namespace); err != nil {
+			dlog.Errorf(ctx, "Failed to update sidecar engagement time: %v", err)
+		}
+	}
+
 	return &empty.Empty{}, nil
 }
 
@@ -721,6 +728,21 @@ func (s *service) removeExcludedEnvVars(envVars map[string]string) {
 	for _, key := range s.configWatcher.GetAgentEnv().Excluded {
 		delete(envVars, key)
 	}
+}
+
+// updateSidecarEngagementTime updates the LastEngagementTime field in the sidecar configuration
+// for the given agent and namespace to the current time.
+func (s *service) updateSidecarEngagementTime(ctx context.Context, agentName, namespace string) error {
+	mm := mutator.GetMap(ctx)
+	_, err := mm.Update(agentName, namespace, func(cm agentconfig.SidecarExt) (agentconfig.SidecarExt, error) {
+		if cm == nil {
+			return nil, fmt.Errorf("sidecar config not found for %s.%s", agentName, namespace)
+		}
+		ac := cm.AgentConfig()
+		ac.LastEngagementTime = time.Now()
+		return cm, nil
+	})
+	return err
 }
 
 func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {

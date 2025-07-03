@@ -193,6 +193,9 @@ type Sidecar struct {
 
 	// ClientConnectionTTL is the maximum duration that the traffic-agent will keep an idle client connection alive.
 	ClientConnectionTTL time.Duration
+
+	// LastEngagementTime is the time the traffic-agent was last used for an engagement
+	LastEngagementTime time.Time
 }
 
 func (s *Sidecar) AgentConfig() *Sidecar {
