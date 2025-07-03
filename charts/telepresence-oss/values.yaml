@@ -136,6 +136,7 @@ agent:
     pullPolicy: IfNotPresent
   initContainer:
     enabled: true
+  maxIdleTime: 999999999h
 
 ################################################################################
 ## Telepresence API Server Configuration
