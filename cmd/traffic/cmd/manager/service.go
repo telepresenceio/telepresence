@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net"
@@ -273,10 +274,9 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 
 	sessionID := tunnel.SessionID(session.GetSessionId())
-	err := s.UpdateLastEngagementTime(ctx, sessionID)
 	// There's no reason for the caller to wait for this removal to complete.
 	go s.state.RemoveSession(context.WithoutCancel(ctx), sessionID)
-	return &empty.Empty{}, err
+	return &empty.Empty{}, nil
 }
 
 func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.SessionID) error {
@@ -309,6 +309,10 @@ func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.Sessio
 	}
 
 	lastEngagementTime := agentStates[agentKey].LastEngagementTime
+	if lastEngagementTime.IsZero() {
+		// means it was never engaged
+		return nil
+	}
 	idleTime := time.Since(lastEngagementTime)
 	if idleTime > maxIdleTime {
 		s.state.RemoveAgentSession(ctx, sessionID)
@@ -323,38 +327,39 @@ func (s *service) UpdateLastEngagementTime(ctx context.Context, sessionID tunnel
 	}
 	namespace := managerutil.GetEnv(ctx).ManagerNamespace
 	client := k8sapi.GetK8sInterface(ctx).CoreV1()
-	configMap, err := client.ConfigMaps(namespace).Get(ctx, agentconfig.ManagerAppName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("failure when getting traffic-manager configmap, err: %w", err)
-	}
-
-	agentStateYAML, ok := configMap.Data[config.AgentStateFileName]
-	if !ok {
-		return fmt.Errorf("%s not found in traffic-manager ConfigMap", config.AgentStateFileName)
-	}
-
-	var agentStates map[string]AgentState
-	if agentStateYAML != "" {
-		err = yaml.Unmarshal([]byte(agentStateYAML), &agentStates)
+	agentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
+	
+	var agentStateFile AgentStateFile
+	if string(agentStateFileYAML) != "" {
+		err := yaml.Unmarshal(agentStateFileYAML, &agentStateFile)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling agent states: %w", err)
 		}
 	} else {
-		agentStates = make(map[string]AgentState)
+		agentStateFile = AgentStateFile{AgentStates: make(map[string]AgentState)}
 	}
+	
+	agentStateFile.AgentStates[agentKey] = AgentState{LastEngagementTime: time.Now()}
 
-	agentState := AgentState{LastEngagementTime: time.Now()}
-	agentStates[agentKey] = agentState
-
-	updatedYAML, err := yaml.Marshal(agentStates)
+	updatedAgentStateFileYAML, err := yaml.Marshal(agentStateFile)
 	if err != nil {
 		return fmt.Errorf("error marshalling agent states: %w", err)
 	}
-
-	configMap.Data[config.AgentStateFileName] = string(updatedYAML)
-	_, err = client.ConfigMaps(namespace).Update(ctx, configMap, metav1.UpdateOptions{})
+	patch := map[string]interface{}{
+		"data": map[string]string{
+			config.AgentStateFileName: string(updatedAgentStateFileYAML),
+		},
+	}
+	patchBytes, err := json.Marshal(patch)
 	if err != nil {
-		return fmt.Errorf("error updating ConfigMap: %w", err)
+		return err
+	}
+
+	_, err = client.ConfigMaps(namespace).Patch(ctx, agentconfig.ManagerAppName, types.StrategicMergePatchType,
+		patchBytes,
+		metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("error patching ConfigMap: %w", err)
 	}
 
 	return nil
@@ -376,6 +381,10 @@ func (s *service) getAgentKey(sessionID tunnel.SessionID) string {
 type AgentState struct {
 	LastEngagementTime time.Time `yaml:"lastEngagementTime"`
 }
+type AgentStateFile struct {
+	AgentStates map[string]AgentState `yaml:"agentStates"`
+}
+
 
 // WatchAgentPods notifies a client of the set of known Agents.
 func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentPodsServer) error {
@@ -695,7 +704,13 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	spec := ciReq.InterceptSpec
 	dlog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
-
+	
+	sessionID := tunnel.SessionID(ciReq.GetSession().GetSessionId())
+	err := s.UpdateLastEngagementTime(ctx, sessionID)
+	if err != nil {
+		// not fatal, so just log error
+		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+	}
 	if val := validateIntercept(spec); val != "" {
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
@@ -739,6 +754,11 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	ctx = managerutil.WithSessionInfo(ctx, riReq.GetSession())
 	sessionID := tunnel.SessionID(riReq.GetSession().GetSessionId())
 	name := riReq.Name
+
+	// Update last engagement time when an intercept is removed
+	if err := s.UpdateLastEngagementTime(ctx, sessionID); err != nil {
+		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+	}
 
 	dlog.Debugf(ctx, "Intercept name %s", name)
 
