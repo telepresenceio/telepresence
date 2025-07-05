@@ -210,22 +210,24 @@ func serveWebSocket(wr http.ResponseWriter, req *http.Request, sendServerHostnam
 }
 
 func serveHTTP(wr http.ResponseWriter, req *http.Request, sendServerHostname bool) {
-	wr.Header().Add("Content-Type", "text/plain")
-	wr.WriteHeader(200)
-
+	bf := &bytes.Buffer{}
 	if sendServerHostname {
 		host, err := os.Hostname()
 		if err == nil {
-			fmt.Fprintf(wr, "Request served by %s\n\n", host)
+			fmt.Fprintf(bf, "Request served by %s\n\n", host)
 		} else {
-			fmt.Fprintf(wr, "Server hostname unknown: %s\n\n", err.Error())
+			fmt.Fprintf(bf, "Server hostname unknown: %s\n\n", err.Error())
 		}
 	}
 	if tpID, ok := os.LookupEnv("TELEPRESENCE_INTERCEPT_ID"); ok {
-		fmt.Fprintf(wr, "Intercept id %s\n", tpID)
-		fmt.Fprintf(wr, "Intercepted container %q\n", os.Getenv("TELEPRESENCE_CONTAINER"))
+		fmt.Fprintf(bf, "Intercept id %s\n", tpID)
+		fmt.Fprintf(bf, "Intercepted container %q\n", os.Getenv("TELEPRESENCE_CONTAINER"))
 	}
-	writeRequest(wr, req)
+	writeRequest(bf, req)
+	hdr := wr.Header()
+	hdr.Set("Content-Type", "text/plain")
+	hdr.Set("Content-Length", strconv.Itoa(bf.Len()))
+	bf.WriteTo(wr)
 }
 
 func serveSSE(wr http.ResponseWriter, req *http.Request, sendServerHostname bool) {
@@ -315,10 +317,7 @@ func writeSSEField(
 
 // writeRequest writes request headers to w.
 func writeRequest(w io.Writer, req *http.Request) {
-	fmt.Fprintf(w, "%s %s %s\n", req.Proto, req.Method, req.URL)
-	fmt.Fprintln(w, "")
-
-	fmt.Fprintf(w, "Host: %s\n", req.Host)
+	fmt.Fprintf(w, "%s %s %s\n\nHost: %s\n", req.Proto, req.Method, req.URL, req.Host)
 	for key, values := range req.Header {
 		for _, value := range values {
 			fmt.Fprintf(w, "%s: %s\n", key, value)
