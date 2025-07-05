@@ -3,10 +3,13 @@ package integration_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-json-experiment/json"
@@ -14,14 +17,16 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type wiretapSuite struct {
 	itest.Suite
 	itest.TrafficManager
-	svc     string
-	tplPath string
-	tpl     *itest.Generic
+	svc      string
+	tplPath  string
+	tpl      *itest.Generic
+	hitCount int32
 }
 
 func (s *wiretapSuite) SuiteName() string {
@@ -29,7 +34,7 @@ func (s *wiretapSuite) SuiteName() string {
 }
 
 func init() {
-	itest.AddConnectedSuite("", func(h itest.TrafficManager) itest.TestingSuite {
+	itest.AddTrafficManagerSuite("", func(h itest.TrafficManager) itest.TestingSuite {
 		return &wiretapSuite{Suite: itest.Suite{Harness: h}, TrafficManager: h, svc: "echo-wt"}
 	})
 }
@@ -77,7 +82,10 @@ func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr strin
 	port := l.Addr().(*net.TCPAddr).Port
 	sc := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			*echoTo <- fmt.Sprintf("Request served by %s on port %d\n", name, port)
+			atomic.AddInt32(&s.hitCount, 1)
+			if *echoTo != nil {
+				*echoTo <- fmt.Sprintf("Request served by %s on port %d\n", name, port)
+			}
 		}),
 	}
 	go func() {
@@ -98,7 +106,12 @@ func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr strin
 }
 
 func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
-	ctx := s.Context()
+	ctx := itest.WithConfig(s.Context(), func(config client.Config) {
+		config.Routing().RecursionBlockDuration = 0
+	})
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceQuitOk(ctx)
+
 	var out1 chan string
 	localPort1, tap1HandlerCancel := s.startWiretapHandler(ctx, s.svc+"-wt1", ":0", &out1)
 	defer tap1HandlerCancel()
@@ -111,7 +124,7 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 	defer ihCancel()
 
 	s.Run("Place wiretap 1", func() {
-		so := itest.TelepresenceOk(ctx, "wiretap", "--workload", s.svc, "--port", fmt.Sprintf("%d:80", localPort1), "wt1")
+		so := itest.TelepresenceOk(ctx, "wiretap", "--workload", s.svc, "--mount=false", "--port", fmt.Sprintf("%d:80", localPort1), "wt1")
 		s.CapturePodLogs(ctx, s.svc, "traffic-agent", s.AppNamespace())
 		s.Contains(so, "Using Deployment "+s.svc)
 	})
@@ -135,7 +148,7 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		Stdout []connector.WorkloadInfo `json:"stdout"`
 	}
 	s.Run("Place wiretap 2", func() {
-		so := itest.TelepresenceOk(ctx, "wiretap", "--workload", s.svc, "--port", fmt.Sprintf("%d:80", localPort2), "wt2")
+		so := itest.TelepresenceOk(ctx, "wiretap", "--workload", s.svc, "--mount=false", "--port", fmt.Sprintf("%d:80", localPort2), "wt2")
 		s.Contains(so, "Using Deployment "+s.svc)
 	})
 
@@ -191,12 +204,33 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		s.Len(soj.Stdout, 0)
 	})
 
+	s.Run("Verify tap concurrency", func() {
+		// Perform 100 http requests spread out over a one-second period.
+		const requestCount = int32(100)
+		out1 = nil
+		out2 = nil
+		atomic.StoreInt32(&s.hitCount, 0)
+		wg := sync.WaitGroup{}
+		wg.Add(int(requestCount))
+		for i := 0; i < int(requestCount); i++ {
+			go func() {
+				defer wg.Done()
+				time.Sleep(time.Duration(rand.Float64() * float64(time.Second)))
+				_, err := itest.Output(ctx, "curl", "--silent", "--max-time", "30", s.svc)
+				s.NoError(err)
+			}()
+		}
+		wg.Wait()
+		time.Sleep(time.Second)
+		s.Require().Equal(requestCount*2, atomic.LoadInt32(&s.hitCount))
+	})
+
 	s.Run("Intercept wiretapped service", func() {
 		out1 = make(chan string, 5)
 		defer close(out1)
 		out2 = make(chan string, 5)
 		defer close(out2)
-		so := itest.TelepresenceOk(ctx, "intercept", "--port", fmt.Sprintf("%d:80", localPort3), s.svc)
+		so := itest.TelepresenceOk(ctx, "intercept", "--mount=false", "--port", fmt.Sprintf("%d:80", localPort3), s.svc)
 		defer itest.TelepresenceOk(ctx, "leave", s.svc)
 
 		s.Contains(so, "Using Deployment "+s.svc)

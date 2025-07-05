@@ -24,6 +24,14 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.3
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Requests lost when using wiretap
+        body: >-
+          Wiretap connection `Close` and `Write` could sometimes be out of sync, so that the `Close` would be executed
+          before the `Write`, causing a "read/write on closed pipe" error and loss of data.
   - version: 2.23.2
     date: 2025-06-27
     notes:
