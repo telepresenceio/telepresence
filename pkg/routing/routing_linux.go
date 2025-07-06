@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os/exec"
 	"regexp"
 	"sort"
 	"syscall" //nolint:depguard // sys/unix does not have NetlinkRIB
@@ -12,7 +13,6 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -142,8 +142,7 @@ func rowAsRoute(rt *rtmsg, msg *syscall.NetlinkMessage) (*Route, error) {
 
 func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	ip := routedNet.Addr()
-	cmd := dexec.CommandContext(ctx, "ip", "route", "get", ip.String())
-	cmd.DisableLogging = true
+	cmd := exec.CommandContext(ctx, "ip", "route", "get", ip.String())
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get route for %s: %w", ip, err)
@@ -252,11 +251,11 @@ func (t *table) Remove(ctx context.Context, r *Route) error {
 }
 
 func (r *Route) addStatic(ctx context.Context) error {
-	return dexec.CommandContext(ctx, "ip", "route", "add", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.InterfaceName).Run()
+	return exec.CommandContext(ctx, "ip", "route", "add", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.InterfaceName).Run()
 }
 
 func (r *Route) removeStatic(ctx context.Context) error {
-	return dexec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.InterfaceName).Run()
+	return exec.CommandContext(ctx, "ip", "route", "del", r.RoutedNet.String(), "via", r.Gateway.String(), "dev", r.InterfaceName).Run()
 }
 
 func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {

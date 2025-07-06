@@ -8,12 +8,11 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"regexp"
 
 	"golang.org/x/net/route"
 	"golang.org/x/sys/unix"
-
-	"github.com/datawire/dlib/dexec"
 )
 
 const (
@@ -118,7 +117,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	ip := routedNet.Addr()
 	errOut := bytes.Buffer{}
-	cmd := dexec.CommandContext(ctx, "route", "-n", "get", ip.String())
+	cmd := exec.CommandContext(ctx, "route", "-n", "get", ip.String())
 	cmd.Stderr = &errOut
 	cmd.DisableLogging = true
 	out, err := cmd.Output()

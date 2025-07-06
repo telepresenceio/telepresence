@@ -4,12 +4,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/netip"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -35,7 +37,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -745,10 +746,10 @@ func WrapSensitive(s string) string {
 	return sensitivePrefix + s
 }
 
-// Command creates and returns a dexec.Cmd  initialized with the global environment
+// Command creates and returns an exec.Cmd  initialized with the global environment
 // from the cluster harness and any other environment that has been added using the
 // WithEnv() function.
-func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd {
+func Command(ctx context.Context, executable string, args ...string) *exec.Cmd {
 	getT(ctx).Helper()
 	// Ensure that command has a timestamp and is somewhat readable
 	dbgArgs := args
@@ -768,7 +769,6 @@ func Command(ctx context.Context, executable string, args ...string) *dexec.Cmd 
 	}
 	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), dbgArgs))
 	cmd := proc.CommandContext(ctx, executable, args...)
-	cmd.DisableLogging = true
 	cmd.Env = EnvironMap(ctx).Environ()
 	cmd.Dir = GetWorkingDir(ctx)
 	cmd.Stdin = dos.Stdin(ctx)
@@ -814,10 +814,10 @@ func Telepresence(ctx context.Context, args ...string) (string, string, error) {
 	return strings.TrimSpace(stdout.String()), errStr, err
 }
 
-// TelepresenceCmd creates a dexec.Cmd using the Command function. Before the command is created,
+// TelepresenceCmd creates an exec.Cmd using the Command function. Before the command is created,
 // the environment is extended with DEV_TELEPRESENCE_CONFIG_DIR from filelocation.AppUserConfigDir
 // and DEV_TELEPRESENCE_LOG_DIR from filelocation.AppUserLogDir.
-func TelepresenceCmd(ctx context.Context, args ...string) *dexec.Cmd {
+func TelepresenceCmd(ctx context.Context, args ...string) *exec.Cmd {
 	t := getT(ctx)
 	t.Helper()
 
@@ -883,7 +883,8 @@ func AssertQuitOutput(ctx context.Context, stdout string) {
 // RunError checks if the given err is a *exit.ExitError, and if so, extracts
 // Stderr and the ExitCode from it.
 func RunError(err error, out []byte) error {
-	if ee, ok := err.(*dexec.ExitError); ok {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
 		switch {
 		case len(ee.Stderr) > 0:
 			err = fmt.Errorf("%s, exit code %d", string(ee.Stderr), ee.ExitCode())

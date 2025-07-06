@@ -645,7 +645,6 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 	stdOut := bytes.Buffer{}
 	dlog.Debug(ctx, shellquote.ShellString("docker", args))
 	cmd := proc.CommandContext(ctx, "docker", args...)
-	cmd.DisableLogging = true
 	cmd.Stderr = &stdErr
 	cmd.Stdout = &stdOut
 	err := cmd.Run()

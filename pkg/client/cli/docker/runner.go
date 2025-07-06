@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/netip"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"slices"
@@ -20,7 +21,6 @@ import (
 	"github.com/containerd/errdefs"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -253,7 +253,7 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 
 	args = append(ourArgs, args...)
 	w.cmd = proc.CommandStd(ctx, nil, Exe, args...)
-	proc.CreateNewProcessGroup(w.cmd.Cmd)
+	proc.CreateNewProcessGroup(w.cmd)
 	w.err = proc.StartCmd(ctx, w.cmd)
 	if w.err != nil {
 		return w
@@ -307,7 +307,7 @@ func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, network
 }
 
 type waiter struct {
-	cmd *dexec.Cmd
+	cmd *exec.Cmd
 
 	// Info about the running container
 	cni *docker.ContainerInfo
