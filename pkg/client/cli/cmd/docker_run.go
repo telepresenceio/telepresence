@@ -124,7 +124,7 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 	cc.Env = dos.Environ(ctx)
 	tty := flags.HasOption("tty", 't', args)
 	if !tty {
-		proc.CreateNewProcessGroup(cc.Cmd)
+		proc.CreateNewProcessGroup(cc)
 	}
 
 	defer func() {

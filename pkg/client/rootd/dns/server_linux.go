@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os/exec"
 	"strconv"
 	"time"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
@@ -196,11 +196,9 @@ func runNatTableCmd(c context.Context, args ...string) error {
 	// want to leave things in a half-cleaned-up state.
 	c = context.WithoutCancel(c)
 	args = append([]string{"-t", "nat"}, args...)
-	cmd := dexec.CommandContext(c, "iptables", args...)
+	cmd := exec.CommandContext(c, "iptables", args...)
 	if dlog.MaxLogLevel(c) >= dlog.LogLevelTrace {
 		dlog.Trace(c, shellquote.ShellString("iptables", args))
-	} else {
-		cmd.DisableLogging = true
 	}
 	return cmd.Run()
 }
@@ -249,8 +247,7 @@ func routeDNS(c context.Context, dnsAddress netip.AddrPort, toAddr netip.AddrPor
 
 // unrouteDNS removes the chain installed by routeDNS.
 func unrouteDNS(c context.Context) {
-	// The errors returned by these commands aren't of any interest besides logging. And they
-	// are already logged since dexec is used.
+	// The errors returned by these commands aren't of any interest besides logging.
 	_ = runNatTableCmd(c, "-D", "OUTPUT", "-j", tpDNSChain)
 	_ = runNatTableCmd(c, "-F", tpDNSChain)
 	_ = runNatTableCmd(c, "-X", tpDNSChain)

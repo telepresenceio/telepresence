@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -41,15 +41,15 @@ func (s *RoutingSuite) SetupSuite() {
 	// Compile the router binary
 	if runtime.GOOS == "windows" {
 		// Run "make wintun.dll" in the ../../ directory
-		err := dexec.CommandContext(context.Background(), "make", "-C", "../../", "build-output/bin/wintun.dll").Run()
+		err := exec.CommandContext(context.Background(), "make", "-C", "../../", "build-output/bin/wintun.dll").Run()
 		s.Require().NoError(err)
 		// That'll place the DLL in ../../build-output/bin/wintun.dll so copy it to testdata/router
-		err = dexec.CommandContext(context.Background(), "cp", "../../build-output/bin/wintun.dll", "testdata/router/wintun.dll").Run()
+		err = exec.CommandContext(context.Background(), "cp", "../../build-output/bin/wintun.dll", "testdata/router/wintun.dll").Run()
 		s.Require().NoError(err)
-		err = dexec.CommandContext(context.Background(), "go", "build", "-o", "testdata\\router\\router.exe", "testdata\\router\\main.go").Run()
+		err = exec.CommandContext(context.Background(), "go", "build", "-o", "testdata\\router\\router.exe", "testdata\\router\\main.go").Run()
 		s.Require().NoError(err)
 	} else {
-		err := dexec.CommandContext(context.Background(), "go", "build", "-o", "testdata/router/router", "testdata/router/main.go").Run()
+		err := exec.CommandContext(context.Background(), "go", "build", "-o", "testdata/router/router", "testdata/router/main.go").Run()
 		s.Require().NoError(err)
 	}
 	// Make sure there's no existing route
@@ -267,21 +267,21 @@ func (s *RoutingSuite) printRoutingTable(ctx context.Context) { //nolint:unused 
 	// Print out the routing table for debugging
 	switch runtime.GOOS {
 	case "darwin":
-		err = dexec.CommandContext(ctx, "netstat", "-nr").Run()
+		err = exec.CommandContext(ctx, "netstat", "-nr").Run()
 	case "linux":
-		err = dexec.CommandContext(ctx, "ip", "route", "show", "table", "all").Run()
+		err = exec.CommandContext(ctx, "ip", "route", "show", "table", "all").Run()
 	case "windows":
-		err = dexec.CommandContext(ctx, "route", "print").Run()
+		err = exec.CommandContext(ctx, "route", "print").Run()
 	}
 	s.Require().NoError(err)
 	// Print out the table rules for debugging
 	switch runtime.GOOS {
 	case "darwin":
-		err = dexec.CommandContext(ctx, "netstat", "-nr", "-f", "inet", "-f", "inet6").Run()
+		err = exec.CommandContext(ctx, "netstat", "-nr", "-f", "inet", "-f", "inet6").Run()
 	case "linux":
-		err = dexec.CommandContext(ctx, "ip", "rule", "show").Run()
+		err = exec.CommandContext(ctx, "ip", "rule", "show").Run()
 	case "windows":
-		err = dexec.CommandContext(ctx, "netsh", "interface", "ipv4", "show", "route").Run()
+		err = exec.CommandContext(ctx, "netsh", "interface", "ipv4", "show", "route").Run()
 	}
 	s.Require().NoError(err)
 }
@@ -303,12 +303,12 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 
 	pCtx, pCancel := context.WithCancel(pCtx)
 
-	var cmd *dexec.Cmd
+	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = dexec.CommandContext(pCtx, "testdata\\router\\router.exe", args...)
+		cmd = exec.CommandContext(pCtx, "testdata\\router\\router.exe", args...)
 	} else {
 		args = append([]string{"./testdata/router/router"}, args...)
-		cmd = dexec.CommandContext(pCtx, "sudo", args...)
+		cmd = exec.CommandContext(pCtx, "sudo", args...)
 	}
 
 	cmd.Stdout = outWrite

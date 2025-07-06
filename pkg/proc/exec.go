@@ -7,7 +7,6 @@ import (
 	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
 	"os/signal"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -16,7 +15,7 @@ import (
 // Start will start the given executable with given args and env, and return the command. The signals are
 // dispatched as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
-func Start(ctx context.Context, env map[string]string, exe string, args ...string) (*dexec.Cmd, error) {
+func Start(ctx context.Context, env map[string]string, exe string, args ...string) (*exec.Cmd, error) {
 	cmd := CommandStd(ctx, env, exe, args...)
 	return cmd, StartCmd(ctx, cmd)
 }
@@ -24,9 +23,8 @@ func Start(ctx context.Context, env map[string]string, exe string, args ...strin
 // CommandStd will create a command based on the given executable with given args and env, and return the command.
 // The signals are dispatched as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).
-func CommandStd(ctx context.Context, env map[string]string, exe string, args ...string) *dexec.Cmd {
+func CommandStd(ctx context.Context, env map[string]string, exe string, args ...string) *exec.Cmd {
 	cmd := CommandContext(ctx, exe, args...)
-	cmd.DisableLogging = true
 	cmd.Stdout = dos.Stdout(ctx)
 	cmd.Stderr = dos.Stderr(ctx)
 	cmd.Stdin = dos.Stdin(ctx)
@@ -38,7 +36,7 @@ func CommandStd(ctx context.Context, env map[string]string, exe string, args ...
 }
 
 // StartCmd will run the given command with debug logging.
-func StartCmd(ctx context.Context, cmd *dexec.Cmd) error {
+func StartCmd(ctx context.Context, cmd *exec.Cmd) error {
 	dlog.Debug(ctx, shellquote.ShellArgsString(cmd.Args))
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s: %w", shellquote.ShellArgsString(cmd.Args), err)
@@ -49,7 +47,7 @@ func StartCmd(ctx context.Context, cmd *dexec.Cmd) error {
 // Wait will wait for the Process of the command to finish.
 // If cancel is not nil, Wait will listen for os signals and call cancel when it
 // receives one.
-func Wait(ctx context.Context, cancel context.CancelFunc, cmd *dexec.Cmd) error {
+func Wait(ctx context.Context, cancel context.CancelFunc, cmd *exec.Cmd) error {
 	p := cmd.Process
 	if p == nil {
 		return nil
