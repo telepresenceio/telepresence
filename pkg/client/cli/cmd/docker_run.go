@@ -2,19 +2,14 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"slices"
 	"strings"
 	"sync/atomic"
 
-	"github.com/containerd/errdefs"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -23,9 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
-	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -86,7 +79,7 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if slices.Contains(args, "--help") {
-		return proc.StdCommand(cmd.Context(), cliDocker.Exe, slices.Insert(args, 0, "run")...).Run()
+		return proc.StdCommand(cmd.Context(), docker.Exe, slices.Insert(args, 0, "run")...).Run()
 	}
 
 	err = connect.InitCommand(cmd)
@@ -103,66 +96,22 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 	if !ud.Containerized() {
 		return fmt.Errorf("%s requires that --docker was used when the connection was established", cmd.UseLine())
 	}
-	cidFileName, err := ioutil.CreateTempName("", "docker-run*.cid")
+	cni, cc, err := docker.Start(ctx, true, args...)
 	if err != nil {
-		return err
-	}
-
-	dockerOpts := []string{"run", "--cidfile", cidFileName}
-	dns, nwName, err := cliDocker.GetDaemonContainerNetworkInfo(ctx)
-	if err != nil {
-		return err
-	}
-	dockerOpts = append(dockerOpts, "--dns", dns.String())
-	if nwName != "" {
-		dockerOpts = append(dockerOpts, "--network", nwName)
-	}
-
-	ctx = dos.WithStdio(ctx, cmd)
-	cc := proc.StdCommand(ctx, cliDocker.Exe, slices.Insert(args, 0, dockerOpts...)...)
-	cc.Stdin = dos.Stdin(ctx)
-	cc.Env = dos.Environ(ctx)
-	tty := flags.HasOption("tty", 't', args)
-	if !tty {
-		proc.CreateNewProcessGroup(cc)
-	}
-
-	defer func() {
-		_ = os.Remove(cidFileName)
-	}()
-
-	err = cc.Start()
-	if err != nil {
-		return err
-	}
-
-	containerID, err := cliDocker.ReadContainerID(ctx, cidFileName)
-	if err != nil {
-		// Process didn't produce a cidfile, so the container failed to start
-		if !errors.Is(err, fs.ErrNotExist) {
-			dlog.Error(ctx, err)
-		}
-		return cc.Wait()
-	}
-
-	ctx = docker.EnableClient(ctx)
-	cni, err := docker.GetContainerInfo(ctx, containerID, nwName)
-	if err != nil {
-		if errdefs.IsNotFound(err) {
-			// Container is already done, so not much left to do here.
-			cancel()
-			err = cc.Wait()
-		}
 		return errcat.NoDaemonLogs.New(err)
+	}
+	if cc == nil {
+		// Container already exited
+		return nil
 	}
 	progress.Write(ctx, progress.DoneEvent(cni.Name, fmt.Sprintf("Started container %s with IP %s", cni.Name, cni.IP)))
 
 	var exited, signalled atomic.Bool
 	done := make(chan error, 1)
-	if tty {
+	if flags.HasOption("tty", 't', args) {
 		close(done)
 	} else {
-		go cliDocker.EnsureStopContainer(ctx, cni.Name, containerID, nil, &exited, &signalled, done)
+		go cliDocker.EnsureStopContainer(ctx, cni.Name, cni.ID, nil, &exited, &signalled, done)
 	}
 
 	err = cc.Wait()

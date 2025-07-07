@@ -34,7 +34,7 @@ func BuildImage(ctx context.Context, context string, buildArgs []string) (string
 		context = dir
 		args = append(args, "--file", fn)
 	}
-	cmd := proc.StdCommand(ctx, "docker", append(args, context)...)
+	cmd := proc.StdCommand(ctx, Exe, append(args, context)...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
@@ -56,7 +56,7 @@ func PullImage(ctx context.Context, progressID, image string) error {
 		return nil
 	}
 	progress.Write(ctx, progress.WorkingEvent(progressID, "Pulling image "+image))
-	cmd := proc.StdCommand(ctx, "docker", "pull", image)
+	cmd := proc.StdCommand(ctx, Exe, "pull", image)
 	// Docker run will put the pull logs in stderr, but docker pull will put them in stdout.
 	// We discard them here, so they don't spam the user. They'll get errors through stderr if it comes to it.
 	cmd.Stdout = io.Discard

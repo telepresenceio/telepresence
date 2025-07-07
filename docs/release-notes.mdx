@@ -9,6 +9,21 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.23.3
 <Note>
+	<Title type="bugfix">The -p flags would have no effect in combination with --docker-run</Title>
+	<Body>
+When using `telepresence <engage> --docker-run` with a `-p <port spec>` flag, the Docker driver silently
+ignored the port specification. This occurred because the `--network=<teleroute network>` flag disabled both
+additional network directives and the default bridge network (which is normally used when no network is
+specified). This has been resolved by:
+
+1. Adding the teleroute network after container creation instead of using a flag
+2. Replacing the single `docker run` command with a sequence of:
+   - `docker create`
+   - Network addition
+   - `docker start`
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Requests lost when using wiretap</Title>
 	<Body>
 Wiretap connection `Close` and `Write` could sometimes be out of sync, so that the `Close` would be executed before the `Write`, causing a "read/write on closed pipe" error and loss of data.
