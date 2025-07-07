@@ -241,6 +241,11 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		return nil, err
 	}
 
+	err = s.UpdateLastEngagementTime(ctx, sessionID)
+	if err != nil {
+		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+	}
+
 	return &rpc.SessionInfo{
 		SessionId:        string(sessionID),
 		ManagerInstallId: s.clusterInfo.ID(),
@@ -285,7 +290,7 @@ func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.Sessio
 		// default aka not set is 0, we don't ever remove agents, skip
 		return nil
 	}
-	agentKey := s.getAgentKey(sessionID)
+	agentKey := s.getAgentKey(ctx, sessionID)
 	if agentKey == "" {
 		return nil
 	}
@@ -321,13 +326,15 @@ func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.Sessio
 }
 
 func (s *service) UpdateLastEngagementTime(ctx context.Context, sessionID tunnel.SessionID) error {
-	agentKey := s.getAgentKey(sessionID)
+	agentKey := s.getAgentKey(ctx, sessionID)
+	dlog.Tracef(ctx, "Logging agentKey for last engagement time: %s", agentKey)
 	if agentKey == "" {
 		return nil
 	}
 	namespace := managerutil.GetEnv(ctx).ManagerNamespace
 	client := k8sapi.GetK8sInterface(ctx).CoreV1()
 	agentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
+	dlog.Tracef(ctx, "Logging agentStateFileYAML: %s", agentStateFileYAML)
 	
 	var agentStateFile AgentStateFile
 	if string(agentStateFileYAML) != "" {
@@ -365,9 +372,11 @@ func (s *service) UpdateLastEngagementTime(ctx context.Context, sessionID tunnel
 	return nil
 }
 
-func (s *service) getAgentKey(sessionID tunnel.SessionID) string {
+func (s *service) getAgentKey(ctx context.Context,sessionID tunnel.SessionID) string {
+	dlog.Debugf(ctx, "Getting agent key for session %s", sessionID)
 	agent := s.state.GetAgent(sessionID)
 	if agent == nil {
+		dlog.Debugf(ctx, "No agent found for session %s", sessionID)
 		return ""
 	}
 
@@ -692,6 +701,10 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	if len(as) == 0 {
 		return nil, status.Errorf(codes.Internal, "failed to ensure agent for workload %s: no agents became active", request.Name)
 	}
+	err = s.UpdateLastEngagementTime(ctx, sessionID)
+	if err != nil {
+			dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+	}
 	rpcAs := make([]*rpc.AgentInfo, len(as))
 	for i, a := range as {
 		rpcAs[i] = a.AgentInfo
@@ -705,12 +718,6 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	spec := ciReq.InterceptSpec
 	dlog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
 	
-	sessionID := tunnel.SessionID(ciReq.GetSession().GetSessionId())
-	err := s.UpdateLastEngagementTime(ctx, sessionID)
-	if err != nil {
-		// not fatal, so just log error
-		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
-	}
 	if val := validateIntercept(spec); val != "" {
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
@@ -855,6 +862,10 @@ func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {
 	if a := s.state.GetAgent(stream.SessionID()); a != nil {
 		// This is actually an AgentToManager tunnel.
 		stream.SetTag(tunnel.AgentToManager)
+		err = s.UpdateLastEngagementTime(ctx, stream.SessionID())
+		if err != nil {
+			dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+		}
 	}
 	return s.state.Tunnel(ctx, stream)
 }
