@@ -241,11 +241,6 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		return nil, err
 	}
 
-	err = s.UpdateLastEngagementTime(ctx, sessionID)
-	if err != nil {
-		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
-	}
-
 	return &rpc.SessionInfo{
 		SessionId:        string(sessionID),
 		ManagerInstallId: s.clusterInfo.ID(),
@@ -269,8 +264,23 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 	if ok := s.state.MarkSession(req, s.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
+
 	err := s.removeUnusedAgent(ctx, sessionID)
 	s.state.RefreshSessionConsumptionMetrics(sessionID)
+
+	agent := s.state.GetAgent(sessionID)
+	if agent == nil {
+		dlog.Debugf(ctx, "No agent found for session %s", sessionID)
+		return &empty.Empty{}, nil
+	}
+
+	if s.state.CountActiveInterceptsForAgent(agent.Name, agent.Namespace) != 0 {
+		err = s.UpdateLastEngagementTime(ctx, sessionID)
+		if err != nil {
+			dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+		}
+	}
+
 	return &empty.Empty{}, err
 }
 
@@ -306,21 +316,34 @@ func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.Sessio
 		return nil
 	}
 
-	agentStateYAML := s.configWatcher.GetAgentStateYaml(ctx)
-	var agentStates map[string]AgentState
-	err := yaml.Unmarshal(agentStateYAML, &agentStates)
+	agentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
+	var agentStateFile AgentStateFile
+	err := yaml.Unmarshal(agentStateFileYAML, &agentStateFile)
 	if err != nil {
 		return fmt.Errorf("err in unmarshalling YAML: %w", err)
 	}
 
-	lastEngagementTime := agentStates[agentKey].LastEngagementTime
+	lastEngagementTime := agentStateFile.AgentStates[agentKey].LastEngagementTime
+	dlog.Tracef(ctx, "Last engagement time for agent %s: %s", agentKey, lastEngagementTime)
 	if lastEngagementTime.IsZero() {
 		// means it was never engaged
 		return nil
 	}
 	idleTime := time.Since(lastEngagementTime)
+	dlog.Tracef(ctx, "Idle time for agent %s: %s", agentKey, idleTime)
 	if idleTime > maxIdleTime {
-		s.state.RemoveAgentSession(ctx, sessionID)
+		// construct uninstall agents request
+		dlog.Infof(ctx, "Removing agent %s due to idle time %s exceeding max idle time %s", agentKey, idleTime, maxIdleTime)
+		ns := agent.Namespace
+		mm := mutator.GetMap(ctx)
+		wl, err := k8sapi.GetWorkload(ctx, agent.Name, ns, "")
+		if err != nil {
+			return status.Errorf(codes.NotFound, "Workload %s.%s not found", agent, ns)
+		}
+		mm.Delete(wl.GetName(), ns)
+		if err := mm.EvictPodsWithAgentConfig(ctx, wl); err != nil {
+			return status.Errorf(codes.Internal, "unable to delete agent for workload %s.%s: %v", wl.GetName(), ns, err)
+		}
 	}
 	return nil
 }
@@ -335,7 +358,7 @@ func (s *service) UpdateLastEngagementTime(ctx context.Context, sessionID tunnel
 	client := k8sapi.GetK8sInterface(ctx).CoreV1()
 	agentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
 	dlog.Tracef(ctx, "Logging agentStateFileYAML: %s", agentStateFileYAML)
-	
+
 	var agentStateFile AgentStateFile
 	if string(agentStateFileYAML) != "" {
 		err := yaml.Unmarshal(agentStateFileYAML, &agentStateFile)
@@ -345,7 +368,7 @@ func (s *service) UpdateLastEngagementTime(ctx context.Context, sessionID tunnel
 	} else {
 		agentStateFile = AgentStateFile{AgentStates: make(map[string]AgentState)}
 	}
-	
+
 	agentStateFile.AgentStates[agentKey] = AgentState{LastEngagementTime: time.Now()}
 
 	updatedAgentStateFileYAML, err := yaml.Marshal(agentStateFile)
@@ -372,7 +395,7 @@ func (s *service) UpdateLastEngagementTime(ctx context.Context, sessionID tunnel
 	return nil
 }
 
-func (s *service) getAgentKey(ctx context.Context,sessionID tunnel.SessionID) string {
+func (s *service) getAgentKey(ctx context.Context, sessionID tunnel.SessionID) string {
 	dlog.Debugf(ctx, "Getting agent key for session %s", sessionID)
 	agent := s.state.GetAgent(sessionID)
 	if agent == nil {
@@ -393,7 +416,6 @@ type AgentState struct {
 type AgentStateFile struct {
 	AgentStates map[string]AgentState `yaml:"agentStates"`
 }
-
 
 // WatchAgentPods notifies a client of the set of known Agents.
 func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentPodsServer) error {
@@ -701,10 +723,6 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	if len(as) == 0 {
 		return nil, status.Errorf(codes.Internal, "failed to ensure agent for workload %s: no agents became active", request.Name)
 	}
-	err = s.UpdateLastEngagementTime(ctx, sessionID)
-	if err != nil {
-			dlog.Errorf(ctx, "error updating last engagement time: %v", err)
-	}
 	rpcAs := make([]*rpc.AgentInfo, len(as))
 	for i, a := range as {
 		rpcAs[i] = a.AgentInfo
@@ -717,7 +735,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	spec := ciReq.InterceptSpec
 	dlog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
-	
+
 	if val := validateIntercept(spec); val != "" {
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
@@ -761,11 +779,6 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	ctx = managerutil.WithSessionInfo(ctx, riReq.GetSession())
 	sessionID := tunnel.SessionID(riReq.GetSession().GetSessionId())
 	name := riReq.Name
-
-	// Update last engagement time when an intercept is removed
-	if err := s.UpdateLastEngagementTime(ctx, sessionID); err != nil {
-		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
-	}
 
 	dlog.Debugf(ctx, "Intercept name %s", name)
 
@@ -862,10 +875,6 @@ func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {
 	if a := s.state.GetAgent(stream.SessionID()); a != nil {
 		// This is actually an AgentToManager tunnel.
 		stream.SetTag(tunnel.AgentToManager)
-		err = s.UpdateLastEngagementTime(ctx, stream.SessionID())
-		if err != nil {
-			dlog.Errorf(ctx, "error updating last engagement time: %v", err)
-		}
 	}
 	return s.state.Tunnel(ctx, stream)
 }
@@ -1162,7 +1171,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 	return ww.Watch(ctx, stream)
 }
 
-const agentSessionTTL = 15 * time.Second
+const agentSessionTTL = 1 * time.Minute
 
 // expire removes stale sessions.
 func (s *service) expire(ctx context.Context) {

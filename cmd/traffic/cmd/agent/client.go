@@ -165,7 +165,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 
 func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo) error {
 	// Loop calling Remain
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {

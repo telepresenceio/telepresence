@@ -24,6 +24,16 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.24.0
+    date: 2025-07-07
+    notes:
+      - type: feature
+        title: add ability to optionally clean up sidecars that have been idle above a specified duration
+        body: >-
+          Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control how long a sidecar can be idle before it is cleaned up.
+          The updating of latestEngagementTime is done every 1m in the Remain Call, which is now called every 1min, compared to every 5s in the past 
+          Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.         
+      
   - version: 2.23.2
     date: 2025-06-27
     notes:
