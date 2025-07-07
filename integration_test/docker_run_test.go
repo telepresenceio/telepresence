@@ -1,17 +1,51 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"regexp"
 	goRuntime "runtime"
 	"strings"
 	"time"
 
-	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
+
+func runDockerRun(ctx context.Context, name, svc, port, appDir, tag string, rq *itest.Requirements, wch chan<- struct{}) *os.Process {
+	args := []string{"intercept", "--mount", "false", svc, "--docker-run"}
+	if port != "" {
+		args = append(args, "--port", port)
+	}
+	args = append(args, "--", "--rm", "-v", appDir+":/usr/src/app")
+	if name != "" {
+		args = append(args, "--name", name)
+	}
+	args = append(args, tag)
+	cmd := itest.TelepresenceCmd(ctx, args...)
+	so := &bytes.Buffer{}
+	se := &bytes.Buffer{}
+	cmd.Stdout = so
+	cmd.Stderr = se
+	rq.NoError(cmd.Start())
+	proc := cmd.Process
+	go func() {
+		if wch != nil {
+			defer close(wch)
+		}
+		err := cmd.Wait()
+		dlog.Info(ctx, so.String())
+		if ses := se.String(); ses != "" {
+			dlog.Error(ctx, ses)
+		}
+		if err != nil {
+			dlog.Error(ctx, err.Error())
+		}
+	}()
+	return proc
+}
 
 func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 	if s.IsCI() && !(goRuntime.GOOS == "linux" && goRuntime.GOARCH == "amd64") {
@@ -29,14 +63,6 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 
 	abs, err := filepath.Abs(testDir)
 	require.NoError(err)
-
-	runDockerRun := func(ctx context.Context, cancel context.CancelFunc) {
-		defer cancel()
-		_, stderr, _ := itest.Telepresence(ctx, "intercept", svc, "--docker-run", "--port", "9070:8080", "--", "--rm", "-v", abs+":/usr/src/app", tag)
-		if len(stderr) > 0 {
-			dlog.Debugf(ctx, "stderr = %q", stderr)
-		}
-	}
 
 	assertInterceptResponse := func(ctx context.Context) {
 		assert := s.Assert()
@@ -78,18 +104,17 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 		}, 30*time.Second, 2*time.Second)
 	}
 
+	port := "9070:8080"
 	s.Run("<ctrl>-C", func() {
 		// Use a soft context to send a <ctrl>-c to telepresence in order to end it
 		ctx := s.Context()
-		cctx, cancel := context.WithCancel(ctx)
-		soft, softCancel := context.WithCancel(dcontext.WithSoftness(ctx))
-		go runDockerRun(soft, cancel)
-		assertInterceptResponse(cctx)
-		softCancel()
+		wch := make(chan struct{})
+		proc := runDockerRun(ctx, "", svc, port, abs, tag, s.Require(), wch)
+		assertInterceptResponse(ctx)
+		_ = proc.Signal(os.Interrupt)
 		select {
-		case <-cctx.Done():
-		case <-time.After(30 * time.Second):
-			itest.TelepresenceOk(ctx, "leave", svc)
+		case <-wch:
+		case <-time.After(10 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
 		assertNotIntercepted(ctx)
@@ -98,13 +123,13 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 	s.Run("leave", func() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
-		cctx, cancel := context.WithCancel(ctx)
-		go runDockerRun(ctx, cancel)
-		assertInterceptResponse(cctx)
+		wch := make(chan struct{})
+		runDockerRun(ctx, "", svc, port, abs, tag, s.Require(), wch)
+		assertInterceptResponse(ctx)
 		itest.TelepresenceOk(ctx, "leave", svc)
 		select {
-		case <-cctx.Done():
-		case <-time.After(30 * time.Second):
+		case <-wch:
+		case <-time.After(10 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
 		assertNotIntercepted(ctx)
@@ -113,13 +138,13 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 	s.Run("disconnect", func() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
-		cctx, cancel := context.WithCancel(ctx)
-		go runDockerRun(ctx, cancel)
-		assertInterceptResponse(cctx)
+		wch := make(chan struct{})
+		runDockerRun(ctx, "", svc, port, abs, tag, s.Require(), wch)
+		assertInterceptResponse(ctx)
 		itest.TelepresenceDisconnectOk(ctx)
 		select {
-		case <-cctx.Done():
-		case <-time.After(30 * time.Second):
+		case <-wch:
+		case <-time.After(10 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
 		s.TelepresenceConnect(ctx)
@@ -129,13 +154,13 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 	s.Run("quit", func() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
-		cctx, cancel := context.WithCancel(ctx)
-		go runDockerRun(ctx, cancel)
-		assertInterceptResponse(cctx)
+		wch := make(chan struct{})
+		runDockerRun(ctx, "", svc, port, abs, tag, s.Require(), wch)
+		assertInterceptResponse(ctx)
 		itest.TelepresenceQuitOk(ctx)
 		select {
-		case <-cctx.Done():
-		case <-time.After(30 * time.Second):
+		case <-wch:
+		case <-time.After(10 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
 		s.TelepresenceConnect(ctx)
@@ -164,19 +189,6 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 
 	abs, err := filepath.Abs(testDir)
 	require.NoError(err)
-
-	runDockerRun := func(ctx context.Context, name string, wch chan<- struct{}) {
-		defer close(wch)
-		so, se, err := itest.Telepresence(ctx, "intercept", "--mount", "false", svc,
-			"--docker-run", "--", "--name", name, "--rm", "-v", abs+":/usr/src/app", tag)
-		dlog.Info(ctx, so)
-		if se != "" {
-			dlog.Error(ctx, se)
-		}
-		if err != nil {
-			dlog.Error(ctx, err.Error())
-		}
-	}
 
 	assertInterceptResponse := func(ctx context.Context) {
 		s.Eventually(func() bool {
@@ -213,12 +225,16 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	s.Run("<ctrl>-C", func() {
 		// Use a soft context to send a <ctrl>-c to telepresence in order to end it
 		ctx := s.Context()
-		soft, softCancel := context.WithCancel(dcontext.WithSoftness(ctx))
 		wch := make(chan struct{})
-		go runDockerRun(soft, "adam", wch)
+		proc := runDockerRun(ctx, "adam", svc, "", abs, tag, s.Require(), wch)
 		s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		assertInterceptResponse(ctx)
-		softCancel()
+		_ = proc.Signal(os.Interrupt)
+		select {
+		case <-wch:
+		case <-time.After(10 * time.Second):
+			s.Fail("interceptor did not terminate")
+		}
 		assertNotIntercepted(ctx)
 	})
 
@@ -226,13 +242,13 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
 		wch := make(chan struct{})
-		go runDockerRun(ctx, "bruce", wch)
+		runDockerRun(ctx, "bruce", svc, "", abs, tag, s.Require(), wch)
 		s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		assertInterceptResponse(ctx)
 		itest.TelepresenceOk(ctx, "leave", svc)
 		select {
 		case <-wch:
-		case <-time.After(30 * time.Second):
+		case <-time.After(10 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
 		assertNotIntercepted(ctx)
@@ -242,13 +258,13 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
 		wch := make(chan struct{})
-		go runDockerRun(ctx, "chris", wch)
+		runDockerRun(ctx, "chris", svc, "", abs, tag, s.Require(), wch)
 		s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		assertInterceptResponse(ctx)
 		itest.TelepresenceDisconnectOk(ctx)
 		select {
 		case <-wch:
-		case <-time.After(30 * time.Second):
+		case <-time.After(10 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
 		s.TelepresenceConnect(ctx, "--docker")
@@ -259,12 +275,12 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
 		wch := make(chan struct{})
-		go runDockerRun(ctx, "david", wch)
+		runDockerRun(ctx, "david", svc, "", abs, tag, s.Require(), wch)
 		assertInterceptResponse(ctx)
 		itest.TelepresenceQuitOk(ctx)
 		select {
 		case <-wch:
-		case <-time.After(30 * time.Second):
+		case <-time.After(10 * time.Second):
 			s.Fail("interceptor did not terminate")
 		}
 		s.TelepresenceConnect(ctx, "--docker")

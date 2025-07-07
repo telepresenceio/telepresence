@@ -3,13 +3,13 @@ package logging
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 )
 
@@ -29,12 +29,12 @@ func TestDupToStd(t *testing.T) {
 	dirname := t.TempDir()
 
 	ctx := dlog.NewTestContext(t, true)
-	cmd := dexec.CommandContext(ctx, os.Args[0], "-test.v", "-test.run="+t.Name()+"Helper", "--", dirname)
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.v", "-test.run="+t.Name()+"Helper", "--", dirname)
 	cmd.Env = append(os.Environ(),
 		"GO_WANT_HELPER_PROCESS=1")
 
 	err := cmd.Run()
-	var eerr *dexec.ExitError
+	var eerr *exec.ExitError
 	require.ErrorAs(t, err, &eerr)
 	require.True(t, eerr.Exited())
 	require.Equal(t, 2, eerr.ExitCode())

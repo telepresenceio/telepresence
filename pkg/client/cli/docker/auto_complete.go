@@ -10,16 +10,16 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-)
 
-const Exe = "docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+)
 
 var directiveCodeRx = regexp.MustCompile(`^:(\d)$`) //nolint:gochecknoglobals // constant
 
 func AutocompleteRun(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	args = slices.Insert(args, 0, "__completeNoDesc", "run")
 	args = append(args, toComplete)
-	cc := exec.CommandContext(cmd.Context(), Exe, args...)
+	cc := exec.CommandContext(cmd.Context(), docker.Exe, args...)
 	cc.Env = os.Environ()
 	ob := bytes.Buffer{}
 	cc.Stdout = &ob

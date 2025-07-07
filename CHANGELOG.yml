@@ -28,6 +28,19 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: The -p flags would have no effect in combination with --docker-run
+        body: |-
+          When using `telepresence <engage> --docker-run` with a `-p <port spec>` flag, the Docker driver silently
+          ignored the port specification. This occurred because the `--network=<teleroute network>` flag disabled both
+          additional network directives and the default bridge network (which is normally used when no network is
+          specified). This has been resolved by:
+
+          1. Adding the teleroute network after container creation instead of using a flag
+          2. Replacing the single `docker run` command with a sequence of:
+             - `docker create`
+             - Network addition
+             - `docker start`
+      - type: bugfix
         title: Requests lost when using wiretap
         body: >-
           Wiretap connection `Close` and `Write` could sometimes be out of sync, so that the `Close` would be executed

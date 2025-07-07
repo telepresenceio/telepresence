@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os/exec"
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
@@ -54,13 +54,12 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 				// sshfs sometimes leave the mount point in a bad state. This will clean it up
 				ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 				defer cancel()
-				var umount *dexec.Cmd
+				var umount *exec.Cmd
 				if runtime.GOOS == "darwin" {
 					umount = proc.CommandContext(ctx, "umount", "-f", clientMountPoint)
 				} else {
 					umount = proc.CommandContext(ctx, "fusermount", "-uz", clientMountPoint)
 				}
-				umount.DisableLogging = true
 				_ = umount.Run()
 			}()
 		}

@@ -84,10 +84,10 @@ func latestPluginName(ctx context.Context, cfg *client.DockerImage, pluginType s
 
 func installPlugin(ctx context.Context, pluginName string) error {
 	dlog.Debugf(ctx, "Installing docker plugin %s", pluginName)
-	cmd := proc.CommandContext(ctx, "docker", "plugin", "install", "--grant-all-permissions", pluginName)
+	cmd := proc.CommandContext(ctx, Exe, "plugin", "install", "--grant-all-permissions", pluginName)
 	_, err := proc.CaptureErr(cmd)
 	if err != nil {
-		err = fmt.Errorf("docker plugin install %s: %w", pluginName, err)
+		err = fmt.Errorf("%s plugin install %s: %w", Exe, pluginName, err)
 	}
 	return err
 }

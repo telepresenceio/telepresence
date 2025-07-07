@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -14,9 +14,8 @@ import (
 
 // StdCommand returns a command that redirects stdout and stderr to dos.Stdout and dos.Stderr
 // and performs no logging.
-func StdCommand(ctx context.Context, exe string, args ...string) *dexec.Cmd {
+func StdCommand(ctx context.Context, exe string, args ...string) *exec.Cmd {
 	cmd := CommandContext(ctx, exe, args...)
-	cmd.DisableLogging = true
 	cmd.Stdout = dos.Stdout(ctx)
 	cmd.Stderr = dos.Stderr(ctx)
 	dlog.Debug(ctx, shellquote.ShellString(exe, args))
@@ -27,9 +26,8 @@ func StdCommand(ctx context.Context, exe string, args ...string) *dexec.Cmd {
 // If an error occurs, the stdout output is discarded and the stderr output is included in the
 // returned error unless the error itself already contains that output.
 // On success, any output on stderr is discarded and the stdout output is returned.
-func CaptureErr(cmd *dexec.Cmd) ([]byte, error) {
+func CaptureErr(cmd *exec.Cmd) ([]byte, error) {
 	var stdOut, stdErr bytes.Buffer
-	cmd.DisableLogging = true
 	cmd.Stdout = &stdOut
 	cmd.Stderr = &stdErr
 	if err := cmd.Run(); err != nil {
