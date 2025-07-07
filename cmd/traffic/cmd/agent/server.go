@@ -32,7 +32,7 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
 	}
 	if awc, ok := s.awaitingForwards.Load(stream.SessionID()); ok {
-		if awf, ok := awc.Load(stream.ID()); ok {
+		if awf, ok := awc.LoadAndDelete(stream.ID()); ok {
 			awf.streamCh <- stream
 			<-awf.doneCh
 			return nil
