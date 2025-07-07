@@ -28,6 +28,13 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Fix tunnel channel reuse in traffic-agent to prevent connection failures
+        body: >-
+          Previously, when a tunnel became active, the map maintained by the traffic-agent containing channel values for
+          agent-to-client tunnels wasn't cleared. This resulted in closed channels remaining in the map. When port
+          numbers were eventually reused, these stale entries would be discovered and their closed channels would cause
+          immediate stream termination, leading to data loss.
+      - type: bugfix
         title: The -p flags would have no effect in combination with --docker-run
         body: |-
           When using `telepresence <engage> --docker-run` with a `-p <port spec>` flag, the Docker driver silently
