@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os/exec"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -16,7 +17,6 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -406,13 +406,12 @@ func (s *service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (
 
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
-	var cmd *dexec.Cmd
+	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = proc.CommandContext(ctx, "sshfs-win", "cmd", "-V")
 	} else {
 		cmd = proc.CommandContext(ctx, "sshfs", "-V")
 	}
-	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		dlog.Errorf(ctx, "sshfs not installed: %v", err)

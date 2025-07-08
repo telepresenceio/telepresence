@@ -867,7 +867,7 @@ var defaultTelemount = Telemount{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "telemount",
-	Tag:         "0.1.6",
+	Tag:         "0.2.0",
 }
 
 func (tm *Telemount) defaults() DefaultsAware {
@@ -898,7 +898,7 @@ var defaultTeleroute = Teleroute{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "teleroute",
-	Tag:         "0.3.0",
+	Tag:         "0.3.1",
 }
 
 func (tr *Teleroute) defaults() DefaultsAware {

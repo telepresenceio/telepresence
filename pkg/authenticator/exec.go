@@ -22,7 +22,6 @@ func (e execCredentialBinary) Resolve(
 	cmd := proc.CommandContext(ctx, execConfig.Command, execConfig.Args...)
 	cmd.Stdout = &buf
 	cmd.Stderr = dos.Stderr(ctx)
-	cmd.DisableLogging = true
 	cmd.Env = dos.Environ(ctx)
 	if len(execConfig.Env) > 0 {
 		em := dos.FromEnvPairs(cmd.Env)

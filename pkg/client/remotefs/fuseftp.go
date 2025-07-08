@@ -98,7 +98,6 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 
 	cmd.Stderr = dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
 	cmd.Stdout = dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
-	cmd.DisableLogging = true
 	err = cmd.Start()
 	if err != nil {
 		return err

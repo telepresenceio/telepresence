@@ -71,7 +71,7 @@ type State interface {
 	CountAgents() int
 	CountClients() int
 	CountIntercepts() int
-	CountActiveInterceptsForAgent(agentName, namespace string) int
+	CountActiveInterceptsForWorkload(workloadKey *mutator.WorkloadKey) int
 	CountSessions() int
 	CountTunnels() int
 	CountTunnelIngress() uint64
@@ -855,11 +855,11 @@ func (s *state) allInterceptsFinalizerCall(client *ClientSession, workload *stri
 	}
 }
 
-func (s *state) CountActiveInterceptsForAgent(agentName, namespace string) int {
+func (s *state) CountActiveInterceptsForWorkload(workloadKey *mutator.WorkloadKey) int {
 	intercepts := s.intercepts.LoadMatching(func(_ string, ii *Intercept) bool {
 		return ii.Disposition == rpc.InterceptDispositionType_ACTIVE &&
-			ii.Spec.Agent == agentName &&
-			ii.Spec.Namespace == namespace
+			ii.Spec.Agent == workloadKey.Name &&
+			ii.Spec.Namespace == workloadKey.Namespace
 	})
 	return len(intercepts)
 }

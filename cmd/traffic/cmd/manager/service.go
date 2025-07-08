@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/blang/semver/v4"
@@ -19,7 +20,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
@@ -38,6 +38,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Clock is the mechanism used by the Manager state to get the current time.
@@ -56,6 +57,7 @@ type Service interface {
 
 	// unexported methods.
 	runSessionGCLoop(context.Context) error
+	runUpdateTrafficManagerConfigMapLoop(context.Context) error
 	serveHTTP(context.Context) error
 	servePrometheus(context.Context) error
 }
@@ -71,6 +73,7 @@ type service struct {
 	serviceNameNs      string
 	serviceNameFQN     string
 	dotClusterDomain   string
+	tmConfigMapUpdated atomic.Bool
 
 	// Possibly extended version of the service. Use when calling interface methods.
 	self Service
@@ -265,20 +268,26 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
-	err := s.removeUnusedAgent(ctx, sessionID)
 	s.state.RefreshSessionConsumptionMetrics(sessionID)
 
 	agent := s.state.GetAgent(sessionID)
 	if agent == nil {
-		dlog.Debugf(ctx, "No agent found for session %s", sessionID)
 		return &empty.Empty{}, nil
 	}
 
-	if s.state.CountActiveInterceptsForAgent(agent.Name, agent.Namespace) != 0 {
-		err = s.UpdateLastEngagementTime(ctx, sessionID)
-		if err != nil {
-			dlog.Errorf(ctx, "error updating last engagement time: %v", err)
-		}
+	workloadKey := &mutator.WorkloadKey{
+		Name:      agent.Name,
+		Namespace: agent.Namespace,
+		Kind:      k8sapi.Kind(agent.Kind),
+	}
+
+	err := s.UpdateLastEngagementTime(ctx, workloadKey)
+	if err != nil {
+		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+	}
+	err = s.removeUnusedAgent(ctx, workloadKey)
+	if err != nil {
+		dlog.Errorf(ctx, "error removing unused agent: %v", err)
 	}
 
 	return &empty.Empty{}, err
@@ -294,23 +303,14 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	return &empty.Empty{}, nil
 }
 
-func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.SessionID) error {
+func (s *service) removeUnusedAgent(ctx context.Context, workloadKey *mutator.WorkloadKey) error {
 	maxIdleTime := managerutil.GetEnv(ctx).AgentMaxIdleTime
 	if maxIdleTime == 0 {
 		// default aka not set is 0, we don't ever remove agents, skip
 		return nil
 	}
-	agentKey := s.getAgentKey(ctx, sessionID)
-	if agentKey == "" {
-		return nil
-	}
 
-	agent := s.state.GetAgent(sessionID)
-	if agent == nil {
-		return nil
-	}
-
-	activeIntercepts := s.state.CountActiveInterceptsForAgent(agent.Name, agent.Namespace)
+	activeIntercepts := s.state.CountActiveInterceptsForWorkload(workloadKey)
 	if activeIntercepts != 0 {
 		// don't remove if there are active intercepts
 		return nil
@@ -323,22 +323,26 @@ func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.Sessio
 		return fmt.Errorf("err in unmarshalling YAML: %w", err)
 	}
 
-	lastEngagementTime := agentStateFile.AgentStates[agentKey].LastEngagementTime
-	dlog.Tracef(ctx, "Last engagement time for agent %s: %s", agentKey, lastEngagementTime)
+	agentState, ok := agentStateFile.AgentStates[*workloadKey]
+	if !ok {
+		return fmt.Errorf("error in looking up workload key %s in agentStateFile, err: %w", workloadKey, err)
+	}
+	lastEngagementTime := agentState.LastEngagementTime
+	dlog.Tracef(ctx, "Last engagement time for agent %s: %s", *workloadKey, lastEngagementTime)
 	if lastEngagementTime.IsZero() {
 		// means it was never engaged
 		return nil
 	}
 	idleTime := time.Since(lastEngagementTime)
-	dlog.Tracef(ctx, "Idle time for agent %s: %s", agentKey, idleTime)
+	dlog.Tracef(ctx, "Idle time for agent %s: %s", *workloadKey, idleTime)
 	if idleTime > maxIdleTime {
 		// construct uninstall agents request
-		dlog.Infof(ctx, "Removing agent %s due to idle time %s exceeding max idle time %s", agentKey, idleTime, maxIdleTime)
-		ns := agent.Namespace
+		dlog.Infof(ctx, "Removing agent %s due to idle time %s exceeding max idle time %s", *workloadKey, idleTime, maxIdleTime)
+		ns := workloadKey.Namespace
 		mm := mutator.GetMap(ctx)
-		wl, err := k8sapi.GetWorkload(ctx, agent.Name, ns, "")
+		wl, err := k8sapi.GetWorkload(ctx, workloadKey.Name, ns, "")
 		if err != nil {
-			return status.Errorf(codes.NotFound, "Workload %s.%s not found", agent, ns)
+			return status.Errorf(codes.NotFound, "Workload %s.%s not found", workloadKey.Name, ns)
 		}
 		mm.Delete(wl.GetName(), ns)
 		if err := mm.EvictPodsWithAgentConfig(ctx, wl); err != nil {
@@ -348,73 +352,77 @@ func (s *service) removeUnusedAgent(ctx context.Context, sessionID tunnel.Sessio
 	return nil
 }
 
-func (s *service) UpdateLastEngagementTime(ctx context.Context, sessionID tunnel.SessionID) error {
-	agentKey := s.getAgentKey(ctx, sessionID)
-	dlog.Tracef(ctx, "Logging agentKey for last engagement time: %s", agentKey)
-	if agentKey == "" {
-		return nil
-	}
-	namespace := managerutil.GetEnv(ctx).ManagerNamespace
-	client := k8sapi.GetK8sInterface(ctx).CoreV1()
+func (s *service) UpdateLastEngagementTime(ctx context.Context, workloadKey *mutator.WorkloadKey) error {
+	// updates last engagement time IN MEMORY, this is persisted to the configmap by another goroutine that runs periodically
+	dlog.Tracef(ctx, "Logging workloadKey for last engagement time: %s", *workloadKey)
+
 	agentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
 	dlog.Tracef(ctx, "Logging agentStateFileYAML: %s", agentStateFileYAML)
 
 	var agentStateFile AgentStateFile
 	if string(agentStateFileYAML) != "" {
+		dlog.Tracef(ctx, "Unmarshalling agent states from YAML")
 		err := yaml.Unmarshal(agentStateFileYAML, &agentStateFile)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling agent states: %w", err)
 		}
+		if !agentStateFile.AgentStates[*workloadKey].LastEngagementTime.IsZero() && s.state.CountActiveInterceptsForWorkload(workloadKey) == 0 {
+			// don't update last engagement time if there are no active intercepts and it is not the first time
+			return nil
+		}
 	} else {
-		agentStateFile = AgentStateFile{AgentStates: make(map[string]AgentState)}
+		agentStateFile = AgentStateFile{AgentStates: make(map[mutator.WorkloadKey]AgentState)}
 	}
 
-	agentStateFile.AgentStates[agentKey] = AgentState{LastEngagementTime: time.Now()}
+	agentStateFile.AgentStates[*workloadKey] = AgentState{LastEngagementTime: time.Now()}
 
 	updatedAgentStateFileYAML, err := yaml.Marshal(agentStateFile)
 	if err != nil {
 		return fmt.Errorf("error marshalling agent states: %w", err)
 	}
-	patch := map[string]interface{}{
-		"data": map[string]string{
-			config.AgentStateFileName: string(updatedAgentStateFileYAML),
-		},
-	}
-	patchBytes, err := json.Marshal(patch)
-	if err != nil {
-		return err
-	}
-
-	_, err = client.ConfigMaps(namespace).Patch(ctx, agentconfig.ManagerAppName, types.StrategicMergePatchType,
-		patchBytes,
-		metav1.PatchOptions{})
-	if err != nil {
-		return fmt.Errorf("error patching ConfigMap: %w", err)
-	}
-
+	s.configWatcher.SetAgentStateYaml(ctx, updatedAgentStateFileYAML)
+	s.tmConfigMapUpdated.Store(true)
 	return nil
 }
 
-func (s *service) getAgentKey(ctx context.Context, sessionID tunnel.SessionID) string {
-	dlog.Debugf(ctx, "Getting agent key for session %s", sessionID)
-	agent := s.state.GetAgent(sessionID)
-	if agent == nil {
-		dlog.Debugf(ctx, "No agent found for session %s", sessionID)
-		return ""
-	}
-
-	workloadKind := agent.Kind // Kind of workload (Deployment, StatefulSet, etc.)
-	workloadName := agent.Name
-	workloadNamespace := agent.Namespace
-	agentKey := fmt.Sprintf("%s.%s.%s", workloadKind, workloadName, workloadNamespace)
-	return agentKey
-}
-
 type AgentState struct {
-	LastEngagementTime time.Time `yaml:"lastEngagementTime"`
+	LastEngagementTime time.Time `json:"lastEngagementTime"`
 }
 type AgentStateFile struct {
-	AgentStates map[string]AgentState `yaml:"agentStates"`
+	AgentStates map[mutator.WorkloadKey]AgentState `json:"agentStates"`
+}
+
+func (f AgentStateFile) MarshalJSON() ([]byte, error) {
+	temp := make(map[string]AgentState)
+	for k, v := range f.AgentStates {
+		temp[k.String()] = v
+	}
+	return json.Marshal(map[string]interface{}{
+		"agentStates": temp,
+	})
+}
+
+func (f *AgentStateFile) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		AgentStates map[string]AgentState `json:"agentStates"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	f.AgentStates = make(map[mutator.WorkloadKey]AgentState)
+	for keyStr, val := range raw.AgentStates {
+		parts := strings.Split(keyStr, ".")
+		if len(parts) != 3 {
+			return fmt.Errorf("invalid key format: %s", keyStr)
+		}
+		f.AgentStates[mutator.WorkloadKey{
+			Kind:      k8sapi.Kind(parts[0]),
+			Name:      parts[1],
+			Namespace: parts[2],
+		}] = val
+	}
+	return nil
 }
 
 // WatchAgentPods notifies a client of the set of known Agents.
@@ -1171,10 +1179,34 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 	return ww.Watch(ctx, stream)
 }
 
-const agentSessionTTL = 1 * time.Minute
+const agentSessionTTL = 70 * time.Second
 
 // expire removes stale sessions.
 func (s *service) expire(ctx context.Context) {
 	now := s.clock.Now()
 	s.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
+}
+
+func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {
+	updatedAgentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
+	patch := map[string]interface{}{
+		"data": map[string]string{
+			config.AgentStateFileName: string(updatedAgentStateFileYAML),
+		},
+	}
+
+	namespace := managerutil.GetEnv(ctx).ManagerNamespace
+	client := k8sapi.GetK8sInterface(ctx).CoreV1()
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return err
+	}
+	_, err = client.ConfigMaps(namespace).Patch(ctx, agentconfig.ManagerAppName, types.StrategicMergePatchType,
+		patchBytes,
+		metav1.PatchOptions{})
+
+	if err == nil {
+		s.tmConfigMapUpdated.Store(false)
+	}
+	return err
 }

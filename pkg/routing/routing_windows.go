@@ -107,7 +107,6 @@ func GetRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	defer cancel()
 	ip := routedNet.Addr()
 	cmd := proc.CommandContext(ctx, "pathping", "-n", "-h", "1", "-p", "100", "-w", "100", "-q", "1", ip.String())
-	cmd.DisableLogging = true
 	stderr := &strings.Builder{}
 	cmd.Stderr = stderr
 	out, err := cmd.Output()
@@ -155,7 +154,6 @@ func (r *Route) addStatic(ctx context.Context) error {
 
 	args = append(args, "IF", strconv.Itoa(r.InterfaceIndex))
 	cmd := proc.CommandContext(ctx, "route", args...)
-	cmd.DisableLogging = true
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to create route %s: %w", r, err)
@@ -172,7 +170,6 @@ func (r *Route) removeStatic(ctx context.Context) error {
 		"DELETE",
 		r.RoutedNet.Addr().String(),
 	)
-	cmd.DisableLogging = true
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to delete route %s: %w", r, err)

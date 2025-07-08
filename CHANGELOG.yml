@@ -25,15 +25,43 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.24.0
-    date: 2025-07-07
+    date: 2025-07-10
     notes:
       - type: feature
         title: add ability to optionally clean up sidecars that have been idle above a specified duration
         body: >-
           Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control how long a sidecar can be idle before it is cleaned up.
-          The updating of latestEngagementTime is done every 1m in the Remain Call, which is now called every 1min, compared to every 5s in the past 
-          Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.         
-      
+          The updating of latestEngagementTime is done every 1m in the Remain Call, which is now called every 1min, compared to every 5s in the past.
+          The agent state (containing latestEngagementTime) is updated in memory, and lazily persisted to the traffic-manager configmap every 2min.
+          Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.       
+  - version: 2.23.3
+    date: 2025-07-07
+    notes:
+      - type: bugfix
+        title: Fix tunnel channel reuse in traffic-agent to prevent connection failures
+        body: >-
+          Previously, when a tunnel became active, the map maintained by the traffic-agent containing channel values for
+          agent-to-client tunnels wasn't cleared. This resulted in closed channels remaining in the map. When port
+          numbers were eventually reused, these stale entries would be discovered and their closed channels would cause
+          immediate stream termination, leading to data loss.
+      - type: bugfix
+        title: The -p flags would have no effect in combination with --docker-run
+        body: |-
+          When using `telepresence <engage> --docker-run` with a `-p <port spec>` flag, the Docker driver silently
+          ignored the port specification. This occurred because the `--network=<teleroute network>` flag disabled both
+          additional network directives and the default bridge network (which is normally used when no network is
+          specified). This has been resolved by:
+
+          1. Adding the teleroute network after container creation instead of using a flag
+          2. Replacing the single `docker run` command with a sequence of:
+             - `docker create`
+             - Network addition
+             - `docker start`
+      - type: bugfix
+        title: Requests lost when using wiretap
+        body: >-
+          Wiretap connection `Close` and `Write` could sometimes be out of sync, so that the `Close` would be executed
+          before the `Write`, causing a "read/write on closed pipe" error and loss of data.  
   - version: 2.23.2
     date: 2025-06-27
     notes:

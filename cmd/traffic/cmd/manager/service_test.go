@@ -246,7 +246,7 @@ matchExpressions:
   values:
     - default
 `,
-			"agent-state.yaml": `agentStates: {}`,
+			"agent-state.yaml": ``,
 		},
 	}, metav1.CreateOptions{})
 	if err != nil {

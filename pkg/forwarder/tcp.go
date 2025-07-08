@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -124,8 +125,12 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 		if len(wtIntercepts) > 0 && targetPort > 0 {
 			var taps []net.Conn
 			clientConn, taps = AddWiretaps(ctx, clientConn, tapCount, wiretapCacheSize)
+			wg := sync.WaitGroup{}
+			wg.Add(tapCount)
+			defer wg.Wait()
 			for i, ii := range wtIntercepts {
 				go func(conn net.Conn, intercept *manager.InterceptInfo) {
+					defer wg.Done()
 					err := f.interceptConn(ctx, conn, intercept)
 					if err != nil {
 						dlog.Errorf(ctx, "wiretap ended with error: %v", err)

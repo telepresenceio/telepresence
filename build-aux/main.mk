@@ -500,7 +500,7 @@ push-echo-server:
 	(cd integration_test/testdata/echo-server && \
  		docker buildx build --platform=linux/amd64,linux/arm64 --push \
  		 --tag ghcr.io/telepresenceio/echo-server:latest \
- 		 --tag ghcr.io/telepresenceio/echo-server:0.2.0 .)
+ 		 --tag ghcr.io/telepresenceio/echo-server:0.2.1 .)
 
 .PHONY: push-udp-echo
 push-udp-echo:

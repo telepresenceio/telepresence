@@ -53,20 +53,7 @@ func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
 		for key := range data {
 			keys = append(keys, key)
 		}
-		sort.Slice(keys, func(i, j int) bool {
-			orders := map[string]int{
-				"dexec.pid":    -4,
-				"dexec.stream": -3,
-				"dexec.data":   -2,
-				"dexec.err":    -1,
-			}
-			iOrd := orders[keys[i]]
-			jOrd := orders[keys[j]]
-			if iOrd != jOrd {
-				return iOrd < jOrd
-			}
-			return keys[i] < keys[j]
-		})
+		sort.Strings(keys)
 		for _, key := range keys {
 			val := fmt.Sprintf("%+v", data[key])
 			fmt.Fprintf(b, " %s=%q", key, val)

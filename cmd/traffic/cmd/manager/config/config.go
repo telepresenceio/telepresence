@@ -34,6 +34,7 @@ type Watcher interface {
 	Run(ctx context.Context) error
 	GetClientConfigYaml(ctx context.Context) []byte
 	GetAgentStateYaml(ctx context.Context) []byte
+	SetAgentStateYaml(ctx context.Context, newAgentStateYAML []byte)
 	GetAgentEnv() AgentEnv
 	SelectorChannel() <-chan *labels.Selector
 
@@ -237,4 +238,8 @@ func (c *config) GetClientConfigYaml(ctx context.Context) (ret []byte) {
 
 func (c *config) GetAgentStateYaml(ctx context.Context) (ret []byte) {
 	return c.agentStateYAML
+}
+
+func (c *config) SetAgentStateYaml(ctx context.Context, newAgentStateYAML []byte) {
+	c.agentStateYAML = newAgentStateYAML
 }

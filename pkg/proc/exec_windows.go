@@ -10,7 +10,6 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
@@ -20,9 +19,9 @@ var SignalsToForward = []os.Signal{os.Interrupt} //nolint:gochecknoglobals // OS
 // SIGTERM uses os.Interrupt on Windows as a best effort.
 var SIGTERM = os.Interrupt //nolint:gochecknoglobals // OS-specific constant
 
-func CommandContext(ctx context.Context, name string, args ...string) *dexec.Cmd {
-	cmd := dexec.CommandContext(ctx, name, args...)
-	createNewProcessGroup(cmd.Cmd)
+func CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	createNewProcessGroup(cmd)
 	return cmd
 }
 
