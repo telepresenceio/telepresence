@@ -158,18 +158,18 @@ following Free and Open Source software:
     gopkg.in/inf.v0                                                v0.9.1                                3-clause BSD license
     gopkg.in/yaml.v3                                               v3.0.1                                Apache License 2.0, MIT license
     gvisor.dev/gvisor                                              v0.0.0-20250606001031-fa4c4dd86b43    Apache License 2.0, MIT license
-    helm.sh/helm/v3                                                v3.18.2                               Apache License 2.0
-    k8s.io/api                                                     v0.33.1                               Apache License 2.0
-    k8s.io/apiextensions-apiserver                                 v0.33.1                               Apache License 2.0
-    k8s.io/apimachinery                                            v0.33.1                               3-clause BSD license, Apache License 2.0
-    k8s.io/apiserver                                               v0.33.1                               Apache License 2.0
-    k8s.io/cli-runtime                                             v0.33.1                               Apache License 2.0
-    k8s.io/client-go                                               v0.33.1                               3-clause BSD license, Apache License 2.0
-    k8s.io/component-base                                          v0.33.1                               Apache License 2.0
-    k8s.io/component-helpers                                       v0.33.1                               Apache License 2.0
+    helm.sh/helm/v3                                                v3.18.4                               Apache License 2.0
+    k8s.io/api                                                     v0.33.2                               Apache License 2.0
+    k8s.io/apiextensions-apiserver                                 v0.33.2                               Apache License 2.0
+    k8s.io/apimachinery                                            v0.33.2                               3-clause BSD license, Apache License 2.0
+    k8s.io/apiserver                                               v0.33.2                               Apache License 2.0
+    k8s.io/cli-runtime                                             v0.33.2                               Apache License 2.0
+    k8s.io/client-go                                               v0.33.2                               3-clause BSD license, Apache License 2.0
+    k8s.io/component-base                                          v0.33.2                               Apache License 2.0
+    k8s.io/component-helpers                                       v0.33.2                               Apache License 2.0
     k8s.io/klog/v2                                                 v2.130.1                              Apache License 2.0
     k8s.io/kube-openapi                                            v0.0.0-20250318190949-c8a335a9a2ff    3-clause BSD license, Apache License 2.0
-    k8s.io/kubectl                                                 v0.33.1                               Apache License 2.0
+    k8s.io/kubectl                                                 v0.33.2                               Apache License 2.0
     k8s.io/utils                                                   v0.0.0-20250604170112-4c0f3b243397    3-clause BSD license, Apache License 2.0
     oras.land/oras-go/v2                                           v2.6.0                                Apache License 2.0
     sigs.k8s.io/json                                               v0.0.0-20241014173422-cfa47c3a1cc8    3-clause BSD license, Apache License 2.0
