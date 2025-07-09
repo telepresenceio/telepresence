@@ -192,7 +192,7 @@ type Sidecar struct {
 	InitSecurityContext *core.SecurityContext `json:"initSecurityContext,omitempty"`
 
 	// ClientConnectionTTL is the maximum duration that the traffic-agent will keep an idle client connection alive.
-	ClientConnectionTTL time.Duration
+	ClientConnectionTTL time.Duration `json:"clientConnectionTTL,omitempty,format:units"`
 }
 
 func (s *Sidecar) AgentConfig() *Sidecar {

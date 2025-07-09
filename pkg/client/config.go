@@ -133,7 +133,7 @@ type BaseConfig struct {
 
 	// This is actually a traffic-manager setting, and controls
 	// the agent's connection to the client.
-	DummyConnectionTTL time.Duration `json:"connectionTTL,omitzero"`
+	DummyConnectionTTL time.Duration `json:"connectionTTL,omitzero,format:units"`
 }
 
 func (c *BaseConfig) OSSpecific() *OSSpecificConfig {
@@ -197,18 +197,29 @@ func (c *BaseConfig) MarshalYAML() ([]byte, error) {
 }
 
 func UnmarshalJSON(data []byte, into any, rejectUnknown bool) error {
-	var opts []json.Options
+	opts := []json.Options{json.WithUnmarshalers(json.UnmarshalFunc(func(b []byte, v *time.Duration) error {
+		var s string
+		err := json.Unmarshal(b, &s)
+		if err != nil {
+			return err
+		}
+		d, err := time.ParseDuration(s)
+		if err == nil {
+			*v = d
+		}
+		return err
+	}))}
 	if rejectUnknown {
 		opts = append(opts, json.RejectUnknownMembers(true))
 	}
-	if err := json.Unmarshal(data, into, opts...); err != nil {
-		return err
-	}
-	return nil
+	return json.Unmarshal(data, into, opts...)
 }
 
 func MarshalJSON(value any) ([]byte, error) {
-	return json.Marshal(value)
+	opts := json.WithMarshalers(json.MarshalFunc(func(d time.Duration) ([]byte, error) {
+		return json.Marshal(d.String())
+	}))
+	return json.Marshal(value, opts, json.Deterministic(true))
 }
 
 func UnmarshalJSONConfig(data []byte, rejectUnknown bool) (Config, error) {
@@ -343,31 +354,31 @@ type Timeouts struct {
 	// make them easy to grep for (`grep Private`) later.
 
 	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
-	PrivateClusterConnect time.Duration `json:"clusterConnect"`
+	PrivateClusterConnect time.Duration `json:"clusterConnect,format:units"`
 	// PrivateConnectivityCheck timeout used when checking if the cluster is already proxied on the workstation
-	PrivateConnectivityCheck time.Duration `json:"connectivityCheck"`
+	PrivateConnectivityCheck time.Duration `json:"connectivityCheck,format:units"`
 	// PrivateEndpointDial is how long to wait for a Dial to a service for which the IP is known.
-	PrivateEndpointDial time.Duration `json:"endpointDial"`
+	PrivateEndpointDial time.Duration `json:"endpointDial,format:units"`
 	// PrivateHelm is how long to wait for any helm operation.
-	PrivateHelm time.Duration `json:"helm"`
+	PrivateHelm time.Duration `json:"helm,format:units"`
 	// PrivateIntercept is the time to wait for an intercept after the agents has been installed
-	PrivateIntercept time.Duration `json:"intercept"`
+	PrivateIntercept time.Duration `json:"intercept,format:units"`
 	// PrivateRoundtripLatency is how much to add to the EndpointDial timeout when establishing a remote connection.
-	PrivateRoundtripLatency time.Duration `json:"roundtripLatency"`
+	PrivateRoundtripLatency time.Duration `json:"roundtripLatency,format:units"`
 	// PrivateProxyDial is how long to wait for the proxy to establish an outbound connection
-	PrivateProxyDial time.Duration `json:"proxyDial"`
+	PrivateProxyDial time.Duration `json:"proxyDial,format:units"`
 	// PrivateTrafficManagerConnect is how long to wait for the traffic-manager API to connect
-	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI"`
+	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,format:units"`
 	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
-	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect"`
+	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,format:units"`
 	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
-	PrivateTrafficAgentArrival time.Duration `json:"trafficAgentArrival"`
+	PrivateTrafficAgentArrival time.Duration `json:"trafficAgentArrival,format:units"`
 	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
-	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite"`
+	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite,format:units"`
 	// PrivateFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
-	PrivateFtpShutdown time.Duration `json:"ftpShutdown"`
+	PrivateFtpShutdown time.Duration `json:"ftpShutdown,format:units"`
 	// PrivateContainerShutdown max time to wait for a docker container to stop before forcing termination.
-	PrivateContainerShutdown time.Duration `json:"containerShutdown"`
+	PrivateContainerShutdown time.Duration `json:"containerShutdown,format:units"`
 }
 
 type TimeoutID int
@@ -710,7 +721,7 @@ type Grpc struct {
 
 	// SimulateDisconnect can be set to a duration to simulate a disconnect some time after connecting.
 	// Intended for debugging purposes only.
-	SimulateDisconnect time.Duration `json:"simulateDisconnect"`
+	SimulateDisconnect time.Duration `json:"simulateDisconnect,format:units"`
 }
 
 var defaultGrpc = Grpc{ //nolint:gochecknoglobals // constant
@@ -782,7 +793,7 @@ type Intercept struct {
 	DefaultPort          int                        `json:"defaultPort"`
 	UseFtp               bool                       `json:"useFtp"`
 	MountsRoot           string                     `json:"mountsRoot"`
-	MountCompletionDelay time.Duration              `json:"mountCompletionDelay"`
+	MountCompletionDelay time.Duration              `json:"mountCompletionDelay,format:units"`
 }
 
 func (ic *Intercept) defaults() DefaultsAware {
@@ -1004,7 +1015,7 @@ type Routing struct {
 	AlsoProxy              []netip.Prefix `json:"alsoProxySubnets,omitempty"`
 	NeverProxy             []netip.Prefix `json:"neverProxySubnets,omitempty"`
 	AllowConflicting       []netip.Prefix `json:"allowConflictingSubnets,omitempty"`
-	RecursionBlockDuration time.Duration  `json:"recursionBlockDuration,omitempty"`
+	RecursionBlockDuration time.Duration  `json:"recursionBlockDuration,omitempty,format:units"`
 	RecursionBlockTreads   int            `json:"recursionBlockTreads,omitempty"`
 	VirtualSubnet          netip.Prefix   `json:"virtualSubnet"`
 	AutoResolveConflicts   bool           `json:"autoResolveConflicts"`
@@ -1263,7 +1274,7 @@ type RoutingSnake struct {
 	AlsoProxy              []netip.Prefix `json:"also_proxy_subnets"`
 	NeverProxy             []netip.Prefix `json:"never_proxy_subnets"`
 	AllowConflicting       []netip.Prefix `json:"allow_conflicting_subnets"`
-	RecursionBlockDuration time.Duration  `json:"recursion_block_duration"`
+	RecursionBlockDuration time.Duration  `json:"recursion_block_duration,format:units"`
 	RecursionBlockTreads   int            `json:"recursion_block_treads"`
 	VirtualSubnet          netip.Prefix   `json:"virtual_subnet"`
 	AutoResolveConflicts   bool           `json:"auto_resolve_conflicts"`
@@ -1287,7 +1298,7 @@ type DNS struct {
 	ExcludeSuffixes []string       `json:"excludeSuffixes"`
 	Excludes        []string       `json:"excludes"`
 	Mappings        DNSMappings    `json:"mappings"`
-	LookupTimeout   time.Duration  `json:"lookupTimeout"`
+	LookupTimeout   time.Duration  `json:"lookupTimeout,format:units"`
 	RecursionCheck  bool           `json:"recursionCheck"`
 }
 
@@ -1300,7 +1311,7 @@ type DNSSnake struct {
 	ExcludeSuffixes []string       `json:"exclude_suffixes"`
 	Excludes        []string       `json:"excludes"`
 	Mappings        DNSMappings    `json:"mappings"`
-	LookupTimeout   time.Duration  `json:"lookup_timeout"`
+	LookupTimeout   time.Duration  `json:"lookup_timeout,format:units"`
 	RecursionCheck  bool           `json:"recursion_check"`
 }
 
