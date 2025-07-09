@@ -39,6 +39,8 @@ timeouts:
   proxyDial: 17s
 logLevels:
   rootDaemon: trace
+dns:
+  recursionCheck: true
 images:
   registry: testregistry.io
   agentImage: ambassador-telepresence-agent-image:0.0.2
@@ -90,6 +92,7 @@ routing:
 	assert.Equal(t, k8sapi.PortName, cfg.Intercept().AppProtocolStrategy)                        // from user
 	assert.Equal(t, 9080, cfg.Intercept().DefaultPort)                                           // from user
 	assert.True(t, cfg.Intercept().UseFtp)                                                       // from user
+	assert.True(t, cfg.DNS().RecursionCheck)                                                     // from user
 	assert.Equal(t, cfg.Cluster().DefaultManagerNamespace, "hello")                              // from sys1
 	assert.Equal(t, cfg.Routing().VirtualSubnet, netip.MustParsePrefix("192.169.0.0/16"))        // from user
 }

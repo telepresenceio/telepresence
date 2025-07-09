@@ -24,6 +24,19 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.4
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)
+        body: >-
+          A DNS for a single label name that fails in a minikube - or another type of local cluster - will sometimes
+          result in a recursive lookup on the host. Without any type of recursion detection, this lookup will timeout
+          waiting for itself. Previously, this resulted in a `SERVFAIL` from the cluster DNS, which triggered renewed
+          lookup attempts that never stopped. This is now changed so that the same type of timeouts instead results
+          in an `NXDOMAIN` error that doesn't trigger renewed attempts.
+  
+          Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.
   - version: 2.23.3
     date: 2025-07-07
     notes:
