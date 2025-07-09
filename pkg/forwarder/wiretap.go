@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -33,24 +32,21 @@ func AddWiretaps(ctx context.Context, conn net.Conn, count, cacheSize int) (net.
 	if count == 0 {
 		return conn, nil
 	}
-	wrs := make([]*io.PipeWriter, count)
+
+	tc := &teeConn{
+		Conn: conn,
+		cs:   make([]chan readResult, count),
+	}
 	taps := make([]net.Conn, count)
-	chs := make([]chan []byte, count)
 
 	for i := 0; i < count; i++ {
 		rd, wr := io.Pipe()
 		taps[i] = &readOverrideConn{Conn: conn, rd: rd}
-		wrs[i] = wr
-		chs[i] = make(chan []byte, cacheSize)
+		c := make(chan readResult, cacheSize)
+		tc.cs[i] = c
+		go writePump(ctx, c, wr)
 	}
-	for i, c := range chs {
-		go writePump(ctx, c, wrs[i])
-	}
-	return &teeConn{
-		Conn: conn,
-		cs:   chs,
-		ws:   wrs,
-	}, taps
+	return tc, taps
 }
 
 // readConn wraps an io.ReadCloser in a net.Conn. Writes are discarded and addresses are
@@ -70,17 +66,17 @@ func (e *readOverrideConn) Write(b []byte) (n int, err error) {
 	return len(b), nil
 }
 
-// Close closes the wrapped io.ReadCloser.
+// Close is a no-op. The real close must be made on the teeConn.
 func (e *readOverrideConn) Close() error {
-	return e.rd.Close()
+	return nil
 }
 
-// SetDeadline calls SetReadDeadline.
+// SetDeadline is a no-op.
 func (e *readOverrideConn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-// SetReadDeadline is currently a no-op.
+// SetReadDeadline is a no-op.
 func (e *readOverrideConn) SetReadDeadline(t time.Time) error {
 	return nil
 }
@@ -88,6 +84,11 @@ func (e *readOverrideConn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline is a no-op.
 func (e *readOverrideConn) SetWriteDeadline(t time.Time) error {
 	return nil
+}
+
+type readResult struct {
+	data []byte
+	err  error
 }
 
 // teeConn wraps a net.Conn and copies everything read from it to its pipe-writers
@@ -98,71 +99,54 @@ func (e *readOverrideConn) SetWriteDeadline(t time.Time) error {
 // CloseWithError call.
 type teeConn struct {
 	net.Conn
-	mu sync.Mutex
-	cs []chan []byte
-	ws []*io.PipeWriter
+	cs []chan readResult
 }
 
 func (mw *teeConn) Read(b []byte) (n int, err error) {
 	n, err = mw.Conn.Read(b)
+	rr := readResult{err: err}
 	if n > 0 {
-		dc := make([]byte, n)
-		copy(dc, b)
-		mw.send(dc)
+		rr.data = make([]byte, n)
+		copy(rr.data, b)
 	}
-	if err != nil {
-		mw.mu.Lock()
-		for i, w := range mw.ws {
-			_ = w.CloseWithError(err)
-			close(mw.cs[i])
-		}
-		mw.ws = nil
-		mw.cs = nil
-		mw.mu.Unlock()
-	}
+	mw.send(rr)
 	return n, err
 }
 
 func (mw *teeConn) Close() error {
-	mw.mu.Lock()
-	for i, w := range mw.ws {
-		_ = w.Close()
-		close(mw.cs[i])
-	}
-	mw.ws = nil
-	mw.cs = nil
-	mw.mu.Unlock()
+	mw.send(readResult{err: io.EOF})
 	return mw.Conn.Close()
 }
 
-func (mw *teeConn) send(data []byte) {
-	mw.mu.Lock()
+func (mw *teeConn) send(rr readResult) {
 	for _, c := range mw.cs {
 		select {
-		case c <- data:
+		case c <- rr:
 		default:
 			// We end up discarding data here if the consumer is too slow.
 		}
 	}
-	mw.mu.Unlock()
 }
 
-func writePump(ctx context.Context, ch <-chan []byte, w *io.PipeWriter) {
+func writePump(ctx context.Context, ch <-chan readResult, w *io.PipeWriter) {
 	for {
 		select {
 		case <-ctx.Done():
-			w.Close()
+			_ = w.CloseWithError(io.EOF)
 			return
-		case data, ok := <-ch:
-			if !ok {
-				return
+		case rr := <-ch:
+			if len(rr.data) > 0 {
+				n, err := w.Write(rr.data)
+				if err == nil && n != len(rr.data) {
+					err = io.ErrShortWrite
+				}
+				if err != nil {
+					dlog.Errorf(ctx, "failed to write wiretap data: %v", err)
+					return
+				}
 			}
-			n, err := w.Write(data)
-			if err == nil && n != len(data) {
-				err = io.ErrShortWrite
-			}
-			if err != nil {
-				dlog.Errorf(ctx, "failed to write wiretap data: %s", err)
+			if rr.err != nil {
+				_ = w.CloseWithError(rr.err)
 				return
 			}
 		}

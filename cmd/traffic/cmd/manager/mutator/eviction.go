@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v4"
 	core "k8s.io/api/core/v1"
 	v1 "k8s.io/api/policy/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -108,18 +109,18 @@ func (c *configWatcher) evictPods(ctx context.Context, wl k8sapi.Workload, pods 
 			dlog.Tracef(ctx, "Skipping pod %s because it is managed manually", pod.Name)
 			continue
 		}
-		c.inactivePods.Compute(podID, func(v inactivation, loaded bool) (inactivation, bool) {
+		c.inactivePods.Compute(podID, func(v inactivation, loaded bool) (inactivation, xsync.ComputeOp) {
 			if loaded && v.deleted {
-				return v, false
+				return v, xsync.CancelOp
 			}
 			if !didRollout {
 				didRollout, err = evictOrRollout(ctx, wl, pod, counter)
 				if err != nil {
-					return v, false
+					return v, xsync.CancelOp
 				}
 				counter++
 			}
-			return inactivation{Time: time.Now(), deleted: true}, false
+			return inactivation{Time: time.Now(), deleted: true}, xsync.UpdateOp
 		})
 		if err != nil {
 			return err

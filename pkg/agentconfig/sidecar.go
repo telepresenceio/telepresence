@@ -2,6 +2,7 @@ package agentconfig
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
@@ -135,60 +136,63 @@ type Sidecar struct {
 	// If Create is true, then this Config has not yet been filled in.
 	Create bool `json:"create,omitzero"`
 
-	// If Manual is true, then this Config is created manually
+	// If Manual is true, then this Config is created manually.
 	Manual bool `json:"manual,omitzero"`
 
-	// The fully qualified name of the traffic-agent image, i.e. "ghcr.io/telepresenceio/tel2:2.5.4"
+	// The fully qualified name of the traffic-agent image, i.e. "ghcr.io/telepresenceio/tel2:2.5.4".
 	AgentImage string `json:"agentImage,omitzero"`
 
-	// One of "IfNotPresent", "Always", or "Never"
+	// One of "IfNotPresent", "Always", or "Never".
 	PullPolicy string `json:"pullPolicy,omitzero"`
 
-	// Secrets used when pulling the agent image from a private registry
+	// Secrets used when pulling the agent image from a private registry.
 	PullSecrets []core.LocalObjectReference `json:"pullSecrets,omitempty"`
 
-	// The name of the traffic-agent instance. Typically, the same as the name of the workload owner
+	// The name of the traffic-agent instance. Typically, the same as the name of the workload owner.
 	AgentName string `json:"agentName,omitzero"`
 
-	// The namespace of the intercepted pod
+	// The namespace of the intercepted pod.
 	Namespace string `json:"namespace,omitzero"`
 
-	// LogLevel used for all traffic-agent logging
+	// LogLevel used for all traffic-agent logging.
 	LogLevel string `json:"logLevel,omitzero"`
 
-	// The name of the workload that the pod originates from
+	// The name of the workload that the pod originates from.
 	WorkloadName string `json:"workloadName,omitzero"`
 
-	// The kind of workload that the pod originates from
+	// The kind of workload that the pod originates from.
 	WorkloadKind k8sapi.Kind `json:"workloadKind,omitzero"`
 
-	// The host used when connecting to the traffic-manager
+	// The host used when connecting to the traffic-manager.
 	ManagerHost string `json:"managerHost,omitzero"`
 
-	// The port used when connecting to the traffic manager
+	// The port used when connecting to the traffic manager.
 	ManagerPort uint16 `json:"managerPort,omitzero"`
 
-	// The port used by the agents restFUL API server
+	// The port used by the agents restFUL API server.
 	APIPort uint16 `json:"apiPort,omitzero"`
 
-	// Resources for the sidecar
+	// Resources for the sidecar.
 	Resources *core.ResourceRequirements `json:"resources,omitempty"`
 
-	// InitResources is the resource requirements for the initContainer sidecar
+	// InitResources is the resource requirements for the initContainer sidecar.
 	InitResources *core.ResourceRequirements `json:"initResources,omitempty"`
 
 	// MountPolicies controls how the agent will handle new mounts that might arrive when
 	// the pod is created.
 	MountPolicies types.MountPolicies `json:"mountPolicies,omitzero"`
 
-	// The intercepts managed by the agent
+	// The intercepts managed by the agent.
 	Containers []*Container `json:"containers,omitempty"`
 
-	// SecurityContext for the sidecar
+	// SecurityContext for the sidecar.
 	SecurityContext *core.SecurityContext `json:"securityContext,omitempty"`
 
-	// InitSecurityContext is the SecurityContext for the initContainer sidecar
+	// InitSecurityContext is the SecurityContext for the initContainer sidecar.
 	InitSecurityContext *core.SecurityContext `json:"initSecurityContext,omitempty"`
+
+	// ClientConnectionTTL is the maximum duration that the traffic-agent will keep an idle client connection alive.
+	ClientConnectionTTL time.Duration
 }
 
 func (s *Sidecar) AgentConfig() *Sidecar {

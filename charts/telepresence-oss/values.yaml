@@ -44,6 +44,9 @@ logLevel: info
 # This is identical to the grpc configuration for local clients.
 # See https://www.telepresence.io/docs/latest/reference/config/#grpc for more info
 grpc:
+  # Max time that the traffic-manager or traffic-agent will keep an idle client connection alive
+  connectionTTL: 24h
+
   # maxReceiveSize is a quantity that configures the maximum message size that the traffic
   # manager will service.
   maxReceiveSize: 4Mi
@@ -167,10 +170,6 @@ hooks:
     pullPolicy: IfNotPresent
 
 client:
-  # Max time that the traffic-manager will keep a client connection alive when it doesn't receive
-  # any calls to Remain.
-  connectionTTL: 24h
-
   dns:
     # Tell client's DNS resolver to never send names with these suffixes to the cluster side resolver
     excludeSuffixes: [".com", ".io", ".net", ".org", ".ru"]

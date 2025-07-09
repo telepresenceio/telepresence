@@ -72,10 +72,14 @@ spec:
             value: {{ .port | quote }}
           {{- end }}
           {{- end }}
-          {{- if .grpc }}
-          {{- if .grpc.maxReceiveSize }}
+          {{- with .grpc }}
+          {{- if .maxReceiveSize }}
           - name: GRPC_MAX_RECEIVE_SIZE
-            value: {{ .grpc.maxReceiveSize }}
+            value: {{ .maxReceiveSize }}
+          {{- if and .connectionTTL (not $.Values.client.connectionTTL) }}
+          - name: CLIENT_CONNECTION_TTL
+            value: {{ .connectionTTL }}
+          {{- end }}
           {{- end }}
           {{- end }}
           {{- if .workloads }}
@@ -204,8 +208,10 @@ spec:
         Client configuration
         */}}
           {{- with .client }}
+          {{- if .connectionTTL }}
           - name: CLIENT_CONNECTION_TTL
             value: {{ .connectionTTL }}
+          {{- end }}
           {{- with .routing }}
           {{- if .alsoProxySubnets }}
           - name: CLIENT_ROUTING_ALSO_PROXY_SUBNETS

@@ -4,7 +4,7 @@ package remotefs
 
 import (
 	"context"
-	"os/exec" //nolint:depguard // No use for dexec here
+	"os/exec"
 )
 
 func getFuseFTPServer(_ context.Context, exe string) (string, error) {

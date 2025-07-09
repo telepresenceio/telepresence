@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/blang/semver/v4"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
@@ -58,8 +58,8 @@ type state struct {
 	Config
 	ftpPort          uint16
 	sftpPort         uint16
-	dialWatchers     *xsync.MapOf[tunnel.SessionID, chan *manager.DialRequest]
-	awaitingForwards *xsync.MapOf[tunnel.SessionID, *xsync.MapOf[tunnel.ConnID, *awaitingForward]]
+	dialWatchers     *xsync.Map[tunnel.SessionID, chan *manager.DialRequest]
+	awaitingForwards *xsync.Map[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]]
 
 	// The sessionInfo and manager client are needed when forwarders establish their
 	// tunnel to the traffic-manager.
@@ -93,8 +93,8 @@ func NewState(config Config) State {
 	return &state{
 		Config:           config,
 		containerStates:  make(map[string]ContainerState),
-		dialWatchers:     xsync.NewMapOf[tunnel.SessionID, chan *manager.DialRequest](),
-		awaitingForwards: xsync.NewMapOf[tunnel.SessionID, *xsync.MapOf[tunnel.ConnID, *awaitingForward]](),
+		dialWatchers:     xsync.NewMap[tunnel.SessionID, chan *manager.DialRequest](),
+		awaitingForwards: xsync.NewMap[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]](),
 	}
 }
 

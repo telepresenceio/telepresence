@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -73,7 +73,7 @@ type Server struct {
 	ctx          context.Context // necessary to make logging work in ServeDNS function
 	fallbackPool FallbackPool
 	requestCount int64
-	cache        *xsync.MapOf[cacheKey, *cacheEntry]
+	cache        *xsync.Map[cacheKey, *cacheEntry]
 	recursive    int32 // one of the recursionXXX constants declared above (unique type avoided because it just gets messy with the atomic calls)
 
 	// Suffixes to immediately drop from the query before processing. This list will always contain the tel2Search domain.
@@ -158,7 +158,7 @@ func NewServer(config *client.DNS, clusterLookup Resolver) *Server {
 	return &Server{
 		DNS:            *config,
 		mappingsMap:    mappingsMap(config.Mappings),
-		cache:          xsync.NewMapOf[cacheKey, *cacheEntry](),
+		cache:          xsync.NewMap[cacheKey, *cacheEntry](),
 		routes:         make(map[string]struct{}),
 		domains:        make(map[string]struct{}),
 		dropSuffixes:   []string{tel2SubDomainDot},

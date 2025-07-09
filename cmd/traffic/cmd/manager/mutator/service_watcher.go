@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/puzpuzpuz/xsync/v4"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
@@ -46,7 +47,7 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Serv
 	}
 
 	var affected []affectedConfig
-	c.agentConfigs.Compute(svc.Namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, bool) {
+	c.agentConfigs.Compute(svc.Namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, xsync.ComputeOp) {
 		if loaded {
 			for _, scx := range sceMap {
 				if wl, err, ok := references(scx.AgentConfig()); ok {
@@ -54,7 +55,7 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Serv
 				}
 			}
 		}
-		return sceMap, !loaded
+		return nil, xsync.CancelOp
 	})
 	return affected
 }

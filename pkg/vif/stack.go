@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
@@ -238,8 +241,16 @@ func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, stre
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := streamCreator(ctx, id)
 	if err != nil {
-		dlog.Errorf(ctx, "forward %s: %v", id, err)
 		cancel()
+		switch status.Code(err) {
+		case codes.Unavailable:
+			if strings.HasSuffix(err.Error(), "reading from server: EOF") {
+				return
+			}
+		case codes.Canceled, codes.Aborted:
+			return
+		}
+		dlog.Errorf(ctx, "forward %s: %v", id, err)
 		return
 	}
 	ep := tunnel.NewConnEndpoint(stream, conn, cancel, nil, nil)

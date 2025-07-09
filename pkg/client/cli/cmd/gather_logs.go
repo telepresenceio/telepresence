@@ -117,9 +117,9 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 		return errcat.User.New("output file must end in .zip")
 	}
 
-	// Create a temporary directory where we will store the logs before we zip
-	// them for export
-	exportDir, err := os.MkdirTemp("", "logexp-")
+	// We will store the logs in a temp dir in the users log directory before we zip them for export, so that
+	// containerized daemons will use the same place.
+	exportDir, err := os.MkdirTemp(filelocation.AppUserCacheDir(ctx), "logs-*")
 	if err != nil {
 		return errcat.User.New(err)
 	}
@@ -271,7 +271,7 @@ func (gl *gatherLogsCommand) gatherClusterLogs(ctx context.Context, exportDir st
 		TrafficManager: gl.trafficManager,
 		Agents:         gl.trafficAgents,
 		GetPodYaml:     gl.podYaml,
-		ExportDir:      exportDir,
+		ExportDir:      filepath.Base(exportDir),
 	}
 	userD := daemon.GetUserClient(ctx)
 	if userD != nil {

@@ -18,7 +18,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/google/uuid"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -115,7 +115,7 @@ type session struct {
 	workloadSubscribers map[uuid.UUID]chan struct{}
 
 	// currentIngests is tracks the ingests that are active in this session.
-	currentIngests *xsync.MapOf[ingestKey, *ingest]
+	currentIngests *xsync.Map[ingestKey, *ingest]
 
 	ingestTracker *podAccessTracker
 
@@ -347,7 +347,8 @@ func connectMgr(
 	installID string,
 	cr *rpc.ConnectRequest,
 ) (*session, error) {
-	tos := client.GetConfig(longLivedCtx).Timeouts()
+	cfg := client.GetConfig(longLivedCtx)
+	tos := cfg.Timeouts()
 
 	ctx, cancel := tos.TimeoutContext(longLivedCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
@@ -361,6 +362,12 @@ func connectMgr(
 	conn, mClient, vi, err := k8sclient.ConnectToManager(longLivedCtx, ctx, mgrNs)
 	if err != nil {
 		return nil, err
+	}
+	if sdc := cfg.Grpc().SimulateDisconnect; sdc > 0 {
+		time.AfterFunc(sdc, func() {
+			dlog.Info(ctx, "Simulated disconnect from manager")
+			conn.Close()
+		})
 	}
 	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
 	if err != nil {
@@ -426,7 +433,6 @@ func connectMgr(
 	}
 
 	var opts []grpc.CallOption
-	cfg := client.GetConfig(ctx)
 	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 		opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
 	}
@@ -448,7 +454,7 @@ func connectMgr(
 		managerName:        managerName,
 		managerVersion:     managerVersion,
 		sessionInfo:        si,
-		currentIngests:     xsync.NewMapOf[ingestKey, *ingest](),
+		currentIngests:     xsync.NewMap[ingestKey, *ingest](),
 		ingestTracker:      newPodAccessTracker(),
 		workloads:          make(map[string]map[workloadInfoKey]workloadInfo),
 		interceptWaiters:   make(map[string]*awaitIntercept),
@@ -775,7 +781,7 @@ nextIs:
 var ErrSessionExpired = errors.New("session expired")
 
 func (s *session) remainLoop(c context.Context) error {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer func() {
 		ticker.Stop()
 		c = dcontext.WithoutCancel(c)

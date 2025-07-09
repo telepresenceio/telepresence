@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
-	"math"
 	"net/netip"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"slices"
@@ -18,9 +17,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/errdefs"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -29,9 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
-	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -93,13 +88,12 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 		}
 	}()
 
-	errRdr, errWrt := io.Pipe()
-	procCtx = dos.WithStderr(procCtx, errWrt)
-	outRdr, outWrt := io.Pipe()
-	procCtx = dos.WithStdout(procCtx, outWrt)
-
 	w := s.start(procCtx, envFile, runFlags, args)
 	if w.err == nil {
+		if w.cmd == nil {
+			// Container already exited
+			return nil
+		}
 		w.err = ud.AddHandler(ctx, s.Environment["TELEPRESENCE_INTERCEPT_ID"], w.cmd, w.cni.Name)
 		progress.Write(ctx, progress.StartedEvent(s.ContainerName))
 	} else if !errors.Is(w.err, fs.ErrNotExist) {
@@ -108,13 +102,6 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 
 	// Can't have the progress monitor running and show process output at the same time.
 	progress.Stop(ctx)
-
-	go func() {
-		_, _ = io.Copy(dos.Stdout(ctx), outRdr)
-	}()
-	go func() {
-		_, _ = io.Copy(dos.Stderr(ctx), errRdr)
-	}()
 
 	if err = w.wait(procCtx); err != nil {
 		return err
@@ -164,7 +151,6 @@ func (s *Runner) adjustMounts(ctx context.Context, runFlags *RunFlags, args []st
 
 func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, args []string) *waiter {
 	ourArgs := []string{
-		"run",
 		"--env-file", envFile,
 	}
 	w := &waiter{}
@@ -173,12 +159,6 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 	if s.Debug {
 		ourArgs = append(ourArgs, "--security-opt", "apparmor=unconfined", "--cap-add", "SYS_PTRACE")
 	}
-	cidFileName, err := ioutil.CreateTempName("", "docker-run*.cid")
-	if err != nil {
-		w.err = err
-		return w
-	}
-	ourArgs = append(ourArgs, "--cidfile", cidFileName)
 
 	// "--rm" is mandatory when using --docker-run, because without it, the name cannot be reused and
 	// the volumes cannot be removed.
@@ -198,7 +178,6 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 
 	hasRemoteMounts := false
 	ud := daemon.GetUserClient(ctx)
-	var nwName string
 	if !ud.Containerized() {
 		// The process is containerized but the user daemon runs on the host
 		for path, policy := range mounts {
@@ -215,15 +194,6 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 		}
 		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
 	} else {
-		var dns netip.Addr
-		dns, nwName, w.err = GetDaemonContainerNetworkInfo(ctx)
-		if w.err != nil {
-			return w
-		}
-		ourArgs = append(ourArgs, "--dns", dns.String())
-		if nwName != "" {
-			ourArgs = append(ourArgs, "--network", nwName)
-		}
 		maps.DeleteFunc(mounts, func(s string, policy types.MountPolicy) bool {
 			return policy == types.MountPolicyIgnore || policy == types.MountPolicyLocal
 		})
@@ -252,62 +222,12 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 	}
 
 	args = append(ourArgs, args...)
-	w.cmd = proc.CommandStd(ctx, nil, Exe, args...)
-	proc.CreateNewProcessGroup(w.cmd.Cmd)
-	w.err = proc.StartCmd(ctx, w.cmd)
-	if w.err != nil {
-		return w
-	}
-
-	var containerID string
-	containerID, err = ReadContainerID(ctx, cidFileName)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			dlog.Error(ctx, err)
-		}
-		// Container didn't start. The reason is returned by the waiter.
-		w.err = w.cmd.Wait()
-		return w
-	}
-	w.cni, w.err = docker.GetContainerInfo(ctx, containerID, nwName)
+	w.cni, w.cmd, w.err = docker.Start(ctx, ud.Containerized(), args...)
 	return w
 }
 
-func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, networkName string, err error) {
-	ud := daemon.GetUserClient(ctx)
-	info := ud.DaemonInfo()
-	status, err := ud.Status(ctx, &empty.Empty{})
-	if err != nil {
-		return dns, "", err
-	}
-
-	rootCfg, err := daemon.GetRootClientConfig(status.DaemonStatus)
-	if err != nil {
-		return dns, "", err
-	}
-
-	if len(rootCfg.Routing().Subnets) > 0 {
-		xi, err := docker.GetContainerInfo(ctx, info.ContainerID, info.Name)
-		if err == nil {
-			dns = xi.IP
-		} else {
-			dns = rootCfg.DNS().VIFAddress.Addr()
-		}
-		networkName = info.Name
-	} else {
-		// The daemon doesn't route any subnets because it found that the container already had access
-		// to the cluster resources. It's then assumed that other containers will have that too.
-		// This means that:
-		//
-		//   1. This container will find the IP of the daemon container using the default bridge network.
-		//   2. The IP of the daemon container can act as the DNS IP.
-		dns = info.ContainerIP
-	}
-	return dns, networkName, nil
-}
-
 type waiter struct {
-	cmd *dexec.Cmd
+	cmd *exec.Cmd
 
 	// Info about the running container
 	cni *docker.ContainerInfo
@@ -326,11 +246,6 @@ func (w *waiter) wait(ctx context.Context) error {
 		dlog.Error(ctx, w.err)
 		return errcat.NoDaemonLogs.New(w.err)
 	}
-
-	killTimer := time.AfterFunc(math.MaxInt64, func() {
-		_ = w.cmd.Process.Kill()
-	})
-	defer killTimer.Stop()
 
 	var exited, signalled atomic.Bool
 	volNames := make([]string, len(w.volumes))
@@ -366,7 +281,7 @@ func EnsureStopContainer(ctx context.Context, name, containerID string, volumes 
 	if len(volumes) > 0 {
 		defer func() {
 			time.Sleep(200 * time.Millisecond)
-			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
 			docker.RemoveVolumes(ctx, volumes)
 		}()

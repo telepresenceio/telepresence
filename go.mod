@@ -29,7 +29,7 @@ require (
 	github.com/morikuni/aec v1.0.0
 	github.com/pkg/sftp v1.13.9
 	github.com/prometheus/client_golang v1.22.0
-	github.com/puzpuzpuz/xsync/v3 v3.5.1
+	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/sirupsen/logrus v1.9.3
@@ -37,9 +37,9 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
-	github.com/telepresenceio/go-fuseftp v0.6.6
-	github.com/telepresenceio/go-fuseftp/rpc v0.6.6
-	github.com/telepresenceio/telepresence/rpc/v2 v2.23.0
+	github.com/telepresenceio/go-fuseftp v0.6.7
+	github.com/telepresenceio/go-fuseftp/rpc v0.6.7
+	github.com/telepresenceio/telepresence/rpc/v2 v2.23.3
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/net v0.41.0
 	golang.org/x/sys v0.33.0

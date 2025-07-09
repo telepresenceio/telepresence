@@ -119,9 +119,11 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 
 	ourIdx := int(rt.device.Index())
 	ourName := rt.device.Name()
+
 	var staticRoutes []routing.Route
+	const linux = runtime.GOOS == "linux"
 	for _, sn := range added {
-		if sn.IsSingleIP() {
+		if linux && sn.IsSingleIP() {
 			staticRoutes = append(staticRoutes, routing.NewRoute(sn, ourIdx, ourName))
 			continue
 		}
@@ -132,7 +134,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 			continue
 		}
 
-		if runtime.GOOS == "linux" {
+		if linux {
 			// On linux, we use static routes for conflicting subnets, because those subnets will then belong
 			// to our own routing table.
 			if slices.ContainsFunc(rt.whitelistedSubnets, func(r netip.Prefix) bool { return r.Overlaps(sn) }) {

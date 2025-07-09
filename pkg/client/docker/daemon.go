@@ -24,6 +24,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -147,6 +148,42 @@ type ContainerInfo struct {
 	Name string
 	Pid  int
 	IP   netip.Addr
+}
+
+// GetDaemonContainerNetworkInfo checks if the daemon VIF routes any subnets. If it does, then the DNS IP
+// assigned to the VIF and the network name of the teleroute network is returned. Otherwise, the method
+// returns the daemon's IP on the default bridge as the DNS address and an empty string as the network name.
+func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, networkName string, err error) {
+	ud := daemon.GetUserClient(ctx)
+	info := ud.DaemonInfo()
+	status, err := ud.Status(ctx, &empty.Empty{})
+	if err != nil {
+		return dns, "", err
+	}
+
+	rootCfg, err := daemon.GetRootClientConfig(status.DaemonStatus)
+	if err != nil {
+		return dns, "", err
+	}
+
+	if len(rootCfg.Routing().Subnets) > 0 {
+		xi, err := GetContainerInfo(ctx, info.ContainerID, info.Name)
+		if err == nil {
+			dns = xi.IP
+		} else {
+			dns = rootCfg.DNS().VIFAddress.Addr()
+		}
+		networkName = info.Name
+	} else {
+		// The daemon doesn't route any subnets because it found that the container already had access
+		// to the cluster resources. It's then assumed that other containers will have that too.
+		// This means that:
+		//
+		//   1. The IP of the daemon container is the one assigned to the default bridge network.
+		//   2. The IP of the daemon container can act as the DNS IP.
+		dns = info.ContainerIP
+	}
+	return dns, networkName, nil
 }
 
 // GetContainerInfo returns the name and process ID of the container with the given ID along with its associated IP in the given network.
@@ -643,9 +680,8 @@ func detectKind(ctx context.Context, cns []container.InspectResponse, hostAddrPo
 func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, args []string) (*daemon.Info, error) {
 	stdErr := bytes.Buffer{}
 	stdOut := bytes.Buffer{}
-	dlog.Debug(ctx, shellquote.ShellString("docker", args))
-	cmd := proc.CommandContext(ctx, "docker", args...)
-	cmd.DisableLogging = true
+	dlog.Debug(ctx, shellquote.ShellString(Exe, args))
+	cmd := proc.CommandContext(ctx, Exe, args...)
 	cmd.Stderr = &stdErr
 	cmd.Stdout = &stdOut
 	err := cmd.Run()

@@ -4,7 +4,8 @@ import (
 	"context"
 	"net/netip"
 	"regexp"
-	"sort"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 var (
@@ -30,21 +31,22 @@ func replaceIP(ctx context.Context, provider LocalIPProvider, rx *regexp.Regexp,
 }
 
 func TranslateEnvironmentIPs(ctx context.Context, env map[string]string, provider LocalIPProvider) {
-	ks := make([]string, len(env))
-	i := 0
-	for k := range env {
-		ks[i] = k
-		i++
-	}
-	sort.Strings(ks)
 	if provider.MapsIPv4() {
-		for _, k := range ks {
-			env[k] = replaceIP(ctx, provider, ipV4Rx, env[k])
+		for k, ev := range env {
+			rv := replaceIP(ctx, provider, ipV4Rx, ev)
+			if ev != rv {
+				dlog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
+				env[k] = rv
+			}
 		}
 	}
 	if provider.MapsIPv6() {
-		for _, k := range ks {
-			env[k] = replaceIP(ctx, provider, ipV6Rx, env[k])
+		for k, ev := range env {
+			rv := replaceIP(ctx, provider, ipV6Rx, ev)
+			if ev != rv {
+				dlog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
+				env[k] = rv
+			}
 		}
 	}
 }

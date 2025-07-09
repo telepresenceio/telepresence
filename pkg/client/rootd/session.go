@@ -20,7 +20,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	dns2 "github.com/miekg/dns"
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -141,14 +141,14 @@ type Session struct {
 	allowConflictingSubnets []netip.Prefix
 
 	// localTranslationTable maps an IP returned by the cluster's DNS to a virtual IP created by this server.
-	localTranslationTable *xsync.MapOf[netip.Addr, netip.Addr]
+	localTranslationTable *xsync.Map[netip.Addr, netip.Addr]
 
 	// IP addresses that the cluster's DNS resolves that are contained in one of the subnets in this
 	// slice are translated to a virtual IP (cached in the localTranslationTable)
 	localTranslationSubnets []agentSubnet
 
 	// virtualIPs maps a virtual IP to an agent tunnel.
-	virtualIPs *xsync.MapOf[netip.Addr, agentVIP]
+	virtualIPs *xsync.Map[netip.Addr, agentVIP]
 
 	// vipGenerator generates virtual IPs for a given range.
 	vipGenerator vip.Generator
@@ -370,8 +370,8 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		done:                  make(chan struct{}),
 		routesCh:              make(chan []netip.Prefix, 2),
 		podDaemon:             isPodDaemon,
-		localTranslationTable: xsync.NewMapOf[netip.Addr, netip.Addr](),
-		virtualIPs:            xsync.NewMapOf[netip.Addr, agentVIP](),
+		localTranslationTable: xsync.NewMap[netip.Addr, netip.Addr](),
+		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
 	}
 	cfg := client.GetConfig(c)
 	rt := cfg.Routing()
@@ -450,12 +450,9 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 	return answer, rCode, err
 }
 
-func (s *Session) GetLocalIP(ctx context.Context, destinationIP netip.Addr) (netip.Addr, error) {
+func (s *Session) GetLocalIP(_ context.Context, destinationIP netip.Addr) (netip.Addr, error) {
 	var err error
-	va, ok := s.localTranslationTable.Compute(destinationIP, func(existing netip.Addr, loaded bool) (netip.Addr, bool) {
-		if loaded {
-			return existing, false
-		}
+	va, _ := s.localTranslationTable.LoadOrCompute(destinationIP, func() (netip.Addr, bool) {
 		for _, sn := range s.localTranslationSubnets {
 			if sn.Contains(destinationIP) {
 				var nip netip.Addr
@@ -465,8 +462,7 @@ func (s *Session) GetLocalIP(ctx context.Context, destinationIP netip.Addr) (net
 		}
 		return netip.Addr{}, true
 	})
-	if ok {
-		dlog.Debugf(ctx, "using VIP %q for resolved IP %q", va, destinationIP)
+	if err == nil && va.IsValid() {
 		destinationIP = va
 	}
 	return destinationIP, err
@@ -1164,19 +1160,13 @@ func (s *Session) stop(c context.Context) {
 		// Session already stopped (or is stopping)
 		return
 	}
-	if s.clientConn != nil {
-		dlog.Debug(c, "Closing port-forward to traffic-manager")
-		_ = s.clientConn.Close()
-	}
-
 	dlog.Debug(c, "Bringing down TUN-device")
 
 	scout.Report(c, "incluster_dns_queries",
 		scout.Entry{Key: "total", Value: s.dnsLookups},
 		scout.Entry{Key: "failures", Value: s.dnsFailures})
 
-	cc, cancel := context.WithTimeout(c, time.Second)
-	defer cancel()
+	cc, cancel := context.WithTimeout(context.WithoutCancel(c), time.Second)
 	go func() {
 		s.handlers.CloseAll(cc)
 		cancel()
@@ -1184,8 +1174,19 @@ func (s *Session) stop(c context.Context) {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
+	if s.clientConn != nil {
+		dlog.Debug(c, "Closing port-forward to traffic-manager")
+		// Avoid sporadic hang when the client connection is torn down.
+		cc, cancel = context.WithTimeout(context.WithoutCancel(c), time.Second)
+		go func() {
+			_ = s.clientConn.Close()
+			cancel()
+		}()
+		<-cc.Done()
+	}
+
 	if s.tunVif != nil {
-		cc, cancel := context.WithTimeout(context.WithoutCancel(c), 1*time.Second)
+		cc, cancel = context.WithTimeout(context.WithoutCancel(c), time.Second)
 		defer cancel()
 		if err := s.tunVif.Close(cc); err != nil {
 			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)

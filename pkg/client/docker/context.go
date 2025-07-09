@@ -22,7 +22,7 @@ func (h *clientHandle) getClient(ctx context.Context) (*client.Client, error) {
 	h.Lock()
 	defer h.Unlock()
 	if h.cli == nil {
-		cmd := proc.CommandContext(ctx, "docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
+		cmd := proc.CommandContext(ctx, Exe, "context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
 		stdout, err := proc.CaptureErr(cmd)
 		opts := []client.Opt{client.FromEnv, client.WithAPIVersionNegotiation()}
 		if err != nil {

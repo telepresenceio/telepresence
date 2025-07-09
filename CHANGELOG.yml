@@ -24,6 +24,81 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.3
+    date: 2025-07-07
+    notes:
+      - type: bugfix
+        title: Fix tunnel channel reuse in traffic-agent to prevent connection failures
+        body: >-
+          Previously, when a tunnel became active, the map maintained by the traffic-agent containing channel values for
+          agent-to-client tunnels wasn't cleared. This resulted in closed channels remaining in the map. When port
+          numbers were eventually reused, these stale entries would be discovered and their closed channels would cause
+          immediate stream termination, leading to data loss.
+      - type: bugfix
+        title: The -p flags would have no effect in combination with --docker-run
+        body: |-
+          When using `telepresence <engage> --docker-run` with a `-p <port spec>` flag, the Docker driver silently
+          ignored the port specification. This occurred because the `--network=<teleroute network>` flag disabled both
+          additional network directives and the default bridge network (which is normally used when no network is
+          specified). This has been resolved by:
+
+          1. Adding the teleroute network after container creation instead of using a flag
+          2. Replacing the single `docker run` command with a sequence of:
+             - `docker create`
+             - Network addition
+             - `docker start`
+      - type: bugfix
+        title: Requests lost when using wiretap
+        body: >-
+          Wiretap connection `Close` and `Write` could sometimes be out of sync, so that the `Close` would be executed
+          before the `Write`, causing a "read/write on closed pipe" error and loss of data.
+  - version: 2.23.2
+    date: 2025-06-27
+    notes:
+      - type: bugfix
+        title: Adding an alsoProxy subnet with 32-bit mask no longer works on macOS
+        body: >-
+          Routing improvements introduced in 2.23.0 surfaced a problem when using special handling of submets with
+          32-bit masks. The special handling now causes problems on macOS. The logic is now conditioned to only run
+          under linux since it's no longer needed on other operating systems.
+      - type: bugfix
+        title: The gather-logs command produces no cluster-side logs when connected with --docker
+        body: >-
+          The `telepresence gather-logs` command did not include cluster-side logs when connected using `--docker`,
+          because it tried to store such logs in a temporary directory created by the CLI. The directory was not mounted
+          in the daemon container. This is now changed so that the temporary directory is created under the users
+          cache directory, which is guaranteed to be mounted on the container.
+      - type: bugfix
+        title: Docker volume mounts failing when connected using both --docker --proxy-via flags
+        body: >-
+          The volume mounter would fail when doing a `telepresence connect --docker --proxy-via all=<workload>` followed
+          by an intercept using `--docker-run`, because the bridge that the daemon created would try to access the
+          intercepted pod using its proxied IP. Now, the bridge will instead use the pod's real IP.
+  - version: 2.23.1
+    date: 2025-06-24
+    notes:
+      - type: feature
+        title: New telepresence helm version command.
+        body: >-
+          The new `telepresence helm version` command prints the version of the helm client that is embedded in the
+          telepresence binary.
+      - type: bugfix
+        title: Engagement disconnects after certain amount of time
+        body: |-
+          The configuration parameter `connectionTTL`, controlling how long a client could be completely idle before
+          the traffic-manager or traffic-agent would consider it dead and disconnect (default 24 hours), had no effect.
+          Instead, an engagement would disconnect after 2 hours (the default gRPC `keepAlive.Time` duration). The
+          default of 24 hours is now reinstated.
+          
+          The Helm value `client.connectionTTL` was moved to `grpc.connectionTTL` because it is a server configuration.
+          The old value will still work, but it is deprecated and will be removed eventually.
+        docs: https://github.com/telepresenceio/telepresence/issues/3861
+      - type: bugfix
+        title: Telepresence breaks if config.yml exists but is empty
+        body: >-
+          Telepresence would refuse to connect with a misleading error if the `config.yml` file containing the client's
+          configuration parameters existed but was empty.
+        docs: https://github.com/telepresenceio/telepresence/issues/3887
   - version: 2.23.0
     date: 2025-06-17
     notes:
@@ -133,7 +208,7 @@ items:
           and was therefore not found by the CLI and the user daemon. The location will henceforth always be based on the
           `%USERDATA` of the CLI user.
         docs: https://github.com/telepresenceio/telepresence/issues/3875
-      - type: bugfix 
+      - type: bugfix
         title: Telepresence DNS Fallback stripping CNAME information from DNS Records.
         body: >-
           The fallback DNS server used on Linux systems without a systemd.resolved configuration, would assume that

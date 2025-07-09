@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -70,10 +70,9 @@ func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.C
 	go func() {
 		<-ctx.Done()
 		tc := atomic.LoadInt32(&ac.tunnelCount)
-		if tc > 0 {
-			atomic.CompareAndSwapInt32(&ac.tunnelCount, tc, tc-1)
+		if tc > 0 && atomic.CompareAndSwapInt32(&ac.tunnelCount, tc, tc-1) {
+			dlog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), tc-1)
 		}
-		dlog.Debugf(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), atomic.LoadInt32(&ac.tunnelCount))
 	}()
 	atomic.StoreInt64(&ac.lastActive, time.Now().UnixNano())
 	return tc, nil
@@ -257,20 +256,20 @@ type Clients interface {
 
 type clients struct {
 	session   *manager.SessionInfo
-	clients   *xsync.MapOf[string, *client]
-	ipWaiters *xsync.MapOf[netip.Addr, chan struct{}]
-	wlWaiters *xsync.MapOf[string, chan struct{}]
-	proxyVias *xsync.MapOf[string, struct{}]
+	clients   *xsync.Map[string, *client]
+	ipWaiters *xsync.Map[netip.Addr, chan struct{}]
+	wlWaiters *xsync.Map[string, chan struct{}]
+	proxyVias *xsync.Map[string, struct{}]
 	disabled  atomic.Bool
 }
 
 func NewClients(session *manager.SessionInfo) Clients {
 	return &clients{
 		session:   session,
-		clients:   xsync.NewMapOf[string, *client](),
-		ipWaiters: xsync.NewMapOf[netip.Addr, chan struct{}](),
-		wlWaiters: xsync.NewMapOf[string, chan struct{}](),
-		proxyVias: xsync.NewMapOf[string, struct{}](),
+		clients:   xsync.NewMap[string, *client](),
+		ipWaiters: xsync.NewMap[netip.Addr, chan struct{}](),
+		wlWaiters: xsync.NewMap[string, chan struct{}](),
+		proxyVias: xsync.NewMap[string, struct{}](),
 	}
 }
 
@@ -448,30 +447,29 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip netip
 	if s.disabled.Load() {
 		return nil
 	}
-	waitOn, ok := s.ipWaiters.Compute(ip, func(oldValue chan struct{}, loaded bool) (chan struct{}, bool) {
-		if loaded {
-			return oldValue, false
-		}
-		found := false
+	var cl *client
+	waitOn, _ := s.ipWaiters.LoadOrCompute(ip, func() (chan struct{}, bool) {
 		s.clients.Range(func(k string, ac *client) bool {
 			if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ip == podIP {
-				found = true
+				cl = ac
 				return false
 			}
 			return true
 		})
-		if found {
+		if cl != nil {
 			return nil, true
 		}
 		return make(chan struct{}), false
 	})
-	if ok {
-		if err := s.waitWithTimeout(ctx, timeout, waitOn); err != nil {
-			return err
-		}
+	if cl != nil {
+		_, err := cl.ensureConnect(ctx)
+		return err
 	}
+	if err := s.waitWithTimeout(ctx, timeout, waitOn); err != nil {
+		return err
+	}
+
 	// Ensure that the client we're waiting for is ready.
-	var cl *client
 	s.clients.Range(func(k string, ac *client) bool {
 		if acIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ip == acIP {
 			cl = ac
@@ -492,10 +490,7 @@ func (s *clients) WaitForWorkload(ctx context.Context, timeout time.Duration, na
 	}
 
 	// Create a channel to subscribe to, but only if the agent doesn't already exist.
-	waitOn, ok := s.wlWaiters.Compute(name, func(oldValue chan struct{}, loaded bool) (chan struct{}, bool) {
-		if loaded {
-			return oldValue, false
-		}
+	waitOn, ok := s.wlWaiters.LoadOrCompute(name, func() (chan struct{}, bool) {
 		found := false
 		s.clients.Range(func(k string, ac *client) bool {
 			if ac.info.WorkloadName == name {
@@ -543,12 +538,13 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 	}
 
 	deleteClient := func(k string) {
-		s.clients.Compute(k, func(oldValue *client, loaded bool) (*client, bool) {
+		s.clients.Compute(k, func(oldValue *client, loaded bool) (*client, xsync.ComputeOp) {
 			if loaded {
 				dlog.Debugf(ctx, "Deleting agent %s", k)
 				oldValue.cancel()
+				return nil, xsync.DeleteOp
 			}
-			return nil, true
+			return nil, xsync.CancelOp
 		})
 	}
 
@@ -568,10 +564,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 	}
 
 	addClient := func(k string, ai *manager.AgentPodInfo) {
-		_, _ = s.clients.Compute(k, func(oldValue *client, loaded bool) (*client, bool) {
-			if loaded {
-				return oldValue, false
-			}
+		_, _ = s.clients.LoadOrCompute(k, func() (*client, bool) {
 			ac := &client{
 				session: s.session,
 				remove: func() {

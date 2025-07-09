@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -134,6 +135,12 @@ func ReadLoop(ctx context.Context, s Stream, p *CounterProbe) (<-chan Message, <
 					endReason = "session closed"
 				case codes.Canceled:
 					endReason = err.Error()
+				case codes.Unavailable:
+					if strings.HasSuffix(err.Error(), "reading from server: EOF") {
+						endReason = err.Error()
+						break
+					}
+					fallthrough
 				default:
 					endReason = err.Error()
 					select {
