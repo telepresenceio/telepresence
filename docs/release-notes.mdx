@@ -9,7 +9,13 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.23.4
 <Note>
-	<Title type="bugfix">Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)</Title>
+	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/3908">DNS server does not respect semicolons as comments in resolv.conf files</Title>
+	<Body>
+Telepresence does not work correctly if `/etc/resolv.conf` contains semicolons, which are valid comments as of [linux manpage](https://man7.org/linux/man-pages/man5/resolv.conf.5.html).
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix" docs="reference/config#DNS">Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)</Title>
 	<Body>
 A DNS for a single label name that fails in a minikube - or another type of local cluster - will sometimes result in a recursive lookup on the host. Without any type of recursion detection, this lookup will timeout waiting for itself. Previously, this resulted in a `SERVFAIL` from the cluster DNS, which triggered renewed lookup attempts that never stopped. This is now changed so that the same type of timeouts instead results in an `NXDOMAIN` error that doesn't trigger renewed attempts.
 Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.

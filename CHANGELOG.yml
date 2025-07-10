@@ -28,6 +28,12 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: DNS server does not respect semicolons as comments in resolv.conf files
+        body: >-
+          Telepresence does not work correctly if `/etc/resolv.conf` contains semicolons, which are valid comments as of
+          [linux manpage](https://man7.org/linux/man-pages/man5/resolv.conf.5.html).
+        docs: https://github.com/telepresenceio/telepresence/issues/3908
+      - type: bugfix
         title: Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)
         body: >-
           A DNS for a single label name that fails in a minikube - or another type of local cluster - will sometimes
@@ -37,6 +43,7 @@ items:
           in an `NXDOMAIN` error that doesn't trigger renewed attempts.
   
           Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.
+        docs: reference/config#DNS
   - version: 2.23.3
     date: 2025-07-07
     notes:
