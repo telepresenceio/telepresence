@@ -33,7 +33,7 @@ const (
 	MountPolicyIgnore
 )
 
-var mountPolicyNames = []string{"Remote", "RemoteReadonly", "Local", "Ignore"} //nolint:gochecknoglobals // constant
+var mountPolicyNames = []string{"Remote", "RemoteReadOnly", "Local", "Ignore"} //nolint:gochecknoglobals // constant
 
 func (mp MountPolicy) String() string {
 	if mp >= 0 && int(mp) < len(mountPolicyNames) {
