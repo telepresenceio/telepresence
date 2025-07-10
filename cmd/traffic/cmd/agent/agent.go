@@ -252,7 +252,7 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 	ac := s.AgentConfig()
 	gRPCAddress := fmt.Sprintf("%s:%v", ac.ManagerHost, ac.ManagerPort)
 
-	// Don't reconnect more than once every five seconds
+	// Don't reconnect more than every 5s
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 

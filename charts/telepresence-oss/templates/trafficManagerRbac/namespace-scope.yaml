@@ -192,6 +192,7 @@ rules:
     - get
     - list
     - watch
+    - patch
   resourceNames:
     - {{ include "traffic-manager.name" $ }}
 

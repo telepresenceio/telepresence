@@ -66,6 +66,7 @@ type Env struct {
 	AgentSecurityContext      *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,        parser=json-security-context, default="`
 	AgentInitSecurityContext  *core.SecurityContext       `env:"AGENT_INIT_SECURITY_CONTEXT,   parser=json-security-context, default="`
 	AgentInitContainerEnabled bool                        `env:"AGENT_INIT_CONTAINER_ENABLED,  parser=bool, default=true"`
+	AgentMaxIdleTime          time.Duration               `env:"AGENT_MAX_IDLE_TIME,              		parser=time.ParseDuration, default=0"`
 
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`

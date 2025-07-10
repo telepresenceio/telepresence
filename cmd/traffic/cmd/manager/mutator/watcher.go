@@ -2,6 +2,7 @@ package mutator
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -96,7 +97,7 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 
 	for _, wp := range evictMap {
 		wl := wp.wl
-		wls := make(map[workloadKey]agentconfig.SidecarExt, len(wp.pods))
+		wls := make(map[WorkloadKey]agentconfig.SidecarExt, len(wp.pods))
 		podsOfInterest := make([]*core.Pod, 0, len(wp.pods))
 		for _, pod := range wp.pods {
 			cfgJSON, ok := pod.Annotations[annotation.Config]
@@ -109,10 +110,10 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 				continue
 			}
 			ac := sce.AgentConfig()
-			key := workloadKey{
-				name:      ac.WorkloadName,
-				namespace: ac.Namespace,
-				kind:      ac.WorkloadKind,
+			key := WorkloadKey{
+				Name:      ac.WorkloadName,
+				Namespace: ac.Namespace,
+				Kind:      ac.WorkloadKind,
 			}
 			newSce, ok := wls[key]
 			if !ok && managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(ac.WorkloadKind) {
@@ -137,10 +138,14 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 	return nil
 }
 
-type workloadKey struct {
-	name      string
-	namespace string
-	kind      k8sapi.Kind
+type WorkloadKey struct {
+	Name      string
+	Namespace string
+	Kind      k8sapi.Kind
+}
+
+func (workloadKey WorkloadKey) String() string {
+	return fmt.Sprintf("%s.%s.%s", workloadKey.Kind, workloadKey.Name, workloadKey.Namespace)
 }
 
 const (

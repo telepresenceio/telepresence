@@ -26,12 +26,15 @@ const (
 	clientConfigFileName            = "client.yaml"
 	agentEnvConfigFileName          = "agent-env.yaml"
 	namespaceSelectorConfigFileName = "namespace-selector.yaml"
+	AgentStateFileName              = "agent-state.yaml"
 	cfgConfigMapName                = agentconfig.ManagerAppName
 )
 
 type Watcher interface {
 	Run(ctx context.Context) error
 	GetClientConfigYaml(ctx context.Context) []byte
+	GetAgentStateYaml(ctx context.Context) []byte
+	SetAgentStateYaml(ctx context.Context, newAgentStateYAML []byte)
 	GetAgentEnv() AgentEnv
 	SelectorChannel() <-chan *labels.Selector
 
@@ -59,6 +62,7 @@ type config struct {
 	namespace string
 
 	clientYAML        []byte
+	agentStateYAML    []byte
 	agentEnv          AgentEnv
 	namespaceSelector []*labels.Requirement
 	selectorChannel   chan *labels.Selector
@@ -194,6 +198,16 @@ func (c *config) refreshFile(ctx context.Context, mapData map[string]string) {
 		c.selectorChannel <- nil
 		dlog.Debug(ctx, "Cleared namespaceSelector")
 	}
+	if yml, ok := mapData[AgentStateFileName]; ok {
+		data := []byte(yml)
+		if !bytes.Equal(data, c.agentStateYAML) {
+			c.agentStateYAML = data
+			dlog.Debugf(ctx, "Refreshed agent state:\n%s", yml)
+		}
+	} else if len(c.agentStateYAML) > 0 {
+		c.agentStateYAML = nil
+		dlog.Debug(ctx, "Cleared agent state")
+	}
 }
 
 func (c *config) GetAgentEnv() AgentEnv {
@@ -220,4 +234,12 @@ func (c *config) GetClientConfigYaml(ctx context.Context) (ret []byte) {
 		ret = c.clientYAML
 	}
 	return ret
+}
+
+func (c *config) GetAgentStateYaml(ctx context.Context) (ret []byte) {
+	return c.agentStateYAML
+}
+
+func (c *config) SetAgentStateYaml(ctx context.Context, newAgentStateYAML []byte) {
+	c.agentStateYAML = newAgentStateYAML
 }

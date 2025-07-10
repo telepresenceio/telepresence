@@ -30,10 +30,10 @@ type wlPods struct {
 	pods []*core.Pod
 }
 
-type wlPodMap map[workloadKey]*wlPods
+type wlPodMap map[WorkloadKey]*wlPods
 
 func (em wlPodMap) add(wl k8sapi.Workload, pod *core.Pod) {
-	k := workloadKey{kind: wl.GetKind(), name: wl.GetName(), namespace: wl.GetNamespace()}
+	k := WorkloadKey{Kind: wl.GetKind(), Name: wl.GetName(), Namespace: wl.GetNamespace()}
 	if v, ok := em[k]; ok {
 		v.pods = append(v.pods, pod)
 	} else {

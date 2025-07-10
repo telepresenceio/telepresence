@@ -162,6 +162,8 @@ func MainWithEnv(ctx context.Context) (err error) {
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
 
+	g.Go("configmap-updater", mgr.runUpdateTrafficManagerConfigMapLoop)
+
 	// Wait for exit
 	return g.Wait()
 }
@@ -308,6 +310,27 @@ func (s *service) runSessionGCLoop(ctx context.Context) error {
 		select {
 		case <-ticker.C:
 			s.expire(ctx)
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (s *service) runUpdateTrafficManagerConfigMapLoop(ctx context.Context) error {
+	// Loop updating the agentState every 2mins
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			dlog.Tracef(ctx, "runUpdateTrafficManagerConfigMapLoop ticked, need to update configMap: %v", s.tmConfigMapUpdated.Load())
+			if s.tmConfigMapUpdated.Load() {
+				err := s.updateTrafficManagerConfigMap(ctx)
+				if err != nil {
+					dlog.Errorf(ctx, "error in updating traffic manager config map, err: %v", err)
+				}
+			}
 		case <-ctx.Done():
 			return nil
 		}
