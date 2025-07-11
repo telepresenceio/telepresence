@@ -14,7 +14,7 @@ The Helm Chart correctly expects the remote read-only mount policy to be `Remote
 Telepresence does not work correctly if `/etc/resolv.conf` contains semicolons, which are valid comments as of [linux manpage](https://man7.org/linux/man-pages/man5/resolv.conf.5.html).
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)](reference/config#DNS)</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)](reference/config#recursioncheck)</div></div>
 <div style="margin-left: 15px">
 
 A DNS for a single label name that fails in a minikube - or another type of local cluster - will sometimes result in a recursive lookup on the host. Without any type of recursion detection, this lookup will timeout waiting for itself. Previously, this resulted in a `SERVFAIL` from the cluster DNS, which triggered renewed lookup attempts that never stopped. This is now changed so that the same type of timeouts instead results in an `NXDOMAIN` error that doesn't trigger renewed attempts.

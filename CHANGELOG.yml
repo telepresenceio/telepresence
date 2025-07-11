@@ -48,7 +48,7 @@ items:
           in an `NXDOMAIN` error that doesn't trigger renewed attempts.
   
           Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.
-        docs: reference/config#DNS
+        docs: reference/config#recursioncheck
   - version: 2.23.3
     date: 2025-07-07
     notes:
