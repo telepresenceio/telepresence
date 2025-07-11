@@ -92,6 +92,18 @@ The fields for `client.dns` are: `localIP`, `excludeSuffixes`, `includeSuffixes`
 | `excludes`        | Names to be excluded by the DNS resolver                                                                                                                            | `[]`                                        |
 | `mappings`        | Names to be resolved to other names (CNAME records) or to explicit IP addresses                                                                                     | `[]`                                        |
 | `lookupTimeout`   | Maximum time to wait for a cluster side host lookup.                                                                                                                | [duration][go-duration] [string][yaml-str]  | 4 seconds                                          |
+| `recursionCheck`  | Enable DNS lookup recursion detection and avoidance.                                                                                                                | boolean                                     | false                                              |
+
+The `recursionCheck` is useful in situations when the cluster runs locally on the client and might have access to the client's DNS server. This is often the case when using clusters like Minikube or Kind, or have a Docker Desktop with Kubernetes enabled. The scenario is as follows:
+
+1. A request to resolve a name arrives to the Telepresence DNS server.
+2. Telepresence sends this request to the cluster's DNS server.
+3. The cluster's DNS server is unable to resolve a name, and in an attempt to resolve it globally, it sends it to its host.
+4. The host sends the request to the Telepresence DNS server.
+5. Telepresence, already in progress of resolving this name, will wait for the previous attempt to succeed.
+6. The original DNS request times out.
+
+The final timeout is fairly slow. Enabling the `recursionCheck` will make it significantly faster because Telepresence will give up after a short timeout in step 5. The draw-back is that if multiple requests to resolve the same name arrive within a very short period of time, then there's a risk that Telepresence will not be able to distinguish the recursive calls from normal calls and respond with false timeouts.
 
 Here is an example values.yaml:
 ```yaml

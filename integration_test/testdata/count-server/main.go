@@ -1,10 +1,10 @@
 package main
 
 import (
-	"sync/atomic"
 	"fmt"
 	"log"
 	"net/http"
+	"sync/atomic"
 )
 
 func main() {

@@ -24,6 +24,31 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.4
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Typo in client mount-policy "RemoteReadonly" should be "RemoteReadOnly"
+        body: >-
+          The Helm Chart correctly expects the remote read-only mount policy to be `RemoteReadOnly`, but the client
+          expected it to be `RemoteReadonly` (without a leading capital letter in the word "only").
+      - type: bugfix
+        title: DNS server does not respect semicolons as comments in resolv.conf files
+        body: >-
+          Telepresence does not work correctly if `/etc/resolv.conf` contains semicolons, which are valid comments as of
+          [linux manpage](https://man7.org/linux/man-pages/man5/resolv.conf.5.html).
+        docs: https://github.com/telepresenceio/telepresence/issues/3908
+      - type: bugfix
+        title: Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)
+        body: >-
+          A DNS for a single label name that fails in a minikube - or another type of local cluster - will sometimes
+          result in a recursive lookup on the host. Without any type of recursion detection, this lookup will timeout
+          waiting for itself. Previously, this resulted in a `SERVFAIL` from the cluster DNS, which triggered renewed
+          lookup attempts that never stopped. This is now changed so that the same type of timeouts instead results
+          in an `NXDOMAIN` error that doesn't trigger renewed attempts.
+  
+          Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.
+        docs: reference/config#DNS
   - version: 2.23.3
     date: 2025-07-07
     notes:
