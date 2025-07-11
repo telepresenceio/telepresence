@@ -417,8 +417,14 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 	})
 	if err != nil {
 		s.dnsFailures++
-		dlog.Errorf(ctx, "Lookup %s %q: %v", dns2.TypeToString[q.Qtype], q.Name, err)
-		return nil, dns2.RcodeServerFailure, err
+		rCode := dns2.RcodeServerFailure
+		switch {
+		case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled), status.Code(err) == codes.DeadlineExceeded, status.Code(err) == codes.Canceled:
+			rCode = dns2.RcodeNameError
+		default:
+		}
+		dlog.Errorf(ctx, "Lookup %s %q %s: %T %v", dns2.TypeToString[q.Qtype], q.Name, dns2.RcodeToString[rCode], err, err)
+		return nil, rCode, err
 	}
 	answer, rCode, err := dnsproxy.FromRPC(r)
 	if err != nil {

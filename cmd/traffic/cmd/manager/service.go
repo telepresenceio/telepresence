@@ -1072,7 +1072,7 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 	}
 	if err != nil {
 		dlog.Errorf(ctx, "traffic-manager: %s %s -> %s %s", qName, qtn, dns2.RcodeToString[rCode], err)
-		return nil, dns2.RcodeServerFailure
+		return nil, rCode
 	}
 	if len(rrs) == 0 {
 		dlog.Tracef(ctx, "traffic-manager: %s %s -> %s", qName, qtn, dns2.RcodeToString[rCode])

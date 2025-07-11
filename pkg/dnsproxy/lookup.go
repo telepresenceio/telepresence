@@ -148,29 +148,21 @@ func useLookupName(qName, noSearchDomain string) (string, bool) {
 	}
 	dots := 0
 	name := qName[:len(qName)-1]
-	for _, c := range qName {
+	for _, c := range name {
 		if c == '.' {
 			dots++
 		}
 	}
-	switch dots {
-	case 1:
-		// singleton name, it's safe to assume that a search path must be applied
-		return name, true
-	case 2, 3, 4:
-		// might need a search path, or might be a full name.
-		return name, false
-	default:
-		// With > 4 dots, we can safely assume that no search path should be applied
-		return qName, true
-	}
+	// singleton name, it's safe to assume that a search path must be applied
+	// With > 3 dots, we can safely assume that no search path should be applied
+	return name, dots == 0 || dots > 3
 }
 
 func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net.Resolver) ([]net.IP, error) {
 	name, final := useLookupName(qName, noSearchDomain)
 	ips, err := r.LookupIP(ctx, network, name)
 	if err != nil && !final {
-		dlog.Errorf(ctx, "LookupIP failed, trying LookupIP %q", qName)
+		dlog.Errorf(ctx, "LookupIP failed %q failed, trying LookupIP %q", name, qName)
 		ips, err = r.LookupIP(ctx, network, qName)
 	}
 	if err == nil && len(ips) == 0 {
@@ -185,7 +177,12 @@ func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net
 
 func makeError(err error) (RRs, int, error) {
 	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return nil, dns.RcodeNameError, status.Error(codes.DeadlineExceeded, err.Error())
+	case errors.Is(err, context.Canceled):
+		return nil, dns.RcodeNameError, status.Error(codes.Canceled, err.Error())
+	case errors.As(err, &dnsErr):
 		switch {
 		case dnsErr.IsNotFound:
 			return nil, dns.RcodeNameError, nil
@@ -198,24 +195,31 @@ func makeError(err error) (RRs, int, error) {
 	return nil, dns.RcodeServerFailure, status.Error(codes.Internal, err.Error())
 }
 
+//nolint:cyclop // yeah, there are a lot of qTypes
 func Lookup(ctx context.Context, qType uint16, qName, noSearchDomain string) (RRs, int, error) {
 	var answer RRs
 	r := &net.Resolver{StrictErrors: true}
 	switch qType {
-	case dns.TypeA, dns.TypeAAAA:
-		ips, err := lookupIP(ctx, "ip", qName, noSearchDomain, r)
+	case dns.TypeA:
+		ips, err := lookupIP(ctx, "ip4", qName, noSearchDomain, r)
 		if err != nil {
 			return makeError(err)
 		}
 		for _, ip := range ips {
 			if ip4 := ip.To4(); ip4 != nil {
-				if qType == dns.TypeA {
-					answer = append(answer, &dns.A{
-						Hdr: NewHeader(qName, qType),
-						A:   ip4,
-					})
-				}
-			} else if ip16 := ip.To16(); ip16 != nil && qType == dns.TypeAAAA {
+				answer = append(answer, &dns.A{
+					Hdr: NewHeader(qName, qType),
+					A:   ip4,
+				})
+			}
+		}
+	case dns.TypeAAAA:
+		ips, err := lookupIP(ctx, "ip6", qName, noSearchDomain, r)
+		if err != nil {
+			return makeError(err)
+		}
+		for _, ip := range ips {
+			if ip16 := ip.To16(); ip16 != nil {
 				answer = append(answer, &dns.AAAA{
 					Hdr:  NewHeader(qName, qType),
 					AAAA: ip16,

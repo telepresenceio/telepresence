@@ -9,10 +9,10 @@ import (
 	"io"
 	"strings"
 
-	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -71,7 +71,11 @@ func Object(ctx context.Context, obj any, override bool) {
 			}
 
 			if o.format == formatJSONStream {
-				if err := json.MarshalWrite(o.originalStdout, obj, json.Deterministic(true)); err != nil {
+				data, err := client.MarshalJSON(obj)
+				if err == nil {
+					_, err = o.originalStdout.Write(data)
+				}
+				if err != nil {
 					panic(err)
 				}
 			} else {
@@ -143,16 +147,20 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	}
 	switch o.format {
 	case formatJSON:
-		if encErr := json.MarshalWrite(o.originalStdout, obj, json.Deterministic(true)); encErr != nil {
+		data, encErr := client.MarshalJSON(obj)
+		if encErr == nil {
+			_, encErr = o.originalStdout.Write(data)
+		}
+		if encErr != nil {
 			panic(encErr)
 		}
 	case formatYAML:
-		ym, encErr := json.Marshal(obj, json.Deterministic(true))
+		ym, encErr := client.MarshalJSON(obj)
 		if encErr == nil {
 			ym, encErr = yaml.JSONToYAML(ym)
-		}
-		if encErr == nil {
-			_, encErr = o.originalStdout.Write(ym)
+			if encErr == nil {
+				_, encErr = o.originalStdout.Write(ym)
+			}
 		}
 		if encErr != nil {
 			panic(encErr)

@@ -5,7 +5,27 @@
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">add ability to optionally clean up sidecars that have been idle above a specified duration</div></div>
 <div style="margin-left: 15px">
 
-Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control how long a sidecar can be idle before it is cleaned up. The updating of latestEngagementTime is done every 1m in the Remain Call, which is now called every 1min, compared to every 5s in the past. The agent state (containing latestEngagementTime) is updated in memory, and lazily persisted to the traffic-manager configmap every 2min. Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.       
+Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control how long a sidecar can be idle before it is cleaned up. The updating of latestEngagementTime is done every 1m in the Remain Call, which is now called every 1min, compared to every 5s in the past. The agent state (containing latestEngagementTime) is updated in memory, and lazily persisted to the traffic-manager configmap every 2min. Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.
+</div>
+
+## Version 2.23.4
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Typo in client mount-policy "RemoteReadonly" should be "RemoteReadOnly"</div></div>
+<div style="margin-left: 15px">
+
+The Helm Chart correctly expects the remote read-only mount policy to be `RemoteReadOnly`, but the client expected it to be `RemoteReadonly` (without a leading capital letter in the word "only").
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[DNS server does not respect semicolons as comments in resolv.conf files](https://github.com/telepresenceio/telepresence/issues/3908)</div></div>
+<div style="margin-left: 15px">
+
+Telepresence does not work correctly if `/etc/resolv.conf` contains semicolons, which are valid comments as of [linux manpage](https://man7.org/linux/man-pages/man5/resolv.conf.5.html).
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Use NXDOMAIN instead SERVFAIL for DNS recursion errors (timeouts)](reference/config#DNS)</div></div>
+<div style="margin-left: 15px">
+
+A DNS for a single label name that fails in a minikube - or another type of local cluster - will sometimes result in a recursive lookup on the host. Without any type of recursion detection, this lookup will timeout waiting for itself. Previously, this resulted in a `SERVFAIL` from the cluster DNS, which triggered renewed lookup attempts that never stopped. This is now changed so that the same type of timeouts instead results in an `NXDOMAIN` error that doesn't trigger renewed attempts.
+Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.
 </div>
 
 ## Version 2.23.3 <span style="font-size: 16px;">(July  7)</span>
@@ -33,7 +53,7 @@ specified). This has been resolved by:
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Requests lost when using wiretap</div></div>
 <div style="margin-left: 15px">
 
-Wiretap connection `Close` and `Write` could sometimes be out of sync, so that the `Close` would be executed before the `Write`, causing a "read/write on closed pipe" error and loss of data.  
+Wiretap connection `Close` and `Write` could sometimes be out of sync, so that the `Close` would be executed before the `Write`, causing a "read/write on closed pipe" error and loss of data.
 </div>
 
 ## Version 2.23.2 <span style="font-size: 16px;">(June 27)</span>

@@ -7,7 +7,7 @@ toolchain go1.24.0
 require github.com/rinchsan/gosimports v0.3.8
 
 require (
-	golang.org/x/mod v0.25.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/mod v0.26.0 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 )
