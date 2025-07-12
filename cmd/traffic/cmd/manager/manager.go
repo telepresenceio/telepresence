@@ -162,7 +162,11 @@ func MainWithEnv(ctx context.Context) (err error) {
 
 	g.Go("session-gc", mgr.runSessionGCLoop)
 
-	g.Go("configmap-updater", mgr.runUpdateTrafficManagerConfigMapLoop)
+	if managerutil.GetEnv(ctx).AgentMaxIdleTime != 0 {
+		// only start the configmap updater if we set the agent max idle time, as we need to persist the latest agent state to the config map
+		//  otherwise everything else is passively synced which is ok if we don't need to clean up idle agents
+		g.Go("configmap-updater", mgr.runUpdateTrafficManagerConfigMapLoop)
+	}
 
 	// Wait for exit
 	return g.Wait()
