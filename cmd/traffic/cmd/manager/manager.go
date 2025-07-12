@@ -39,15 +39,18 @@ import (
 )
 
 var (
-	DisplayName                   = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
-	NewServiceFunc                = NewService                          //nolint:gochecknoglobals // extension point
-	WithAgentImageRetrieverFunc   = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
-	IncrementInterceptCounterFunc = func(metric *prometheus.CounterVec, client, installId string, spec *rpc.InterceptSpec) {
+	DisplayName                 = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
+	NewServiceFunc              = NewService                          //nolint:gochecknoglobals // extension point
+	WithAgentImageRetrieverFunc = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
+	//nolint:gochecknoglobals // extension point
+	IncrementInterceptCounterFunc = func(ctx context.Context, metric *prometheus.CounterVec, client, installId string, spec *rpc.InterceptSpec) {
 		if metric != nil {
 			labels := prometheus.Labels{
-				"client":         client,
 				"install_id":     installId,
 				"intercept_type": "global",
+			}
+			if !managerutil.GetEnv(ctx).PrometheusDropClientLabel {
+				labels["client"] = client
 			}
 
 			metric.With(labels).Inc()
@@ -200,17 +203,24 @@ func newGaugeVecFunc(n, h string, labels []string) *prometheus.GaugeVec {
 	return gaugeVec
 }
 
-func IncrementCounter(metric *prometheus.CounterVec, client, installId string) {
+func IncrementCounter(ctx context.Context, metric *prometheus.CounterVec, client, installId string) {
 	if metric != nil {
-		metric.With(prometheus.Labels{"client": client, "install_id": installId}).Inc()
+		labels := prometheus.Labels{"install_id": installId}
+		if !managerutil.GetEnv(ctx).PrometheusDropClientLabel {
+			labels["client"] = client
+		}
+		metric.With(labels).Inc()
 	}
 }
 
-func SetGauge(metric *prometheus.GaugeVec, client, installId string, workload *string, value float64) {
+func SetGauge(ctx context.Context, metric *prometheus.GaugeVec, client, installId string, workload *string, value float64) {
 	if metric != nil {
 		labels := prometheus.Labels{
-			"client":     client,
 			"install_id": installId,
+		}
+
+		if !managerutil.GetEnv(ctx).PrometheusDropClientLabel {
+			labels["client"] = client
 		}
 
 		if workload != nil {
@@ -244,7 +254,10 @@ func (s *service) servePrometheus(ctx context.Context) error {
 		return int(atomic.LoadInt32(&s.activeGrpcRequests))
 	})
 
-	labels := []string{"client", "install_id"}
+	labels := []string{"install_id"}
+	if !managerutil.GetEnv(ctx).PrometheusDropClientLabel {
+		labels = append(labels, "client")
+	}
 	s.state.SetPrometheusMetrics(
 		newCounterVecFunc("connect_count", "The total number of connects by user", labels),
 		newGaugeVecFunc("connect_active_status", "Flag to indicate when a connect is active. 1 for active, 0 for not active.", labels),
@@ -254,11 +267,11 @@ func (s *service) servePrometheus(ctx context.Context) error {
 	)
 
 	s.state.SetAllClientSessionsFinalizer(func(client *state.ClientSession) {
-		SetGauge(s.state.GetConnectActiveStatus(), client.Name, client.InstallId, nil, 0)
+		SetGauge(ctx, s.state.GetConnectActiveStatus(), client.Name, client.InstallId, nil, 0)
 	})
 
 	s.state.SetAllInterceptsFinalizer(func(client *state.ClientSession, workload *string) {
-		SetGauge(s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, workload, 0)
+		SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, workload, 0)
 	})
 
 	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
