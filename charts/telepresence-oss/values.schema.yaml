@@ -470,6 +470,9 @@ properties:
       port:
         description: Set this port number to enable a prometheus metrics http server for the traffic manager
         type: integer
+      dropClientLabel:
+        description: optionally drop the client label from prometheus metrics for GDPR personal data compliance
+        type: boolean
 
   rbac:
     type: object
