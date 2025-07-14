@@ -192,16 +192,16 @@ spec:
             value: {{ toJson . | quote }}
           {{- end }}
       {{- end }}
-          {{- with .prometheus }}
-            {{- if .port }}  # 0 is false
-            - name: PROMETHEUS_PORT
-              value: "{{ .port }}"
-            {{- end }}
-            {{- if .dropClientLabel }}  
-            - name: PROMETHEUS_DROP_CLIENT_LABEL
-              value: "{{ .dropClientLabel }}"
-            {{- end }}
+        {{- with .prometheus }}
+          {{- if .port }}  # 0 is false
+          - name: PROMETHEUS_PORT
+            value: "{{ .port }}"
           {{- end }}
+          {{- if .dropClientLabel }}
+          - name: PROMETHEUS_DROP_CLIENT_LABEL
+            value: "{{ .dropClientLabel }}"
+          {{- end }}
+        {{- end }}
           - name: MAX_NAMESPACE_SPECIFIC_WATCHERS
             value: {{.maxNamespaceSpecificWatchers | quote }}
           - name: MANAGER_NAMESPACE
