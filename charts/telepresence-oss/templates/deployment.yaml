@@ -184,7 +184,7 @@ spec:
           {{- end }}
           {{- with fromJsonArray (include "traffic-manager.namespaces" $) }}
           {{- /*
-           This environment variable is not used, it's here to force a redeploy of the traffic manager when the list
+           This environment variable is not used, it is here to force a redeploy of the traffic manager when the list
            changes, because it updates roles and rolebindings and potentially also changes from roles to clusterroles or
            vice versa.
            */}}
@@ -192,9 +192,15 @@ spec:
             value: {{ toJson . | quote }}
           {{- end }}
       {{- end }}
-          {{- if .prometheus.port }}  # 0 is false
-          - name: PROMETHEUS_PORT
-            value: "{{ .prometheus.port }}"
+          {{- with .prometheus }}
+            {{- if .port }}  # 0 is false
+            - name: PROMETHEUS_PORT
+              value: "{{ .port }}"
+            {{- end }}
+            {{- if .dropClientLabel }}  
+            - name: PROMETHEUS_DROP_CLIENT_LABEL
+              value: "{{ .dropClientLabel }}"
+            {{- end }}
           {{- end }}
           - name: MAX_NAMESPACE_SPECIFIC_WATCHERS
             value: {{.maxNamespaceSpecificWatchers | quote }}

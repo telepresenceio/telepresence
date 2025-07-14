@@ -37,6 +37,7 @@ type Env struct {
 	ServerHost                   string        `env:"SERVER_HOST,              parser=string,      default="`
 	ServerPort                   uint16        `env:"SERVER_PORT,              parser=port-number"`
 	PrometheusPort               uint16        `env:"PROMETHEUS_PORT,          parser=port-number, default=0"`
+	PrometheusDropClientLabel    bool          `env:"PROMETHEUS_DROP_CLIENT_LABEL, parser=bool, default=false"`
 	MutatorWebhookPort           uint16        `env:"MUTATOR_WEBHOOK_PORT,     parser=port-number, default=0"`
 	ManagerNamespace             string        `env:"MANAGER_NAMESPACE,        parser=string,      default="`
 	APIPort                      uint16        `env:"AGENT_REST_API_PORT,      parser=port-number, default=0"`

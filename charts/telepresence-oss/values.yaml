@@ -153,6 +153,7 @@ prometheus: {}
   # traffic manager
   # Default: 0
   # port: 0
+  # dropClientLabel: false
 
 # Values specific to the helm chart hooks for managing upgrade/deleting
 hooks:

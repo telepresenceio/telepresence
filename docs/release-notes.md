@@ -8,6 +8,12 @@
 Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control how long a sidecar can be idle before it is cleaned up. The updating of latestEngagementTime is done every 1m in the Remain Call, which is now called every 1min, compared to every 5s in the past. The agent state (containing latestEngagementTime) is updated in memory, and lazily persisted to the traffic-manager configmap every 2min. Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[add option to drop client label in prometheus metrics for GDPR compliance](https://github.com/telepresenceio/telepresence/issues/3491)</div></div>
+<div style="margin-left: 15px">
+
+The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics. This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to  track the working times of an individual.
+</div>
+
 ## Version 2.23.4
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Typo in client mount-policy "RemoteReadonly" should be "RemoteReadOnly"</div></div>
 <div style="margin-left: 15px">
