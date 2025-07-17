@@ -162,7 +162,7 @@ func TestErrorEvent(t *testing.T) {
 		Text:       "Text",
 		Status:     EventStatusWorking,
 		StatusText: "Working",
-		StartTime:  time.Now(),
+		StartTime:  time.Now().Add(-1 * time.Second),
 		spinner: &spinner{
 			chars: []string{"."},
 		},

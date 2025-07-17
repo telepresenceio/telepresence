@@ -145,9 +145,13 @@ func NewEvent(id string, status EventStatus, statusText string) *Event {
 		Status:     status,
 		StatusText: statusText,
 	}
-	if status == EventStatusWorking {
+	switch status {
+	case EventStatusWorking:
 		e.spinner = newSpinner()
 		e.StartTime = time.Now()
+	case EventStatusDone, EventStatusError:
+		e.EndTime = time.Now()
+	default:
 	}
 	return e
 }
