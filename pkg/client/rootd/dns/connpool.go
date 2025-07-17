@@ -66,12 +66,14 @@ func (cp *ConnPool) Exchange(ctx context.Context, client *dns.Client, msg *dns.M
 
 func (cp *ConnPool) Close() {
 	cp.cancel()
-	for conn := range cp.items {
-		conn.Close()
-	}
 }
 
 func (cp *ConnPool) coordinate(ctx context.Context) {
+	defer func() {
+		for conn := range cp.items {
+			conn.Close()
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
