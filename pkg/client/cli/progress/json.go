@@ -25,20 +25,7 @@ import (
 )
 
 type jsonWriter struct {
-	out    io.Writer
-	dryRun bool
-}
-
-type jsonMessage struct {
-	DryRun   bool   `json:"dry-run,omitempty"`
-	Tail     bool   `json:"tail,omitempty"`
-	ID       string `json:"id,omitempty"`
-	ParentID string `json:"parent_id,omitempty"`
-	Text     string `json:"text,omitempty"`
-	Status   string `json:"status,omitempty"`
-	Current  int64  `json:"current,omitempty"`
-	Total    int64  `json:"total,omitempty"`
-	Percent  int    `json:"percent,omitempty"`
+	out io.Writer
 }
 
 func (p *jsonWriter) Start(context.Context, string) {
@@ -49,18 +36,7 @@ func (p *jsonWriter) IsNoOp() bool {
 }
 
 func (p *jsonWriter) write(e *Event) {
-	message := &jsonMessage{
-		DryRun:   p.dryRun,
-		Tail:     false,
-		ID:       e.ID,
-		Text:     e.Text,
-		Status:   e.StatusText,
-		ParentID: e.ParentID,
-		Current:  e.Current,
-		Total:    e.Total,
-		Percent:  e.Percent,
-	}
-	marshal, err := json.Marshal(message)
+	marshal, err := json.Marshal(e)
 	if err == nil {
 		_, _ = fmt.Fprintln(p.out, string(marshal))
 	}
@@ -72,19 +48,19 @@ func (p *jsonWriter) Write(events ...*Event) {
 	}
 }
 
+type tailMsg struct {
+	Message string `json:"message"`
+}
+
 func (p *jsonWriter) TailMsgf(msg string, args ...any) {
-	message := &jsonMessage{
-		DryRun: p.dryRun,
-		Tail:   true,
-		ID:     "",
-		Text:   fmt.Sprintf(msg, args...),
-		Status: "",
-	}
-	marshal, err := json.Marshal(message)
+	marshal, err := json.Marshal(&tailMsg{Message: fmt.Sprintf(msg, args...)})
 	if err == nil {
 		_, _ = fmt.Fprintln(p.out, string(marshal))
 	}
 }
 
 func (p *jsonWriter) Stop() {
+}
+
+func (p *jsonWriter) TriggerRefresh() {
 }

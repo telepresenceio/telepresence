@@ -97,20 +97,20 @@ func (f *Flags) Validate(args []string) error {
 
 // PullOrBuildImage will pull or build the image and return the args list suitable
 // when starting it.
-func (f *Flags) PullOrBuildImage(ctx context.Context, progressID string) error {
+func (f *Flags) PullOrBuildImage(ctx context.Context) error {
 	if f.Image != "" {
-		return docker.PullImage(ctx, progressID, f.Image)
+		return docker.PullImage(ctx, f.Image)
 	}
 	opts := make([]string, len(f.BuildOptions))
 	for i, opt := range f.BuildOptions {
 		opts[i] = "--" + opt
 	}
-	progress.Write(ctx, progress.BuildingEvent(progressID))
+	progress.Working(ctx, "Building")
 	imageID, err := docker.BuildImage(ctx, f.Context, opts)
 	if err != nil {
-		return progress.MaybeWriteError(ctx, progressID, err)
+		return progress.MaybeWriteError(ctx, err)
 	}
-	progress.Write(ctx, progress.BuiltEvent(progressID))
+	progress.Done(ctx, "Built")
 	if f.imageIndex < 0 {
 		f.args = []string{imageID}
 		f.imageIndex = 0

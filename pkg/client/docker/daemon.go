@@ -425,7 +425,7 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 // successful start yields a cache.Info entry in the cache.
 func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemon.Info, conn *grpc.ClientConn, err error) {
 	image := ClientImage(ctx)
-	if err = PullImage(ctx, daemonID.Name, image); err != nil {
+	if err = PullImage(progress.WithEventId(ctx, daemonID.Name), image); err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
 	fp, err := client.FreePortsTCP(1)
@@ -696,7 +696,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 	// The teleroute network plugin communicates with the daemon over the default bridge network
 	cni, err := GetContainerInfo(ctx, cid, "bridge")
 	if err != nil {
-		progress.Write(ctx, progress.ErrorMessageEvent("daemon", err.Error()))
+		progress.Error(ctx, err.Error())
 		return nil, err
 	}
 	cr := daemon.GetRequest(ctx)

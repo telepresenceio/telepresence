@@ -45,7 +45,7 @@ func BuildImage(ctx context.Context, context string, buildArgs []string) (string
 
 // PullImage checks if the given image exists locally by doing docker image inspect. A docker pull is
 // performed if no local image is found. Stdout is silenced during those operations.
-func PullImage(ctx context.Context, progressID, image string) error {
+func PullImage(ctx context.Context, image string) error {
 	cli, err := GetClient(ctx)
 	if err != nil {
 		return err
@@ -55,7 +55,7 @@ func PullImage(ctx context.Context, progressID, image string) error {
 		// Image exists in the local cache, so don't bother pulling it.
 		return nil
 	}
-	progress.Write(ctx, progress.WorkingEvent(progressID, "Pulling image "+image))
+	progress.Working(ctx, "Pulling image "+image)
 	cmd := proc.StdCommand(ctx, Exe, "pull", image)
 	// Docker run will put the pull logs in stderr, but docker pull will put them in stdout.
 	// We discard them here, so they don't spam the user. They'll get errors through stderr if it comes to it.
@@ -67,8 +67,8 @@ func PullImage(ctx context.Context, progressID, image string) error {
 
 	err = cmd.Run()
 	if err != nil {
-		return progress.MaybeWriteError(ctx, progressID, err)
+		return progress.MaybeWriteError(ctx, err)
 	}
-	progress.Write(ctx, progress.DoneEvent(progressID, "Pulled image "+image))
+	progress.Done(ctx, "Pulled image "+image)
 	return nil
 }

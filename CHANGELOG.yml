@@ -28,6 +28,11 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Never truncate meaningful output from a command
+        body: >-
+          The new human-friendly output using a progress reporter would sometimes truncate error output. This is no
+          longer the case. Instead, all output will be wrapped.
+      - type: bugfix
         title: Typo in client mount-policy "RemoteReadonly" should be "RemoteReadOnly"
         body: >-
           The Helm Chart correctly expects the remote read-only mount policy to be `RemoteReadOnly`, but the client

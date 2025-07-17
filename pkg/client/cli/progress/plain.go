@@ -42,19 +42,23 @@ func (p plainWriter) Stop() {
 func (p plainWriter) Write(events ...*Event) {
 	for _, e := range events {
 		w := p.out
-		if e.Status == Error || e.Status == Warning {
+		if e.Status == EventStatusError || e.Status == EventStatusWarning {
 			w = p.err
 		}
-		if e.Status == Error || e.Status == Warning || e.Level > Progress || e.Text != "" {
+		if e.plainAlways || e.Status == EventStatusError || e.Status == EventStatusWarning || e.Status == EventStatusInfo || e.Text != "" {
 			if e.Text == "" {
 				ioutil.Println(w, e.StatusText)
 			} else {
 				ioutil.Println(w, e.Text, e.StatusText)
 			}
 		}
+		p.Write(e.children...)
 	}
 }
 
 func (p plainWriter) TailMsgf(msg string, args ...any) {
 	_, _ = fmt.Fprintln(p.out, fmt.Sprintf(msg, args...))
+}
+
+func (p plainWriter) TriggerRefresh() {
 }

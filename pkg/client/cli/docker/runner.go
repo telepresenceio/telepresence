@@ -88,6 +88,7 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 		}
 	}()
 
+	progress.Working(ctx, "Starting")
 	w := s.start(procCtx, envFile, runFlags, args)
 	if w.err == nil {
 		if w.cmd == nil {
@@ -95,9 +96,9 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 			return nil
 		}
 		w.err = ud.AddHandler(ctx, s.Environment["TELEPRESENCE_INTERCEPT_ID"], w.cmd, w.cni.Name)
-		progress.Write(ctx, progress.StartedEvent(s.ContainerName))
+		progress.Done(ctx, "Started")
 	} else if !errors.Is(w.err, fs.ErrNotExist) {
-		w.err = progress.MaybeWriteError(ctx, s.ContainerName, w.err)
+		w.err = progress.MaybeWriteError(ctx, w.err)
 	}
 
 	// Can't have the progress monitor running and show process output at the same time.

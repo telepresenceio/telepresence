@@ -35,3 +35,6 @@ func (q quiet) Write(...*Event) {
 
 func (q quiet) TailMsgf(_ string, _ ...any) {
 }
+
+func (q quiet) TriggerRefresh() {
+}

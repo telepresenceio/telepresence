@@ -37,3 +37,6 @@ func (p noopWriter) TailMsgf(_ string, _ ...any) {
 
 func (p noopWriter) Stop() {
 }
+
+func (p noopWriter) TriggerRefresh() {
+}

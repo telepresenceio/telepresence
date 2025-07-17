@@ -17,187 +17,139 @@
 package progress
 
 import (
+	"context"
+	"fmt"
+	"io"
+	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"github.com/morikuni/aec"
 )
 
 // EventStatus indicates the status of an action.
 type EventStatus int
 
+const (
+	EventStatusWorking EventStatus = iota
+	EventStatusDone
+	EventStatusInfo
+	EventStatusWarning
+	EventStatusError
+)
+
 func (s EventStatus) color() aec.ANSI {
 	switch s {
-	case Done:
+	case EventStatusDone:
 		return successColor
-	case Warning:
+	case EventStatusInfo:
+		return infoColor
+	case EventStatusWarning:
 		return warningColor
-	case Error:
+	case EventStatusError:
 		return errorColor
 	default:
 		return noColor{}
 	}
 }
 
-const (
-	// Working means that the current task is working.
-	Working EventStatus = iota
-	// Done means that the current task is done.
-	Done
-	// Warning means that the current task has warning.
-	Warning
-	// Error means that the current task has errored.
-	Error
-)
+func (s EventStatus) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, s.String())
+}
 
-type Level int
-
-const (
-	Progress Level = iota
-	Info
-)
+func (s EventStatus) String() string {
+	switch s {
+	case EventStatusDone:
+		return "Done"
+	case EventStatusWarning:
+		return "Warning"
+	case EventStatusError:
+		return "Error"
+	case EventStatusInfo:
+		return "Info"
+	default:
+		return "Working"
+	}
+}
 
 // Event represents a progress event.
 type Event struct {
-	ID         string
-	ParentID   string
-	Text       string
-	Status     EventStatus
-	StatusText string
-	Current    int64
-	Percent    int
-	Level      Level
-
-	Total     int64
-	startTime time.Time
-	endTime   time.Time
-	spinner   *spinner
+	ID          string      `json:"id,omitempty"`
+	Text        string      `json:"text,omitempty"`
+	Status      EventStatus `json:"status,omitempty"`
+	StatusText  string      `json:"statusText,omitempty"`
+	Current     int64       `json:"current,omitempty"`
+	Percent     int         `json:"percent,omitempty"`
+	Total       int64       `json:"total,omitempty"`
+	StartTime   time.Time   `json:"startTime,omitzero"`
+	EndTime     time.Time   `json:"endTime,omitzero"`
+	plainAlways bool
+	spinner     *spinner
+	children    []*Event
 }
 
 // ErrorMessageEvent creates a new Error Event with a message.
 func ErrorMessageEvent(id string, msg string) *Event {
-	return NewEvent(id, Error, msg)
+	return NewEvent(id, EventStatusError, msg)
 }
 
-// ErrorEvent creates a new Error Event.
-func ErrorEvent(id string) *Event {
-	return NewEvent(id, Error, "Error")
+// WarningMessageEvent creates a new Error Event with a message.
+func WarningMessageEvent(id string, msg string) *Event {
+	return NewEvent(id, EventStatusWarning, msg)
 }
 
-// CreatingEvent creates a new Create in progress Event.
-func CreatingEvent(id string) *Event {
-	return NewEvent(id, Working, "Creating")
+// InfoMessageEvent creates a new Error Event with a message.
+func InfoMessageEvent(id string, msg string) *Event {
+	return NewEvent(id, EventStatusInfo, msg)
 }
 
 // StartingEvent creates a new Starting in progress Event.
 func StartingEvent(id string) *Event {
-	return NewEvent(id, Working, "Starting")
+	return NewEvent(id, EventStatusWorking, "Starting")
 }
 
 // StartedEvent creates a new Started in progress Event.
 func StartedEvent(id string) *Event {
-	return NewEvent(id, Done, "Started")
-}
-
-// Waiting creates a new waiting event.
-func Waiting(id string) *Event {
-	return NewEvent(id, Working, "Waiting")
-}
-
-// Healthy creates a new healthy event.
-func Healthy(id string) *Event {
-	return NewEvent(id, Done, "Healthy")
-}
-
-// Exited creates a new exited event.
-func Exited(id string) *Event {
-	return NewEvent(id, Done, "Exited")
-}
-
-// RestartingEvent creates a new Restarting in progress Event.
-func RestartingEvent(id string) *Event {
-	return NewEvent(id, Working, "Restarting")
-}
-
-// RestartedEvent creates a new Restarted in progress Event.
-func RestartedEvent(id string) *Event {
-	return NewEvent(id, Done, "Restarted")
-}
-
-// RunningEvent creates a new Running in progress Event.
-func RunningEvent(id string) *Event {
-	return NewEvent(id, Done, "Running")
-}
-
-// CreatedEvent creates a new Created (done) *Event.
-func CreatedEvent(id string) *Event {
-	return NewEvent(id, Done, "Created")
-}
-
-// StoppingEvent creates a new Stopping in progress Event.
-func StoppingEvent(id string) *Event {
-	return NewEvent(id, Working, "Stopping")
+	return NewEvent(id, EventStatusDone, "Started")
 }
 
 // StoppedEvent creates a new Stopping in progress Event.
 func StoppedEvent(id string) *Event {
-	return NewEvent(id, Done, "Stopped")
-}
-
-// KillingEvent creates a new Killing in progress Event.
-func KillingEvent(id string) *Event {
-	return NewEvent(id, Working, "Killing")
-}
-
-// KilledEvent creates a new Killed in progress Event.
-func KilledEvent(id string) *Event {
-	return NewEvent(id, Done, "Killed")
-}
-
-// RemovingEvent creates a new Removing in progress Event.
-func RemovingEvent(id string) *Event {
-	return NewEvent(id, Working, "Removing")
-}
-
-// RemovedEvent creates a new removed (done) *Event.
-func RemovedEvent(id string) *Event {
-	return NewEvent(id, Done, "Removed")
+	return NewEvent(id, EventStatusDone, "Stopped")
 }
 
 // BuildingEvent creates a new Building in progress Event.
 func BuildingEvent(id string) *Event {
-	return NewEvent(id, Working, "Building")
+	return NewEvent(id, EventStatusWorking, "Building")
 }
 
 // BuiltEvent creates a new built (done) *Event.
 func BuiltEvent(id string) *Event {
-	return NewEvent(id, Done, "Built")
+	return NewEvent(id, EventStatusDone, "Built")
 }
 
 // WorkingEvent creates a new <verb> in progress Event.
 func WorkingEvent(id, verb string) *Event {
-	return NewEvent(id, Working, verb)
+	return NewEvent(id, EventStatusWorking, verb)
 }
 
 // DoneEvent creates a new <verb> done Event.
 func DoneEvent(id, verb string) *Event {
-	return NewEvent(id, Done, verb)
-}
-
-// SkippedEvent creates a new Skipped Event.
-func SkippedEvent(id string, reason string) *Event {
-	return &Event{
-		ID:         id,
-		Status:     Warning,
-		StatusText: "Skipped: " + reason,
-	}
+	return NewEvent(id, EventStatusDone, verb)
 }
 
 func NewEvent(id string, status EventStatus, statusText string) *Event {
-	return &Event{
+	e := &Event{
 		ID:         id,
 		Status:     status,
 		StatusText: statusText,
 	}
+	if status == EventStatusWorking {
+		e.spinner = newSpinner()
+		e.StartTime = time.Now()
+	}
+	return e
 }
 
 func (e *Event) WithText(msg string) *Event {
@@ -205,18 +157,130 @@ func (e *Event) WithText(msg string) *Event {
 	return e
 }
 
-func (e *Event) Info() *Event {
-	e.Level = Info
+func (e *Event) AddChild(status EventStatus, text, statusText string) *Event {
+	child := NewEvent(fmt.Sprintf("%s-%d", e.ID, len(e.children)+1), status, statusText)
+	child.Text = text
+	e.children = append(e.children, child)
+	return child
+}
+
+// PlainAlways configures the event to always be printed when using the plain progress writer.
+func (e *Event) PlainAlways() *Event {
+	e.plainAlways = true
 	return e
 }
 
-func (e *Event) stop() {
-	e.endTime = time.Now()
-	e.spinner.Stop()
+func (e *Event) Pump(ctx context.Context, status EventStatus) io.Writer {
+	in, out := io.Pipe()
+	wr := ContextWriter(ctx)
+	id := e.ID
+	if id == "" {
+		id = EventId(ctx)
+	}
+	go func() {
+		for {
+			var buf [1024]byte
+			n, err := in.Read(buf[:])
+			if n > 0 {
+				wr.Write(NewEvent(id, status, strings.TrimSpace(string(buf[:n]))))
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return out
 }
 
-func (e *Event) hasMore() {
-	e.spinner.Restart()
+func (e *Event) stop() {
+	e.EndTime = time.Now()
+	if e.spinner != nil {
+		e.spinner.Stop()
+	}
+}
+
+func (e *Event) child(id string) *Event {
+	for _, child := range e.children {
+		if child.ID == id {
+			return child
+		}
+	}
+	return nil
+}
+
+func (e *Event) merge(o *Event) {
+	if e == o {
+		return
+	}
+	e.Text = o.Text
+	e.EndTime = o.EndTime
+
+	switch e.Status {
+	case EventStatusInfo, EventStatusWarning, EventStatusError:
+		if o.Status == EventStatusWorking || o.Status == EventStatusDone {
+			ch := e.AddChild(e.Status, e.Text, e.StatusText)
+			ch.plainAlways = e.plainAlways
+		}
+	default:
+	}
+
+	switch o.Status {
+	case EventStatusError:
+		e.Status = EventStatusError
+		e.stop()
+		fallthrough
+	case EventStatusInfo, EventStatusWarning:
+		e.AddChild(o.Status, o.Text, o.StatusText)
+	case EventStatusDone:
+		e.stop()
+		fallthrough
+	case EventStatusWorking:
+		e.spinner = o.spinner
+		e.Text = o.Text
+		e.Status = o.Status
+		e.StatusText = o.StatusText
+		// progress can only go up
+		if o.Total > e.Total {
+			e.Total = o.Total
+		}
+		if o.Current > e.Current {
+			e.Current = o.Current
+		}
+		if o.Percent > e.Percent {
+			e.Percent = o.Percent
+		}
+	}
+
+	// Drop Working and Done events from the current event. Merge other events
+	// with the same ID.
+	var children []*Event
+	for _, child := range e.children {
+		if oc := o.child(child.ID); oc != nil {
+			child.merge(oc)
+			children = append(children, child)
+		} else {
+			switch child.Status {
+			case EventStatusWorking, EventStatusDone:
+			default:
+				children = append(children, child)
+			}
+		}
+	}
+	// Add new events.
+	for _, child := range o.children {
+		if ec := e.child(child.ID); ec == nil {
+			children = append(children, child)
+		}
+	}
+
+	if e.Status == EventStatusDone {
+		for _, child := range children {
+			if child.Status == EventStatusWorking {
+				child.Status = EventStatusDone
+			}
+		}
+	}
+	e.children = children
 }
 
 const (
@@ -225,15 +289,18 @@ const (
 	spinnerError   = "✘"
 )
 
-func (e *Event) Spinner() any {
+func (e *Event) Spinner() string {
 	switch e.Status {
-	case Done:
+	case EventStatusDone:
 		return successColor.Apply(spinnerDone)
-	case Warning:
+	case EventStatusWarning:
 		return warningColor.Apply(spinnerWarning)
-	case Error:
+	case EventStatusError:
 		return errorColor.Apply(spinnerError)
 	default:
+		if e.spinner == nil {
+			return " "
+		}
 		return countColor.Apply(e.spinner.String())
 	}
 }

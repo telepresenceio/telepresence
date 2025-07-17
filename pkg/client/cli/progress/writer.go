@@ -18,6 +18,7 @@ package progress
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/moby/term"
@@ -40,8 +41,8 @@ type Writer interface {
 	// end up in different spinners and be reported individually based on their ID.
 	Write(...*Event)
 
-	// TailMsgf are formatted messages that will be output when the writer is stopped.
-	TailMsgf(string, ...any)
+	// TriggerRefresh triggers a refresh of event output on the tty writer
+	TriggerRefresh()
 }
 
 type writerKey struct{}
@@ -60,6 +61,24 @@ func ContextWriter(ctx context.Context) Writer {
 	return s
 }
 
+type eventIdKey struct{}
+
+func WithEventId(ctx context.Context, id string) context.Context {
+	currentID := EventId(ctx)
+	if currentID == id {
+		return ctx
+	}
+	return context.WithValue(ctx, eventIdKey{}, id)
+}
+
+func EventId(ctx context.Context) string {
+	id, ok := ctx.Value(eventIdKey{}).(string)
+	if !ok {
+		return ""
+	}
+	return id
+}
+
 func IsNoOp(ctx context.Context) bool {
 	return ContextWriter(ctx).IsNoOp()
 }
@@ -74,20 +93,82 @@ func Stop(ctx context.Context) {
 	ContextWriter(ctx).Stop()
 }
 
+func Working(ctx context.Context, args ...any) *Event {
+	return write(ctx, EventStatusWorking, false, args)
+}
+
+func Workingf(ctx context.Context, format string, args ...any) *Event {
+	return writef(ctx, EventStatusWorking, false, format, args)
+}
+
+func Done(ctx context.Context, args ...any) *Event {
+	return write(ctx, EventStatusDone, false, args)
+}
+
+func Donef(ctx context.Context, format string, args ...any) *Event {
+	return writef(ctx, EventStatusDone, false, format, args)
+}
+
+// PrintDone is like Done but also enforces that the plain writer will print the output. The
+// plain writer normally skips Working and Done events.
+func PrintDone(ctx context.Context, args ...any) *Event {
+	return write(ctx, EventStatusDone, true, args)
+}
+
+// PrintDonef is like Donef but also enforces that the plain writer will print the output. The
+// plain writer normally skips Working and Done events.
+func PrintDonef(ctx context.Context, format string, args ...any) *Event {
+	return writef(ctx, EventStatusDone, true, format, args)
+}
+
+func Info(ctx context.Context, args ...any) *Event {
+	return write(ctx, EventStatusInfo, false, args)
+}
+
+func Infof(ctx context.Context, format string, args ...any) *Event {
+	return writef(ctx, EventStatusInfo, false, format, args)
+}
+
+func Error(ctx context.Context, args ...any) *Event {
+	return write(ctx, EventStatusError, false, args)
+}
+
+func Errorf(ctx context.Context, format string, args ...any) *Event {
+	return writef(ctx, EventStatusError, false, format, args)
+}
+
+func Warning(ctx context.Context, args ...any) *Event {
+	return write(ctx, EventStatusWarning, false, args)
+}
+
+func Warningf(ctx context.Context, format string, args ...any) *Event {
+	return writef(ctx, EventStatusWarning, false, format, args)
+}
+
+func write(ctx context.Context, status EventStatus, plain bool, args []any) *Event {
+	ev := NewEvent(EventId(ctx), status, fmt.Sprint(args...))
+	ev.plainAlways = plain
+	ContextWriter(ctx).Write(ev)
+	return ev
+}
+
+func writef(ctx context.Context, status EventStatus, plain bool, format string, args []any) *Event {
+	ev := NewEvent(EventId(ctx), status, fmt.Sprintf(format, args...))
+	ev.plainAlways = plain
+	ContextWriter(ctx).Write(ev)
+	return ev
+}
+
 func Write(ctx context.Context, events ...*Event) {
 	ContextWriter(ctx).Write(events...)
 }
 
-func MaybeWriteError(ctx context.Context, id string, err error) error {
+func MaybeWriteError(ctx context.Context, err error) error {
 	if err != nil && errcat.GetCategory(err) != errcat.Silent {
-		ContextWriter(ctx).Write(ErrorMessageEvent(id, err.Error()))
+		Error(ctx, err.Error())
 		err = errcat.Silent.New(err)
 	}
 	return err
-}
-
-func TailMsgf(ctx context.Context, format string, args ...any) {
-	ContextWriter(ctx).TailMsgf(format, args...)
 }
 
 type Mode string
