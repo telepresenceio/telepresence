@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
@@ -38,7 +39,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Clock is the mechanism used by the Manager state to get the current time.

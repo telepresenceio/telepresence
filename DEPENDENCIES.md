@@ -102,6 +102,7 @@ following Free and Open Source software:
     github.com/opencontainers/go-digest                            v1.0.0                                Apache License 2.0
     github.com/opencontainers/image-spec                           v1.1.1                                Apache License 2.0
     github.com/peterbourgon/diskv                                  v2.0.1+incompatible                   MIT license
+    github.com/pkg/browser                                         v0.0.0-20240102092130-5ac0b6a4141c    2-clause BSD license
     github.com/pkg/errors                                          v0.9.1                                2-clause BSD license
     github.com/pkg/sftp                                            v1.13.9                               2-clause BSD license
     github.com/pmezard/go-difflib                                  v1.0.1-0.20181226105442-5d4384ee4fb2  3-clause BSD license

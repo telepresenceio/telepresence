@@ -272,6 +272,14 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	return &emptypb.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, ProcessName)
 }
 
+func (s *Service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (rsp *rpc.LookupIPResponse, err error) {
+	err = s.WithSession(func(ctx context.Context, session *Session) error {
+		rsp, err = session.lookupIP(ctx, request)
+		return err
+	})
+	return rsp, err
+}
+
 func (s *Service) configReload(c context.Context) error {
 	return client.WatchConfig(c, func(c context.Context) error {
 		return client.ReloadDaemonLogLevel(c, true)

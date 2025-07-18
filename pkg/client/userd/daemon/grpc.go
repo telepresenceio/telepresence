@@ -598,6 +598,14 @@ func (s *service) ResolveSyntheticIP(ctx context.Context, request *rpc.ResolveSy
 	return response, err
 }
 
+func (s *service) LookupIP(ctx context.Context, request *daemon.LookupIPRequest) (rsp *daemon.LookupIPResponse, err error) {
+	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+		rsp, err = session.RootDaemon().LookupIP(ctx, request)
+		return err
+	})
+	return rsp, err
+}
+
 func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
 	if s.rootSessionInProc {
 		return status.Error(codes.Unavailable, "root daemon is embedded")

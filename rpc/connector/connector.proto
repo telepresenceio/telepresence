@@ -121,6 +121,9 @@ service Connector {
   // ResolveSyntheticIP resolves a synthetic IP into a name and optionally
   // the first IP for that name when the daemon performs a DNS lookup.
   rpc ResolveSyntheticIP(ResolveSyntheticRequest) returns (ResolveSyntheticResponse);
+
+  // LookupIP resolves the given name using the Telepresence DNS server
+  rpc LookupIP(daemon.LookupIPRequest) returns (daemon.LookupIPResponse);
 }
 
 // ManagerProxy is a small subset of the traffic-manager API that the

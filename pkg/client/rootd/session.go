@@ -1326,6 +1326,16 @@ func (s *Session) translateEnvIPs(ctx context.Context, environment *rpc.Environm
 	return environment
 }
 
+func (s *Session) lookupIP(ctx context.Context, rq *rpc.LookupIPRequest) (*rpc.LookupIPResponse, error) {
+	ip, err := dns.LookupIP(ctx, s.localDNS, rq.Name)
+	if err != nil {
+		return nil, err
+	}
+	rsp := new(rpc.LookupIPResponse)
+	rsp.Ip, _ = ip.MarshalBinary()
+	return rsp, nil
+}
+
 func (s *Session) MapsIPv4() bool {
 	for _, p := range s.localTranslationSubnets {
 		if p.Addr().Is4() {

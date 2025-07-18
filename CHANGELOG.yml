@@ -25,8 +25,14 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.24.0
-    date: 2025-07-18
+    date: (TBD)
     notes:
+      - type: feature
+        title: Serve up a web-page with telepresence serve.
+        body: >-
+          A new `telepresence serve <service>` command was added that starts a web browser on the specified service. The
+          command is especially useful when used in combination with `telepresence connect --docker` because it will
+          then expose the given service on a random port on localhost.
       - type: feature
         title: add ability to optionally clean up sidecars that have been idle above a specified duration
         body: >-
