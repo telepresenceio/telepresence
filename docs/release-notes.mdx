@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.23.4
 <Note>
+	<Title type="bugfix">Never truncate meaningful output from a command</Title>
+	<Body>
+The new human-friendly output using a progress reporter would sometimes truncate error output. This is no longer the case. Instead, all output will be wrapped.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Typo in client mount-policy "RemoteReadonly" should be "RemoteReadOnly"</Title>
 	<Body>
 The Helm Chart correctly expects the remote read-only mount policy to be `RemoteReadOnly`, but the client expected it to be `RemoteReadonly` (without a leading capital letter in the word "only").

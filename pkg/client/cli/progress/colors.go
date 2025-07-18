@@ -38,6 +38,7 @@ var (
 	doneColor    = aec.BlueF                  //nolint:gochecknoglobals // constant names
 	timerColor   = aec.BlueF                  //nolint:gochecknoglobals // constant names
 	countColor   = aec.YellowF                //nolint:gochecknoglobals // constant names
+	infoColor    = aec.LightBlueF             //nolint:gochecknoglobals // constant names
 	warningColor = aec.YellowF.With(aec.Bold) //nolint:gochecknoglobals // constant names
 	successColor = aec.GreenF                 //nolint:gochecknoglobals // constant names
 	errorColor   = aec.RedF.With(aec.Bold)    //nolint:gochecknoglobals // constant names

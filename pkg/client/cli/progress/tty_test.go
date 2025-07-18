@@ -30,10 +30,10 @@ func TestLineText(t *testing.T) {
 	ev := &Event{
 		ID:         "id",
 		Text:       "Text",
-		Status:     Working,
+		Status:     EventStatusWorking,
 		StatusText: "Status",
-		endTime:    now,
-		startTime:  now,
+		EndTime:    now,
+		StartTime:  now,
 		spinner: &spinner{
 			chars: []string{"."},
 		},
@@ -41,43 +41,97 @@ func TestLineText(t *testing.T) {
 
 	lineWidth := len(ev.Text)
 
-	out := tty().lineText(ev, true, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[33m.\x1b[0m Text Status                               \x1b[34m0.0s \x1b[0m\n")
+	out, n := tty().lineText(ev, false, 50, lineWidth)
+	assert.Equal(t, " \x1b[33m.\x1b[0m Text Status                               \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
-	ev.Status = Done
-	out = tty().lineText(ev, true, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[32m✔\x1b[0m Text \x1b[32mStatus\x1b[0m                               \x1b[34m0.0s \x1b[0m\n")
+	ev.Status = EventStatusDone
+	out, n = tty().lineText(ev, false, 50, lineWidth)
+	assert.Equal(t, " \x1b[32m✔\x1b[0m Text \x1b[32mStatus\x1b[0m                               \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
-	ev.Status = Error
-	out = tty().lineText(ev, true, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[31m\x1b[1m✘\x1b[0m Text \x1b[31m\x1b[1mStatus\x1b[0m                               \x1b[34m0.0s \x1b[0m\n")
+	ev.Status = EventStatusError
+	out, n = tty().lineText(ev, false, 50, lineWidth)
+	assert.Equal(t, " \x1b[31m\x1b[1m✘\x1b[0m Text \x1b[31m\x1b[1mStatus\x1b[0m                               \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
-	ev.Status = Warning
-	out = tty().lineText(ev, true, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[33m\x1b[1m!\x1b[0m Text \x1b[33m\x1b[1mStatus\x1b[0m                               \x1b[34m0.0s \x1b[0m\n")
+	ev.Status = EventStatusWarning
+	out, n = tty().lineText(ev, false, 50, lineWidth)
+	assert.Equal(t, " \x1b[33m\x1b[1m!\x1b[0m Text \x1b[33m\x1b[1mStatus\x1b[0m                               \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
-	ev.Status = Working
+	ev.Status = EventStatusWorking
 	ev.Text = ""
-	out = tty().lineText(ev, true, "", 50, 0)
-	assert.Equal(t, out, " \x1b[33m.\x1b[0m Status                                    \x1b[34m0.0s \x1b[0m\n")
+	out, n = tty().lineText(ev, false, 50, 0)
+	assert.Equal(t, " \x1b[33m.\x1b[0m Status                                    \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
 	ev.Text = "Text"
-	lineWidth = len(fmt.Sprintf("%s %s", ev.ID, ev.Text))
+	lineWidth = len(fmt.Sprintf("%s %s ", ev.ID, ev.Text))
 
-	out = tty().lineText(ev, false, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[33m.\x1b[0m id Text Status                            \x1b[34m0.0s \x1b[0m\n")
+	out, n = tty().lineText(ev, true, 50, lineWidth)
+	assert.Equal(t, " \x1b[33m.\x1b[0m id Text Status                            \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
-	ev.Status = Done
-	out = tty().lineText(ev, false, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[32m✔\x1b[0m id Text \x1b[32mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\n")
+	ev.Status = EventStatusDone
+	out, n = tty().lineText(ev, true, 50, lineWidth)
+	assert.Equal(t, " \x1b[32m✔\x1b[0m id Text \x1b[32mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
-	ev.Status = Error
-	out = tty().lineText(ev, false, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[31m\x1b[1m✘\x1b[0m id Text \x1b[31m\x1b[1mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\n")
+	ev.Status = EventStatusError
+	out, n = tty().lineText(ev, true, 50, lineWidth)
+	assert.Equal(t, " \x1b[31m\x1b[1m✘\x1b[0m id Text \x1b[31m\x1b[1mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 
-	ev.Status = Warning
-	out = tty().lineText(ev, false, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[33m\x1b[1m!\x1b[0m id Text \x1b[33m\x1b[1mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\n")
+	ev.Status = EventStatusWarning
+	out, n = tty().lineText(ev, true, 50, lineWidth)
+	assert.Equal(t, " \x1b[33m\x1b[1m!\x1b[0m id Text \x1b[33m\x1b[1mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
+}
+
+func TestEventTruncate(t *testing.T) {
+	now := time.Now()
+	ev := &Event{
+		ID:         "id",
+		Text:       "Text",
+		Status:     EventStatusWorking,
+		StatusText: "Long status text that should be truncated",
+		EndTime:    now,
+		StartTime:  now,
+		spinner: &spinner{
+			chars: []string{"."},
+		},
+	}
+
+	lineWidth := len(fmt.Sprintf("%s %s ", ev.ID, ev.Text))
+	out, n := tty().lineText(ev, true, 40, lineWidth)
+	assert.Equal(t, " \x1b[33m.\x1b[0m id Text Long status text that   \x1b[34m0.0s \x1b[0m\x1b[0K\n           should be truncated\x1b[0K\n", out)
+	assert.Equal(t, 2, n)
+
+	ev.Status = EventStatusDone
+	out, n = tty().lineText(ev, true, 40, lineWidth)
+	assert.Equal(t, " \x1b[32m✔\x1b[0m id Text \x1b[32mLong status text that\x1b[0m   \x1b[34m0.0s \x1b[0m\x1b[0K\n           \x1b[32mshould be truncated\x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 2, n)
+}
+
+func TestErrorEventWrap(t *testing.T) {
+	now := time.Now()
+	ev := &Event{
+		ID:         "id",
+		Text:       "Text",
+		Status:     EventStatusError,
+		StatusText: "Long status text that should be wrapped",
+		EndTime:    now,
+		StartTime:  now,
+		spinner: &spinner{
+			chars: []string{"."},
+		},
+	}
+
+	lineWidth := len(fmt.Sprintf("%s %s ", ev.ID, ev.Text))
+	out, n := tty().lineText(ev, true, 40, lineWidth)
+	assert.Equal(t, " \x1b[31m\x1b[1m✘\x1b[0m id Text \x1b[31m\x1b[1mLong status text that\x1b[0m   \x1b[34m0.0s \x1b[0m\x1b[0K\n           \x1b[31m\x1b[1mshould be wrapped\x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 2, n)
 }
 
 func TestLineTextSingleEvent(t *testing.T) {
@@ -85,9 +139,10 @@ func TestLineTextSingleEvent(t *testing.T) {
 	ev := &Event{
 		ID:         "id",
 		Text:       "Text",
-		Status:     Done,
+		Status:     EventStatusDone,
 		StatusText: "Status",
-		startTime:  now,
+		StartTime:  now,
+		EndTime:    now,
 		spinner: &spinner{
 			chars: []string{"."},
 		},
@@ -95,8 +150,9 @@ func TestLineTextSingleEvent(t *testing.T) {
 
 	lineWidth := len(fmt.Sprintf("%s %s", ev.ID, ev.Text))
 
-	out := tty().lineText(ev, false, "", 50, lineWidth)
-	assert.Equal(t, out, " \x1b[32m✔\x1b[0m id Text \x1b[32mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\n")
+	out, n := tty().lineText(ev, true, 50, lineWidth)
+	assert.Equal(t, " \x1b[32m✔\x1b[0m id Text \x1b[32mStatus\x1b[0m                            \x1b[34m0.0s \x1b[0m\x1b[0K\n", out)
+	assert.Equal(t, 1, n)
 }
 
 func TestErrorEvent(t *testing.T) {
@@ -104,9 +160,9 @@ func TestErrorEvent(t *testing.T) {
 	e := &Event{
 		ID:         "id",
 		Text:       "Text",
-		Status:     Working,
+		Status:     EventStatusWorking,
 		StatusText: "Working",
-		startTime:  time.Now(),
+		StartTime:  time.Now().Add(-1 * time.Second),
 		spinner: &spinner{
 			chars: []string{"."},
 		},
@@ -115,15 +171,15 @@ func TestErrorEvent(t *testing.T) {
 	w.Write(e)
 	event, ok := w.events[e.ID]
 	assert.True(t, ok)
-	assert.True(t, event.endTime.Equal(time.Time{}))
+	assert.True(t, event.EndTime.Equal(time.Time{}))
 
 	// Fire "Error" event and check end time is set
 	e = &Event{
 		ID:         "id",
 		Text:       "Text",
-		Status:     Error,
+		Status:     EventStatusError,
 		StatusText: "Working",
-		startTime:  time.Now(),
+		StartTime:  time.Now(),
 		spinner: &spinner{
 			chars: []string{"."},
 		},
@@ -131,7 +187,7 @@ func TestErrorEvent(t *testing.T) {
 	w.Write(e)
 	event, ok = w.events[e.ID]
 	assert.True(t, ok)
-	assert.True(t, event.endTime.After(time.Now().Add(-10*time.Second)))
+	assert.True(t, event.EndTime.After(event.StartTime))
 }
 
 func TestWarningEvent(t *testing.T) {
@@ -139,9 +195,9 @@ func TestWarningEvent(t *testing.T) {
 	e := &Event{
 		ID:         "id",
 		Text:       "Text",
-		Status:     Working,
+		Status:     EventStatusWorking,
 		StatusText: "Working",
-		startTime:  time.Now(),
+		StartTime:  time.Now(),
 		spinner: &spinner{
 			chars: []string{"."},
 		},
@@ -150,15 +206,15 @@ func TestWarningEvent(t *testing.T) {
 	w.Write(e)
 	event, ok := w.events[e.ID]
 	assert.True(t, ok)
-	assert.True(t, event.endTime.Equal(time.Time{}))
+	assert.True(t, event.EndTime.Equal(time.Time{}))
 
-	// Fire "Warning" event and check end time is set
+	// Fire "Warning" event and check end time isn't touched
 	e = &Event{
 		ID:         "id",
 		Text:       "Text",
-		Status:     Warning,
+		Status:     EventStatusWarning,
 		StatusText: "Working",
-		startTime:  time.Now(),
+		StartTime:  time.Now(),
 		spinner: &spinner{
 			chars: []string{"."},
 		},
@@ -166,7 +222,7 @@ func TestWarningEvent(t *testing.T) {
 	w.Write(e)
 	event, ok = w.events[e.ID]
 	assert.True(t, ok)
-	assert.True(t, event.endTime.After(time.Now().Add(-10*time.Second)))
+	assert.True(t, event.EndTime.Equal(time.Time{}))
 }
 
 func tty() *ttyWriter {

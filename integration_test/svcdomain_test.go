@@ -15,11 +15,11 @@ func (s *connectedSuite) Test_SvcDomain() {
 	defer s.DeleteSvcAndWorkload(c, "deploy", "echo")
 
 	host := fmt.Sprintf("echo.%s.svc", s.AppNamespace())
-	s.Eventually(func() bool {
+	s.Eventuallyf(func() bool {
 		c, cancel := context.WithTimeout(c, 1800*time.Millisecond)
 		defer cancel()
 		dlog.Info(c, "LookupHost("+host+")")
 		_, err := net.DefaultResolver.LookupHost(c, host)
-		return s.NoErrorf(err, "%s did not resolve", host)
-	}, 10*time.Second, 2*time.Second)
+		return err == nil
+	}, 10*time.Second, 2*time.Second, "%s did not resolve", host)
 }

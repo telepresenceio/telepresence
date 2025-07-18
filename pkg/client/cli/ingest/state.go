@@ -95,7 +95,7 @@ func (s *state) Run(ctx context.Context) error {
 			defaultContainerName = fmt.Sprintf("ingest-%s", s.WorkloadName)
 		}
 		ctx = docker.EnableClient(ctx)
-		err = s.DockerFlags.PullOrBuildImage(ctx, "Handler")
+		err = s.DockerFlags.PullOrBuildImage(progress.WithEventId(ctx, "Handler"))
 		if err != nil {
 			return err
 		}
@@ -127,17 +127,16 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	defer progress.Stop(ctx)
 
 	// Submit the request
-	prId := ud.DaemonID().Name
-	progress.Write(ctx, progress.WorkingEvent(prId, types.EngagementTypeIngest.Working()))
+	ctx = progress.WithEventId(ctx, ud.DaemonID().Name)
+	progress.Working(ctx, types.EngagementTypeIngest.Working())
 	ii, err := ud.Ingest(ctx, ir)
 	if err != nil {
 		switch grpcStatus.Code(err) {
 		case grpcCodes.AlreadyExists, grpcCodes.NotFound, grpcCodes.Unimplemented, grpcCodes.FailedPrecondition:
 			err = errors.New(grpcStatus.Convert(err).Message())
 		}
-		return false, progress.MaybeWriteError(ctx, prId, err)
+		return false, progress.MaybeWriteError(ctx, err)
 	}
-	progress.Write(ctx, progress.DoneEvent(ud.DaemonID().Name, types.EngagementTypeIngest.WorkDone()))
 
 	if s.MountFlags.Enabled {
 		if ir.LocalMountPort != 0 {
@@ -149,9 +148,10 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		ii.FtpPort = 0
 		ii.SftpPort = 0
 	}
-
 	s.info = ii
-	progress.TailMsgf(ctx, "Using %s %s\n", ii.WorkloadKind, ii.Workload)
+
+	progress.Done(ctx, types.EngagementTypeIngest.WorkDone())
+	progress.Infof(ctx, "Using %s %s", ii.WorkloadKind, ii.Workload)
 
 	env := s.info.Environment
 	if env == nil {
@@ -167,14 +167,15 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	if s.FormattedOutput {
 		output.Object(ctx, info, true)
 	} else {
-		progress.TailMsgf(ctx, s.info.String())
+		progress.Info(ctx, info)
 	}
 	return true, nil
 }
 
 func (s *state) leave(ctx context.Context) error {
 	ud := daemon.GetUserClient(ctx)
-	progress.Write(ctx, progress.WorkingEvent(ud.DaemonID().Name, "Ending ingest"))
+	ctx = progress.WithEventId(ctx, ud.DaemonID().Name)
+	progress.Working(ctx, "Ending ingest")
 	_, err := ud.LeaveIngest(ctx, &rpc.IngestIdentifier{
 		WorkloadName:  s.WorkloadName,
 		ContainerName: s.ContainerName,
@@ -184,9 +185,9 @@ func (s *state) leave(ctx context.Context) error {
 		err = nil
 	}
 	if err != nil {
-		err = progress.MaybeWriteError(ctx, ud.DaemonID().Name, err)
+		err = progress.MaybeWriteError(ctx, err)
 	} else {
-		progress.Write(ctx, progress.DoneEvent(ud.DaemonID().Name, "Ended ingest"))
+		progress.Done(ctx, "Ended ingest")
 	}
 	return err
 }

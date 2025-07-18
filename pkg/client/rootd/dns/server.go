@@ -110,6 +110,9 @@ type Server struct {
 	// mappingsMap is contains the same mappings as DNS.Mappings but as a map (for performance).
 	mappingsMap map[string]string
 
+	// namespaceDomain is the current connected kubernetes namespace suffixed by a dot.
+	namespaceDomain string
+
 	error string
 
 	// ready is closed when the DNS server is fully configured
@@ -146,7 +149,7 @@ func sliceToLower(ss []string) []string {
 }
 
 // NewServer returns a new dns.Server.
-func NewServer(config *client.DNS, clusterLookup Resolver) *Server {
+func NewServer(config *client.DNS, namespace string, clusterLookup Resolver) *Server {
 	if config == nil {
 		config = &client.DNS{}
 	}
@@ -157,17 +160,18 @@ func NewServer(config *client.DNS, clusterLookup Resolver) *Server {
 		config.LookupTimeout = 4 * time.Second
 	}
 	return &Server{
-		DNS:            *config,
-		mappingsMap:    mappingsMap(config.Mappings),
-		cache:          xsync.NewMap[cacheKey, *cacheEntry](),
-		routes:         make(map[string]struct{}),
-		domains:        make(map[string]struct{}),
-		dropSuffixes:   []string{tel2SubDomainDot},
-		search:         []string{tel2SubDomain},
-		nsAndDomainsCh: make(chan nsAndDomains, 5),
-		clusterDomain:  defaultClusterDomain,
-		clusterLookup:  clusterLookup,
-		ready:          make(chan struct{}),
+		DNS:             *config,
+		mappingsMap:     mappingsMap(config.Mappings),
+		cache:           xsync.NewMap[cacheKey, *cacheEntry](),
+		routes:          make(map[string]struct{}),
+		domains:         make(map[string]struct{}),
+		dropSuffixes:    []string{tel2SubDomainDot},
+		search:          []string{tel2SubDomain},
+		nsAndDomainsCh:  make(chan nsAndDomains, 5),
+		clusterDomain:   defaultClusterDomain,
+		namespaceDomain: namespace + ".",
+		clusterLookup:   clusterLookup,
+		ready:           make(chan struct{}),
 	}
 }
 
@@ -649,10 +653,49 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 		})
 		if recursive {
 			dlog.Debugf(s.ctx, "returning error for query %q: assumed to be recursive", q.Name)
-			return nil, dns.RcodeNameError, nil
+			// Do we know that the name is correct?
+			rCode := dns.RcodeNameError
+			if s.isNameCachedWithSuccess(q) {
+				// Return empty but successful
+				rCode = dns.RcodeSuccess
+			}
+			return nil, rCode, nil
 		}
 	}
 	return s.resolveThruCache(q)
+}
+
+func (s *Server) isNameCachedWithSuccess(q *dns.Question) bool {
+	cKey := cacheKey{qType: dns.TypeNone}
+	switch q.Qtype {
+	case dns.TypeAAAA:
+		cKey.qType = dns.TypeA
+	case dns.TypeA:
+		cKey.qType = dns.TypeAAAA
+	default:
+		return false
+	}
+
+	names := []string{q.Name}
+	if strings.HasSuffix(q.Name, s.namespaceDomain) {
+		names = append(names, strings.TrimSuffix(q.Name, s.namespaceDomain))
+	}
+	for _, name := range names {
+		cKey.name = name
+		dlog.Debugf(s.ctx, "checking if name %q is cached with success", name)
+		if aRec, ok := s.cache.Load(cKey); ok {
+			// The name is OK, but there were no records
+			select {
+			case <-aRec.wait:
+				dlog.Debugf(s.ctx, "found %q cached with %s", name, dns.RcodeToString[aRec.rCode])
+				if aRec.rCode == dns.RcodeSuccess {
+					return true
+				}
+			default:
+			}
+		}
+	}
+	return false
 }
 
 // resolveThruCache resolves the given query by first performing a cache lookup. If a cached
@@ -683,32 +726,15 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 	}
 
 	defer func() {
-		if rCode != dns.RcodeSuccess && rCode != dns.RcodeNameError {
-			// We don't cache other types of errors, because they might be caused by recoverable network glitches.
+		if err != nil || rCode != dns.RcodeSuccess && rCode != dns.RcodeNameError {
+			// We don't cache other types of errors because they might be caused by recoverable network glitches.
 			s.cache.Delete(key)
 		}
 	}()
 
-	if rCode != dns.RcodeSuccess {
-		cKey := cacheKey{name: q.Name, qType: dns.TypeNone}
-		switch q.Qtype {
-		case dns.TypeAAAA:
-			cKey.qType = dns.TypeA
-		case dns.TypeA:
-			cKey.qType = dns.TypeAAAA
-		}
-		if cKey.qType != dns.TypeNone {
-			if aRec, ok := s.cache.Load(cKey); ok {
-				// The name is OK, but there were no records
-				select {
-				case <-aRec.wait:
-					if aRec.rCode == dns.RcodeSuccess {
-						rCode = dns.RcodeSuccess
-					}
-				default:
-				}
-			}
-		}
+	if rCode != dns.RcodeSuccess && s.isNameCachedWithSuccess(q) {
+		err = nil
+		rCode = dns.RcodeSuccess
 	}
 
 	qTypes := []uint16{q.Qtype}
@@ -725,7 +751,7 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 	answer = copyRRs(answer, qTypes)
 	dv.answer = answer
 	dv.rCode = rCode
-	return answer, rCode, nil
+	return answer, rCode, err
 }
 
 // dfs is a func that implements the fmt.Stringer interface. Used in log statements to ensure
@@ -872,7 +898,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	// The tel2SubDomain serves one purpose and one purpose alone. It's there to coerce the
 	// system DNS resolver to direct requests to this resolver. The system configuration to
-	// make this happen vary depending on OS, but the purpose is always the same. Given that,
+	// make this happen varies depending on OS, but the purpose is always the same. Given that,
 	// the first step in the resolution is to remove this domain-suffix if it exists.
 	ln := len(q.Name)
 	for _, dropSuffix := range s.dropSuffixes {
