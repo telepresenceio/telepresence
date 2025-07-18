@@ -147,6 +147,7 @@ func (s *state) RunAndLeave() bool {
 
 func (s *state) Run(ctx context.Context) (*Info, error) {
 	progress.Start(ctx, "Initializing")
+	defer progress.Stop(ctx)
 	ctx = scout.NewReporter(ctx, "cli")
 	scout.Start(ctx)
 	defer scout.Close(ctx)
@@ -163,7 +164,7 @@ func (s *state) Run(ctx context.Context) (*Info, error) {
 	// start intercept, run command, then leave the intercept
 	if s.DockerFlags.Run {
 		ctx = docker.EnableClient(ctx)
-		err = s.DockerFlags.PullOrBuildImage(ctx, "Handler")
+		err = s.DockerFlags.PullOrBuildImage(progress.WithEventId(ctx, "Handler"))
 		if err != nil {
 			return nil, err
 		}
@@ -223,14 +224,13 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 
 	// Submit the request
 	egType := types.EngagementTypeFromSpec(ir.Spec)
-	progress.Write(ctx, progress.WorkingEvent(ud.DaemonID().Name, egType.Working()))
+	progress.Working(ctx, egType.Working())
 	r, err := ud.CreateIntercept(ctx, ir)
 	if err = Result(r, err); err != nil {
-		return false, progress.MaybeWriteError(ctx, ud.DaemonID().Name, fmt.Errorf("connector.CreateIntercept: %w", err))
+		return false, progress.MaybeWriteError(ctx, fmt.Errorf("connector.CreateIntercept: %w", err))
 	}
-	progress.Write(ctx, progress.DoneEvent(ud.DaemonID().Name, egType.WorkDone()))
-	detailedOutput := s.DetailedOutput && s.FormattedOutput
-	progress.TailMsgf(ctx, "Using %s %s", r.WorkloadKind, s.AgentName)
+	progress.Done(ctx, egType.WorkDone())
+	progress.Infof(ctx, "Using %s %s", r.WorkloadKind, s.AgentName)
 	var intercept *manager.InterceptInfo
 
 	// Add metadata to scout from InterceptResult
@@ -267,10 +267,11 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	}
 
 	s.info = NewInfo(ctx, intercept, s.MountFlags.ReadOnly, s.mountError)
+	detailedOutput := s.DetailedOutput && s.FormattedOutput
 	if detailedOutput {
 		output.Object(ctx, s.info, true)
 	} else {
-		progress.TailMsgf(ctx, s.info.String())
+		progress.Info(ctx, s.info)
 	}
 	return true, nil
 }
@@ -288,16 +289,16 @@ func (s *state) leave(ctx context.Context) error {
 	}
 	n := strings.TrimSpace(s.Name())
 	ud := daemon.GetUserClient(ctx)
-	progress.Write(ctx, progress.WorkingEvent(ud.DaemonID().Name, fmt.Sprintf("Ending %s", s.what())))
+	progress.Workingf(ctx, "Ending %s", s.what())
 	r, err := ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: n})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
 	}
 	if err != nil {
-		err = progress.MaybeWriteError(ctx, ud.DaemonID().Name, err)
+		err = progress.MaybeWriteError(ctx, err)
 	} else {
-		progress.Write(ctx, progress.DoneEvent(ud.DaemonID().Name, fmt.Sprintf("Ended %s", s.what())))
+		progress.Donef(ctx, "Ended %s", s.what())
 	}
 	return Result(r, err)
 }

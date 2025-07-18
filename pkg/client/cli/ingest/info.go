@@ -12,6 +12,7 @@ import (
 )
 
 type Info struct {
+	WorkloadName string            `json:"workload_name,omitempty"   yaml:"workload_name,omitempty"`
 	WorkloadKind string            `json:"workload_kind,omitempty"   yaml:"workload_kind,omitempty"`
 	Container    string            `json:"container,omitempty"       yaml:"container,omitempty"`
 	Environment  map[string]string `json:"environment,omitempty"     yaml:"environment,omitempty"`
@@ -28,6 +29,7 @@ func NewInfo(ctx context.Context, ii *rpc.IngestInfo, mountError error) *Info {
 			ii.Environment, uint16(ii.FtpPort), uint16(ii.SftpPort), ii.ClientMountPoint, ii.MountPoint, ii.PodIp, types.MountPoliciesFromRPC(ii.Mounts), true)
 	}
 	return &Info{
+		WorkloadName: ii.Workload,
 		WorkloadKind: ii.WorkloadKind,
 		Container:    ii.Container,
 		Mount:        m,
@@ -45,8 +47,9 @@ func (ii *Info) String() string {
 func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 	kvf := ioutil.DefaultKeyValueFormatter()
 	kvf.Prefix = "   "
-	kvf.Add("Container name", ii.Container)
+	kvf.Add("Workload name", ii.WorkloadName)
 	kvf.Add("Workload kind", ii.WorkloadKind)
+	kvf.Add("Container name", ii.Container)
 	if m := ii.Mount; m != nil {
 		if m.LocalDir != "" {
 			kvf.Add("Volume Mount Point", m.LocalDir)

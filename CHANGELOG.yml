@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.24.0
-    date: (TBD)
+    date: 2025-07-18
     notes:
       - type: feature
         title: add ability to optionally clean up sidecars that have been idle above a specified duration
@@ -42,8 +42,13 @@ items:
           This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to 
           track the working times of an individual.
   - version: 2.23.4
-    date: (TBD)
+    date: 2025-07-18
     notes:
+      - type: bugfix
+        title: Never truncate meaningful output from a command
+        body: >-
+          The new human-friendly output using a progress reporter would sometimes truncate error output. This is no
+          longer the case. Instead, all output will be wrapped.
       - type: bugfix
         title: Typo in client mount-policy "RemoteReadonly" should be "RemoteReadOnly"
         body: >-
@@ -65,7 +70,7 @@ items:
           in an `NXDOMAIN` error that doesn't trigger renewed attempts.
   
           Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.
-        docs: reference/config#DNS
+        docs: reference/config#recursioncheck
   - version: 2.23.3
     date: 2025-07-07
     notes:

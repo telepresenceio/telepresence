@@ -64,26 +64,25 @@ var QuitDaemonFuncs = []func(context.Context){
 }
 
 func quitHostConnector(ctx context.Context) {
-	udCtx, err := ExistingHostDaemon(ctx, nil)
-	pid := "daemon"
+	udCtx, err := ExistingHostDaemon(ctx, &daemon.Info{})
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			progress.Write(ctx, progress.ErrorMessageEvent(pid, fmt.Sprintf("unable to quit existing user daemon: %v", err)))
+			progress.Errorf(ctx, "unable to quit existing user daemon: %v", err)
 		}
 		return
 	}
 	ud := daemon.GetUserClient(udCtx)
-	progress.Write(ctx, progress.WorkingEvent(pid, "Quitting"))
+	progress.Working(ctx, "Quitting")
 	_, _ = ud.Quit(ctx, &emptypb.Empty{})
 	_ = ud.Close()
-	_ = socket.WaitUntilVanishes(pid, socket.UserDaemonPath(ctx), 5*time.Second)
+	_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 
 	// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
 	// the fact that the user daemon might have been killed ungracefully.
 	if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
 		quitRootDaemon(ctx)
 	}
-	progress.Write(ctx, progress.DoneEvent(pid, "Quit").Info())
+	progress.PrintDone(ctx, "Quit")
 }
 
 func quitDockerDaemons(ctx context.Context) {
@@ -93,12 +92,12 @@ func quitDockerDaemons(ctx context.Context) {
 		return
 	}
 	for _, info := range infos {
-		id := info.DaemonID().Name
-		progress.Write(ctx, progress.WorkingEvent(id, "Quitting"))
+		ctx := progress.WithEventId(ctx, info.DaemonID().Name)
+		progress.Working(ctx, "Quitting")
 		udCtx, err := ExistingDaemon(ctx, info)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
-				progress.Write(ctx, progress.ErrorMessageEvent(id, err.Error()))
+				progress.Error(ctx, err.Error())
 			}
 			continue
 		}
@@ -106,7 +105,7 @@ func quitDockerDaemons(ctx context.Context) {
 		_, _ = ud.Quit(ctx, &emptypb.Empty{})
 		_ = ud.Close()
 		maybeDeleteNetwork(ctx, ud.DaemonInfo())
-		progress.Write(ctx, progress.DoneEvent(id, "Quit").Info())
+		progress.PrintDone(ctx, "Quit")
 	}
 	if err = daemon.WaitUntilAllVanishes(ctx, 5*time.Second); err != nil {
 		dlog.Error(ctx, err)
@@ -121,6 +120,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, e
 		return ctx, err
 	}
 
+	ctx = progress.WithEventId(ctx, daemonID.Name)
 	launched := false
 	defer func() {
 		if err == nil && required && !(proc.IsAdmin() || daemon.GetUserClient(rc).Containerized()) {
@@ -128,9 +128,9 @@ func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, e
 			err = EnsureRootDaemonRunning(ctx)
 		}
 		if err != nil && !(errors.Is(err, ErrNoUserDaemon) && !required) {
-			err = progress.MaybeWriteError(ctx, daemonID.Name, err)
+			err = progress.MaybeWriteError(ctx, err)
 		} else if launched {
-			progress.Write(ctx, progress.DoneEvent(daemonID.Name, "Launched Daemon").Info())
+			progress.PrintDone(ctx, "Launched Daemon")
 		}
 	}()
 
@@ -215,19 +215,19 @@ func Disconnect(ctx context.Context) {
 	progress.Start(ctx, "Disconnecting")
 	defer progress.Stop(ctx)
 	if ud := daemon.GetUserClient(ctx); ud == nil {
-		progress.Write(ctx, progress.DoneEvent("daemon", "Not connected").Info())
+		progress.PrintDone(progress.WithEventId(ctx, "daemon"), "Not connected")
 	} else {
-		id := ud.DaemonID().Name
-		progress.Write(ctx, progress.WorkingEvent(id, "Disconnecting"))
+		ctx = progress.WithEventId(ctx, ud.DaemonID().Name)
+		progress.Working(ctx, "Disconnecting")
 		_, err := ud.Disconnect(ctx, &emptypb.Empty{})
 		switch {
 		case err == nil:
-			progress.Write(ctx, progress.DoneEvent(id, "Disconnected").Info())
+			progress.PrintDone(ctx, "Disconnected")
 			maybeDeleteNetwork(ctx, ud.DaemonInfo())
 		case status.Code(err) == codes.Unavailable:
-			progress.Write(ctx, progress.DoneEvent(id, "Not connected").Info())
+			progress.PrintDone(ctx, "Not connected")
 		default:
-			_ = progress.MaybeWriteError(ctx, id, fmt.Errorf("failed to disconnect: %v", err))
+			_ = progress.MaybeWriteError(ctx, fmt.Errorf("failed to disconnect: %v", err))
 		}
 	}
 }
@@ -376,7 +376,8 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 		return ctx, false, ErrNoUserDaemon
 	}
 
-	progress.Write(ctx, progress.WorkingEvent(daemonID.Name, "Launching Daemon"))
+	ctx = progress.WithEventId(ctx, daemonID.Name)
+	progress.Working(ctx, "Launching Daemon")
 
 	if err = ensureAppUserCacheDirs(ctx); err != nil {
 		return ctx, false, err
@@ -431,6 +432,7 @@ func newUserDaemon(ctx context.Context, conn *grpc.ClientConn, info *daemon.Info
 		return ctx, fmt.Errorf("unable to parse version obtained from connector daemon: %w", err)
 	}
 	ctx = daemon.WithUserClient(ctx, daemon.NewUserClientFunc(conn, info, v, vi.Name, vi.Executable))
+	ctx = progress.WithEventId(ctx, info.Name)
 	return ctx, nil
 }
 
@@ -458,18 +460,19 @@ func warnMngrVersion(ctx context.Context, ci *connector.ConnectInfo) error {
 		diff = mSemver.Minor - cliSemver.Minor
 	}
 
-	maxDiff := uint64(3)
+	const maxDiff = uint64(3)
+	dlog.Debugf(ctx, "diff between client and manager versions: %d", diff)
 	if diff > maxDiff {
-		progress.TailMsgf(ctx,
-			"The Traffic Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.\n",
+		progress.Warningf(ctx,
+			"The Traffic Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.",
 			mv.Version, maxDiff, client.Version())
 	}
 
 	cv := ci.Version
 	if strings.HasPrefix(cv.Name, "OSS ") && !strings.HasPrefix(mv.Name, "OSS ") {
-		progress.TailMsgf(ctx,
+		progress.Warningf(ctx,
 			"You are using the OSS client %s to connect to an enterprise traffic manager %s. Please consider installing an\n"+
-				"enterprise client from getambassador.io, or use \"telepresence helm install\" to install an OSS traffic-manager\n",
+				"enterprise client from getambassador.io, or use \"telepresence helm install\" to install an OSS traffic-manager.",
 			cv.Version,
 			mv.Version)
 	}
@@ -491,11 +494,11 @@ func connectResult(ctx context.Context, ci *connector.ConnectInfo, withProgress 
 	case connector.ConnectInfo_ALREADY_CONNECTED:
 		if withProgress {
 			msg := fmt.Sprintf("Connected to context %s, namespace %s (%s)", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
-			ev := progress.DoneEvent(ci.ConnectionName, msg)
 			if ci.Error == connector.ConnectInfo_UNSPECIFIED {
-				ev = ev.Info()
+				progress.PrintDone(ctx, msg)
+			} else {
+				progress.Done(ctx, msg)
 			}
-			progress.Write(ctx, ev)
 		}
 		return &daemon.Session{Info: ci, Started: started}, nil
 	case connector.ConnectInfo_MUST_RESTART:
@@ -529,6 +532,7 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 		}
 	}()
 
+	implicitConnect := false
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
 		if ci, err = userD.Status(ctx, &emptypb.Empty{}); err != nil {
@@ -538,10 +542,7 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 			return connectResult(ctx, ci, false)
 		}
 		if required {
-			progress.TailMsgf(ctx,
-				`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
-					"connect to take place. The implicit connect behavior is deprecated and will be removed in a future release.",
-				useLine)
+			implicitConnect = true
 		}
 	}
 
@@ -550,7 +551,13 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 	}
 
 	daemonID := userD.DaemonID()
-	progress.Write(ctx, progress.WorkingEvent(daemonID.Name, fmt.Sprintf("Connecting to context %s, namespace %s", daemonID.KubeContext, daemonID.Namespace)))
+	progress.Workingf(ctx, "Connecting to context %s, namespace %s", daemonID.KubeContext, daemonID.Namespace)
+	if implicitConnect {
+		progress.Warningf(ctx,
+			`Warning: You are executing the %q command without a preceding "telepresence connect", causing an implicit `+
+				"connect to namespace %q. The implicit connect behavior is deprecated and will be removed in a future release.",
+			useLine, daemonID.Namespace)
+	}
 	if ci, err = userD.Connect(ctx, request.ConnectRequest); err != nil {
 		if !userD.Containerized() {
 			file := userD.DaemonID().InfoFileName()

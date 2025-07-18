@@ -16,7 +16,6 @@ import (
 	cliDocker "github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -104,7 +103,6 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 		// Container already exited
 		return nil
 	}
-	progress.Write(ctx, progress.DoneEvent(cni.Name, fmt.Sprintf("Started container %s with IP %s", cni.Name, cni.IP)))
 
 	var exited, signalled atomic.Bool
 	done := make(chan error, 1)

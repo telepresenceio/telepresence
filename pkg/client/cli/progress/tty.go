@@ -21,12 +21,12 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/docker/go-units"
+	"github.com/mitchellh/go-wordwrap"
 	"github.com/moby/term"
 	"github.com/morikuni/aec"
 
@@ -35,14 +35,13 @@ import (
 
 type ttyWriter struct {
 	out             io.Writer
-	ticker          *time.Timer
+	ticker          *time.Ticker
 	events          map[string]*Event
 	eventIDs        []string
 	repeated        bool
 	numLines        int
 	done            chan struct{}
 	mtx             sync.Mutex
-	tailEvents      []string
 	skipChildEvents bool
 	progressTitle   string
 }
@@ -53,7 +52,7 @@ func newTTYWriter(out io.Writer) Writer {
 		events: make(map[string]*Event),
 		done:   make(chan struct{}),
 	}
-	w.ticker = time.AfterFunc(math.MaxInt64, w.print)
+	w.ticker = time.NewTicker(math.MaxInt64)
 	return w
 }
 
@@ -65,16 +64,16 @@ func (w *ttyWriter) Start(ctx context.Context, progressTitle string) {
 	w.repeated = false
 	w.numLines = 0
 	w.done = make(chan struct{})
-	w.tailEvents = nil
 	w.skipChildEvents = false
 	w.progressTitle = progressTitle
 	go func() {
 		defer w.ticker.Stop()
 		for {
 			select {
+			case <-w.ticker.C:
+				w.print()
 			case <-ctx.Done():
 				w.print()
-				w.printTailEvents()
 				return
 			case <-w.done:
 				return
@@ -95,73 +94,30 @@ func (w *ttyWriter) Stop() {
 	default:
 		close(w.done)
 		w.print()
-		w.printTailEvents()
 	}
 }
 
 func (w *ttyWriter) event(e *Event) {
-	if !slices.Contains(w.eventIDs, e.ID) {
-		w.eventIDs = append(w.eventIDs, e.ID)
-	}
-	if _, ok := w.events[e.ID]; ok {
-		last := w.events[e.ID]
-		switch e.Status {
-		case Done, Error, Warning:
-			if last.Status != e.Status {
-				last.stop()
-			}
-		case Working:
-			last.hasMore()
-		}
-		last.Status = e.Status
-		last.Text = e.Text
-		last.StatusText = e.StatusText
-		// progress can only go up
-		if e.Total > last.Total {
-			last.Total = e.Total
-		}
-		if e.Current > last.Current {
-			last.Current = e.Current
-		}
-		if e.Percent > last.Percent {
-			last.Percent = e.Percent
-		}
-		// allow set/unset of parent, but not swapping otherwise prompt is flickering
-		if last.ParentID == "" || e.ParentID == "" {
-			last.ParentID = e.ParentID
-		}
-		w.events[e.ID] = last
+	last, ok := w.events[e.ID]
+	if ok {
+		last.merge(e)
 	} else {
-		e.startTime = time.Now()
-		e.spinner = newSpinner()
-		if e.Status == Done || e.Status == Error {
-			e.stop()
-		}
+		w.eventIDs = append(w.eventIDs, e.ID)
 		w.events[e.ID] = e
 	}
 }
 
 func (w *ttyWriter) Write(events ...*Event) {
 	w.mtx.Lock()
-	defer w.mtx.Unlock()
 	for _, e := range events {
 		w.event(e)
 	}
-	w.ticker.Reset(10 * time.Millisecond)
+	w.mtx.Unlock()
+	w.TriggerRefresh()
 }
 
-func (w *ttyWriter) TailMsgf(msg string, args ...any) {
-	w.mtx.Lock()
-	defer w.mtx.Unlock()
-	w.tailEvents = append(w.tailEvents, fmt.Sprintf(msg, args...))
-}
-
-func (w *ttyWriter) printTailEvents() {
-	w.mtx.Lock()
-	defer w.mtx.Unlock()
-	for _, msg := range w.tailEvents {
-		ioutil.Println(w.out, msg)
-	}
+func (w *ttyWriter) TriggerRefresh() {
+	w.ticker.Reset(333 * time.Millisecond)
 }
 
 func (w *ttyWriter) print() {
@@ -178,15 +134,12 @@ func (w *ttyWriter) print() {
 		}
 	}
 	b := aec.EmptyBuilder
-	for i := 0; i <= w.numLines; i++ {
-		b = b.Up(1)
+	if w.repeated {
+		b = b.Up(uint(w.numLines))
+		ioutil.Print(w.out, b.Column(0).ANSI)
+	} else {
+		w.repeated = true
 	}
-	single := len(w.events) == 1
-	if single || !w.repeated {
-		b = b.Down(1)
-	}
-	w.repeated = true
-	ioutil.Print(w.out, b.Column(0).ANSI)
 
 	// Hide the cursor while we are printing
 	ioutil.Print(w.out, aec.Hide)
@@ -194,56 +147,57 @@ func (w *ttyWriter) print() {
 		ioutil.Print(w.out, aec.Show)
 	}()
 
-	if !single {
+	numLines := 0
+	withID := len(w.eventIDs) > 1
+	if withID {
 		firstLine := fmt.Sprintf("[+] %s %d/%d", w.progressTitle, numDone(w.events), len(w.events))
 		if numDone(w.events) == len(w.events) {
 			firstLine = doneColor.Apply(firstLine)
 		}
+		firstLine += aec.EraseLine(aec.EraseModes.Tail).String()
 		ioutil.Println(w.out, firstLine)
+		numLines++
 	}
 
 	var statusPadding int
 	for _, v := range w.eventIDs {
 		event := w.events[v]
 		l := len(event.Text)
-		if !single {
-			l += len(event.ID) + 1
+		if withID {
+			if l > 0 {
+				l++ // one space between text and id
+			}
+			l += len(event.ID)
 		}
-		if statusPadding < l {
-			statusPadding = l
-		}
-		if event.ParentID != "" {
-			statusPadding -= 2
+		if l > 0 {
+			l++ // one space after text
+			if statusPadding < l {
+				statusPadding = l
+			}
 		}
 	}
 
 	if len(w.eventIDs) > int(ws.Height)-2 {
 		w.skipChildEvents = true
 	}
-	numLines := 0
 	for _, v := range w.eventIDs {
 		event := w.events[v]
-		if event.ParentID != "" {
-			continue
-		}
-		line := w.lineText(event, single, "", int(ws.Width), statusPadding)
+		line, lines := w.lineText(event, withID, int(ws.Width), statusPadding)
 		ioutil.Print(w.out, line)
-		numLines++
-		for _, v := range w.eventIDs {
-			ev := w.events[v]
-			if ev.ParentID == event.ID {
-				if w.skipChildEvents {
-					continue
-				}
-				line := w.lineText(ev, single, "  ", int(ws.Width), statusPadding)
-				ioutil.Print(w.out, line)
-				numLines++
+		numLines += lines
+		for _, child := range event.children {
+			if w.skipChildEvents {
+				continue
 			}
+			line, lines = w.lineText(child, false, int(ws.Width), statusPadding)
+			ioutil.Print(w.out, line)
+			numLines += lines
 		}
 	}
+
 	for i := numLines; i < w.numLines; i++ {
 		if numLines < int(ws.Height)-2 {
-			ioutil.Println(w.out, strings.Repeat(" ", int(ws.Width)))
+			ioutil.Println(w.out, aec.EraseLine(aec.EraseModes.All).String())
 			numLines++
 		}
 	}
@@ -252,16 +206,7 @@ func (w *ttyWriter) print() {
 
 var percentChars = strings.Split("⠀⡀⣀⣄⣤⣦⣶⣷⣿", "") //nolint:gochecknoglobals // constant names
 
-func (w *ttyWriter) lineText(event *Event, single bool, pad string, terminalWidth, statusPadding int) string {
-	endTime := time.Now()
-	if event.Status != Working {
-		endTime = event.startTime
-		if (event.endTime != time.Time{}) {
-			endTime = event.endTime
-		}
-	}
-	elapsed := endTime.Sub(event.startTime).Seconds()
-
+func (w *ttyWriter) lineText(event *Event, withID bool, terminalWidth, statusPadding int) (string, int) {
 	var (
 		hideDetails bool
 		total       int64
@@ -269,18 +214,17 @@ func (w *ttyWriter) lineText(event *Event, single bool, pad string, terminalWidt
 		completion  []string
 	)
 
-	// only show the aggregated progress while the root operation is in-progress
-	if parent := event; parent.Status == Working {
-		for _, v := range w.eventIDs {
-			child := w.events[v]
-			if child.ParentID == parent.ID {
-				if child.Status == Working && child.Total == 0 {
-					// we don't have totals available for all the child events
-					// so don't show the total progress yet
-					hideDetails = true
-				}
-				total += child.Total
-				current += child.Current
+	// only show the aggregated progress while the root operation is in progress
+	if event.Status == EventStatusWorking {
+		for _, child := range event.children {
+			if child.Status == EventStatusWorking && child.Total == 0 {
+				// we don't have totals available for all the child events
+				// so don't show the total progress yet
+				hideDetails = true
+			}
+			total += child.Total
+			current += child.Current
+			if child.Percent > 0 {
 				completion = append(completion, percentChars[(len(percentChars)-1)*child.Percent/100])
 			}
 		}
@@ -305,75 +249,86 @@ func (w *ttyWriter) lineText(event *Event, single bool, pad string, terminalWidt
 	} else {
 		txt = event.Text
 	}
-	if !single {
-		txt = fmt.Sprintf("%s %s", event.ID, txt)
+	if withID {
+		if txt == "" {
+			txt = event.ID
+		} else {
+			txt = fmt.Sprintf("%s %s", event.ID, txt)
+		}
 	}
 	textLen := len(txt)
 	padding := statusPadding - textLen
 	if padding < 0 {
 		padding = 0
 	}
-	// calculate the max length for the status text, on errors it
-	// is 2-3 lines long and breaks the line formatting
-	maxStatusLen := terminalWidth - textLen - statusPadding - 15
-	status := event.StatusText
-	// in some cases (debugging under VS Code), terminalWidth is set to zero by goterm.Width() ; ensuring we don't tweak strings with negative char index
-	if maxStatusLen > 0 && len(status) > maxStatusLen {
-		status = status[:maxStatusLen] + "..."
-	}
 	if txt != "" && padding == 0 {
 		padding++
 	}
-	text := fmt.Sprintf("%s %s %s%s%s",
-		pad,
-		event.Spinner(),
-		txt,
-		strings.Repeat(" ", padding),
-		event.Status.color().Apply(status),
-	)
-	timer := fmt.Sprintf("%.1fs ", elapsed)
-	o := align(text, timerColor.Apply(timer), terminalWidth)
 
-	return o
+	// calculate the max length for the status text
+	const spinnerWidth = 3 // spinner surrounded by space
+	allExceptStatusLen := spinnerWidth + textLen + padding
+	var timerLen int
+	var timer, coloredTimer string
+	switch {
+	case event.Status == EventStatusWorking:
+		timer = fmt.Sprintf("%.1fs ", time.Since(event.StartTime).Seconds())
+	case !event.EndTime.IsZero():
+		timer = fmt.Sprintf("%.1fs ", event.EndTime.Sub(event.StartTime).Seconds())
+	default:
+		timer = ""
+	}
+
+	if timer != "" {
+		timerLen = len(timer)
+		coloredTimer = timerColor.Apply(timer)
+		allExceptStatusLen += timerLen
+	}
+
+	maxStatusLen := terminalWidth - allExceptStatusLen - 1 //
+	if maxStatusLen < 5 {
+		// This will look weird, and that's intentional when terminalWidth < 5 + allExceptStatusLen
+		maxStatusLen = math.MaxInt
+	}
+	lines := strings.Split(wordwrap.WrapString(event.StatusText, uint(maxStatusLen)), "\n")
+
+	bld := &strings.Builder{}
+	for li, status := range lines {
+		if li > 0 {
+			writePad(bld, spinnerWidth+textLen)
+			timerLen = 0
+		} else {
+			bld.WriteByte(' ')
+			bld.WriteString(event.Spinner())
+			bld.WriteByte(' ')
+			bld.WriteString(txt)
+		}
+		if len(status) > 0 || timerLen > 0 {
+			writePad(bld, padding)
+			bld.WriteString(event.Status.color().Apply(status))
+			if timerLen > 0 {
+				writePad(bld, terminalWidth-allExceptStatusLen-len(status))
+				bld.WriteString(coloredTimer)
+			}
+		}
+		bld.WriteString(aec.EraseLine(aec.EraseModes.Tail).String())
+		bld.WriteByte('\n')
+	}
+	return bld.String(), len(lines)
+}
+
+func writePad(bld *strings.Builder, padLen int) {
+	for ; padLen > 0; padLen-- {
+		bld.WriteByte(' ')
+	}
 }
 
 func numDone(events map[string]*Event) int {
 	i := 0
 	for _, e := range events {
-		if e.Status != Working {
+		if e.Status != EventStatusWorking {
 			i++
 		}
 	}
 	return i
-}
-
-func align(l, r string, w int) string {
-	ll := lenAnsi(l)
-	lr := lenAnsi(r)
-	pad := ""
-	count := w - ll - lr
-	if count > 0 {
-		pad = strings.Repeat(" ", count)
-	}
-	return fmt.Sprintf("%s%s%s\n", l, pad, r)
-}
-
-// lenAnsi count of user-perceived characters in ANSI string.
-func lenAnsi(s string) int {
-	length := 0
-	ansiCode := false
-	for _, r := range s {
-		if r == '\x1b' {
-			ansiCode = true
-			continue
-		}
-		if ansiCode && r == 'm' {
-			ansiCode = false
-			continue
-		}
-		if !ansiCode {
-			length++
-		}
-	}
-	return length
 }

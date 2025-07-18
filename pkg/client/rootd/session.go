@@ -394,7 +394,7 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 	}
 	dlog.Infof(c, "allow-conflicting subnets %v", s.allowConflictingSubnets)
 
-	s.dnsServer = dns.NewServer(cfg.DNS(), s.clusterLookup)
+	s.dnsServer = dns.NewServer(cfg.DNS(), s.namespace, s.clusterLookup)
 	s.SetTopLevelDomains(c, nil)
 
 	// Terminate the routes watcher
