@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/netip"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 type UserClient interface {
@@ -32,6 +34,7 @@ type UserClient interface {
 	DaemonID() *Identifier
 	Executable() string
 	DaemonInfo() *Info
+	Lookup(ctx context.Context, addr string) (netip.Addr, error)
 	Name() string
 	Semver() semver.Version
 	AddHandler(ctx context.Context, id string, cmd *exec.Cmd, containerName string) error
@@ -107,6 +110,18 @@ func (u *userClient) DaemonID() *Identifier {
 
 func (u *userClient) Executable() string {
 	return u.executable
+}
+
+func (u *userClient) Lookup(ctx context.Context, name string) (addr netip.Addr, err error) {
+	ipb, err := u.LookupIP(ctx, &daemon.LookupIPRequest{Name: name})
+	if err != nil {
+		return addr, errcat.User.Newf("unable to resolve name %q: %v", name, err)
+	}
+	err = addr.UnmarshalBinary(ipb.Ip)
+	if err != nil {
+		return addr, errcat.NoDaemonLogs.New(err)
+	}
+	return addr, nil
 }
 
 func (u *userClient) Name() string {

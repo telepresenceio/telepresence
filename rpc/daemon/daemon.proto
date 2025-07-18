@@ -49,6 +49,9 @@ service Daemon {
 
   // WaitForAgentIP waits for the network of an intercepted agent to become ready.
   rpc WaitForAgentIP(WaitForAgentIPRequest) returns (WaitForAgentIPResponse);
+
+  // LookupIP resolves the given name using the Telepresence DNS server
+  rpc LookupIP(LookupIPRequest) returns (LookupIPResponse);
 }
 
 message DaemonStatus {
@@ -149,6 +152,15 @@ message WaitForAgentIPRequest {
 message WaitForAgentIPResponse {
   // The local IP of the agent (might be virtual)
   bytes local_ip = 1;
+}
+
+message LookupIPRequest {
+  string name = 1;
+}
+
+message LookupIPResponse {
+  // IP in netip.Addr binary form
+  bytes ip = 1;
 }
 
 message Environment {
