@@ -487,9 +487,7 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 	mc := client.GetConfig(ctx)
 	r := mc.Routing()
 	if s.tunVif != nil {
-		curSubnets := s.tunVif.Router.GetRoutedSubnets()
-		r.Subnets = make([]netip.Prefix, len(curSubnets))
-		copy(r.Subnets, curSubnets)
+		r.Subnets = s.tunVif.Router.GetRoutedSubnets()
 	} else {
 		r.Subnets = nil
 	}
@@ -867,7 +865,7 @@ func (s *Session) reconcileSubnets(ctx context.Context, mgrInfo *manager.Cluster
 	if err != nil {
 		return err
 	}
-	sns := slices.Clone(rt.GetRoutedSubnets())
+	sns := rt.GetRoutedSubnets()
 	select {
 	case <-ctx.Done():
 	case s.routesCh <- sns:

@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"runtime"
 	"slices"
+	"sync"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -14,6 +15,7 @@ import (
 )
 
 type Router struct {
+	sync.RWMutex
 	// The vif device that packets will be routed through
 	device Device
 	// The routing table that will be used to route packets
@@ -31,11 +33,16 @@ func NewRouter(device Device, table routing.Table) *Router {
 }
 
 func (rt *Router) GetRoutedSubnets() []netip.Prefix {
-	return rt.routedSubnets
+	rt.RLock()
+	rsn := slices.Clone(rt.routedSubnets)
+	rt.RUnlock()
+	return rsn
 }
 
 func (rt *Router) UpdateWhitelist(whitelist []netip.Prefix) {
+	rt.Lock()
 	rt.whitelistedSubnets = whitelist
+	rt.Unlock()
 }
 
 func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) error {
@@ -45,6 +52,7 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 		return err
 	}
 
+	rt.RLock()
 	nonWhitelisted := slices.DeleteFunc(slices.Clone(routes), func(r netip.Prefix) bool {
 		for _, w := range rt.whitelistedSubnets {
 			if subnet.Covers(w, r) {
@@ -59,6 +67,7 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 		}
 		return false
 	})
+	rt.RUnlock()
 
 	// Slightly awkward nested loops, since they can both continue (i.e., there are probably wasted iterations), but it's
 	// okay, there's not going to be hundreds of routes.
@@ -83,6 +92,9 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 }
 
 func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dontProxyOverrides []netip.Prefix) error {
+	rt.Lock()
+	defer rt.Unlock()
+
 	// Remove all current static routes so that they don't affect the routes for subnets
 	// that we're about to add.
 	rt.dropStaticOverrides(ctx)
@@ -203,12 +215,14 @@ func (rt *Router) dropStaticOverrides(ctx context.Context) {
 }
 
 func (rt *Router) Close(ctx context.Context) {
+	rt.RLock()
 	for _, sn := range rt.routedSubnets {
 		if err := rt.device.RemoveSubnet(ctx, sn); err != nil {
 			dlog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
 		}
 	}
 	rt.dropStaticOverrides(ctx)
+	rt.RUnlock()
 }
 
 func (rt *Router) Table() routing.Table {
