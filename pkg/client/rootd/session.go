@@ -1379,20 +1379,20 @@ func (s *Session) ManagerVersion() semver.Version {
 
 func (s *Session) DialTCP(ctx context.Context, addr netip.AddrPort) (conn net.Conn, err error) {
 	var d tunnel.Dialer
-	if s.tunVif == nil || addr.Addr().IsLoopback() {
-		d = tunnel.DefaultDialer{}
-	} else {
+	if s.tunVif != nil && s.tunVif.Router.Routes(addr.Addr()) {
 		d = s.tunVif
+	} else {
+		d = tunnel.DefaultDialer{}
 	}
 	return d.DialTCP(ctx, addr)
 }
 
 func (s *Session) DialUDP(ctx context.Context, localAddr netip.AddrPort, remoteAddr netip.AddrPort) (conn net.Conn, err error) {
 	var d tunnel.Dialer
-	if s.tunVif == nil || remoteAddr.Addr().IsLoopback() {
-		d = tunnel.DefaultDialer{}
-	} else {
+	if s.tunVif != nil && s.tunVif.Router.Routes(remoteAddr.Addr()) {
 		d = s.tunVif
+	} else {
+		d = tunnel.DefaultDialer{}
 	}
 	return d.DialUDP(ctx, localAddr, remoteAddr)
 }

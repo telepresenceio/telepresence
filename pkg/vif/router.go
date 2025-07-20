@@ -91,6 +91,28 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 	return nil
 }
 
+func (rt *Router) Routes(addr netip.Addr) bool {
+	rt.RLock()
+	hasRoute := false
+	for _, sn := range rt.routedSubnets {
+		if sn.Contains(addr) {
+			hasRoute = true
+			break
+		}
+	}
+	if hasRoute {
+		for i := range rt.staticOverrides {
+			rn := &rt.staticOverrides[i]
+			if rn.RoutedNet.Contains(addr) && uint32(rn.InterfaceIndex) != rt.device.Index() {
+				hasRoute = false
+				break
+			}
+		}
+	}
+	rt.RUnlock()
+	return hasRoute
+}
+
 func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dontProxyOverrides []netip.Prefix) error {
 	rt.Lock()
 	defer rt.Unlock()
