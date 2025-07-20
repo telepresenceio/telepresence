@@ -24,6 +24,14 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.5
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Let docker.Start pass on --interactive to docker start.
+        body: >-
+          An `-i` or `--interactive` flag given when the user runs a container with telepresence must be propagated to
+          `docker start` to attach `stdin`.
   - version: 2.23.4
     date: 2025-07-18
     notes:
