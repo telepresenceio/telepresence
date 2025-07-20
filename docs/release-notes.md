@@ -20,6 +20,13 @@ Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control 
 The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics. This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to  track the working times of an individual.
 </div>
 
+## Version 2.23.5 <span style="font-size: 16px;">(July 20)</span>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Let docker.Start pass on --interactive to docker start.</div></div>
+<div style="margin-left: 15px">
+
+An `-i` or `--interactive` flag given when the user runs a container with telepresence must be propagated to `docker start` to attach `stdin`.
+</div>
+
 ## Version 2.23.4 <span style="font-size: 16px;">(July 18)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Never truncate meaningful output from a command</div></div>
 <div style="margin-left: 15px">

@@ -41,12 +41,20 @@ items:
           The agent state (containing latestEngagementTime) is updated in memory, and lazily persisted to the traffic-manager configmap every 2min.
           Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.
       - type: feature
-        title: add option to drop client label in prometheus metrics for GDPR compliance 
+        title: add option to drop client label in prometheus metrics for GDPR compliance
         docs: https://github.com/telepresenceio/telepresence/issues/3491
         body: >-
           The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics.
           This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to 
           track the working times of an individual.
+  - version: 2.23.5
+    date: 2025-07-20
+    notes:
+      - type: bugfix
+        title: Let docker.Start pass on --interactive to docker start.
+        body: >-
+          An `-i` or `--interactive` flag given when the user runs a container with telepresence must be propagated to
+          `docker start` to attach `stdin`.
   - version: 2.23.4
     date: 2025-07-18
     notes:

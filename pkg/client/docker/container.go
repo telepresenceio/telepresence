@@ -15,6 +15,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -58,7 +59,12 @@ func Start(ctx context.Context, daemonInContainer bool, args ...string) (cni *Co
 		}
 	}
 
-	cc = proc.StdCommand(ctx, Exe, "start", "--attach", containerID)
+	startArgs := []string{"start", "--attach"}
+	if flags.HasOption("interactive", 'i', args) {
+		startArgs = append(startArgs, "--interactive")
+	}
+	startArgs = append(startArgs, containerID)
+	cc = proc.StdCommand(ctx, Exe, startArgs...)
 	cc.Stdin = dos.Stdin(ctx)
 	cc.Env = dos.Environ(ctx)
 	err = cc.Start()

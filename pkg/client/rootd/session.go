@@ -487,9 +487,7 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 	mc := client.GetConfig(ctx)
 	r := mc.Routing()
 	if s.tunVif != nil {
-		curSubnets := s.tunVif.Router.GetRoutedSubnets()
-		r.Subnets = make([]netip.Prefix, len(curSubnets))
-		copy(r.Subnets, curSubnets)
+		r.Subnets = s.tunVif.Router.GetRoutedSubnets()
 	} else {
 		r.Subnets = nil
 	}
@@ -867,7 +865,7 @@ func (s *Session) reconcileSubnets(ctx context.Context, mgrInfo *manager.Cluster
 	if err != nil {
 		return err
 	}
-	sns := slices.Clone(rt.GetRoutedSubnets())
+	sns := rt.GetRoutedSubnets()
 	select {
 	case <-ctx.Done():
 	case s.routesCh <- sns:
@@ -1391,20 +1389,20 @@ func (s *Session) ManagerVersion() semver.Version {
 
 func (s *Session) DialTCP(ctx context.Context, addr netip.AddrPort) (conn net.Conn, err error) {
 	var d tunnel.Dialer
-	if s.tunVif == nil || addr.Addr().IsLoopback() {
-		d = tunnel.DefaultDialer{}
-	} else {
+	if s.tunVif != nil && s.tunVif.Router.Routes(addr.Addr()) {
 		d = s.tunVif
+	} else {
+		d = tunnel.DefaultDialer{}
 	}
 	return d.DialTCP(ctx, addr)
 }
 
 func (s *Session) DialUDP(ctx context.Context, localAddr netip.AddrPort, remoteAddr netip.AddrPort) (conn net.Conn, err error) {
 	var d tunnel.Dialer
-	if s.tunVif == nil || remoteAddr.Addr().IsLoopback() {
-		d = tunnel.DefaultDialer{}
-	} else {
+	if s.tunVif != nil && s.tunVif.Router.Routes(remoteAddr.Addr()) {
 		d = s.tunVif
+	} else {
+		d = tunnel.DefaultDialer{}
 	}
 	return d.DialUDP(ctx, localAddr, remoteAddr)
 }
