@@ -24,6 +24,16 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.23.6
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Public DNS names aren't resolved from local docker application started by Telepresence
+        body: >-
+          A container running using `telepresence docker-run` or `telepresence <engage-type> --docker-run` was not able to resolve public
+          DNS names such as "google.com". The problem is caused by an undocumented behavior in Docker's internal DNS-resolver when the
+          `--dns` flag is used in conjunction with the teleroute network, where the DNS-server no longer finds public names even thought
+          another bridge network is connected. The problem was solved by using a fallback resolver in the Telepresence DNS resolver.
   - version: 2.23.5
     date: 2025-07-20
     notes:

@@ -48,22 +48,36 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	return err
 }
 
+func addressFromResolvConf(c context.Context) (ap netip.AddrPort, err error) {
+	var rf *dnsproxy.ResolveFile
+	rf, err = dnsproxy.ReadResolveFile("/etc/resolv.conf")
+	if err != nil {
+		return ap, err
+	}
+	dlog.Debug(c, rf.String())
+	if len(rf.Nameservers) > 0 {
+		nsAddr := rf.Nameservers[0]
+		addr, err := netip.ParseAddr(nsAddr)
+		if err != nil {
+			return ap, fmt.Errorf("nameserver IP %q in /etc/resolv.conf is invalid: %v", nsAddr, err)
+		}
+		p := rf.Port
+		if p == 0 {
+			p = 53
+		}
+		ap = netip.AddrPortFrom(addr, uint16(p))
+	}
+	return ap, nil
+}
+
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
 	if !s.LocalAddress.IsValid() {
-		rf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
+		ap, err := addressFromResolvConf(c)
 		if err != nil {
 			return err
 		}
-		dlog.Debug(c, rf.String())
-		if len(rf.Nameservers) > 0 {
-			nsAddr := rf.Nameservers[0]
-			addr, err := netip.ParseAddr(nsAddr)
-			if err != nil {
-				return fmt.Errorf("nameserver IP %q in /etc/resolv.conf is invalid: %v", nsAddr, err)
-			}
-			s.LocalAddress = netip.AddrPortFrom(addr, 53)
-			dlog.Infof(c, "Automatically set dns=%s", s.LocalAddress)
-		}
+		s.LocalAddress = ap
+		dlog.Infof(c, "Automatically set dns=%s", s.LocalAddress)
 	}
 	if !s.LocalAddress.IsValid() {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
@@ -165,6 +179,20 @@ func (s *Server) runContainerServer(c context.Context, dev vif.Device, configure
 	}
 	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 
+	ap, err := addressFromResolvConf(c)
+	if err != nil {
+		return err
+	}
+	dlog.Debugf(c, "Using DNS fallback=%s", ap)
+	pool, err := NewConnPool(ap, 10)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		pool.Close()
+	}()
+
+	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 	serverStarted := make(chan struct{})
 	serverDone := make(chan struct{})
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
@@ -175,7 +203,7 @@ func (s *Server) runContainerServer(c context.Context, dev vif.Device, configure
 			s.flushDNS()
 			return nil
 		}, dev)
-		return s.Run(c, serverStarted, []net.PacketConn{l}, nil)
+		return s.Run(c, serverStarted, []net.PacketConn{l}, pool)
 	})
 
 	configureDNS(s.VIFAddress, dnsResolverAddr)
