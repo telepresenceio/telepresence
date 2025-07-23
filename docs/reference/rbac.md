@@ -84,8 +84,11 @@ rules:
     verbs: ["get", "watch"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch"] # patch not needed when agentInjector.enabled is set to false
-
+    verbs: ["get", "list", "watch", "patch"] # patch not needed when agentInjector.enabled is set to false
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["servicecidrs"]
+    verbs: ["list"]
+  
   # If argoRollouts.enabled is set to true
   - apiGroups: ["argoproj.io"]
     resources: ["rollouts"]
@@ -128,6 +131,16 @@ roleRef:
 The permissions required by the `traffic-manager` account in a statically namespaced configuration is very similar to
 the ones used in a dynamic configuration, but a `Role`/`RoleBinding` will be installed in each managed namespace instead
 of the `ClusterRole`/`ClusterRoleBinding` pair.
+
+> [!NOTE]
+> One `ClusterRole/ClusterRoleBinding` will still be present that permits the traffic-manager to list the `servicecidr` resource.
+> That resource is cluster wide, so the following cluster wide rule is required:
+>
+> ```yaml
+>   - apiGroups: ["networking.k8s.io"]
+>     resources: ["servicecidrs"]
+>     verbs: ["list"]
+> ```
 
 ## Telepresence Client Access
 
