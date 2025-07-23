@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.23.6
-    date: (TBD)
+    date: 2025-07-23
     notes:
       - type: bugfix
         title: Public DNS names aren't resolved from local docker application started by Telepresence
