@@ -316,3 +316,15 @@ func (s *dockerDaemonSuite) Test_DockerRunCommand() {
 		s.Contains(stdout, "dev tpd-0")
 	}
 }
+
+func (s *dockerDaemonSuite) Test_DockerRunExternalDNS() {
+	ctx := s.Context()
+	require := s.Require()
+	s.TelepresenceConnect(ctx, "--docker")
+	defer itest.TelepresenceQuitOk(ctx)
+
+	stdout, _, err := itest.Telepresence(ctx, "docker-run", "--rm", "busybox", "nslookup", "google.com")
+	require.NoError(err)
+	dlog.Infof(ctx, "stdout = %s", stdout)
+	s.Contains(stdout, "Address: ")
+}

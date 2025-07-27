@@ -20,6 +20,13 @@ Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control 
 The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics. This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to  track the working times of an individual.
 </div>
 
+## Version 2.23.6 <span style="font-size: 16px;">(July 23)</span>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Public DNS names aren't resolved from local docker application started by Telepresence</div></div>
+<div style="margin-left: 15px">
+
+A container running using `telepresence docker-run` or `telepresence <engage-type> --docker-run` was not able to resolve public DNS names such as "google.com". The problem is caused by an undocumented behavior in Docker's internal DNS-resolver when the `--dns` flag is used in conjunction with the teleroute network, where the DNS-server no longer finds public names even thought another bridge network is connected. The problem was solved by using a fallback resolver in the Telepresence DNS resolver.
+</div>
+
 ## Version 2.23.5 <span style="font-size: 16px;">(July 20)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Let docker.Start pass on --interactive to docker start.</div></div>
 <div style="margin-left: 15px">
