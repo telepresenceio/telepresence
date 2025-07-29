@@ -34,7 +34,7 @@ following Free and Open Source software:
     github.com/datawire/go-ftpserver                               v0.1.3                                Apache License 2.0
     github.com/davecgh/go-spew                                     v1.1.2-0.20180830191138-d8f796af33cc  ISC license
     github.com/distribution/reference                              v0.6.0                                Apache License 2.0
-    github.com/docker/docker                                       v28.3.2+incompatible                  Apache License 2.0
+    github.com/docker/docker                                       v28.3.3+incompatible                  Apache License 2.0
     github.com/docker/go-connections                               v0.5.0                                Apache License 2.0
     github.com/docker/go-units                                     v0.5.0                                Apache License 2.0
     github.com/emicklei/go-restful/v3                              v3.12.2                               MIT license
