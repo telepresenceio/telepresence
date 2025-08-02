@@ -10,8 +10,8 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 const dnsConnTTL = 5 * time.Second
@@ -23,9 +23,9 @@ func (s *Session) isForDNS(ip netip.Addr, port uint16) bool {
 // checkRecursion checks that the given IP is not contained in any of the subnets
 // that the VIF is configured with. When that's the case, the VIF is somehow receiving
 // requests that originate from the cluster and dispatching it leads to infinite recursion.
-func checkRecursion(p int, ip netip.Addr, sn netip.Prefix) (err error) {
+func checkRecursion(p types.Proto, ip netip.Addr, sn netip.Prefix) (err error) {
 	if sn.Contains(ip) && ip != sn.Masked().Addr() {
-		err = fmt.Errorf("refusing recursive %s %s dispatch from pod subnet %s", ipproto.String(p), ip, sn)
+		err = fmt.Errorf("refusing recursive %s %s dispatch from pod subnet %s", p, ip, sn)
 	}
 	return err
 }
@@ -55,7 +55,7 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 		}
 
 		destAddr := id.DestinationAddr()
-		if p == ipproto.UDP {
+		if p == types.ProtoUDP {
 			if s.isForDNS(destAddr, id.DestinationPort()) {
 				pipeId := tunnel.NewConnID(p, id.Source(), s.localDNS)
 				dlog.Tracef(c, "Intercept DNS %s to %s", id, pipeId.Destination())
@@ -63,6 +63,13 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 				tunnel.NewDialerTTL(to, func() {}, dnsConnTTL, nil, nil).Start(c)
 				return from, nil
 			}
+		}
+
+		if mp, ok := s.l4PortMap.Load(types.AddrPortProto{
+			AddrPort: netip.AddrPortFrom(destAddr, id.DestinationPort()),
+			Proto:    id.Protocol(),
+		}); ok {
+			id = tunnel.NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(destAddr, mp))
 		}
 
 		if recursionBlockDuration > 0 {

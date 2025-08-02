@@ -32,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -278,6 +279,34 @@ func (s *Service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (r
 		return err
 	})
 	return rsp, err
+}
+
+func (s *Service) ResolvePort(ctx context.Context, request *rpc.ResolvePortRequest) (rsp *rpc.ResolvePortResponse, err error) {
+	err = s.WithSession(func(ctx context.Context, session *Session) error {
+		ap, err := session.resolvePort(ctx, request.Host, request.Port)
+		if err != nil {
+			return err
+		}
+		apb, err := ap.MarshalBinary()
+		if err != nil {
+			return err
+		}
+		rsp = &rpc.ResolvePortResponse{HostPort: apb}
+		return nil
+	})
+	return rsp, err
+}
+
+func (s *Service) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePortRequest) (rsp *emptypb.Empty, err error) {
+	err = s.WithSession(func(ctx context.Context, session *Session) error {
+		var ap types.AddrPortProto
+		err = ap.UnmarshalBinary(request.DstHostPort)
+		if err == nil {
+			session.rerouteRemotePort(ctx, ap, uint16(request.SrcPort))
+		}
+		return err
+	})
+	return &emptypb.Empty{}, err
 }
 
 func (s *Service) configReload(c context.Context) error {

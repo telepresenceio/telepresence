@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	core "k8s.io/api/core/v1"
+
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -37,7 +39,7 @@ type Info struct {
 	PortID        string            `json:"port_id,omitempty"         yaml:"port_id,omitempty"`
 	ContainerName string            `json:"container_name,omitempty"  yaml:"container_name,omitempty"`
 	ContainerPort int32             `json:"container_port,omitempty"  yaml:"container_port,omitempty"`
-	Protocol      string            `json:"protocol,omitempty"        yaml:"protocol,omitempty"`
+	Protocol      types.Proto       `json:"protocol,omitempty"        yaml:"protocol,omitempty"`
 	Environment   map[string]string `json:"environment,omitempty"     yaml:"environment,omitempty"`
 	Mount         *mount.Info       `json:"mount,omitempty"           yaml:"mount,omitempty"`
 	FilterDesc    string            `json:"filter_desc,omitempty"     yaml:"filter_desc,omitempty"`
@@ -73,7 +75,7 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		PortID:        spec.PortIdentifier,
 		ContainerName: spec.ContainerName,
 		ContainerPort: spec.ContainerPort,
-		Protocol:      spec.Protocol,
+		Protocol:      types.FromK8sProtocol(core.Protocol(spec.Protocol)),
 		PodIP:         ii.PodIp,
 		Environment:   ii.Environment,
 		FilterDesc:    ii.MechanismArgsDesc,
@@ -151,7 +153,7 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 	}
 	for _, pp := range ii.PodPorts {
 		pm := types.PortMapping(pp)
-		to := pm.To()
+		to := pm.ToAsNumeric()
 		pkv.Add(pm.From().String(), fmt.Sprintf("%d %s", to.Port, to.Proto))
 	}
 	kvf.Add(what, fmt.Sprintf("%s -> %s\n%s", ii.PodIP, ii.TargetHost, pkv))

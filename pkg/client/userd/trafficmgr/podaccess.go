@@ -134,7 +134,7 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 
 func (pa *podAccess) workerPortForward(ctx context.Context, port string, wg *sync.WaitGroup) {
 	defer wg.Done()
-	pp, err := types.NewPortAndProto(port)
+	pp, err := types.ParsePortAndProto(port)
 	if err != nil {
 		dlog.Errorf(ctx, "malformed extra port %q: %v", port, err)
 		return

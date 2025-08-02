@@ -82,8 +82,7 @@ func (f *udp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
 func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager.InterceptInfo) error {
 	defer conn.Close()
 	if intercept != nil {
-		f.interceptConn(ctx, conn, intercept)
-		return nil
+		return f.interceptConn(ctx, conn, intercept)
 	}
 
 	if f.targetPort == 0 {
@@ -202,9 +201,13 @@ func (u *udpHandler) forward(ctx context.Context, tag tunnel.Tag) {
 	}
 }
 
-func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manager.InterceptInfo) {
+func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manager.InterceptInfo) error {
 	spec := iCept.Spec
-	dest := netip.AddrPortFrom(iputil.Parse(spec.TargetHost), uint16(spec.TargetPort))
+	ip, err := iputil.ParseAddr(spec.TargetHost)
+	if err != nil {
+		return err
+	}
+	dest := netip.AddrPortFrom(ip, uint16(spec.TargetPort))
 	dlog.Infof(ctx, "Forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
 	defer dlog.Infof(ctx, "Done forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
 	d := tunnel.NewUDPListener(conn, tunnel.AgentToClient, dest, func(ctx context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
@@ -216,4 +219,5 @@ func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manag
 	})
 	d.Start(ctx)
 	<-d.Done()
+	return nil
 }

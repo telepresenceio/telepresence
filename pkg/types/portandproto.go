@@ -9,17 +9,16 @@ import (
 
 	"github.com/go-json-experiment/json"
 	"github.com/go-json-experiment/json/jsontext"
-	core "k8s.io/api/core/v1"
 )
 
 var ErrNotInteger = errors.New("not an integer")
 
 const ProtoSeparator = byte('/')
 
-// ParseNumericPort parses the given string into a positive unsigned 16-bit integer.
+// ParsePort parses the given string into a positive unsigned 16-bit integer.
 // ErrNotInteger is returned if the string doesn't represent an integer.
 // A range error is return unless the integer is between 1 and 65535.
-func ParseNumericPort(portStr string) (uint16, error) {
+func ParsePort(portStr string) (uint16, error) {
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return 0, ErrNotInteger
@@ -30,33 +29,21 @@ func ParseNumericPort(portStr string) (uint16, error) {
 	return uint16(port), nil
 }
 
-func ParseProtocol(protocol string) (core.Protocol, error) {
-	pr := core.Protocol(strings.ToUpper(protocol))
-	switch pr {
-	case "":
-		return core.ProtocolTCP, nil
-	case core.ProtocolUDP, core.ProtocolTCP:
-		return pr, nil
-	default:
-		return core.ProtocolTCP, fmt.Errorf("unsupported protocol: %s", pr)
-	}
-}
-
 type PortAndProto struct {
 	Port  uint16
-	Proto core.Protocol
+	Proto Proto
 }
 
-func NewPortAndProto(s string) (PortAndProto, error) {
-	pp := PortAndProto{Proto: core.ProtocolTCP}
+func ParsePortAndProto(s string) (PortAndProto, error) {
+	pp := PortAndProto{Proto: ProtoTCP}
 	var err error
 	if ix := strings.IndexByte(s, ProtoSeparator); ix > 0 {
-		if pp.Proto, err = ParseProtocol(s[ix+1:]); err != nil {
+		if pp.Proto, err = ParseProto(s[ix+1:]); err != nil {
 			return pp, err
 		}
 		s = s[0:ix]
 	}
-	pp.Port, err = ParseNumericPort(s)
+	pp.Port, err = ParsePort(s)
 	return pp, err
 }
 
@@ -67,7 +54,7 @@ func (pp *PortAndProto) MarshalJSONTo(out *jsontext.Encoder) error {
 // String will consistently yield the identifier without the protocol suffix when the protocol is TCP
 // and otherwise always use the suffix "/UDP".
 func (pp *PortAndProto) String() string {
-	if pp.Proto == core.ProtocolTCP {
+	if pp.Proto == ProtoTCP {
 		return strconv.Itoa(int(pp.Port))
 	}
 	return fmt.Sprintf("%d/%s", pp.Port, pp.Proto)
@@ -77,7 +64,7 @@ func (pp *PortAndProto) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	var s string
 	err := json.UnmarshalDecode(in, &s)
 	if err == nil {
-		*pp, err = NewPortAndProto(s)
+		*pp, err = ParsePortAndProto(s)
 	}
 	return err
 }

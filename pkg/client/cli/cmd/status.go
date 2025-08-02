@@ -41,11 +41,12 @@ type SingleConnectStatusInfo struct {
 }
 
 type RootDaemonStatus struct {
-	Running    bool             `json:"running,omitempty"`
-	Name       string           `json:"name,omitempty"`
-	Version    string           `json:"version,omitempty"`
-	APIVersion int32            `json:"api_version,omitempty"`
-	DNS        *client.DNSSnake `json:"dns,omitempty"`
+	Running      bool             `json:"running,omitempty"`
+	Name         string           `json:"name,omitempty"`
+	Version      string           `json:"version,omitempty"`
+	APIVersion   int32            `json:"api_version,omitempty"`
+	PortMappings []string         `json:"port_mappings,omitempty"`
+	DNS          *client.DNSSnake `json:"dns,omitempty"`
 	*client.RoutingSnake
 }
 
@@ -76,7 +77,8 @@ type UserDaemonStatus struct {
 
 type ContainerizedDaemonStatus struct {
 	*UserDaemonStatus
-	DNS *client.DNSSnake `json:"dns,omitempty"`
+	PortMappings []string         `json:"port_mappings,omitempty"`
+	DNS          *client.DNSSnake `json:"dns,omitempty"`
 	*client.RoutingSnake
 }
 
@@ -220,6 +222,7 @@ func (s *StatusInfo) WriterTos() []io.WriterTo {
 		return []io.WriterTo{
 			&ContainerizedDaemonStatus{
 				UserDaemonStatus: &s.UserDaemon,
+				PortMappings:     s.RootDaemon.PortMappings,
 				DNS:              s.RootDaemon.DNS,
 				RoutingSnake:     s.RootDaemon.RoutingSnake,
 			},
@@ -346,6 +349,9 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		}
 		rs.Version = rStatus.Version.Version
 		rs.APIVersion = rStatus.Version.ApiVersion
+		if obc := rStatus.OutboundConfig; obc != nil {
+			rs.PortMappings = obc.PortMappings
+		}
 		if rootCfg, err := daemon.GetRootClientConfig(rStatus); err == nil {
 			rs.DNS = rootCfg.DNS().ToSnake()
 			rs.RoutingSnake = rootCfg.Routing().ToSnake()
@@ -454,6 +460,9 @@ func (cs *ContainerizedDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
 		cs.print(kvf)
+		if len(cs.PortMappings) > 0 {
+			printPortMappings(kvf, cs.PortMappings)
+		}
 		if cs.DNS != nil {
 			printDNS(kvf, cs.DNS)
 		}
@@ -475,6 +484,9 @@ func (ds *RootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
 		kvf.Add("Version", ds.Version)
+		if len(ds.PortMappings) > 0 {
+			printPortMappings(kvf, ds.PortMappings)
+		}
 		if ds.DNS != nil {
 			printDNS(kvf, ds.DNS)
 		}
@@ -488,9 +500,20 @@ func (ds *RootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	return int64(n), nil
 }
 
+func printPortMappings(kvf *ioutil.KeyValueFormatter, pms []string) {
+	pmKvf := ioutil.DefaultKeyValueFormatter()
+	for _, pm := range pms {
+		ix := strings.LastIndexByte(pm, ':')
+		if ix < 0 {
+			continue
+		}
+		pmKvf.Add(pm[:ix], pm[ix+1:])
+	}
+	kvf.Add("Port Mappings", "\n"+pmKvf.String())
+}
+
 func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 	dnsKvf := ioutil.DefaultKeyValueFormatter()
-	kvf.Indent = "  "
 	if d.Error != "" {
 		dnsKvf.Add("Error", d.Error)
 	}

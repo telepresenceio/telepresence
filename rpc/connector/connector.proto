@@ -124,6 +124,15 @@ service Connector {
 
   // LookupIP resolves the given name using the Telepresence DNS server
   rpc LookupIP(daemon.LookupIPRequest) returns (daemon.LookupIPResponse);
+
+  // ResolvePort resolves an host:port string from into a netip.AddrPort
+  rpc ResolvePort(daemon.ResolvePortRequest) returns (daemon.ResolvePortResponse);
+
+  // RerouteLocalPort reroutes a port on localhost to a netip.AddrPort.
+  rpc RerouteLocalPort(daemon.ReroutePortRequest) returns (google.protobuf.Empty);
+
+  // RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
+  rpc RerouteRemotePort(daemon.ReroutePortRequest) returns (google.protobuf.Empty);
 }
 
 // ManagerProxy is a small subset of the traffic-manager API that the

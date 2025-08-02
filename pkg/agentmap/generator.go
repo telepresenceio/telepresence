@@ -228,7 +228,7 @@ nextSvcPort:
 			ServicePortName:   port.Name,
 			ServicePort:       uint16(port.Port),
 			TargetPortNumeric: port.TargetPort.Type == intstr.Int,
-			Protocol:          port.Protocol,
+			Protocol:          types.FromK8sProtocol(port.Protocol),
 			AppProtocol:       k8sapi.GetAppProto(ctx, cfg.AppProtocolStrategy, &port),
 			AgentPort:         agentPortNumberFunc(appPort.ContainerPort),
 			ContainerPortName: appPort.Name,
@@ -291,7 +291,7 @@ func findContainerPort(cns []core.Container, p types.PortIdentifier) (*core.Cont
 			for i := range cn.Ports {
 				appPort := &cn.Ports[i]
 				if (name != "" && name == appPort.Name || num == uint16(appPort.ContainerPort)) &&
-					(proto == appPort.Protocol || proto == core.ProtocolTCP && appPort.Protocol == "") {
+					(proto.String() == string(appPort.Protocol) || proto == types.ProtoTCP && appPort.Protocol == "") {
 					return cn, appPort
 				}
 			}
@@ -323,13 +323,13 @@ nextContainerPort:
 			appPort = &core.ContainerPort{
 				Name:          fmt.Sprintf("port-%s", Base26(anonNameIndex)),
 				ContainerPort: int32(num),
-				Protocol:      proto,
+				Protocol:      core.Protocol(proto.String()),
 			}
 			anonNameIndex++
 		}
 		ic := &agentconfig.Intercept{
 			TargetPortNumeric: true,
-			Protocol:          appPort.Protocol,
+			Protocol:          types.FromK8sProtocol(appPort.Protocol),
 			AgentPort:         agentPortNumberFunc(appPort.ContainerPort),
 			AppProtocol:       getContainerPortAppProtocol(ctx, cfg.AppProtocolStrategy, appPort.Name),
 			ContainerPortName: appPort.Name,
@@ -430,7 +430,7 @@ func filterServicePorts(svc *core.Service, portAnnotations []types.PortIdentifie
 				if pn == 0 {
 					pn = port.Port
 				}
-				if uint16(pn) == num && (port.Protocol == "" && proto == core.ProtocolTCP || port.Protocol == proto) {
+				if uint16(pn) == num && types.FromK8sProtocol(port.Protocol) == proto {
 					svcPorts = append(svcPorts, port)
 				}
 			}

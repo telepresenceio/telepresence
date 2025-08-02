@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // A ConnID is a compact and immutable representation of protocol, source IP, source port, destination IP and destination port which
@@ -14,11 +14,11 @@ import (
 type ConnID string
 
 func ConnIDFromUDP(src, dst netip.AddrPort) ConnID {
-	return NewConnID(ipproto.UDP, src, dst)
+	return NewConnID(types.ProtoUDP, src, dst)
 }
 
 // NewConnID returns a new ConnID for the given values.
-func NewConnID(proto int, src, dst netip.AddrPort) ConnID {
+func NewConnID(proto types.Proto, src, dst netip.AddrPort) ConnID {
 	srcAddr := src.Addr()
 	dstAddr := dst.Addr()
 	switch {
@@ -125,21 +125,21 @@ func (id ConnID) DestinationPort() uint16 {
 }
 
 // Protocol returns the protocol, e.g. ipproto.TCP.
-func (id ConnID) Protocol() int {
-	return int(id[len(id)-1])
+func (id ConnID) Protocol() types.Proto {
+	return types.Proto(id[len(id)-1])
 }
 
 // SourceProtocolString returns the protocol string for the source, e.g. "tcp4".
 func (id ConnID) SourceProtocolString() (proto string) {
 	p := id.Protocol()
 	switch p {
-	case ipproto.TCP:
+	case types.ProtoTCP:
 		if id.IsSourceIPv4() {
 			proto = "tcp4"
 		} else {
 			proto = "tcp6"
 		}
-	case ipproto.UDP:
+	case types.ProtoUDP:
 		if id.IsSourceIPv4() {
 			proto = "udp4"
 		} else {
@@ -155,13 +155,13 @@ func (id ConnID) SourceProtocolString() (proto string) {
 func (id ConnID) DestinationProtocolString() (proto string) {
 	p := id.Protocol()
 	switch p {
-	case ipproto.TCP:
+	case types.ProtoTCP:
 		if id.IsDestinationIPv4() {
 			proto = "tcp4"
 		} else {
 			proto = "tcp6"
 		}
-	case ipproto.UDP:
+	case types.ProtoUDP:
 		if id.IsDestinationIPv4() {
 			proto = "udp4"
 		} else {
@@ -197,7 +197,7 @@ func (id ConnID) Reply() ConnID {
 // ReplyString returns a formatted string suitable for logging showing the destination:destinationPort -> source:sourcePort.
 func (id ConnID) ReplyString() string {
 	return fmt.Sprintf("%s %s -> %s",
-		ipproto.String(id.Protocol()), id.Destination(), id.Source())
+		id.Protocol(), id.Destination(), id.Source())
 }
 
 // String returns a formatted string suitable for logging showing the source:sourcePort -> destination:destinationPort.
@@ -206,5 +206,5 @@ func (id ConnID) String() string {
 		return "bogus ConnID"
 	}
 	return fmt.Sprintf("%s %s -> %s",
-		ipproto.String(id.Protocol()), id.Source(), id.Destination())
+		id.Protocol(), id.Source(), id.Destination())
 }

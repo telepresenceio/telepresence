@@ -7,8 +7,6 @@ import (
 	"net/netip"
 	"sync"
 
-	core "k8s.io/api/core/v1"
-
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -52,9 +50,9 @@ type interceptor struct {
 
 func NewInterceptor(from types.PortAndProto, tag tunnel.Tag, targetHost string, targetPort uint16) Interceptor {
 	switch from.Proto {
-	case core.ProtocolTCP:
+	case types.ProtoTCP:
 		return newTCP(from.Port, tag, targetHost, targetPort)
-	case core.ProtocolUDP:
+	case types.ProtoUDP:
 		return newUDP(from.Port, tag, targetHost, targetPort)
 	default:
 		panic(fmt.Errorf("unsupported protocol %s", from.Proto))

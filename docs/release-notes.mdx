@@ -9,19 +9,31 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.24.0
 <Note>
+	<Title type="feature">Service Port Rerouting</Title>
+	<Body>
+The telepresence connect command introduces a new `--reroute-remote <host>:<port>:<new-port>[/{tcp|udp}]` flag, allowing users to remap service ports. This feature redirects requests sent to `<host>:<new-port>` to `<host>:<port>` within the Telepresence VIF. The flag can be repeated.
+  </Body>
+</Note>
+<Note>
+	<Title type="feature">Local Port Rerouting</Title>
+	<Body>
+The telepresence connect command introduces a new `--reroute-local <local-port>:<host>:<port>[/{tcp|udp}]` flag, allowing users to redirect requests sent to ports on localhost to arbitrary service ports. This feature enables requests sent to `localhost:<local-port>` to be redirected to `<host:port>`. The flag can be repeated.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Serve up a web-page with telepresence serve.</Title>
 	<Body>
 A new `telepresence serve <service>` command was added that starts a web browser on the specified service. The command is especially useful when used in combination with `telepresence connect --docker` because it will then expose the given service on a random port on localhost.
   </Body>
 </Note>
 <Note>
-	<Title type="feature">add ability to optionally clean up sidecars that have been idle above a specified duration</Title>
+	<Title type="feature">Add ability to optionally clean up sidecars that have been idle above a specified duration</Title>
 	<Body>
 Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control how long a sidecar can be idle before it is cleaned up. The updating of latestEngagementTime is done every 1m in the Remain Call, which is now called every 1min, compared to every 5s in the past. The agent state (containing latestEngagementTime) is updated in memory, and lazily persisted to the traffic-manager configmap every 2min. Removal of the sidecar is also done in the Remain Call, if the sidecar has been idle for longer than the configured `agent.maxIdleTime`.
   </Body>
 </Note>
 <Note>
-	<Title type="feature" docs="https://github.com/telepresenceio/telepresence/issues/3491">add option to drop client label in prometheus metrics for GDPR compliance</Title>
+	<Title type="feature" docs="https://github.com/telepresenceio/telepresence/issues/3491">Add option to drop client label in prometheus metrics for GDPR compliance</Title>
 	<Body>
 The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics. This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to  track the working times of an individual.
   </Body>

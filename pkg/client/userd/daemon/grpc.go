@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 func (s *service) FuseFTPError() error {
@@ -601,6 +602,34 @@ func (s *service) ResolveSyntheticIP(ctx context.Context, request *rpc.ResolveSy
 func (s *service) LookupIP(ctx context.Context, request *daemon.LookupIPRequest) (rsp *daemon.LookupIPResponse, err error) {
 	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
 		rsp, err = session.RootDaemon().LookupIP(ctx, request)
+		return err
+	})
+	return rsp, err
+}
+
+func (s *service) ResolvePort(ctx context.Context, request *daemon.ResolvePortRequest) (rsp *daemon.ResolvePortResponse, err error) {
+	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+		rsp, err = session.RootDaemon().ResolvePort(ctx, request)
+		return err
+	})
+	return rsp, err
+}
+
+func (s *service) RerouteLocalPort(ctx context.Context, request *daemon.ReroutePortRequest) (*empty.Empty, error) {
+	err := s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+		var ap types.AddrPortProto
+		if err := ap.UnmarshalBinary(request.DstHostPort); err != nil {
+			return err
+		}
+		session.RerouteLocalPort(ctx, ap, uint16(request.SrcPort))
+		return nil
+	})
+	return &empty.Empty{}, err
+}
+
+func (s *service) RerouteRemotePort(ctx context.Context, request *daemon.ReroutePortRequest) (rsp *empty.Empty, err error) {
+	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+		rsp, err = session.RootDaemon().RerouteRemotePort(ctx, request)
 		return err
 	})
 	return rsp, err

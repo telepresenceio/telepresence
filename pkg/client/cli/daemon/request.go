@@ -59,6 +59,12 @@ type Request struct {
 	// vnats holds the string version for the --vnat flag values.
 	vnats []string
 
+	// LocalReroutes maps ports on localhost to remote ports.
+	LocalReroutes []string
+
+	// RemoteReroutes uses the VIF to reroute remote host ports.
+	RemoteReroutes []string
+
 	// Aliases by which this daemon can be referenced (added to the telepresence network).
 	NetworkAliases []string
 }
@@ -98,9 +104,17 @@ func InitRequest(cmd *cobra.Command) *CobraRequest {
 		"vnat", nil, ``+
 			`Use Network Address Translation to create virtual IPs for the given CIDR. CIDR can be substituted for the `+
 			`symblic name "service", "pods", "also", or "all".`)
+	nwFlags.StringSliceVar(&cr.LocalReroutes,
+		"reroute-local", nil, ``+
+			`Reroute port on local host to remote host. Format is <local port>:<host>:<port>[/{tcp,udp}]. `+
+			`<port> can be symbolic when <host> is a service name.`)
+	nwFlags.StringSliceVar(&cr.RemoteReroutes,
+		"reroute-remote", nil, ``+
+			`Reroute port on remote host. Format is <host>:<port>:<new port>[/{tcp,udp}]. `+
+			`<port> can be symbolic when <host> is a service name.`)
 	nwFlags.StringSliceVar(&cr.proxyVia,
 		"proxy-via", nil, ``+
-			`Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the`+
+			`Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the `+
 			`form CIDR=WORKLOAD. CIDR can be substituted for the symblic name "service", "pods", "also", or "all".`)
 	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
 		"allow-conflicting-subnets", nil, ``+

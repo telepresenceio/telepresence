@@ -3,6 +3,7 @@ package portforward
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"sort"
 	"strconv"
 	"time"
@@ -18,7 +19,39 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
+
+func ResolveServiceAndPort(ctx context.Context, name, namespace string, portName string, proto types.Proto) (pap types.AddrPortProto, err error) {
+	if pn, err := strconv.Atoi(name); err == nil {
+		if ip, err := netip.ParseAddr(name); err == nil {
+			return types.AddrPortProto{
+				AddrPort: netip.AddrPortFrom(ip, uint16(pn)),
+				Proto:    proto,
+			}, nil
+		}
+	}
+	svcObj, err := k8sapi.GetService(ctx, name, namespace)
+	if err != nil {
+		return pap, err
+	}
+	svc, _ := k8sapi.ServiceImpl(svcObj)
+	if svc.Spec.ClusterIP == core.ClusterIPNone {
+		return pap, fmt.Errorf("service '%s' is not accessible from outside the cluster", name)
+	}
+	ip, err := netip.ParseAddr(svc.Spec.ClusterIP)
+	if err != nil {
+		return pap, fmt.Errorf("unable to parse ClusterIP %q of service '%s': %v", svc.Spec.ClusterIP, name, err)
+	}
+	svcPort, err := servicePortByName(svc, portName, core.Protocol(proto.String()))
+	if err != nil {
+		return pap, err
+	}
+	return types.AddrPortProto{
+		AddrPort: netip.AddrPortFrom(ip, uint16(svcPort.Port)),
+		Proto:    types.FromK8sProtocol(svcPort.Protocol),
+	}, nil
+}
 
 func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa *podAddress, err error) {
 	// Get the service.
@@ -30,7 +63,7 @@ func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 		return pa, err
 	}
 	svc, _ := k8sapi.ServiceImpl(svcObj)
-	svcPortNumber, err := servicePortByName(svc, portName)
+	svcPort, err := servicePortByName(svc, portName, "")
 	if err != nil {
 		return pa, err
 	}
@@ -57,7 +90,7 @@ func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 		return pa, fmt.Errorf("cannot find first pod for %s.%s: %v", name, namespace, err)
 	}
 	pa.name = pod.Name
-	pa.port, err = containerPortByServicePort(svc, pod, svcPortNumber)
+	pa.port, err = containerPortNumber(pod, svcPort.TargetPort)
 	pa.podID = pod.UID
 	if err != nil {
 		return pa, fmt.Errorf("cannot find first container port %s.%s: %v", pod.Name, pod.Namespace, err)
@@ -65,43 +98,35 @@ func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 	return pa, nil
 }
 
-func containerPortByServicePort(svc *core.Service, pod *core.Pod, port uint16) (uint16, error) {
+func servicePortByName(svc *core.Service, name string, proto core.Protocol) (*core.ServicePort, error) {
 	sps := svc.Spec.Ports
-	for si := range sps {
-		sp := &sps[si]
-		if uint16(sp.Port) == port {
-			if svc.Spec.ClusterIP == core.ClusterIPNone {
-				return port, nil
-			}
-			tp := sp.TargetPort
-			if tp.Type == intstr.Int {
-				if tp.IntValue() == 0 {
-					// targetPort is omitted, and the IntValue() would be zero
-					return uint16(sp.Port), nil
-				}
-				return uint16(tp.IntValue()), nil
-			}
-			return containerPortByName(pod, tp.String())
-		}
+	if proto == "" {
+		proto = core.ProtocolTCP
 	}
-	return port, fmt.Errorf("service %s does not have a service port %d", svc.Name, port)
-}
-
-func servicePortByName(svc *core.Service, name string) (uint16, error) {
 	if pn, err := strconv.Atoi(name); err == nil {
-		return uint16(pn), nil
+		for si := range sps {
+			sp := &sps[si]
+			if sp.Port == int32(pn) && (proto == sp.Protocol || proto == core.ProtocolTCP && sp.Protocol == "") {
+				return sp, nil
+			}
+		}
+		return nil, fmt.Errorf("service '%s' does not have %s port number '%d'", svc.Name, proto, pn)
 	}
-	sps := svc.Spec.Ports
 	for si := range sps {
 		sp := &sps[si]
-		if sp.Name == name {
-			return uint16(sp.Port), nil
+		if sp.Name == name && (proto == sp.Protocol || proto == core.ProtocolTCP && sp.Protocol == "") {
+			return sp, nil
 		}
 	}
-	return 0, fmt.Errorf("service '%s' does not have a named port '%s'", svc.Name, name)
+	return nil, fmt.Errorf("service '%s' does not have a %s port named '%s'", svc.Name, proto, name)
 }
 
-func containerPortByName(pod *core.Pod, name string) (uint16, error) {
+func containerPortNumber(pod *core.Pod, port intstr.IntOrString) (uint16, error) {
+	if port.Type == intstr.Int {
+		// It's not required for the container to declare the port.
+		return uint16(port.IntVal), nil
+	}
+	name := port.StrVal
 	cns := pod.Spec.Containers
 	for ci := range cns {
 		cn := &cns[ci]
@@ -112,7 +137,7 @@ func containerPortByName(pod *core.Pod, name string) (uint16, error) {
 			}
 		}
 	}
-	return 0, fmt.Errorf("pod '%s' does not have a named port '%s'", pod.Name, name)
+	return 0, fmt.Errorf("pod '%s' does not have a port named '%s'", pod.Name, name)
 }
 
 func resolve(ctx context.Context, addr string) (pa *podAddress, err error) {
@@ -142,7 +167,7 @@ func resolve(ctx context.Context, addr string) (pa *podAddress, err error) {
 	}
 	pod, _ := k8sapi.PodImpl(podObj)
 	if pn == 0 {
-		pn, err = containerPortByName(pod, port)
+		pn, err = containerPortNumber(pod, intstr.Parse(port))
 		if err != nil {
 			return pa, err
 		}

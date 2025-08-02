@@ -26,6 +26,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	daemon2 "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -38,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 var (
@@ -146,7 +148,8 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 		return ctx, nil
 	}
 
-	s, err := connectSession(ctx, useLine, daemon.GetRequest(ctx), required)
+	rq := daemon.GetRequest(ctx)
+	s, err := connectSession(ctx, useLine, rq, required)
 	if err != nil {
 		return ctx, err
 	}
@@ -168,7 +171,94 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 		}
 	}
 
+	for _, pm := range rq.LocalReroutes {
+		err = ResolveLocalReroute(ctx, s, pm)
+		if err != nil {
+			return ctx, err
+		}
+	}
+
+	for _, pm := range rq.RemoteReroutes {
+		err = ResolveRemoteReroute(ctx, s, pm)
+		if err != nil {
+			return ctx, err
+		}
+	}
 	return daemon.WithSession(ctx, s), nil
+}
+
+func ResolveLocalReroute(ctx context.Context, ds *daemon.Session, pm string) (err error) {
+	ix := strings.IndexByte(pm, ':')
+	if ix < 1 {
+		return fmt.Errorf("invalid port mapping %s", pm)
+	}
+	localPort, err := types.ParsePortAndProto(pm[:ix])
+	if err != nil {
+		return fmt.Errorf("invalid port mapping %s: local port %w", pm, err)
+	}
+	hostPort, err := resolveHostPort(ctx, ds, localPort.Proto, pm[ix+1:])
+	if err != nil {
+		return err
+	}
+	hpb, err := hostPort.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	_, err = ds.RerouteLocalPort(ctx, &daemon2.ReroutePortRequest{
+		DstHostPort: hpb,
+		SrcPort:     uint32(localPort.Port),
+	})
+	return err
+}
+
+func ResolveRemoteReroute(ctx context.Context, ds *daemon.Session, pm string) (err error) {
+	ix := strings.LastIndexByte(pm, ':')
+	if ix < 3 {
+		return fmt.Errorf("invalid port mapping %s", pm)
+	}
+	newPort, err := types.ParsePortAndProto(pm[ix+1:])
+	if err != nil {
+		return fmt.Errorf("invalid port mapping %s: new port %w", pm, err)
+	}
+	hostPort, err := resolveHostPort(ctx, ds, newPort.Proto, pm[:ix])
+	if err != nil {
+		return err
+	}
+	hpb, err := hostPort.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	_, err = ds.RerouteRemotePort(ctx, &daemon2.ReroutePortRequest{
+		DstHostPort: hpb,
+		SrcPort:     uint32(newPort.Port),
+	})
+	return err
+}
+
+func resolveHostPort(ctx context.Context, ds *daemon.Session, proto types.Proto, hostPortStr string) (hostPort types.AddrPortProto, err error) {
+	hostPort.Proto = proto
+	hostPort.AddrPort, err = netip.ParseAddrPort(hostPortStr)
+	if err == nil {
+		return hostPort, nil
+	}
+	// Resolve host and port name
+	ix := strings.LastIndexByte(hostPortStr, ':')
+	if ix < 1 {
+		return hostPort, fmt.Errorf("invalid port mapping %s", hostPortStr)
+	}
+	portStr := hostPortStr[ix+1:]
+	if hostPort.Proto != types.ProtoTCP {
+		portStr = fmt.Sprintf("%s%c%s", portStr, types.ProtoSeparator, hostPort.Proto)
+	}
+	rsp, err := ds.ResolvePort(ctx, &daemon2.ResolvePortRequest{
+		Host: hostPortStr[:ix],
+		Port: portStr,
+	})
+	if err != nil {
+		return hostPort, err
+	}
+	err = hostPort.UnmarshalBinary(rsp.HostPort)
+	return hostPort, err
 }
 
 func ExistingDaemon(ctx context.Context, info *daemon.Info) (context.Context, error) {

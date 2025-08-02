@@ -56,6 +56,9 @@ const (
 	Connector_GetAgentConfig_FullMethodName          = "/telepresence.connector.Connector/GetAgentConfig"
 	Connector_ResolveSyntheticIP_FullMethodName      = "/telepresence.connector.Connector/ResolveSyntheticIP"
 	Connector_LookupIP_FullMethodName                = "/telepresence.connector.Connector/LookupIP"
+	Connector_ResolvePort_FullMethodName             = "/telepresence.connector.Connector/ResolvePort"
+	Connector_RerouteLocalPort_FullMethodName        = "/telepresence.connector.Connector/RerouteLocalPort"
+	Connector_RerouteRemotePort_FullMethodName       = "/telepresence.connector.Connector/RerouteRemotePort"
 )
 
 // ConnectorClient is the client API for Connector service.
@@ -144,6 +147,12 @@ type ConnectorClient interface {
 	ResolveSyntheticIP(ctx context.Context, in *ResolveSyntheticRequest, opts ...grpc.CallOption) (*ResolveSyntheticResponse, error)
 	// LookupIP resolves the given name using the Telepresence DNS server
 	LookupIP(ctx context.Context, in *daemon.LookupIPRequest, opts ...grpc.CallOption) (*daemon.LookupIPResponse, error)
+	// ResolvePort resolves an host:port string from into a netip.AddrPort
+	ResolvePort(ctx context.Context, in *daemon.ResolvePortRequest, opts ...grpc.CallOption) (*daemon.ResolvePortResponse, error)
+	// RerouteLocalPort reroutes a port on localhost to a netip.AddrPort.
+	RerouteLocalPort(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
+	RerouteRemotePort(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type connectorClient struct {
@@ -493,6 +502,36 @@ func (c *connectorClient) LookupIP(ctx context.Context, in *daemon.LookupIPReque
 	return out, nil
 }
 
+func (c *connectorClient) ResolvePort(ctx context.Context, in *daemon.ResolvePortRequest, opts ...grpc.CallOption) (*daemon.ResolvePortResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(daemon.ResolvePortResponse)
+	err := c.cc.Invoke(ctx, Connector_ResolvePort_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) RerouteLocalPort(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_RerouteLocalPort_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) RerouteRemotePort(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_RerouteRemotePort_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility.
@@ -579,6 +618,12 @@ type ConnectorServer interface {
 	ResolveSyntheticIP(context.Context, *ResolveSyntheticRequest) (*ResolveSyntheticResponse, error)
 	// LookupIP resolves the given name using the Telepresence DNS server
 	LookupIP(context.Context, *daemon.LookupIPRequest) (*daemon.LookupIPResponse, error)
+	// ResolvePort resolves an host:port string from into a netip.AddrPort
+	ResolvePort(context.Context, *daemon.ResolvePortRequest) (*daemon.ResolvePortResponse, error)
+	// RerouteLocalPort reroutes a port on localhost to a netip.AddrPort.
+	RerouteLocalPort(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error)
+	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
+	RerouteRemotePort(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -687,6 +732,15 @@ func (UnimplementedConnectorServer) ResolveSyntheticIP(context.Context, *Resolve
 }
 func (UnimplementedConnectorServer) LookupIP(context.Context, *daemon.LookupIPRequest) (*daemon.LookupIPResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupIP not implemented")
+}
+func (UnimplementedConnectorServer) ResolvePort(context.Context, *daemon.ResolvePortRequest) (*daemon.ResolvePortResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResolvePort not implemented")
+}
+func (UnimplementedConnectorServer) RerouteLocalPort(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RerouteLocalPort not implemented")
+}
+func (UnimplementedConnectorServer) RerouteRemotePort(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RerouteRemotePort not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 func (UnimplementedConnectorServer) testEmbeddedByValue()                   {}
@@ -1296,6 +1350,60 @@ func _Connector_LookupIP_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_ResolvePort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(daemon.ResolvePortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ResolvePort(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_ResolvePort_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ResolvePort(ctx, req.(*daemon.ResolvePortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_RerouteLocalPort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(daemon.ReroutePortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RerouteLocalPort(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_RerouteLocalPort_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RerouteLocalPort(ctx, req.(*daemon.ReroutePortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_RerouteRemotePort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(daemon.ReroutePortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RerouteRemotePort(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_RerouteRemotePort_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RerouteRemotePort(ctx, req.(*daemon.ReroutePortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1430,6 +1538,18 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupIP",
 			Handler:    _Connector_LookupIP_Handler,
+		},
+		{
+			MethodName: "ResolvePort",
+			Handler:    _Connector_ResolvePort_Handler,
+		},
+		{
+			MethodName: "RerouteLocalPort",
+			Handler:    _Connector_RerouteLocalPort_Handler,
+		},
+		{
+			MethodName: "RerouteRemotePort",
+			Handler:    _Connector_RerouteRemotePort_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

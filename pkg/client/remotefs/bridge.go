@@ -4,8 +4,6 @@ import (
 	"context"
 	"net/netip"
 
-	core "k8s.io/api/core/v1"
-
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -24,7 +22,7 @@ func (m bridgeMounter) Start(ctx context.Context, _, _, _, _ string, podAddrPort
 	ctx = dgroup.WithGoroutineName(ctx, "/"+podAddrPort.String())
 	pp := types.PortAndProto{
 		Port:  uint16(m),
-		Proto: core.ProtocolTCP,
+		Proto: types.ProtoTCP,
 	}
 	dlog.Debugf(ctx, "Remote mount bridge listening at :%d, will forward to %s", m, podAddrPort)
 	go func() {

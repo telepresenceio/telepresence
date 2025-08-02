@@ -62,7 +62,7 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 				ports = append(ports, core.ContainerPort{
 					Name:          name,
 					ContainerPort: int32(ic.AgentPort),
-					Protocol:      ic.Protocol,
+					Protocol:      core.Protocol(ic.Protocol.String()),
 				})
 			}
 		default:

@@ -48,6 +48,7 @@ func TelepresenceStatus(ctx context.Context, args ...string) (*StatusResponse, e
 			Version:      cd.Version,
 			DNS:          cd.DNS,
 			RoutingSnake: cd.RoutingSnake,
+			PortMappings: cd.PortMappings,
 		}
 	} else if status.RootDaemon == nil {
 		status.RootDaemon = &cmd.RootDaemonStatus{}

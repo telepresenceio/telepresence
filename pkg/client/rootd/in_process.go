@@ -14,6 +14,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // userdToManagerShortcut overcomes one minor problem, namely that even though a connector.ManagerProxyClient implements a subset
@@ -119,6 +120,27 @@ func (rd *InProcSession) WaitForNetwork(ctx context.Context, _ *empty.Empty, _ .
 
 func (rd *InProcSession) LookupIP(ctx context.Context, request *rpc.LookupIPRequest, _ ...grpc.CallOption) (*rpc.LookupIPResponse, error) {
 	return rd.lookupIP(ctx, request)
+}
+
+func (rd *InProcSession) ResolvePort(ctx context.Context, request *rpc.ResolvePortRequest, _ ...grpc.CallOption) (*rpc.ResolvePortResponse, error) {
+	ap, err := rd.resolvePort(ctx, request.Host, request.Port)
+	if err != nil {
+		return nil, err
+	}
+	apb, err := ap.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.ResolvePortResponse{HostPort: apb}, nil
+}
+
+func (rd *InProcSession) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePortRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	var ap types.AddrPortProto
+	if err := ap.UnmarshalBinary(request.DstHostPort); err != nil {
+		return nil, err
+	}
+	rd.rerouteRemotePort(ctx, ap, uint16(request.SrcPort))
+	return &empty.Empty{}, nil
 }
 
 func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest, _ ...grpc.CallOption) (*rpc.WaitForAgentIPResponse, error) {
