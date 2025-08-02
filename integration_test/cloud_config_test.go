@@ -19,7 +19,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func (s *notConnectedSuite) Test_CloudNeverProxy() {
@@ -36,8 +35,8 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 		"-o",
 		"jsonpath={.spec.clusterIP}")
 	require.NoError(err)
-	ip := iputil.Parse(ipStr)
-	require.NotNil(ip)
+	ip, err := netip.ParseAddr(ipStr)
+	require.NoError(err)
 	if ip.IsLoopback() {
 		s.T().Skipf("test can't run on host with a loopback cluster IP %s", ip)
 	}

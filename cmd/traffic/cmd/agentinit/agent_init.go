@@ -15,10 +15,10 @@ import (
 	"strings"
 
 	"github.com/coreos/go-iptables/iptables"
-	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -55,7 +55,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 	agentUID := strconv.Itoa(os.Getuid())
 
 	outputInsertCount := 0
-	for _, proto := range []core.Protocol{core.ProtocolTCP, core.ProtocolUDP} {
+	for _, proto := range []types.Proto{types.ProtoTCP, types.ProtoUDP} {
 		hasRule := false
 	nextCn:
 		for _, cn := range c.AgentConfig().Containers {
@@ -72,19 +72,20 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		}
 
 		// Clearing the chains will create them if they don't exist, or clear them out if they do.
-		preRoutingChain := "TEL_PREROUTING_" + string(proto)
+		protoStr := proto.String()
+		preRoutingChain := "TEL_PREROUTING_" + protoStr
 		err := iptables.ClearChain(nat, preRoutingChain)
 		if err != nil {
 			return fmt.Errorf("failed to clear chain %s: %w", preRoutingChain, err)
 		}
-		outputChain := "TEL_OUTPUT_" + string(proto)
+		outputChain := "TEL_OUTPUT_" + protoStr
 		err = iptables.ClearChain(nat, outputChain)
 		if err != nil {
 			return fmt.Errorf("failed to clear chain %s: %w", outputChain, err)
 		}
 
 		// Use our inbound chain to direct traffic coming into the app port to the agent port.
-		lcProto := strings.ToLower(string(proto))
+		lcProto := strings.ToLower(protoStr)
 		ac := c.AgentConfig()
 		for _, cn := range ac.Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {

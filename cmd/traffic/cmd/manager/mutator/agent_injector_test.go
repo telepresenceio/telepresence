@@ -18,7 +18,7 @@ import (
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
@@ -35,7 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
-	types2 "github.com/telepresenceio/telepresence/v2/pkg/types"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 const serviceAccountMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -372,10 +372,10 @@ matchExpressions:
 		}
 	}
 
-	makeUID := func() types.UID {
+	makeUID := func() k8sTypes.UID {
 		uid, err := uuid.NewUUID()
 		require.NoError(t, err)
-		return types.UID(uid.String())
+		return k8sTypes.UID(uid.String())
 	}
 	namedPortUID := makeUID()
 	numericPortUID := makeUID()
@@ -557,8 +557,8 @@ matchExpressions:
 						Name:       "some-container",
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/some-container",
-						Mounts: map[string]types2.MountPolicy{
-							"/var/run/secrets/kubernetes.io/serviceaccount": types2.MountPolicyRemote,
+						Mounts: map[string]types.MountPolicy{
+							"/var/run/secrets/kubernetes.io/serviceaccount": types.MountPolicyRemote,
 						},
 						MountPaths: []string{"/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
@@ -604,15 +604,15 @@ matchExpressions:
 								ServiceUID:        namedPortUID,
 								ServicePortName:   "http",
 								ServicePort:       80,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AgentPort:         9900,
 								ContainerPort:     8888,
 							},
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/some-container",
-						Mounts: map[string]types2.MountPolicy{
-							"/var/run/secrets/kubernetes.io/serviceaccount": types2.MountPolicyRemote,
+						Mounts: map[string]types.MountPolicy{
+							"/var/run/secrets/kubernetes.io/serviceaccount": types.MountPolicyRemote,
 						},
 						MountPaths: []string{"/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
@@ -642,7 +642,7 @@ matchExpressions:
 								ServicePortName:   "http",
 								ServicePort:       80,
 								TargetPortNumeric: true,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AgentPort:         9900,
 								ContainerPort:     8899,
 							},
@@ -675,7 +675,7 @@ matchExpressions:
 								ServiceUID:        unnamedNumericPortUID,
 								ServicePort:       80,
 								TargetPortNumeric: true,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AgentPort:         9900,
 								ContainerPort:     8899,
 							},
@@ -708,16 +708,16 @@ matchExpressions:
 								ServiceUID:        namedPortUID,
 								ServicePortName:   "http",
 								ServicePort:       80,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AgentPort:         9900,
 								ContainerPort:     8888,
 							},
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/named-port-container",
-						Mounts: map[string]types2.MountPolicy{
-							"/home/bob": types2.MountPolicyRemote,
-							"/var/run/secrets/kubernetes.io/serviceaccount": types2.MountPolicyRemote,
+						Mounts: map[string]types.MountPolicy{
+							"/home/bob": types.MountPolicyRemote,
+							"/var/run/secrets/kubernetes.io/serviceaccount": types.MountPolicyRemote,
 						},
 						MountPaths: []string{"/home/bob", "/var/run/secrets/kubernetes.io/serviceaccount"},
 					},
@@ -731,7 +731,7 @@ matchExpressions:
 								ServicePortName:   "http",
 								ServicePort:       80,
 								TargetPortNumeric: true,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AgentPort:         9901,
 								ContainerPort:     8899,
 							},
@@ -764,7 +764,7 @@ matchExpressions:
 								ServiceUID:        multiPortUID,
 								ServicePortName:   "http",
 								ServicePort:       80,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AgentPort:         9900,
 								ContainerPort:     8080,
 							},
@@ -774,7 +774,7 @@ matchExpressions:
 								ServiceUID:        multiPortUID,
 								ServicePortName:   "grpc",
 								ServicePort:       8001,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AppProtocol:       "grpc",
 								AgentPort:         9901,
 								ContainerPort:     8081,
@@ -782,8 +782,8 @@ matchExpressions:
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/multi-port-container",
-						Mounts: map[string]types2.MountPolicy{
-							"/home/bob": types2.MountPolicyRemote,
+						Mounts: map[string]types.MountPolicy{
+							"/home/bob": types.MountPolicyRemote,
 						},
 						MountPaths: []string{"/home/bob"},
 					},
@@ -812,15 +812,15 @@ matchExpressions:
 								ServiceUID:        multiPortUID,
 								ServicePortName:   "http",
 								ServicePort:       80,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AgentPort:         9900,
 								ContainerPort:     8080,
 							},
 						},
 						EnvPrefix:  "A_",
 						MountPoint: "/tel_app_mounts/http-container",
-						Mounts: map[string]types2.MountPolicy{
-							"/home/bob": types2.MountPolicyRemote,
+						Mounts: map[string]types.MountPolicy{
+							"/home/bob": types.MountPolicyRemote,
 						},
 						MountPaths: []string{"/home/bob"},
 					},
@@ -833,7 +833,7 @@ matchExpressions:
 								ServiceUID:        multiPortUID,
 								ServicePortName:   "grpc",
 								ServicePort:       8001,
-								Protocol:          core.ProtocolTCP,
+								Protocol:          types.ProtoTCP,
 								AppProtocol:       "grpc",
 								AgentPort:         9901,
 								ContainerPort:     8081,
@@ -907,7 +907,7 @@ matchExpressions:
 							ServiceUID:        grpcPortUID,
 							ServicePortName:   "grpc",
 							ServicePort:       443,
-							Protocol:          core.ProtocolTCP,
+							Protocol:          types.ProtoTCP,
 							AgentPort:         9900,
 							ContainerPort:     8443,
 							AppProtocol:       "grpc",
@@ -970,7 +970,7 @@ matchExpressions:
 			Annotations:     map[string]string{annotation.InjectTrafficAgent: "enabled"},
 			Labels:          map[string]string{"service": name},
 			OwnerReferences: podOwner(name),
-			UID:             types.UID(uuid.New().String()),
+			UID:             k8sTypes.UID(uuid.New().String()),
 		}
 	}
 
@@ -1707,7 +1707,7 @@ matchExpressions:
 								{
 									ServiceName:       "numeric-port",
 									TargetPortNumeric: true,
-									Protocol:          "TCP",
+									Protocol:          types.ProtoTCP,
 									ContainerPort:     8888,
 									ServicePort:       80,
 									AgentPort:         9900,

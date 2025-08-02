@@ -141,7 +141,7 @@ func prepareAllContainerPorts(cn *agentconfig.Container, pi *rpc.PreparedInterce
 		// Put the first port in the intercept itself
 		i0 := pics[0]
 		pi.ContainerPort = int32(i0.ContainerPort)
-		pi.Protocol = string(i0.Protocol)
+		pi.Protocol = i0.Protocol.String()
 		if ni > 1 {
 			// Put the remaining ports in PodPorts with a 1:1 mapping to target port on the client.
 			pi.PodPorts = make([]string, ni-1)
@@ -188,7 +188,7 @@ func (s *state) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container,
 				return err
 			}
 
-			to := pm.To()
+			to := pm.ToAsNumeric()
 			if _, ok := uniqueTargets[to]; ok {
 				return fmt.Errorf("multiple port definitions targeting %s", &to)
 			}
@@ -236,7 +236,7 @@ func (s *state) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container,
 	pi.ContainerName = cn.Name
 	pi.ServiceUid = string(ic.ServiceUID)
 	pi.ServicePortName = ic.ServicePortName
-	pi.Protocol = string(ic.Protocol)
+	pi.Protocol = ic.Protocol.String()
 	pi.ContainerPort = int32(ic.ContainerPort)
 	pi.ServicePort = int32(ic.ServicePort)
 	pi.PodPorts = podPorts
@@ -299,7 +299,7 @@ func (s *state) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		pmSpec.Protocol = string(to.Proto)
 		pmSpec.ContainerPort = int32(from)
 		pmSpec.PortIdentifier = pm.From().String()
-		pmSpec.TargetPort = int32(pm.To().Port)
+		pmSpec.TargetPort = int32(pm.ToAsNumeric().Port)
 
 		// The Client field helps IsChildIntercept identify the child.
 		pmSpec.Client = fmt.Sprintf("child %s %s %s", pm, spec.Name, spec.Client)

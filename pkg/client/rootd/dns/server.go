@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -764,7 +765,7 @@ func (d dfs) String() string {
 }
 
 func (s *Server) performRecursionCheck(c context.Context) {
-	if !client.GetConfig(c).DNS().RecursionCheck {
+	if proc.RunningInContainer() || !client.GetConfig(c).DNS().RecursionCheck {
 		close(s.ready)
 		return
 	}

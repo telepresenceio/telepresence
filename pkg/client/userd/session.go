@@ -101,6 +101,7 @@ type Session interface {
 	Ingest(context.Context, *rpc.IngestRequest) (*rpc.IngestInfo, error)
 	GetIngest(*rpc.IngestIdentifier) (*rpc.IngestInfo, error)
 	LeaveIngest(context.Context, *rpc.IngestIdentifier) (*rpc.IngestInfo, error)
+	RerouteLocalPort(ctx context.Context, ap types.AddrPortProto, srcPort uint16)
 }
 
 type NewSessionFunc func(context.Context, ConnectRequest, *client.Kubeconfig, *sync.WaitGroup) (context.Context, Session, *rpc.ConnectInfo)

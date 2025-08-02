@@ -17,8 +17,8 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type uni struct {
@@ -112,7 +112,7 @@ func TestStream_Connect(t *testing.T) {
 	defer cancel()
 
 	tunnel := newBidi(10, ctx.Done())
-	id := NewConnID(ipproto.TCP, netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001), netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
+	id := NewConnID(types.ProtoTCP, netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001), netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
 	si := SessionID(uuid.New().String())
 
 	wg := sync.WaitGroup{}
@@ -213,7 +213,7 @@ func TestStream_Xfer(t *testing.T) {
 	ctx, cancel := testContext(t, 30*time.Second)
 	defer cancel()
 
-	id := NewConnID(ipproto.TCP, netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001), netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
+	id := NewConnID(types.ProtoTCP, netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001), netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
 	si := SessionID(uuid.New().String())
 	b := make([]byte, 0x1000)
 	for i := range b {

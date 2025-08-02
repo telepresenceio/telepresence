@@ -86,7 +86,7 @@ type Intercept struct {
 	TargetPortNumeric bool `json:"targetPortNumeric,omitzero"`
 
 	// L4 protocol used by the intercepted port
-	Protocol core.Protocol `json:"protocol,omitzero"`
+	Protocol types.Proto `json:"protocol,omitzero"`
 
 	// L7 protocol used by the intercepted port
 	AppProtocol string `json:"appProtocol,omitzero"`

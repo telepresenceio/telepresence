@@ -17,7 +17,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // The idleDuration controls how long a dialer for a specific proto+from-to address combination remains alive without
@@ -99,7 +99,7 @@ func NewDialerTTL(stream Stream, cancel context.CancelFunc, ttl time.Duration, i
 
 func NewConnEndpoint(stream Stream, conn net.Conn, cancel context.CancelFunc, ingressBytesProbe, egressBytesProbe *CounterProbe) Endpoint {
 	ttl := tcpConnTTL
-	if stream.ID().Protocol() == ipproto.UDP {
+	if stream.ID().Protocol() == types.ProtoUDP {
 		ttl = udpConnTTL
 	}
 	return NewConnEndpointTTL(stream, conn, cancel, ttl, ingressBytesProbe, egressBytesProbe)
@@ -166,7 +166,7 @@ func (h *dialer) Start(ctx context.Context) {
 			defer cancel()
 			var conn net.Conn
 			var err error
-			if id.Protocol() == ipproto.UDP {
+			if id.Protocol() == types.ProtoUDP {
 				conn, err = d.DialUDP(dtoCtx, netip.AddrPort{}, id.Destination())
 			} else {
 				conn, err = d.DialTCP(dtoCtx, id.Destination())

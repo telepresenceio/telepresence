@@ -25,7 +25,7 @@ const (
 )
 
 func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.State) {
-	f := forwarder.NewInterceptor(types.PortAndProto{Proto: core.ProtocolTCP, Port: 1111}, tunnel.AgentToProxied, appHost, appPort)
+	f := forwarder.NewInterceptor(types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appHost, appPort)
 	go func() {
 		if err := f.Serve(context.Background(), nil); err != nil {
 			dlog.Error(ctx, err)

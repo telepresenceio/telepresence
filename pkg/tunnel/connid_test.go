@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 var (
@@ -29,55 +29,55 @@ func TestConnIDFromUDP(t *testing.T) {
 			name: "ipv4-ipv4",
 			src:  netip.AddrPortFrom(ipv4a, 4),
 			dst:  netip.AddrPortFrom(ipv4b, 8),
-			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
+			want: "UDP 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv4-ipv6",
 			src:  netip.AddrPortFrom(ipv4a, 4),
 			dst:  netip.AddrPortFrom(ipv6b, 8),
-			want: "udp 192.168.0.1:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
+			want: "UDP 192.168.0.1:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
 		},
 		{
 			name: "ipv4-ipv4as6",
 			src:  netip.AddrPortFrom(ipv4a, 4),
 			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
-			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
+			want: "UDP 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv6-ipv4",
 			src:  netip.AddrPortFrom(ipv6a, 4),
 			dst:  netip.AddrPortFrom(ipv4b, 8),
-			want: "udp [2a05:d014:153d:d732:a2d3::15]:4 -> 192.168.3.8:8",
+			want: "UDP [2a05:d014:153d:d732:a2d3::15]:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv6-ipv6",
 			src:  netip.AddrPortFrom(ipv6a, 4),
 			dst:  netip.AddrPortFrom(ipv6b, 8),
-			want: "udp [2a05:d014:153d:d732:a2d3::15]:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
+			want: "UDP [2a05:d014:153d:d732:a2d3::15]:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
 		},
 		{
 			name: "ipv6-ipv4as6",
 			src:  netip.AddrPortFrom(ipv6a, 4),
 			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
-			want: "udp [2a05:d014:153d:d732:a2d3::15]:4 -> 192.168.3.8:8",
+			want: "UDP [2a05:d014:153d:d732:a2d3::15]:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv4as6-ipv4",
 			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
 			dst:  netip.AddrPortFrom(ipv4b, 8),
-			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
+			want: "UDP 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 		{
 			name: "ipv4as6-ipv6",
 			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
 			dst:  netip.AddrPortFrom(ipv6b, 8),
-			want: "udp 192.168.0.1:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
+			want: "UDP 192.168.0.1:4 -> [2a05:d014:153d:d732:a2f2::8]:8",
 		},
 		{
 			name: "ipv4as6-ipv4as6",
 			src:  netip.AddrPortFrom(ipv4Asv6a, 4),
 			dst:  netip.AddrPortFrom(ipv4Asv6b, 8),
-			want: "udp 192.168.0.1:4 -> 192.168.3.8:8",
+			want: "UDP 192.168.0.1:4 -> 192.168.3.8:8",
 		},
 	}
 	for _, tt := range tests {
@@ -151,7 +151,7 @@ func TestConnID_Source(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, NewConnID(ipproto.TCP, tt.src, tt.dst).Source(), "Source()")
+			assert.Equalf(t, tt.want, NewConnID(types.ProtoTCP, tt.src, tt.dst).Source(), "Source()")
 		})
 	}
 }
@@ -220,7 +220,7 @@ func TestConnID_Destination(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equalf(t, tt.want, NewConnID(ipproto.TCP, tt.src, tt.dst).Destination(), "Source()")
+			assert.Equalf(t, tt.want, NewConnID(types.ProtoTCP, tt.src, tt.dst).Destination(), "Source()")
 		})
 	}
 }

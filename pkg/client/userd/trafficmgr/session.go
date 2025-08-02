@@ -26,7 +26,7 @@ import (
 	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
 
@@ -50,12 +50,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
@@ -75,7 +77,7 @@ type workloadInfoKey struct {
 }
 
 type workloadInfo struct {
-	uid              types.UID
+	uid              k8sTypes.UID
 	state            workload.State
 	agentState       manager.WorkloadInfo_AgentState
 	interceptClients []string
@@ -1130,6 +1132,27 @@ func (s *session) eachWorkload(namespaces []string, do func(kind manager.Workloa
 	s.workloadsLock.Unlock()
 }
 
+func (s *session) RerouteLocalPort(ctx context.Context, ap types.AddrPortProto, srcPort uint16) {
+	fw := forwarder.NewInterceptor(types.PortAndProto{
+		Port:  srcPort,
+		Proto: ap.Proto,
+	}, tunnel.ClientToAgent, ap.Addr().String(), ap.Port())
+
+	// create a context canceled when the session is done.
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	go func() {
+		<-s.done
+		cancel()
+	}()
+	ctx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%d=>%s", srcPort, ap))
+	go func() {
+		err := fw.Serve(ctx, nil)
+		if err != nil && ctx.Err() == nil {
+			dlog.Errorf(ctx, "port-forwarder failed with %v", err)
+		}
+	}()
+}
+
 func (s *session) localWorkloadsWatcher(ctx context.Context, namespace string, synced *sync.WaitGroup) error {
 	defer func() {
 		if synced != nil {
@@ -1273,7 +1296,7 @@ func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced
 				state := workload.StateFromRPC(w.State)
 				dlog.Debugf(ctx, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
 				workloads[key] = workloadInfo{
-					uid:              types.UID(w.Uid),
+					uid:              k8sTypes.UID(w.Uid),
 					state:            state,
 					agentState:       w.AgentState,
 					interceptClients: clients,

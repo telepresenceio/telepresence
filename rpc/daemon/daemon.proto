@@ -52,6 +52,12 @@ service Daemon {
 
   // LookupIP resolves the given name using the Telepresence DNS server
   rpc LookupIP(LookupIPRequest) returns (LookupIPResponse);
+
+  // ResolvePort resolves an hostName:portID string from into a netip.AddrPort
+  rpc ResolvePort(ResolvePortRequest) returns (ResolvePortResponse);
+
+  // RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
+  rpc RerouteRemotePort(ReroutePortRequest) returns (google.protobuf.Empty);
 }
 
 message DaemonStatus {
@@ -120,6 +126,9 @@ message NetworkConfig {
   // Route subnets via given workload using virtual IPs
   repeated SubnetViaWorkload subnet_via_workloads = 2;
 
+  // Port mappings enforced by the TUN-device.
+  repeated string port_mappings = 8;
+
   // Users home directory
   string home_dir = 3;
 
@@ -165,4 +174,25 @@ message LookupIPResponse {
 
 message Environment {
   map<string, string> env = 1;
+}
+
+message ResolvePortRequest {
+  // host is the name or IP-address of the targeted host.
+  string host = 1;
+
+  // port can be symbolic if the host is the name of a service, and can be suffixed with /{tcp|udp}.
+  string port = 2;
+}
+
+message ResolvePortResponse {
+  // host_port is a iputil.ProtoAddrPort in binary format
+  bytes host_port = 1;
+}
+
+message ReroutePortRequest {
+  // host_port is a iputil.ProtoAddrPort in binary format
+  bytes dst_host_port = 1;
+
+  // port is will be rerouted to the host_port.
+  uint32 src_port = 2;
 }

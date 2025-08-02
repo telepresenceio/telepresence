@@ -333,7 +333,7 @@ func (s *interceptInfo) PortIdentifier() (types.PortIdentifier, error) {
 	} else {
 		spi = s.preparedIntercept.ServicePortName
 	}
-	return types.NewPortIdentifier(s.preparedIntercept.Protocol, spi)
+	return types.NewPortIdentifier(types.FromK8sProtocol(core.Protocol(s.preparedIntercept.Protocol)), spi)
 }
 
 func (s *interceptInfo) PreparedIntercept() *manager.PreparedIntercept {
@@ -362,25 +362,29 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 
 // allBusyLocalPorts returns the sum of all ports that the intercept forwards to and all ports
 // that are forwarded from.
-func allBusyLocalPorts(spec *manager.InterceptSpec) []types.PortAndProto {
+func allBusyLocalPorts(spec *manager.InterceptSpec) ([]types.PortAndProto, error) {
 	targetPort := spec.TargetPort
 	if targetPort == 0 {
 		targetPort = spec.ContainerPort
 	}
+	proto, err := types.ParseProto(spec.Protocol)
+	if err != nil {
+		return nil, err
+	}
 	ports := make([]types.PortAndProto, 0, len(spec.LocalPorts)+len(spec.PodPorts)+1)
 	ports = append(ports, types.PortAndProto{
 		Port:  uint16(targetPort),
-		Proto: core.Protocol(spec.Protocol),
+		Proto: proto,
 	})
 	for _, lp := range spec.LocalPorts {
-		pp, _ := types.NewPortAndProto(lp)
+		pp, _ := types.ParsePortAndProto(lp)
 		ports = append(ports, pp)
 	}
 	for _, ps := range spec.PodPorts {
 		pm := types.PortMapping(ps)
-		ports = append(ports, pm.To())
+		ports = append(ports, pm.ToAsNumeric())
 	}
-	return ports
+	return ports, nil
 }
 
 // ensureUniqueLocalPorts returns the sum of all local ports that the intercept will forward to, and all
@@ -393,14 +397,18 @@ func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedInt
 		targetPort = pi.ContainerPort
 	}
 
+	proto, err := types.ParseProto(pi.Protocol)
+	if err != nil {
+		return nil, err
+	}
 	ports := make(map[types.PortAndProto]struct{}, len(spec.LocalPorts)+len(pi.PodPorts)+1)
 	ports[types.PortAndProto{
 		Port:  uint16(targetPort),
-		Proto: core.Protocol(pi.Protocol),
+		Proto: proto,
 	}] = struct{}{}
 
 	for _, lp := range spec.LocalPorts {
-		pp, err := types.NewPortAndProto(lp)
+		pp, err := types.ParsePortAndProto(lp)
 		if err != nil {
 			return nil, err
 		}
@@ -414,7 +422,7 @@ func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedInt
 		if err := pm.Validate(); err != nil {
 			return nil, err
 		}
-		pp := pm.To()
+		pp := pm.ToAsNumeric()
 		if _, ok := ports[pp]; ok {
 			return nil, fmt.Errorf("multiple use of port %s on %s", &pp, spec.TargetHost)
 		}
@@ -433,7 +441,11 @@ func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.
 	defer s.currentInterceptsLock.Unlock()
 	for _, ci := range s.currentIntercepts {
 		ciSpec := ci.Spec
-		for _, blp := range allBusyLocalPorts(ciSpec) {
+		busyPorts, err := allBusyLocalPorts(ciSpec)
+		if err != nil {
+			return InterceptError(common.InterceptError_INTERNAL, errcat.User.New(err))
+		}
+		for _, blp := range busyPorts {
 			if _, ok := ports[blp]; ok {
 				return &rpc.InterceptResult{
 					Error:         common.InterceptError_LOCAL_TARGET_IN_USE,

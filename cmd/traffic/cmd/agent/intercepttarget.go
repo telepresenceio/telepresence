@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // InterceptTarget describes the mapping between service ports and one container port, or if no service
@@ -41,7 +42,7 @@ func NewInterceptTarget(ics []*agentconfig.Intercept) InterceptTarget {
 func (cp InterceptTarget) MatchForSpec(spec *manager.InterceptSpec) bool {
 	if cnPort := uint16(spec.ContainerPort); cnPort > 0 {
 		for _, ic := range cp {
-			if cnPort == ic.ContainerPort && ic.Protocol == core.Protocol(spec.Protocol) {
+			if cnPort == ic.ContainerPort && ic.Protocol == types.FromK8sProtocol(core.Protocol(spec.Protocol)) {
 				return true
 			}
 		}
@@ -61,7 +62,7 @@ func (cp InterceptTarget) ContainerPortName() string {
 	return cp[0].ContainerPortName
 }
 
-func (cp InterceptTarget) Protocol() core.Protocol {
+func (cp InterceptTarget) Protocol() types.Proto {
 	return cp[0].Protocol
 }
 

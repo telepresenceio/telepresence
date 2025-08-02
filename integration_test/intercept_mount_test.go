@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 type interceptMountSuite struct {
@@ -160,7 +160,7 @@ func (s *singleServiceSuite) Test_InterceptDetailedOutput() {
 	s.Equal(iInfo.Environment["TELEPRESENCE_CONTAINER"], "echo-server")
 	m := iInfo.Mount
 	require.NotNil(m)
-	s.NotNil(iputil.Parse(m.PodIP))
+	s.NotNil(net.ParseIP(m.PodIP))
 	s.NotZero(m.Port)
 	s.Equal(agentconfig.ExportsMountPoint+"/echo-server", m.RemoteDir)
 	require.Len(m.Mounts, 1)

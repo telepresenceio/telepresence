@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 func NewStack(ctx context.Context, dev stack.LinkEndpoint, streamCreator tunnel.StreamCreator) (*stack.Stack, tcpip.NICID, error) {
@@ -234,7 +235,7 @@ func tcpAddrToAddr(addr tcpip.Address) netip.Addr {
 }
 
 func newConnID(proto tcpip.TransportProtocolNumber, id stack.TransportEndpointID) tunnel.ConnID {
-	return tunnel.NewConnID(int(proto), netip.AddrPortFrom(tcpAddrToAddr(id.RemoteAddress), id.RemotePort), netip.AddrPortFrom(tcpAddrToAddr(id.LocalAddress), id.LocalPort))
+	return tunnel.NewConnID(types.Proto(proto), netip.AddrPortFrom(tcpAddrToAddr(id.RemoteAddress), id.RemotePort), netip.AddrPortFrom(tcpAddrToAddr(id.LocalAddress), id.LocalPort))
 }
 
 func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, streamCreator tunnel.StreamCreator) {

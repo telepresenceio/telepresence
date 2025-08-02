@@ -66,7 +66,7 @@ func (s *state) CreateRequest() (*rpc.IngestRequest, error) {
 	}
 
 	for _, toPod := range s.ToPod {
-		pp, err := types.NewPortAndProto(toPod)
+		pp, err := types.ParsePortAndProto(toPod)
 		if err != nil {
 			return nil, err
 		}

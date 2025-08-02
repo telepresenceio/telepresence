@@ -6,10 +6,10 @@ import (
 	"net/netip"
 )
 
-// Parse is like net.ParseIP but converts an IPv4 in 16 byte form to its 4 byte form.
-func Parse(ipStr string) (ip netip.Addr) {
-	if ip, err := netip.ParseAddr(ipStr); err == nil {
-		return ip.Unmap()
+// ParseAddr is like netip.ParseAddr but removes any IPv4-mapped IPv6 address prefix.
+func ParseAddr(ipStr string) (ip netip.Addr, err error) {
+	if ip, err = netip.ParseAddr(ipStr); err == nil {
+		ip = ip.Unmap()
 	}
 	return
 }

@@ -11,9 +11,9 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/ipproto"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type tcp struct {
@@ -195,11 +195,15 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 
 func (f *tcp) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
 	spec := iCept.Spec
+	ip, err := iputil.ParseAddr(spec.TargetHost)
+	if err != nil {
+		return err
+	}
 	return f.rerouteConn(
 		ctx,
 		conn,
 		tunnel.SessionID(iCept.ClientSession.SessionId),
-		netip.AddrPortFrom(iputil.Parse(spec.TargetHost), uint16(spec.TargetPort)),
+		netip.AddrPortFrom(ip, uint16(spec.TargetPort)),
 		time.Duration(spec.RoundtripLatency),
 		time.Duration(spec.DialTimeout))
 }
@@ -214,7 +218,11 @@ func (f *tcp) rerouteConn(ctx context.Context, conn net.Conn, clientSession tunn
 		return fmt.Errorf("failed to parse intercept source address %s: %w", srcAddr, err)
 	}
 
-	id := tunnel.NewConnID(ipproto.Parse(srcAddr.Network()), src, dst)
+	proto, err := types.ParseProto(srcAddr.Network())
+	if err != nil {
+		return fmt.Errorf("failed to parse intercept protocol %s: %w", srcAddr, err)
+	}
+	id := tunnel.NewConnID(proto, src, dst)
 	ctx, cancel := context.WithCancel(ctx)
 	f.mu.Lock()
 	sp := f.streamProvider

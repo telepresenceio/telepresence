@@ -86,7 +86,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.NoDefaultPort = s.NoDefaultPort
 
 	for _, toPod := range s.ToPod {
-		pp, err := types.NewPortAndProto(toPod)
+		pp, err := types.ParsePortAndProto(toPod)
 		if err != nil {
 			return nil, err
 		}
@@ -350,7 +350,7 @@ func parsePort(portSpec string, dockerRun, containerized bool) (local uint16, do
 	}
 
 	if p := portMapping[0]; p != "" {
-		if local, err = types.ParseNumericPort(p); err != nil {
+		if local, err = types.ParsePort(p); err != nil {
 			return portError()
 		}
 	}
@@ -363,7 +363,7 @@ func parsePort(portSpec string, dockerRun, containerized bool) (local uint16, do
 				return 0, 0, p, nil
 			}
 			if dockerRun && !containerized {
-				if docker, err = types.ParseNumericPort(p); err != nil {
+				if docker, err = types.ParsePort(p); err != nil {
 					return portError()
 				}
 			} else {
@@ -381,7 +381,7 @@ func parsePort(portSpec string, dockerRun, containerized bool) (local uint16, do
 		if !dockerRun {
 			return portError()
 		}
-		if docker, err = types.ParseNumericPort(portMapping[1]); err != nil {
+		if docker, err = types.ParsePort(portMapping[1]); err != nil {
 			return portError()
 		}
 		svcPortId = portMapping[2]

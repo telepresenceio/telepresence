@@ -6,7 +6,6 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/puzpuzpuz/xsync/v4"
-	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
@@ -157,7 +156,7 @@ func (s *state) InterceptInfo(ctx context.Context, callerID, path string, contai
 	}
 	for _, is := range s.interceptStates {
 		ic := is.Target()
-		if containerPort == ic.ContainerPort() && ic.Protocol() == core.ProtocolTCP {
+		if containerPort == ic.ContainerPort() && ic.Protocol() == types.ProtoTCP {
 			return is.InterceptInfo(ctx, callerID, path, containerPort, headers)
 		}
 	}

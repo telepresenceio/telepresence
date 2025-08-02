@@ -54,6 +54,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -200,6 +201,9 @@ type Session struct {
 	// daemon runs as part of a pod-daemon setup.
 	podDaemon bool
 	routesCh  chan []netip.Prefix
+
+	// Maps one UDP or TCP AddrPort to another
+	l4PortMap *xsync.Map[types.AddrPortProto, uint16]
 }
 
 type NewSessionFunc func(context.Context, *rpc.NetworkConfig) (context.Context, *Session, error)
@@ -372,6 +376,7 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		podDaemon:             isPodDaemon,
 		localTranslationTable: xsync.NewMap[netip.Addr, netip.Addr](),
 		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
+		l4PortMap:             xsync.NewMap[types.AddrPortProto, uint16](),
 	}
 	cfg := client.GetConfig(c)
 	rt := cfg.Routing()
@@ -403,6 +408,47 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		close(s.routesCh)
 	}()
 	return c, s, nil
+}
+
+func (s *Session) resolvePort(ctx context.Context, host, portStr string) (ap types.AddrPortProto, err error) {
+	ix := strings.LastIndexByte(portStr, types.ProtoSeparator)
+	proto := types.ProtoTCP
+	if ix > 0 {
+		proto, err = types.ParseProto(portStr[ix+1:])
+		if err != nil {
+			return ap, err
+		}
+		portStr = portStr[:ix]
+	}
+
+	if port, err := types.ParsePort(portStr); err == nil {
+		ip, err := netip.ParseAddr(host)
+		if err != nil {
+			ip, err = dns.LookupIP(ctx, s.localDNS, dns2.Fqdn(host))
+			if err != nil {
+				return ap, err
+			}
+		}
+		return types.AddrPortProto{AddrPort: netip.AddrPortFrom(ip, port), Proto: proto}, nil
+	}
+
+	// The toPort is symbolic, so it must be resolved using the Kubernetes API.
+	_, err = netip.ParseAddr(host)
+	if err == nil {
+		return ap, errors.New("a symbolic port must be used with a service name, not an IP address")
+	}
+	return portforward.ResolveServiceAndPort(ctx, host, s.namespace, portStr, proto)
+}
+
+func (s *Session) rerouteRemotePort(ctx context.Context, ap types.AddrPortProto, newPort uint16) {
+	if newPort != ap.Port() {
+		dlog.Debugf(ctx, "Rerouting %s via %d", ap, newPort)
+
+		// Swap ports so that the port map reroutes requests for the new port to the original port.
+		toPort := ap.Port()
+		ap.AddrPort = netip.AddrPortFrom(ap.Addr(), newPort)
+		s.l4PortMap.Store(ap, toPort)
+	}
 }
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
@@ -521,9 +567,18 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 	}
 	d.VIFAddress = s.vifDNS
 
+	var portMappings []string
+	if psz := s.l4PortMap.Size(); psz > 0 {
+		portMappings = make([]string, 0, psz)
+		s.l4PortMap.Range(func(key types.AddrPortProto, origPort uint16) bool {
+			portMappings = append(portMappings, fmt.Sprintf("%s:%d", types.AddrPortProto{AddrPort: netip.AddrPortFrom(key.Addr(), origPort), Proto: key.Proto}, key.Port()))
+			return true
+		})
+	}
 	js, _ := client.MarshalJSON(mc)
 	return &rpc.NetworkConfig{
 		Session:      s.session,
+		PortMappings: portMappings,
 		ClientConfig: js,
 	}
 }
@@ -956,7 +1011,7 @@ func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.Cluste
 	// The traffic-manager service is headless, which means we can't try a GRPC connection to its ClusterIP.
 	// Instead, we try an HTTP health check on the agent-injector server, since that one does expose a ClusterIP.
 	// This is less precise than if we could check for our own GRPC, since /healthz is a common enough health check path,
-	// but hopefully the server on the other end isn't configured to respond to the hostname "agent-injector" if it isn't the agent-injector.
+	// but hopefully, the server on the other end isn't configured to respond to the hostname "agent-injector" if it isn't the agent-injector.
 	if info.InjectorSvcIp == nil {
 		dlog.Debugf(ctx, "No injector service IP given; usually this is because the traffic-manager is older than the telepresence binary."+
 			"Connectivity check for services set to pass.")

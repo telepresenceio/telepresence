@@ -19,6 +19,7 @@ var engagementTypes = map[string]EngagementType{ //nolint:gochecknoglobals // co
 	"wiretap":   EngagementTypeWiretap,
 	"intercept": EngagementTypeIntercept,
 	"replace":   EngagementTypeReplace,
+	"proxy":     EngagementTypeProxy,
 }
 
 const (
@@ -27,9 +28,10 @@ const (
 	EngagementTypeWiretap
 	EngagementTypeIntercept
 	EngagementTypeReplace
+	EngagementTypeProxy
 )
 
-var egStrings = [5][3]string{ //nolint:gochecknoglobals // constant names
+var egStrings = [6][3]string{ //nolint:gochecknoglobals // constant names
 	{
 		"connect",
 		"Connecting",
@@ -55,6 +57,11 @@ var egStrings = [5][3]string{ //nolint:gochecknoglobals // constant names
 		"Replacing",
 		"Replaced",
 	},
+	{
+		"proxy",
+		"Proxying",
+		"Proxied",
+	},
 }
 
 const invalidType = "invalid engagement type %s"
@@ -78,7 +85,7 @@ func EngagementTypeFromSpec(spec *manager.InterceptSpec) EngagementType {
 }
 
 func (e EngagementType) strings() [3]string {
-	if e >= 0 && e < 5 {
+	if e >= 0 && e < 6 {
 		return egStrings[e]
 	}
 	en := fmt.Sprintf(invalidType, strconv.Itoa(int(e)))
