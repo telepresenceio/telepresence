@@ -21,7 +21,7 @@ import (
 )
 
 // Telepresence returns the top level "telepresence" CLI command.
-func Telepresence(ctx context.Context) *cobra.Command {
+func Telepresence(ctx context.Context, args []string) *cobra.Command {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v", err)
@@ -43,6 +43,7 @@ func Telepresence(ctx context.Context) *cobra.Command {
 		SilenceUsage:      true, // our FlagErrorFunc will handle it
 		ValidArgsFunction: cobra.NoFileCompletions,
 	}
+	rootCmd.SetArgs(args)
 	rootCmd.SetContext(ctx)
 	AddSubCommands(rootCmd)
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
@@ -52,7 +53,7 @@ func Telepresence(ctx context.Context) *cobra.Command {
 }
 
 // TelepresenceDaemon returns the top level "telepresence" CLI limited to the subcommands [kubeauth|connector|daemon]-foreground.
-func TelepresenceDaemon(ctx context.Context) *cobra.Command {
+func TelepresenceDaemon(ctx context.Context, args []string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "telepresence",
 		Args: OnlySubcommands,
@@ -63,6 +64,7 @@ func TelepresenceDaemon(ctx context.Context) *cobra.Command {
 		SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:  true, // our FlagErrorFunc will handle it
 	}
+	cmd.SetArgs(args)
 	cmd.SetContext(ctx)
 	AddSubCommands(cmd)
 	return cmd

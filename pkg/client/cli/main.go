@@ -60,7 +60,7 @@ func InitContext(ctx context.Context) context.Context {
 	return ctx
 }
 
-func Main(ctx context.Context) {
+func Main(ctx context.Context, args []string) {
 	if dir := os.Getenv("DEV_TELEPRESENCE_CONFIG_DIR"); dir != "" {
 		ctx = filelocation.WithAppUserConfigDir(ctx, dir)
 	}
@@ -71,12 +71,12 @@ func Main(ctx context.Context) {
 	if client.IsDaemon() {
 		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
 		// avoids checks for legacy commands.
-		if cmd, _, err := output.Execute(cmd.TelepresenceDaemon(ctx)); err != nil {
+		if cmd, _, err := output.Execute(cmd.TelepresenceDaemon(ctx, args)); err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 			os.Exit(1)
 		}
 	} else {
-		if cmd, fmtOutput, err := output.Execute(cmd.Telepresence(ctx)); err != nil {
+		if cmd, fmtOutput, err := output.Execute(cmd.Telepresence(ctx, args)); err != nil {
 			if fmtOutput || errcat.GetCategory(err) == errcat.Silent {
 				os.Exit(1)
 			}
