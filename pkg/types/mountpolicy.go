@@ -50,7 +50,9 @@ func (mp *MountPolicy) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	var s string
 	err := json.UnmarshalDecode(in, &s)
 	if err == nil {
-		if ix := slices.Index(mountPolicyNames, s); ix >= 0 {
+		if ix := slices.IndexFunc(mountPolicyNames, func(pn string) bool {
+			return strings.EqualFold(pn, s)
+		}); ix >= 0 {
 			*mp = MountPolicy(ix)
 		} else {
 			err = fmt.Errorf("invalid mount policy: %q", s)
