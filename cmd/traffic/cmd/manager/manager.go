@@ -242,19 +242,19 @@ func (s *service) servePrometheus(ctx context.Context) error {
 		dlog.Info(ctx, "Prometheus metrics server not started")
 		return nil
 	}
-	newGaugeFunc("agent_count", "Number of connected traffic agents", s.state.CountAgents)
-	newGaugeFunc("client_count", "Number of connected clients", s.state.CountClients)
-	newGaugeFunc("active_intercept_count", "Number of active intercepts", s.state.CountIntercepts)
-	newGaugeFunc("session_count", "Number of sessions", s.state.CountSessions)
-	newGaugeFunc("tunnel_count", "Number of tunnels", s.state.CountTunnels)
-	newCounterFunc("tunnel_ingress_bytes", "Number of bytes tunneled from clients", s.state.CountTunnelIngress)
-	newCounterFunc("tunnel_egress_bytes", "Number bytes tunneled to clients", s.state.CountTunnelEgress)
+	newGaugeFunc("telepresence_agent_count", "Number of connected traffic agents", s.state.CountAgents)
+	newGaugeFunc("telepresence_client_count", "Number of connected clients", s.state.CountClients)
+	newGaugeFunc("telepresence_active_intercept_count", "Number of active intercepts", s.state.CountIntercepts)
+	newGaugeFunc("telepresence_session_count", "Number of sessions", s.state.CountSessions)
+	newGaugeFunc("telepresence_tunnel_count", "Number of tunnels", s.state.CountTunnels)
+	newCounterFunc("telepresence_tunnel_ingress_bytes", "Number of bytes tunneled from clients", s.state.CountTunnelIngress)
+	newCounterFunc("telepresence_tunnel_egress_bytes", "Number bytes tunneled to clients", s.state.CountTunnelEgress)
 
-	newGaugeFunc("active_http_request_count", "Number of currently served http requests", func() int {
+	newGaugeFunc("telepresence_active_http_request_count", "Number of currently served http requests", func() int {
 		return int(atomic.LoadInt32(&s.activeHttpRequests))
 	})
 
-	newGaugeFunc("active_grpc_request_count", "Number of currently served gRPC requests", func() int {
+	newGaugeFunc("telepresence_active_grpc_request_count", "Number of currently served gRPC requests", func() int {
 		return int(atomic.LoadInt32(&s.activeGrpcRequests))
 	})
 
@@ -263,10 +263,10 @@ func (s *service) servePrometheus(ctx context.Context) error {
 		labels = append(labels, "client")
 	}
 	s.state.SetPrometheusMetrics(
-		newCounterVecFunc("connect_count", "The total number of connects by user", labels),
-		newGaugeVecFunc("connect_active_status", "Flag to indicate when a connect is active. 1 for active, 0 for not active.", labels),
-		newCounterVecFunc("intercept_count", "The total number of intercepts by user", append(labels, "intercept_type")),
-		newGaugeVecFunc("intercept_active_status",
+		newCounterVecFunc("telepresence_connect_count", "The total number of connects by user", labels),
+		newGaugeVecFunc("telepresence_connect_active_status", "Flag to indicate when a connect is active. 1 for active, 0 for not active.", labels),
+		newCounterVecFunc("telepresence_intercept_count", "The total number of intercepts by user", append(labels, "intercept_type")),
+		newGaugeVecFunc("telepresence_intercept_active_status",
 			"Flag to indicate when an intercept is active. 1 for active, 0 for not active.", append(labels, "workload")),
 	)
 
