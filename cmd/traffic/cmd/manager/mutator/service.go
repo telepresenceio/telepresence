@@ -333,7 +333,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 		}
 	} else if patchOps != nil {
 		// Otherwise, encode the patch operations to JSON and return a positive response.
-		patchBytes, err := json.Marshal(patchOps, jsonv1.OmitEmptyWithLegacyDefinition(true), json.FormatNilSliceAsNull(true))
+		patchBytes, err := json.Marshal(patchOps, jsonv1.OmitEmptyWithLegacySemantics(true), json.FormatNilSliceAsNull(true))
 		if err != nil {
 			return nil, http.StatusInternalServerError, fmt.Errorf("could not marshal JSON patch: %v", err)
 		}
