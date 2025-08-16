@@ -3,7 +3,7 @@ following Free and Open Source software:
 
     Name                                                           Version                               License(s)
     ----                                                           -------                               ----------
-    the Go language standard library ("std")                       v1.24                                 3-clause BSD license
+    the Go language standard library ("std")                       v1.25                                 3-clause BSD license
     dario.cat/mergo                                                v1.0.2                                3-clause BSD license
     github.com/Azure/go-ansiterm                                   v0.0.0-20250102033503-faa5f7b0171c    MIT license
     github.com/BurntSushi/toml                                     v1.5.0                                MIT license
@@ -58,7 +58,6 @@ following Free and Open Source software:
     github.com/gobwas/glob                                         v0.2.3                                MIT license
     github.com/godbus/dbus/v5                                      v5.1.0                                2-clause BSD license
     github.com/gogo/protobuf                                       v1.3.2                                3-clause BSD license
-    github.com/golang/mock                                         v1.7.0-rc.1                           Apache License 2.0
     github.com/google/btree                                        v1.1.3                                Apache License 2.0
     github.com/google/gnostic-models                               v0.7.0                                Apache License 2.0
     github.com/google/go-cmp                                       v0.7.0                                3-clause BSD license
