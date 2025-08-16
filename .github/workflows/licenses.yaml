@@ -17,9 +17,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - name: "Install mockgen"
-        shell: bash
-        run: go install go.uber.org/mock/mockgen@latest
       - name: "Generate dependency information"
         shell: bash
         run: make generate
