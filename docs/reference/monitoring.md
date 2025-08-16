@@ -36,19 +36,19 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
 
    | **Name**                    | **Type** | **Description**                                                               | **Labels**                               |
    |-----------------------------|----------|-------------------------------------------------------------------------------|------------------------------------------|
-   | `agent_count`               | Gauge    | Number of connected traffic agents.                                           |                                          |
-   | `client_count`              | Gauge    | Number of connected clients.                                                  |                                          |
-   | `active_intercept_count`    | Gauge    | Number of active intercepts.                                                  |                                          |
-   | `session_count`             | Gauge    | Number of sessions.                                                           |                                          |
-   | `tunnel_count`              | Gauge    | Number of tunnels.                                                            |                                          |
-   | `tunnel_ingress_bytes`      | Counter  | Number of bytes tunnelled from clients.                                       |                                          |
-   | `tunnel_egress_bytes`       | Counter  | Number of bytes tunnelled to clients.                                         |                                          |
-   | `active_http_request_count` | Gauge    | Number of currently served HTTP requests.                                     |                                          |
-   | `active_grpc_request_count` | Gauge    | Number of currently served gRPC requests.                                     |                                          |
-   | `connect_count`             | Counter  | The total number of connects by user.                                         | `client`, `install_id`                   |
-   | `connect_active_status`     | Gauge    | Flag to indicate when a connect is active. 1 for active, 0 for not active.    | `client`, `install_id`                   |
-   | `intercept_count`           | Counter  | The total number of intercepts by user.                                       | `client`, `install_id`, `intercept_type` |
-   | `intercept_active_status`   | Gauge    | Flag to indicate when an intercept is active. 1 for active, 0 for not active. | `client`, `install_id`, `workload`       |
+   | `telepresence_agent_count`               | Gauge    | Number of connected traffic agents.                                           |                                          |
+   | `telepresence_client_count`              | Gauge    | Number of connected clients.                                                  |                                          |
+   | `telepresence_active_intercept_count`    | Gauge    | Number of active intercepts.                                                  |                                          |
+   | `telepresence_session_count`             | Gauge    | Number of sessions.                                                           |                                          |
+   | `telepresence_tunnel_count`              | Gauge    | Number of tunnels.                                                            |                                          |
+   | `telepresence_tunnel_ingress_bytes`      | Counter  | Number of bytes tunnelled from clients.                                       |                                          |
+   | `telepresence_tunnel_egress_bytes`       | Counter  | Number of bytes tunnelled to clients.                                         |                                          |
+   | `telepresence_active_http_request_count` | Gauge    | Number of currently served HTTP requests.                                     |                                          |
+   | `telepresence_active_grpc_request_count` | Gauge    | Number of currently served gRPC requests.                                     |                                          |
+   | `telepresence_connect_count`             | Counter  | The total number of connects by user.                                         | `client`, `install_id`                   |
+   | `telepresence_connect_active_status`     | Gauge    | Flag to indicate when a connect is active. 1 for active, 0 for not active.    | `client`, `install_id`                   |
+   | `telepresence_intercept_count`           | Counter  | The total number of intercepts by user.                                       | `client`, `install_id`, `intercept_type` |
+   | `telepresence_intercept_active_status`   | Gauge    | Flag to indicate when an intercept is active. 1 for active, 0 for not active. | `client`, `install_id`, `workload`       |
 
 4. **Enable Scraping for Traffic Manager Metrics**
    To ensure that these metrics are collected regularly by your Prometheus server and to maintain a historical record, it's essential to enable scraping. If you're using the default Prometheus configuration, you can achieve this by specifying specific pod annotations as follows:
@@ -61,7 +61,7 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
          prometheus.io/port: "9090"
          prometheus.io/scrape: "true"
    ```
-   
+
    These annotations instruct Prometheus to scrape metrics from the Traffic Manager pod, allowing you to track consumption metrics and other important data over time.
 
 ## Grafana Integration
@@ -199,7 +199,7 @@ This dashboard is designed to provide you with comprehensive monitoring and visu
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "agent_count",
+          "expr": "telepresence_agent_count",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -266,7 +266,7 @@ This dashboard is designed to provide you with comprehensive monitoring and visu
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "client_count",
+          "expr": "telepresence_client_count",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -333,7 +333,7 @@ This dashboard is designed to provide you with comprehensive monitoring and visu
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "active_intercept_count",
+          "expr": "telepresence_active_intercept_count",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -400,7 +400,7 @@ This dashboard is designed to provide you with comprehensive monitoring and visu
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "session_count",
+          "expr": "telepresence_session_count",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,

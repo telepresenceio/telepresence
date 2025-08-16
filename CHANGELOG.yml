@@ -57,8 +57,12 @@ items:
         docs: https://github.com/telepresenceio/telepresence/issues/3491
         body: >-
           The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics.
-          This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to 
+          This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to
           track the working times of an individual.
+      - type: feature
+        title: Prefix metrics with `telepresnece_`
+        docs: https://github.com/telepresenceio/telepresence/issues/3920
+        body: Avoids metric conflicts and makes these more explicit to improve search in observability stacks
   - version: 2.23.6
     date: 2025-07-23
     notes:
@@ -104,7 +108,7 @@ items:
           waiting for itself. Previously, this resulted in a `SERVFAIL` from the cluster DNS, which triggered renewed
           lookup attempts that never stopped. This is now changed so that the same type of timeouts instead results
           in an `NXDOMAIN` error that doesn't trigger renewed attempts.
-  
+
           Also, the recursion check now handles that the cluster's DNS adds suffixes from its search-path.
         docs: reference/config#recursioncheck
   - version: 2.23.3
@@ -172,7 +176,7 @@ items:
           the traffic-manager or traffic-agent would consider it dead and disconnect (default 24 hours), had no effect.
           Instead, an engagement would disconnect after 2 hours (the default gRPC `keepAlive.Time` duration). The
           default of 24 hours is now reinstated.
-          
+
           The Helm value `client.connectionTTL` was moved to `grpc.connectionTTL` because it is a server configuration.
           The old value will still work, but it is deprecated and will be removed eventually.
         docs: https://github.com/telepresenceio/telepresence/issues/3861
@@ -190,7 +194,7 @@ items:
         body: >-
           The new `telepresence wiretap` command introduces a read-only form of an `intercept` where the original
           container will run unaffected while a copy of the wiretapped traffic is sent to the client.
-          
+
           Similar to an `ingest`, a `wiretap` will always enforce read-only status on all volume mounts, and since that
           makes the `wiretap` completely read-only, there's no limit to how many simultaneous wiretaps that can be
           served. In fact, a `wiretap` and an `intercept` on the same port can run simultaneously.
@@ -204,7 +208,7 @@ items:
 
           With the Teleroute Docker network plugin in place, there's no longer a need for special handling of network
           related docker flags, and the following changes have been made:
-          
+
           1. The Teleroute Docker network driver will be installed unless it is already present.
           2. A Teleroute network will be created when starting the Telepresence daemon as a container. This network will
              then communicate with that container and expose the same CIDRs as the daemon's VIF.
@@ -280,7 +284,7 @@ items:
           The port used for the containerized gRPC was randomly selected using the hosts network namespace. This is now
           changed so that the port used by the container is preset and configurable and then mapped to a random port
           on the host.
-          
+
           The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
       - type: bugfix
         title: Telepresence fails to start the root daemon on Windows unless current user is the administrator
