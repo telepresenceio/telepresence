@@ -35,7 +35,13 @@ Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control 
 <Note>
 	<Title type="feature" docs="https://github.com/telepresenceio/telepresence/issues/3491">Add option to drop client label in prometheus metrics for GDPR compliance</Title>
 	<Body>
-The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics. This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to  track the working times of an individual.
+The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics. This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to track the working times of an individual.
+  </Body>
+</Note>
+<Note>
+	<Title type="feature" docs="https://github.com/telepresenceio/telepresence/issues/3920">Prefix metrics with `telepresnece_`</Title>
+	<Body>
+Avoids metric conflicts and makes these more explicit to improve search in observability stacks
   </Body>
 </Note>
 ## Version 2.23.6 <span style={{fontSize:'16px'}}>(July 23)</span>
