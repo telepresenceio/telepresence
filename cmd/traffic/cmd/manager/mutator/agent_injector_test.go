@@ -2037,7 +2037,7 @@ matchExpressions:
 				if expectedPatch != "null\n" {
 					expectedPatch = fmt.Sprintf(expectedPatch, cfgJSON)
 				}
-				patchBytes, err := json.Marshal(actualPatch, json.Deterministic(true), jsonv1.OmitEmptyWithLegacyDefinition(true), json.FormatNilSliceAsNull(true))
+				patchBytes, err := json.Marshal(actualPatch, json.Deterministic(true), jsonv1.OmitEmptyWithLegacySemantics(true), json.FormatNilSliceAsNull(true))
 				require.NoError(t, err)
 				patchBytes, err = yaml.JSONToYAML(patchBytes)
 				require.NoError(t, err)

@@ -204,10 +204,10 @@ var blockedUDPPorts = map[uint16]bool{ //nolint:gochecknoglobals // constant
 	139: true, // NETBIOS
 }
 
-func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp.ForwarderRequest) {
+func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp.ForwarderRequest) bool {
 	id := fr.ID()
 	if _, ok := blockedUDPPorts[id.LocalPort]; ok {
-		return
+		return false
 	}
 
 	wq := waiter.Queue{}
@@ -215,14 +215,14 @@ func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp
 	if err != nil {
 		msg := fmt.Sprintf("forward UDP %s: %s", idStringer(id), err)
 		dlog.Error(ctx, msg)
-		return
+		return false
 	}
-	dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(&wq, ep), streamCreator)
+	return dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(&wq, ep), streamCreator)
 }
 
 func setUDPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.StreamCreator) {
-	f := udp.NewForwarder(s, func(fr *udp.ForwarderRequest) {
-		forwardUDP(ctx, streamCreator, fr)
+	f := udp.NewForwarder(s, func(fr *udp.ForwarderRequest) bool {
+		return forwardUDP(ctx, streamCreator, fr)
 	})
 	s.SetTransportProtocolHandler(udp.ProtocolNumber, f.HandlePacket)
 }
@@ -238,7 +238,7 @@ func newConnID(proto tcpip.TransportProtocolNumber, id stack.TransportEndpointID
 	return tunnel.NewConnID(types.Proto(proto), netip.AddrPortFrom(tcpAddrToAddr(id.RemoteAddress), id.RemotePort), netip.AddrPortFrom(tcpAddrToAddr(id.LocalAddress), id.LocalPort))
 }
 
-func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, streamCreator tunnel.StreamCreator) {
+func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, streamCreator tunnel.StreamCreator) bool {
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := streamCreator(ctx, id)
 	if err != nil {
@@ -246,14 +246,15 @@ func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, stre
 		switch status.Code(err) {
 		case codes.Unavailable:
 			if strings.HasSuffix(err.Error(), "reading from server: EOF") {
-				return
+				return false
 			}
 		case codes.Canceled, codes.Aborted:
-			return
+			return false
 		}
 		dlog.Errorf(ctx, "forward %s: %v", id, err)
-		return
+		return false
 	}
 	ep := tunnel.NewConnEndpoint(stream, conn, cancel, nil, nil)
 	ep.Start(ctx)
+	return true
 }
