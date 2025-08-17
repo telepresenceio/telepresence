@@ -18,10 +18,11 @@ type MountPolicy int
 type MountPolicies map[string]MountPolicy
 
 const (
-	// MountPolicyRemote means that the client can (or in case of a docker-run, will) mount the
+	// MountPolicyRemote means that the client can (or in the case of a docker-run, will) mount the
 	// volume using a remote file system. Unless constrained by other mechanisms, the mount will
 	// be read-write.
 	MountPolicyRemote MountPolicy = iota
+
 	// MountPolicyRemoteReadOnly is like MountPolicyRemote but will enforce a read-only mount.
 	MountPolicyRemoteReadOnly
 

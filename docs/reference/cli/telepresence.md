@@ -38,6 +38,7 @@ recommended) which in turn may result in a password prompt.
 | Command | Description |
 |---------|-------------|
 | [completion](telepresence_completion) | Generate a shell completion script |
+| [compose](telepresence_compose) | Define and run multi-container applications with Telepresence and Docker |
 | [config](telepresence_config) | Telepresence configuration commands |
 | [connect](telepresence_connect) | Connect to a cluster |
 | [curl](telepresence_curl) | curl with daemon network |

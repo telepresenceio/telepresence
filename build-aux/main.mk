@@ -213,6 +213,11 @@ endif
 endif
 endif
 
+pkg/client/cli/docker/compose/dc-cli.json: go.mod
+	go run cmd/cobraparser/main.go docker compose > $@
+
+build-deps: pkg/client/cli/docker/compose/dc-cli.json
+
 ifeq ($(GOHOSTOS),windows)
 WINTUN_VERSION=0.14.1
 $(BUILDDIR)/wintun-$(WINTUN_VERSION)/wintun/bin/$(GOARCH)/wintun.dll:

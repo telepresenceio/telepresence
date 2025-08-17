@@ -390,10 +390,7 @@ func connectMgr(
 		clientID = fmt.Sprintf("%s@%s", userinfo.Username, host)
 	}
 
-	daemonID, err := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace, proc.RunningInContainer())
-	if err != nil {
-		return nil, err
-	}
+	daemonID := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace, proc.RunningInContainer())
 	si, err := LoadSessionInfoFromUserCache(ctx, daemonID)
 	if err != nil {
 		return nil, err

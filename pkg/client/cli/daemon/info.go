@@ -32,8 +32,7 @@ type Info struct {
 }
 
 func (info *Info) DaemonID() *Identifier {
-	id, _ := NewIdentifier(info.Name, info.KubeContext, info.Namespace, info.InDocker())
-	return id
+	return NewIdentifier(info.Name, info.KubeContext, info.Namespace, info.InDocker())
 }
 
 func (info *Info) InDocker() bool {

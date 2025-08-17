@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.24.0
 <Note>
+	<Title type="feature">Support for Docker Compose</Title>
+	<Body>
+Telepresence now supports integration with Docker Compose. It connects to and interacts with cluster resources by utilizing `x-tele` extensions within a Docker Compose specification. These extensions configure your local services to effectively act as handlers for Telepresence connections, providing them with the necessary access to the traffic, volumes, and environment of the engaged container.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Service Port Rerouting</Title>
 	<Body>
 The telepresence connect command introduces a new `--reroute-remote <host>:<port>:<new-port>[/{tcp|udp}]` flag, allowing users to remap service ports. This feature redirects requests sent to `<host>:<new-port>` to `<host>:<port>` within the Telepresence VIF. The flag can be repeated.

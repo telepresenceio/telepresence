@@ -69,11 +69,7 @@ func RemoveVolumes(ctx context.Context, vols []string) {
 	}
 }
 
-func createVolume(ctx context.Context, pluginName string, hostPort netip.AddrPort, volumeName, container, dir string, ro bool) error {
-	cli, err := GetClient(ctx)
-	if err != nil {
-		return err
-	}
+func VolumeDriverOpts(ctx context.Context, pluginName string, hostPort netip.AddrPort, volumeName, container, dir string, ro bool) map[string]string {
 	opts := map[string]string{
 		"host":      hostPort.Addr().String(),
 		"container": container,
@@ -81,19 +77,33 @@ func createVolume(ctx context.Context, pluginName string, hostPort netip.AddrPor
 		"dir":       dir,
 	}
 	if ro {
-		var ver *semver.Version
-		if di := strings.LastIndexByte(pluginName, '-'); di > 0 {
-			tag := pluginName[di+1:]
-			if v, err := semver.Parse(tag); err == nil {
-				ver = &v
-			}
-		}
+		ver := parsePluginSemver(pluginName)
 		if ver != nil && ver.LT(semver.MustParse("0.1.6")) {
 			dlog.Warnf(ctx, "The %q docker volume plugin does not support read-only mode. Please upgrade to a more recent version", pluginName)
 		} else {
 			opts["ro"] = "true"
 		}
 	}
+	return opts
+}
+
+// parsePluginSemver extracts a semantic version from a plugin name formatted like "name-<semver>".
+func parsePluginSemver(name string) *semver.Version {
+	if i := strings.LastIndexByte(name, '-'); i > 0 {
+		tag := name[i+1:]
+		if v, err := semver.Parse(tag); err == nil {
+			return &v
+		}
+	}
+	return nil
+}
+
+func createVolume(ctx context.Context, pluginName string, hostPort netip.AddrPort, volumeName, container, dir string, ro bool) error {
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return err
+	}
+	opts := VolumeDriverOpts(ctx, pluginName, hostPort, volumeName, container, dir, ro)
 
 	dlog.Debugf(ctx, "VolumeCreate(%s, %s, %s)", pluginName, opts, volumeName)
 	_, err = cli.VolumeCreate(ctx, volume.CreateOptions{

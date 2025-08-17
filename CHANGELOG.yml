@@ -28,6 +28,13 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Support for Docker Compose
+        body: >-
+          Telepresence now supports integration with Docker Compose. It connects to and interacts with cluster resources
+          by utilizing `x-tele` extensions within a Docker Compose specification. These extensions configure
+          your local services to effectively act as handlers for Telepresence connections, providing them with the
+          necessary access to the traffic, volumes, and environment of the engaged container.
+      - type: feature
         title: Service Port Rerouting
         body: >-
           The telepresence connect command introduces a new `--reroute-remote <host>:<port>:<new-port>[/{tcp|udp}]` flag,
