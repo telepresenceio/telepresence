@@ -8,18 +8,6 @@
 Telepresence now supports integration with Docker Compose. It connects to and interacts with cluster resources by utilizing `x-tele` extensions within a Docker Compose specification. These extensions configure your local services to effectively act as handlers for Telepresence connections, providing them with the necessary access to the traffic, volumes, and environment of the engaged container.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Service Port Rerouting</div></div>
-<div style="margin-left: 15px">
-
-The telepresence connect command introduces a new `--reroute-remote <host>:<port>:<new-port>[/{tcp|udp}]` flag, allowing users to remap service ports. This feature redirects requests sent to `<host>:<new-port>` to `<host>:<port>` within the Telepresence VIF. The flag can be repeated.
-</div>
-
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Local Port Rerouting</div></div>
-<div style="margin-left: 15px">
-
-The telepresence connect command introduces a new `--reroute-local <local-port>:<host>:<port>[/{tcp|udp}]` flag, allowing users to redirect requests sent to ports on localhost to arbitrary service ports. This feature enables requests sent to `localhost:<local-port>` to be redirected to `<host:port>`. The flag can be repeated.
-</div>
-
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Serve up a web-page with telepresence serve.</div></div>
 <div style="margin-left: 15px">
 
@@ -42,6 +30,24 @@ The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to 
 <div style="margin-left: 15px">
 
 Avoids metric conflicts and makes these more explicit to improve search in observability stacks
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Create CLI documentation in markdown format](reference/cli/telepresence)</div></div>
+<div style="margin-left: 15px">
+
+The Telepresence CLI is now capable of generating its own documentation in markdown format using the new `telepresence man-pages` command. The generated documentation is included under the heading "Telepresence CLI" in the the Telepresence reference documentation.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Service Port Rerouting</div></div>
+<div style="margin-left: 15px">
+
+The telepresence connect command introduces a new `--reroute-remote <host>:<port>:<new-port>[/{tcp|udp}]` flag, allowing users to remap service ports. This feature redirects requests sent to `<host>:<new-port>` to `<host>:<port>` within the Telepresence VIF. The flag can be repeated.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Local Port Rerouting</div></div>
+<div style="margin-left: 15px">
+
+The telepresence connect command introduces a new `--reroute-local <local-port>:<host>:<port>[/{tcp|udp}]` flag, allowing users to redirect requests sent to ports on localhost to arbitrary service ports. This feature enables requests sent to `localhost:<local-port>` to be redirected to `<host:port>`. The flag can be repeated.
 </div>
 
 ## Version 2.23.6 <span style="font-size: 16px;">(July 23)</span>
