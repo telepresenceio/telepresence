@@ -116,6 +116,11 @@ generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION).
 
 	rm -rf vendor
 
+# Build: artifacts that don't get checked in to Git
+# =================================================
+
+TELEPRESENCE=$(BINDIR)/telepresence$(BEXE)
+
 generate: docs-files
 
 .PHONY: generate-clean
@@ -136,7 +141,11 @@ CHANGELOG.yml: FORCE
 		git add CHANGELOG.yml; \
 	fi
 
-docs-files: docs/README.md docs/release-notes.md docs/release-notes.mdx docs/variables.yml docs/helm/values.schema.json
+docs-files: docs/README.md docs/release-notes.md docs/release-notes.mdx docs/variables.yml docs/helm/values.schema.json docs/reference/cli/telepresence.md
+
+docs/reference/cli/telepresence.md: $(TELEPRESENCE)
+	$(TELEPRESENCE) man-pages --dir $(@D)
+	git add $(@D)
 
 docs/README.md: docs/doc-links.yml $(tools/tocgen)
 	$(tools/tocgen) --input $< > $@
@@ -160,11 +169,6 @@ docs/helm/values.schema.json: charts/telepresence-oss/values.schema.yaml $(tools
 	git add $@
 
 PKG_VERSION = $(shell go list ./pkg/version)
-
-# Build: artifacts that don't get checked in to Git
-# =================================================
-
-TELEPRESENCE=$(BINDIR)/telepresence$(BEXE)
 
 ifeq ($(GOOS),windows)
 TELEPRESENCE_INSTALLER=$(BINDIR)/telepresence$(BZIP)

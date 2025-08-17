@@ -1,7 +1,6 @@
 ---
 title: Laptop-side configuration
 ---
-
 # Laptop-side configuration
 
 There are a number of configuration values that can be tweaked to change how Telepresence behaves.
@@ -153,10 +152,10 @@ The `client.helm` object contains options for the `telepresence helm` commands
 
 All traffic to and from the cluster is tunneled via gRPC over a kubernetes port-forward connection.
 
-| Field             | Description                                                                                   | Type                                    | Default  |
-|-------------------|-----------------------------------------------------------------------------------------------|-----------------------------------------|----------|
-| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive  | [string][go-duration]                   | `24h`    |
-| `maxReceiveSize`  | Max size of a gRCP message.                                                                   | Docker registry name [string][quantity] | `4Mi`    |
+| Field             | Description                                                                                   | Type                                      | Default  |
+|-------------------|-----------------------------------------------------------------------------------------------|-------------------------------------------|----------|
+| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive  | [duration][go-duration]                   | `24h`    |
+| `maxReceiveSize`  | Max size of a gRCP message.                                                                   | Docker registry name [quantity][quantity] | `4Mi`    |
 
 ### Images
 Values for `client.images` are strings. These values affect the objects that are deployed in the cluster,
@@ -174,11 +173,11 @@ These are the valid fields for the `client.images` key:
 
 The `intercept` controls applies to how Telepresence will intercept the communications to replaced containers and intercepted services.
 
-| Field         | Description                                                                                                           | Type    | Default    |
-|---------------|-----------------------------------------------------------------------------------------------------------------------|---------|------------|
-| `defaultPort` | controls which port is selected when no `--port` flag is given to the `telepresence intercept` command                | int     | 8080       |
-| `useFtp`      | Use fuseftp instead of sshfs when mounting remote file systems                                                        | boolean | false      |
-| `mountsRoot`  | Directory that will be used as the root for all automatically generated mount directories (not applicable on windows) | string  | env:TMPDIR |
+| Field         | Description                                                                                                           | Type                 | Default    |
+|---------------|-----------------------------------------------------------------------------------------------------------------------|----------------------|------------|
+| `defaultPort` | controls which port is selected when no `--port` flag is given to the `telepresence intercept` command                | [int][yaml-int]      | 8080       |
+| `useFtp`      | Use fuseftp instead of sshfs when mounting remote file systems                                                        | [boolean][yaml-bool] | false      |
+| `mountsRoot`  | Directory that will be used as the root for all automatically generated mount directories (not applicable on windows) | [string][yaml-str]   | env:TMPDIR |
 
 ### Log Levels
 

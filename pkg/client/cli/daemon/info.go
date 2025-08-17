@@ -28,6 +28,7 @@ type Info struct {
 	ContainerPID int        `json:"container_pid,omitempty"`
 	ContainerIP  netip.Addr `json:"container_ip,omitempty"`
 	ContainerID  string     `json:"container_id,omitempty"`
+	ComposeFile  string     `json:"compose_file,omitempty"`
 }
 
 func (info *Info) DaemonID() *Identifier {

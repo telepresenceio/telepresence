@@ -34,14 +34,88 @@
   items:
     - title: Architecture
       link: reference/architecture
-    - title: Client reference
-      link: reference/client
+    - title: Telepresence CLI
+      link: reference/cli/telepresence
+      items:
+        - title: telepresence completion
+          link: reference/cli/telepresence_completion
+        - title: telepresence config
+          link: reference/cli/telepresence_config
+          items:
+            - title: view
+              link: reference/cli/telepresence_config_view
+        - title: telepresence connect
+          link: reference/cli/telepresence_connect
+        - title: telepresence curl
+          link: reference/cli/telepresence_curl
+        - title: telepresence docker-run
+          link: reference/cli/telepresence_docker-run
+        - title: telepresence gather-logs
+          link: reference/cli/telepresence_gather-logs
+        - title: telepresence genyaml
+          link: reference/cli/telepresence_genyaml
+          items:
+            - title: annotations
+              link: reference/cli/telepresence_genyaml_annotations
+            - title: annotations
+              link: reference/cli/telepresence_genyaml_annotations
+            - title: config
+              link: reference/cli/telepresence_genyaml_config
+            - title: container
+              link: reference/cli/telepresence_genyaml_container
+            - title: initcontainer
+              link: reference/cli/telepresence_genyaml_initcontainer
+            - title: volume
+              link: reference/cli/telepresence_genyaml_volume
+        - title: telepresence helm
+          link: reference/cli/telepresence_helm
+          items:
+            - title: helm install
+              link: reference/cli/telepresence_helm_install
+            - title: helm lint
+              link: reference/cli/telepresence_helm_lint
+            - title: helm uninstall
+              link: reference/cli/telepresence_helm_uninstall
+            - title: helm upgrade
+              link: reference/cli/telepresence_helm_upgrade
+            - title: helm version
+              link: reference/cli/telepresence_helm_version
+        - title: telepresence ingest
+          link: reference/cli/telepresence_ingest
+        - title: telepresence intercept
+          link: reference/cli/telepresence_intercept
+        - title: telepresence leave
+          link: reference/cli/telepresence_leave
+        - title: telepresence list
+          link: reference/cli/telepresence_list
+        - title: telepresence list-contexts
+          link: reference/cli/telepresence_list-contexts
+        - title: telepresence list-namespaces
+          link: reference/cli/telepresence_list-namespaces
+        - title: telepresence loglevel
+          link: reference/cli/telepresence_loglevel
+        - title: telepresence quit
+          link: reference/cli/telepresence_quit
+        - title: telepresence replace
+          link: reference/cli/telepresence_replace
+        - title: telepresence serve
+          link: reference/cli/telepresence_serve
+        - title: telepresence status
+          link: reference/cli/telepresence_status
+        - title: telepresence uninstall
+          link: reference/cli/telepresence_uninstall
+        - title: telepresence version
+          link: reference/cli/telepresence_version
+        - title: telepresence wiretap
+          link: reference/cli/telepresence_wiretap
     - title: Laptop-side configuration
       link: reference/config
     - title: Cluster-side configuration
       link: reference/cluster-config
     - title: Using Docker for engagements
       link: reference/docker-run
+    - title: Telepresence Compose Extensions
+      link: reference/compose
     - title: Running Telepresence in a Docker container
       link: reference/inside-container
     - title: Environment variables

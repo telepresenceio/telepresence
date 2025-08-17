@@ -372,7 +372,7 @@ func GetRequest(ctx context.Context) *Request {
 	return nil
 }
 
-func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) (context.Context, error) {
+func WithDefaultRequest(cmd *cobra.Command) (context.Context, error) {
 	cr := NewDefaultRequest()
 	cr.Implicit = true
 	cr.kubeConfig.Context = nil // --context is global
@@ -385,6 +385,7 @@ func WithDefaultRequest(ctx context.Context, cmd *cobra.Command) (context.Contex
 			cr.KubeFlags["namespace"] = ns
 		}
 	}
+	ctx := cmd.Context()
 	if err := cr.setGlobalConnectFlags(cmd); err != nil {
 		return ctx, err
 	}

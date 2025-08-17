@@ -307,7 +307,12 @@ func Disconnect(ctx context.Context) {
 	if ud := daemon.GetUserClient(ctx); ud == nil {
 		progress.PrintDone(progress.WithEventId(ctx, "daemon"), "Not connected")
 	} else {
-		ctx = progress.WithEventId(ctx, ud.DaemonID().Name)
+		id := ud.DaemonID()
+		if id == nil {
+			progress.PrintDone(progress.WithEventId(ctx, "daemon"), "Not connected")
+			return
+		}
+		ctx = progress.WithEventId(ctx, id.Name)
 		progress.Working(ctx, "Disconnecting")
 		_, err := ud.Disconnect(ctx, &emptypb.Empty{})
 		switch {

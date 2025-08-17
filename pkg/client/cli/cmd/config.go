@@ -14,7 +14,8 @@ import (
 
 func configCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "config",
+		Use:   "config",
+		Short: "Telepresence configuration commands",
 	}
 	cmd.AddCommand(configView())
 	return cmd

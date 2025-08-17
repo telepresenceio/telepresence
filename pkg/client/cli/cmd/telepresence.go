@@ -21,7 +21,7 @@ import (
 )
 
 // Telepresence returns the top level "telepresence" CLI command.
-func Telepresence(ctx context.Context) *cobra.Command {
+func Telepresence(ctx context.Context, args []string) *cobra.Command {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v", err)
@@ -32,19 +32,26 @@ func Telepresence(ctx context.Context) *cobra.Command {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
+	useMarkdown := len(args) > 0 && args[0] == "man-pages"
+	longHelp := helpPlain
+	if useMarkdown {
+		os.Setenv("KUBECACHEDIR", "$HOME/.kube/cache")
+		longHelp = helpMarkdown
+	}
 	rootCmd := &cobra.Command{
-		Use:  "telepresence",
-		Args: OnlySubcommands,
-
+		Use:               "telepresence",
+		Args:              OnlySubcommands,
 		Short:             "Connect your workstation to a Kubernetes cluster",
-		Long:              help,
+		Long:              longHelp,
 		RunE:              RunSubcommands,
 		SilenceErrors:     true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:      true, // our FlagErrorFunc will handle it
+		TraverseChildren:  true,
 		ValidArgsFunction: cobra.NoFileCompletions,
 	}
+	rootCmd.SetArgs(args)
 	rootCmd.SetContext(ctx)
-	AddSubCommands(rootCmd)
+	AddSubCommands(rootCmd, useMarkdown)
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return errcat.User.New(err)
 	})
@@ -52,7 +59,7 @@ func Telepresence(ctx context.Context) *cobra.Command {
 }
 
 // TelepresenceDaemon returns the top level "telepresence" CLI limited to the subcommands [kubeauth|connector|daemon]-foreground.
-func TelepresenceDaemon(ctx context.Context) *cobra.Command {
+func TelepresenceDaemon(ctx context.Context, args []string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "telepresence",
 		Args: OnlySubcommands,
@@ -63,15 +70,23 @@ func TelepresenceDaemon(ctx context.Context) *cobra.Command {
 		SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:  true, // our FlagErrorFunc will handle it
 	}
+	cmd.SetArgs(args)
 	cmd.SetContext(ctx)
-	AddSubCommands(cmd)
+	AddSubCommands(cmd, false)
 	return cmd
+}
+
+func setContext(cmd *cobra.Command, ctx context.Context) {
+	cmd.SetContext(ctx)
+	for _, c := range cmd.Commands() {
+		setContext(c, ctx)
+	}
 }
 
 // AddSubCommands adds subcommands to the given command, including the default help, the commands in the
 // CommandGroups found in the given command's context, and the completion command. It also replaces
 // the standard usage template with a custom template.
-func AddSubCommands(cmd *cobra.Command) {
+func AddSubCommands(cmd *cobra.Command, markdown bool) {
 	ctx := cmd.Context()
 	commands := getSubCommands(cmd)
 	for _, command := range commands {
@@ -79,13 +94,12 @@ func AddSubCommands(cmd *cobra.Command) {
 			// Ensure that args errors don't advice the user to look in log files
 			command.Args = argsCheck(ac)
 		}
-		command.SetContext(ctx)
+		setContext(command, ctx)
 	}
 	cmd.AddCommand(commands...)
 	cmd.PersistentFlags().AddFlagSet(global.Flags(false))
-	addCompletion(cmd)
-	cmd.InitDefaultHelpCmd()
-	addUsageTemplate(cmd)
+	addCompletion(cmd, markdown)
+	addUsageTemplate(cmd, markdown)
 	_ = cmd.RegisterFlagCompletionFunc("context", autocompleteContext)
 }
 
@@ -146,6 +160,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		listContexts(),
 		listNamespaces(),
 		loglevel(),
+		manPages(),
 		quit(),
 		replaceCmd(),
 		serveCmd(),
