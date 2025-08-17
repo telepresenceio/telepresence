@@ -214,7 +214,7 @@ func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *client.Kubeconf
 		}
 	} else {
 		if GetRequest(ctx) == nil {
-			if ctx, err = WithDefaultRequest(ctx, cmd); err != nil {
+			if ctx, err = WithDefaultRequest(cmd); err != nil {
 				return ctx, nil, err
 			}
 		}

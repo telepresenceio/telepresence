@@ -2,8 +2,9 @@ package cli
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
+	"os/exec"
 	"slices"
 
 	"github.com/spf13/cobra"
@@ -19,13 +20,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 func InitContext(ctx context.Context) context.Context {
 	env, err := client.LoadEnv()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load environment: %v", err)
+		ioutil.Printf(os.Stderr, "Failed to load environment: %v", err)
 		os.Exit(1)
 	}
 	ctx = client.WithEnv(ctx, env)
@@ -50,7 +52,6 @@ func InitContext(ctx context.Context) context.Context {
 	default:
 		client.DisplayName = "OSS Client"
 		ctx = connect.WithCommandInitializer(ctx, connect.CommandInitializer)
-		ctx = cmd.WithSubCommands(ctx)
 	}
 	if client.IsDaemon() {
 		ctx = cmd.WithDaemonSubCommands(ctx)
@@ -71,26 +72,37 @@ func Main(ctx context.Context, args []string) {
 	if client.IsDaemon() {
 		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
 		// avoids checks for legacy commands.
-		if cmd, _, err := output.Execute(cmd.TelepresenceDaemon(ctx, args)); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
+		if command, _, err := output.Execute(cmd.TelepresenceDaemon(ctx, args)); err != nil {
+			if command != nil {
+				ioutil.Printf(command.ErrOrStderr(), "%s: error: %v\n", command.CommandPath(), err)
+			}
 			os.Exit(1)
 		}
 	} else {
-		if cmd, fmtOutput, err := output.Execute(cmd.Telepresence(ctx, args)); err != nil {
+		if command, fmtOutput, err := output.Execute(cmd.Telepresence(ctx, args)); err != nil {
 			if fmtOutput || errcat.GetCategory(err) == errcat.Silent {
-				os.Exit(1)
-			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
-			if errcat.GetCategory(err) > errcat.NoDaemonLogs {
-				if summarizeLogs(ctx, cmd) {
-					// If the user gets here, it might be an actual bug that they found, so
-					// point them to the `gather-logs` command in case they want to open an
-					// issue.
-					fmt.Fprintln(cmd.ErrOrStderr(), "If you think you have encountered a bug"+
-						", please run `telepresence gather-logs` and attach the "+
-						"telepresence_logs.zip to your github issue or create a new one: "+
-						"https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md .")
+				exitCode := 1
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) {
+					exitCode = exitErr.ExitCode()
 				}
+				os.Exit(exitCode)
+			}
+			if command != nil {
+				ioutil.Printf(command.ErrOrStderr(), "%s: error: %v\n", command.CommandPath(), err)
+				if errcat.GetCategory(err) > errcat.NoDaemonLogs {
+					if summarizeLogs(ctx, command) {
+						// If the user gets here, it might be an actual bug that they found, so
+						// point them to the `gather-logs` command in case they want to open an
+						// issue.
+						ioutil.Println(command.ErrOrStderr(), "If you think you have encountered a bug"+
+							", please run `telepresence gather-logs` and attach the "+
+							"telepresence_logs.zip to your github issue or create a new one: "+
+							"https://github.com/telepresenceio/telepresence/issues/new?template=Bug_report.md .")
+					}
+				}
+			} else {
+				ioutil.Printf(os.Stderr, "%v\n", err)
 			}
 			os.Exit(1)
 		}
@@ -102,15 +114,15 @@ func Main(ctx context.Context, args []string) {
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) bool {
 	w := cmd.ErrOrStderr()
 	first := true
-	for _, proc := range []string{rootd.ProcessName, userd.ProcessName} {
-		if summary, err := logging.SummarizeLog(ctx, proc); err != nil {
-			fmt.Fprintf(w, "failed to scan %s logs: %v\n", proc, err)
+	for _, processName := range []string{rootd.ProcessName, userd.ProcessName} {
+		if summary, err := logging.SummarizeLog(ctx, processName); err != nil {
+			ioutil.Printf(w, "failed to scan %s logs: %v\n", processName, err)
 		} else if summary != "" {
 			if first {
-				fmt.Fprintln(w)
+				ioutil.Println(w)
 				first = false
 			}
-			fmt.Fprintln(w, summary)
+			ioutil.Println(w, summary)
 		}
 	}
 	return !first

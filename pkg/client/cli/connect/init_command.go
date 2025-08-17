@@ -66,7 +66,7 @@ func CommandInitializer(cmd *cobra.Command) (err error) {
 
 	if v := as[ann.UserDaemon]; v == ann.Optional || v == ann.Required {
 		if cr := daemon.GetRequest(ctx); cr == nil {
-			if ctx, err = daemon.WithDefaultRequest(ctx, cmd); err != nil {
+			if ctx, err = daemon.WithDefaultRequest(cmd); err != nil {
 				return err
 			}
 			flags.DeprecationIfChanged(cmd, global.FlagDocker, "use telepresence connect to initiate the connection")

@@ -29,10 +29,10 @@ connecting clients. To learn more about this, please see the [client config docs
 All traffic to and from the cluster is tunneled via gRPC over a kubernetes port-forward connection. Both the traffic-manager
 and the traffic-agent have gRPC servers that the clients connect to. They are configured using the `grpc` structure.
 
-| Field             | Description                                                                                  | Type                                            | Default  |
-|-------------------|----------------------------------------------------------------------------------------------|-------------------------------------------------|----------|
-| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive | [string](https://pkg.go.dev/time#ParseDuration) | `24h`    |
-| `maxReceiveSize`  | Max size of a gRCP message received by the traffic-manager or traffic-agent                  | [string](quantity.md)                           | `4Mi`    |
+| Field             | Description                                                                                  | Type                                              | Default  |
+|-------------------|----------------------------------------------------------------------------------------------|---------------------------------------------------|----------|
+| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive | [duration](https://pkg.go.dev/time#ParseDuration) | `24h`    |
+| `maxReceiveSize`  | Max size of a gRCP message received by the traffic-manager or traffic-agent                  | [quantity](../common/quantity.md)                 | `4Mi`    |
 
 ## Traffic Manager Configuration
 
@@ -207,9 +207,9 @@ spec:
 ## Excluding Envrionment Variables
 
 If your pod contains sensitive variables like a database password, or third party API Key, you may want to exclude those from being propagated through an intercept.
-Telepresence allows you to configure this through a ConfigMap that is then read and removes the sensitive variables. 
+Telepresence allows you to configure this through a ConfigMap that is then read and removes the sensitive variables.
 
-This can be done in two ways: 
+This can be done in two ways:
 
 When installing your traffic-manager through helm you can use the `--set` flag and pass a comma separated list of variables:
 

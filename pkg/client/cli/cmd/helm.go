@@ -15,7 +15,8 @@ import (
 
 func helmCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "helm",
+		Use:   "helm command [flags]",
+		Short: `Helm commands using the embedded Telepresence Helm chart.`,
 	}
 	cmd.AddCommand(helmInstall(), helmUpgrade(), helmUninstall(), helmLint(), helmVersion())
 	return cmd
