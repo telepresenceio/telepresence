@@ -117,7 +117,7 @@ func (s *multipleServicesSuite) Test_LargeRequest() {
 }
 
 func (s *multipleServicesSuite) Test_List() {
-	stdout := itest.TelepresenceOk(s.Context(), "-n", s.AppNamespace(), "list")
+	stdout := itest.TelepresenceOk(s.Context(), "list", "-n", s.AppNamespace())
 	for i := 0; i < s.ServiceCount(); i++ {
 		s.Regexp(fmt.Sprintf(`%s-%d\s*: ready to (engage|intercept)`, s.Name(), i), stdout)
 	}
