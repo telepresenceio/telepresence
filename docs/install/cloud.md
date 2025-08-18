@@ -31,7 +31,7 @@ $ gcloud compute firewall-rules list \
 
 NAME                                  NETWORK           DIRECTION  SRC_RANGES     ALLOW                         TARGET_TAGS
 gke-tele-webhook-gke-33fa1791-all     tele-webhook-net  INGRESS    10.40.0.0/14   esp,ah,sctp,tcp,udp,icmp      gke-tele-webhook-gke-33fa1791-node
-gke-tele-webhook-gke-33fa1791-master  tele-webhook-net  INGRESS    172.16.0.0/28  tcp:10250,tcp:443             gke-tele-webhook-gke-33fa1791-node
+gke-tele-webhook-gke-33fa1791-master  tele-webhook-net  INGRESS    172.16.0.0/28  tcp:10250,tcp:8443            gke-tele-webhook-gke-33fa1791-node
 gke-tele-webhook-gke-33fa1791-vms     tele-webhook-net  INGRESS    10.128.0.0/9   icmp,tcp:1-65535,udp:1-65535  gke-tele-webhook-gke-33fa1791-node
 # Take note fo the TARGET_TAGS value, gke-tele-webhook-gke-33fa1791-node
 

@@ -118,7 +118,7 @@ agentInjector:
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]
     servicePath: /traffic-agent
-    port: 443
+    port: 8443
     failurePolicy: Ignore
     reinvocationPolicy: IfNeeded
     sideEffects: None
