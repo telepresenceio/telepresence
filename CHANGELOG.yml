@@ -34,12 +34,14 @@ items:
           by utilizing `x-tele` extensions within a Docker Compose specification. These extensions configure
           your local services to effectively act as handlers for Telepresence connections, providing them with the
           necessary access to the traffic, volumes, and environment of the engaged container.
+        docs: howtos/docker-compose
       - type: feature
         title: Serve up a web-page with telepresence serve.
         body: >-
           A new `telepresence serve <service>` command was added that starts a web browser on the specified service. The
           command is especially useful when used in combination with `telepresence connect --docker` because it will
           then expose the given service on a random port on localhost.
+        docs: reference/cli/telepresence_serve
       - type: feature
         title: Add ability to optionally clean up sidecars that have been idle above a specified duration
         body: >-
@@ -59,7 +61,7 @@ items:
         docs: https://github.com/telepresenceio/telepresence/issues/3920
         body: Avoids metric conflicts and makes these more explicit to improve search in observability stacks.
       - type: feature
-        title: Create CLI documentation in markdown format
+        title: CLI documentation in markdown format
         body: >-
           The Telepresence CLI is now capable of generating its own documentation in markdown format using the
           new `telepresence man-pages` command. The generated documentation is included under the heading "Telepresence
