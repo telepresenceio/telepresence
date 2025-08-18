@@ -18,10 +18,11 @@ type MountPolicy int
 type MountPolicies map[string]MountPolicy
 
 const (
-	// MountPolicyRemote means that the client can (or in case of a docker-run, will) mount the
+	// MountPolicyRemote means that the client can (or in the case of a docker-run, will) mount the
 	// volume using a remote file system. Unless constrained by other mechanisms, the mount will
 	// be read-write.
 	MountPolicyRemote MountPolicy = iota
+
 	// MountPolicyRemoteReadOnly is like MountPolicyRemote but will enforce a read-only mount.
 	MountPolicyRemoteReadOnly
 
@@ -50,7 +51,9 @@ func (mp *MountPolicy) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	var s string
 	err := json.UnmarshalDecode(in, &s)
 	if err == nil {
-		if ix := slices.Index(mountPolicyNames, s); ix >= 0 {
+		if ix := slices.IndexFunc(mountPolicyNames, func(pn string) bool {
+			return strings.EqualFold(pn, s)
+		}); ix >= 0 {
 			*mp = MountPolicy(ix)
 		} else {
 			err = fmt.Errorf("invalid mount policy: %q", s)

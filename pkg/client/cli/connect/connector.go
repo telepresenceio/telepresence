@@ -65,6 +65,25 @@ var QuitDaemonFuncs = []func(context.Context){
 	quitHostConnector, quitDockerDaemons,
 }
 
+// maybeComposeDown performs a `docker compose down -f <compose file>` and also deletes `<compose file>` if it exists.
+// A full docker compose down is necessary because the created containers are dependent on the network represented by
+// the connection that is about to close.
+func maybeComposeDown(ctx context.Context, info *daemon.Info) {
+	if info.ComposeFile == "" {
+		return
+	}
+	progress.Stop(ctx)
+	err := proc.StdCommand(ctx, docker.Exe, "compose", "--file", info.ComposeFile, "down", "--remove-orphans").Run()
+	if err != nil {
+		dlog.Error(ctx, err)
+	}
+	err = os.Remove(info.ComposeFile)
+	if err != nil {
+		dlog.Error(ctx, err)
+	}
+	progress.Start(ctx, "Quitting")
+}
+
 func quitHostConnector(ctx context.Context) {
 	udCtx, err := ExistingHostDaemon(ctx, &daemon.Info{})
 	if err != nil {
@@ -94,6 +113,7 @@ func quitDockerDaemons(ctx context.Context) {
 		return
 	}
 	for _, info := range infos {
+		maybeComposeDown(ctx, info)
 		ctx := progress.WithEventId(ctx, info.DaemonID().Name)
 		progress.Working(ctx, "Quitting")
 		udCtx, err := ExistingDaemon(ctx, info)
@@ -312,6 +332,7 @@ func Disconnect(ctx context.Context) {
 			progress.PrintDone(progress.WithEventId(ctx, "daemon"), "Not connected")
 			return
 		}
+		maybeComposeDown(ctx, ud.DaemonInfo())
 		ctx = progress.WithEventId(ctx, id.Name)
 		progress.Working(ctx, "Disconnecting")
 		_, err := ud.Disconnect(ctx, &emptypb.Empty{})

@@ -275,15 +275,7 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = userd.WithService(ctx, s.self)
 
-	daemonID, err := daemon.NewIdentifier(cr.Request().Name, config.Context, config.Namespace, proc.RunningInContainer())
-	if err != nil {
-		cancel()
-		return &rpc.ConnectInfo{
-			Error:         rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText:     err.Error(),
-			ErrorCategory: int32(errcat.GetCategory(err)),
-		}
-	}
+	daemonID := daemon.NewIdentifier(cr.Request().Name, config.Context, config.Namespace, proc.RunningInContainer())
 	go runAliveAndCancellation(ctx, cancel, daemonID, wg)
 
 	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config, wg)

@@ -24,6 +24,8 @@
       link: howtos/engage
     - title: Use Telepresence with Docker
       link: howtos/docker
+    - title: Extend Docker Compose with Telepresence
+      link: howtos/docker-compose
     - title: Work with large clusters
       link: howtos/large-clusters
     - title: Host a cluster in Docker or a VM
@@ -39,6 +41,75 @@
       items:
         - title: telepresence completion
           link: reference/cli/telepresence_completion
+        - title: telepresence compose
+          link: reference/cli/telepresence_compose
+          items:
+            - title: attach
+              link: reference/cli/telepresence_compose_attach
+            - title: build
+              link: reference/cli/telepresence_compose_build
+            - title: commit
+              link: reference/cli/telepresence_compose_commit
+            - title: config
+              link: reference/cli/telepresence_compose_config
+            - title: cp
+              link: reference/cli/telepresence_compose_cp
+            - title: create
+              link: reference/cli/telepresence_compose_create
+            - title: down
+              link: reference/cli/telepresence_compose_down
+            - title: events
+              link: reference/cli/telepresence_compose_events
+            - title: exec
+              link: reference/cli/telepresence_compose_exec
+            - title: export
+              link: reference/cli/telepresence_compose_export
+            - title: images
+              link: reference/cli/telepresence_compose_images
+            - title: kill
+              link: reference/cli/telepresence_compose_kill
+            - title: logs
+              link: reference/cli/telepresence_compose_logs
+            - title: ls
+              link: reference/cli/telepresence_compose_ls
+            - title: pause
+              link: reference/cli/telepresence_compose_pause
+            - title: port
+              link: reference/cli/telepresence_compose_port
+            - title: ps
+              link: reference/cli/telepresence_compose_ps
+            - title: publish
+              link: reference/cli/telepresence_compose_publish
+            - title: pull
+              link: reference/cli/telepresence_compose_pull
+            - title: push
+              link: reference/cli/telepresence_compose_push
+            - title: restart
+              link: reference/cli/telepresence_compose_restart
+            - title: rm
+              link: reference/cli/telepresence_compose_rm
+            - title: run
+              link: reference/cli/telepresence_compose_run
+            - title: scale
+              link: reference/cli/telepresence_compose_scale
+            - title: start
+              link: reference/cli/telepresence_compose_start
+            - title: stats
+              link: reference/cli/telepresence_compose_stats
+            - title: stop
+              link: reference/cli/telepresence_compose_stop
+            - title: top
+              link: reference/cli/telepresence_compose_top
+            - title: unpause
+              link: reference/cli/telepresence_compose_unpause
+            - title: up
+              link: reference/cli/telepresence_compose_up
+            - title: version
+              link: reference/cli/telepresence_compose_version
+            - title: wait
+              link: reference/cli/telepresence_compose_wait
+            - title: watch
+              link: reference/cli/telepresence_compose_watch
         - title: telepresence config
           link: reference/cli/telepresence_config
           items:

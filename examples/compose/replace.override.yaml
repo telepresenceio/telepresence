@@ -1,0 +1,13 @@
+x-tele:
+  connections:
+    - namespace: emojivoto
+services:
+  emoji:
+    x-tele:
+      type: replace
+  voting:
+    x-tele:
+      type: replace
+  vote-bot:
+    profiles:
+      - notEnabled

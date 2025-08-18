@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -15,9 +14,9 @@ type Identifier struct {
 	Containerized bool
 }
 
-func NewIdentifier(name, contextName, namespace string, containerized bool) (*Identifier, error) {
+func NewIdentifier(name, contextName, namespace string, containerized bool) *Identifier {
 	if namespace == "" {
-		return nil, errors.New("daemon identifier must have a namespace")
+		namespace = "default"
 	}
 	if name == "" {
 		if contextName == "" {
@@ -35,7 +34,7 @@ func NewIdentifier(name, contextName, namespace string, containerized bool) (*Id
 		Namespace:     namespace,
 		Name:          ioutil.SafeName(name),
 		Containerized: containerized,
-	}, nil
+	}
 }
 
 func (id *Identifier) String() string {
@@ -74,5 +73,5 @@ func IdentifierFromFlags(ctx context.Context, name string, flagMap map[string]st
 			cc = config.CurrentContext
 		}
 	}
-	return NewIdentifier(name, cc, ns, containerized)
+	return NewIdentifier(name, cc, ns, containerized), nil
 }

@@ -1,0 +1,1359 @@
+{
+  "name": "compose",
+  "usage": "docker compose [OPTIONS] COMMAND",
+  "description": "Define and run multi-container applications with Docker",
+  "flags": [
+    {
+      "name": "all-resources",
+      "type": "bool",
+      "description": "Include all resources, even those not"
+    },
+    {
+      "name": "ansi",
+      "type": "string",
+      "description": "Control when to print ANSI control"
+    },
+    {
+      "name": "compatibility",
+      "type": "bool",
+      "description": "Run compose in backward compatibility mode"
+    },
+    {
+      "name": "dry-run",
+      "type": "bool",
+      "description": "Execute command in dry run mode"
+    },
+    {
+      "name": "env-file",
+      "type": "stringArray",
+      "description": "Specify an alternate environment file"
+    },
+    {
+      "name": "file",
+      "shorthand": "f",
+      "type": "stringArray",
+      "description": "Compose configuration files"
+    },
+    {
+      "name": "parallel",
+      "type": "int",
+      "description": "Control max parallelism, -1 for"
+    },
+    {
+      "name": "profile",
+      "type": "stringArray",
+      "description": "Specify a profile to enable"
+    },
+    {
+      "name": "progress",
+      "type": "string",
+      "description": "Set type of progress output (auto,"
+    },
+    {
+      "name": "project-directory",
+      "type": "string",
+      "description": "Specify an alternate working directory"
+    },
+    {
+      "name": "project-name",
+      "shorthand": "p",
+      "type": "string",
+      "description": "Project name"
+    }
+  ],
+  "subcommands": [
+    {
+      "name": "attach",
+      "usage": "docker compose attach [OPTIONS] SERVICE",
+      "description": "Attach local standard input, output, and error streams to a service's running container",
+      "flags": [
+        {
+          "name": "detach-keys",
+          "type": "string",
+          "description": "Override the key sequence for detaching from"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "index",
+          "type": "int",
+          "description": "index of the container if service has"
+        },
+        {
+          "name": "no-stdin",
+          "type": "bool",
+          "description": "Do not attach STDIN"
+        },
+        {
+          "name": "sig-proxy",
+          "type": "bool",
+          "description": "Proxy all received signals to the process"
+        }
+      ]
+    },
+    {
+      "name": "build",
+      "usage": "docker compose build [OPTIONS] [SERVICE...]",
+      "description": "Build or rebuild services",
+      "flags": [
+        {
+          "name": "build-arg",
+          "type": "stringArray",
+          "description": "Set build-time variables for services"
+        },
+        {
+          "name": "builder",
+          "type": "string",
+          "description": "Set builder to use"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "memory",
+          "shorthand": "m",
+          "type": "bytes",
+          "description": "Set memory limit for the build container."
+        },
+        {
+          "name": "no-cache",
+          "type": "bool",
+          "description": "Do not use cache when building the image"
+        },
+        {
+          "name": "print",
+          "type": "bool",
+          "description": "Print equivalent bake file"
+        },
+        {
+          "name": "pull",
+          "type": "bool",
+          "description": "Always attempt to pull a newer version of"
+        },
+        {
+          "name": "push",
+          "type": "bool",
+          "description": "Push service images"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Don't print anything to STDOUT"
+        },
+        {
+          "name": "ssh",
+          "type": "string",
+          "description": "Set SSH authentications used when"
+        },
+        {
+          "name": "with-dependencies",
+          "type": "bool",
+          "description": "Also build dependencies (transitively)"
+        }
+      ]
+    },
+    {
+      "name": "commit",
+      "usage": "docker compose commit [OPTIONS] SERVICE [REPOSITORY[:TAG]]",
+      "description": "Create a new image from a service container's changes",
+      "flags": [
+        {
+          "name": "author",
+          "shorthand": "a",
+          "type": "string",
+          "description": "Author (e.g., \"John Hannibal Smith"
+        },
+        {
+          "name": "change",
+          "shorthand": "c",
+          "type": "list",
+          "description": "Apply Dockerfile instruction to the created image"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "index",
+          "type": "int",
+          "description": "index of the container if service has multiple"
+        },
+        {
+          "name": "message",
+          "shorthand": "m",
+          "type": "string",
+          "description": "Commit message"
+        },
+        {
+          "name": "pause",
+          "shorthand": "p",
+          "type": "bool",
+          "description": "Pause container during commit",
+          "default": "true"
+        }
+      ]
+    },
+    {
+      "name": "config",
+      "usage": "docker compose config [OPTIONS] [SERVICE...]",
+      "description": "Parse, resolve and render compose file in canonical format",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "environment",
+          "type": "bool",
+          "description": "Print environment used for interpolation."
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "description": "Format the output. Values: [yaml | json]"
+        },
+        {
+          "name": "hash",
+          "type": "string",
+          "description": "Print the service config hash, one per line."
+        },
+        {
+          "name": "images",
+          "type": "bool",
+          "description": "Print the image names, one per line."
+        },
+        {
+          "name": "no-consistency",
+          "type": "bool",
+          "description": "Don't check model consistency - warning:"
+        },
+        {
+          "name": "no-env-resolution",
+          "type": "bool",
+          "description": "Don't resolve service env files"
+        },
+        {
+          "name": "no-interpolate",
+          "type": "bool",
+          "description": "Don't interpolate environment variables"
+        },
+        {
+          "name": "no-normalize",
+          "type": "bool",
+          "description": "Don't normalize compose model"
+        },
+        {
+          "name": "no-path-resolution",
+          "type": "bool",
+          "description": "Don't resolve file paths"
+        },
+        {
+          "name": "output",
+          "shorthand": "o",
+          "type": "string",
+          "description": "Save to file (default to stdout)"
+        },
+        {
+          "name": "profiles",
+          "type": "bool",
+          "description": "Print the profile names, one per line."
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Only validate the configuration, don't"
+        },
+        {
+          "name": "resolve-image-digests",
+          "type": "bool",
+          "description": "Pin image tags to digests"
+        },
+        {
+          "name": "services",
+          "type": "bool",
+          "description": "Print the service names, one per line."
+        },
+        {
+          "name": "variables",
+          "type": "bool",
+          "description": "Print model variables and default values."
+        },
+        {
+          "name": "volumes",
+          "type": "bool",
+          "description": "Print the volume names, one per line."
+        }
+      ]
+    },
+    {
+      "name": "cp",
+      "usage": "docker compose cp [OPTIONS] SERVICE:SRC_PATH DEST_PATH|-",
+      "description": "docker compose cp [OPTIONS] SRC_PATH|- SERVICE:DEST_PATH",
+      "flags": [
+        {
+          "name": "all",
+          "type": "bool",
+          "description": "Include containers created by the run command"
+        },
+        {
+          "name": "archive",
+          "shorthand": "a",
+          "type": "bool",
+          "description": "Archive mode (copy all uid/gid information)"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "follow-link",
+          "shorthand": "L",
+          "type": "bool",
+          "description": "Always follow symbol link in SRC_PATH"
+        },
+        {
+          "name": "index",
+          "type": "int",
+          "description": "Index of the container if service has multiple replicas"
+        }
+      ]
+    },
+    {
+      "name": "create",
+      "usage": "docker compose create [OPTIONS] [SERVICE...]",
+      "description": "Creates containers for a service",
+      "flags": [
+        {
+          "name": "build",
+          "type": "bool",
+          "description": "Build images before starting containers"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "force-recreate",
+          "type": "bool",
+          "description": "Recreate containers even if their configuration"
+        },
+        {
+          "name": "no-build",
+          "type": "bool",
+          "description": "Don't build an image, even if it's policy"
+        },
+        {
+          "name": "no-recreate",
+          "type": "bool",
+          "description": "If containers already exist, don't recreate"
+        },
+        {
+          "name": "pull",
+          "type": "string",
+          "description": "Pull image before running"
+        },
+        {
+          "name": "quiet-pull",
+          "type": "bool",
+          "description": "Pull without printing progress information"
+        },
+        {
+          "name": "remove-orphans",
+          "type": "bool",
+          "description": "Remove containers for services not defined in"
+        },
+        {
+          "name": "scale",
+          "type": "scale",
+          "description": "Scale SERVICE to NUM instances. Overrides the"
+        },
+        {
+          "name": "yes",
+          "shorthand": "y",
+          "type": "bool",
+          "description": "Assume \"yes\" as answer to all prompts and run"
+        }
+      ]
+    },
+    {
+      "name": "down",
+      "usage": "docker compose down [OPTIONS] [SERVICES]",
+      "description": "Stop and remove containers, networks",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "remove-orphans",
+          "type": "bool",
+          "description": "Remove containers for services not defined in"
+        },
+        {
+          "name": "rmi",
+          "type": "string",
+          "description": "Remove images used by services. \"local\" remove"
+        },
+        {
+          "name": "timeout",
+          "shorthand": "t",
+          "type": "int",
+          "description": "Specify a shutdown timeout in seconds"
+        },
+        {
+          "name": "volumes",
+          "shorthand": "v",
+          "type": "bool",
+          "description": "Remove named volumes declared in the \"volumes\""
+        }
+      ]
+    },
+    {
+      "name": "events",
+      "usage": "docker compose events [OPTIONS] [SERVICE...]",
+      "description": "Receive real time events from containers",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "description": "Output events as a stream of json objects"
+        }
+      ]
+    },
+    {
+      "name": "exec",
+      "usage": "docker compose exec [OPTIONS] SERVICE COMMAND [ARGS...]",
+      "description": "Execute a command in a running container",
+      "flags": [
+        {
+          "name": "detach",
+          "shorthand": "d",
+          "type": "bool",
+          "description": "Detached mode: Run command in the"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "env",
+          "shorthand": "e",
+          "type": "stringArray",
+          "description": "Set environment variables"
+        },
+        {
+          "name": "index",
+          "type": "int",
+          "description": "Index of the container if service"
+        },
+        {
+          "name": "privileged",
+          "type": "bool",
+          "description": "Give extended privileges to the process"
+        },
+        {
+          "name": "user",
+          "shorthand": "u",
+          "type": "string",
+          "description": "Run the command as this user"
+        },
+        {
+          "name": "workdir",
+          "shorthand": "w",
+          "type": "string",
+          "description": "Path to workdir directory for this"
+        }
+      ]
+    },
+    {
+      "name": "export",
+      "usage": "docker compose export [OPTIONS] SERVICE",
+      "description": "Export a service container's filesystem as a tar archive",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "index",
+          "type": "int",
+          "description": "index of the container if service has multiple"
+        },
+        {
+          "name": "output",
+          "shorthand": "o",
+          "type": "string",
+          "description": "Write to a file, instead of STDOUT"
+        }
+      ]
+    },
+    {
+      "name": "images",
+      "usage": "docker compose images [OPTIONS] [SERVICE...]",
+      "description": "List images used by the created containers",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "description": "Format the output. Values: [table | json]"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Only display IDs"
+        }
+      ]
+    },
+    {
+      "name": "kill",
+      "usage": "docker compose kill [OPTIONS] [SERVICE...]",
+      "description": "Force stop service containers",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "remove-orphans",
+          "type": "bool",
+          "description": "Remove containers for services not defined in"
+        },
+        {
+          "name": "signal",
+          "shorthand": "s",
+          "type": "string",
+          "description": "SIGNAL to send to the container",
+          "default": "\"SIGKILL\""
+        }
+      ]
+    },
+    {
+      "name": "logs",
+      "usage": "docker compose logs [OPTIONS] [SERVICE...]",
+      "description": "View output from containers",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "follow",
+          "shorthand": "f",
+          "type": "bool",
+          "description": "Follow log output"
+        },
+        {
+          "name": "index",
+          "type": "int",
+          "description": "index of the container if service has multiple"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "description": "Produce monochrome output"
+        },
+        {
+          "name": "no-log-prefix",
+          "type": "bool",
+          "description": "Don't print prefix in logs"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Show logs since timestamp (e.g."
+        },
+        {
+          "name": "tail",
+          "shorthand": "n",
+          "type": "string",
+          "description": "Number of lines to show from the end of the logs"
+        },
+        {
+          "name": "timestamps",
+          "shorthand": "t",
+          "type": "bool",
+          "description": "Show timestamps"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "description": "Show logs before a timestamp (e.g."
+        }
+      ]
+    },
+    {
+      "name": "ls",
+      "usage": "docker compose ls [OPTIONS]",
+      "description": "List running compose projects",
+      "flags": [
+        {
+          "name": "all",
+          "shorthand": "a",
+          "type": "bool",
+          "description": "Show all stopped Compose projects"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "filter",
+          "type": "filter",
+          "description": "Filter output based on conditions provided"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "description": "Format the output. Values: [table | json]"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Only display project names"
+        }
+      ]
+    },
+    {
+      "name": "pause",
+      "usage": "docker compose pause [SERVICE...]",
+      "description": "Pause services",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        }
+      ]
+    },
+    {
+      "name": "port",
+      "usage": "docker compose port [OPTIONS] SERVICE PRIVATE_PORT",
+      "description": "Print the public port for a port binding",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "index",
+          "type": "int",
+          "description": "Index of the container if service has multiple"
+        },
+        {
+          "name": "protocol",
+          "type": "string",
+          "description": "tcp or udp",
+          "default": "\"tcp\""
+        }
+      ]
+    },
+    {
+      "name": "ps",
+      "usage": "docker compose ps [OPTIONS] [SERVICE...]",
+      "description": "List containers",
+      "flags": [
+        {
+          "name": "all",
+          "shorthand": "a",
+          "type": "bool",
+          "description": "Show all stopped containers (including those"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "description": "Filter services by a property (supported"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "description": "Format output using a custom template:"
+        },
+        {
+          "name": "no-trunc",
+          "type": "bool",
+          "description": "Don't truncate output"
+        },
+        {
+          "name": "orphans",
+          "type": "bool",
+          "description": "Include orphaned services (not declared by"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Only display IDs"
+        },
+        {
+          "name": "services",
+          "type": "bool",
+          "description": "Display services"
+        },
+        {
+          "name": "status",
+          "type": "stringArray",
+          "description": "Filter services by status. Values: [paused |"
+        }
+      ]
+    },
+    {
+      "name": "publish",
+      "usage": "docker compose publish [OPTIONS] REPOSITORY[:TAG]",
+      "description": "Publish compose application",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "oci-version",
+          "type": "string",
+          "description": "OCI image/artifact specification version"
+        },
+        {
+          "name": "resolve-image-digests",
+          "type": "bool",
+          "description": "Pin image tags to digests"
+        },
+        {
+          "name": "with-env",
+          "type": "bool",
+          "description": "Include environment variables in the"
+        },
+        {
+          "name": "yes",
+          "shorthand": "y",
+          "type": "bool",
+          "description": "Assume \"yes\" as answer to all prompts"
+        }
+      ]
+    },
+    {
+      "name": "pull",
+      "usage": "docker compose pull [OPTIONS] [SERVICE...]",
+      "description": "Pull service images",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "ignore-buildable",
+          "type": "bool",
+          "description": "Ignore images that can be built"
+        },
+        {
+          "name": "ignore-pull-failures",
+          "type": "bool",
+          "description": "Pull what it can and ignores images with"
+        },
+        {
+          "name": "include-deps",
+          "type": "bool",
+          "description": "Also pull services declared as dependencies"
+        },
+        {
+          "name": "policy",
+          "type": "string",
+          "description": "Apply pull policy (\"missing\"|\"always\")"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Pull without printing progress information"
+        }
+      ]
+    },
+    {
+      "name": "push",
+      "usage": "docker compose push [OPTIONS] [SERVICE...]",
+      "description": "Push service images",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "ignore-push-failures",
+          "type": "bool",
+          "description": "Push what it can and ignores images with"
+        },
+        {
+          "name": "include-deps",
+          "type": "bool",
+          "description": "Also push images of services declared as"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Push without printing progress information"
+        }
+      ]
+    },
+    {
+      "name": "restart",
+      "usage": "docker compose restart [OPTIONS] [SERVICE...]",
+      "description": "Restart service containers",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "no-deps",
+          "type": "bool",
+          "description": "Don't restart dependent services"
+        },
+        {
+          "name": "timeout",
+          "shorthand": "t",
+          "type": "int",
+          "description": "Specify a shutdown timeout in seconds"
+        }
+      ]
+    },
+    {
+      "name": "rm",
+      "usage": "docker compose rm [OPTIONS] [SERVICE...]",
+      "description": "Removes stopped service containers",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "force",
+          "shorthand": "f",
+          "type": "bool",
+          "description": "Don't ask to confirm removal"
+        },
+        {
+          "name": "stop",
+          "shorthand": "s",
+          "type": "bool",
+          "description": "Stop the containers, if required, before removing"
+        },
+        {
+          "name": "volumes",
+          "shorthand": "v",
+          "type": "bool",
+          "description": "Remove any anonymous volumes attached to containers"
+        }
+      ]
+    },
+    {
+      "name": "run",
+      "usage": "docker compose run [OPTIONS] SERVICE [COMMAND] [ARGS...]",
+      "description": "Run a one-off command on a service",
+      "flags": [
+        {
+          "name": "build",
+          "type": "bool",
+          "description": "Build image before starting container"
+        },
+        {
+          "name": "cap-add",
+          "type": "list",
+          "description": "Add Linux capabilities"
+        },
+        {
+          "name": "cap-drop",
+          "type": "list",
+          "description": "Drop Linux capabilities"
+        },
+        {
+          "name": "detach",
+          "shorthand": "d",
+          "type": "bool",
+          "description": "Run container in background and print"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "entrypoint",
+          "type": "string",
+          "description": "Override the entrypoint of the image"
+        },
+        {
+          "name": "env",
+          "shorthand": "e",
+          "type": "stringArray",
+          "description": "Set environment variables"
+        },
+        {
+          "name": "env-from-file",
+          "type": "stringArray",
+          "description": "Set environment variables from file"
+        },
+        {
+          "name": "interactive",
+          "shorthand": "i",
+          "type": "bool",
+          "description": "Keep STDIN open even if not attached"
+        },
+        {
+          "name": "label",
+          "shorthand": "l",
+          "type": "stringArray",
+          "description": "Add or override a label"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Assign a name to the container"
+        },
+        {
+          "name": "no-TTY",
+          "shorthand": "T",
+          "type": "bool",
+          "description": "Disable pseudo-TTY allocation"
+        },
+        {
+          "name": "no-deps",
+          "type": "bool",
+          "description": "Don't start linked services"
+        },
+        {
+          "name": "publish",
+          "shorthand": "p",
+          "type": "stringArray",
+          "description": "Publish a container's port(s) to the host"
+        },
+        {
+          "name": "pull",
+          "type": "string",
+          "description": "Pull image before running"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Don't print anything to STDOUT"
+        },
+        {
+          "name": "quiet-build",
+          "type": "bool",
+          "description": "Suppress progress output from the"
+        },
+        {
+          "name": "quiet-pull",
+          "type": "bool",
+          "description": "Pull without printing progress information"
+        },
+        {
+          "name": "remove-orphans",
+          "type": "bool",
+          "description": "Remove containers for services not"
+        },
+        {
+          "name": "rm",
+          "type": "bool",
+          "description": "Automatically remove the container"
+        },
+        {
+          "name": "service-ports",
+          "shorthand": "P",
+          "type": "bool",
+          "description": "Run command with all service's ports"
+        },
+        {
+          "name": "use-aliases",
+          "type": "bool",
+          "description": "Use the service's network useAliases"
+        },
+        {
+          "name": "user",
+          "shorthand": "u",
+          "type": "string",
+          "description": "Run as specified username or uid"
+        },
+        {
+          "name": "volume",
+          "shorthand": "v",
+          "type": "stringArray",
+          "description": "Bind mount a volume"
+        },
+        {
+          "name": "workdir",
+          "shorthand": "w",
+          "type": "string",
+          "description": "Working directory inside the container"
+        }
+      ]
+    },
+    {
+      "name": "scale",
+      "usage": "docker compose scale [SERVICE=REPLICAS...]",
+      "description": "Scale services",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "no-deps",
+          "type": "bool",
+          "description": "Don't start linked services"
+        }
+      ]
+    },
+    {
+      "name": "start",
+      "usage": "docker compose start [SERVICE...]",
+      "description": "Start services",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        }
+      ]
+    },
+    {
+      "name": "stats",
+      "usage": "docker compose stats [OPTIONS] [SERVICE]",
+      "description": "Display a live stream of container(s) resource usage statistics",
+      "flags": [
+        {
+          "name": "all",
+          "shorthand": "a",
+          "type": "bool",
+          "description": "Show all containers (default shows just running)"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "description": "Format output using a custom template:"
+        },
+        {
+          "name": "no-stream",
+          "type": "bool",
+          "description": "Disable streaming stats and only pull the first result"
+        },
+        {
+          "name": "no-trunc",
+          "type": "bool",
+          "description": "Do not truncate output"
+        }
+      ]
+    },
+    {
+      "name": "stop",
+      "usage": "docker compose stop [OPTIONS] [SERVICE...]",
+      "description": "Stop services",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "timeout",
+          "shorthand": "t",
+          "type": "int",
+          "description": "Specify a shutdown timeout in seconds"
+        }
+      ]
+    },
+    {
+      "name": "top",
+      "usage": "docker compose top [SERVICES...]",
+      "description": "Display the running processes",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        }
+      ]
+    },
+    {
+      "name": "unpause",
+      "usage": "docker compose unpause [SERVICE...]",
+      "description": "Unpause services",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        }
+      ]
+    },
+    {
+      "name": "up",
+      "usage": "docker compose up [OPTIONS] [SERVICE...]",
+      "description": "Create and start containers",
+      "flags": [
+        {
+          "name": "abort-on-container-exit",
+          "type": "bool",
+          "description": "Stops all containers if any"
+        },
+        {
+          "name": "abort-on-container-failure",
+          "type": "bool",
+          "description": "Stops all containers if any"
+        },
+        {
+          "name": "always-recreate-deps",
+          "type": "bool",
+          "description": "Recreate dependent containers."
+        },
+        {
+          "name": "attach",
+          "type": "stringArray",
+          "description": "Restrict attaching to the specified"
+        },
+        {
+          "name": "attach-dependencies",
+          "type": "bool",
+          "description": "Automatically attach to log output"
+        },
+        {
+          "name": "build",
+          "type": "bool",
+          "description": "Build images before starting containers"
+        },
+        {
+          "name": "detach",
+          "shorthand": "d",
+          "type": "bool",
+          "description": "Detached mode: Run containers in the"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "exit-code-from",
+          "type": "string",
+          "description": "Return the exit code of the selected"
+        },
+        {
+          "name": "force-recreate",
+          "type": "bool",
+          "description": "Recreate containers even if their"
+        },
+        {
+          "name": "menu",
+          "type": "bool",
+          "description": "Enable interactive shortcuts when"
+        },
+        {
+          "name": "no-attach",
+          "type": "stringArray",
+          "description": "Do not attach (stream logs) to the"
+        },
+        {
+          "name": "no-build",
+          "type": "bool",
+          "description": "Don't build an image, even if it's policy"
+        },
+        {
+          "name": "no-color",
+          "type": "bool",
+          "description": "Produce monochrome output"
+        },
+        {
+          "name": "no-deps",
+          "type": "bool",
+          "description": "Don't start linked services"
+        },
+        {
+          "name": "no-log-prefix",
+          "type": "bool",
+          "description": "Don't print prefix in logs"
+        },
+        {
+          "name": "no-recreate",
+          "type": "bool",
+          "description": "If containers already exist, don't"
+        },
+        {
+          "name": "no-start",
+          "type": "bool",
+          "description": "Don't start the services after"
+        },
+        {
+          "name": "pull",
+          "type": "string",
+          "description": "Pull image before running"
+        },
+        {
+          "name": "quiet-pull",
+          "type": "bool",
+          "description": "Pull without printing progress"
+        },
+        {
+          "name": "remove-orphans",
+          "type": "bool",
+          "description": "Remove containers for services not"
+        },
+        {
+          "name": "renew-anon-volumes",
+          "shorthand": "V",
+          "type": "bool",
+          "description": "Recreate anonymous volumes instead"
+        },
+        {
+          "name": "scale",
+          "type": "scale",
+          "description": "Scale SERVICE to NUM instances."
+        },
+        {
+          "name": "timeout",
+          "shorthand": "t",
+          "type": "int",
+          "description": "Use this timeout in seconds for"
+        },
+        {
+          "name": "timestamps",
+          "type": "bool",
+          "description": "Show timestamps"
+        },
+        {
+          "name": "wait",
+          "type": "bool",
+          "description": "Wait for services to be"
+        },
+        {
+          "name": "wait-timeout",
+          "type": "int",
+          "description": "Maximum duration in seconds to wait"
+        },
+        {
+          "name": "watch",
+          "shorthand": "w",
+          "type": "bool",
+          "description": "Watch source code and"
+        },
+        {
+          "name": "yes",
+          "shorthand": "y",
+          "type": "bool",
+          "description": "Assume \"yes\" as answer to all"
+        }
+      ]
+    },
+    {
+      "name": "version",
+      "usage": "docker compose version [OPTIONS]",
+      "description": "Show the Docker Compose version information",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "format",
+          "shorthand": "f",
+          "type": "string",
+          "description": "Format the output. Values: [pretty | json]."
+        },
+        {
+          "name": "short",
+          "type": "bool",
+          "description": "Shows only Compose's version number"
+        }
+      ]
+    },
+    {
+      "name": "wait",
+      "usage": "docker compose wait SERVICE [SERVICE...] [OPTIONS]",
+      "description": "Block until containers of all (or specified) services stop.",
+      "flags": [
+        {
+          "name": "down-project",
+          "type": "bool",
+          "description": "Drops project when the first container stops"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        }
+      ]
+    },
+    {
+      "name": "watch",
+      "usage": "docker compose watch [SERVICE...]",
+      "description": "Watch build context for service and rebuild/refresh containers when files are updated",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "no-up",
+          "type": "bool",
+          "description": "Do not build \u0026 start services before watching"
+        },
+        {
+          "name": "prune",
+          "type": "bool",
+          "description": "Prune dangling images on rebuild",
+          "default": "true"
+        },
+        {
+          "name": "quiet",
+          "type": "bool",
+          "description": "hide build output"
+        }
+      ]
+    }
+  ]
+}

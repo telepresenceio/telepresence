@@ -47,8 +47,7 @@ func (m *managerGRPCSuite) SetupSuite() {
 	_, err = m.client.Version(ctx, &empty.Empty{})
 	m.Require().NoError(err)
 
-	daemonID, err := daemon.NewIdentifier("", k8sCluster.Context, m.AppNamespace(), false)
-	m.Require().NoError(err)
+	daemonID := daemon.NewIdentifier("", k8sCluster.Context, m.AppNamespace(), false)
 	m.si, err = trafficmgr.LoadSessionInfoFromUserCache(ctx, daemonID)
 	m.Require().NoError(err)
 }

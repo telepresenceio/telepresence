@@ -1,0 +1,12 @@
+x-tele:
+  connections:
+    - namespace: emojivoto
+  mounts:
+    - volumePattern: .*
+      policy: local
+services:
+  web:
+    x-tele:
+      type: proxy
+      ports:
+        - 8080:80

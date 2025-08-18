@@ -1,3 +1,4 @@
+
 ---
 title: Laptop-side configuration
 ---
@@ -385,7 +386,7 @@ clusters:
 [yaml-int]: https://yaml.org/type/int.html
 [yaml-seq]: https://yaml.org/type/seq.html
 [yaml-str]: https://yaml.org/type/str.html
-[quantity]: quantity.md
+[quantity]: ../common/quantity.md
 [go-duration]: https://pkg.go.dev/time#ParseDuration
 [logrus-level]: https://github.com/sirupsen/logrus/blob/v1.8.1/logrus.go#L25-L45
 [cidr]: https://www.geeksforgeeks.org/classless-inter-domain-routing-cidr/

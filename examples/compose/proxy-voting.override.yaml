@@ -1,0 +1,10 @@
+x-tele:
+  connections:
+    - namespace: emojivoto
+  mounts:
+    - volumePattern: .*
+      policy: local
+services:
+  voting:
+    x-tele:
+      type: proxy
