@@ -33,9 +33,9 @@ The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to 
   </Body>
 </Note>
 <Note>
-	<Title type="feature" docs="https://github.com/telepresenceio/telepresence/issues/3920">Prefix metrics with `telepresnece_`</Title>
+	<Title type="feature" docs="https://github.com/telepresenceio/telepresence/issues/3920">Prefix metrics with "telepresence_"</Title>
 	<Body>
-Avoids metric conflicts and makes these more explicit to improve search in observability stacks
+Avoids metric conflicts and makes these more explicit to improve search in observability stacks.
   </Body>
 </Note>
 <Note>
@@ -54,6 +54,12 @@ The telepresence connect command introduces a new `--reroute-remote <host>:<port
 	<Title type="feature">Local Port Rerouting</Title>
 	<Body>
 The telepresence connect command introduces a new `--reroute-local <local-port>:<host>:<port>[/{tcp|udp}]` flag, allowing users to redirect requests sent to ports on localhost to arbitrary service ports. This feature enables requests sent to `localhost:<local-port>` to be redirected to `<host:port>`. The flag can be repeated.
+  </Body>
+</Note>
+<Note>
+	<Title type="change">The default port for the mutating webhook is now 8443. It used to be 443</Title>
+	<Body>
+Port numbers below 1000 are reserved for privileged processes and are often restricted by firewalls. Consequently, the default port for the mutating webhook was changed from 443 to 8443. You can override this default port using the agentInjector.webhook.port value in the Helm Chart. This change is particularly significant for clusters using Telepresence, where firewall rules limit the admission webhook's access to worker nodes, such as in an Amazon EKS cluster.
   </Body>
 </Note>
 ## Version 2.23.6 <span style={{fontSize:'16px'}}>(July 23)</span>

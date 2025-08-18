@@ -507,7 +507,7 @@ matchExpressions:
 					{
 						Protocol:   "TCP",
 						Name:       "grpc",
-						Port:       443,
+						Port:       8443,
 						TargetPort: intstr.FromInt32(8443),
 					},
 				},
@@ -906,7 +906,7 @@ matchExpressions:
 							ServiceName:       "grpc-port",
 							ServiceUID:        grpcPortUID,
 							ServicePortName:   "grpc",
-							ServicePort:       443,
+							ServicePort:       8443,
 							Protocol:          types.ProtoTCP,
 							AgentPort:         9900,
 							ContainerPort:     8443,

@@ -11,7 +11,7 @@ spec:
     telepresence: manager
   ports:
     - name: agent-injector
-      port: 443
+      port: 8443
       targetPort: https
 ---
 apiVersion: admissionregistration.k8s.io/v1

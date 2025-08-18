@@ -69,6 +69,6 @@ func (m *managerGRPCSuite) Test_ClusterInfo() {
 	m.Require().NotNil(info.ManagerPodIp)
 	m.Require().Equal(int32(8081), info.ManagerPodPort)
 	m.Require().NotNil(info.InjectorSvcIp)
-	m.Require().Equal(int32(443), info.InjectorSvcPort)
+	m.Require().Equal(int32(8443), info.InjectorSvcPort)
 	m.Require().Equal(fmt.Sprintf("agent-injector.%s", m.ManagerNamespace()), info.InjectorSvcHost)
 }

@@ -1025,7 +1025,7 @@ func (s *Session) checkSvcConnectivity(ctx context.Context, info *manager.Cluste
 	ip := net.IP(info.InjectorSvcIp).String()
 	port := info.InjectorSvcPort
 	if port == 0 {
-		port = 443
+		port = 8443
 	}
 	tr := &http.Transport{
 		// Skip checking the cert because its trust chain is loaded into a secret on the cluster; we'd fail to verify it

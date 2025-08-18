@@ -26,10 +26,10 @@ Added configuration parameter `agent.maxIdleTime` to the Helm Chart, to control 
 The Helm Chart now has a `prometheus.dropClientLabel` option that can be set to true to drop the client label from the prometheus metrics. This is useful for GDPR compliance, as the client label contains personal data, which can be potentially problematic, i.e allowing the ability to track the working times of an individual.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Prefix metrics with `telepresnece_`](https://github.com/telepresenceio/telepresence/issues/3920)</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Prefix metrics with "telepresence_"](https://github.com/telepresenceio/telepresence/issues/3920)</div></div>
 <div style="margin-left: 15px">
 
-Avoids metric conflicts and makes these more explicit to improve search in observability stacks
+Avoids metric conflicts and makes these more explicit to improve search in observability stacks.
 </div>
 
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Create CLI documentation in markdown format](reference/cli/telepresence)</div></div>
@@ -48,6 +48,12 @@ The telepresence connect command introduces a new `--reroute-remote <host>:<port
 <div style="margin-left: 15px">
 
 The telepresence connect command introduces a new `--reroute-local <local-port>:<host>:<port>[/{tcp|udp}]` flag, allowing users to redirect requests sent to ports on localhost to arbitrary service ports. This feature enables requests sent to `localhost:<local-port>` to be redirected to `<host:port>`. The flag can be repeated.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The default port for the mutating webhook is now 8443. It used to be 443</div></div>
+<div style="margin-left: 15px">
+
+Port numbers below 1000 are reserved for privileged processes and are often restricted by firewalls. Consequently, the default port for the mutating webhook was changed from 443 to 8443. You can override this default port using the agentInjector.webhook.port value in the Helm Chart. This change is particularly significant for clusters using Telepresence, where firewall rules limit the admission webhook's access to worker nodes, such as in an Amazon EKS cluster.
 </div>
 
 ## Version 2.23.6 <span style="font-size: 16px;">(July 23)</span>

@@ -207,7 +207,7 @@ pod/hello-87f7f548f-mdg8d   2/2     Running   0          6m36s
 ```console
 $ kubectl -n ambassador get svc,deploy,pod
 NAME                      TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
-service/agent-injector    ClusterIP   10.107.17.143   <none>        443/TCP    31m
+service/agent-injector    ClusterIP   10.107.17.143   <none>        8443/TCP   31m
 service/traffic-manager   ClusterIP   None            <none>        8081/TCP   31m
 
 NAME                              READY   UP-TO-DATE   AVAILABLE   AGE

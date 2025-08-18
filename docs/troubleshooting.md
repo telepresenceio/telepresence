@@ -92,7 +92,7 @@ echo-easy-d8dc4cc7c-27567   1/1     Running   0          2m9s
 
 If this is occurring in a GKE cluster with private networking enabled, it is likely due to firewall rules blocking the
 Traffic Manager's webhook injector from the API server.
-To fix this, add a firewall rule allowing your cluster's master nodes to access TCP port `443` in your cluster's pods,
+To fix this, add a firewall rule allowing your cluster's master nodes to access TCP port `8443` in your cluster's pods,
 or change the port number that Telepresence is using for the agent injector by providing the number of an allowed port
 using the Helm chart value `agentInjector.webhook.port`.
 Please refer to the [telepresence install instructions](install/cloud#gke) or the [GCP docs](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules) for information to resolve this.
