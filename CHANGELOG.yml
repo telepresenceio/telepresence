@@ -79,6 +79,13 @@ items:
           The telepresence connect command introduces a new `--reroute-local <local-port>:<host>:<port>[/{tcp|udp}]` flag,
           allowing users to redirect requests sent to ports on localhost to arbitrary service ports. This feature enables
           requests sent to `localhost:<local-port>` to be redirected to `<host:port>`. The flag can be repeated.
+      - type: feature
+        title: Add information about using Kubernetes auth plugins when using Telepresence CLI in a container
+        body: >-
+          Kubernetes, and hence the Telepresence CLI, must have access to auth plugins declared in the kubeconfig. A
+          section was added to the documentation explaining how to achieve this when using the Telepresence CLI in a
+          container.
+        docs: reference/inside-container#kubernetes-auth-plugins
       - type: change
         title: The default port for the mutating webhook is now 8443. It used to be 443
         body: >-
