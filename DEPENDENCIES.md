@@ -19,7 +19,7 @@ following Free and Open Source software:
     github.com/cenkalti/backoff/v4                                 v4.3.0                                MIT license
     github.com/cespare/xxhash/v2                                   v2.3.0                                MIT license
     github.com/chai2010/gettext-go                                 v1.0.3                                3-clause BSD license
-    github.com/compose-spec/compose-go/v2                          v2.6.4                                Apache License 2.0, MIT license
+    github.com/compose-spec/compose-go/v2                          v2.8.1                                Apache License 2.0, MIT license
     github.com/containerd/containerd                               v1.7.28                               Apache License 2.0
     github.com/containerd/errdefs                                  v1.0.0                                Apache License 2.0
     github.com/containerd/errdefs/pkg                              v0.3.0                                Apache License 2.0
@@ -55,7 +55,7 @@ following Free and Open Source software:
     github.com/go-openapi/jsonpointer                              v0.21.2                               Apache License 2.0
     github.com/go-openapi/jsonreference                            v0.21.0                               Apache License 2.0
     github.com/go-openapi/swag                                     v0.23.1                               Apache License 2.0
-    github.com/go-viper/mapstructure/v2                            v2.0.0                                MIT license
+    github.com/go-viper/mapstructure/v2                            v2.4.0                                MIT license
     github.com/gobwas/glob                                         v0.2.3                                MIT license
     github.com/godbus/dbus/v5                                      v5.1.0                                2-clause BSD license
     github.com/gogo/protobuf                                       v1.3.2                                3-clause BSD license
@@ -133,9 +133,6 @@ following Free and Open Source software:
     github.com/vishvananda/netns                                   v0.0.5                                Apache License 2.0
     github.com/winfsp/cgofuse                                      v1.6.0                                MIT license
     github.com/x448/float16                                        v0.8.4                                MIT license
-    github.com/xeipuuv/gojsonpointer                               v0.0.0-20180127040702-4e3ac2762d5f    Apache License 2.0
-    github.com/xeipuuv/gojsonreference                             v0.0.0-20180127040603-bd5ef7bd5415    Apache License 2.0
-    github.com/xeipuuv/gojsonschema                                v1.2.0                                Apache License 2.0
     github.com/xhit/go-str2duration/v2                             v2.1.0                                3-clause BSD license
     github.com/xlab/treeprint                                      v1.2.0                                MIT license
     go.opentelemetry.io/auto/sdk                                   v1.1.0                                Apache License 2.0
@@ -158,13 +155,13 @@ following Free and Open Source software:
     golang.zx2c4.com/wintun                                        v0.0.0-20230126152724-0fa3db229ce2    MIT license
     golang.zx2c4.com/wireguard                                     v0.0.0-20250521234502-f333402bd9cb    MIT license
     golang.zx2c4.com/wireguard/windows                             v0.5.3                                MIT license
-    google.golang.org/genproto/googleapis/rpc                      v0.0.0-20250811230008-5f3141c8851a    Apache License 2.0
+    google.golang.org/genproto/googleapis/rpc                      v0.0.0-20250818200422-3122310a409c    Apache License 2.0
     google.golang.org/grpc                                         v1.74.2                               Apache License 2.0
     google.golang.org/protobuf                                     v1.36.7                               3-clause BSD license
     gopkg.in/evanphx/json-patch.v4                                 v4.13.0                               3-clause BSD license
     gopkg.in/inf.v0                                                v0.9.1                                3-clause BSD license
     gopkg.in/yaml.v3                                               v3.0.1                                Apache License 2.0, MIT license
-    gvisor.dev/gvisor                                              v0.0.0-20250814200850-35ffc9bcab55    3-clause BSD license, Apache License 2.0, MIT license
+    gvisor.dev/gvisor                                              v0.0.0-20250816201027-ba3b9ca85f20    3-clause BSD license, Apache License 2.0, MIT license
     helm.sh/helm/v3                                                v3.18.5                               Apache License 2.0
     k8s.io/api                                                     v0.33.4                               Apache License 2.0
     k8s.io/apiextensions-apiserver                                 v0.33.4                               Apache License 2.0
