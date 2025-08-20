@@ -29,12 +29,15 @@ Build or rebuild services
 ```
       --build-arg stringArray   Set build-time variables for services
       --builder string          Set builder to use
+      --check                   Check build configuration
   -m, --memory bytes            Set memory limit for the build container.
       --no-cache                Do not use cache when building the image
       --print                   Print equivalent bake file
+      --provenance string       Add a provenance attestation
       --pull                    Always attempt to pull a newer version of
       --push                    Push service images
-  -q, --quiet                   Don't print anything to STDOUT
+  -q, --quiet                   Suppress the build output
+      --sbom string             Add a SBOM attestation
       --ssh string              Set SSH authentications used when
       --with-dependencies       Also build dependencies (transitively)
 ```

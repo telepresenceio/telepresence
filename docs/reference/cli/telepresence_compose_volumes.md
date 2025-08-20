@@ -1,19 +1,19 @@
 ---
-title: telepresence compose events
-description: Receive real time events from containers
+title: telepresence compose volumes
+description: List volumes
 hide_table_of_contents: true
 ---
 
-Receive real time events from containers
+List volumes
 
 ### Usage:
 ```
-  telepresence compose events [flags] [services]
+  telepresence compose volumes [flags] [services]
 ```
 
 ### Flags:
 ```
-  -h, --help   help for events
+  -h, --help   help for volumes
 ```
 
 ### Compose flags:
@@ -25,11 +25,10 @@ Receive real time events from containers
       --project-name string        Project name
 ```
 
-### Compose events flags:
+### Compose volumes flags:
 ```
-      --json           Output events as a stream of json objects
-      --since string   Show all events created since timestamp
-      --until string   Stream events until this timestamp
+      --format string   Format output using a custom template:
+  -q, --quiet           Only display volume names
 ```
 
 ### Global Flags:
