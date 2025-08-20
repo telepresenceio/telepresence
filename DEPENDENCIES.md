@@ -125,9 +125,9 @@ following Free and Open Source software:
     github.com/spf13/cobra                                         v1.9.1                                Apache License 2.0
     github.com/spf13/pflag                                         v1.0.7                                3-clause BSD license
     github.com/stretchr/testify                                    v1.10.0                               MIT license
-    github.com/telepresenceio/cobraparser                          (modified)                            Apache License 2.0
     github.com/telepresenceio/go-fuseftp                           v0.6.7                                Apache License 2.0
     github.com/telepresenceio/go-fuseftp/rpc                       v0.6.7                                Apache License 2.0
+    github.com/telepresenceio/telepresence/cmd/cobraparser         (modified)                            Apache License 2.0
     github.com/telepresenceio/telepresence/rpc/v2                  (modified)                            Apache License 2.0
     github.com/vishvananda/netlink                                 v1.3.1                                Apache License 2.0
     github.com/vishvananda/netns                                   v0.0.5                                Apache License 2.0

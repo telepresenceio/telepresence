@@ -39,9 +39,9 @@ require (
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
 	github.com/stretchr/testify v1.10.0
-	github.com/telepresenceio/cobraparser v0.0.0-00010101000000-000000000000
 	github.com/telepresenceio/go-fuseftp v0.6.7
 	github.com/telepresenceio/go-fuseftp/rpc v0.6.7
+	github.com/telepresenceio/telepresence/cmd/cobraparser v0.0.0-00010101000000-000000000000
 	github.com/telepresenceio/telepresence/rpc/v2 v2.24.0-rc.0
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/net v0.43.0
@@ -190,6 +190,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 )
 
-replace github.com/telepresenceio/cobraparser => ./cmd/cobraparser
+replace github.com/telepresenceio/telepresence/cmd/cobraparser => ./cmd/cobraparser
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

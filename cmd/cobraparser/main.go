@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/telepresenceio/cobraparser/types"
+	"github.com/telepresenceio/telepresence/cmd/cobraparser/types"
 )
 
 func main() {

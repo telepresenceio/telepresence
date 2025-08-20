@@ -9,7 +9,7 @@ import (
 	"github.com/docker/docker/opts"
 	"github.com/spf13/pflag"
 
-	"github.com/telepresenceio/cobraparser/types"
+	"github.com/telepresenceio/telepresence/cmd/cobraparser/types"
 )
 
 // FlagSet creates a FlagSet based on the given CommandInfo.
