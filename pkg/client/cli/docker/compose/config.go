@@ -51,7 +51,7 @@ type parentConfig struct {
 }
 
 type config struct {
-	*topLevelExtension
+	topLevelExtension
 	*parentConfig
 	subCommandFlags *pflag.FlagSet
 }
@@ -171,7 +171,7 @@ func (c *config) loadProject(ctx context.Context) (*transformer, error) {
 	}
 	ev, ok := p.Extensions[extensionKey]
 	if ok {
-		c.topLevelExtension, err = ParseTopLevelExtension(ev)
+		err = c.topLevelExtension.parse(ev)
 		if err != nil {
 			return nil, err
 		}
@@ -345,9 +345,6 @@ var defaultConnectionConfig = &connectionConfig{
 }
 
 func (c *config) getConnectionConfig(name string) (*connectionConfig, error) {
-	if c.topLevelExtension == nil {
-		c.topLevelExtension = &topLevelExtension{}
-	}
 	if len(c.Connections) == 0 {
 		c.Connections = []*connectionConfig{defaultConnectionConfig}
 	}
