@@ -63,6 +63,104 @@
   ],
   "subcommands": [
     {
+      "name": "bridge",
+      "usage": "docker compose bridge [OPTIONS] COMMAND",
+      "description": "Convert compose files into another model",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        }
+      ],
+      "subcommands": [
+        {
+          "name": "transformations",
+          "usage": "docker compose bridge transformations [OPTIONS] COMMAND",
+          "description": "Manage transformation images",
+          "flags": [
+            {
+              "name": "dry-run",
+              "type": "bool",
+              "description": "Execute command in dry run mode"
+            }
+          ],
+          "subcommands": [
+            {
+              "name": "create",
+              "usage": "docker compose bridge transformations create [OPTION] PATH",
+              "description": "Create a new transformation",
+              "flags": [
+                {
+                  "name": "dry-run",
+                  "type": "bool",
+                  "description": "Execute command in dry run mode"
+                },
+                {
+                  "name": "from",
+                  "shorthand": "f",
+                  "type": "string",
+                  "description": "Existing transformation to copy (default:"
+                }
+              ]
+            },
+            {
+              "name": "list",
+              "usage": "docker compose bridge transformations list",
+              "description": "List available transformations",
+              "flags": [
+                {
+                  "name": "dry-run",
+                  "type": "bool",
+                  "description": "Execute command in dry run mode"
+                },
+                {
+                  "name": "format",
+                  "type": "string",
+                  "description": "Format the output. Values: [table | json]"
+                },
+                {
+                  "name": "quiet",
+                  "shorthand": "q",
+                  "type": "bool",
+                  "description": "Only display transformer names"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "convert",
+          "usage": "docker compose bridge convert",
+          "description": "Convert compose files to Kubernetes manifests, Helm charts, or another model",
+          "flags": [
+            {
+              "name": "dry-run",
+              "type": "bool",
+              "description": "Execute command in dry run mode"
+            },
+            {
+              "name": "output",
+              "shorthand": "o",
+              "type": "string",
+              "description": "The output directory for the"
+            },
+            {
+              "name": "templates",
+              "type": "string",
+              "description": "Directory containing transformation"
+            },
+            {
+              "name": "transformation",
+              "shorthand": "t",
+              "type": "stringArray",
+              "description": "Transformation to apply to compose"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "attach",
       "usage": "docker compose attach [OPTIONS] SERVICE",
       "description": "Attach local standard input, output, and error streams to a service's running container",
@@ -110,6 +208,11 @@
           "description": "Set builder to use"
         },
         {
+          "name": "check",
+          "type": "bool",
+          "description": "Check build configuration"
+        },
+        {
           "name": "dry-run",
           "type": "bool",
           "description": "Execute command in dry run mode"
@@ -131,6 +234,11 @@
           "description": "Print equivalent bake file"
         },
         {
+          "name": "provenance",
+          "type": "string",
+          "description": "Add a provenance attestation"
+        },
+        {
           "name": "pull",
           "type": "bool",
           "description": "Always attempt to pull a newer version of"
@@ -144,7 +252,12 @@
           "name": "quiet",
           "shorthand": "q",
           "type": "bool",
-          "description": "Don't print anything to STDOUT"
+          "description": "Suppress the build output"
+        },
+        {
+          "name": "sbom",
+          "type": "string",
+          "description": "Add a SBOM attestation"
         },
         {
           "name": "ssh",
@@ -229,6 +342,21 @@
           "name": "images",
           "type": "bool",
           "description": "Print the image names, one per line."
+        },
+        {
+          "name": "lock-image-digests",
+          "type": "bool",
+          "description": "Produces an override file with image digests"
+        },
+        {
+          "name": "models",
+          "type": "bool",
+          "description": "Print the model names, one per line."
+        },
+        {
+          "name": "networks",
+          "type": "bool",
+          "description": "Print the network names, one per line."
         },
         {
           "name": "no-consistency",
@@ -434,6 +562,16 @@
           "name": "json",
           "type": "bool",
           "description": "Output events as a stream of json objects"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Show all events created since timestamp"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "description": "Stream events until this timestamp"
         }
       ]
     },
@@ -1232,6 +1370,11 @@
           "description": "Pull image before running"
         },
         {
+          "name": "quiet-build",
+          "type": "bool",
+          "description": "Suppress the build output"
+        },
+        {
           "name": "quiet-pull",
           "type": "bool",
           "description": "Pull without printing progress"
@@ -1307,6 +1450,29 @@
           "name": "short",
           "type": "bool",
           "description": "Shows only Compose's version number"
+        }
+      ]
+    },
+    {
+      "name": "volumes",
+      "usage": "docker compose volumes [OPTIONS] [SERVICE...]",
+      "description": "List volumes",
+      "flags": [
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "description": "Format output using a custom template:"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "description": "Only display volume names"
         }
       ]
     },

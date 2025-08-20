@@ -63,6 +63,12 @@ Kubernetes, and hence the Telepresence CLI, must have access to auth plugins dec
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Add log directory to the output of `telepresence config view`</Title>
+	<Body>
+The `telepresence config view` command now includes the path to the directory where the Telepresence logs are stored.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">The default port for the mutating webhook is now 8443. It used to be 443</Title>
 	<Body>
 Port numbers below 1000 are reserved for privileged processes and are often restricted by firewalls. Consequently, the default port for the mutating webhook was changed from 443 to 8443. You can override this default port using the agentInjector.webhook.port value in the Helm Chart. This change is particularly significant for clusters using Telepresence, where firewall rules limit the admission webhook's access to worker nodes, such as in an Amazon EKS cluster.

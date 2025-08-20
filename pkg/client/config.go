@@ -1406,8 +1406,9 @@ func (r *Routing) ToSnake() *RoutingSnake {
 }
 
 type SessionConfig struct {
-	Config     `json:"clientConfig"`
-	ClientFile string `json:"clientFile"`
+	Config       `json:"clientConfig"`
+	ClientFile   string `json:"clientFile"`
+	LogDirectory string `json:"logDirectory"`
 }
 
 func (sc *SessionConfig) UnmarshalJSON(data []byte) error {

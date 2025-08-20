@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 func configCmd() *cobra.Command {
@@ -69,6 +70,7 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 		}
 		cfg.Config = client.GetConfig(ctx)
 		cfg.ClientFile = client.GetConfigFile(ctx)
+		cfg.LogDirectory = filelocation.AppUserLogDir(ctx)
 		output.Object(cmd.Context(), &cfg, true)
 		return nil
 	}

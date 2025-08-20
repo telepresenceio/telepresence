@@ -56,6 +56,12 @@ The telepresence connect command introduces a new `--reroute-local <local-port>:
 Kubernetes, and hence the Telepresence CLI, must have access to auth plugins declared in the kubeconfig. A section was added to the documentation explaining how to achieve this when using the Telepresence CLI in a container.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add log directory to the output of `telepresence config view`</div></div>
+<div style="margin-left: 15px">
+
+The `telepresence config view` command now includes the path to the directory where the Telepresence logs are stored.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The default port for the mutating webhook is now 8443. It used to be 443</div></div>
 <div style="margin-left: 15px">
 

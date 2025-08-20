@@ -86,6 +86,11 @@ items:
           section was added to the documentation explaining how to achieve this when using the Telepresence CLI in a
           container.
         docs: reference/inside-container#kubernetes-auth-plugins
+      - type: feature
+        title: Add log directory to the output of `telepresence config view`
+        body: >-
+          The `telepresence config view` command now includes the path to the directory where the Telepresence logs are
+          stored.
       - type: change
         title: The default port for the mutating webhook is now 8443. It used to be 443
         body: >-
