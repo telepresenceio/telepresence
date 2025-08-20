@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/compose-spec/compose-go/v2/cli"
 	"github.com/go-json-experiment/json"
@@ -28,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -311,14 +313,19 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 	for _, e := range es {
 		progress.Start(ctx, "Engaging")
 		cn := e.composeService().Name
-		g.Go(cn, func(ctx context.Context) error {
+		g.Go(cn, func(ctx context.Context) (err error) {
 			ctx = progress.WithEventId(ctx, cn)
-			progress.Workingf(ctx, "%s service %s", e.engagementType().Working(), cn)
-			ae, err := e.activate(tr.volumes())
+			progress.Working(ctx, e.engagementType().Working(), cn)
+			var ae *engagement
+			if connMustExist {
+				ae, err = e.engaged()
+			} else {
+				ae, err = e.activate(tr.volumes())
+			}
 			if err != nil {
 				return progress.MaybeWriteError(ctx, err)
 			}
-			progress.Donef(ctx, "%s service %s", e.engagementType().WorkDone(), cn)
+			progress.Done(ctx, e.engagementType().WorkDone(), cn)
 			aesCh <- ae
 			return nil
 		})
@@ -334,9 +341,29 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 			}
 		}
 		progress.Stop(ctx)
+		if name == "stop" || name == "up" && !flags.HasOption("detached", 'd', args) {
+			defer func() {
+				progress.Start(ctx, "Disengaging")
+				for _, n := range maps.SortedKeys(tr.engagements) {
+					e := tr.engagements[n]
+					eCtx := progress.WithEventId(ctx, n)
+					progress.Working(eCtx, e.engagementType().Leaving())
+					err = e.deactivate()
+					if err != nil {
+						dlog.Error(eCtx, err)
+					}
+					progress.Done(eCtx, e.engagementType().Left())
+				}
+				progress.Stop(ctx)
+			}()
+		}
 		return tr.runCommand(ctx, name, args)
 	})
-	return g.Wait()
+	err = g.Wait()
+	if err != nil && strings.Contains(err.Error(), "graceful shutdown") {
+		err = nil
+	}
+	return err
 }
 
 //nolint:gochecknoglobals // constant

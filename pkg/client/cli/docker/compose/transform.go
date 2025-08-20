@@ -10,6 +10,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -50,12 +52,7 @@ func (t *transformer) addEngagement(engagement *engagement) {
 	t.engagements[engagement.composeService().Name] = engagement
 }
 
-func (t *transformer) createProject(ctx context.Context, cmdName string) ([]string, error) {
-	forceRecreate := cmdName == "up" || cmdName == "create"
-	composeFile, err := t.createConfigFile(ctx, forceRecreate)
-	if err != nil {
-		return nil, err
-	}
+func (t *transformer) createProject(cmdName, composeFile string) ([]string, error) {
 	c := t.config
 	opts := make([]string, 0, 10)
 	opts = append(opts, "compose", "--file", composeFile)
@@ -65,6 +62,7 @@ func (t *transformer) createProject(ctx context.Context, cmdName string) ([]stri
 		opts = append(opts, "--project-name", c.projectName)
 	}
 	if c.projectDir == "" {
+		var err error
 		c.projectDir, err = os.Getwd()
 		if err != nil {
 			return nil, err
@@ -87,16 +85,55 @@ func (t *transformer) marshalYAML() ([]byte, error) {
 }
 
 func (t *transformer) runCommand(ctx context.Context, name string, args []string) error {
-	opts, err := t.createProject(ctx, name)
+	forceRecreate := name == "up" || name == "create"
+	composeFile, err := t.createConfigFile(ctx, forceRecreate)
 	if err != nil {
 		return err
 	}
-	err = proc.StdCommand(ctx, "docker", append(opts, args...)...).Run()
+	opts, err := t.createProject(name, composeFile)
+	if err != nil {
+		return err
+	}
+	err = t.runCompose(ctx, name, composeFile, append(opts, args...))
 	if err != nil {
 		// Prefer error output from the command to the exit code error.
 		err = errcat.Silent.New(err)
 	}
 	return err
+}
+
+func (t *transformer) runCompose(ctx context.Context, name, composeFile string, args []string) (err error) {
+	if name == "up" && !flags.HasOption("detach", 'd', args) {
+		return t.runAttachedUp(ctx, composeFile, args)
+	}
+	cmd := proc.StdCommand(ctx, docker.Exe, args...)
+	cmd.Env = os.Environ()
+	return cmd.Run()
+}
+
+func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile string, args []string) (err error) {
+	// We need to ensure that containers are stopped when the parentCtx is canceled, but we don't want to do that
+	// by killing the "docker compose up" process. There are multiple reasons for this:
+	//
+	// 1. If the "docker compose up" process is interrupted, it will detach, and the containers will continue to run
+	//    for a while longer. We don't want that because some of them might depend on engagements that will end once
+	//    this function returns.
+	// 2. On windows, the "docker compose up" will detach, but it won't stop the containers at all.s
+	ctx := context.WithoutCancel(parentCtx)
+	cmd := proc.StdCommand(ctx, docker.Exe, args...)
+	proc.CreateNewProcessGroup(cmd)
+	cmd.Env = os.Environ()
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+	go func() {
+		<-parentCtx.Done()
+		stopCmd := proc.StdCommand(ctx, docker.Exe, "compose", "--file", composeFile, "stop")
+		stopCmd.Env = os.Environ()
+		_ = stopCmd.Run()
+	}()
+	return cmd.Wait()
 }
 
 func (t *transformer) serviceExtensions() (ses map[string]serviceExtension) {

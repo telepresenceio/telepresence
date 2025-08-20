@@ -2,6 +2,7 @@ package maps
 
 import (
 	"cmp"
+	"slices"
 	"sort"
 )
 
@@ -32,6 +33,18 @@ func Merge[K comparable, V any](dst, src map[K]V) {
 	for k, v := range src {
 		dst[k] = v
 	}
+}
+
+// SortedKeys returns the keys of the map m sorted alphabetically.
+func SortedKeys[M ~map[K]V, K cmp.Ordered, V any](m M) []K {
+	r := make([]K, len(m))
+	i := 0
+	for k := range m {
+		r[i] = k
+		i++
+	}
+	slices.Sort(r)
+	return r
 }
 
 // ToSortedSlice returns a slice of the values in the given map, sorted by that map's keys.

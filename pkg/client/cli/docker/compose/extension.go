@@ -1,13 +1,16 @@
 package compose
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/puzpuzpuz/xsync/v4"
+	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	grpcStatus "google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -21,6 +24,10 @@ import (
 type serviceExtension interface {
 	// Activate the service extension.
 	activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error)
+
+	deactivate() error
+
+	engaged() (*engagement, error)
 
 	engagementType() types.EngagementType
 
@@ -155,6 +162,10 @@ func (e *extension) activate(*xsync.Map[string, *compose.VolumeConfig]) (*engage
 	return createEngagement(daemon.GetUserClient(e.conn), e)
 }
 
+func (e *extension) deactivate() error {
+	return nil
+}
+
 type proxyExtension struct {
 	extension
 	Name  string              `json:"name"`
@@ -169,6 +180,10 @@ func (e *proxyExtension) init(c *config, et types.EngagementType, composeService
 }
 
 func (e *proxyExtension) activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e)
+}
+
+func (e *extension) engaged() (*engagement, error) {
 	return createEngagement(daemon.GetUserClient(e.conn), e)
 }
 
@@ -247,6 +262,10 @@ type interceptExtension struct {
 	ToPod    []types.PortAndProto `json:"toPod,omitempty"`
 }
 
+func (e *interceptExtension) deactivate() error {
+	return deactivateIntercept(e)
+}
+
 func (e *interceptExtension) init(c *config, et types.EngagementType, composeService *compose.ServiceConfig) {
 	e.engageExtension.init(c, et, composeService)
 	if e.Workload == "" {
@@ -261,6 +280,10 @@ func (e *interceptExtension) workload() string {
 
 func (e *interceptExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
 	return activateIntercept(e, tpVolumes)
+}
+
+func (e *interceptExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e)
 }
 
 func (e *interceptExtension) service() string {
@@ -331,6 +354,30 @@ func (e *ingestExtension) container() string {
 	return e.Container
 }
 
+func (e *ingestExtension) deactivate() error {
+	ctx := context.WithoutCancel(e.connection().Context)
+	ud := daemon.GetUserClient(ctx)
+	ig, err := ud.GetIngest(ctx, &connector.IngestIdentifier{
+		WorkloadName:  e.workload(),
+		ContainerName: e.container(),
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			err = nil
+		}
+		return err
+	}
+	_, err = ud.LeaveIngest(ctx, &connector.IngestIdentifier{
+		WorkloadName:  ig.Workload,
+		ContainerName: ig.Container,
+	})
+	return err
+}
+
+func (e *ingestExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e)
+}
+
 // ToPod maps local ports to ports in an engaged pod.
 func (e *ingestExtension) toPod() []types.PortAndProto {
 	return e.ToPod
@@ -351,6 +398,14 @@ type replaceExtension struct {
 
 func (e *replaceExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
 	return activateIntercept(e, tpVolumes)
+}
+
+func (e *replaceExtension) deactivate() error {
+	return deactivateIntercept(e)
+}
+
+func (e *replaceExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e)
 }
 
 func (e *replaceExtension) container() string {
@@ -377,6 +432,14 @@ type wiretapExtension struct {
 
 func (e *wiretapExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
 	return activateIntercept(e, tpVolumes)
+}
+
+func (e *wiretapExtension) deactivate() error {
+	return deactivateIntercept(e)
+}
+
+func (e *wiretapExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e)
 }
 
 func (e *wiretapExtension) service() string {
@@ -482,4 +545,17 @@ func activateIntercept(e workloadExtension, tpVolumes *xsync.Map[string, *compos
 	ii := r.InterceptInfo
 	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, tpVolumes)
 	return ae, nil
+}
+
+func deactivateIntercept(e workloadExtension) error {
+	ctx := context.WithoutCancel(e.connection().Context)
+	ud := daemon.GetUserClient(ctx)
+	ic, err := ud.GetIntercept(ctx, &manager.GetInterceptRequest{Name: e.name()})
+	if err != nil {
+		if grpcStatus.Code(err) == grpcCodes.NotFound {
+			err = nil
+		}
+		return err
+	}
+	return intercept.Result(ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: ic.Spec.Name}))
 }
