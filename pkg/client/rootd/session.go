@@ -643,7 +643,7 @@ func (s *Session) networkReady(ctx context.Context) <-chan error {
 	return rdy
 }
 
-func (s *Session) watchClusterInfo(ctx context.Context) error {
+func (s *Session) watchClusterInfo(ctx context.Context, teleroutePort uint16) error {
 	backoff := 100 * time.Millisecond
 
 	for ctx.Err() == nil {
@@ -684,7 +684,7 @@ func (s *Session) watchClusterInfo(ctx context.Context) error {
 					return err
 				}
 			default:
-				if err = s.onFirstClusterInfo(ctx, mgrInfo); err != nil {
+				if err = s.onFirstClusterInfo(ctx, teleroutePort, mgrInfo); err != nil {
 					if !errors.Is(err, context.Canceled) {
 						dlog.Error(ctx, err)
 					}
@@ -724,7 +724,7 @@ func (s *Session) createSubnetForDNSOnly(ctx context.Context, mgrInfo *manager.C
 	}
 }
 
-func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo) (err error) {
+func (s *Session) onFirstClusterInfo(ctx context.Context, teleroutePort uint16, mgrInfo *manager.ClusterInfo) (err error) {
 	defer func() {
 		if err != nil {
 			s.vifReady <- err
@@ -734,10 +734,17 @@ func (s *Session) onFirstClusterInfo(ctx context.Context, mgrInfo *manager.Clust
 	if s.podDaemon {
 		return nil
 	}
-	s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
-	s.proxyClusterSvcs = s.checkSvcConnectivity(ctx, mgrInfo)
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if teleroutePort > 0 {
+		// Always proxy pods and services when using the teleroute network, so that we can inject synthetic IP:s as needed. This means
+		// never relying on Docker's default route to reach the cluster.
+		s.proxyClusterPods = true
+		s.proxyClusterSvcs = true
+	} else {
+		s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
+		s.proxyClusterSvcs = s.checkSvcConnectivity(ctx, mgrInfo)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 	}
 	return s.onClusterInfo(ctx, mgrInfo)
 }
@@ -1155,7 +1162,7 @@ func (s *Session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16
 			cancelDNS()
 			cancelDNSLock.Unlock()
 		}()
-		return s.watchClusterInfo(ctx)
+		return s.watchClusterInfo(ctx, teleroutePort)
 	})
 
 	if s.agentClients == nil && len(s.subnetViaWorkloads) > 0 {
