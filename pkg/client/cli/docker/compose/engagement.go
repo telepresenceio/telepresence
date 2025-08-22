@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
@@ -28,23 +29,17 @@ type engagement struct {
 	daemonIP    netip.Addr
 }
 
-func createEngagement(ud daemon.UserClient, e serviceExtension) (*engagement, error) {
+func createEngagement(ud daemon.UserClient, e serviceExtension, sftpPort uint16) (*engagement, error) {
 	ae := &engagement{
 		serviceExtension: e,
 		daemonID:         ud.DaemonID(),
 		daemonIP:         ud.DaemonInfo().ContainerIP,
-	}
-	if e.needsVolumes() {
-		lma, err := client.FreePortsTCP(1)
-		if err != nil {
-			return nil, err
-		}
-		ae.sftpPort = lma[0].Port()
+		sftpPort:         sftpPort,
 	}
 	return ae, nil
 }
 
-func (a *engagement) assignEnvAndCreateMounts(remoteEnv map[string]string, remoteMounts map[string]int32, tpVolumes *xsync.Map[string, *compose.VolumeConfig]) {
+func (a *engagement) assignEnvAndCreateMounts(remoteEnv map[string]string, remoteMounts map[string]int32, t *transformer) {
 	env := make(map[string]string)
 	maps.Merge(env, remoteEnv)
 	a.environment = env
@@ -59,10 +54,11 @@ func (a *engagement) assignEnvAndCreateMounts(remoteEnv map[string]string, remot
 	ro := a.engagementType() == types.EngagementTypeIngest || a.engagementType() == types.EngagementTypeWiretap
 	ctx := a.connection().Context
 	dlog.Debugf(ctx, "mounts: %v, ro %t", mounts, ro)
-	createVolumes(ctx, netip.AddrPortFrom(a.daemonIP, a.sftpPort), a.environment["TELEPRESENCE_CONTAINER"], mounts, serviceVolumes, ro, tpVolumes)
+	createVolumes(ctx, netip.AddrPortFrom(a.daemonIP, a.sftpPort), a.environment["TELEPRESENCE_CONTAINER"], mounts, serviceVolumes, ro, t)
 }
 
 const connectionAnnotationPrefix = "telepresence.io/connection-"
+const mountPortAnnotation = "telepresence.io/mount-port"
 
 func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
 	conn := a.connection()
@@ -116,6 +112,12 @@ func (a *engagement) engageService(s *compose.ServiceConfig) {
 			}
 		}
 	}
+	if a.sftpPort > 0 {
+		if s.Annotations == nil {
+			s.Annotations = make(map[string]string)
+		}
+		s.Annotations[mountPortAnnotation] = strconv.Itoa(int(a.sftpPort))
+	}
 }
 
 func (a *engagement) engageProxyDependents(p *compose.Project, n string, dependents []string) {
@@ -130,7 +132,7 @@ func (a *engagement) engageProxyDependents(p *compose.Project, n string, depende
 			continue
 		}
 		if len(conn.proxies) > 0 {
-			extraHosts := make(map[string][]string, len(conn.proxies))
+			extraHosts := make(compose.HostsList, len(conn.proxies))
 			for name, ip := range conn.proxies {
 				extraHosts[name] = []string{ip.String()}
 			}
@@ -174,7 +176,7 @@ func createVolumes(
 	mounts types.MountPolicies,
 	serviceVolumes map[string]*compose.ServiceVolumeConfig,
 	ro bool,
-	vols *xsync.Map[string, *compose.VolumeConfig],
+	t *transformer,
 ) {
 	var plugin string
 	i := 0
@@ -196,7 +198,7 @@ func createVolumes(
 				return
 			}
 		}
-		vols.Compute(sv.Source, func(prev *compose.VolumeConfig, loaded bool) (vol *compose.VolumeConfig, op xsync.ComputeOp) {
+		t.volumes().Compute(sv.Source, func(prev *compose.VolumeConfig, loaded bool) (vol *compose.VolumeConfig, op xsync.ComputeOp) {
 			if loaded {
 				if !volRO && prev.DriverOpts["ro"] == "true" {
 					// A read-write volume is needed by this service, so we can't use a read-only one.

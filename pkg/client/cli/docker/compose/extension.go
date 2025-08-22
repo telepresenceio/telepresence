@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
-	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc/codes"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -23,7 +22,7 @@ import (
 
 type serviceExtension interface {
 	// Activate the service extension.
-	activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error)
+	activate(*transformer) (*engagement, error)
 
 	deactivate() error
 
@@ -158,8 +157,8 @@ func (e *extension) setConnection(c *connection) {
 	e.conn = c
 }
 
-func (e *extension) activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+func (e *extension) activate(*transformer) (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *extension) deactivate() error {
@@ -179,12 +178,12 @@ func (e *proxyExtension) init(c *config, et types.EngagementType, composeService
 	}
 }
 
-func (e *proxyExtension) activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+func (e *proxyExtension) activate(*transformer) (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *extension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 // Name is the name of the service that this proxy connects to. It defaults to the name of the compose-service.
@@ -278,12 +277,12 @@ func (e *interceptExtension) workload() string {
 	return e.Workload
 }
 
-func (e *interceptExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return activateIntercept(e, tpVolumes)
+func (e *interceptExtension) activate(t *transformer) (*engagement, error) {
+	return activateIntercept(e, t)
 }
 
 func (e *interceptExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *interceptExtension) service() string {
@@ -322,9 +321,13 @@ type ingestExtension struct {
 	ToPod     []types.PortAndProto `json:"toPod,omitempty"`
 }
 
-func (e *ingestExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
+func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
 	ud := daemon.GetUserClient(e.conn)
-	ae, err := createEngagement(ud, e)
+	sftpPort, err := t.config.getMountPort(e)
+	if err != nil {
+		return nil, err
+	}
+	ae, err := createEngagement(ud, e, sftpPort)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +349,7 @@ func (e *ingestExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeC
 		}
 		return nil, fmt.Errorf("ingest: %w", err)
 	}
-	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, tpVolumes)
+	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
 	return ae, nil
 }
 
@@ -375,7 +378,7 @@ func (e *ingestExtension) deactivate() error {
 }
 
 func (e *ingestExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 // ToPod maps local ports to ports in an engaged pod.
@@ -396,8 +399,8 @@ type replaceExtension struct {
 	ToPod []types.PortAndProto `json:"toPod,omitempty"`
 }
 
-func (e *replaceExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return activateIntercept(e, tpVolumes)
+func (e *replaceExtension) activate(t *transformer) (*engagement, error) {
+	return activateIntercept(e, t)
 }
 
 func (e *replaceExtension) deactivate() error {
@@ -405,7 +408,7 @@ func (e *replaceExtension) deactivate() error {
 }
 
 func (e *replaceExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *replaceExtension) container() string {
@@ -430,8 +433,8 @@ type wiretapExtension struct {
 	Ports []types.PortMapping `json:"ports,omitempty"`
 }
 
-func (e *wiretapExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return activateIntercept(e, tpVolumes)
+func (e *wiretapExtension) activate(t *transformer) (*engagement, error) {
+	return activateIntercept(e, t)
 }
 
 func (e *wiretapExtension) deactivate() error {
@@ -439,7 +442,7 @@ func (e *wiretapExtension) deactivate() error {
 }
 
 func (e *wiretapExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *wiretapExtension) service() string {
@@ -528,9 +531,11 @@ func createInterceptRequest(e workloadExtension, localMountPort uint16) *connect
 	return ir
 }
 
-func activateIntercept(e workloadExtension, tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	ud := daemon.GetUserClient(e.connection())
-	ae, err := createEngagement(ud, e)
+func activateIntercept(e workloadExtension, t *transformer) (*engagement, error) {
+	ctx := e.connection()
+	ud := daemon.GetUserClient(ctx)
+	sftpPort, err := t.config.getMountPort(e)
+	ae, err := createEngagement(ud, e, sftpPort)
 	if err != nil {
 		return nil, err
 	}
@@ -543,7 +548,7 @@ func activateIntercept(e workloadExtension, tpVolumes *xsync.Map[string, *compos
 		return nil, fmt.Errorf("connector.CreateIntercept: %w", err)
 	}
 	ii := r.InterceptInfo
-	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, tpVolumes)
+	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
 	return ae, nil
 }
 

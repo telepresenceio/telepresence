@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/compose-spec/compose-go/v2/cli"
+	"github.com/compose-spec/compose-go/v2/loader"
+	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/go-json-experiment/json"
 	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/spf13/cobra"
@@ -20,6 +23,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/generate"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/types"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
@@ -47,9 +51,9 @@ type parentConfig struct {
 	configPaths []string
 	envFiles    []string
 	profiles    []string
-	services    []string
 
-	commandFlags *pflag.FlagSet
+	commandFlags    *pflag.FlagSet
+	existingProject *compose.Project
 }
 
 type config struct {
@@ -162,7 +166,7 @@ func (c *config) subCommand(subCmd *types.CommandInfo) *cobra.Command {
 	return cmd
 }
 
-func (c *config) loadProject(ctx context.Context) (*transformer, error) {
+func (c *config) loadProject(ctx context.Context, services []string) (*transformer, error) {
 	options, err := c.toProjectOptions()
 	if err != nil {
 		return nil, err
@@ -178,7 +182,7 @@ func (c *config) loadProject(ctx context.Context) (*transformer, error) {
 			return nil, err
 		}
 	}
-	return newTransformer(c, p)
+	return newTransformer(c, p, services)
 }
 
 func (c *config) appendFlags(flags *pflag.FlagSet, opts []string) []string {
@@ -229,7 +233,6 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 	connMustExist := true
 	switch name {
 	case "up", "create":
-		c.services = args
 		connMustExist = false
 	case "build":
 		connMustExist = false
@@ -249,7 +252,7 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 		progress.Stop(ctx)
 	}()
 
-	tr, err := c.loadProject(ctx)
+	tr, err := c.loadProject(ctx, args)
 	if err != nil {
 		return err
 	}
@@ -261,7 +264,6 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 	}
 
 	es := tr.serviceExtensions()
-	dlog.Debugf(ctx, "Found %d engagements", len(es))
 	if len(es) == 0 {
 		return tr.runCommand(ctx, name, args)
 	}
@@ -283,6 +285,7 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 	defer cancel()
 
 	progress.Start(ctx, "Connecting")
+	var existingComposeFile string
 	for _, e := range es {
 		var cc *connectionConfig
 		cc, err = c.getConnectionConfig(e.connectionName())
@@ -303,29 +306,39 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 			return err
 		}
 		dlog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.engagementType().WorkDone())
+		if existingComposeFile == "" {
+			existingComposeFile = daemon.GetSession(c).DaemonInfo().ComposeFile
+		}
 		e.setConnection(c)
+	}
+	if existingComposeFile != "" {
+		dlog.Debugf(ctx, "Existing compose file: %s", existingComposeFile)
+		p, err := loadExistingProject(ctx, c.projectDir, existingComposeFile)
+		if err != nil {
+			return err
+		}
+		c.existingProject = p
 	}
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 	})
-
 	for _, e := range es {
 		progress.Start(ctx, "Engaging")
 		cn := e.composeService().Name
 		g.Go(cn, func(ctx context.Context) (err error) {
 			ctx = progress.WithEventId(ctx, cn)
-			progress.Working(ctx, e.engagementType().Working(), cn)
+			progress.Workingf(ctx, fmt.Sprintf("%s %s", e.engagementType().Working(), cn))
 			var ae *engagement
 			if connMustExist {
 				ae, err = e.engaged()
 			} else {
-				ae, err = e.activate(tr.volumes())
+				ae, err = e.activate(tr)
 			}
 			if err != nil {
 				return progress.MaybeWriteError(ctx, err)
 			}
-			progress.Done(ctx, e.engagementType().WorkDone(), cn)
+			progress.Donef(ctx, fmt.Sprintf("%s %s", e.engagementType().WorkDone(), cn))
 			aesCh <- ae
 			return nil
 		})
@@ -347,12 +360,12 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 				for _, n := range maps.SortedKeys(tr.engagements) {
 					e := tr.engagements[n]
 					eCtx := progress.WithEventId(ctx, n)
-					progress.Working(eCtx, e.engagementType().Leaving())
+					progress.Workingf(eCtx, fmt.Sprintf("%s %s", e.engagementType().Leaving(), n))
 					err = e.deactivate()
 					if err != nil {
 						dlog.Error(eCtx, err)
 					}
-					progress.Done(eCtx, e.engagementType().Left())
+					progress.Donef(eCtx, fmt.Sprintf("%s %s", e.engagementType().Left(), n))
 				}
 				progress.Stop(ctx)
 			}()
@@ -388,4 +401,42 @@ func (c *config) getConnectionConfig(name string) (*connectionConfig, error) {
 		}
 	}
 	return nil, fmt.Errorf("connection %q not found", name)
+}
+
+func (c *config) getMountPort(e mountsExtension) (uint16, error) {
+	if !e.needsVolumes() {
+		return 0, nil
+	}
+	if ep := c.existingProject; ep != nil {
+		cn := e.composeService().Name
+		if s, ok := ep.Services[cn]; ok {
+			if pa, ok := s.Annotations[mountPortAnnotation]; ok {
+				if p, err := strconv.Atoi(pa); err == nil {
+					dlog.Debugf(e.connection(), "Found existing mount port %d for %q", p, cn)
+					return uint16(p), nil
+				}
+			}
+		}
+	}
+	lma, err := client.FreePortsTCP(1)
+	if err != nil {
+		return 0, err
+	}
+	return lma[0].Port(), nil
+}
+
+func loadExistingProject(ctx context.Context, pwd, path string) (*compose.Project, error) {
+	return loader.LoadWithContext(ctx, compose.ConfigDetails{
+		ConfigFiles: []compose.ConfigFile{{Filename: path}},
+		WorkingDir:  pwd,
+	}, func(options *loader.Options) {
+		options.SkipConsistencyCheck = true
+		options.SkipValidation = true
+		options.SkipNormalization = true
+		options.SkipInterpolation = true
+		options.SkipResolveEnvironment = true
+		options.SkipDefaultValues = true
+		options.SkipExtends = true
+		options.SkipInclude = true
+	})
 }

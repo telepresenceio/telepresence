@@ -2,7 +2,10 @@ package compose
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/puzpuzpuz/xsync/v4"
@@ -23,20 +26,20 @@ type transformer struct {
 	extensions  map[string]serviceExtension
 	engagements map[string]*engagement
 	tpVolumes   *xsync.Map[string, *compose.VolumeConfig]
+	selectsAll  bool
 }
 
-func newTransformer(config *config, p *compose.Project) (tr *transformer, err error) {
-	t := &transformer{config: config, project: p, tpVolumes: xsync.NewMap[string, *compose.VolumeConfig]()}
-	if len(config.services) > 0 {
-		t.project, err = t.project.WithSelectedServices(t.config.services)
-		if err != nil {
-			return nil, err
-		}
-	}
+func newTransformer(config *config, p *compose.Project, services []string) (tr *transformer, err error) {
+	t := &transformer{config: config, project: p, tpVolumes: xsync.NewMap[string, *compose.VolumeConfig](), selectsAll: true}
 	t.extensions = make(map[string]serviceExtension)
 	for n, sv := range t.project.Services {
+		dlog.Debug(context.Background(), "Service %q has extension %q", n, sv.Extensions)
 		ex, ok := sv.Extensions[extensionKey]
 		if ok {
+			if len(services) > 0 && !slices.Contains(services, n) {
+				t.selectsAll = false
+				continue
+			}
 			eg, err := t.config.parseServiceExtension(&sv, ex)
 			if err != nil {
 				return nil, err
@@ -84,17 +87,64 @@ func (t *transformer) marshalYAML() ([]byte, error) {
 	return t.project.MarshalYAML()
 }
 
-func (t *transformer) runCommand(ctx context.Context, name string, args []string) error {
-	forceRecreate := name == "up" || name == "create"
-	composeFile, err := t.createConfigFile(ctx, forceRecreate)
+func (t *transformer) runCommand(ctx context.Context, name string, services []string) error {
+	forceRecreate := false
+	canCreate := t.selectsAll
+	if canCreate {
+		if f := t.config.subCommandFlags.Lookup("force-recreate"); f != nil && f.Changed {
+			forceRecreate = f.Value.String() == "true"
+		}
+		if f := t.config.subCommandFlags.Lookup("no-recreate"); f != nil && f.Changed {
+			canCreate = f.Value.String() != "true"
+		}
+	}
+	composeFile, err := t.createConfigFile(ctx, canCreate, forceRecreate)
 	if err != nil {
 		return err
+	}
+	if ep := t.config.existingProject; ep != nil && !t.selectsAll {
+		// Verify that all extended services that provide volumes are included.
+		teleVols := make(map[string]struct{})
+		for n, v := range ep.Volumes {
+			if strings.Contains(v.Driver, "/telemount:") {
+				teleVols[n] = struct{}{}
+			}
+		}
+		dlog.Debugf(ctx, "teleVols: %v", teleVols)
+		for n, sv := range ep.Services {
+			ex, ok := sv.Extensions[extensionKey]
+			if !ok {
+				continue
+			}
+			if slices.Contains(services, n) {
+				continue
+			}
+			eg, err := t.config.parseServiceExtension(&sv, ex)
+			if err != nil {
+				return err
+			}
+			switch eg.engagementType() {
+			case types.EngagementTypeConnect, types.EngagementTypeProxy:
+				continue
+			default:
+			}
+			dlog.Debugf(ctx, "Checking if service %q is a volume provider", n)
+			if sv.Volumes != nil {
+				for _, v := range sv.Volumes {
+					if v.Type == compose.VolumeTypeVolume {
+						if _, ok := teleVols[v.Source]; ok {
+							return fmt.Errorf("volume %q is provided extended service %q, but that service is not included", v.Source, n)
+						}
+					}
+				}
+			}
+		}
 	}
 	opts, err := t.createProject(name, composeFile)
 	if err != nil {
 		return err
 	}
-	err = t.runCompose(ctx, name, composeFile, append(opts, args...))
+	err = t.runCompose(ctx, name, composeFile, opts, services)
 	if err != nil {
 		// Prefer error output from the command to the exit code error.
 		err = errcat.Silent.New(err)
@@ -102,16 +152,16 @@ func (t *transformer) runCommand(ctx context.Context, name string, args []string
 	return err
 }
 
-func (t *transformer) runCompose(ctx context.Context, name, composeFile string, args []string) (err error) {
-	if name == "up" && !flags.HasOption("detach", 'd', args) {
-		return t.runAttachedUp(ctx, composeFile, args)
+func (t *transformer) runCompose(ctx context.Context, name, composeFile string, opts, services []string) (err error) {
+	if name == "up" && !flags.HasOption("detach", 'd', opts) {
+		return t.runAttachedUp(ctx, composeFile, opts, services)
 	}
-	cmd := proc.StdCommand(ctx, docker.Exe, args...)
+	cmd := proc.StdCommand(ctx, docker.Exe, append(opts, services...)...)
 	cmd.Env = os.Environ()
 	return cmd.Run()
 }
 
-func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile string, args []string) (err error) {
+func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile string, opts, services []string) (err error) {
 	// We need to ensure that containers are stopped when the parentCtx is canceled, but we don't want to do that
 	// by killing the "docker compose up" process. There are multiple reasons for this:
 	//
@@ -120,7 +170,7 @@ func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile strin
 	//    this function returns.
 	// 2. On windows, the "docker compose up" will detach, but it won't stop the containers at all.s
 	ctx := context.WithoutCancel(parentCtx)
-	cmd := proc.StdCommand(ctx, docker.Exe, args...)
+	cmd := proc.StdCommand(ctx, docker.Exe, append(opts, services...)...)
 	proc.CreateNewProcessGroup(cmd)
 	cmd.Env = os.Environ()
 	err = cmd.Start()
@@ -129,7 +179,8 @@ func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile strin
 	}
 	go func() {
 		<-parentCtx.Done()
-		stopCmd := proc.StdCommand(ctx, docker.Exe, "compose", "--file", composeFile, "stop")
+		args := append([]string{"compose", "--file", composeFile, "stop"}, services...)
+		stopCmd := proc.StdCommand(ctx, docker.Exe, args...)
 		stopCmd.Env = os.Environ()
 		_ = stopCmd.Run()
 	}()
@@ -170,6 +221,7 @@ func (t *transformer) applyEngagements() error {
 				delete(sm, n)
 			} else {
 				e.engageService(&s)
+				sm[n] = s
 			}
 		}
 	}
@@ -238,9 +290,9 @@ nextCfg:
 	return cs
 }
 
-func (t *transformer) createConfigFile(ctx context.Context, forceRecreate bool) (composeFile string, err error) {
-	conns := t.connections()
-	for _, c := range conns {
+func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecreate bool) (composeFile string, err error) {
+	cs := t.connections()
+	for _, c := range cs {
 		ud := daemon.GetUserClient(c)
 		composeFile = ud.DaemonInfo().ComposeFile
 		if composeFile != "" {
@@ -249,6 +301,9 @@ func (t *transformer) createConfigFile(ctx context.Context, forceRecreate bool) 
 			}
 			break
 		}
+	}
+	if !canCreate {
+		return "", errcat.User.New(`the initial invocation of "compose up" or "compose create" must include all extended services`)
 	}
 
 	err = t.applyEngagements()
@@ -283,7 +338,7 @@ func (t *transformer) createConfigFile(ctx context.Context, forceRecreate bool) 
 		// Save the name of the docker compose file in the daemon info. This ensures that a `docker compose down` is
 		// issued if one of the connections is removed. This is necessary because the network represented by the
 		// daemon will no longer be available.
-		for _, c := range conns {
+		for _, c := range cs {
 			ud := daemon.GetUserClient(c)
 			info := ud.DaemonInfo()
 			info.ComposeFile = composeFile
