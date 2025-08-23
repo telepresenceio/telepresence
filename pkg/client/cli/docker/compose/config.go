@@ -166,6 +166,13 @@ func (c *config) subCommand(subCmd *types.CommandInfo) *cobra.Command {
 	return cmd
 }
 
+func (c *config) detached() bool {
+	if f := c.subCommandFlags.Lookup("detach"); f != nil {
+		return f.Changed && f.Value.String() == "true"
+	}
+	return false
+}
+
 func (c *config) loadProject(ctx context.Context, services []string) (*transformer, error) {
 	options, err := c.toProjectOptions()
 	if err != nil {
@@ -232,7 +239,7 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 	name := cmd.Name()
 	connMustExist := true
 	switch name {
-	case "up", "create":
+	case "up", "create", "start":
 		connMustExist = false
 	case "build":
 		connMustExist = false
@@ -354,7 +361,7 @@ func (c *config) run(cmd *cobra.Command, args []string) (err error) {
 			}
 		}
 		progress.Stop(ctx)
-		if name == "stop" || name == "up" && !flags.HasOption("detached", 'd', args) {
+		if name == "create" || name == "stop" || name == "up" && !c.detached() {
 			defer func() {
 				progress.Start(ctx, "Disengaging")
 				for _, n := range maps.SortedKeys(tr.engagements) {

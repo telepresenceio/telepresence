@@ -306,6 +306,10 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 		return "", errcat.User.New(`the initial invocation of "compose up" or "compose create" must include all extended services`)
 	}
 
+	if composeFile != "" {
+		dlog.Debugf(ctx, "Recreating existing compose file %q", composeFile)
+	}
+
 	err = t.applyEngagements()
 	if err != nil {
 		return "", err

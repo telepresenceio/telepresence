@@ -322,32 +322,43 @@ type ingestExtension struct {
 }
 
 func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
-	ud := daemon.GetUserClient(e.conn)
+	ctx := e.conn
+	ud := daemon.GetUserClient(ctx)
 	sftpPort, err := t.config.getMountPort(e)
 	if err != nil {
 		return nil, err
 	}
+
+	// The ingest might be active already.
+	ii, err := ud.GetIngest(ctx, &connector.IngestIdentifier{WorkloadName: e.workload()})
+	if err != nil {
+		if status.Code(err) != codes.NotFound {
+			return nil, err
+		}
+	}
+	if ii == nil {
+		ir := &connector.IngestRequest{
+			Identifier: &connector.IngestIdentifier{
+				WorkloadName:  e.name(),
+				ContainerName: e.container(),
+			},
+			LocalMountPort: int32(sftpPort),
+		}
+		for _, toPod := range e.toPod() {
+			ir.LocalPorts = append(ir.LocalPorts, toPod.String())
+		}
+		ii, err = ud.Ingest(e.conn, ir)
+		if err != nil {
+			switch grpcStatus.Code(err) {
+			case grpcCodes.AlreadyExists, grpcCodes.NotFound, grpcCodes.Unimplemented, grpcCodes.FailedPrecondition:
+				return nil, errors.New(grpcStatus.Convert(err).Message())
+			}
+			return nil, fmt.Errorf("ingest: %w", err)
+		}
+	}
 	ae, err := createEngagement(ud, e, sftpPort)
 	if err != nil {
 		return nil, err
-	}
-	ir := &connector.IngestRequest{
-		Identifier: &connector.IngestIdentifier{
-			WorkloadName:  e.name(),
-			ContainerName: e.container(),
-		},
-		LocalMountPort: int32(ae.sftpPort),
-	}
-	for _, toPod := range e.toPod() {
-		ir.LocalPorts = append(ir.LocalPorts, toPod.String())
-	}
-	ii, err := ud.Ingest(e.conn, ir)
-	if err != nil {
-		switch grpcStatus.Code(err) {
-		case grpcCodes.AlreadyExists, grpcCodes.NotFound, grpcCodes.Unimplemented, grpcCodes.FailedPrecondition:
-			return nil, errors.New(grpcStatus.Convert(err).Message())
-		}
-		return nil, fmt.Errorf("ingest: %w", err)
 	}
 	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
 	return ae, nil
@@ -535,19 +546,32 @@ func activateIntercept(e workloadExtension, t *transformer) (*engagement, error)
 	ctx := e.connection()
 	ud := daemon.GetUserClient(ctx)
 	sftpPort, err := t.config.getMountPort(e)
+	if err != nil {
+		return nil, err
+	}
+
+	// The intercept might be active already.
+	ii, err := ud.GetIntercept(ctx, &manager.GetInterceptRequest{Name: e.name()})
+	if err != nil {
+		if status.Code(err) != codes.NotFound {
+			return nil, err
+		}
+	}
+	if ii == nil {
+		ir, err := e.createInterceptRequest(sftpPort)
+		if err != nil {
+			return nil, err
+		}
+		r, err := ud.CreateIntercept(e.connection(), ir)
+		if err = intercept.Result(r, err); err != nil {
+			return nil, fmt.Errorf("connector.CreateIntercept: %w", err)
+		}
+		ii = r.InterceptInfo
+	}
 	ae, err := createEngagement(ud, e, sftpPort)
 	if err != nil {
 		return nil, err
 	}
-	ir, err := e.createInterceptRequest(ae.sftpPort)
-	if err != nil {
-		return nil, err
-	}
-	r, err := ud.CreateIntercept(e.connection(), ir)
-	if err = intercept.Result(r, err); err != nil {
-		return nil, fmt.Errorf("connector.CreateIntercept: %w", err)
-	}
-	ii := r.InterceptInfo
 	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
 	return ae, nil
 }
