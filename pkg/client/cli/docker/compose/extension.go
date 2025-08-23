@@ -8,15 +8,14 @@ import (
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/grpc/codes"
-	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	grpcStatus "google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -75,15 +74,15 @@ type servicePortExtension interface {
 func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v any) (se serviceExtension, err error) {
 	m, ok := v.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%s extension is not a map", extensionKey)
+		return nil, errcat.User.Newf("%s extension is not a map", extensionKey)
 	}
 	typ, ok := m["type"].(string)
 	if !ok {
-		return nil, fmt.Errorf("%s extension must have a type", extensionKey)
+		return nil, errcat.User.Newf("%s extension must have a type", extensionKey)
 	}
 	et, err := types.ParseEngagementType(typ)
 	if err != nil {
-		return nil, fmt.Errorf("%s extension has invalid type: %v", extensionKey, err)
+		return nil, errcat.User.Newf("%s extension has invalid type: %v", extensionKey, err)
 	}
 
 	data, err := client.MarshalJSON(v)
@@ -104,12 +103,12 @@ func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v 
 	case types.EngagementTypeWiretap:
 		se = &wiretapExtension{}
 	default:
-		return nil, fmt.Errorf("%s has unsupported extension type %s", extensionKey, et)
+		return nil, errcat.User.Newf("%s has unsupported extension type %s", extensionKey, et)
 	}
 
 	err = client.UnmarshalJSON(data, se, true)
 	if err != nil {
-		return nil, err
+		return nil, errcat.User.New(err)
 	}
 	se.init(c, et, composeService)
 	return se, nil
@@ -349,9 +348,9 @@ func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
 		}
 		ii, err = ud.Ingest(e.conn, ir)
 		if err != nil {
-			switch grpcStatus.Code(err) {
-			case grpcCodes.AlreadyExists, grpcCodes.NotFound, grpcCodes.Unimplemented, grpcCodes.FailedPrecondition:
-				return nil, errors.New(grpcStatus.Convert(err).Message())
+			switch status.Code(err) {
+			case codes.AlreadyExists, codes.NotFound, codes.Unimplemented, codes.FailedPrecondition:
+				return nil, errors.New(status.Convert(err).Message())
 			}
 			return nil, fmt.Errorf("ingest: %w", err)
 		}
@@ -581,7 +580,7 @@ func deactivateIntercept(e workloadExtension) error {
 	ud := daemon.GetUserClient(ctx)
 	ic, err := ud.GetIntercept(ctx, &manager.GetInterceptRequest{Name: e.name()})
 	if err != nil {
-		if grpcStatus.Code(err) == grpcCodes.NotFound {
+		if status.Code(err) == codes.NotFound {
 			err = nil
 		}
 		return err

@@ -57,8 +57,10 @@ func (a *engagement) assignEnvAndCreateMounts(remoteEnv map[string]string, remot
 	createVolumes(ctx, netip.AddrPortFrom(a.daemonIP, a.sftpPort), a.environment["TELEPRESENCE_CONTAINER"], mounts, serviceVolumes, ro, t)
 }
 
-const connectionAnnotationPrefix = "telepresence.io/connection-"
-const mountPortAnnotation = "telepresence.io/mount-port"
+const (
+	connectionAnnotationPrefix = "telepresence.io/connection-"
+	mountPortAnnotation        = "telepresence.io/mount-port"
+)
 
 func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
 	conn := a.connection()

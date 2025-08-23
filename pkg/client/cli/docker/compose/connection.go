@@ -13,6 +13,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -176,7 +177,7 @@ func addProxyRemoteReroutes(e servicePortExtension, cr *daemon.Request) error {
 	for _, p := range e.servicePorts() {
 		_, s, _ := p.From().ProtoAndNameOrNumber()
 		if s != "" {
-			return fmt.Errorf("port %s is not a number in proxy for %s", s, e.composeService().Name)
+			return errcat.User.Newf("port %s is not a number in proxy for %s", s, e.composeService().Name)
 		}
 		b.Reset()
 		b.WriteString(e.name())
