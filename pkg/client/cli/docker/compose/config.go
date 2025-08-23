@@ -182,9 +182,11 @@ func (c *config) appendFlags(flags *pflag.FlagSet, opts []string) []string {
 		fv := f.Value
 		switch fv.Type() {
 		case "bool":
-			if fv.String() == "true" {
-				opts = append(opts, "--"+f.Name)
+			v := "--" + f.Name
+			if fv.String() == "false" {
+				v += "=false"
 			}
+			opts = append(opts, v)
 		case "stringArray":
 			sv := fv.(pflag.SliceValue)
 			opt := "--" + f.Name

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 
@@ -17,9 +18,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -209,20 +212,29 @@ func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile strin
 	// 2. On windows, the "docker compose up" will detach, but it won't stop the containers at all.s
 	ctx := context.WithoutCancel(parentCtx)
 	cmd := proc.StdCommand(ctx, docker.Exe, append(opts, t.config.services...)...)
-	proc.CreateNewProcessGroup(cmd)
+	cmd.Stdin = dos.Stdin(ctx)
 	cmd.Env = os.Environ()
 	err = cmd.Start()
 	if err != nil {
 		return err
 	}
+
+	parentCtx, parentCancel := context.WithCancel(parentCtx)
+	stopDone := make(chan struct{})
 	go func() {
 		<-parentCtx.Done()
 		args := append([]string{"compose", "--file", composeFile, "stop"}, t.config.services...)
-		stopCmd := proc.StdCommand(ctx, docker.Exe, args...)
+		stopCmd := exec.CommandContext(ctx, docker.Exe, args...)
+		// Don't assign stdout/stderr. Avoid duplicated output from "compose up" and "compose stop".
 		stopCmd.Env = os.Environ()
+		dlog.Debug(ctx, shellquote.ShellString(docker.Exe, args))
 		_ = stopCmd.Run()
+		close(stopDone)
 	}()
-	return cmd.Wait()
+	err = cmd.Wait()
+	parentCancel()
+	<-stopDone
+	return err
 }
 
 func (t *transformer) serviceExtensions() (ses map[string]serviceExtension) {
