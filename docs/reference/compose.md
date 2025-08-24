@@ -59,7 +59,7 @@ The `mounts` field is a list of mount configurations that controls how the servi
 |---------------|----------------------------------------------------------------------------------------------------------|--------|---------------------------------|
 | volume        | Name of a Docker Compose volume. Mutually exclusive to volumePattern.                                    | string | empty                           |
 | volumePattern | Regular expression pattern matching one or several Docker Compose volumes. Mutually exclusive to volume. | string | empty                           |
-| Policy        | "local", "remote", or "remoteReadOnly"                                                                   | string | determined by the traffic-agent |
+| policy        | "local", "remote", or "remoteReadOnly"                                                                   | string | determined by the traffic-agent |
 
 The mount policy determines how the volume is mounted by Docker Compose.
 <dl>

@@ -33,7 +33,7 @@ Telepresence supports the following types:
 All types imply a `connect`, and thus rely on the top-level `x-tele` extension that defines the connection to the cluster.
 
 ## Walkthrough and Samples
-This documentation will give some examples on how to use the `x-tele` extension using the sample Emoji application from the https://github.com/telepresenceio/emojivoto repository. This app is easy to deploy locally using `docker compose up` or remotely to a cluster using `kubectl apply --kustomize`.
+This documentation will give some examples on how to use the `x-tele` extension using the sample Emoji application, originally developed by Buoyant.io, from the https://github.com/telepresenceio/emojivoto repository. This app is easy to deploy locally using `docker compose up` or remotely to a cluster using `kubectl apply --kustomize`.
 
 ### Initial Steps
 
