@@ -61,14 +61,19 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 	wh := "agent-injector-webhook-" + s.ManagerNamespace()
 	pmf := `{"webhooks":[{"name": "agent-injector-%s.telepresence.io", "clientConfig": {"service": {"name": "agent-injector", "port": %d}}}]}`
 	rq.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "patch", "mutatingwebhookconfiguration", wh,
-		"--patch", fmt.Sprintf(pmf, s.ManagerNamespace(), 443)))
-	portRestored := false
+		"--patch", fmt.Sprintf(pmf, s.ManagerNamespace(), 3443)))
+
+	injectorSvcPort := 443
+	if s.ManagerIsVersion(">=2.24.0") {
+		injectorSvcPort = 8443
+	}
 
 	// Restore the webhook port when this test ends in case an error occurred that prevented it
+	portRestored := false
 	defer func() {
 		if !portRestored {
 			s.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "patch", "mutatingwebhookconfiguration", wh,
-				"--patch", fmt.Sprintf(pmf, s.ManagerNamespace(), 8443)))
+				"--patch", fmt.Sprintf(pmf, s.ManagerNamespace(), injectorSvcPort)))
 		}
 	}()
 
@@ -82,7 +87,7 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 
 	// Restore mutating-webhook operation.
 	rq.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "patch", "mutatingwebhookconfiguration", wh,
-		"--patch", fmt.Sprintf(pmf, s.ManagerNamespace(), 8443)))
+		"--patch", fmt.Sprintf(pmf, s.ManagerNamespace(), injectorSvcPort)))
 	portRestored = true
 
 	// Verify that intercept works OK again.
