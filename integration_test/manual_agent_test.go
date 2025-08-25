@@ -38,8 +38,9 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 		"--namespace", nsp.AppNamespace(),
 		"--input", inputFile,
 		"--loglevel", "debug")
-	var ac agentconfig.Sidecar
-	require.NoError(yaml.Unmarshal([]byte(cfgEntry), &ac))
+	sce, err := agentconfig.UnmarshalYAML([]byte(cfgEntry))
+	require.NoError(err)
+	ac := sce.AgentConfig()
 
 	tmpDir := s.T().TempDir()
 	writeYaml := func(name string, data any) string {
