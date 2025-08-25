@@ -124,7 +124,7 @@ following Free and Open Source software:
     github.com/spf13/cast                                          v1.9.2                                MIT license
     github.com/spf13/cobra                                         v1.9.1                                Apache License 2.0
     github.com/spf13/pflag                                         v1.0.7                                3-clause BSD license
-    github.com/stretchr/testify                                    v1.10.0                               MIT license
+    github.com/stretchr/testify                                    v1.11.0                               MIT license
     github.com/telepresenceio/go-fuseftp                           v0.6.7                                Apache License 2.0
     github.com/telepresenceio/go-fuseftp/rpc                       v0.6.7                                Apache License 2.0
     github.com/telepresenceio/telepresence/cmd/cobraparser         (modified)                            Apache License 2.0
@@ -156,13 +156,13 @@ following Free and Open Source software:
     golang.zx2c4.com/wireguard                                     v0.0.0-20250521234502-f333402bd9cb    MIT license
     golang.zx2c4.com/wireguard/windows                             v0.5.3                                MIT license
     google.golang.org/genproto/googleapis/rpc                      v0.0.0-20250818200422-3122310a409c    Apache License 2.0
-    google.golang.org/grpc                                         v1.74.2                               Apache License 2.0
-    google.golang.org/protobuf                                     v1.36.7                               3-clause BSD license
+    google.golang.org/grpc                                         v1.75.0                               Apache License 2.0
+    google.golang.org/protobuf                                     v1.36.8                               3-clause BSD license
     gopkg.in/evanphx/json-patch.v4                                 v4.13.0                               3-clause BSD license
     gopkg.in/inf.v0                                                v0.9.1                                3-clause BSD license
     gopkg.in/yaml.v3                                               v3.0.1                                Apache License 2.0, MIT license
-    gvisor.dev/gvisor                                              v0.0.0-20250816201027-ba3b9ca85f20    3-clause BSD license, Apache License 2.0, MIT license
-    helm.sh/helm/v3                                                v3.18.5                               Apache License 2.0
+    gvisor.dev/gvisor                                              v0.0.0-20250822235216-b2666650a156    3-clause BSD license, Apache License 2.0, MIT license
+    helm.sh/helm/v3                                                v3.18.6                               Apache License 2.0
     k8s.io/api                                                     v0.33.4                               Apache License 2.0
     k8s.io/apiextensions-apiserver                                 v0.33.4                               Apache License 2.0
     k8s.io/apimachinery                                            v0.33.4                               3-clause BSD license, Apache License 2.0
@@ -174,7 +174,7 @@ following Free and Open Source software:
     k8s.io/klog/v2                                                 v2.130.1                              Apache License 2.0
     k8s.io/kube-openapi                                            v0.0.0-20250701173324-9bd5c66d9911    3-clause BSD license, Apache License 2.0
     k8s.io/kubectl                                                 v0.33.4                               Apache License 2.0
-    k8s.io/utils                                                   v0.0.0-20250604170112-4c0f3b243397    3-clause BSD license, Apache License 2.0
+    k8s.io/utils                                                   v0.0.0-20250820121507-0af2bda4dd1d    3-clause BSD license, Apache License 2.0
     oras.land/oras-go/v2                                           v2.6.0                                Apache License 2.0
     sigs.k8s.io/json                                               v0.0.0-20250730193827-2d320260d730    3-clause BSD license, Apache License 2.0
     sigs.k8s.io/kustomize/api                                      v0.20.1                               Apache License 2.0
