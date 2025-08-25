@@ -36,3 +36,43 @@ The Codespaces `devcontainer.json` will typically need to include:
         "--cap-add=NET_ADMIN",
     ],
 ```
+
+## Kubernetes auth plugins
+
+If Kubernetes auth plugins are needed, they must be installed into the same container as Telepresence. Each auth plugin
+will need a different approach.
+
+### AWS IAM Authenticator
+
+1. Install the AWS IAM Authenticator Go binary.
+
+```dockerfile
+FROM golang:alpine AS auth-builder
+RUN go install sigs.k8s.io/aws-iam-authenticator/cmd/aws-iam-authenticator@latest
+
+# Dockerfile with telepresence and its prerequisites
+FROM alpine
+
+# Install Telepresence prerequisites
+RUN apk add --no-cache curl iproute2 sshfs
+
+# Download and install the telepresence binary
+RUN curl -fL https://github.com/telepresenceio/telepresence/releases/download/v$version$/telepresence-linux-amd64 -o telepresence && \
+   install -o root -g root -m 0755 telepresence /usr/local/bin/telepresence
+
+COPY --from=auth-builder /go/bin/aws-iam-authenticator ./aws-iam-authenticator
+RUN install -o root -g root -m 0755 aws-iam-authenticator /usr/local/bin/aws-iam-authenticator && \
+    rm aws-iam-authenticator
+```
+
+2. Ensure that the authenticator can reach your kubconfig and AWS configuration by mounting them into the container:
+
+```console
+$ docker run \
+  --cap-add=NET_ADMIN \
+  --device /dev/net/tun:/dev/net/tun \
+  --network=host \
+  -v ~/.kube/config:/root/.kube/config \
+  -v ~/.aws:/root/.aws \
+  -it --rm tp-in-docker
+```

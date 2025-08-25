@@ -17,6 +17,16 @@ services:
       ...
 ```
 
+Those extensions are recognized by the `telepresence compose`, which acts as an extended `docker compose` command. Telepresence will create connections, engagements, and proxies based on the extensions and then modify the docker compose file with the necessary networks, mounts, and environment variables to make the extended services work.
+
+## States
+
+- `telepresence compose up` will ensure that the extended services are in the correct state.
+- `telepresence compose create` is like `up`, but it will not start the containers, and therefore end any existing engagements once all the containers are created.
+- `telepresence compose stop` ends the engagements, but it keeps telepresence connected, because the existing containers use the `teleroute` network backed by that connection.
+- `telepresence compose down` will end the engagements, terminate the network, and quit telepresence.
+- `telepresence config` will detect if the project is started, if so, produce the extended project file. Otherwise, it will produce the original project file's canonical form.
+- `telepresence quit` will detect if a `telepresence compose` is running and, if so, issue a `telepresence compose down`.
 ## Top-level Extension
 
 The Top-level extension describes the connection and mount configurations that are used by the service extensions:
@@ -49,7 +59,7 @@ The `mounts` field is a list of mount configurations that controls how the servi
 |---------------|----------------------------------------------------------------------------------------------------------|--------|---------------------------------|
 | volume        | Name of a Docker Compose volume. Mutually exclusive to volumePattern.                                    | string | empty                           |
 | volumePattern | Regular expression pattern matching one or several Docker Compose volumes. Mutually exclusive to volume. | string | empty                           |
-| Policy        | "local", "remote", or "remoteReadOnly"                                                                   | string | determined by the traffic-agent |
+| policy        | "local", "remote", or "remoteReadOnly"                                                                   | string | determined by the traffic-agent |
 
 The mount policy determines how the volume is mounted by Docker Compose.
 <dl>

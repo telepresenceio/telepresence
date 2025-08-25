@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -248,7 +249,11 @@ var SidecarType = reflect.TypeOf(Sidecar{}) //nolint:gochecknoglobals // extensi
 // UnmarshalYAML creates a new instance of the SidecarType from the given YAML data.
 func UnmarshalYAML(data []byte) (SidecarExt, error) {
 	into := reflect.New(SidecarType).Interface()
-	if err := yaml.Unmarshal(data, into); err != nil {
+	data, err := yaml.YAMLToJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := client.UnmarshalJSON(data, into, true); err != nil {
 		return nil, err
 	}
 	return into.(SidecarExt), nil

@@ -1,4 +1,4 @@
-module github.com/telepresenceio/cobraparser
+module github.com/telepresenceio/telepresence/cmd/cobraparser
 
 go 1.24
 

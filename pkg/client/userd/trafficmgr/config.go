@@ -21,7 +21,8 @@ func (s *session) GetConfig(ctx context.Context) (*client.SessionConfig, error) 
 		return nil, err
 	}
 	return &client.SessionConfig{
-		ClientFile: filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile),
-		Config:     client.GetConfig(ctx).Merge(rc),
+		ClientFile:   filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile),
+		LogDirectory: filelocation.AppUserLogDir(ctx),
+		Config:       client.GetConfig(ctx).Merge(rc),
 	}, nil
 }

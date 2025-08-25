@@ -31,36 +31,48 @@ const (
 	EngagementTypeProxy
 )
 
-var egStrings = [6][3]string{ //nolint:gochecknoglobals // constant names
+var egStrings = [6][5]string{ //nolint:gochecknoglobals // constant names
 	{
 		"connect",
 		"Connecting",
 		"Connected",
+		"Disconnecting",
+		"Disconnected",
 	},
 	{
 		"ingest",
 		"Ingesting",
 		"Ingested",
+		"Leaving ingest",
+		"Left ingest",
 	},
 	{
 		"wiretap",
 		"Wiretapping",
 		"Wiretapped",
+		"Removing wiretap",
+		"Removed wiretap",
 	},
 	{
 		"intercept",
 		"Intercepting",
 		"Intercepted",
+		"Leaving intercept",
+		"Left intercept",
 	},
 	{
 		"replace",
 		"Replacing",
 		"Replaced",
+		"Restoring",
+		"Restored",
 	},
 	{
 		"proxy",
 		"Proxying",
 		"Proxied",
+		"Removing proxy",
+		"Removed proxy",
 	},
 }
 
@@ -84,12 +96,12 @@ func EngagementTypeFromSpec(spec *manager.InterceptSpec) EngagementType {
 	}
 }
 
-func (e EngagementType) strings() [3]string {
+func (e EngagementType) strings() [5]string {
 	if e >= 0 && e < 6 {
 		return egStrings[e]
 	}
 	en := fmt.Sprintf(invalidType, strconv.Itoa(int(e)))
-	return [3]string{en, en, en}
+	return [5]string{en, en, en, en, en}
 }
 
 func (e EngagementType) String() string {
@@ -102,6 +114,14 @@ func (e EngagementType) Working() string {
 
 func (e EngagementType) WorkDone() string {
 	return e.strings()[2]
+}
+
+func (e EngagementType) Leaving() string {
+	return e.strings()[3]
+}
+
+func (e EngagementType) Left() string {
+	return e.strings()[4]
 }
 
 func (e EngagementType) MarshalJSONTo(out *jsontext.Encoder) error {

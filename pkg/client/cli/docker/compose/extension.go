@@ -1,26 +1,31 @@
 package compose
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
-	"github.com/puzpuzpuz/xsync/v4"
-	grpcCodes "google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type serviceExtension interface {
 	// Activate the service extension.
-	activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error)
+	activate(*transformer) (*engagement, error)
+
+	deactivate() error
+
+	engaged() (*engagement, error)
 
 	engagementType() types.EngagementType
 
@@ -69,15 +74,15 @@ type servicePortExtension interface {
 func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v any) (se serviceExtension, err error) {
 	m, ok := v.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%s extension is not a map", extensionKey)
+		return nil, errcat.User.Newf("%s extension is not a map", extensionKey)
 	}
 	typ, ok := m["type"].(string)
 	if !ok {
-		return nil, fmt.Errorf("%s extension must have a type", extensionKey)
+		return nil, errcat.User.Newf("%s extension must have a type", extensionKey)
 	}
 	et, err := types.ParseEngagementType(typ)
 	if err != nil {
-		return nil, fmt.Errorf("%s extension has invalid type: %v", extensionKey, err)
+		return nil, errcat.User.Newf("%s extension has invalid type: %v", extensionKey, err)
 	}
 
 	data, err := client.MarshalJSON(v)
@@ -98,12 +103,12 @@ func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v 
 	case types.EngagementTypeWiretap:
 		se = &wiretapExtension{}
 	default:
-		return nil, fmt.Errorf("%s has unsupported extension type %s", extensionKey, et)
+		return nil, errcat.User.Newf("%s has unsupported extension type %s", extensionKey, et)
 	}
 
 	err = client.UnmarshalJSON(data, se, true)
 	if err != nil {
-		return nil, err
+		return nil, errcat.User.New(err)
 	}
 	se.init(c, et, composeService)
 	return se, nil
@@ -151,8 +156,12 @@ func (e *extension) setConnection(c *connection) {
 	e.conn = c
 }
 
-func (e *extension) activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+func (e *extension) activate(*transformer) (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+}
+
+func (e *extension) deactivate() error {
+	return nil
 }
 
 type proxyExtension struct {
@@ -168,8 +177,12 @@ func (e *proxyExtension) init(c *config, et types.EngagementType, composeService
 	}
 }
 
-func (e *proxyExtension) activate(*xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e)
+func (e *proxyExtension) activate(*transformer) (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+}
+
+func (e *extension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 // Name is the name of the service that this proxy connects to. It defaults to the name of the compose-service.
@@ -247,6 +260,10 @@ type interceptExtension struct {
 	ToPod    []types.PortAndProto `json:"toPod,omitempty"`
 }
 
+func (e *interceptExtension) deactivate() error {
+	return deactivateIntercept(e)
+}
+
 func (e *interceptExtension) init(c *config, et types.EngagementType, composeService *compose.ServiceConfig) {
 	e.engageExtension.init(c, et, composeService)
 	if e.Workload == "" {
@@ -259,8 +276,12 @@ func (e *interceptExtension) workload() string {
 	return e.Workload
 }
 
-func (e *interceptExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return activateIntercept(e, tpVolumes)
+func (e *interceptExtension) activate(t *transformer) (*engagement, error) {
+	return activateIntercept(e, t)
+}
+
+func (e *interceptExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *interceptExtension) service() string {
@@ -299,36 +320,75 @@ type ingestExtension struct {
 	ToPod     []types.PortAndProto `json:"toPod,omitempty"`
 }
 
-func (e *ingestExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	ud := daemon.GetUserClient(e.conn)
-	ae, err := createEngagement(ud, e)
+func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
+	ctx := e.conn
+	ud := daemon.GetUserClient(ctx)
+	sftpPort, err := t.config.getMountPort(e)
 	if err != nil {
 		return nil, err
 	}
-	ir := &connector.IngestRequest{
-		Identifier: &connector.IngestIdentifier{
-			WorkloadName:  e.name(),
-			ContainerName: e.container(),
-		},
-		LocalMountPort: int32(ae.sftpPort),
-	}
-	for _, toPod := range e.toPod() {
-		ir.LocalPorts = append(ir.LocalPorts, toPod.String())
-	}
-	ii, err := ud.Ingest(e.conn, ir)
+
+	// The ingest might be active already.
+	ii, err := ud.GetIngest(ctx, &connector.IngestIdentifier{WorkloadName: e.workload()})
 	if err != nil {
-		switch grpcStatus.Code(err) {
-		case grpcCodes.AlreadyExists, grpcCodes.NotFound, grpcCodes.Unimplemented, grpcCodes.FailedPrecondition:
-			return nil, errors.New(grpcStatus.Convert(err).Message())
+		if status.Code(err) != codes.NotFound {
+			return nil, err
 		}
-		return nil, fmt.Errorf("ingest: %w", err)
 	}
-	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, tpVolumes)
+	if ii == nil {
+		ir := &connector.IngestRequest{
+			Identifier: &connector.IngestIdentifier{
+				WorkloadName:  e.name(),
+				ContainerName: e.container(),
+			},
+			LocalMountPort: int32(sftpPort),
+		}
+		for _, toPod := range e.toPod() {
+			ir.LocalPorts = append(ir.LocalPorts, toPod.String())
+		}
+		ii, err = ud.Ingest(e.conn, ir)
+		if err != nil {
+			switch status.Code(err) {
+			case codes.AlreadyExists, codes.NotFound, codes.Unimplemented, codes.FailedPrecondition:
+				return nil, errors.New(status.Convert(err).Message())
+			}
+			return nil, fmt.Errorf("ingest: %w", err)
+		}
+	}
+	ae, err := createEngagement(ud, e, sftpPort)
+	if err != nil {
+		return nil, err
+	}
+	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
 	return ae, nil
 }
 
 func (e *ingestExtension) container() string {
 	return e.Container
+}
+
+func (e *ingestExtension) deactivate() error {
+	ctx := context.WithoutCancel(e.connection().Context)
+	ud := daemon.GetUserClient(ctx)
+	ig, err := ud.GetIngest(ctx, &connector.IngestIdentifier{
+		WorkloadName:  e.workload(),
+		ContainerName: e.container(),
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			err = nil
+		}
+		return err
+	}
+	_, err = ud.LeaveIngest(ctx, &connector.IngestIdentifier{
+		WorkloadName:  ig.Workload,
+		ContainerName: ig.Container,
+	})
+	return err
+}
+
+func (e *ingestExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 // ToPod maps local ports to ports in an engaged pod.
@@ -349,8 +409,16 @@ type replaceExtension struct {
 	ToPod []types.PortAndProto `json:"toPod,omitempty"`
 }
 
-func (e *replaceExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return activateIntercept(e, tpVolumes)
+func (e *replaceExtension) activate(t *transformer) (*engagement, error) {
+	return activateIntercept(e, t)
+}
+
+func (e *replaceExtension) deactivate() error {
+	return deactivateIntercept(e)
+}
+
+func (e *replaceExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *replaceExtension) container() string {
@@ -375,8 +443,16 @@ type wiretapExtension struct {
 	Ports []types.PortMapping `json:"ports,omitempty"`
 }
 
-func (e *wiretapExtension) activate(tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	return activateIntercept(e, tpVolumes)
+func (e *wiretapExtension) activate(t *transformer) (*engagement, error) {
+	return activateIntercept(e, t)
+}
+
+func (e *wiretapExtension) deactivate() error {
+	return deactivateIntercept(e)
+}
+
+func (e *wiretapExtension) engaged() (*engagement, error) {
+	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
 }
 
 func (e *wiretapExtension) service() string {
@@ -465,21 +541,49 @@ func createInterceptRequest(e workloadExtension, localMountPort uint16) *connect
 	return ir
 }
 
-func activateIntercept(e workloadExtension, tpVolumes *xsync.Map[string, *compose.VolumeConfig]) (*engagement, error) {
-	ud := daemon.GetUserClient(e.connection())
-	ae, err := createEngagement(ud, e)
+func activateIntercept(e workloadExtension, t *transformer) (*engagement, error) {
+	ctx := e.connection()
+	ud := daemon.GetUserClient(ctx)
+	sftpPort, err := t.config.getMountPort(e)
 	if err != nil {
 		return nil, err
 	}
-	ir, err := e.createInterceptRequest(ae.sftpPort)
+
+	// The intercept might be active already.
+	ii, err := ud.GetIntercept(ctx, &manager.GetInterceptRequest{Name: e.name()})
+	if err != nil {
+		if status.Code(err) != codes.NotFound {
+			return nil, err
+		}
+	}
+	if ii == nil {
+		ir, err := e.createInterceptRequest(sftpPort)
+		if err != nil {
+			return nil, err
+		}
+		r, err := ud.CreateIntercept(e.connection(), ir)
+		if err = intercept.Result(r, err); err != nil {
+			return nil, fmt.Errorf("connector.CreateIntercept: %w", err)
+		}
+		ii = r.InterceptInfo
+	}
+	ae, err := createEngagement(ud, e, sftpPort)
 	if err != nil {
 		return nil, err
 	}
-	r, err := ud.CreateIntercept(e.connection(), ir)
-	if err = intercept.Result(r, err); err != nil {
-		return nil, fmt.Errorf("connector.CreateIntercept: %w", err)
-	}
-	ii := r.InterceptInfo
-	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, tpVolumes)
+	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
 	return ae, nil
+}
+
+func deactivateIntercept(e workloadExtension) error {
+	ctx := context.WithoutCancel(e.connection().Context)
+	ud := daemon.GetUserClient(ctx)
+	ic, err := ud.GetIntercept(ctx, &manager.GetInterceptRequest{Name: e.name()})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			err = nil
+		}
+		return err
+	}
+	return intercept.Result(ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: ic.Spec.Name}))
 }

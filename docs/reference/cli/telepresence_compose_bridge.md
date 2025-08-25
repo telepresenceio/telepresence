@@ -1,19 +1,19 @@
 ---
-title: telepresence compose events
-description: Receive real time events from containers
+title: telepresence compose bridge
+description: Convert compose files into another model
 hide_table_of_contents: true
 ---
 
-Receive real time events from containers
+Convert compose files into another model
 
 ### Usage:
 ```
-  telepresence compose events [flags] [services]
+  telepresence compose bridge [flags] [services]
 ```
 
 ### Flags:
 ```
-  -h, --help   help for events
+  -h, --help   help for bridge
 ```
 
 ### Compose flags:
@@ -25,11 +25,9 @@ Receive real time events from containers
       --project-name string        Project name
 ```
 
-### Compose events flags:
+### Compose bridge flags:
 ```
-      --json           Output events as a stream of json objects
-      --since string   Show all events created since timestamp
-      --until string   Stream events until this timestamp
+
 ```
 
 ### Global Flags:

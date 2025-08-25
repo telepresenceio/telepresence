@@ -1,18 +1,28 @@
 package shellquote
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
 
-func ShellString(exe string, args []string) string {
+type stringer struct {
+	exe  string
+	args []string
+}
+
+func (s stringer) String() string {
 	b := strings.Builder{}
-	b.WriteString(quoteArg(exe))
-	for _, a := range args {
+	b.WriteString(quoteArg(s.exe))
+	for _, a := range s.args {
 		b.WriteByte(' ')
 		b.WriteString(quoteArg(a))
 	}
 	return b.String()
+}
+
+func ShellString(exe string, args []string) fmt.Stringer {
+	return stringer{exe: exe, args: args}
 }
 
 var UnixEscape = regexp.MustCompile(`[^\w!%+,\-./:=@^]`)

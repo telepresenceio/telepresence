@@ -45,6 +45,7 @@ Create and start containers
       --no-recreate                  If containers already exist, don't
       --no-start                     Don't start the services after
       --pull string                  Pull image before running
+      --quiet-build                  Suppress the build output
       --quiet-pull                   Pull without printing progress
       --remove-orphans               Remove containers for services not
   -V, --renew-anon-volumes           Recreate anonymous volumes instead

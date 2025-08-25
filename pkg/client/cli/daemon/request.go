@@ -343,7 +343,7 @@ func (cr *Request) setGlobalConnectFlags(cmd *cobra.Command) error {
 	if useFlag := cmd.Flag(global.FlagUse); useFlag != nil && useFlag.Changed {
 		var err error
 		if cr.Use, err = regexp.Compile(useFlag.Value.String()); err != nil {
-			return err
+			return errcat.User.Newf("argument to --use must be a valid regexp: %v", err)
 		}
 	}
 	return nil

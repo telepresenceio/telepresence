@@ -23,35 +23,34 @@ type topLevelExtension struct {
 	Mounts      []volumeMountPolicy `json:"mounts,omitempty"`
 }
 
-func ParseTopLevelExtension(v any) (*topLevelExtension, error) {
+func (tl *topLevelExtension) parse(v any) error {
 	data, err := client.MarshalJSON(v)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	var tle topLevelExtension
-	err = client.UnmarshalJSON(data, &tle, true)
+	err = client.UnmarshalJSON(data, tl, true)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if count := len(tle.Connections); count > 1 {
+	if count := len(tl.Connections); count > 1 {
 		// Assert that all connections have a name and that the names are unique.
 		unique := make(map[string]struct{}, count)
-		for _, cc := range tle.Connections {
+		for _, cc := range tl.Connections {
 			if cc.Name == "" {
-				return nil, fmt.Errorf("connection name is required when multiple connections are defined")
+				return fmt.Errorf("connection name is required when multiple connections are defined")
 			}
 			if _, ok := unique[cc.Name]; ok {
-				return nil, fmt.Errorf("duplicate connection name %q", cc.Name)
+				return fmt.Errorf("duplicate connection name %q", cc.Name)
 			}
 			unique[cc.Name] = struct{}{}
 		}
 	}
-	for _, m := range tle.Mounts {
+	for _, m := range tl.Mounts {
 		if m.VolumePattern != nil {
 			if m.Volume != "" {
-				return nil, fmt.Errorf("volumePattern and volume are mutually exclusive")
+				return fmt.Errorf("volumePattern and volume are mutually exclusive")
 			}
 		}
 	}
-	return &tle, nil
+	return nil
 }

@@ -878,7 +878,7 @@ var defaultTelemount = Telemount{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "telemount",
-	Tag:         "0.2.0",
+	Tag:         "0.3.0",
 }
 
 func (tm *Telemount) defaults() DefaultsAware {
@@ -1406,8 +1406,9 @@ func (r *Routing) ToSnake() *RoutingSnake {
 }
 
 type SessionConfig struct {
-	Config     `json:"clientConfig"`
-	ClientFile string `json:"clientFile"`
+	Config       `json:"clientConfig"`
+	ClientFile   string `json:"clientFile"`
+	LogDirectory string `json:"logDirectory"`
 }
 
 func (sc *SessionConfig) UnmarshalJSON(data []byte) error {

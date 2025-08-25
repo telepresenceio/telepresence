@@ -31,7 +31,7 @@ bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 # https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
 export DOCKER_BUILDKIT := 1
 
-GOLANGCI_VERSION:=v2.1.6
+GOLANGCI_VERSION:=v2.4.0
 
 .PHONY: FORCE
 FORCE:
@@ -417,7 +417,7 @@ lint-go: lint-deps ## (QA) Run the golangci-lint
 	$(if $(strip $(badimports)), echo "The following files have bad import ordering (use make format to fix): " $(badimports) && false)
 ifeq ($(GOOS),windows)
 	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
-	run --timeout 8m ./cmd/telepresence/... ./integration_test/... ./pkg/...
+	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./integration_test/... ./pkg/...
 else
 	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
 	run --timeout 8m ./...

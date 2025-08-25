@@ -31,6 +31,9 @@ Parse, resolve and render compose file in canonical format
       --format string           Format the output. Values: [yaml | json]
       --hash string             Print the service config hash, one per line.
       --images                  Print the image names, one per line.
+      --lock-image-digests      Produces an override file with image digests
+      --models                  Print the model names, one per line.
+      --networks                Print the network names, one per line.
       --no-consistency          Don't check model consistency - warning:
       --no-env-resolution       Don't resolve service env files
       --no-interpolate          Don't interpolate environment variables

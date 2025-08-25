@@ -1,9 +1,9 @@
 module local
 
-go 1.22.0
+go 1.23
 
-toolchain go1.22.3
+toolchain go1.24.4
 
-require google.golang.org/protobuf v1.36.7
+require google.golang.org/protobuf v1.36.8
 
 require github.com/google/go-cmp v0.7.0 // indirect

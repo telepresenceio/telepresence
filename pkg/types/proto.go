@@ -69,11 +69,20 @@ func (p Proto) MarshalJSONTo(out *jsontext.Encoder) error {
 	return json.MarshalEncode(out, p.String())
 }
 
-func (p *Proto) UnmarshalJSONFrom(in *jsontext.Decoder) error {
-	var s string
-	err := json.UnmarshalDecode(in, &s)
-	if err == nil {
-		*p, err = ParseProto(s)
+func (p *Proto) UnmarshalJSONFrom(in *jsontext.Decoder) (err error) {
+	if in.PeekKind() == '0' {
+		// Backwards compatibility. Older versions uses the protocol number in JSON.
+		var bn byte
+		err = json.UnmarshalDecode(in, &bn)
+		if err == nil {
+			*p = Proto(bn)
+		}
+	} else {
+		var s string
+		err = json.UnmarshalDecode(in, &s)
+		if err == nil {
+			*p, err = ParseProto(s)
+		}
 	}
 	return err
 }

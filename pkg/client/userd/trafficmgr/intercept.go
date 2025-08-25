@@ -362,7 +362,7 @@ func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc
 
 // allBusyLocalPorts returns the sum of all ports that the intercept forwards to and all ports
 // that are forwarded from.
-func allBusyLocalPorts(spec *manager.InterceptSpec) ([]types.PortAndProto, error) {
+func allBusyLocalPorts(targetHost netip.Addr, spec *manager.InterceptSpec) ([]types.AddrPortProto, error) {
 	targetPort := spec.TargetPort
 	if targetPort == 0 {
 		targetPort = spec.ContainerPort
@@ -371,18 +371,25 @@ func allBusyLocalPorts(spec *manager.InterceptSpec) ([]types.PortAndProto, error
 	if err != nil {
 		return nil, err
 	}
-	ports := make([]types.PortAndProto, 0, len(spec.LocalPorts)+len(spec.PodPorts)+1)
-	ports = append(ports, types.PortAndProto{
-		Port:  uint16(targetPort),
-		Proto: proto,
+	ports := make([]types.AddrPortProto, 0, len(spec.LocalPorts)+len(spec.PodPorts)+1)
+	ports = append(ports, types.AddrPortProto{
+		AddrPort: netip.AddrPortFrom(targetHost, uint16(targetPort)),
+		Proto:    proto,
 	})
 	for _, lp := range spec.LocalPorts {
 		pp, _ := types.ParsePortAndProto(lp)
-		ports = append(ports, pp)
+		ports = append(ports, types.AddrPortProto{
+			AddrPort: netip.AddrPortFrom(targetHost, pp.Port),
+			Proto:    pp.Proto,
+		})
 	}
 	for _, ps := range spec.PodPorts {
 		pm := types.PortMapping(ps)
-		ports = append(ports, pm.ToAsNumeric())
+		pp := pm.ToAsNumeric()
+		ports = append(ports, types.AddrPortProto{
+			AddrPort: netip.AddrPortFrom(targetHost, pp.Port),
+			Proto:    pp.Proto,
+		})
 	}
 	return ports, nil
 }
@@ -391,7 +398,7 @@ func allBusyLocalPorts(spec *manager.InterceptSpec) ([]types.PortAndProto, error
 // local ports that the client will forward from. Also ensures that there are no conflicts among those ports.
 // The cluster-side of the port mappings are not checked here because we rely on the PrepareIntercept
 // call to already have done that.
-func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedIntercept) (map[types.PortAndProto]struct{}, error) {
+func ensureUniqueLocalPorts(targetHost netip.Addr, spec *manager.InterceptSpec, pi *manager.PreparedIntercept) (map[types.AddrPortProto]struct{}, error) {
 	targetPort := spec.TargetPort
 	if targetPort == 0 {
 		targetPort = pi.ContainerPort
@@ -401,10 +408,10 @@ func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedInt
 	if err != nil {
 		return nil, err
 	}
-	ports := make(map[types.PortAndProto]struct{}, len(spec.LocalPorts)+len(pi.PodPorts)+1)
-	ports[types.PortAndProto{
-		Port:  uint16(targetPort),
-		Proto: proto,
+	ports := make(map[types.AddrPortProto]struct{}, len(spec.LocalPorts)+len(pi.PodPorts)+1)
+	ports[types.AddrPortProto{
+		AddrPort: netip.AddrPortFrom(targetHost, uint16(targetPort)),
+		Proto:    proto,
 	}] = struct{}{}
 
 	for _, lp := range spec.LocalPorts {
@@ -412,10 +419,14 @@ func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedInt
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := ports[pp]; ok {
+		ap := types.AddrPortProto{
+			AddrPort: netip.AddrPortFrom(targetHost, pp.Port),
+			Proto:    pp.Proto,
+		}
+		if _, ok := ports[ap]; ok {
 			return nil, fmt.Errorf("multiple use of port %s on %s", &pp, spec.TargetHost)
 		}
-		ports[pp] = struct{}{}
+		ports[ap] = struct{}{}
 	}
 	for _, ps := range pi.PodPorts {
 		pm := types.PortMapping(ps)
@@ -423,16 +434,24 @@ func ensureUniqueLocalPorts(spec *manager.InterceptSpec, pi *manager.PreparedInt
 			return nil, err
 		}
 		pp := pm.ToAsNumeric()
-		if _, ok := ports[pp]; ok {
-			return nil, fmt.Errorf("multiple use of port %s on %s", &pp, spec.TargetHost)
+		ap := types.AddrPortProto{
+			AddrPort: netip.AddrPortFrom(targetHost, pp.Port),
+			Proto:    pp.Proto,
 		}
-		ports[pp] = struct{}{}
+		if _, ok := ports[ap]; ok {
+			return nil, fmt.Errorf("multiple use of port %s on %s", &ap, spec.TargetHost)
+		}
+		ports[ap] = struct{}{}
 	}
 	return ports, nil
 }
 
 func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.PreparedIntercept) *rpc.InterceptResult {
-	ports, err := ensureUniqueLocalPorts(spec, ir)
+	targetHost, err := netip.ParseAddr(spec.TargetHost)
+	if err != nil {
+		return InterceptError(common.InterceptError_INTERNAL, errcat.User.Newf("invalid target host: %v", err))
+	}
+	ports, err := ensureUniqueLocalPorts(targetHost, spec, ir)
 	if err != nil {
 		return InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.New(err))
 	}
@@ -441,7 +460,11 @@ func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.
 	defer s.currentInterceptsLock.Unlock()
 	for _, ci := range s.currentIntercepts {
 		ciSpec := ci.Spec
-		busyPorts, err := allBusyLocalPorts(ciSpec)
+		targetHost, err = netip.ParseAddr(ciSpec.TargetHost)
+		if err != nil {
+			return InterceptError(common.InterceptError_INTERNAL, errcat.User.Newf("invalid target host: %v", err))
+		}
+		busyPorts, err := allBusyLocalPorts(targetHost, ciSpec)
 		if err != nil {
 			return InterceptError(common.InterceptError_INTERNAL, errcat.User.New(err))
 		}
@@ -449,7 +472,7 @@ func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.
 			if _, ok := ports[blp]; ok {
 				return &rpc.InterceptResult{
 					Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
-					ErrorText:     fmt.Sprintf("Port %s is already in use by intercept %s", net.JoinHostPort(ciSpec.TargetHost, blp.String()), ciSpec.Name),
+					ErrorText:     fmt.Sprintf("Port %s is already in use by intercept %s", blp, ciSpec.Name),
 					ErrorCategory: int32(errcat.User),
 				}
 			}

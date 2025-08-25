@@ -72,12 +72,14 @@ func maybeComposeDown(ctx context.Context, info *daemon.Info) {
 	if info.ComposeFile == "" {
 		return
 	}
+	defer func() {
+		err := os.Remove(info.ComposeFile)
+		if err != nil {
+			dlog.Error(ctx, err)
+		}
+	}()
 	progress.Stop(ctx)
-	err := proc.StdCommand(ctx, docker.Exe, "compose", "--file", info.ComposeFile, "down", "--remove-orphans").Run()
-	if err != nil {
-		dlog.Error(ctx, err)
-	}
-	err = os.Remove(info.ComposeFile)
+	err := proc.StdCommand(ctx, docker.Exe, "compose", "--file", info.ComposeFile, "down", "--remove-orphans", "--volumes").Run()
 	if err != nil {
 		dlog.Error(ctx, err)
 	}
