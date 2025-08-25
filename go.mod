@@ -38,27 +38,27 @@ require (
 	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/telepresenceio/go-fuseftp v0.6.7
 	github.com/telepresenceio/go-fuseftp/rpc v0.6.7
-	github.com/telepresenceio/telepresence/cmd/cobraparser v0.0.0-00010101000000-000000000000
-	github.com/telepresenceio/telepresence/rpc/v2 v2.24.0-rc.4
+	github.com/telepresenceio/telepresence/cmd/cobraparser v0.0.0-20250824104819-c9104deca45a
+	github.com/telepresenceio/telepresence/rpc/v2 v2.24.0-test.1
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/net v0.43.0
 	golang.org/x/sys v0.35.0
 	golang.org/x/term v0.34.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	golang.zx2c4.com/wireguard/windows v0.5.3
-	google.golang.org/grpc v1.74.2
-	google.golang.org/protobuf v1.36.7
-	gvisor.dev/gvisor v0.0.0-20250816201027-ba3b9ca85f20
-	helm.sh/helm/v3 v3.18.5
+	google.golang.org/grpc v1.75.0
+	google.golang.org/protobuf v1.36.8
+	gvisor.dev/gvisor v0.0.0-20250822235216-b2666650a156
+	helm.sh/helm/v3 v3.18.6
 	k8s.io/api v0.33.4
 	k8s.io/apimachinery v0.33.4
 	k8s.io/cli-runtime v0.33.4
 	k8s.io/client-go v0.33.4
 	k8s.io/kubectl v0.33.4
-	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
+	k8s.io/utils v0.0.0-20250820121507-0af2bda4dd1d
 	sigs.k8s.io/yaml v1.6.0
 )
 

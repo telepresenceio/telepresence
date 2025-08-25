@@ -31,7 +31,6 @@ func loadCoreChart(version semver.Version) (*chart.Chart, error) {
 
 func newDefaultRegistryClient(ctx context.Context) (*registry.Client, error) {
 	return registry.NewClient(
-		registry.ClientOptDebug(dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug),
 		registry.ClientOptEnableCache(true),
 		registry.ClientOptWriter(dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()),
 	)

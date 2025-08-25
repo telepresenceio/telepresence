@@ -8,8 +8,8 @@ require (
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/telepresenceio/telepresence/rpc/v2 v2.23.6
-	google.golang.org/grpc v1.74.2
-	google.golang.org/protobuf v1.36.7
+	google.golang.org/grpc v1.75.0
+	google.golang.org/protobuf v1.36.8
 )
 
 require (
