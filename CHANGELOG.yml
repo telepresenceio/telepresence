@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.24.0
-    date: (TBD)
+    date: 2025-08-25
     notes:
       - type: feature
         title: Support for Docker Compose
