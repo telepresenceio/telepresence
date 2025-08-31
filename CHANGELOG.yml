@@ -24,6 +24,14 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.24.1
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Restore default value for agent-state.yaml in the traffic-manager configmap
+        body: >-
+          The value was previously an empty string which caused problems when when Argo CD tried to synchronize it.
+        docs: https://github.com/telepresenceio/telepresence/pull/3953
   - version: 2.24.0
     date: 2025-08-25
     notes:
