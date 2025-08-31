@@ -28,6 +28,12 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: A `telepresence connect --docker` would fail with some k3s configurations
+        body: >-
+          Telepresence would fail to connect to a k3s cluster unless the cluster's IP was a loopback address. This is
+          now changed so that any IP:port combination is accepted as long as a container can be found that defines a
+          mapping for it.
+      - type: bugfix
         title: Restore default value for agent-state.yaml in the traffic-manager configmap
         body: >-
           The value was previously an empty string which caused problems when when Argo CD tried to synchronize it.

@@ -25,10 +25,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	core "k8s.io/api/core/v1"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/datawire/dlib/dlog"
@@ -41,7 +37,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -358,28 +353,17 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	}
 	addr, err := netip.ParseAddr(host)
 	if err != nil {
-		if host == "localhost" {
-			addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
-			err = nil
-		} else {
-			err = fmt.Errorf(`invalid host IP "%s"`, host)
+		if host != "localhost" {
+			// Address is not a valid IP address, so it's not a local k8s. Docker can't make
+			// containers available to the host via DNS.
+			return nil
 		}
-	}
-	if err != nil {
-		return nil
-	}
-	isMinikube := false
-	if ex, ok := cl.Extensions["cluster_info"].(*runtime.Unknown); ok {
-		var data map[string]any
-		isMinikube = json.Unmarshal(ex.Raw, &data) == nil && data["provider"] == "minikube.sigs.k8s.io"
-	}
-	if !(addr.IsLoopback() || isMinikube) {
-		return nil
+		addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
 	}
 
 	port, err := strconv.ParseUint(portStr, 10, 16)
 	if err != nil {
-		return err
+		return nil
 	}
 	addrPort := netip.AddrPortFrom(addr, uint16(port))
 
@@ -391,20 +375,8 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	}
 	cjs := runningContainers(ctx, cli)
 
-	var hostPort netip.AddrPort
-	var nw string
-	if isMinikube {
-		hostPort, nw = detectMinikube(ctx, cjs, addrPort, cc.Cluster)
-	} else {
-		addr = detectK3sControlPlaneNode(ctx)
-		if addr.IsValid() {
-			hostPort = netip.AddrPortFrom(addr, uint16(port))
-		} else {
-			hostPort, nw = detectKind(ctx, cjs, addrPort)
-		}
-	}
+	hostPort, nw := detectControlPlane(ctx, cli, cjs, addrPort)
 	if hostPort.IsValid() {
-		dlog.Debugf(ctx, "hostPort %s, network %s", hostPort, nw)
 		server.Host = hostPort.String()
 		cl.Server = server.String()
 	}
@@ -488,6 +460,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 // the container's port bindings.
 // The additional bool is true if the host address is IPv6.
 func containerPort(addrPort netip.AddrPort, ns *container.NetworkSettings) (port uint16, isIPv6 bool) {
+	// If the port mapping exists where the source address is the host's address, then use the destination port.
 	for portDef, bindings := range ns.Ports {
 		if portDef.Proto() != "tcp" {
 			continue
@@ -506,11 +479,30 @@ func containerPort(addrPort netip.AddrPort, ns *container.NetworkSettings) (port
 			}
 		}
 	}
+
+	// If the address on the host belongs to a network, then trust the current port.
+	addr := addrPort.Addr()
+	for _, nw := range ns.Networks {
+		if ic := nw.IPAMConfig; ic != nil {
+			if addr.Is4() && ic.IPv4Address != "" {
+				na, err := netip.ParseAddr(ic.IPv4Address)
+				if err == nil && addr == na {
+					return addrPort.Port(), false
+				}
+			}
+			if addr.Is6() && ic.IPv6Address != "" {
+				na, err := netip.ParseAddr(ic.IPv6Address)
+				if err == nil && addr == na {
+					return addrPort.Port(), false
+				}
+			}
+		}
+	}
 	return 0, false
 }
 
 // runningContainers returns the inspect data for all containers with status=running.
-func runningContainers(ctx context.Context, cli dockerClient.APIClient) []container.InspectResponse {
+func runningContainers(ctx context.Context, cli dockerClient.APIClient) []*container.InspectResponse {
 	cl, err := cli.ContainerList(ctx, container.ListOptions{
 		Filters: filters.NewArgs(filters.KeyValuePair{Key: "status", Value: "running"}),
 	})
@@ -518,163 +510,119 @@ func runningContainers(ctx context.Context, cli dockerClient.APIClient) []contai
 		dlog.Errorf(ctx, "failed to list containers: %v", err)
 		return nil
 	}
-	cjs := make([]container.InspectResponse, 0, len(cl))
+	cjs := make([]*container.InspectResponse, 0, len(cl))
 	for _, cn := range cl {
 		cj, err := cli.ContainerInspect(ctx, cn.ID)
 		if err != nil {
 			dlog.Errorf(ctx, "container inspect on %v failed: %v", cn.Names, err)
 		} else {
-			cjs = append(cjs, cj)
+			cjs = append(cjs, &cj)
 		}
 	}
 	return cjs
 }
 
-func localAddr(ctx context.Context, cnID, nwID string, isIPv6 bool) (addr netip.Addr, err error) {
-	cli, err := GetClient(ctx)
-	if err != nil {
-		return addr, err
+func endpointAddr(cn *network.EndpointResource, isIPv6 bool) (addr netip.Addr, _ error) {
+	// These aren't IP-addresses at all. They are prefixes!
+	var prefix string
+	if isIPv6 {
+		prefix = cn.IPv6Address
+	} else {
+		prefix = cn.IPv4Address
 	}
+	ap, err := netip.ParsePrefix(prefix)
+	if err == nil {
+		addr = ap.Addr()
+	}
+	return addr, err
+}
+
+func localAddr(ctx context.Context, cli dockerClient.APIClient, cnID, nwID string, isIPv6 bool) (addr netip.Addr, err error) {
 	nw, err := cli.NetworkInspect(ctx, nwID, network.InspectOptions{})
 	if err != nil {
 		return addr, err
 	}
 	if cn, ok := nw.Containers[cnID]; ok {
 		// These aren't IP-addresses at all. They are prefixes!
-		var prefix string
-		if isIPv6 {
-			prefix = cn.IPv6Address
-		} else {
-			prefix = cn.IPv4Address
-		}
-		ap, err := netip.ParsePrefix(prefix)
-		if err == nil {
-			addr = ap.Addr()
-		}
+		return endpointAddr(&cn, isIPv6)
 	}
-	return addr, err
+	return addr, errors.New("no such container")
 }
 
-// useMinikubeNetwork returns true if the given hostAddrPort points to a network named "minikube".
-func useMinikubeNetwork(ctx context.Context, addr netip.Addr) bool {
-	cli, err := GetClient(ctx)
-	if err != nil {
-		return false
-	}
-	nw, err := cli.NetworkInspect(ctx, "minikube", network.InspectOptions{})
-	if err != nil {
-		return false
-	}
-	for _, c := range nw.Containers {
-		if addr.Is4() {
-			if a, err := netip.ParsePrefix(c.IPv4Address); err == nil && a.Addr() == addr {
-				return true
-			}
-		}
-		if addr.Is6() {
-			if a, err := netip.ParsePrefix(c.IPv6Address); err == nil && a.Addr() == addr {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// detectK3sControlPlaneNode returns the internal IP of the k3s control-plane node, if
-// such a node is found, or an invalid address otherwise.
-func detectK3sControlPlaneNode(ctx context.Context) (addr netip.Addr) {
-	ki := k8sapi.GetK8sInterface(ctx)
-	le := labels.SelectorFromSet(map[string]string{
-		"node-role.kubernetes.io/control-plane": "true",
-		"node-role.kubernetes.io/master":        "true",
-		"node.kubernetes.io/instance-type":      "k3s",
-	})
-	ns, err := ki.CoreV1().Nodes().List(ctx, meta.ListOptions{LabelSelector: le.String()})
-	if err != nil {
-		dlog.Errorf(ctx, "failed to list nodes: %v", err)
-		return addr
-	}
-	nis := ns.Items
-	for i := range nis {
-		n := &nis[i]
-		for _, a := range n.Status.Addresses {
-			if a.Type == core.NodeInternalIP {
-				addr, err = netip.ParseAddr(a.Address)
-				if err != nil {
-					dlog.Errorf(ctx, "failed to parse address %s: %v", a.Address, err)
-				} else {
-					dlog.Debugf(ctx, "Found k3s control plane %s with internal IP %s", n.Name, addr)
-				}
-				break
-			}
-		}
-	}
-	return addr
-}
-
-// detectMinikube returns the container IP:port for the given hostAddrPort for a container where the
-// "name.minikube.sigs.k8s.io" label is equal to the given cluster name.
-// Returns the internal IP:port for the given hostAddrPort and the name of a network that makes the
-// IP available.
-func detectMinikube(ctx context.Context, cns []container.InspectResponse, hostAddrPort netip.AddrPort, clusterName string) (netip.AddrPort, string) {
-	if useMinikubeNetwork(ctx, hostAddrPort.Addr()) {
-		return hostAddrPort, "minikube"
-	}
+func findNetworkSettingsForHostPort(cns []*container.InspectResponse, hostAddrPort netip.AddrPort) (*container.InspectResponse, uint16, bool) {
 	for _, cn := range cns {
-		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["name.minikube.sigs.k8s.io"] == clusterName {
+		if ns := cn.NetworkSettings; ns != nil {
 			if port, isIPv6 := containerPort(hostAddrPort, ns); port != 0 {
-				for networkName, nw := range ns.Networks {
-					addr, err := localAddr(ctx, cn.ID, nw.NetworkID, isIPv6)
-					if err != nil {
-						dlog.Error(ctx, err)
-						break
-					}
-					return netip.AddrPortFrom(addr, port), networkName
-				}
+				return cn, port, isIPv6
 			}
 		}
 	}
-	return netip.AddrPort{}, ""
+	return nil, 0, false
 }
 
-// detectKind returns the container hostname:port for the given hostAddrPort for a container where the
-// "io.x-k8s.kind.role" label is equal to "control-plane".
-// Returns the internal hostname:port for the given hostAddrPort and the name of a network that makes the
-// hostname available.
-func detectKind(ctx context.Context, cns []container.InspectResponse, hostAddrPort netip.AddrPort) (netip.AddrPort, string) {
+type containerFilter func(cn *container.InspectResponse) bool
+
+//nolint:gochecknoglobals // constant
+var knownFilters = map[string]containerFilter{
+	"minikube": func(cn *container.InspectResponse) bool {
+		return cn.Config != nil && cn.Config.Labels["name.minikube.sigs.k8s.io"] != ""
+	},
+	"k3s": func(cn *container.InspectResponse) bool {
+		return cn.Config != nil && strings.Contains(cn.Config.Image, "/k3s:")
+	},
+	"kind": func(cn *container.InspectResponse) bool {
+		return cn.Config != nil && cn.Config.Labels["io.x-k8s.kind.role"] == "control-plane"
+	},
+}
+
+func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*container.InspectResponse, hostAddr netip.AddrPort) (ap netip.AddrPort, nn string) {
+	ncn, port, isIPv6 := findNetworkSettingsForHostPort(cns, hostAddr)
+	if ncn == nil {
+		dlog.Debugf(ctx, "no network settings found that maps host address %s", hostAddr)
+		return ap, nn
+	}
+
+	type candidate struct {
+		container   *container.InspectResponse
+		networkName string
+		localAddr   netip.AddrPort
+	}
+
+	ns := ncn.NetworkSettings
+	candidates := make([]candidate, 0)
 	for _, cn := range cns {
-		if cfg, ns := cn.Config, cn.NetworkSettings; cfg != nil && ns != nil && cfg.Labels["io.x-k8s.kind.role"] == "control-plane" {
-			if port, isIPv6 := containerPort(hostAddrPort, ns); port != 0 {
-				for n, nw := range ns.Networks {
-					found := false
-					for _, names := range nw.DNSNames {
-						if strings.HasSuffix(names, "-control-plane") {
-							found = true
-							break
-						}
-					}
-					if !found {
-						// Aliases got deprecated in favor of DNSNames in Docker versions 25+
-						for _, alias := range nw.Aliases {
-							if strings.HasSuffix(alias, "-control-plane") {
-								found = true
-								break
-							}
-						}
-					}
-					if found {
-						addr, err := localAddr(ctx, cn.ID, nw.NetworkID, isIPv6)
-						if err != nil {
-							dlog.Error(ctx, err)
-							break
-						}
-						return netip.AddrPortFrom(addr, port), n
-					}
+		for networkName, nw := range ns.Networks {
+			addr, err := localAddr(ctx, cli, cn.ID, nw.NetworkID, isIPv6)
+			if err == nil {
+				candidates = append(candidates, candidate{
+					container:   cn,
+					networkName: networkName,
+					localAddr:   netip.AddrPortFrom(addr, port),
+				})
+			}
+		}
+	}
+
+	switch len(candidates) {
+	case 0:
+		return ap, nn
+	case 1:
+		c := candidates[0]
+		dlog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q", c.container.Name, c.localAddr, hostAddr, c.networkName)
+		return c.localAddr, c.networkName
+	default:
+		// We have multiple candidates. Let's try and discriminate using the known filters.'
+		for _, c := range candidates {
+			for filterName, filter := range knownFilters {
+				if filter(c.container) {
+					dlog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q using filter %q",
+						c.container.Name, c.localAddr, hostAddr, c.networkName, filterName)
+					return c.localAddr, c.networkName
 				}
 			}
 		}
 	}
-	return netip.AddrPort{}, ""
+	return ap, nn
 }
 
 func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, args []string) (*daemon.Info, error) {

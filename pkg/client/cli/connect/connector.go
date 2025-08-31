@@ -579,11 +579,12 @@ func warnMngrVersion(ctx context.Context, ci *connector.ConnectInfo) error {
 	}
 
 	const maxDiff = uint64(3)
-	dlog.Debugf(ctx, "diff between client and manager versions: %d", diff)
 	if diff > maxDiff {
 		progress.Warningf(ctx,
 			"The Traffic Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.",
 			mv.Version, maxDiff, client.Version())
+	} else if diff > 0 {
+		dlog.Debugf(ctx, "Diff between client and manager minor versions: %d", diff)
 	}
 
 	cv := ci.Version
