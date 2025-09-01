@@ -94,8 +94,9 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	if env.ScoutDisable {
 		opts = append(opts, "-e", "SCOUT_DISABLE=1")
 	}
-	if client.GetConfig(ctx).Docker().AddHostGateway {
-		opts = append(opts, "--add-host", "host.docker.internal:host-gateway")
+	cfg := client.GetConfig(ctx).Docker()
+	if cfg.HostGateway != "" && (cfg.AddHostGateway || cfg.HostGateway != client.DefaultHostGateway) {
+		opts = append(opts, "--add-host", cfg.HostGateway+":host-gateway")
 	}
 	return opts, nil
 }
@@ -317,8 +318,9 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 			// will run in a container, so the first argument must be a path that finds the telepresence executable and
 			// the second must be an address that will find the host's port, not the container's localhost. The host
 			// in this case is the client performing the authentication (as opposed to the Docker VM, when one is used).
-			kubeAuthHost := "host.docker.internal"
-			if !client.GetConfig(ctx).Docker().AddHostGateway {
+			cfg := client.GetConfig(ctx).Docker()
+			kubeAuthHost := cfg.HostGateway
+			if !(cfg.AddHostGateway || kubeAuthHost != client.DefaultHostGateway) {
 				r, err := routing.DefaultRoute(ctx)
 				if err != nil {
 					return "", "", err
@@ -337,7 +339,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	return err
 }
 
-// handleLocalK8s checks if the cluster is using a well known provider (currently minikube or kind)
+// handleLocalK8s checks if the cluster is using a well-known provider (currently minikube or kind)
 // and if so, ensures that the daemon container is connected to its network.
 func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *api.Config) error {
 	cc := config.Contexts[config.CurrentContext]
@@ -379,7 +381,15 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	if hostPort.IsValid() {
 		server.Host = hostPort.String()
 		cl.Server = server.String()
+	} else if addrPort.Addr().IsLoopback() {
+		// We're running in a container, but apparently the control-plan isn't. Since we can't use the host's loopback interface directly,
+		// the best we can do here is to use the "host.docker.internal" (or whatever alias the user has configured for the GatewayHost) and
+		// hope that the server's certificate is configured to accept connections from that address.
+		server.Host = iputil.JoinHostPort(client.GetConfig(ctx).Docker().HostGateway, addrPort.Port())
+		dlog.Debugf(ctx, "Connecting to host's %s via alias %s", addrPort, server.Host)
+		cl.Server = server.String()
 	}
+
 	if nw != "" {
 		dcName := daemonID.ContainerName()
 		dlog.Debugf(ctx, "Connecting network %s to container %s", nw, dcName)
