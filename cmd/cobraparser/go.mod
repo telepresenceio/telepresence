@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/docker/docker v28.3.3+incompatible
-	github.com/spf13/pflag v1.0.7
+	github.com/spf13/pflag v1.0.9
 )
 
 require (
