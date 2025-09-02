@@ -93,7 +93,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		spec.LocalPorts = append(spec.LocalPorts, pp.String())
 	}
 
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 
 	// Parse port into spec based on how it's formatted
 	s.localPort, s.dockerPort, spec.PortIdentifier = 0, 0, ""
@@ -191,7 +191,7 @@ func (s *state) what() string {
 }
 
 func (s *state) create(ctx context.Context) (acquired bool, err error) {
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	s.status, err = ud.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
@@ -288,7 +288,7 @@ func (s *state) leave(ctx context.Context) error {
 		}()
 	}
 	n := strings.TrimSpace(s.Name())
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	progress.Workingf(ctx, "Ending %s", s.what())
 	r, err := ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: n})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
@@ -315,7 +315,7 @@ func (s *state) runCommand(ctx context.Context) error {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
 			return errcat.NoDaemonLogs.New(err)
 		}
-		if err = daemon.GetUserClient(ctx).AddHandler(ctx, env["TELEPRESENCE_INTERCEPT_ID"], cmd, ""); err != nil {
+		if err = daemon.MustGetUserClient(ctx).AddHandler(ctx, env["TELEPRESENCE_INTERCEPT_ID"], cmd, ""); err != nil {
 			return err
 		}
 		// The external command will not output anything to the logs. An error here

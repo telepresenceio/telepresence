@@ -82,7 +82,7 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	ctx := cmd.Context()
-	cc, err := daemon.GetUserClient(ctx).GetConfig(ctx, &empty.Empty{})
+	cc, err := daemon.MustGetUserClient(ctx).GetConfig(ctx, &empty.Empty{})
 	if err != nil {
 		return err
 	}

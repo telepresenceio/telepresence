@@ -150,7 +150,7 @@ type ContainerInfo struct {
 // assigned to the VIF and the network name of the teleroute network is returned. Otherwise, the method
 // returns the daemon's IP on the default bridge as the DNS address and an empty string as the network name.
 func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, networkName string, err error) {
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	info := ud.DaemonInfo()
 	status, err := ud.Status(ctx, &empty.Empty{})
 	if err != nil {

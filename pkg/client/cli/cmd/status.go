@@ -160,7 +160,7 @@ func run(cmd *cobra.Command, _ []string) error {
 				return err
 			}
 			sis[i], err = getStatusInfo(udCtx, info)
-			_ = daemon.GetUserClient(udCtx).Close()
+			_ = daemon.MustGetUserClient(udCtx).Close()
 			if err != nil {
 				return err
 			}

@@ -321,7 +321,7 @@ func (c *config) connect(ctx context.Context, es map[string]serviceExtension, co
 		}
 		dlog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.engagementType().WorkDone())
 		if existingComposeFile == "" {
-			existingComposeFile = daemon.GetSession(cx).DaemonInfo().ComposeFile
+			existingComposeFile = daemon.MustGetSession(cx).DaemonInfo().ComposeFile
 		}
 		e.setConnection(cx)
 	}

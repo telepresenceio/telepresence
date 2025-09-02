@@ -40,7 +40,6 @@ type Runner struct {
 }
 
 func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) error {
-	ud := daemon.GetUserClient(ctx)
 	var runFlags *RunFlags
 	if s.imageIndex > 0 {
 		// arguments between the "--" separator and the image name are docker run flags, and
@@ -79,6 +78,8 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 		return err
 	}
 	envFile := file.Name()
+
+	ud := daemon.MustGetUserClient(ctx)
 
 	// Ensure that the intercept handler is stopped properly if the daemon quits
 	procCtx, cancel := context.WithCancel(ctx)
@@ -178,9 +179,9 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 	}
 
 	hasRemoteMounts := false
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	if !ud.Containerized() {
-		// The process is containerized but the user daemon runs on the host
+		// The process is containerized, but the user daemon runs on the host
 		for path, policy := range mounts {
 			ro := ""
 			switch policy {

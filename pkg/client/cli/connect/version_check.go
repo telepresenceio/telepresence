@@ -21,7 +21,7 @@ func versionCheck(ctx context.Context, daemonBinary string) error {
 	}
 
 	// Ensure that the already running daemons have the correct version
-	userD := daemon.GetUserClient(ctx)
+	userD := daemon.MustGetUserClient(ctx)
 	uv := userD.Semver()
 	if userD.Containerized() {
 		// The user-daemon is remote (in a docker container, most likely). Compare the major, minor, and patch. Only

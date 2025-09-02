@@ -47,7 +47,7 @@ func leaveCmd() *cobra.Command {
 				return nil, shellCompDir | cobra.ShellCompDirectiveError
 			}
 			ctx := cmd.Context()
-			userD := daemon.GetUserClient(ctx)
+			userD := daemon.MustGetUserClient(ctx)
 			resp, err := userD.List(ctx, &connector.ListRequest{
 				Filter: connector.ListRequest_INTERCEPTS | connector.ListRequest_REPLACEMENTS | connector.ListRequest_INGESTS,
 			})
@@ -81,7 +81,7 @@ func leaveCmd() *cobra.Command {
 }
 
 func disengage(ctx context.Context, name, container string) error {
-	userD := daemon.GetUserClient(ctx)
+	userD := daemon.MustGetUserClient(ctx)
 
 	var ic *manager.InterceptInfo
 	var ig *connector.IngestInfo

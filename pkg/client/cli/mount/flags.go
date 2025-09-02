@@ -77,7 +77,7 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 		}
 	}()
 
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	if ud.Containerized() {
 		// Mounts will be facilitated by the Telemount plug-in connecting to our LocalMountPort
 		if f.LocalMountPort == 0 {
@@ -111,7 +111,7 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 }
 
 func checkCapability(ctx context.Context) error {
-	r, err := daemon.GetUserClient(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
+	r, err := daemon.MustGetUserClient(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
 	if err != nil {
 		return err
 	}

@@ -75,7 +75,7 @@ func (u *uninstallCommand) run(cmd *cobra.Command, args []string) error {
 		ur.Agents = args
 	}
 	ctx := cmd.Context()
-	r, err := daemon.GetUserClient(ctx).Uninstall(ctx, ur)
+	r, err := daemon.MustGetUserClient(ctx).Uninstall(ctx, ur)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func validWorkloads(cmd *cobra.Command, args []string, toComplete string) ([]str
 	}
 	ctx := cmd.Context()
 
-	r, err := daemon.GetUserClient(ctx).List(ctx, &req)
+	r, err := daemon.MustGetUserClient(ctx).List(ctx, &req)
 	if err != nil {
 		dlog.Debugf(ctx, "unable to get list of workloads with agents: %v", err)
 		return nil, cobra.ShellCompDirectiveError
