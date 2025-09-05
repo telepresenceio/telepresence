@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.24.1
 <Note>
+	<Title type="bugfix">A `telepresence connect --docker` fails kubeconfig points to a port-forwarded localhost</Title>
+	<Body>
+Telepresence would fail to connect to a cluster from within a container if the kubeconfig pointed to a port-forwarded localhost because that localhost is not reachable from within the container. This situation is now detected so that the address used from within the container has "localhost" replaced with "host.docker.internal", or an alternative alias configured by the user using the new `docker.hostGateway` parameter in the client configuration.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">A `telepresence connect --docker` would fail with some k3s configurations</Title>
 	<Body>
 Telepresence would fail to connect to a k3s cluster unless the cluster's IP was a loopback address. This is now changed so that any IP:port combination is accepted as long as a container can be found that defines a mapping for it.

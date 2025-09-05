@@ -24,6 +24,7 @@ func newUDP(listenPort uint16, tag tunnel.Tag, targetHost string, targetPort uin
 			listenPort: listenPort,
 			targetHost: targetHost,
 			targetPort: targetPort,
+			lCancel:    func() {},
 		},
 	}
 }

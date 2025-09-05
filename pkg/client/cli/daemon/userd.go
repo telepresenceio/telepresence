@@ -71,6 +71,14 @@ func GetUserClient(ctx context.Context) UserClient {
 	return nil
 }
 
+func MustGetUserClient(ctx context.Context) UserClient {
+	ud := GetUserClient(ctx)
+	if ud == nil {
+		panic("no user client in context")
+	}
+	return ud
+}
+
 func WithUserClient(ctx context.Context, ud UserClient) context.Context {
 	return context.WithValue(ctx, userDaemonKey{}, ud)
 }
@@ -82,6 +90,14 @@ func GetSession(ctx context.Context) *Session {
 		return s
 	}
 	return nil
+}
+
+func MustGetSession(ctx context.Context) *Session {
+	s := GetSession(ctx)
+	if s == nil {
+		panic("no session in context")
+	}
+	return s
 }
 
 func WithSession(ctx context.Context, s *Session) context.Context {

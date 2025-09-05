@@ -81,7 +81,7 @@ func (lls *logLevelCommand) setTempLogLevel(cmd *cobra.Command, args []string) e
 	}
 	defer progress.Stop(cmd.Context())
 	ctx := cmd.Context()
-	userD := daemon.GetUserClient(ctx)
+	userD := daemon.MustGetUserClient(ctx)
 	_, err := userD.SetLogLevel(ctx, rq)
 	return err
 }

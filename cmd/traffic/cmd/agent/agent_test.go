@@ -114,7 +114,7 @@ func Test_AppEnvironment(t *testing.T) {
 	require.NoError(t, err)
 
 	cn := config.AgentConfig().Containers[0]
-	env, err := agent.AppEnvironment(ctx, cn.Mounts, cn)
+	env, err := agent.AppEnvironment(ctx, cn)
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{
 		"ALPHA":                           "alpha",

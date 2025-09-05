@@ -108,7 +108,7 @@ func (s *state) Run(ctx context.Context) error {
 }
 
 func (s *state) create(ctx context.Context) (acquired bool, err error) {
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	ir, err := s.self.CreateRequest()
 	if err != nil {
 		return false, errcat.NoDaemonLogs.New(err)
@@ -173,7 +173,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 }
 
 func (s *state) leave(ctx context.Context) error {
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	ctx = progress.WithEventId(ctx, ud.DaemonID().Name)
 	progress.Working(ctx, "Ending ingest")
 	_, err := ud.LeaveIngest(ctx, &rpc.IngestIdentifier{
@@ -204,7 +204,7 @@ func (s *state) runCommand(ctx context.Context) error {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
 			return errcat.NoDaemonLogs.New(err)
 		}
-		if err = daemon.GetUserClient(ctx).AddHandler(ctx, fmt.Sprintf("%s/%s", s.WorkloadName, s.handlerContainer), cmd, ""); err != nil {
+		if err = daemon.MustGetUserClient(ctx).AddHandler(ctx, fmt.Sprintf("%s/%s", s.WorkloadName, s.handlerContainer), cmd, ""); err != nil {
 			return err
 		}
 		// The external command will not output anything to the logs. An error here

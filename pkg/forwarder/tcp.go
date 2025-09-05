@@ -27,6 +27,7 @@ func newTCP(listenPort uint16, tag tunnel.Tag, targetHost string, targetPort uin
 			listenPort: listenPort,
 			targetHost: targetHost,
 			targetPort: targetPort,
+			lCancel:    func() {},
 		},
 	}
 }
@@ -47,47 +48,54 @@ func (f *tcp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
 	dlog.Debugf(ctx, "Forwarding from %s", la)
 	defer dlog.Debugf(ctx, "Done forwarding from %s", la)
 
-	go func() {
-		<-ctx.Done()
-		listener.Close()
-	}()
+	go f.acceptLoop(listener)
+	<-ctx.Done()
+	return nil
+}
 
+func (f *tcp) listen(ctx context.Context) (*net.TCPListener, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Set up listener lifetime (same as the overall forwarder lifetime)
+	f.lCtx, f.lCancel = context.WithCancel(ctx)
+
+	// Set up a target lifetime
+	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
+	listenPort := f.listenPort
+
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(listenPort)})
+	if err != nil {
+		return nil, err
+	}
+	addr := listener.Addr().(*net.TCPAddr).AddrPort()
+	f.lCtx = dlog.WithField(f.lCtx, "listen", addr.String())
+	f.listenPort = addr.Port()
+	return listener, nil
+}
+
+func (f *tcp) acceptLoop(listener *net.TCPListener) {
 	for {
 		select {
-		case <-ctx.Done():
-			return nil
+		case <-f.lCtx.Done():
+			return
 		default:
 		}
 
 		conn, err := listener.AcceptTCP()
 		if err != nil {
-			if ctx.Err() != nil {
-				return nil
+			if f.lCtx.Err() != nil {
+				return
 			}
-			dlog.Infof(ctx, "Error on accept: %+v", err)
+			dlog.Infof(f.lCtx, "Error on accept: %+v", err)
 			continue
 		}
 		go func() {
 			if err := f.forwardConn(conn); err != nil {
-				dlog.Error(ctx, err)
+				dlog.Error(f.lCtx, err)
 			}
 		}()
 	}
-}
-
-func (f *tcp) listen(ctx context.Context) (*net.TCPListener, error) {
-	f.mu.Lock()
-
-	// Set up listener lifetime (same as the overall forwarder lifetime)
-	f.lCtx, f.lCancel = context.WithCancel(ctx)
-	f.lCtx = dlog.WithField(f.lCtx, "lis", f.listenPort)
-
-	// Set up target lifetime
-	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
-	listenPort := f.listenPort
-
-	f.mu.Unlock()
-	return net.ListenTCP("tcp", &net.TCPAddr{Port: int(listenPort)})
 }
 
 // Number of []byte chunks that can be cached by a wiretap connection before it discards data.

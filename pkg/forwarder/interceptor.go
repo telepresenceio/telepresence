@@ -21,7 +21,7 @@ type Interceptor interface {
 	InterceptId() string
 	InterceptInfo() *restapi.InterceptInfo
 	Serve(context.Context, chan<- netip.AddrPort) error
-	SetIntercepting(*manager.InterceptInfo)
+	SetIntercepting(context.Context, *manager.InterceptInfo)
 	SetStreamProvider(tunnel.ClientStreamProvider)
 	Target() (string, uint16)
 	AddWiretap(*manager.InterceptInfo)
@@ -129,7 +129,7 @@ func (f *interceptor) RemoveWiretap(id string) {
 	f.mu.Unlock()
 }
 
-func (f *interceptor) SetIntercepting(intercept *manager.InterceptInfo) {
+func (f *interceptor) SetIntercepting(ctx context.Context, intercept *manager.InterceptInfo) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -141,26 +141,27 @@ func (f *interceptor) SetIntercepting(intercept *manager.InterceptInfo) {
 		if f.intercept == nil {
 			return
 		}
-		dlog.Debugf(f.lCtx, "Forward target changed from intercept %s to %s",
+		dlog.Debugf(ctx, "Forward target changed from intercept %s to %s",
 			iceptInfo(f.intercept), iputil.JoinHostPort(f.targetHost, f.targetPort))
 	} else {
 		if f.intercept == nil {
-			dlog.Debugf(f.lCtx, "Forward target changed from %s to intercept %s",
+			dlog.Debugf(ctx, "Forward target changed from %s to intercept %s",
 				iputil.JoinHostPort(f.targetHost, f.targetPort), iceptInfo(intercept))
 		} else {
 			if f.intercept.Id == intercept.Id {
 				return
 			}
-			dlog.Debugf(f.lCtx, "Forward target changed from intercept %s to intercept %q", iceptInfo(f.intercept), iceptInfo(intercept))
+			dlog.Debugf(ctx, "Forward target changed from intercept %s to intercept %q", iceptInfo(f.intercept), iceptInfo(intercept))
 		}
 	}
-
-	// Drop existing connections
-	f.tCancel()
-
-	// Set up new target and lifetime
-	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
 	f.intercept = intercept
+	if f.lCtx != nil {
+		// Drop existing connections
+		f.tCancel()
+
+		// Set up a new target and lifetime
+		f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
+	}
 }
 
 func (f *interceptor) Tag() tunnel.Tag {

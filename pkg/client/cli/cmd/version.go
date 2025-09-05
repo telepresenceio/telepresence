@@ -109,7 +109,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 				subKvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
 			}
 			addDaemonVersions(udCtx, subKvf)
-			ud := daemon.GetUserClient(udCtx)
+			ud := daemon.MustGetUserClient(udCtx)
 			kvf.Add("Connection "+ud.DaemonID().Name, "\n"+subKvf.String())
 			_ = ud.Close()
 		}

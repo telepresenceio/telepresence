@@ -303,7 +303,7 @@ func ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, 
 	}
 	ctx := cmd.Context()
 
-	r, err := daemon.GetUserClient(ctx).List(ctx, &connector.ListRequest{Filter: connector.ListRequest_UNSPECIFIED})
+	r, err := daemon.MustGetUserClient(ctx).List(ctx, &connector.ListRequest{Filter: connector.ListRequest_UNSPECIFIED})
 	if err != nil {
 		dlog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
 		return nil, cobra.ShellCompDirectiveError

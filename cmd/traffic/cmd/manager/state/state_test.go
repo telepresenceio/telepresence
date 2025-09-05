@@ -12,6 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
@@ -52,6 +53,7 @@ func (fc *FakeClock) Now() time.Time {
 
 func (s *suiteState) TestStateInternal() {
 	ctx := context.Background()
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{})
 
 	testAgents := testdata.GetTestAgents(s.T())
 	testClients := testdata.GetTestClients(s.T())

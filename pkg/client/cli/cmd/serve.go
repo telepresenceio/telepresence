@@ -72,12 +72,12 @@ func (sc *serveCommand) run(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
-	uc := daemon.GetUserClient(ctx)
+	uc := daemon.MustGetUserClient(ctx)
 	ip, err := uc.Lookup(ctx, svc)
 	if err != nil {
 		return err
 	}
-	if daemon.GetUserClient(ctx).Containerized() {
+	if uc.Containerized() {
 		err = sc.serveFromContainer(ctx, ip)
 	} else {
 		err = sc.serveFromHost(ctx, ip)

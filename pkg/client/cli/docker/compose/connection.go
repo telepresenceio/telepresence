@@ -107,7 +107,7 @@ func (cc *connectionConfig) Connect(ctx context.Context, es map[string]serviceEx
 	if err != nil {
 		return nil, err
 	}
-	ds := daemon.GetSession(ctx)
+	ds := daemon.MustGetSession(ctx)
 	rootCfg, err := daemon.GetRootClientConfig(ds.Info.DaemonStatus)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to obtain routing info for connection: %v", err)

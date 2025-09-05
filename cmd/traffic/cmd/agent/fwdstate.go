@@ -120,7 +120,7 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 				ManagerProvider: &tunnel.TrafficManagerStreamProvider{Manager: fs.ManagerClient(), AgentSessionID: tunnel.SessionID(fs.sessionInfo.SessionId)},
 			})
 	}
-	fwd.SetIntercepting(activeIntercept)
+	fwd.SetIntercepting(ctx, activeIntercept)
 
 	// Remove inactive wiretaps.
 	for _, id := range fwd.WiretapIDs() {

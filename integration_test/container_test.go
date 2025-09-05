@@ -58,7 +58,7 @@ func (s *connectedSuite) Test_InterceptsContainer() {
 	itest.PingInterceptedEchoServer(ctx, svc, "80")
 
 	// Check that the env stems from the targeted container
-	s.Equal(iInfo.Environment["TAG"], "echo-server")
+	s.Equal("echo-server", iInfo.Environment["TAG"])
 	mountPoint := iInfo.Mount.LocalDir
 	dataDir := filepath.Join(mountPoint, "usr", "share", "data")
 	st, err := os.Stat(dataDir)

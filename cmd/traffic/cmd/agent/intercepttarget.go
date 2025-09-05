@@ -54,6 +54,10 @@ func (cp InterceptTarget) AgentPort() uint16 {
 	return cp[0].AgentPort
 }
 
+func (cp InterceptTarget) TargetPortNumeric() bool {
+	return cp[0].TargetPortNumeric
+}
+
 func (cp InterceptTarget) ContainerPort() uint16 {
 	return cp[0].ContainerPort
 }

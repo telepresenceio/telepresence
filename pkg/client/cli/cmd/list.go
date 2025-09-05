@@ -75,7 +75,7 @@ func list() *cobra.Command {
 			return nil, shellCompDir
 		}
 		ctx := cmd.Context()
-		userD := daemon.GetUserClient(ctx)
+		userD := daemon.MustGetUserClient(ctx)
 		resp, err := userD.GetNamespaces(ctx, &connector.GetNamespacesRequest{
 			ForClientAccess: false,
 			Prefix:          toComplete,
@@ -103,7 +103,7 @@ func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 	defer progress.Stop(cmd.Context())
 	stdout := cmd.OutOrStdout()
 	ctx := cmd.Context()
-	userD := daemon.GetUserClient(ctx)
+	userD := daemon.MustGetUserClient(ctx)
 	filter := connector.ListRequest_UNSPECIFIED
 	for i := range s.inclusions {
 		if s.inclusions[i] {

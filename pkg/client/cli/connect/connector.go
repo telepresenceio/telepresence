@@ -94,7 +94,7 @@ func quitHostConnector(ctx context.Context) {
 		}
 		return
 	}
-	ud := daemon.GetUserClient(udCtx)
+	ud := daemon.MustGetUserClient(udCtx)
 	progress.Working(ctx, "Quitting")
 	_, _ = ud.Quit(ctx, &emptypb.Empty{})
 	_ = ud.Close()
@@ -125,7 +125,7 @@ func quitDockerDaemons(ctx context.Context) {
 			}
 			continue
 		}
-		ud := daemon.GetUserClient(udCtx)
+		ud := daemon.MustGetUserClient(udCtx)
 		_, _ = ud.Quit(ctx, &emptypb.Empty{})
 		_ = ud.Close()
 		maybeDeleteNetwork(ctx, ud.DaemonInfo())
@@ -147,7 +147,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, e
 	ctx = progress.WithEventId(ctx, daemonID.Name)
 	launched := false
 	defer func() {
-		if err == nil && required && !(proc.IsAdmin() || daemon.GetUserClient(rc).Containerized()) {
+		if err == nil && required && !(proc.IsAdmin() || daemon.MustGetUserClient(rc).Containerized()) {
 			// The RootDaemon must be started if the UserDaemon was started
 			err = EnsureRootDaemonRunning(ctx)
 		}
@@ -358,7 +358,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	ctx := cmd.Context()
-	if daemon.GetSession(ctx).Started {
+	if daemon.MustGetSession(ctx).Started {
 		defer Disconnect(ctx)
 	}
 	return proc.Run(dos.WithStdio(ctx, cmd), nil, args[0], args[1:]...)
@@ -475,7 +475,7 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 	// Try dialing the host daemon using the well-known socket.
 	ctx, err := DiscoverDaemon(ctx, cr.Use, daemonID)
 	if err == nil {
-		ud := daemon.GetUserClient(ctx)
+		ud := daemon.MustGetUserClient(ctx)
 		if ud.Containerized() {
 			ctx = docker.EnableClient(ctx)
 			cr.Docker = true
@@ -632,7 +632,7 @@ func connectResult(ctx context.Context, ci *connector.ConnectInfo, withProgress 
 }
 
 func connectSession(ctx context.Context, useLine string, request *daemon.Request, required bool) (session *daemon.Session, err error) {
-	userD := daemon.GetUserClient(ctx)
+	userD := daemon.MustGetUserClient(ctx)
 	if userD.Containerized() {
 		patcher.AnnotateConnectRequest(request.ConnectRequest, docker.TpCache, userD.DaemonID().KubeContext)
 	}

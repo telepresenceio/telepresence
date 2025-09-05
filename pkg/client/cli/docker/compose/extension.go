@@ -157,7 +157,7 @@ func (e *extension) setConnection(c *connection) {
 }
 
 func (e *extension) activate(*transformer) (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *extension) deactivate() error {
@@ -178,11 +178,11 @@ func (e *proxyExtension) init(c *config, et types.EngagementType, composeService
 }
 
 func (e *proxyExtension) activate(*transformer) (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *extension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 // Name is the name of the service that this proxy connects to. It defaults to the name of the compose-service.
@@ -281,7 +281,7 @@ func (e *interceptExtension) activate(t *transformer) (*engagement, error) {
 }
 
 func (e *interceptExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *interceptExtension) service() string {
@@ -322,7 +322,7 @@ type ingestExtension struct {
 
 func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
 	ctx := e.conn
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	sftpPort, err := t.config.getMountPort(e)
 	if err != nil {
 		return nil, err
@@ -369,7 +369,7 @@ func (e *ingestExtension) container() string {
 
 func (e *ingestExtension) deactivate() error {
 	ctx := context.WithoutCancel(e.connection().Context)
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	ig, err := ud.GetIngest(ctx, &connector.IngestIdentifier{
 		WorkloadName:  e.workload(),
 		ContainerName: e.container(),
@@ -388,7 +388,7 @@ func (e *ingestExtension) deactivate() error {
 }
 
 func (e *ingestExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 // ToPod maps local ports to ports in an engaged pod.
@@ -418,7 +418,7 @@ func (e *replaceExtension) deactivate() error {
 }
 
 func (e *replaceExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *replaceExtension) container() string {
@@ -452,7 +452,7 @@ func (e *wiretapExtension) deactivate() error {
 }
 
 func (e *wiretapExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.GetUserClient(e.conn), e, 0)
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *wiretapExtension) service() string {
@@ -543,7 +543,7 @@ func createInterceptRequest(e workloadExtension, localMountPort uint16) *connect
 
 func activateIntercept(e workloadExtension, t *transformer) (*engagement, error) {
 	ctx := e.connection()
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	sftpPort, err := t.config.getMountPort(e)
 	if err != nil {
 		return nil, err
@@ -577,7 +577,7 @@ func activateIntercept(e workloadExtension, t *transformer) (*engagement, error)
 
 func deactivateIntercept(e workloadExtension) error {
 	ctx := context.WithoutCancel(e.connection().Context)
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	ic, err := ud.GetIntercept(ctx, &manager.GetInterceptRequest{Name: e.name()})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {

@@ -93,7 +93,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		spec.LocalPorts = append(spec.LocalPorts, pp.String())
 	}
 
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 
 	// Parse port into spec based on how it's formatted
 	s.localPort, s.dockerPort, spec.PortIdentifier = 0, 0, ""
@@ -168,9 +168,20 @@ func (s *state) Run(ctx context.Context) (*Info, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.handlerContainer, s.Cmdline, err = s.DockerFlags.GetContainerNameAndArgs(fmt.Sprintf("%s-%s-%d", s.what(), s.Name(), s.localPort))
+		defaultContainerName := fmt.Sprintf("%s-%s-%d", s.what(), s.Name(), s.localPort)
+		s.handlerContainer, s.Cmdline, err = s.DockerFlags.GetContainerNameAndArgs(defaultContainerName)
 		if err != nil {
 			return nil, err
+		}
+		if s.handlerContainer != defaultContainerName {
+			// Check if the given name is already in use.
+			ud := daemon.MustGetSession(ctx)
+			ip, err := ud.Lookup(ctx, s.handlerContainer)
+			if err == nil {
+				// We're about to start a container with a name that is already present in the cluster. That's
+				// probably a mistake.
+				progress.Warningf(ctx, "the container name %q will override the current mapping to IP %s", s.handlerContainer, ip)
+			}
 		}
 	}
 	err = client.WithEnsuredState(ctx, s.create, s.runCommand, s.leave)
@@ -191,7 +202,7 @@ func (s *state) what() string {
 }
 
 func (s *state) create(ctx context.Context) (acquired bool, err error) {
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	s.status, err = ud.Status(ctx, &empty.Empty{})
 	if err != nil {
 		return false, err
@@ -288,7 +299,7 @@ func (s *state) leave(ctx context.Context) error {
 		}()
 	}
 	n := strings.TrimSpace(s.Name())
-	ud := daemon.GetUserClient(ctx)
+	ud := daemon.MustGetUserClient(ctx)
 	progress.Workingf(ctx, "Ending %s", s.what())
 	r, err := ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: n})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
@@ -315,7 +326,7 @@ func (s *state) runCommand(ctx context.Context) error {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
 			return errcat.NoDaemonLogs.New(err)
 		}
-		if err = daemon.GetUserClient(ctx).AddHandler(ctx, env["TELEPRESENCE_INTERCEPT_ID"], cmd, ""); err != nil {
+		if err = daemon.MustGetUserClient(ctx).AddHandler(ctx, env["TELEPRESENCE_INTERCEPT_ID"], cmd, ""); err != nil {
 			return err
 		}
 		// The external command will not output anything to the logs. An error here

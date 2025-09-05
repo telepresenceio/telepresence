@@ -343,7 +343,7 @@ nextCfg:
 func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecreate bool) (composeFile string, err error) {
 	cs := t.connections()
 	for _, c := range cs {
-		ud := daemon.GetUserClient(c)
+		ud := daemon.MustGetUserClient(c)
 		composeFile = ud.DaemonInfo().ComposeFile
 		if composeFile != "" {
 			if !forceRecreate {
@@ -393,7 +393,7 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 		// issued if one of the connections is removed. This is necessary because the network represented by the
 		// daemon will no longer be available.
 		for _, c := range cs {
-			ud := daemon.GetUserClient(c)
+			ud := daemon.MustGetUserClient(c)
 			info := ud.DaemonInfo()
 			info.ComposeFile = composeFile
 			err = daemon.SaveInfo(ctx, info, ud.DaemonID().InfoFileName())

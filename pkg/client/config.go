@@ -935,15 +935,19 @@ func (tr *Teleroute) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 
 type Docker struct {
 	// If set, add flag "--add-host=host.docker.internal:host-gateway" when starting the containerized daemon container
-	AddHostGateway bool      `json:"addHostGateway"`
+	AddHostGateway bool      `json:"addHostGateway,omitzero"`
 	Telemount      Telemount `json:"telemount,omitzero"`
 	Teleroute      Teleroute `json:"teleroute,omitzero"`
+	HostGateway    string    `json:"hostGateway,omitzero"`
 }
+
+const DefaultHostGateway = "host.docker.internal"
 
 var defaultDocker = Docker{ //nolint:gochecknoglobals // constant
 	AddHostGateway: defaultAddHostGateway,
 	Telemount:      defaultTelemount,
 	Teleroute:      defaultTeleroute,
+	HostGateway:    DefaultHostGateway,
 }
 
 func (d *Docker) defaults() DefaultsAware {
