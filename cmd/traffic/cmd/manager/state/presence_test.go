@@ -7,12 +7,13 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 func TestPresence(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
-
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{})
 	p := NewState(ctx)
 
 	now := time.Now()

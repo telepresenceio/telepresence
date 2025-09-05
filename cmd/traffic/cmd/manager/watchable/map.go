@@ -41,10 +41,10 @@ func NewMap[K comparable, V any](equal func(V, V) bool, notifyDelay time.Duratio
 // emitted.
 //
 // The first snapshot is emitted immediately after the call to Subscribe(), and then whenever the map
-// changes a key - value binding for which the filter evaluates to true.
+// changes, a key - value binding for which the filter evaluates to true.
 //
 // The snapshot content will reflect actual values in the map. Mutating them will thus mutate the
-// map without the map's knowledge, and hence not trigger notifications to subscribers.
+// map without the map's knowledge and hence not trigger notifications to subscribers.
 //
 // The returned channel will be closed when the given channel is closed.
 func (m *Map[K, V]) Subscribe(done <-chan struct{}, filter func(K, V) bool) <-chan map[K]V {
@@ -60,7 +60,7 @@ func (m *Map[K, V]) Subscribe(done <-chan struct{}, filter func(K, V) bool) <-ch
 		sb := &subscription[K, V]{filter: filter, channel: ch}
 		m.subscribers.Store(id, sb)
 		go func() {
-			// Trigger initial snapshot, then wait for subscription to end
+			// Trigger the initial snapshot, then wait for the subscription to end
 			m.sendSnapshot(sb)
 			<-done
 			m.subscribers.Delete(id)
@@ -213,9 +213,9 @@ func (m *Map[K, V]) Store(key K, value V) {
 // markSubscribers marks all subscribers interested in the given key and value binding.
 func (m *Map[K, V]) markSubscribers(key K, value V) (didMark bool) {
 	m.subscribers.Range(func(_ uuid.UUID, sb *subscription[K, V]) bool {
-		if !sb.mark.Load() && sb.filter(key, value) {
+		// Don't run the filter if the subscriber is marked already.
+		if !sb.mark.Load() && sb.filter(key, value) && sb.mark.CompareAndSwap(false, true) {
 			didMark = true
-			sb.mark.Store(true)
 		}
 		return true
 	})
@@ -224,12 +224,17 @@ func (m *Map[K, V]) markSubscribers(key K, value V) (didMark bool) {
 
 // notify will send a snapshot to all subscribers that have been marked.
 func (m *Map[K, V]) notify() {
-	m.subscribers.Range(func(_ uuid.UUID, sb *subscription[K, V]) bool {
-		if sb.mark.CompareAndSwap(true, false) {
-			m.sendSnapshot(sb)
-		}
-		return true
-	})
+	// We need to loop until all marked snapshots have been sent, because new marks may be added during sending.
+	for didSend := true; didSend; {
+		didSend = false
+		m.subscribers.Range(func(_ uuid.UUID, sb *subscription[K, V]) bool {
+			if sb.mark.CompareAndSwap(true, false) {
+				m.sendSnapshot(sb)
+				didSend = true
+			}
+			return true
+		})
+	}
 }
 
 // sendSnapshot evaluates and sends a snapshot to the subscriber.
