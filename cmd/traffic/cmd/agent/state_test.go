@@ -42,7 +42,7 @@ func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.Sta
 	s := agent.NewState(c)
 	cn := c.AgentConfig().Containers[0]
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
-	s.AddContainerState(cn.Name, agent.NewContainerState(s, cn, cnMountPoint, map[string]string{}))
+	s.AddContainerState(cn.Name, s.NewContainerState(s, cn, cnMountPoint, map[string]string{}))
 	s.AddInterceptState(s.NewInterceptState(f, agent.NewInterceptTarget(cn.Intercepts), cn.Name))
 	return f, s
 }

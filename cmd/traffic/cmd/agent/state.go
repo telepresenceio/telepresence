@@ -10,6 +10,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -23,6 +24,7 @@ type State interface {
 	tunnel.ClientStreamProvider
 	AddInterceptState(is InterceptState)
 	AgentState() restapi.AgentState
+	ContainerStates() map[string]ContainerState
 	InterceptStates() []InterceptState
 	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
 	ManagerClient() manager.ManagerClient
@@ -33,16 +35,20 @@ type State interface {
 	FtpPort() uint16
 	SftpPort() uint16
 	NewInterceptState(forwarder forwarder.Interceptor, target InterceptTarget, container string) InterceptState
+	NewContainerState(s State, cn *agentconfig.Container, mountPoint string, env map[string]string) ContainerState
 	AddContainerState(containerName string, containerState ContainerState)
 }
 
 type ContainerState interface {
 	State
+	Container() *agentconfig.Container
+	GlobalState() State
 	Name() string
 	ReplaceContainer() bool
 	MountPoint() string
 	Mounts() types.MountPolicies
 	Env() map[string]string
+	AddPortHandler(ctx context.Context, pp types.PortAndProto, ics []*agentconfig.Intercept) forwarder.Interceptor
 }
 
 // An InterceptState implements what's needed to intercept one target port.
@@ -107,6 +113,10 @@ func (s *state) AddContainerState(containerName string, containerState Container
 
 func (s *state) AgentState() restapi.AgentState {
 	return s
+}
+
+func (s *state) ContainerStates() map[string]ContainerState {
+	return s.containerStates
 }
 
 func (s *state) InterceptStates() []InterceptState {

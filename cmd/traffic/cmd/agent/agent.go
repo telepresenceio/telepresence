@@ -29,11 +29,9 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -43,7 +41,7 @@ var DisplayName = "OSS Traffic Agent" //nolint:gochecknoglobals // extension poi
 // AppEnvironment returns the environment visible to this agent together with environment variables
 // explicitly declared for the app container and minus the environment variables provided by this
 // config.
-func AppEnvironment(ctx context.Context, mounts types.MountPolicies, ag *agentconfig.Container) (map[string]string, error) {
+func AppEnvironment(ctx context.Context, ag *agentconfig.Container) (map[string]string, error) {
 	osEnv := dos.Environ(ctx)
 	prefix := agentconfig.EnvPrefixApp + ag.EnvPrefix
 	fullEnv := make(map[string]string, len(osEnv))
@@ -79,6 +77,7 @@ func AppEnvironment(ctx context.Context, mounts types.MountPolicies, ag *agentco
 		}
 	}
 	fullEnv[agentconfig.EnvInterceptContainer] = ag.Name
+	mounts := ag.Mounts
 	if len(mounts) > 0 {
 		var localMounts, remoteMounts []string
 		for path, policy := range mounts {
@@ -187,65 +186,42 @@ func Main(ctx context.Context, _ ...string) error {
 		return err
 	}
 
-	// Talk to the Traffic Manager
 	g.Go("sidecar", func(ctx context.Context) error {
-		return sidecar(ctx, s, info)
+		return Sidecar(ctx, s, info)
 	})
 
 	// Wait for exit
 	return g.Wait()
 }
 
-func sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
+func Sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 	// Manage the forwarders
 	ac := s.AgentConfig()
 	for _, cn := range ac.Containers {
 		ci := info.Containers[cn.Name]
-		s.AddContainerState(cn.Name, NewContainerState(s, cn, ci.MountPoint, ci.Environment))
-
-		// Group the container's intercepts by agent port
-		icStates := make(map[types.PortAndProto][]*agentconfig.Intercept, len(cn.Intercepts))
-		for _, ic := range cn.Intercepts {
-			ap := ic.AgentPort
-			if cn.Replace == agentconfig.ReplacePolicyContainer {
-				// Listen to replaced container's original port.
-				ap = ic.ContainerPort
-			}
-			k := types.PortAndProto{Port: ap, Proto: ic.Protocol}
-			icStates[k] = append(icStates[k], ic)
-		}
-
-		for pp, ics := range icStates {
-			ic := ics[0] // They all have the same protocol container port, so the first one will do.
-			var fwd forwarder.Interceptor
-			var cp uint16
-			if cn.Replace == agentconfig.ReplacePolicyIntercept {
-				if ic.TargetPortNumeric {
-					// We must differentiate between connections originating from the agent's forwarder to the container
-					// port and those from other sources. The former should not be routed back, while the latter should
-					// always be routed to the agent. We do this by using a proxy port that will be recognized by the
-					// iptables filtering in our init-container.
-					cp = ac.ProxyPort(ic)
-				} else {
-					cp = ic.ContainerPort
-				}
-				// Redirect non-intercepted traffic to the pod, so that injected sidecars that hijack the ports for
-				// incoming connections will continue to work.
-				targetHost := s.PodIP()
-				fwd = forwarder.NewInterceptor(pp, tunnel.AgentToProxied, targetHost, cp)
-			} else {
-				fwd = forwarder.NewInterceptor(pp, tunnel.AgentToClient, "", 0)
-				cp = ic.ContainerPort
-			}
-
-			dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s", iputil.JoinHostPort(cn.Name, cp)), func(ctx context.Context) error {
-				return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
-			})
-			s.AddInterceptState(s.NewInterceptState(fwd, NewInterceptTarget(ics), cn.Name))
+		cs := s.NewContainerState(s, cn, ci.MountPoint, ci.Environment)
+		s.AddContainerState(cn.Name, cs)
+		for pp, ics := range MakeInterceptStates(cn) {
+			cs.AddPortHandler(ctx, pp, ics)
 		}
 	}
 	TalkToManagerLoop(ctx, s, info)
 	return nil
+}
+
+func MakeInterceptStates(cn *agentconfig.Container) map[types.PortAndProto][]*agentconfig.Intercept {
+	// Group the container's intercepts by agent port
+	icStates := make(map[types.PortAndProto][]*agentconfig.Intercept, len(cn.Intercepts))
+	for _, ic := range cn.Intercepts {
+		ap := ic.AgentPort
+		if cn.Replace == agentconfig.ReplacePolicyContainer {
+			// Listen to replaced container's original port.
+			ap = ic.ContainerPort
+		}
+		k := types.PortAndProto{Port: ap, Proto: ic.Protocol}
+		icStates[k] = append(icStates[k], ic)
+	}
+	return icStates
 }
 
 func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
@@ -338,7 +314,7 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 	containers := make(map[string]*rpc.AgentInfo_ContainerInfo, len(ac.Containers))
 	for _, cn := range ac.Containers {
 		appMounts := cn.Mounts
-		env, err := AppEnvironment(ctx, appMounts, cn)
+		env, err := AppEnvironment(ctx, cn)
 		if err != nil {
 			return nil, err
 		}
