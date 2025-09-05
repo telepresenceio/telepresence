@@ -112,7 +112,7 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return errcat.User.New(err)
 		}
-		gl.outputFile = filepath.Join(pwd, fmt.Sprintf("telepresence_logs_%s.zip", time.Now().Format(time.RFC3339)))
+		gl.outputFile = filepath.Join(pwd, fmt.Sprintf("telepresence_logs_%s.zip", time.Now().UTC().Format("060102T150405")))
 	} else if !strings.HasSuffix(gl.outputFile, ".zip") {
 		return errcat.User.New("output file must end in .zip")
 	}
