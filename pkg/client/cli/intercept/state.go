@@ -168,9 +168,20 @@ func (s *state) Run(ctx context.Context) (*Info, error) {
 		if err != nil {
 			return nil, err
 		}
-		s.handlerContainer, s.Cmdline, err = s.DockerFlags.GetContainerNameAndArgs(fmt.Sprintf("%s-%s-%d", s.what(), s.Name(), s.localPort))
+		defaultContainerName := fmt.Sprintf("%s-%s-%d", s.what(), s.Name(), s.localPort)
+		s.handlerContainer, s.Cmdline, err = s.DockerFlags.GetContainerNameAndArgs(defaultContainerName)
 		if err != nil {
 			return nil, err
+		}
+		if s.handlerContainer != defaultContainerName {
+			// Check if the given name is already in use.
+			ud := daemon.MustGetSession(ctx)
+			ip, err := ud.Lookup(ctx, s.handlerContainer)
+			if err == nil {
+				// We're about to start a container with a name that is already present in the cluster. That's
+				// probably a mistake.
+				progress.Warningf(ctx, "the container name %q will override the current mapping to IP %s", s.handlerContainer, ip)
+			}
 		}
 	}
 	err = client.WithEnsuredState(ctx, s.create, s.runCommand, s.leave)
