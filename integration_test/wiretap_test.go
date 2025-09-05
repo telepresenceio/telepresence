@@ -132,6 +132,7 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 	var podName string
 	s.Run("Find pod with agent", func() {
 		// Retrieve the name of the wiretapped pod
+		ctx := s.Context()
 		s.Eventually(func() bool {
 			pods := itest.RunningPodsWithAgents(ctx, s.svc, s.AppNamespace())
 			dlog.Infof(ctx, "%s pods with agents: %v", s.svc, pods)
@@ -148,7 +149,7 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		Stdout []connector.WorkloadInfo `json:"stdout"`
 	}
 	s.Run("Place wiretap 2", func() {
-		so := itest.TelepresenceOk(ctx, "wiretap", "--workload", s.svc, "--mount=false", "--port", fmt.Sprintf("%d:80", localPort2), "wt2")
+		so := itest.TelepresenceOk(s.Context(), "wiretap", "--workload", s.svc, "--mount=false", "--port", fmt.Sprintf("%d:80", localPort2), "wt2")
 		s.Contains(so, "Using Deployment "+s.svc)
 	})
 
