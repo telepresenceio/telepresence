@@ -246,6 +246,7 @@ func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
 }
 
 type Clients interface {
+	GetRandomAgent(ctx context.Context) agent.AgentClient
 	GetClient(netip.Addr) tunnel.Provider
 	WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error
 	WaitForIP(ctx context.Context, timeout time.Duration, ip netip.Addr) error
@@ -307,6 +308,29 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 		pvd = ternary
 	}
 	return pvd
+}
+
+// GetRandomAgent returns an active agent.AgentClient and ensures that it is kept alive
+// for at least 5 seconds.
+//
+// The function returns nil when there are no active agents.
+func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
+	s.clients.Range(func(_ string, ac *client) bool {
+		if ac.connected() {
+			atomic.StoreInt64(&ac.lastActive, time.Now().UnixNano())
+			aa = ac.cli
+			return false
+		}
+		if s.isProxyVIA(ac.info) {
+			var err error
+			aa, err = ac.ensureConnect(ctx)
+			if err == nil {
+				return false
+			}
+		}
+		return true
+	})
+	return aa
 }
 
 // GetWorkloadClient returns tunnel.Provider that opens a tunnel to a traffic-agent that

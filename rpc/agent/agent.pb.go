@@ -29,28 +29,33 @@ var File_agent_agent_proto protoreflect.FileDescriptor
 
 const file_agent_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x11agent/agent.proto\x12\x12telepresence.agent\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15manager/manager.proto2\xfb\x01\n" +
-	"\x05Agent\x12V\n" +
+	"\x11agent/agent.proto\x12\x12telepresence.agent\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15manager/manager.proto2\xd0\x02\n" +
+	"\x05Agent\x12S\n" +
+	"\x06Lookup\x12#.telepresence.manager.LookupRequest\x1a$.telepresence.manager.LookupResponse\x12V\n" +
 	"\x06Tunnel\x12#.telepresence.manager.TunnelMessage\x1a#.telepresence.manager.TunnelMessage(\x010\x01\x12E\n" +
 	"\aVersion\x12\x16.google.protobuf.Empty\x1a\".telepresence.manager.VersionInfo2\x12S\n" +
 	"\tWatchDial\x12!.telepresence.manager.SessionInfo\x1a!.telepresence.manager.DialRequest0\x01B5Z3github.com/telepresenceio/telepresence/rpc/v2/agentb\x06proto3"
 
 var file_agent_agent_proto_goTypes = []any{
-	(*manager.TunnelMessage)(nil), // 0: telepresence.manager.TunnelMessage
-	(*emptypb.Empty)(nil),         // 1: google.protobuf.Empty
-	(*manager.SessionInfo)(nil),   // 2: telepresence.manager.SessionInfo
-	(*manager.VersionInfo2)(nil),  // 3: telepresence.manager.VersionInfo2
-	(*manager.DialRequest)(nil),   // 4: telepresence.manager.DialRequest
+	(*manager.LookupRequest)(nil),  // 0: telepresence.manager.LookupRequest
+	(*manager.TunnelMessage)(nil),  // 1: telepresence.manager.TunnelMessage
+	(*emptypb.Empty)(nil),          // 2: google.protobuf.Empty
+	(*manager.SessionInfo)(nil),    // 3: telepresence.manager.SessionInfo
+	(*manager.LookupResponse)(nil), // 4: telepresence.manager.LookupResponse
+	(*manager.VersionInfo2)(nil),   // 5: telepresence.manager.VersionInfo2
+	(*manager.DialRequest)(nil),    // 6: telepresence.manager.DialRequest
 }
 var file_agent_agent_proto_depIdxs = []int32{
-	0, // 0: telepresence.agent.Agent.Tunnel:input_type -> telepresence.manager.TunnelMessage
-	1, // 1: telepresence.agent.Agent.Version:input_type -> google.protobuf.Empty
-	2, // 2: telepresence.agent.Agent.WatchDial:input_type -> telepresence.manager.SessionInfo
-	0, // 3: telepresence.agent.Agent.Tunnel:output_type -> telepresence.manager.TunnelMessage
-	3, // 4: telepresence.agent.Agent.Version:output_type -> telepresence.manager.VersionInfo2
-	4, // 5: telepresence.agent.Agent.WatchDial:output_type -> telepresence.manager.DialRequest
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
+	0, // 0: telepresence.agent.Agent.Lookup:input_type -> telepresence.manager.LookupRequest
+	1, // 1: telepresence.agent.Agent.Tunnel:input_type -> telepresence.manager.TunnelMessage
+	2, // 2: telepresence.agent.Agent.Version:input_type -> google.protobuf.Empty
+	3, // 3: telepresence.agent.Agent.WatchDial:input_type -> telepresence.manager.SessionInfo
+	4, // 4: telepresence.agent.Agent.Lookup:output_type -> telepresence.manager.LookupResponse
+	1, // 5: telepresence.agent.Agent.Tunnel:output_type -> telepresence.manager.TunnelMessage
+	5, // 6: telepresence.agent.Agent.Version:output_type -> telepresence.manager.VersionInfo2
+	6, // 7: telepresence.agent.Agent.WatchDial:output_type -> telepresence.manager.DialRequest
+	4, // [4:8] is the sub-list for method output_type
+	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name

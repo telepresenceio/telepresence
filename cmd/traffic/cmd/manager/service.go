@@ -980,6 +980,56 @@ func (s *service) resolveSelfDNS(svcIP net.IP, request *rpc.DNSRequest) (rrs dns
 	return rrs
 }
 
+func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (response *rpc.LookupResponse, err error) {
+	dlog.Debugf(ctx, "lookup %q", request.Name)
+	var ips []netip.Addr
+	defer func() {
+		if err == nil {
+			dlog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
+		}
+	}()
+	session := request.GetSession()
+	client := s.state.GetClient(tunnel.SessionID(session.SessionId))
+	if client == nil {
+		return nil, status.Errorf(codes.NotFound, "Client session %q not found", session.SessionId)
+	}
+	ctx = managerutil.WithSessionInfo(ctx, session)
+	if svcIP := s.clusterInfo.ServiceIP(); svcIP != nil && (request.Name == s.serviceNameNs || request.Name == s.serviceNameFQN) {
+		addr, _ := netip.AddrFromSlice(svcIP)
+		b, _ := addr.MarshalBinary()
+		return &rpc.LookupResponse{Ips: [][]byte{b}}, nil
+	}
+	tmNamespace := managerutil.GetEnv(ctx).ManagerNamespace
+	name := request.Name
+	if len(name) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "empty name")
+	}
+	nDots := 0
+	for _, c := range name {
+		if c == '.' {
+			nDots++
+		}
+	}
+	if nDots == 1 && client.Namespace != tmNamespace {
+		name += client.Namespace
+	}
+	ips, err = net.DefaultResolver.LookupNetIP(ctx, "ip", name)
+	if err != nil {
+		_, err = dnsproxy.MakeDNSError(err)
+		if err != nil {
+			return nil, err
+		}
+	}
+	response = &rpc.LookupResponse{}
+	if len(ips) > 0 {
+		response.Ips = make([][]byte, len(ips))
+		for i, ip := range ips {
+			response.Ips[i], _ = ip.MarshalBinary()
+		}
+	}
+	return response, nil
+}
+
 func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (response *rpc.DNSResponse, err error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSession())
 	qType := uint16(request.Type)

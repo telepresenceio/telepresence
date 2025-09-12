@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"net"
+	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
@@ -12,6 +15,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -23,6 +27,23 @@ type awaitingForward struct {
 
 func (s *state) Version(context.Context, *emptypb.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
+}
+
+func (s *state) Lookup(ctx context.Context, request *rpc.LookupRequest) (*rpc.LookupResponse, error) {
+	dlog.Debugf(ctx, "lookup %q", request.Name)
+	var ips []netip.Addr
+	response := &rpc.LookupResponse{}
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", strings.TrimSuffix(request.Name, "."))
+	if err != nil {
+		_, err = dnsproxy.MakeDNSError(err)
+	} else {
+		response.Ips = make([][]byte, len(ips))
+		for i, ip := range ips {
+			response.Ips[i], _ = ip.MarshalBinary()
+		}
+	}
+	dlog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
+	return response, err
 }
 
 func (s *state) Tunnel(server agent.Agent_TunnelServer) error {

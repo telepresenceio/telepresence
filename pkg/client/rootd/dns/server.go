@@ -576,17 +576,20 @@ func (s *Server) RequestCount() int {
 	return int(atomic.LoadInt64(&s.requestCount))
 }
 
-func copyRRs(rrs dnsproxy.RRs, qTypes []uint16) dnsproxy.RRs {
+func copyRRs(rrs dnsproxy.RRs, qTypes []uint16) (cp, others dnsproxy.RRs) {
 	if len(rrs) == 0 {
-		return rrs
+		return rrs, nil
 	}
-	cp := make(dnsproxy.RRs, 0, len(rrs))
+	cp = make(dnsproxy.RRs, 0, len(rrs))
+	others = make(dnsproxy.RRs, 0, len(rrs))
 	for _, rr := range rrs {
 		if slice.Contains(qTypes, rr.Header().Rrtype) {
 			cp = append(cp, dns.Copy(rr))
+		} else {
+			others = append(others, dns.Copy(rr))
 		}
 	}
-	return cp
+	return cp, others
 }
 
 type cacheKey struct {
@@ -749,9 +752,32 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 		}
 	}
 
-	answer = copyRRs(answer, qTypes)
+	answer, others := copyRRs(answer, qTypes)
+	answer = answer.PruneEmptyNames()
 	dv.answer = answer
 	dv.rCode = rCode
+	if rCode == dns.RcodeSuccess {
+		for _, rr := range others {
+			// Those should be cached as well.
+			qType := rr.Header().Rrtype
+			key := cacheKey{name: rr.Header().Name, qType: qType}
+			rrs := dnsproxy.RRs{}
+			if !dnsproxy.IsEmptyName(rr) {
+				rrs = append(rrs, rr)
+			}
+			s.cache.Compute(key, func(oldValue *cacheEntry, loaded bool) (newValue *cacheEntry, op xsync.ComputeOp) {
+				if loaded {
+					oldValue.answer = rrs
+					oldValue.rCode = rCode
+					oldValue.close()
+					return oldValue, xsync.CancelOp
+				}
+				ce := &cacheEntry{wait: make(chan struct{}), created: time.Now(), answer: rrs, rCode: rCode}
+				ce.close()
+				return ce, xsync.UpdateOp
+			})
+		}
+	}
 	return answer, rCode, err
 }
 

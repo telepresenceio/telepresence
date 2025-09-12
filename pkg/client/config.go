@@ -1296,27 +1296,29 @@ type DNS struct {
 	// Deprecated: Use VIFAddress.
 	RemoteIP netip.Addr `json:"remoteIP"`
 
-	LocalAddress    netip.AddrPort `json:"localAddress"`
-	VIFAddress      netip.AddrPort `json:"vifAddress"`
-	IncludeSuffixes []string       `json:"includeSuffixes"`
-	ExcludeSuffixes []string       `json:"excludeSuffixes"`
-	Excludes        []string       `json:"excludes"`
-	Mappings        DNSMappings    `json:"mappings"`
-	LookupTimeout   time.Duration  `json:"lookupTimeout,format:units"`
-	RecursionCheck  bool           `json:"recursionCheck"`
+	LocalAddress     netip.AddrPort `json:"localAddress"`
+	VIFAddress       netip.AddrPort `json:"vifAddress"`
+	IncludeSuffixes  []string       `json:"includeSuffixes"`
+	ExcludeSuffixes  []string       `json:"excludeSuffixes"`
+	Excludes         []string       `json:"excludes"`
+	Mappings         DNSMappings    `json:"mappings"`
+	LookupTimeout    time.Duration  `json:"lookupTimeout,format:units"`
+	RecursionCheck   bool           `json:"recursionCheck"`
+	UseComplexLookup bool           `json:"useComplexLookup"`
 }
 
 // DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
-	Error           string         `json:"error"`
-	LocalAddress    netip.AddrPort `json:"local_address"`
-	VIFAddress      netip.AddrPort `json:"vif_address"`
-	IncludeSuffixes []string       `json:"include_suffixes"`
-	ExcludeSuffixes []string       `json:"exclude_suffixes"`
-	Excludes        []string       `json:"excludes"`
-	Mappings        DNSMappings    `json:"mappings"`
-	LookupTimeout   time.Duration  `json:"lookup_timeout,format:units"`
-	RecursionCheck  bool           `json:"recursion_check"`
+	Error            string         `json:"error"`
+	LocalAddress     netip.AddrPort `json:"local_address"`
+	VIFAddress       netip.AddrPort `json:"vif_address"`
+	IncludeSuffixes  []string       `json:"include_suffixes"`
+	ExcludeSuffixes  []string       `json:"exclude_suffixes"`
+	Excludes         []string       `json:"excludes"`
+	Mappings         DNSMappings    `json:"mappings"`
+	LookupTimeout    time.Duration  `json:"lookup_timeout,format:units"`
+	RecursionCheck   bool           `json:"recursion_check"`
+	UseComplexLookup bool           `json:"use_complex_lookup"`
 }
 
 func (d *DNS) ToRPC() *daemon.DNSConfig {
@@ -1348,15 +1350,16 @@ func (d *DNS) ToRPC() *daemon.DNSConfig {
 
 func (d *DNS) ToSnake() *DNSSnake {
 	return &DNSSnake{
-		LocalAddress:    d.LocalAddress,
-		VIFAddress:      d.VIFAddress,
-		ExcludeSuffixes: d.ExcludeSuffixes,
-		IncludeSuffixes: d.IncludeSuffixes,
-		Excludes:        d.Excludes,
-		Mappings:        d.Mappings,
-		LookupTimeout:   d.LookupTimeout,
-		RecursionCheck:  d.RecursionCheck,
-		Error:           d.Error,
+		LocalAddress:     d.LocalAddress,
+		VIFAddress:       d.VIFAddress,
+		ExcludeSuffixes:  d.ExcludeSuffixes,
+		IncludeSuffixes:  d.IncludeSuffixes,
+		Excludes:         d.Excludes,
+		Mappings:         d.Mappings,
+		LookupTimeout:    d.LookupTimeout,
+		RecursionCheck:   d.RecursionCheck,
+		UseComplexLookup: d.UseComplexLookup,
+		Error:            d.Error,
 	}
 }
 
@@ -1372,27 +1375,6 @@ func MappingsFromRPC(mappings []*daemon.DNSMapping) DNSMappings {
 		return ml
 	}
 	return nil
-}
-
-func DNSFromRPC(s *daemon.DNSConfig) *DNS {
-	c := DNS{
-		ExcludeSuffixes: s.ExcludeSuffixes,
-		IncludeSuffixes: s.IncludeSuffixes,
-		Excludes:        s.Excludes,
-		Mappings:        MappingsFromRPC(s.Mappings),
-		RecursionCheck:  s.RecursionCheck,
-		Error:           s.Error,
-	}
-	if len(s.LocalAddress) > 0 {
-		_ = c.LocalAddress.UnmarshalBinary(s.LocalAddress)
-	}
-	if len(s.VifAddress) > 0 {
-		_ = c.VIFAddress.UnmarshalBinary(s.VifAddress)
-	}
-	if s.LookupTimeout != nil {
-		c.LookupTimeout = s.LookupTimeout.AsDuration()
-	}
-	return &c
 }
 
 func (r *Routing) ToSnake() *RoutingSnake {

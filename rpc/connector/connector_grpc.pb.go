@@ -1567,6 +1567,7 @@ const (
 	ManagerProxy_GetClientConfig_FullMethodName  = "/telepresence.connector.ManagerProxy/GetClientConfig"
 	ManagerProxy_EnsureAgent_FullMethodName      = "/telepresence.connector.ManagerProxy/EnsureAgent"
 	ManagerProxy_WatchClusterInfo_FullMethodName = "/telepresence.connector.ManagerProxy/WatchClusterInfo"
+	ManagerProxy_Lookup_FullMethodName           = "/telepresence.connector.ManagerProxy/Lookup"
 	ManagerProxy_LookupDNS_FullMethodName        = "/telepresence.connector.ManagerProxy/LookupDNS"
 	ManagerProxy_Tunnel_FullMethodName           = "/telepresence.connector.ManagerProxy/Tunnel"
 )
@@ -1589,6 +1590,9 @@ type ManagerProxyClient interface {
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[manager.ClusterInfo], error)
+	// Lookup performs a LookupIP in the cluster. The connected namespace will be
+	// appended if the name is a single label.
+	Lookup(ctx context.Context, in *manager.LookupRequest, opts ...grpc.CallOption) (*manager.LookupResponse, error)
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(ctx context.Context, in *manager.DNSRequest, opts ...grpc.CallOption) (*manager.DNSResponse, error)
@@ -1658,6 +1662,16 @@ func (c *managerProxyClient) WatchClusterInfo(ctx context.Context, in *manager.S
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ManagerProxy_WatchClusterInfoClient = grpc.ServerStreamingClient[manager.ClusterInfo]
 
+func (c *managerProxyClient) Lookup(ctx context.Context, in *manager.LookupRequest, opts ...grpc.CallOption) (*manager.LookupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(manager.LookupResponse)
+	err := c.cc.Invoke(ctx, ManagerProxy_Lookup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerProxyClient) LookupDNS(ctx context.Context, in *manager.DNSRequest, opts ...grpc.CallOption) (*manager.DNSResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(manager.DNSResponse)
@@ -1699,6 +1713,9 @@ type ManagerProxyServer interface {
 	// WatchClusterInfo returns information needed when establishing
 	// connectivity to the cluster.
 	WatchClusterInfo(*manager.SessionInfo, grpc.ServerStreamingServer[manager.ClusterInfo]) error
+	// Lookup performs a LookupIP in the cluster. The connected namespace will be
+	// appended if the name is a single label.
+	Lookup(context.Context, *manager.LookupRequest) (*manager.LookupResponse, error)
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(context.Context, *manager.DNSRequest) (*manager.DNSResponse, error)
@@ -1730,6 +1747,9 @@ func (UnimplementedManagerProxyServer) EnsureAgent(context.Context, *manager.Ens
 }
 func (UnimplementedManagerProxyServer) WatchClusterInfo(*manager.SessionInfo, grpc.ServerStreamingServer[manager.ClusterInfo]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
+}
+func (UnimplementedManagerProxyServer) Lookup(context.Context, *manager.LookupRequest) (*manager.LookupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Lookup not implemented")
 }
 func (UnimplementedManagerProxyServer) LookupDNS(context.Context, *manager.DNSRequest) (*manager.DNSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
@@ -1823,6 +1843,24 @@ func _ManagerProxy_WatchClusterInfo_Handler(srv interface{}, stream grpc.ServerS
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ManagerProxy_WatchClusterInfoServer = grpc.ServerStreamingServer[manager.ClusterInfo]
 
+func _ManagerProxy_Lookup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.LookupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerProxyServer).Lookup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ManagerProxy_Lookup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerProxyServer).Lookup(ctx, req.(*manager.LookupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ManagerProxy_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(manager.DNSRequest)
 	if err := dec(in); err != nil {
@@ -1866,6 +1904,10 @@ var ManagerProxy_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EnsureAgent",
 			Handler:    _ManagerProxy_EnsureAgent_Handler,
+		},
+		{
+			MethodName: "Lookup",
+			Handler:    _ManagerProxy_Lookup_Handler,
 		},
 		{
 			MethodName: "LookupDNS",
