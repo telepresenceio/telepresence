@@ -82,7 +82,7 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 		// Mounts will be facilitated by the Telemount plug-in connecting to our LocalMountPort
 		if f.LocalMountPort == 0 {
 			var lma []netip.AddrPort
-			lma, err = client.FreePortsTCP(1)
+			lma, err = client.FreePortsTCP(ctx, 1)
 			if err != nil {
 				return err
 			}

@@ -694,12 +694,16 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 	}
 	d := mc.DNS()
 	if proc.RunningInContainer() && s.teleroute != nil {
-		d.LocalAddress = netip.AddrPortFrom(s.teleroute.DaemonAddress(), 53)
+		las := s.teleroute.DaemonAddresses()
+		d.LocalAddresses = make([]netip.AddrPort, len(las))
+		for i, addr := range s.teleroute.DaemonAddresses() {
+			d.LocalAddresses[i] = netip.AddrPortFrom(addr, 53)
+		}
 	} else {
 		if s.localDNS.IsValid() {
-			d.LocalAddress = s.localDNS
+			d.LocalAddresses = []netip.AddrPort{s.localDNS}
 		} else {
-			d.LocalAddress = netip.AddrPort{}
+			d.LocalAddresses = nil
 		}
 	}
 	d.VIFAddress = s.vifDNS

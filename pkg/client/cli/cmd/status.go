@@ -360,7 +360,7 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 					// No teleroute network is started when there are no subnets to route.
 					// DNS is exposed on port 53 on the containerized daemon, so the
 					// IP that it exposes on the default bridge can be used for DNS.
-					rs.DNS.LocalAddress = netip.AddrPortFrom(userD.DaemonInfo().ContainerIP, 53)
+					rs.DNS.LocalAddresses = []netip.AddrPort{netip.AddrPortFrom(userD.DaemonInfo().ContainerIP, 53)}
 					us.ContainerNetwork = "default bridge"
 				}
 			}
@@ -517,8 +517,8 @@ func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 	if d.Error != "" {
 		dnsKvf.Add("Error", d.Error)
 	}
-	if d.LocalAddress.IsValid() {
-		dnsKvf.Add("Local address", d.LocalAddress.String())
+	if len(d.LocalAddresses) > 0 {
+		dnsKvf.Add("Local addresses", fmt.Sprintf("%s", d.LocalAddresses))
 	}
 	if d.VIFAddress.IsValid() {
 		dnsKvf.Add("VIF Address", d.VIFAddress.String())

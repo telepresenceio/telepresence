@@ -9,6 +9,19 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.25.0
 <Note>
+	<Title type="feature">Add support for IPv6 and dual-stack when using `telepresence connect --docker`</Title>
+	<Body>
+Telepresence now supports using `telepresence connect --docker` together with Kubernetes single-stack IPv4
+networking, single-stack IPv6 networking, or dual-stack networking with both network families. Both are
+enabled by default, but can be disabled by setting the `client.docker.enableIPv4` or `client.docker.enableIPv6`
+to false in the Helm chart, or by using the corresponding settings `docker.enableIPv4` or `docker.enableIPv6`
+the client configuration file.
+
+The new dual-stack support requires the teleroute network plugin 0.4.0 or later. The client will install this
+version automatically unless you work in an air-gapped environment.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">More efficient DNS handling in the traffic-manager</Title>
 	<Body>
 Telepresence will no longer send DNS queries for A and AAAA records to the traffic-manager. Instead, it will

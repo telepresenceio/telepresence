@@ -71,15 +71,15 @@ func addressFromResolvConf(c context.Context) (ap netip.AddrPort, err error) {
 }
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
-	if !s.LocalAddress.IsValid() {
+	if len(s.LocalAddresses) == 0 {
 		ap, err := addressFromResolvConf(c)
 		if err != nil {
 			return err
 		}
-		s.LocalAddress = ap
-		dlog.Infof(c, "Automatically set dns=%s", s.LocalAddress)
+		s.LocalAddresses = []netip.AddrPort{ap}
+		dlog.Infof(c, "Automatically set dns=%s", ap)
 	}
-	if !s.LocalAddress.IsValid() {
+	if len(s.LocalAddresses) == 0 {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
@@ -96,7 +96,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
 	// let it reach the original destination and not cause an endless loop.
-	pool, err := NewConnPool(s.LocalAddress, 10)
+	pool, err := NewConnPool(s.LocalAddresses[0], 10)
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 			// Give DNS server time to start before rerouting NAT
 			dtime.SleepWithContext(c, time.Millisecond)
 
-			err := routeDNS(c, s.LocalAddress, dnsResolverAddr, pool.LocalAddrs())
+			err := routeDNS(c, s.LocalAddresses[0], dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {
 				return err
 			}

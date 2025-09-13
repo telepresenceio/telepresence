@@ -315,21 +315,35 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 //
 // The function returns nil when there are no active agents.
 func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
+	var connected, waiting, other *client
 	s.clients.Range(func(_ string, ac *client) bool {
 		if ac.connected() {
-			atomic.StoreInt64(&ac.lastActive, time.Now().UnixNano())
-			aa = ac.cli
+			connected = ac
 			return false
 		}
-		if s.isProxyVIA(ac.info) {
-			var err error
-			aa, err = ac.ensureConnect(ctx)
-			if err == nil {
-				return false
-			}
+		if s.isProxyVIA(ac.info) || s.hasWaiterFor(ac.info) {
+			waiting = ac
+		} else {
+			other = ac
 		}
 		return true
 	})
+
+	var err error
+	switch {
+	case connected != nil:
+		connected.Lock()
+		connected.lastActive = time.Now().UnixNano()
+		aa = connected.cli
+		connected.Unlock()
+	case waiting != nil:
+		aa, err = waiting.ensureConnect(ctx)
+	case other != nil:
+		aa, err = other.ensureConnect(ctx)
+	}
+	if err != nil {
+		dlog.Warn(ctx, err)
+	}
 	return aa
 }
 

@@ -400,7 +400,7 @@ func (c *config) getMountPort(e mountsExtension) (uint16, error) {
 			}
 		}
 	}
-	lma, err := client.FreePortsTCP(1)
+	lma, err := client.FreePortsTCP(e.connection(), 1)
 	if err != nil {
 		return 0, err
 	}

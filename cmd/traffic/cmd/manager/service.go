@@ -1001,7 +1001,9 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 	}
 	tmNamespace := managerutil.GetEnv(ctx).ManagerNamespace
 	name := request.Name
-	if len(name) == 0 {
+	// Name must be at least one character long and end with a dot.
+	nl := len(name)
+	if nl < 2 || name[nl-1] != '.' {
 		return nil, status.Errorf(codes.InvalidArgument, "empty name")
 	}
 	nDots := 0
@@ -1012,7 +1014,11 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 	}
 	if nDots == 1 && client.Namespace != tmNamespace {
 		name += client.Namespace
+	} else {
+		// Strip trailing dot in query.
+		name = name[:nl-1]
 	}
+	dlog.Debugf(ctx, `LookupNetIP("ip", %q)`, name)
 	ips, err = net.DefaultResolver.LookupNetIP(ctx, "ip", name)
 	if err != nil {
 		_, err = dnsproxy.MakeDNSError(err)
@@ -1024,6 +1030,10 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 	if len(ips) > 0 {
 		response.Ips = make([][]byte, len(ips))
 		for i, ip := range ips {
+			if ip.Is4In6() {
+				ip = netip.AddrFrom4(ip.As4())
+				ips[i] = ip
+			}
 			response.Ips[i], _ = ip.MarshalBinary()
 		}
 	}

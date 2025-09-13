@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"net/netip"
-	"strings"
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
@@ -30,15 +29,24 @@ func (s *state) Version(context.Context, *emptypb.Empty) (*rpc.VersionInfo2, err
 }
 
 func (s *state) Lookup(ctx context.Context, request *rpc.LookupRequest) (*rpc.LookupResponse, error) {
-	dlog.Debugf(ctx, "lookup %q", request.Name)
+	name := request.Name
+	dlog.Debugf(ctx, "lookup %q", name)
+	nl := len(name)
+	if nl < 2 || name[nl-1] != '.' {
+		return nil, status.Errorf(codes.InvalidArgument, "empty name")
+	}
 	var ips []netip.Addr
 	response := &rpc.LookupResponse{}
-	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", strings.TrimSuffix(request.Name, "."))
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", name[:nl-1])
 	if err != nil {
 		_, err = dnsproxy.MakeDNSError(err)
 	} else {
 		response.Ips = make([][]byte, len(ips))
 		for i, ip := range ips {
+			if ip.Is4In6() {
+				ip = netip.AddrFrom4(ip.As4())
+				ips[i] = ip
+			}
 			response.Ips[i], _ = ip.MarshalBinary()
 		}
 	}

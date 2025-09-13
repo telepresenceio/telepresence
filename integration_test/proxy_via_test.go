@@ -77,6 +77,7 @@ func (s *proxyViaSuite) Test_ProxyViaLoopBack() {
 		s.TelepresenceConnect(ctx, "--proxy-via", "127.0.0.1/32=echo")
 	}
 	defer itest.TelepresenceQuitOk(ctx)
+	s.CapturePodLogs(ctx, "echo", "traffic-agent", s.AppNamespace())
 
 	virtualSubnet := client.GetConfig(ctx).Routing().VirtualSubnet
 

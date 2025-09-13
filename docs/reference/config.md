@@ -56,11 +56,13 @@ Values for `client.cluster` controls aspects on how client's connection to the t
 ### Docker
 Values for the `client.docker` provides docker specific options.
 
-| Field            | Description                                                                           | Type                                        | Default         |
-|------------------|---------------------------------------------------------------------------------------|---------------------------------------------|-----------------|
-| `addHostGateway` | Add `--add-host host.docker.internal:host-gateway` when starting the daemon in docker | [boolean][yaml-bool]                        | `true` on linux |
-| `telemount`      | Configuration of the image containing the telemount Docker volume plugin              | Image |
-| `teleroute`      | Configuration of the image containing the teleroute Docker network plugin             | Image |
+| Field            | Description                                                                           | Type                  | Default         |
+|------------------|---------------------------------------------------------------------------------------|-----------------------|-----------------|
+| `addHostGateway` | Add `--add-host host.docker.internal:host-gateway` when starting the daemon in docker | [boolean][yaml-bool]  | `true` on linux |
+| `telemount`      | Configuration of the image containing the telemount Docker volume plugin              | Image                 |                 |
+| `teleroute`      | Configuration of the image containing the teleroute Docker network plugin             | Image                 |                 |
+| `enableIPv4`     | Enable support for IPv4 networking                                                    | [boolean][yaml-bool]  | `true`          |
+| `enableIPv6`     | Enable support for IPv6 networking                                                    | [boolean][yaml-bool]  | `true`          |
 
 #### Image
 
@@ -84,15 +86,16 @@ The `client.dns` configuration offers options for configuring the DNS resolution
 
 The fields for `client.dns` are: `localIP`, `excludeSuffixes`, `includeSuffixes`, and `lookupTimeout`.
 
-| Field             | Description                                                                                                                                                         | Type                                        | Default                                            |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------|----------------------------------------------------|
-| `localIP`         | The address of the local DNS server.  This entry is only used on Linux systems that are not configured to use systemd-resolved.                                     | IP address [string][yaml-str]               | first `nameserver` mentioned in `/etc/resolv.conf` |
-| `excludeSuffixes` | Suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver). Can be globally configured in the Helm chart.                | [sequence][yaml-seq] of [strings][yaml-str] | `[".arpa", ".com", ".io", ".net", ".org", ".ru"]`  |
-| `includeSuffixes` | Suffixes for which the DNS resolver will always attempt to do a lookup.  Includes have higher priority than excludes. Can be globally configured in the Helm chart. | [sequence][yaml-seq] of [strings][yaml-str] | `[]`                                               |
-| `excludes`        | Names to be excluded by the DNS resolver                                                                                                                            | `[]`                                        |
-| `mappings`        | Names to be resolved to other names (CNAME records) or to explicit IP addresses                                                                                     | `[]`                                        |
-| `lookupTimeout`   | Maximum time to wait for a cluster side host lookup.                                                                                                                | [duration][go-duration] [string][yaml-str]  | 4 seconds                                          |
-| `recursionCheck`  | Enable DNS lookup recursion detection and avoidance.                                                                                                                | boolean                                     | false                                              |
+| Field              | Description                                                                                                                                                         | Type                                        | Default                                            |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------|----------------------------------------------------|
+| `localIP`          | The address of the local DNS server.  This entry is only used on Linux systems that are not configured to use systemd-resolved.                                     | IP address [string][yaml-str]               | first `nameserver` mentioned in `/etc/resolv.conf` |
+| `excludeSuffixes`  | Suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver). Can be globally configured in the Helm chart.                | [sequence][yaml-seq] of [strings][yaml-str] | `[".arpa", ".com", ".io", ".net", ".org", ".ru"]`  |
+| `includeSuffixes`  | Suffixes for which the DNS resolver will always attempt to do a lookup.  Includes have higher priority than excludes. Can be globally configured in the Helm chart. | [sequence][yaml-seq] of [strings][yaml-str] | `[]`                                               |
+| `excludes`         | Names to be excluded by the DNS resolver                                                                                                                            | `[]`                                        |                                                    |
+| `mappings`         | Names to be resolved to other names (CNAME records) or to explicit IP addresses                                                                                     | `[]`                                        |                                                    |
+| `lookupTimeout`    | Maximum time to wait for a cluster side host lookup.                                                                                                                | [duration][go-duration] [string][yaml-str]  | 4 seconds                                          |
+| `recursionCheck`   | Enable DNS lookup recursion detection and avoidance.                                                                                                                | boolean                                     | false                                              |
+| `useComplexLookup` | Disable use of simplified but efficient A and AAAA lookups.                                                                                                         | [boolean][yaml-bool]                        | `false`                                            |
 
 Here is an example values.yaml:
 ```yaml

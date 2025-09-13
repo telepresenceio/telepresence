@@ -28,8 +28,11 @@ message CreateEndpointRequest {
   // The id of this endpoint.
   string id = 1;
 
-  // The joining container's IP address in netip.Addr binary form
-  bytes address = 2;
+  // The joining container's IPv4 address in netip.Addr binary form
+  bytes addr_ipv4 = 2;
+
+  // The joining container's IPv6 address in netip.Addr binary form
+  bytes addr_ipv6 = 4;
 
   // Set to true if this is the daemon endpoint
   bool daemon = 3;

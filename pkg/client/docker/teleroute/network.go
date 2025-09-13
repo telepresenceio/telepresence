@@ -2,6 +2,7 @@ package teleroute
 
 import (
 	"context"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -11,22 +12,34 @@ import (
 	dockerClient "github.com/docker/docker/client"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 const daemonLabel = "telepresence.io/teleroute/daemon"
 
 func CreateNetwork(ctx context.Context, info *daemon.Info, cli *dockerClient.Client, teleroutePlugin string, teleroutePort uint16) error {
 	cn := info.Name
-	yes := true
+	dockerCfg := client.GetConfig(ctx).Docker()
+	ipv4 := dockerCfg.EnableIPv4
+	ipv6 := dockerCfg.EnableIPv6
+	host := info.ContainerIP
+	if ipv6 && !ipv4 && host.Is4() {
+		host = netip.AddrFrom16(host.As16())
+	}
+	if !ipv4 && !ipv6 {
+		return errcat.User.New("unable to create teleroute network because both the IPv4 and IPv6 families are disabled")
+	}
 	dlog.Debugf(ctx, "Creating teleroute network %s", cn)
 	rsp, err := cli.NetworkCreate(ctx, cn, network.CreateOptions{
 		Driver:     teleroutePlugin,
 		Scope:      "local",
 		Internal:   true,
-		EnableIPv4: &yes,
+		EnableIPv4: &ipv4,
+		EnableIPv6: &ipv6,
 		Options: map[string]string{
-			"host": info.ContainerIP.String(),
+			"host": host.String(),
 			"port": strconv.Itoa(int(teleroutePort)),
 		},
 		Labels: map[string]string{

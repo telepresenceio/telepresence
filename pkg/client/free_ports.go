@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"net"
 	"net/netip"
 )
@@ -12,7 +13,7 @@ import (
 // before they are actually used. The chances are slim though, since tests show that in most cases (at least on
 // macOS and Linux), the same address isn't allocated for a while even if the allocation is made from different
 // processes.
-func FreePortsTCP(count int) ([]netip.AddrPort, error) {
+func FreePortsTCP(ctx context.Context, count int) ([]netip.AddrPort, error) {
 	ls := make([]net.Listener, 0, count)
 	as := make([]netip.AddrPort, count)
 	defer func() {
@@ -21,8 +22,12 @@ func FreePortsTCP(count int) ([]netip.AddrPort, error) {
 		}
 	}()
 
+	network := "tcp4"
+	if GetConfig(ctx).Docker().EnableIPv6 {
+		network = "tcp6"
+	}
 	for i := 0; i < count; i++ {
-		if l, err := net.Listen("tcp", "localhost:0"); err != nil {
+		if l, err := net.Listen(network, "localhost:0"); err != nil {
 			return nil, err
 		} else {
 			ls = append(ls, l)

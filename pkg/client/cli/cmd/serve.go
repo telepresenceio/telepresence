@@ -93,7 +93,7 @@ const (
 func (sc *serveCommand) serveFromContainer(ctx context.Context, addr netip.Addr) error {
 	// We can't reliably just map a service port (typically port 80) to localhost, so instead of doing
 	// that, we create a random port and use that.
-	ps, err := client.FreePortsTCP(1)
+	ps, err := client.FreePortsTCP(ctx, 1)
 	if err != nil {
 		return err
 	}

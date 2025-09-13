@@ -288,7 +288,13 @@ func ExistingDaemon(ctx context.Context, info *daemon.Info) (context.Context, er
 	var conn *grpc.ClientConn
 	if info.InDocker() {
 		// The host relies on that the daemon has exposed a port to localhost
-		conn, err = docker.ConnectDaemon(ctx, netip.AddrPortFrom(netip.IPv4Unspecified(), info.DaemonPort))
+		var addr netip.Addr
+		if client.GetConfig(ctx).Docker().EnableIPv6 {
+			addr = netip.IPv6Loopback()
+		} else {
+			addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
+		}
+		conn, err = docker.ConnectDaemon(ctx, netip.AddrPortFrom(addr, info.DaemonPort))
 		if err != nil {
 			return ctx, err
 		}

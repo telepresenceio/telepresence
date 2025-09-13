@@ -79,7 +79,7 @@ message DNSMapping {
 message DNSConfig {
   // local_address is the address and port of the local DNS server.
   // In netip.AddrPort binary form.
-  bytes local_address = 1;
+  repeated bytes local_addresses = 1;
 
   // vif_address is the address and port that the DNS server uses on the Telepresence VIF. Only used by Linux systems.
   // In netip.AddrPort binary form.

@@ -178,7 +178,7 @@ type DNSConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// local_address is the address and port of the local DNS server.
 	// In netip.AddrPort binary form.
-	LocalAddress []byte `protobuf:"bytes,1,opt,name=local_address,json=localAddress,proto3" json:"local_address,omitempty"`
+	LocalAddresses [][]byte `protobuf:"bytes,1,rep,name=local_addresses,json=localAddresses,proto3" json:"local_addresses,omitempty"`
 	// vif_address is the address and port that the DNS server uses on the Telepresence VIF. Only used by Linux systems.
 	// In netip.AddrPort binary form.
 	VifAddress []byte `protobuf:"bytes,2,opt,name=vif_address,json=vifAddress,proto3" json:"vif_address,omitempty"`
@@ -231,9 +231,9 @@ func (*DNSConfig) Descriptor() ([]byte, []int) {
 	return file_daemon_daemon_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *DNSConfig) GetLocalAddress() []byte {
+func (x *DNSConfig) GetLocalAddresses() [][]byte {
 	if x != nil {
-		return x.LocalAddress
+		return x.LocalAddresses
 	}
 	return nil
 }
@@ -943,9 +943,9 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\n" +
 	"DNSMapping\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\talias_for\x18\x02 \x01(\tR\baliasFor\"\x81\x03\n" +
-	"\tDNSConfig\x12#\n" +
-	"\rlocal_address\x18\x01 \x01(\fR\flocalAddress\x12\x1f\n" +
+	"\talias_for\x18\x02 \x01(\tR\baliasFor\"\x85\x03\n" +
+	"\tDNSConfig\x12'\n" +
+	"\x0flocal_addresses\x18\x01 \x03(\fR\x0elocalAddresses\x12\x1f\n" +
 	"\vvif_address\x18\x02 \x01(\fR\n" +
 	"vifAddress\x12)\n" +
 	"\x10exclude_suffixes\x18\x03 \x03(\tR\x0fexcludeSuffixes\x12)\n" +

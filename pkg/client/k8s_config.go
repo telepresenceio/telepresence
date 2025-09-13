@@ -128,7 +128,7 @@ func (ke *kubeconfigExtension) asConfig() Config {
 			dns.Mappings = keDns.Mappings
 		}
 		if keDns.LocalIP.IsValid() {
-			dns.LocalAddress = netip.AddrPortFrom(keDns.LocalIP, 53)
+			dns.LocalAddresses = []netip.AddrPort{netip.AddrPortFrom(keDns.LocalIP, 53)}
 		}
 		if keDns.RemoteIP.IsValid() {
 			dns.VIFAddress = netip.AddrPortFrom(keDns.RemoteIP, 53)

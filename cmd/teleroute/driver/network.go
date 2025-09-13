@@ -152,42 +152,45 @@ func (n *networkState) connectToDaemon(gateways []netip.Prefix) (err error) {
 	return nil
 }
 
-func (n *networkState) createEndpoint(r *network.CreateEndpointRequest) (_ *network.CreateEndpointResponse, err error) {
-	endpointID := r.EndpointID
-	eid := endpointID[:8]
-	n.log.Debugf("Create endpoint %s %v %v", eid, r.Interface, r.Options)
+func rawAddrFromPrefixString(s string) (rawAddr []byte, err error) {
+	if len(s) == 0 {
+		return nil, nil
+	}
+	var pfx netip.Prefix
+	pfx, err = netip.ParsePrefix(s)
+	if err == nil {
+		rawAddr, err = pfx.Addr().MarshalBinary()
+	}
+	if err != nil {
+		err = fmt.Errorf("invalid CIDR %q: %w", s, err)
+	}
+	return rawAddr, err
+}
 
+func (n *networkState) createEndpoint(r *network.CreateEndpointRequest) (_ *network.CreateEndpointResponse, err error) {
+	n.log.Debugf("Create endpoint %.8s %v %v", r.EndpointID, r.Interface, r.Options)
 	defer func() {
 		if err != nil {
 			n.log.Error(err)
 		}
 	}()
 
-	var pfx netip.Prefix
-	if len(r.Interface.Address) > 0 {
-		pfx, err = netip.ParsePrefix(r.Interface.Address)
-	} else if len(r.Interface.AddressIPv6) > 0 {
-		pfx, err = netip.ParsePrefix(r.Interface.AddressIPv6)
+	request := &teleroute.CreateEndpointRequest{
+		Id: r.EndpointID,
 	}
+	request.AddrIPv4, err = rawAddrFromPrefixString(r.Interface.Address)
 	if err != nil {
 		return nil, err
 	}
-
-	daemon := false
+	request.AddrIPv6, err = rawAddrFromPrefixString(r.Interface.AddressIPv6)
+	if err != nil {
+		return nil, err
+	}
 	if daemonOpt, ok := r.Options["daemon"].(string); ok {
-		daemon, _ = strconv.ParseBool(daemonOpt)
-	}
-	addr := pfx.Addr()
-	binAddr, err := addr.MarshalBinary()
-	if err != nil {
-		return nil, err
+		request.Daemon, _ = strconv.ParseBool(daemonOpt)
 	}
 	_, err = callDaemon(n, func(ctx context.Context, client teleroute.TelerouteClient) (*emptypb.Empty, error) {
-		return client.CreateEndpoint(ctx, &teleroute.CreateEndpointRequest{
-			Id:      endpointID,
-			Address: binAddr,
-			Daemon:  daemon,
-		})
+		return client.CreateEndpoint(ctx, request)
 	})
 	return &network.CreateEndpointResponse{}, err
 }
@@ -211,7 +214,7 @@ func (n *networkState) join(r *network.JoinRequest) (response *network.JoinRespo
 		var nxt netip.Addr
 		err = nxt.UnmarshalBinary(rsp.Via)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to unmarshal via with length %d: %w", len(rsp.Via), err)
 		}
 		viaStr = nxt.String()
 		routeType = 0
@@ -221,7 +224,7 @@ func (n *networkState) join(r *network.JoinRequest) (response *network.JoinRespo
 		var pfx netip.Prefix
 		err = pfx.UnmarshalBinary(r)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to unmarshal route with length %d: %w", len(r), err)
 		}
 		srs[i] = &network.StaticRoute{
 			Destination: pfx.String(),
@@ -241,15 +244,15 @@ func (n *networkState) join(r *network.JoinRequest) (response *network.JoinRespo
 		var gwIPv4 netip.Prefix
 		err = gwIPv4.UnmarshalBinary(rsp.GwIpV4)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to unmarshal GwIpV4 with length %d: %w", len(rsp.GwIpV4), err)
 		}
 		response.Gateway = gwIPv4.Addr().String()
 	}
 	if len(rsp.GwIpV6) > 0 {
 		var gwIPv6 netip.Prefix
-		err = gwIPv6.UnmarshalBinary(rsp.GwIpV4)
+		err = gwIPv6.UnmarshalBinary(rsp.GwIpV6)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unable to unmarshal GwIpV6 with length %d: %w", len(rsp.GwIpV6), err)
 		}
 		response.GatewayIPv6 = gwIPv6.Addr().String()
 	}
