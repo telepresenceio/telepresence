@@ -186,18 +186,6 @@ func (s *service) GetAgentConfig(ctx context.Context, request *rpc.AgentConfigRe
 	return &r, nil
 }
 
-func (s *service) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
-func (s *service) CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
-func (s *service) GetCloudConfig(context.Context, *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
 // GetTelepresenceAPI returns information about the TelepresenceAPI server.
 func (s *service) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.TelepresenceAPIInfo, error) {
 	env := managerutil.GetEnv(ctx)
@@ -778,10 +766,6 @@ func (s *service) MakeInterceptID(_ context.Context, sessionID string, name stri
 	}
 }
 
-func (s *service) UpdateIntercept(context.Context, *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
 // RemoveIntercept lets a client remove an intercept.
 func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, riReq.GetSession())
@@ -1068,36 +1052,8 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 	}
 
 	sessionID := tunnel.SessionID(request.GetSession().GetSessionId())
-	tmNamespace := managerutil.GetEnv(ctx).ManagerNamespace
 	noSearchDomain := s.dotClusterDomain
-	var rCode int
-	switch {
-	case request.Name == "tel2-recursion-check.kube-system.":
-		rCode = state.RcodeNoAgents
-		noSearchDomain = ".kube-system."
-	case hasDomainSuffix(request.Name, tmNamespace):
-		// It's enough to propagate this one to the traffic-manager
-		noSearchDomain = tmNamespace + "."
-		rCode = state.RcodeNoAgents
-	case strings.HasSuffix(request.Name, s.dotClusterDomain):
-		// It's enough to propagate this one to the traffic-manager
-		rCode = state.RcodeNoAgents
-	default:
-		rrs, rCode, err = s.state.AgentsLookupDNS(ctx, sessionID, request)
-		if err != nil {
-			dlog.Errorf(ctx, "AgentsLookupDNS %s %s: %v", request.Name, qtn, err)
-		} else if rCode != state.RcodeNoAgents {
-			if len(rrs) == 0 {
-				dlog.Tracef(ctx, "agents: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
-			} else {
-				dlog.Tracef(ctx, "agents: %s %s -> %s", request.Name, qtn, rrs)
-			}
-		}
-	}
-
-	if rCode == state.RcodeNoAgents {
-		rrs, rCode = s.lookupFromManager(ctx, sessionID, qType, request.Name, noSearchDomain)
-	}
+	rrs, rCode := s.lookupFromManager(ctx, sessionID, qType, request.Name, noSearchDomain)
 	return dnsproxy.ToRPC(rrs, rCode)
 }
 

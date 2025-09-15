@@ -145,8 +145,6 @@ type session struct {
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
 
-	ingressInfo []*manager.IngressInfo
-
 	isPodDaemon bool
 
 	// done is closed when the session ends
@@ -854,9 +852,6 @@ func (s *session) UpdateStatus(c context.Context, cri userd.ConnectRequest) *rpc
 		if len(namespaces) == 0 && k8sapi.CanWatchNamespaces(c) {
 			s.StartNamespaceWatcher(c)
 		}
-		s.currentInterceptsLock.Lock()
-		s.ingressInfo = nil
-		s.currentInterceptsLock.Unlock()
 	}
 	s.subnetViaWorkloads = cr.SubnetViaWorkloads
 	return s.Status(c)

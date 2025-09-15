@@ -24,43 +24,39 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Manager_Version_FullMethodName                   = "/telepresence.manager.Manager/Version"
-	Manager_GetAgentImageFQN_FullMethodName          = "/telepresence.manager.Manager/GetAgentImageFQN"
-	Manager_GetAgentConfig_FullMethodName            = "/telepresence.manager.Manager/GetAgentConfig"
-	Manager_GetLicense_FullMethodName                = "/telepresence.manager.Manager/GetLicense"
-	Manager_CanConnectAmbassadorCloud_FullMethodName = "/telepresence.manager.Manager/CanConnectAmbassadorCloud"
-	Manager_GetCloudConfig_FullMethodName            = "/telepresence.manager.Manager/GetCloudConfig"
-	Manager_GetClientConfig_FullMethodName           = "/telepresence.manager.Manager/GetClientConfig"
-	Manager_GetTelepresenceAPI_FullMethodName        = "/telepresence.manager.Manager/GetTelepresenceAPI"
-	Manager_ArriveAsClient_FullMethodName            = "/telepresence.manager.Manager/ArriveAsClient"
-	Manager_ArriveAsAgent_FullMethodName             = "/telepresence.manager.Manager/ArriveAsAgent"
-	Manager_Remain_FullMethodName                    = "/telepresence.manager.Manager/Remain"
-	Manager_Depart_FullMethodName                    = "/telepresence.manager.Manager/Depart"
-	Manager_SetLogLevel_FullMethodName               = "/telepresence.manager.Manager/SetLogLevel"
-	Manager_GetLogs_FullMethodName                   = "/telepresence.manager.Manager/GetLogs"
-	Manager_WatchAgentPods_FullMethodName            = "/telepresence.manager.Manager/WatchAgentPods"
-	Manager_WatchAgents_FullMethodName               = "/telepresence.manager.Manager/WatchAgents"
-	Manager_WatchAgentsNS_FullMethodName             = "/telepresence.manager.Manager/WatchAgentsNS"
-	Manager_WatchIntercepts_FullMethodName           = "/telepresence.manager.Manager/WatchIntercepts"
-	Manager_WatchWorkloads_FullMethodName            = "/telepresence.manager.Manager/WatchWorkloads"
-	Manager_WatchClusterInfo_FullMethodName          = "/telepresence.manager.Manager/WatchClusterInfo"
-	Manager_EnsureAgent_FullMethodName               = "/telepresence.manager.Manager/EnsureAgent"
-	Manager_PrepareIntercept_FullMethodName          = "/telepresence.manager.Manager/PrepareIntercept"
-	Manager_CreateIntercept_FullMethodName           = "/telepresence.manager.Manager/CreateIntercept"
-	Manager_RemoveIntercept_FullMethodName           = "/telepresence.manager.Manager/RemoveIntercept"
-	Manager_UpdateIntercept_FullMethodName           = "/telepresence.manager.Manager/UpdateIntercept"
-	Manager_GetIntercept_FullMethodName              = "/telepresence.manager.Manager/GetIntercept"
-	Manager_ReviewIntercept_FullMethodName           = "/telepresence.manager.Manager/ReviewIntercept"
-	Manager_GetKnownWorkloadKinds_FullMethodName     = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
-	Manager_Lookup_FullMethodName                    = "/telepresence.manager.Manager/Lookup"
-	Manager_LookupDNS_FullMethodName                 = "/telepresence.manager.Manager/LookupDNS"
-	Manager_AgentLookupDNSResponse_FullMethodName    = "/telepresence.manager.Manager/AgentLookupDNSResponse"
-	Manager_WatchLookupDNS_FullMethodName            = "/telepresence.manager.Manager/WatchLookupDNS"
-	Manager_WatchLogLevel_FullMethodName             = "/telepresence.manager.Manager/WatchLogLevel"
-	Manager_Tunnel_FullMethodName                    = "/telepresence.manager.Manager/Tunnel"
-	Manager_ReportMetrics_FullMethodName             = "/telepresence.manager.Manager/ReportMetrics"
-	Manager_WatchDial_FullMethodName                 = "/telepresence.manager.Manager/WatchDial"
-	Manager_UninstallAgents_FullMethodName           = "/telepresence.manager.Manager/UninstallAgents"
+	Manager_Version_FullMethodName                = "/telepresence.manager.Manager/Version"
+	Manager_GetAgentImageFQN_FullMethodName       = "/telepresence.manager.Manager/GetAgentImageFQN"
+	Manager_GetAgentConfig_FullMethodName         = "/telepresence.manager.Manager/GetAgentConfig"
+	Manager_GetClientConfig_FullMethodName        = "/telepresence.manager.Manager/GetClientConfig"
+	Manager_GetTelepresenceAPI_FullMethodName     = "/telepresence.manager.Manager/GetTelepresenceAPI"
+	Manager_ArriveAsClient_FullMethodName         = "/telepresence.manager.Manager/ArriveAsClient"
+	Manager_ArriveAsAgent_FullMethodName          = "/telepresence.manager.Manager/ArriveAsAgent"
+	Manager_Remain_FullMethodName                 = "/telepresence.manager.Manager/Remain"
+	Manager_Depart_FullMethodName                 = "/telepresence.manager.Manager/Depart"
+	Manager_SetLogLevel_FullMethodName            = "/telepresence.manager.Manager/SetLogLevel"
+	Manager_GetLogs_FullMethodName                = "/telepresence.manager.Manager/GetLogs"
+	Manager_WatchAgentPods_FullMethodName         = "/telepresence.manager.Manager/WatchAgentPods"
+	Manager_WatchAgents_FullMethodName            = "/telepresence.manager.Manager/WatchAgents"
+	Manager_WatchAgentsNS_FullMethodName          = "/telepresence.manager.Manager/WatchAgentsNS"
+	Manager_WatchIntercepts_FullMethodName        = "/telepresence.manager.Manager/WatchIntercepts"
+	Manager_WatchWorkloads_FullMethodName         = "/telepresence.manager.Manager/WatchWorkloads"
+	Manager_WatchClusterInfo_FullMethodName       = "/telepresence.manager.Manager/WatchClusterInfo"
+	Manager_EnsureAgent_FullMethodName            = "/telepresence.manager.Manager/EnsureAgent"
+	Manager_PrepareIntercept_FullMethodName       = "/telepresence.manager.Manager/PrepareIntercept"
+	Manager_CreateIntercept_FullMethodName        = "/telepresence.manager.Manager/CreateIntercept"
+	Manager_RemoveIntercept_FullMethodName        = "/telepresence.manager.Manager/RemoveIntercept"
+	Manager_GetIntercept_FullMethodName           = "/telepresence.manager.Manager/GetIntercept"
+	Manager_ReviewIntercept_FullMethodName        = "/telepresence.manager.Manager/ReviewIntercept"
+	Manager_GetKnownWorkloadKinds_FullMethodName  = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
+	Manager_Lookup_FullMethodName                 = "/telepresence.manager.Manager/Lookup"
+	Manager_LookupDNS_FullMethodName              = "/telepresence.manager.Manager/LookupDNS"
+	Manager_AgentLookupDNSResponse_FullMethodName = "/telepresence.manager.Manager/AgentLookupDNSResponse"
+	Manager_WatchLookupDNS_FullMethodName         = "/telepresence.manager.Manager/WatchLookupDNS"
+	Manager_WatchLogLevel_FullMethodName          = "/telepresence.manager.Manager/WatchLogLevel"
+	Manager_Tunnel_FullMethodName                 = "/telepresence.manager.Manager/Tunnel"
+	Manager_ReportMetrics_FullMethodName          = "/telepresence.manager.Manager/ReportMetrics"
+	Manager_WatchDial_FullMethodName              = "/telepresence.manager.Manager/WatchDial"
+	Manager_UninstallAgents_FullMethodName        = "/telepresence.manager.Manager/UninstallAgents"
 )
 
 // ManagerClient is the client API for Manager service.
@@ -73,15 +69,6 @@ type ManagerClient interface {
 	GetAgentImageFQN(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AgentImageFQN, error)
 	// GetAgentConfig returns the agent configuration for a specific workload.
 	GetAgentConfig(ctx context.Context, in *AgentConfigRequest, opts ...grpc.CallOption) (*AgentConfigResponse, error)
-	// GetLicense returns the License information (the license itself and
-	// domain that granted it) known to the manager.
-	GetLicense(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*License, error)
-	// CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
-	// Ambassador Cloud
-	CanConnectAmbassadorCloud(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error)
-	// GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
-	// by the agents.
-	GetCloudConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*CLIConfig, error)
 	// GetTelepresenceAPI returns information about the TelepresenceAPI server
@@ -140,7 +127,6 @@ type ManagerClient interface {
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	UpdateIntercept(ctx context.Context, in *UpdateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// GetIntercept gets info from intercept name
 	GetIntercept(ctx context.Context, in *GetInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
@@ -218,36 +204,6 @@ func (c *managerClient) GetAgentConfig(ctx context.Context, in *AgentConfigReque
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AgentConfigResponse)
 	err := c.cc.Invoke(ctx, Manager_GetAgentConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) GetLicense(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*License, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(License)
-	err := c.cc.Invoke(ctx, Manager_GetLicense_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) CanConnectAmbassadorCloud(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConnection, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AmbassadorCloudConnection)
-	err := c.cc.Invoke(ctx, Manager_CanConnectAmbassadorCloud_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) GetCloudConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AmbassadorCloudConfig, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AmbassadorCloudConfig)
-	err := c.cc.Invoke(ctx, Manager_GetCloudConfig_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -488,16 +444,6 @@ func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveIntercept
 	return out, nil
 }
 
-func (c *managerClient) UpdateIntercept(ctx context.Context, in *UpdateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(InterceptInfo)
-	err := c.cc.Invoke(ctx, Manager_UpdateIntercept_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *managerClient) GetIntercept(ctx context.Context, in *GetInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InterceptInfo)
@@ -658,15 +604,6 @@ type ManagerServer interface {
 	GetAgentImageFQN(context.Context, *emptypb.Empty) (*AgentImageFQN, error)
 	// GetAgentConfig returns the agent configuration for a specific workload.
 	GetAgentConfig(context.Context, *AgentConfigRequest) (*AgentConfigResponse, error)
-	// GetLicense returns the License information (the license itself and
-	// domain that granted it) known to the manager.
-	GetLicense(context.Context, *emptypb.Empty) (*License, error)
-	// CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
-	// Ambassador Cloud
-	CanConnectAmbassadorCloud(context.Context, *emptypb.Empty) (*AmbassadorCloudConnection, error)
-	// GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
-	// by the agents.
-	GetCloudConfig(context.Context, *emptypb.Empty) (*AmbassadorCloudConfig, error)
 	// GetClientConfig returns the config that connected clients should use for this manager.
 	GetClientConfig(context.Context, *emptypb.Empty) (*CLIConfig, error)
 	// GetTelepresenceAPI returns information about the TelepresenceAPI server
@@ -725,7 +662,6 @@ type ManagerServer interface {
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*emptypb.Empty, error)
-	UpdateIntercept(context.Context, *UpdateInterceptRequest) (*InterceptInfo, error)
 	// GetIntercept gets info from intercept name
 	GetIntercept(context.Context, *GetInterceptRequest) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
@@ -788,15 +724,6 @@ func (UnimplementedManagerServer) GetAgentImageFQN(context.Context, *emptypb.Emp
 func (UnimplementedManagerServer) GetAgentConfig(context.Context, *AgentConfigRequest) (*AgentConfigResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAgentConfig not implemented")
 }
-func (UnimplementedManagerServer) GetLicense(context.Context, *emptypb.Empty) (*License, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetLicense not implemented")
-}
-func (UnimplementedManagerServer) CanConnectAmbassadorCloud(context.Context, *emptypb.Empty) (*AmbassadorCloudConnection, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CanConnectAmbassadorCloud not implemented")
-}
-func (UnimplementedManagerServer) GetCloudConfig(context.Context, *emptypb.Empty) (*AmbassadorCloudConfig, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetCloudConfig not implemented")
-}
 func (UnimplementedManagerServer) GetClientConfig(context.Context, *emptypb.Empty) (*CLIConfig, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetClientConfig not implemented")
 }
@@ -850,9 +777,6 @@ func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterc
 }
 func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
-}
-func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterceptRequest) (*InterceptInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
 func (UnimplementedManagerServer) GetIntercept(context.Context, *GetInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetIntercept not implemented")
@@ -961,60 +885,6 @@ func _Manager_GetAgentConfig_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).GetAgentConfig(ctx, req.(*AgentConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_GetLicense_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).GetLicense(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Manager_GetLicense_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).GetLicense(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_CanConnectAmbassadorCloud_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).CanConnectAmbassadorCloud(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Manager_CanConnectAmbassadorCloud_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).CanConnectAmbassadorCloud(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_GetCloudConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).GetCloudConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Manager_GetCloudConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).GetCloudConfig(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1301,24 +1171,6 @@ func _Manager_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_UpdateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateInterceptRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).UpdateIntercept(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Manager_UpdateIntercept_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).UpdateIntercept(ctx, req.(*UpdateInterceptRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Manager_GetIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetInterceptRequest)
 	if err := dec(in); err != nil {
@@ -1523,18 +1375,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Manager_GetAgentConfig_Handler,
 		},
 		{
-			MethodName: "GetLicense",
-			Handler:    _Manager_GetLicense_Handler,
-		},
-		{
-			MethodName: "CanConnectAmbassadorCloud",
-			Handler:    _Manager_CanConnectAmbassadorCloud_Handler,
-		},
-		{
-			MethodName: "GetCloudConfig",
-			Handler:    _Manager_GetCloudConfig_Handler,
-		},
-		{
 			MethodName: "GetClientConfig",
 			Handler:    _Manager_GetClientConfig_Handler,
 		},
@@ -1581,10 +1421,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveIntercept",
 			Handler:    _Manager_RemoveIntercept_Handler,
-		},
-		{
-			MethodName: "UpdateIntercept",
-			Handler:    _Manager_UpdateIntercept_Handler,
 		},
 		{
 			MethodName: "GetIntercept",

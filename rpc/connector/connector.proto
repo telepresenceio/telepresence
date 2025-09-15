@@ -66,8 +66,6 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(manager.RemoveInterceptRequest2) returns (InterceptResult);
 
-  rpc UpdateIntercept(manager.UpdateInterceptRequest) returns (manager.InterceptInfo);
-
   // Uninstalls traffic-agents from the cluster.
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (telepresence.common.Result);
