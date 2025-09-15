@@ -80,8 +80,10 @@ type CreateEndpointRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The id of this endpoint.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// The joining container's IP address in netip.Addr binary form
-	Address []byte `protobuf:"bytes,2,opt,name=address,proto3" json:"address,omitempty"`
+	// The joining container's IPv4 address in netip.Addr binary form
+	AddrIpv4 []byte `protobuf:"bytes,2,opt,name=addr_ipv4,json=addrIpv4,proto3" json:"addr_ipv4,omitempty"`
+	// The joining container's IPv6 address in netip.Addr binary form
+	AddrIpv6 []byte `protobuf:"bytes,4,opt,name=addr_ipv6,json=addrIpv6,proto3" json:"addr_ipv6,omitempty"`
 	// Set to true if this is the daemon endpoint
 	Daemon        bool `protobuf:"varint,3,opt,name=daemon,proto3" json:"daemon,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -125,9 +127,16 @@ func (x *CreateEndpointRequest) GetId() string {
 	return ""
 }
 
-func (x *CreateEndpointRequest) GetAddress() []byte {
+func (x *CreateEndpointRequest) GetAddrIpv4() []byte {
 	if x != nil {
-		return x.Address
+		return x.AddrIpv4
+	}
+	return nil
+}
+
+func (x *CreateEndpointRequest) GetAddrIpv6() []byte {
+	if x != nil {
+		return x.AddrIpv6
 	}
 	return nil
 }
@@ -329,10 +338,11 @@ const file_teleroute_service_proto_rawDesc = "" +
 	"\x17teleroute/service.proto\x12\x16telepresence.teleroute\x1a\x1bgoogle/protobuf/empty.proto\">\n" +
 	"\x0eConnectRequest\x12\x1a\n" +
 	"\bgateways\x18\x01 \x03(\fR\bgateways\x12\x10\n" +
-	"\x03pid\x18\x02 \x01(\x03R\x03pid\"Y\n" +
+	"\x03pid\x18\x02 \x01(\x03R\x03pid\"y\n" +
 	"\x15CreateEndpointRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aaddress\x18\x02 \x01(\fR\aaddress\x12\x16\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
+	"\taddr_ipv4\x18\x02 \x01(\fR\baddrIpv4\x12\x1b\n" +
+	"\taddr_ipv6\x18\x04 \x01(\fR\baddrIpv6\x12\x16\n" +
 	"\x06daemon\x18\x03 \x01(\bR\x06daemon\"$\n" +
 	"\x12EndpointIdentifier\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\xeb\x01\n" +

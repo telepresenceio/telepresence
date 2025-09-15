@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 
 	"github.com/puzpuzpuz/xsync/v4"
@@ -43,7 +44,6 @@ func (e linkNotFoundError) Unwrap() error {
 }
 
 type endpoint struct {
-	addr     netip.Addr
 	macAddr  net.HardwareAddr
 	vethCont netlink.Link
 	vethHost netlink.Link
@@ -52,18 +52,19 @@ type endpoint struct {
 
 type server struct {
 	rpc.UnsafeTelerouteServer
-	done          <-chan struct{}
-	watchersMutex sync.Mutex
-	pluginPid     int
-	routesCh      <-chan []netip.Prefix
-	currentRoutes []netip.Prefix
-	gateways      []netip.Prefix
-	tap           *vif.TunnelingDevice
-	bridgeIdx     int
-	endpoints     *xsync.Map[string, endpoint]
-	endpointCache *xsync.Map[netip.Addr, [2]netlink.Link]
-	port          uint16
-	daemonAddr    netip.Addr
+	done           <-chan struct{}
+	watchersMutex  sync.Mutex
+	pluginPid      int
+	routesCh       <-chan []netip.Prefix
+	currentRoutes  []netip.Prefix
+	gateways       []netip.Prefix
+	tap            *vif.TunnelingDevice
+	bridgeIdx      int
+	endpoints      *xsync.Map[string, endpoint]
+	endpointCache  *xsync.Map[netip.Addr, [2]netlink.Link]
+	port           uint16
+	daemonAddrIPv4 netip.Addr
+	daemonAddrIPv6 netip.Addr
 }
 
 func StartServer(g *dgroup.Group, tap *vif.TunnelingDevice, routesCh <-chan []netip.Prefix, teleroutePort uint16) (Server, error) {
@@ -79,8 +80,15 @@ func StartServer(g *dgroup.Group, tap *vif.TunnelingDevice, routesCh <-chan []ne
 	return ts, nil
 }
 
-func (ts *server) DaemonAddress() netip.Addr {
-	return ts.daemonAddr
+func (ts *server) DaemonAddresses() []netip.Addr {
+	addrs := make([]netip.Addr, 0, 2)
+	if ts.daemonAddrIPv4.IsValid() {
+		addrs = append(addrs, ts.daemonAddrIPv4)
+	}
+	if ts.daemonAddrIPv6.IsValid() {
+		addrs = append(addrs, ts.daemonAddrIPv6)
+	}
+	return addrs
 }
 
 func (ts *server) Connect(cr *rpc.ConnectRequest, connectServer grpc.ServerStreamingServer[rpc.Info]) error {
@@ -108,7 +116,7 @@ func (ts *server) Connect(cr *rpc.ConnectRequest, connectServer grpc.ServerStrea
 
 func (ts *server) CreateEndpoint(ctx context.Context, request *rpc.CreateEndpointRequest) (*emptypb.Empty, error) {
 	err := ts.createEndpoint(ctx, request)
-	if status.Code(err) == codes.Unknown {
+	if err != nil && status.Code(err) == codes.Unknown {
 		err = status.Error(codes.Internal, err.Error())
 	}
 	return &emptypb.Empty{}, err
@@ -116,7 +124,7 @@ func (ts *server) CreateEndpoint(ctx context.Context, request *rpc.CreateEndpoin
 
 func (ts *server) Join(ctx context.Context, request *rpc.EndpointIdentifier) (*rpc.JoinResponse, error) {
 	rsp, err := ts.join(ctx, request)
-	if status.Code(err) == codes.Unknown {
+	if err != nil && status.Code(err) == codes.Unknown {
 		err = status.Error(codes.Internal, err.Error())
 	}
 	return rsp, err
@@ -151,23 +159,46 @@ func (ts *server) createAddressEndpoint(ctx context.Context) ([2]netlink.Link, e
 	return pair, err
 }
 
+func addrFromRaw(raw []byte) (netip.Addr, error) {
+	if len(raw) == 0 {
+		return netip.Addr{}, nil
+	}
+	var ip netip.Addr
+	if err := ip.UnmarshalBinary(raw); err != nil {
+		return netip.Addr{}, err
+	}
+	return ip, nil
+}
+
 func (ts *server) createEndpoint(ctx context.Context, request *rpc.CreateEndpointRequest) error {
-	var addr netip.Addr
-	err := addr.UnmarshalBinary(request.Address)
+	keyAddr := netip.Addr{}
+	addrIPv4, err := addrFromRaw(request.AddrIpv4)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	addrIPv6, err := addrFromRaw(request.AddrIpv6)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	if request.Daemon {
-		ts.daemonAddr = addr
+		ts.daemonAddrIPv4 = addrIPv4
+		ts.daemonAddrIPv6 = addrIPv6
+	}
+	switch {
+	case addrIPv4.IsValid():
+		keyAddr = addrIPv4
+	case addrIPv6.IsValid():
+		keyAddr = addrIPv6
+	default:
+		return status.Error(codes.InvalidArgument, "neither IPv4 nor IPv6 address provided")
 	}
 	_, loaded := ts.endpoints.LoadOrCompute(request.Id, func() (ep endpoint, cancel bool) {
-		pair, _ := ts.endpointCache.LoadOrCompute(addr, func() (pair [2]netlink.Link, cancel bool) {
+		pair, _ := ts.endpointCache.LoadOrCompute(keyAddr, func() (pair [2]netlink.Link, cancel bool) {
 			pair, err = ts.createAddressEndpoint(ctx)
 			return pair, err != nil
 		})
 		if err == nil {
 			ep.vethHost = pair[0]
-			ep.addr = addr
 			ep.macAddr = pair[1].Attrs().HardwareAddr
 			ep.vethCont = pair[1]
 			ep.daemon = request.Daemon
@@ -178,6 +209,71 @@ func (ts *server) createEndpoint(ctx context.Context, request *rpc.CreateEndpoin
 		return status.Error(codes.AlreadyExists, fmt.Sprintf("endpoint %s already exists", request.Id))
 	}
 	return err
+}
+
+type responseStringer struct {
+	*rpc.JoinResponse
+}
+
+func writeRawIP(raw []byte, w *strings.Builder) {
+	if len(raw) == 0 {
+		w.WriteString("nil")
+		return
+	}
+	var ip netip.Addr
+	if err := ip.UnmarshalBinary(raw); err == nil {
+		w.WriteString(ip.String())
+	} else {
+		_, _ = fmt.Fprintf(w, "(%#v: error %v)", raw, err)
+	}
+}
+
+func writeRawPrefix(raw []byte, w *strings.Builder) {
+	if len(raw) == 0 {
+		w.WriteString("nil")
+		return
+	}
+	var pfx netip.Prefix
+	if err := pfx.UnmarshalBinary(raw); err == nil {
+		w.WriteString(pfx.String())
+	} else {
+		_, _ = fmt.Fprintf(w, "(%#v: error %v)", raw, err)
+	}
+}
+
+func (r responseStringer) String() string {
+	bld := &strings.Builder{}
+	bld.WriteString("JoinResponse{InterfaceSrcName: ")
+	bld.WriteString(r.InterfaceSrcName)
+	bld.WriteString(", InterfaceDstPrefix: ")
+	bld.WriteString(r.InterfaceDstPrefix)
+	bld.WriteString(", GwIpV4: ")
+	writeRawPrefix(r.GwIpV4, bld)
+	bld.WriteString(", GwIpV6: ")
+	writeRawPrefix(r.GwIpV6, bld)
+	bld.WriteString(", routes: [")
+	for i, r := range r.Routes {
+		if i > 0 {
+			bld.WriteString(", ")
+		}
+		writeRawPrefix(r, bld)
+	}
+	bld.WriteString("], via: ")
+	writeRawIP(r.Via, bld)
+	bld.WriteString("}")
+	return bld.String()
+}
+
+func (ts *server) isIPv6() bool {
+	ts.watchersMutex.Lock()
+	rs := ts.currentRoutes
+	ts.watchersMutex.Unlock()
+	for _, r := range rs {
+		if r.Addr().Is6() {
+			return true
+		}
+	}
+	return false
 }
 
 func (ts *server) join(ctx context.Context, request *rpc.EndpointIdentifier) (*rpc.JoinResponse, error) {
@@ -207,7 +303,17 @@ func (ts *server) join(ctx context.Context, request *rpc.EndpointIdentifier) (*r
 			}
 		}
 		rsp.Routes = rsb
-		rsp.Via, _ = ts.daemonAddr.MarshalBinary()
+		if ts.isIPv6() {
+			if !ts.daemonAddrIPv6.IsValid() {
+				return nil, status.Error(codes.Internal, "IPv6 is not enabled for the teleroute network")
+			}
+			rsp.Via, _ = ts.daemonAddrIPv6.MarshalBinary()
+		} else {
+			if !ts.daemonAddrIPv4.IsValid() {
+				return nil, status.Error(codes.Internal, "IPv4 is not enabled for the teleroute network")
+			}
+			rsp.Via, _ = ts.daemonAddrIPv4.MarshalBinary()
+		}
 	}
 	for _, gw := range ts.gateways {
 		if rsp.GwIpV4 == nil && gw.Addr().Is4() {
@@ -217,6 +323,7 @@ func (ts *server) join(ctx context.Context, request *rpc.EndpointIdentifier) (*r
 			rsp.GwIpV6, _ = gw.MarshalBinary()
 		}
 	}
+	dlog.Debug(ctx, responseStringer{JoinResponse: rsp})
 	return rsp, nil
 }
 

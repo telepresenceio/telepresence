@@ -501,6 +501,19 @@ message DialRequest {
   reserved 4;
 }
 
+message LookupRequest {
+  // Client session
+  SessionInfo session = 1;
+
+  // The name to use for the LookupIP request.
+  string name = 2;
+}
+
+message LookupResponse {
+  // List of found IPs in netip.Addr binary form.
+  repeated bytes ips = 1;
+}
+
 // LookupHost request sent from a client
 message DNSRequest {
   // Client session
@@ -849,6 +862,9 @@ service Manager {
   // that the manager can handle. This set may include Deployment, StatefulSet, ReplicaSet, Rollout (Argo Rollouts)
   // as configured in the manager's Helm values.
   rpc GetKnownWorkloadKinds(SessionInfo) returns (KnownWorkloadKinds);
+
+  // Lookup performs an LookupIP in the cluster and returns the resultings IPs.
+  rpc Lookup(LookupRequest) returns (LookupResponse);
 
   // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.

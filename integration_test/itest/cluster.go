@@ -456,6 +456,7 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 		}
 	}
 
+	config.Docker().EnableIPv6 = s.ipv6
 	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
 	config.Intercept().UseFtp = true
 	if s.ClientIsVersion(">=2.23.0") {

@@ -69,19 +69,40 @@ User-Agent: curl/8.11.1
 Accept: */*
 ```
 
-Similarly, if you want to start your container manually using `docker run`, you must ensure that it shares the
-daemon container's network. The most convenient way to do that is to use the `--docker-run` flag as explained above,
-but you can also start a container separately using `telepresence docker-run`.
+### Starting the local container prior to the intercept
+If you want to start your container manually using `docker run`, you must ensure that it shares the  daemon container's
+network. A convenient way to do that is to use the `--docker-run` flag as explained above, but you can also start
+a container separately using `telepresence docker-run`. This can be done before or after the intercept and the run will
+survive cycling the intercept on or off.
 
 ```console
 $ telepresence docker-run ghcr.io/telepresenceio/echo-server:latest
 Echo server listening on port 8080.
 ```
 
-> [!TIP]
-> Use named connections
-> You can use the `--name` flag to name the connection if you want to connect to several namespaces simultaneously, e.g.
+Check what name the started container has:
+```console
+$ docker ps --last 1 --format {{.Names}}
+fervent_goodall
+```
 
+
+
+You can now redirect intercepted traffic to your "echo" container using the address flag, e.g.:
+```console
+telepresence intercept --port 8080:80 --address echo fervent_goodall
+```
+
+> [!TIP]
+> Name your container using the `--name` flag, e.g. `telepresence docker-run --name echo ghcr.io/telepresenceio/echo-server:latest`.
+> This will make it easier to refer to it later.
+
+> [!IMPORTANT]
+> Never name your container the same as a service in the cluster. If you do, you'll get a warning that the name overrides
+> the service IP, and the service will not be reachable.
+
+### Use named connections
+You can use the `--name` flag to name the connection if you want to connect to several namespaces simultaneously, e.g.
 ```console
 $ telepresence connect --docker --name alpha --namespace alpha
 $ telepresence connect --docker --name beta --namespace beta

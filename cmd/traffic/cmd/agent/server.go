@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"net"
+	"net/netip"
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
@@ -12,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -23,6 +26,32 @@ type awaitingForward struct {
 
 func (s *state) Version(context.Context, *emptypb.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
+}
+
+func (s *state) Lookup(ctx context.Context, request *rpc.LookupRequest) (*rpc.LookupResponse, error) {
+	name := request.Name
+	dlog.Debugf(ctx, "lookup %q", name)
+	nl := len(name)
+	if nl < 2 || name[nl-1] != '.' {
+		return nil, status.Errorf(codes.InvalidArgument, "empty name")
+	}
+	var ips []netip.Addr
+	response := &rpc.LookupResponse{}
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", name[:nl-1])
+	if err != nil {
+		_, err = dnsproxy.MakeDNSError(err)
+	} else {
+		response.Ips = make([][]byte, len(ips))
+		for i, ip := range ips {
+			if ip.Is4In6() {
+				ip = netip.AddrFrom4(ip.As4())
+				ips[i] = ip
+			}
+			response.Ips[i], _ = ip.MarshalBinary()
+		}
+	}
+	dlog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
+	return response, err
 }
 
 func (s *state) Tunnel(server agent.Agent_TunnelServer) error {

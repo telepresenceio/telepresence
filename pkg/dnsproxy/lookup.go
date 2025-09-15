@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"github.com/miekg/dns"
@@ -54,6 +55,20 @@ func writeRR(rr dns.RR, bf *strings.Builder) {
 	default:
 		bf.WriteString(rr.String())
 	}
+}
+
+func (a RRs) PruneEmptyNames() RRs {
+	return slices.DeleteFunc(a, IsEmptyName)
+}
+
+func IsEmptyName(rr dns.RR) bool {
+	switch rr := rr.(type) {
+	case *dns.A:
+		return len(rr.A) == 0
+	case *dns.AAAA:
+		return len(rr.AAAA) == 0
+	}
+	return false
 }
 
 func (a RRs) String() string {
@@ -175,24 +190,29 @@ func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net
 	return ips, err
 }
 
-func makeError(err error) (RRs, int, error) {
+func MakeDNSError(err error) (int, error) {
 	var dnsErr *net.DNSError
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		return nil, dns.RcodeNameError, status.Error(codes.DeadlineExceeded, err.Error())
+		return dns.RcodeNameError, status.Error(codes.DeadlineExceeded, err.Error())
 	case errors.Is(err, context.Canceled):
-		return nil, dns.RcodeNameError, status.Error(codes.Canceled, err.Error())
+		return dns.RcodeNameError, status.Error(codes.Canceled, err.Error())
 	case errors.As(err, &dnsErr):
 		switch {
 		case dnsErr.IsNotFound:
-			return nil, dns.RcodeNameError, nil
+			return dns.RcodeNameError, nil
 		case dnsErr.IsTemporary:
-			return nil, dns.RcodeNameError, status.Error(codes.Unavailable, dnsErr.Error())
+			return dns.RcodeNameError, status.Error(codes.Unavailable, dnsErr.Error())
 		case dnsErr.IsTimeout:
-			return nil, dns.RcodeNameError, status.Error(codes.DeadlineExceeded, dnsErr.Error())
+			return dns.RcodeNameError, status.Error(codes.DeadlineExceeded, dnsErr.Error())
 		}
 	}
-	return nil, dns.RcodeServerFailure, status.Error(codes.Internal, err.Error())
+	return dns.RcodeServerFailure, status.Error(codes.Internal, err.Error())
+}
+
+func makeError(err error) (RRs, int, error) {
+	rCode, err := MakeDNSError(err)
+	return nil, rCode, err
 }
 
 //nolint:cyclop // yeah, there are a lot of qTypes

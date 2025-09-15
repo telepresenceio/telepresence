@@ -10,6 +10,9 @@ import "manager/manager.proto";
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/agent";
 
 service Agent {
+  // Lookup performs a LookupIP in the cluster.
+  rpc Lookup(manager.LookupRequest) returns (manager.LookupResponse);
+
   rpc Tunnel(stream manager.TunnelMessage) returns (stream manager.TunnelMessage);
 
   // Version returns the version information of the Manager.

@@ -236,6 +236,7 @@ func (c *configWatcher) Store(sce agentconfig.SidecarExt) {
 
 func NewWatcher() Map {
 	w := &configWatcher{
+		cancel:       func() {},
 		informers:    xsync.NewMap[string, *informersWithCancel](),
 		inactivePods: xsync.NewMap[types.UID, inactivation](),
 		agentConfigs: xsync.NewMap[string, map[string]agentconfig.SidecarExt](),

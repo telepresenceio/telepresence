@@ -24,6 +24,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	Agent_Lookup_FullMethodName    = "/telepresence.agent.Agent/Lookup"
 	Agent_Tunnel_FullMethodName    = "/telepresence.agent.Agent/Tunnel"
 	Agent_Version_FullMethodName   = "/telepresence.agent.Agent/Version"
 	Agent_WatchDial_FullMethodName = "/telepresence.agent.Agent/WatchDial"
@@ -33,6 +34,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentClient interface {
+	// Lookup performs a LookupIP in the cluster.
+	Lookup(ctx context.Context, in *manager.LookupRequest, opts ...grpc.CallOption) (*manager.LookupResponse, error)
 	Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[manager.TunnelMessage, manager.TunnelMessage], error)
 	// Version returns the version information of the Manager.
 	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.VersionInfo2, error)
@@ -49,6 +52,16 @@ type agentClient struct {
 
 func NewAgentClient(cc grpc.ClientConnInterface) AgentClient {
 	return &agentClient{cc}
+}
+
+func (c *agentClient) Lookup(ctx context.Context, in *manager.LookupRequest, opts ...grpc.CallOption) (*manager.LookupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(manager.LookupResponse)
+	err := c.cc.Invoke(ctx, Agent_Lookup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *agentClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[manager.TunnelMessage, manager.TunnelMessage], error) {
@@ -97,6 +110,8 @@ type Agent_WatchDialClient = grpc.ServerStreamingClient[manager.DialRequest]
 // All implementations must embed UnimplementedAgentServer
 // for forward compatibility.
 type AgentServer interface {
+	// Lookup performs a LookupIP in the cluster.
+	Lookup(context.Context, *manager.LookupRequest) (*manager.LookupResponse, error)
 	Tunnel(grpc.BidiStreamingServer[manager.TunnelMessage, manager.TunnelMessage]) error
 	// Version returns the version information of the Manager.
 	Version(context.Context, *emptypb.Empty) (*manager.VersionInfo2, error)
@@ -115,6 +130,9 @@ type AgentServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAgentServer struct{}
 
+func (UnimplementedAgentServer) Lookup(context.Context, *manager.LookupRequest) (*manager.LookupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Lookup not implemented")
+}
 func (UnimplementedAgentServer) Tunnel(grpc.BidiStreamingServer[manager.TunnelMessage, manager.TunnelMessage]) error {
 	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
 }
@@ -143,6 +161,24 @@ func RegisterAgentServer(s grpc.ServiceRegistrar, srv AgentServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&Agent_ServiceDesc, srv)
+}
+
+func _Agent_Lookup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.LookupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServer).Lookup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Agent_Lookup_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServer).Lookup(ctx, req.(*manager.LookupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Agent_Tunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -188,6 +224,10 @@ var Agent_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.agent.Agent",
 	HandlerType: (*AgentServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Lookup",
+			Handler:    _Agent_Lookup_Handler,
+		},
 		{
 			MethodName: "Version",
 			Handler:    _Agent_Version_Handler,

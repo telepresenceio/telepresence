@@ -258,13 +258,13 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 	assertInterceptResponse(ixCtx1, name1, svc1)
 	assertInterceptResponse(ixCtx2, name2, svc2)
 
-	itest.TelepresenceOk(ixCtx1, "leave", "--use", n1, svc1)
+	itest.TelepresenceOk(ctx1, "leave", "--use", n1, svc1)
 	assertNotIntercepted(ctx1, n1, svc1)
 
 	// Other connection's intercept is still alive and kicking.
 	assertInterceptResponse(ixCtx2, name2, svc2)
 
-	itest.TelepresenceOk(ixCtx2, "leave", "--use", n2, svc2)
+	itest.TelepresenceOk(ctx2, "leave", "--use", n2, svc2)
 	assertNotIntercepted(ctx2, n2, svc2)
 
 	cancel1()

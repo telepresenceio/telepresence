@@ -69,7 +69,6 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	opts = []string{
 		"--name", daemonID.ContainerName(),
 		"--cap-add", "NET_ADMIN",
-		"--sysctl", "net.ipv6.conf.all.disable_ipv6=0",
 		"--device", "/dev/net/tun:/dev/net/tun",
 		"--pid", "host",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
@@ -95,6 +94,12 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 		opts = append(opts, "-e", "SCOUT_DISABLE=1")
 	}
 	cfg := client.GetConfig(ctx).Docker()
+	if cfg.EnableIPv6 {
+		opts = append(opts,
+			"--sysctl", "net.ipv6.conf.all.forwarding=1",
+			"--sysctl", "net.ipv6.conf.all.disable_ipv6=0",
+		)
+	}
 	if cfg.HostGateway != "" && (cfg.AddHostGateway || cfg.HostGateway != client.DefaultHostGateway) {
 		opts = append(opts, "--add-host", cfg.HostGateway+":host-gateway")
 	}
@@ -107,7 +112,7 @@ func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 	return []string{
 		"connector-foreground",
 		"--name", "docker-" + daemonID.String(),
-		"--address", netip.AddrPortFrom(netip.IPv4Unspecified(), grpcCfg.DaemonPort).String(),
+		"--address", fmt.Sprintf(":%d", grpcCfg.DaemonPort),
 		"--embed-network",
 		"--teleroute-port", strconv.Itoa(int(grpcCfg.TeleroutePort)),
 	}
@@ -206,14 +211,21 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 				return os.ErrNotExist
 			}
 			tn, ok := ns.Networks[network]
-			if !ok || tn.IPAddress == "" {
+			if !ok || tn.IPAddress == "" && tn.GlobalIPv6Address == "" {
 				// retry the operation if this happens
-				return fmt.Errorf("container %s has no IP address in network %s", ci.Name, network)
+				return fmt.Errorf("container %q has no IP address in network %q", ci.Name, network)
 			}
-			addr, err = netip.ParseAddr(tn.IPAddress)
+			what := "GlobalIPv6Address"
+			if tn.GlobalIPv6Address != "" {
+				addr, err = netip.ParseAddr(tn.GlobalIPv6Address)
+			} else {
+				what = "IPAddress"
+				addr, err = netip.ParseAddr(tn.IPAddress)
+			}
 			if err != nil {
-				return backoff.Permanent(fmt.Errorf("failed to parse IPAddress of network %s: %w", network, err))
+				return backoff.Permanent(fmt.Errorf("failed to parse %s of network %q: %w", what, network, err))
 			}
+			dlog.Debugf(ctx, "container %q has IP address %s in network %q", ci.Name, addr, network)
 		}
 		info = &ContainerInfo{ID: ci.ID, Pid: ci.State.Pid, IP: addr, Name: ci.Name}
 		return nil
@@ -410,7 +422,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	if err = PullImage(progress.WithEventId(ctx, daemonID.Name), image); err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
-	fp, err := client.FreePortsTCP(1)
+	fp, err := client.FreePortsTCP(ctx, 1)
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}

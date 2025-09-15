@@ -153,6 +153,10 @@ service ManagerProxy {
   // connectivity to the cluster.
   rpc WatchClusterInfo(manager.SessionInfo) returns (stream manager.ClusterInfo);
 
+  // Lookup performs a LookupIP in the cluster. The connected namespace will be
+  // appended if the name is a single label.
+  rpc Lookup(manager.LookupRequest) returns (manager.LookupResponse);
+
   // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.
   rpc LookupDNS(manager.DNSRequest) returns (manager.DNSResponse);

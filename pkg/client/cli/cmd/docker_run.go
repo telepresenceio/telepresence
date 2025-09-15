@@ -95,6 +95,15 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 	if !ud.Containerized() {
 		return fmt.Errorf("%s requires that --docker was used when the connection was established", cmd.UseLine())
 	}
+	if name, ok, err := flags.GetUnparsedValue("name", 0, false, args); err == nil && ok {
+		ip, err := ud.Lookup(ctx, name)
+		if err == nil {
+			// We're about to start a container with a name that is already present in the cluster. That's
+			// probably a mistake.
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning! The container name %q will override the current mapping to IP %s\n", name, ip)
+		}
+	}
+
 	cni, cc, err := docker.Start(ctx, true, args...)
 	if err != nil {
 		return errcat.NoDaemonLogs.New(err)

@@ -155,6 +155,14 @@ func (p *mgrProxy) EnsureAgent(ctx context.Context, arg *manager.EnsureAgentRequ
 	return client.EnsureAgent(ctx, arg, callOptions...)
 }
 
+func (p *mgrProxy) Lookup(ctx context.Context, arg *manager.LookupRequest) (*manager.LookupResponse, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.Lookup(ctx, arg, callOptions...)
+}
+
 func (p *mgrProxy) LookupDNS(ctx context.Context, arg *manager.DNSRequest) (*manager.DNSResponse, error) {
 	client, callOptions, err := p.get()
 	if err != nil {

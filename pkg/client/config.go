@@ -909,7 +909,7 @@ var defaultTeleroute = Teleroute{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "teleroute",
-	Tag:         "0.3.1",
+	Tag:         "0.4.0",
 }
 
 func (tr *Teleroute) defaults() DefaultsAware {
@@ -939,15 +939,23 @@ type Docker struct {
 	Telemount      Telemount `json:"telemount,omitzero"`
 	Teleroute      Teleroute `json:"teleroute,omitzero"`
 	HostGateway    string    `json:"hostGateway,omitzero"`
+	EnableIPv4     bool      `json:"enableIPv4,omitzero"`
+	EnableIPv6     bool      `json:"enableIPv6,omitzero"`
 }
 
-const DefaultHostGateway = "host.docker.internal"
+const (
+	DefaultHostGateway = "host.docker.internal"
+	defaultEnableIPv4  = true
+	defaultEnableIPv6  = true
+)
 
 var defaultDocker = Docker{ //nolint:gochecknoglobals // constant
 	AddHostGateway: defaultAddHostGateway,
 	Telemount:      defaultTelemount,
 	Teleroute:      defaultTeleroute,
 	HostGateway:    DefaultHostGateway,
+	EnableIPv4:     defaultEnableIPv4,
+	EnableIPv6:     defaultEnableIPv6,
 }
 
 func (d *Docker) defaults() DefaultsAware {
@@ -1104,7 +1112,7 @@ func (d *DNS) Equal(o *DNS) bool {
 	if d == nil || o == nil {
 		return d == o
 	}
-	return o.LocalAddress == d.LocalAddress &&
+	return slices.Equal(o.LocalAddresses, d.LocalAddresses) &&
 		o.VIFAddress == d.VIFAddress &&
 		o.LookupTimeout == d.LookupTimeout &&
 		o.RecursionCheck == d.RecursionCheck &&
@@ -1152,8 +1160,11 @@ func (d *DNS) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	wp := (*dns)(d)
 	err := json.UnmarshalDecode(in, &wp)
 	if err == nil {
-		if d.LocalIP.IsValid() && !d.LocalAddress.IsValid() {
-			d.LocalAddress = netip.AddrPortFrom(d.LocalIP, 53)
+		if d.LocalIP.IsValid() && len(d.LocalAddresses) == 0 {
+			d.LocalAddresses = []netip.AddrPort{netip.AddrPortFrom(d.LocalIP, 53)}
+		}
+		if d.LocalAddress.IsValid() && len(d.LocalAddresses) == 0 {
+			d.LocalAddresses = []netip.AddrPort{d.LocalAddress}
 		}
 		if d.RemoteIP.IsValid() && !d.VIFAddress.IsValid() {
 			d.VIFAddress = netip.AddrPortFrom(d.RemoteIP, 53)
@@ -1289,34 +1300,39 @@ type DNS struct {
 	Error string `json:"error"`
 
 	// LocalIP
-	// Deprecated: Use LocalAddress.
+	// Deprecated: Use LocalAddresses.
 	LocalIP netip.Addr `json:"localIP"`
 
 	// RemoteIP
 	// Deprecated: Use VIFAddress.
 	RemoteIP netip.Addr `json:"remoteIP"`
 
-	LocalAddress    netip.AddrPort `json:"localAddress"`
-	VIFAddress      netip.AddrPort `json:"vifAddress"`
-	IncludeSuffixes []string       `json:"includeSuffixes"`
-	ExcludeSuffixes []string       `json:"excludeSuffixes"`
-	Excludes        []string       `json:"excludes"`
-	Mappings        DNSMappings    `json:"mappings"`
-	LookupTimeout   time.Duration  `json:"lookupTimeout,format:units"`
-	RecursionCheck  bool           `json:"recursionCheck"`
+	// Deprecated: Use LocalAddresses.
+	LocalAddress netip.AddrPort `json:"localAddress"`
+
+	LocalAddresses   []netip.AddrPort `json:"localAddresses"`
+	VIFAddress       netip.AddrPort   `json:"vifAddress"`
+	IncludeSuffixes  []string         `json:"includeSuffixes"`
+	ExcludeSuffixes  []string         `json:"excludeSuffixes"`
+	Excludes         []string         `json:"excludes"`
+	Mappings         DNSMappings      `json:"mappings"`
+	LookupTimeout    time.Duration    `json:"lookupTimeout,format:units"`
+	RecursionCheck   bool             `json:"recursionCheck"`
+	UseComplexLookup bool             `json:"useComplexLookup"`
 }
 
 // DNSSnake is the same as DNS but with snake_case json/yaml names.
 type DNSSnake struct {
-	Error           string         `json:"error"`
-	LocalAddress    netip.AddrPort `json:"local_address"`
-	VIFAddress      netip.AddrPort `json:"vif_address"`
-	IncludeSuffixes []string       `json:"include_suffixes"`
-	ExcludeSuffixes []string       `json:"exclude_suffixes"`
-	Excludes        []string       `json:"excludes"`
-	Mappings        DNSMappings    `json:"mappings"`
-	LookupTimeout   time.Duration  `json:"lookup_timeout,format:units"`
-	RecursionCheck  bool           `json:"recursion_check"`
+	Error            string           `json:"error"`
+	LocalAddresses   []netip.AddrPort `json:"local_addresses"`
+	VIFAddress       netip.AddrPort   `json:"vif_address"`
+	IncludeSuffixes  []string         `json:"include_suffixes"`
+	ExcludeSuffixes  []string         `json:"exclude_suffixes"`
+	Excludes         []string         `json:"excludes"`
+	Mappings         DNSMappings      `json:"mappings"`
+	LookupTimeout    time.Duration    `json:"lookup_timeout,format:units"`
+	RecursionCheck   bool             `json:"recursion_check"`
+	UseComplexLookup bool             `json:"use_complex_lookup"`
 }
 
 func (d *DNS) ToRPC() *daemon.DNSConfig {
@@ -1328,8 +1344,9 @@ func (d *DNS) ToRPC() *daemon.DNSConfig {
 		RecursionCheck:  d.RecursionCheck,
 		Error:           d.Error,
 	}
-	if d.LocalAddress.IsValid() {
-		rd.LocalAddress, _ = d.LocalAddress.MarshalBinary()
+	for _, a := range d.LocalAddresses {
+		aBin, _ := a.MarshalBinary()
+		rd.LocalAddresses = append(rd.LocalAddresses, aBin)
 	}
 	if d.VIFAddress.IsValid() {
 		rd.VifAddress, _ = d.VIFAddress.MarshalBinary()
@@ -1348,15 +1365,16 @@ func (d *DNS) ToRPC() *daemon.DNSConfig {
 
 func (d *DNS) ToSnake() *DNSSnake {
 	return &DNSSnake{
-		LocalAddress:    d.LocalAddress,
-		VIFAddress:      d.VIFAddress,
-		ExcludeSuffixes: d.ExcludeSuffixes,
-		IncludeSuffixes: d.IncludeSuffixes,
-		Excludes:        d.Excludes,
-		Mappings:        d.Mappings,
-		LookupTimeout:   d.LookupTimeout,
-		RecursionCheck:  d.RecursionCheck,
-		Error:           d.Error,
+		LocalAddresses:   d.LocalAddresses,
+		VIFAddress:       d.VIFAddress,
+		ExcludeSuffixes:  d.ExcludeSuffixes,
+		IncludeSuffixes:  d.IncludeSuffixes,
+		Excludes:         d.Excludes,
+		Mappings:         d.Mappings,
+		LookupTimeout:    d.LookupTimeout,
+		RecursionCheck:   d.RecursionCheck,
+		UseComplexLookup: d.UseComplexLookup,
+		Error:            d.Error,
 	}
 }
 
@@ -1372,27 +1390,6 @@ func MappingsFromRPC(mappings []*daemon.DNSMapping) DNSMappings {
 		return ml
 	}
 	return nil
-}
-
-func DNSFromRPC(s *daemon.DNSConfig) *DNS {
-	c := DNS{
-		ExcludeSuffixes: s.ExcludeSuffixes,
-		IncludeSuffixes: s.IncludeSuffixes,
-		Excludes:        s.Excludes,
-		Mappings:        MappingsFromRPC(s.Mappings),
-		RecursionCheck:  s.RecursionCheck,
-		Error:           s.Error,
-	}
-	if len(s.LocalAddress) > 0 {
-		_ = c.LocalAddress.UnmarshalBinary(s.LocalAddress)
-	}
-	if len(s.VifAddress) > 0 {
-		_ = c.VIFAddress.UnmarshalBinary(s.VifAddress)
-	}
-	if s.LookupTimeout != nil {
-		c.LookupTimeout = s.LookupTimeout.AsDuration()
-	}
-	return &c
 }
 
 func (r *Routing) ToSnake() *RoutingSnake {

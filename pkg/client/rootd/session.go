@@ -204,6 +204,8 @@ type Session struct {
 
 	// Maps one UDP or TCP AddrPort to another
 	l4PortMap *xsync.Map[types.AddrPortProto, uint16]
+
+	lookupSequencer *xsync.Map[string, clusterLookupResult]
 }
 
 type NewSessionFunc func(context.Context, *rpc.NetworkConfig) (context.Context, *Session, error)
@@ -379,6 +381,13 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		l4PortMap:             xsync.NewMap[types.AddrPortProto, uint16](),
 	}
 	cfg := client.GetConfig(c)
+
+	// Use simple lookups unless the traffic-manager version is less than 2.25.0 (not supported), or if the user has explicitly
+	// requested complex lookups. The presence of the s.lookupSequencer will trigger simple lookups.
+	if !(cfg.DNS().UseComplexLookup || semver.MustParse(ver.FinalizeVersion()).LT(semver.MustParse("2.25.0"))) {
+		s.lookupSequencer = xsync.NewMap[string, clusterLookupResult]()
+	}
+
 	rt := cfg.Routing()
 	var err error
 	s.alsoProxySubnets, err = validateSubnets("also-proxy", rt.AlsoProxy, s.alsoProxyVia)
@@ -451,28 +460,143 @@ func (s *Session) rerouteRemotePort(ctx context.Context, ap types.AddrPortProto,
 	}
 }
 
-// clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
+type clusterLookupResult struct {
+	created time.Time
+	rrs     dnsproxy.RRs
+	rCode   int
+	err     error
+}
+
+// clusterLookup sends a Lookup or LookupDNS request to the traffic-manager and returns the result.
 func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
 	dlog.Debugf(ctx, "Lookup %s %q", dns2.TypeToString[q.Qtype], q.Name)
 	s.dnsLookups++
 
-	r, err := s.managerClient.LookupDNS(ctx, &manager.DNSRequest{
+	if s.lookupSequencer == nil || !(q.Qtype == dns2.TypeA || q.Qtype == dns2.TypeAAAA) {
+		return s.complexClusterLookup(ctx, q)
+	}
+
+	// The lookupSequencer ensures that successive calls for the same name, whether they are A or AAAA, are not
+	// performed concurrently. The traffic manager will return all known IPs for the name regardless of the type.
+	result, _ := s.lookupSequencer.Compute(q.Name, func(oldValue clusterLookupResult, loaded bool) (newValue clusterLookupResult, op xsync.ComputeOp) {
+		if loaded && time.Since(oldValue.created) < 2*time.Second {
+			return oldValue, xsync.CancelOp
+		}
+		rrs, rCode, err := s.simpleLookup(ctx, q)
+		return clusterLookupResult{
+			created: time.Now(),
+			rrs:     rrs,
+			rCode:   rCode,
+			err:     err,
+		}, xsync.UpdateOp
+	})
+	return result.rrs, result.rCode, result.err
+}
+
+func (s *Session) simpleLookup(ctx context.Context, question *dns2.Question) (dnsproxy.RRs, int, error) {
+	var lookupClient interface {
+		Lookup(context.Context, *manager.LookupRequest, ...grpc.CallOption) (*manager.LookupResponse, error)
+	}
+	request := &manager.LookupRequest{Session: s.session, Name: question.Name}
+	if ags := s.agentClients; ags != nil {
+		lookupClient = ags.GetRandomAgent(ctx)
+	}
+	if lookupClient == nil {
+		dlog.Debugf(ctx, "Using traffic-manager for lookup %q", question.Name)
+		lookupClient = s.managerClient
+	} else {
+		dlog.Debugf(ctx, "Using traffic-agent for lookup %q", question.Name)
+	}
+	resp, err := lookupClient.Lookup(ctx, request)
+	if status.Code(err) == codes.Unimplemented {
+		return s.complexClusterLookup(ctx, question)
+	}
+	if err != nil {
+		s.dnsFailures++
+		rCode := rcodeFromError(err)
+		dlog.Errorf(ctx, "Lookup %q %s: %v", question.Name, dns2.RcodeToString[rCode], err)
+		return nil, rCode, err
+	}
+	if len(resp.Ips) == 0 {
+		return nil, dns2.RcodeNameError, nil
+	}
+	ips := make([]netip.Addr, len(resp.Ips))
+	for i := range resp.Ips {
+		_ = ips[i].UnmarshalBinary(resp.Ips[i])
+	}
+	if len(s.localTranslationSubnets) > 0 {
+		for i, ip := range ips {
+			ips[i], err = s.GetLocalIP(ctx, ip)
+			if err != nil {
+				return nil, dns2.RcodeServerFailure, err
+			}
+		}
+	}
+	ips4, ips6 := splitNameTypes(question.Name, ips)
+	rrs := ensureBothFamilies(question.Name, ips4, ips6)
+	rCode := dns2.RcodeSuccess
+	return rrs, rCode, err
+}
+
+// rrHeader creates a common DNS RR header for INET class.
+func rrHeader(name string, rrType uint16) dns2.RR_Header {
+	return dns2.RR_Header{
+		Name:   name,
+		Rrtype: rrType,
+		Class:  dns2.ClassINET,
+	}
+}
+
+// splitNameTypes converts the binary-encoded IPs into A and AAAA resource records.
+func splitNameTypes(name string, ips []netip.Addr) (dnsproxy.RRs, dnsproxy.RRs) {
+	ips4 := make(dnsproxy.RRs, 0)
+	ips6 := make(dnsproxy.RRs, 0)
+
+	for _, addr := range ips {
+		if addr.Is6() {
+			ips6 = append(ips6, &dns2.AAAA{
+				Hdr:  rrHeader(name, dns2.TypeAAAA),
+				AAAA: addr.AsSlice(),
+			})
+		} else {
+			ips4 = append(ips4, &dns2.A{
+				Hdr: rrHeader(name, dns2.TypeA),
+				A:   addr.AsSlice(),
+			})
+		}
+	}
+	return ips4, ips6
+}
+
+// ensureBothFamilies pads with an empty RR for the missing address family, preserving original behavior.
+func ensureBothFamilies(name string, ips4, ips6 dnsproxy.RRs) dnsproxy.RRs {
+	switch {
+	case len(ips4) > 0 && len(ips6) == 0:
+		ips6 = append(ips6, &dns2.AAAA{
+			Hdr: rrHeader(name, dns2.TypeAAAA),
+		})
+	case len(ips6) > 0 && len(ips4) == 0:
+		ips4 = append(ips4, &dns2.A{
+			Hdr: rrHeader(name, dns2.TypeA),
+		})
+	}
+	return append(ips4, ips6...)
+}
+
+// clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
+func (s *Session) complexClusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
+	dnsResponse, err := s.managerClient.LookupDNS(ctx, &manager.DNSRequest{
 		Session: s.session,
 		Name:    q.Name,
 		Type:    uint32(q.Qtype),
 	})
 	if err != nil {
 		s.dnsFailures++
-		rCode := dns2.RcodeServerFailure
-		switch {
-		case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled), status.Code(err) == codes.DeadlineExceeded, status.Code(err) == codes.Canceled:
-			rCode = dns2.RcodeNameError
-		default:
-		}
+		rCode := rcodeFromError(err)
 		dlog.Errorf(ctx, "Lookup %s %q %s: %T %v", dns2.TypeToString[q.Qtype], q.Name, dns2.RcodeToString[rCode], err, err)
 		return nil, rCode, err
 	}
-	answer, rCode, err := dnsproxy.FromRPC(r)
+	answer, rCode, err := dnsproxy.FromRPC(dnsResponse)
 	if err != nil {
 		s.dnsFailures++
 		return nil, dns2.RcodeServerFailure, err
@@ -500,6 +624,19 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 		}
 	}
 	return answer, rCode, err
+}
+
+// rcodeFromError maps lookup errors to appropriate DNS RCODEs.
+func rcodeFromError(err error) int {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded),
+		errors.Is(err, context.Canceled),
+		status.Code(err) == codes.DeadlineExceeded,
+		status.Code(err) == codes.Canceled:
+		return dns2.RcodeNameError
+	default:
+		return dns2.RcodeServerFailure
+	}
 }
 
 func (s *Session) GetLocalIP(_ context.Context, destinationIP netip.Addr) (netip.Addr, error) {
@@ -557,12 +694,16 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 	}
 	d := mc.DNS()
 	if proc.RunningInContainer() && s.teleroute != nil {
-		d.LocalAddress = netip.AddrPortFrom(s.teleroute.DaemonAddress(), 53)
+		las := s.teleroute.DaemonAddresses()
+		d.LocalAddresses = make([]netip.AddrPort, len(las))
+		for i, addr := range s.teleroute.DaemonAddresses() {
+			d.LocalAddresses[i] = netip.AddrPortFrom(addr, 53)
+		}
 	} else {
 		if s.localDNS.IsValid() {
-			d.LocalAddress = s.localDNS
+			d.LocalAddresses = []netip.AddrPort{s.localDNS}
 		} else {
-			d.LocalAddress = netip.AddrPort{}
+			d.LocalAddresses = nil
 		}
 	}
 	d.VIFAddress = s.vifDNS
