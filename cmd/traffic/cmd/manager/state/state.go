@@ -3,7 +3,6 @@ package state
 import (
 	"context"
 	"fmt"
-	"net/netip"
 	"os"
 	"slices"
 	"strings"
@@ -27,7 +26,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -67,7 +65,6 @@ type State interface {
 	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*ClientSession, *rpc.InterceptInfo, error)
 	AddInterceptFinalizer(string, InterceptFinalizer) error
 	AddSessionConsumptionMetrics(metrics *rpc.TunnelMetrics)
-	AgentsLookupDNS(context.Context, tunnel.SessionID, *rpc.DNSRequest) (dnsproxy.RRs, int, error)
 	CountAgents() int
 	CountClients() int
 	CountIntercepts() int
@@ -91,7 +88,6 @@ type State interface {
 	HasAgent(name, namespace string) bool
 	MarkSession(*rpc.RemainRequest, time.Time) bool
 	NewInterceptInfo(string, *rpc.CreateInterceptRequest) *Intercept
-	PostLookupDNSResponse(context.Context, *rpc.DNSAgentResponse)
 	EnsureAgent(context.Context, string, string) ([]*AgentSession, error)
 	PrepareIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error)
 	RemoveIntercept(context.Context, string)
@@ -111,10 +107,8 @@ type State interface {
 	ValidateAgentImage(string, bool) error
 	WaitForTempLogLevel(rpc.Manager_WatchLogLevelServer) error
 	WatchAgents(context.Context, func(tunnel.SessionID, *AgentSession) bool) <-chan map[tunnel.SessionID]*AgentSession
-	WatchDial(tunnel.SessionID) <-chan *rpc.DialRequest
 	WatchIntercepts(context.Context, func(sessionID string, intercept *Intercept) bool) <-chan map[string]*Intercept
 	WatchWorkloads(ctx context.Context, namespace string) (ch <-chan []workload.Event, err error)
-	WatchLookupDNS(id tunnel.SessionID) <-chan *rpc.DNSRequest
 	ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error
 	NewWorkloadInfoWatcher(clientSession tunnel.SessionID, namespace string) WorkloadInfoWatcher
 	ManagesNamespace(context.Context, string) bool
@@ -550,8 +544,8 @@ func (s *state) WatchAgents(
 }
 
 func (s *state) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []workload.Event, err error) {
-	ww, _ := s.workloadWatchers.LoadOrCompute(ns, func() (workload.Watcher, bool) {
-		ww, err := workload.NewWatcher(s.backgroundCtx, ns, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
+	ww, _ := s.workloadWatchers.LoadOrCompute(ns, func() (ww workload.Watcher, rm bool) {
+		ww, err = workload.NewWatcher(s.backgroundCtx, ns, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
 		return ww, err != nil // delete if error.
 	})
 	if err != nil {
@@ -652,126 +646,14 @@ func (s *state) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	if cs, ok := s.clients.Load(id); ok {
 		return s.clientTunnel(ctx, cs, stream)
 	}
-	if as, ok := s.agents.Load(id); ok {
-		return s.agentTunnel(ctx, as, stream)
-	}
 	return status.Errorf(codes.NotFound, "Session %q not found", id)
-}
-
-func (s *state) agentTunnel(ctx context.Context, agent *AgentSession, stream tunnel.Stream) error {
-	var scm *SessionConsumptionMetrics
-
-	// If it's an agent, find the associated ClientSession.
-	if clientSessionID := agent.AwaitingBidiMapOwnerSessionID(stream); clientSessionID != "" {
-		cs, ok := s.clients.Load(clientSessionID) // get awaiting state
-		if ok {                                   // if found
-			scm = cs.ConsumptionMetrics()
-		}
-	}
-
-	if bidiPipe, err := agent.OnConnect(ctx, stream, &s.tunnelCounter, scm); err != nil {
-		return err
-	} else if bidiPipe != nil {
-		// A peer awaited this stream. Wait for the bidiPipe to finish
-		<-bidiPipe.Done()
-		return nil
-	}
-
-	// A traffic-agent must always extend the tunnel to the client that it is currently intercepted
-	// by, and hence, start by sending the sessionID of that client on the tunnel.
-
-	// Obtain the desired client session
-	m, err := stream.Receive(ctx)
-	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to read first message from agent tunnel %q: %v", agent.PodName, err)
-	}
-	if m.Code() != tunnel.Session {
-		return status.Errorf(codes.FailedPrecondition, "unable to read ClientSession from agent %q", agent.PodName)
-	}
-	if peerSession, ok := s.clients.Load(tunnel.GetSession(m)); ok {
-		endPoint, err := peerSession.EstablishBidiPipe(ctx, stream)
-		if err == nil {
-			<-endPoint.Done()
-		}
-		return err
-	}
-	return nil
 }
 
 func (s *state) clientTunnel(ctx context.Context, client *ClientSession, stream tunnel.Stream) error {
 	scm := client.ConsumptionMetrics()
-	if bidiPipe, err := client.OnConnect(ctx, stream, &s.tunnelCounter, scm); err != nil {
-		return err
-	} else if bidiPipe != nil {
-		// A peer awaited this stream. Wait for the bidiPipe to finish
-		<-bidiPipe.Done()
-		return nil
-	}
-
-	// The session is either the telepresence client or a traffic-agent.
-	//
-	// A client will want to extend the tunnel to a dialer in an intercepted traffic-agent or, if no
-	// intercept is active, to a dialer in that namespace.
-	if peerSession := s.getAgentForDial(ctx, client, stream.ID().DestinationAddr()); peerSession != nil {
-		endPoint, err := peerSession.EstablishBidiPipe(ctx, stream)
-		if err == nil {
-			<-endPoint.Done()
-		}
-		return err
-	}
-
-	// No peerSession exists, so use the traffic-manager itself for the dial.
 	endPoint := tunnel.NewDialer(stream, func() {}, scm.FromClientBytes, scm.ToClientBytes)
 	endPoint.Start(ctx)
 	<-endPoint.Done()
-	return nil
-}
-
-func (s *state) getAgentForDial(ctx context.Context, client *ClientSession, podIP netip.Addr) *AgentSession {
-	// An agent with a podIO matching the given podIP has precedence
-	agents := s.LoadMatchingAgents(func(key tunnel.SessionID, ai *AgentSession) bool {
-		if aip, err := netip.ParseAddr(ai.PodIp); err == nil {
-			return podIP == aip
-		}
-		return false
-	})
-	for _, agent := range agents {
-		dlog.Debugf(ctx, "selecting agent for dial based on podIP %s", podIP)
-		return agent
-	}
-
-	env := managerutil.GetEnv(ctx)
-	if env.ManagerNamespace == client.Namespace {
-		// Traffic manager will do just fine
-		dlog.Debugf(ctx, "selecting traffic-manager for dial, because it's in namespace %q", client.Namespace)
-		return nil
-	}
-
-	// Any agent that is currently intercepted by the client has precedence.
-	for _, agent := range s.getAgentsInterceptedByClient(client.ID()) {
-		dlog.Debugf(ctx, "selecting intercepted agent %q for dial", agent.PodName)
-		return agent
-	}
-
-	// Any agent from the same namespace will do.
-	for _, agent := range s.getAgentsInNamespace(client.Namespace) {
-		dlog.Debugf(ctx, "selecting agent %q for dial based on namespace %q", agent.PodName, client.Namespace)
-		return agent
-	}
-
-	// Best effort is to use the traffic-manager.
-	// TODO: Add a pod that can dial from the correct namespace
-	dlog.Debugf(ctx, "selecting traffic-manager for dial, even though it's not in namespace %q", client.Namespace)
-	return nil
-}
-
-func (s *state) WatchDial(id tunnel.SessionID) <-chan *rpc.DialRequest {
-	if cs := s.GetClient(id); cs != nil {
-		return cs.Dials()
-	}
-	if as := s.GetAgent(id); as != nil {
-		return as.Dials()
-	}
 	return nil
 }
 

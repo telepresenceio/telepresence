@@ -544,7 +544,6 @@ func (s *session) StartServices(g *dgroup.Group) {
 	g.Go("remain", s.remainLoop)
 	g.Go("agents", s.watchAgentsLoop)
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
-	g.Go("dial-request-watcher", s.dialRequestWatcher)
 }
 
 func runWithRetry(ctx context.Context, f func(context.Context) error) error {

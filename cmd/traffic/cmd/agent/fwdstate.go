@@ -67,11 +67,7 @@ func (pm *ProviderMux) ReportMetrics(ctx context.Context, metrics *manager.Tunne
 
 func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, sessionID tunnel.SessionID, id tunnel.ConnID, roundTripLatency, dialTimeout time.Duration,
 ) (tunnel.Stream, error) {
-	s, err := pm.AgentProvider.CreateClientStream(ctx, tag, sessionID, id, roundTripLatency, dialTimeout)
-	if err == nil && s == nil {
-		s, err = pm.ManagerProvider.CreateClientStream(ctx, tag, sessionID, id, roundTripLatency, dialTimeout)
-	}
-	return s, err
+	return pm.AgentProvider.CreateClientStream(ctx, tag, sessionID, id, roundTripLatency, dialTimeout)
 }
 
 func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {

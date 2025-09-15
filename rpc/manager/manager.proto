@@ -744,9 +744,6 @@ service Manager {
   // returns immediately, having not delivered any snapshots.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
 
-  // WatchAgentsNS is like WatchAgents but limited to a set of namespaces
-  rpc WatchAgentsNS(AgentsRequest) returns (stream AgentInfoSnapshot);
-
   // WatchIntercepts notifies a client or agent of the set of intercepts
   // relevant to that client or agent.
   //
@@ -801,12 +798,6 @@ service Manager {
   // active, the lookup will be performed from the intercepted pods.
   rpc LookupDNS(DNSRequest) returns (DNSResponse);
 
-  // AgentLookupHostResponse lets an agent respond for lookup requests
-  rpc AgentLookupDNSResponse(DNSAgentResponse) returns (google.protobuf.Empty);
-
-  // WatchLookupHost lets an agent receive lookup requests
-  rpc WatchLookupDNS(SessionInfo) returns (stream DNSRequest);
-
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);
 
@@ -821,16 +812,6 @@ service Manager {
   // ReportMetrics is used by a traffic-agent to report metrics for streams
   // established when clients connect directly to traffic-agents using port-forward.
   rpc ReportMetrics(TunnelMetrics) returns (google.protobuf.Empty);
-
-  // WatchDial makes it possible for the client side to receive
-  // DialRequests from the traffic-manager. Requests are sent when an
-  // intercepted traffic-agent creates a Tunnel that needs to be extended
-  // to the Telepresence client on the workstation, or the other way around,
-  // when that client creates a tunnel that needs to be extended to an
-  // intercepted traffic agent. The receiver of the request dials a
-  // connection and responds with a Tunnel. The manager then connects the
-  // two tunnels.
-  rpc WatchDial(SessionInfo) returns (stream DialRequest);
 
   // UninstallAgents will uninstall the traffic-agent from the given workloads (or all
   // workloads if the list is empty).

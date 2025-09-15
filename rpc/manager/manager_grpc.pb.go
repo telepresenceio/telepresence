@@ -24,39 +24,35 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Manager_Version_FullMethodName                = "/telepresence.manager.Manager/Version"
-	Manager_GetAgentImageFQN_FullMethodName       = "/telepresence.manager.Manager/GetAgentImageFQN"
-	Manager_GetAgentConfig_FullMethodName         = "/telepresence.manager.Manager/GetAgentConfig"
-	Manager_GetClientConfig_FullMethodName        = "/telepresence.manager.Manager/GetClientConfig"
-	Manager_GetTelepresenceAPI_FullMethodName     = "/telepresence.manager.Manager/GetTelepresenceAPI"
-	Manager_ArriveAsClient_FullMethodName         = "/telepresence.manager.Manager/ArriveAsClient"
-	Manager_ArriveAsAgent_FullMethodName          = "/telepresence.manager.Manager/ArriveAsAgent"
-	Manager_Remain_FullMethodName                 = "/telepresence.manager.Manager/Remain"
-	Manager_Depart_FullMethodName                 = "/telepresence.manager.Manager/Depart"
-	Manager_SetLogLevel_FullMethodName            = "/telepresence.manager.Manager/SetLogLevel"
-	Manager_GetLogs_FullMethodName                = "/telepresence.manager.Manager/GetLogs"
-	Manager_WatchAgentPods_FullMethodName         = "/telepresence.manager.Manager/WatchAgentPods"
-	Manager_WatchAgents_FullMethodName            = "/telepresence.manager.Manager/WatchAgents"
-	Manager_WatchAgentsNS_FullMethodName          = "/telepresence.manager.Manager/WatchAgentsNS"
-	Manager_WatchIntercepts_FullMethodName        = "/telepresence.manager.Manager/WatchIntercepts"
-	Manager_WatchWorkloads_FullMethodName         = "/telepresence.manager.Manager/WatchWorkloads"
-	Manager_WatchClusterInfo_FullMethodName       = "/telepresence.manager.Manager/WatchClusterInfo"
-	Manager_EnsureAgent_FullMethodName            = "/telepresence.manager.Manager/EnsureAgent"
-	Manager_PrepareIntercept_FullMethodName       = "/telepresence.manager.Manager/PrepareIntercept"
-	Manager_CreateIntercept_FullMethodName        = "/telepresence.manager.Manager/CreateIntercept"
-	Manager_RemoveIntercept_FullMethodName        = "/telepresence.manager.Manager/RemoveIntercept"
-	Manager_GetIntercept_FullMethodName           = "/telepresence.manager.Manager/GetIntercept"
-	Manager_ReviewIntercept_FullMethodName        = "/telepresence.manager.Manager/ReviewIntercept"
-	Manager_GetKnownWorkloadKinds_FullMethodName  = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
-	Manager_Lookup_FullMethodName                 = "/telepresence.manager.Manager/Lookup"
-	Manager_LookupDNS_FullMethodName              = "/telepresence.manager.Manager/LookupDNS"
-	Manager_AgentLookupDNSResponse_FullMethodName = "/telepresence.manager.Manager/AgentLookupDNSResponse"
-	Manager_WatchLookupDNS_FullMethodName         = "/telepresence.manager.Manager/WatchLookupDNS"
-	Manager_WatchLogLevel_FullMethodName          = "/telepresence.manager.Manager/WatchLogLevel"
-	Manager_Tunnel_FullMethodName                 = "/telepresence.manager.Manager/Tunnel"
-	Manager_ReportMetrics_FullMethodName          = "/telepresence.manager.Manager/ReportMetrics"
-	Manager_WatchDial_FullMethodName              = "/telepresence.manager.Manager/WatchDial"
-	Manager_UninstallAgents_FullMethodName        = "/telepresence.manager.Manager/UninstallAgents"
+	Manager_Version_FullMethodName               = "/telepresence.manager.Manager/Version"
+	Manager_GetAgentImageFQN_FullMethodName      = "/telepresence.manager.Manager/GetAgentImageFQN"
+	Manager_GetAgentConfig_FullMethodName        = "/telepresence.manager.Manager/GetAgentConfig"
+	Manager_GetClientConfig_FullMethodName       = "/telepresence.manager.Manager/GetClientConfig"
+	Manager_GetTelepresenceAPI_FullMethodName    = "/telepresence.manager.Manager/GetTelepresenceAPI"
+	Manager_ArriveAsClient_FullMethodName        = "/telepresence.manager.Manager/ArriveAsClient"
+	Manager_ArriveAsAgent_FullMethodName         = "/telepresence.manager.Manager/ArriveAsAgent"
+	Manager_Remain_FullMethodName                = "/telepresence.manager.Manager/Remain"
+	Manager_Depart_FullMethodName                = "/telepresence.manager.Manager/Depart"
+	Manager_SetLogLevel_FullMethodName           = "/telepresence.manager.Manager/SetLogLevel"
+	Manager_GetLogs_FullMethodName               = "/telepresence.manager.Manager/GetLogs"
+	Manager_WatchAgentPods_FullMethodName        = "/telepresence.manager.Manager/WatchAgentPods"
+	Manager_WatchAgents_FullMethodName           = "/telepresence.manager.Manager/WatchAgents"
+	Manager_WatchIntercepts_FullMethodName       = "/telepresence.manager.Manager/WatchIntercepts"
+	Manager_WatchWorkloads_FullMethodName        = "/telepresence.manager.Manager/WatchWorkloads"
+	Manager_WatchClusterInfo_FullMethodName      = "/telepresence.manager.Manager/WatchClusterInfo"
+	Manager_EnsureAgent_FullMethodName           = "/telepresence.manager.Manager/EnsureAgent"
+	Manager_PrepareIntercept_FullMethodName      = "/telepresence.manager.Manager/PrepareIntercept"
+	Manager_CreateIntercept_FullMethodName       = "/telepresence.manager.Manager/CreateIntercept"
+	Manager_RemoveIntercept_FullMethodName       = "/telepresence.manager.Manager/RemoveIntercept"
+	Manager_GetIntercept_FullMethodName          = "/telepresence.manager.Manager/GetIntercept"
+	Manager_ReviewIntercept_FullMethodName       = "/telepresence.manager.Manager/ReviewIntercept"
+	Manager_GetKnownWorkloadKinds_FullMethodName = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
+	Manager_Lookup_FullMethodName                = "/telepresence.manager.Manager/Lookup"
+	Manager_LookupDNS_FullMethodName             = "/telepresence.manager.Manager/LookupDNS"
+	Manager_WatchLogLevel_FullMethodName         = "/telepresence.manager.Manager/WatchLogLevel"
+	Manager_Tunnel_FullMethodName                = "/telepresence.manager.Manager/Tunnel"
+	Manager_ReportMetrics_FullMethodName         = "/telepresence.manager.Manager/ReportMetrics"
+	Manager_UninstallAgents_FullMethodName       = "/telepresence.manager.Manager/UninstallAgents"
 )
 
 // ManagerClient is the client API for Manager service.
@@ -98,8 +94,6 @@ type ManagerClient interface {
 	// A session ID is required; if no session ID is given then the call
 	// returns immediately, having not delivered any snapshots.
 	WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoSnapshot], error)
-	// WatchAgentsNS is like WatchAgents but limited to a set of namespaces
-	WatchAgentsNS(ctx context.Context, in *AgentsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoSnapshot], error)
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
 	//
@@ -142,10 +136,6 @@ type ManagerClient interface {
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error)
-	// AgentLookupHostResponse lets an agent respond for lookup requests
-	AgentLookupDNSResponse(ctx context.Context, in *DNSAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// WatchLookupHost lets an agent receive lookup requests
-	WatchLookupDNS(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DNSRequest], error)
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLevelRequest], error)
 	// A Tunnel represents one single connection where the client or
@@ -158,15 +148,6 @@ type ManagerClient interface {
 	// ReportMetrics is used by a traffic-agent to report metrics for streams
 	// established when clients connect directly to traffic-agents using port-forward.
 	ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// WatchDial makes it possible for the client side to receive
-	// DialRequests from the traffic-manager. Requests are sent when an
-	// intercepted traffic-agent creates a Tunnel that needs to be extended
-	// to the Telepresence client on the workstation, or the other way around,
-	// when that client creates a tunnel that needs to be extended to an
-	// intercepted traffic agent. The receiver of the request dials a
-	// connection and responds with a Tunnel. The manager then connects the
-	// two tunnels.
-	WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DialRequest], error)
 	// UninstallAgents will uninstall the traffic-agent from the given workloads (or all
 	// workloads if the list is empty).
 	UninstallAgents(ctx context.Context, in *UninstallAgentsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -328,28 +309,9 @@ func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts .
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentsClient = grpc.ServerStreamingClient[AgentInfoSnapshot]
 
-func (c *managerClient) WatchAgentsNS(ctx context.Context, in *AgentsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoSnapshot], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchAgentsNS_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[AgentsRequest, AgentInfoSnapshot]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Manager_WatchAgentsNSClient = grpc.ServerStreamingClient[AgentInfoSnapshot]
-
 func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InterceptInfoSnapshot], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchIntercepts_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchIntercepts_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +330,7 @@ type Manager_WatchInterceptsClient = grpc.ServerStreamingClient[InterceptInfoSna
 
 func (c *managerClient) WatchWorkloads(ctx context.Context, in *WorkloadEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WorkloadEventsDelta], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchWorkloads_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchWorkloads_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +349,7 @@ type Manager_WatchWorkloadsClient = grpc.ServerStreamingClient[WorkloadEventsDel
 
 func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ClusterInfo], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchClusterInfo_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchClusterInfo_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -494,38 +456,9 @@ func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...g
 	return out, nil
 }
 
-func (c *managerClient) AgentLookupDNSResponse(ctx context.Context, in *DNSAgentResponse, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, Manager_AgentLookupDNSResponse_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) WatchLookupDNS(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DNSRequest], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchLookupDNS_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[SessionInfo, DNSRequest]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Manager_WatchLookupDNSClient = grpc.ServerStreamingClient[DNSRequest]
-
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLevelRequest], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_WatchLogLevel_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchLogLevel_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +477,7 @@ type Manager_WatchLogLevelClient = grpc.ServerStreamingClient[LogLevelRequest]
 
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TunnelMessage, TunnelMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_Tunnel_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_Tunnel_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -564,25 +497,6 @@ func (c *managerClient) ReportMetrics(ctx context.Context, in *TunnelMetrics, op
 	}
 	return out, nil
 }
-
-func (c *managerClient) WatchDial(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DialRequest], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], Manager_WatchDial_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[SessionInfo, DialRequest]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Manager_WatchDialClient = grpc.ServerStreamingClient[DialRequest]
 
 func (c *managerClient) UninstallAgents(ctx context.Context, in *UninstallAgentsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -633,8 +547,6 @@ type ManagerServer interface {
 	// A session ID is required; if no session ID is given then the call
 	// returns immediately, having not delivered any snapshots.
 	WatchAgents(*SessionInfo, grpc.ServerStreamingServer[AgentInfoSnapshot]) error
-	// WatchAgentsNS is like WatchAgents but limited to a set of namespaces
-	WatchAgentsNS(*AgentsRequest, grpc.ServerStreamingServer[AgentInfoSnapshot]) error
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
 	//
@@ -677,10 +589,6 @@ type ManagerServer interface {
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error)
-	// AgentLookupHostResponse lets an agent respond for lookup requests
-	AgentLookupDNSResponse(context.Context, *DNSAgentResponse) (*emptypb.Empty, error)
-	// WatchLookupHost lets an agent receive lookup requests
-	WatchLookupDNS(*SessionInfo, grpc.ServerStreamingServer[DNSRequest]) error
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(*emptypb.Empty, grpc.ServerStreamingServer[LogLevelRequest]) error
 	// A Tunnel represents one single connection where the client or
@@ -693,15 +601,6 @@ type ManagerServer interface {
 	// ReportMetrics is used by a traffic-agent to report metrics for streams
 	// established when clients connect directly to traffic-agents using port-forward.
 	ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error)
-	// WatchDial makes it possible for the client side to receive
-	// DialRequests from the traffic-manager. Requests are sent when an
-	// intercepted traffic-agent creates a Tunnel that needs to be extended
-	// to the Telepresence client on the workstation, or the other way around,
-	// when that client creates a tunnel that needs to be extended to an
-	// intercepted traffic agent. The receiver of the request dials a
-	// connection and responds with a Tunnel. The manager then connects the
-	// two tunnels.
-	WatchDial(*SessionInfo, grpc.ServerStreamingServer[DialRequest]) error
 	// UninstallAgents will uninstall the traffic-agent from the given workloads (or all
 	// workloads if the list is empty).
 	UninstallAgents(context.Context, *UninstallAgentsRequest) (*emptypb.Empty, error)
@@ -754,9 +653,6 @@ func (UnimplementedManagerServer) WatchAgentPods(*SessionInfo, grpc.ServerStream
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, grpc.ServerStreamingServer[AgentInfoSnapshot]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgents not implemented")
 }
-func (UnimplementedManagerServer) WatchAgentsNS(*AgentsRequest, grpc.ServerStreamingServer[AgentInfoSnapshot]) error {
-	return status.Errorf(codes.Unimplemented, "method WatchAgentsNS not implemented")
-}
 func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, grpc.ServerStreamingServer[InterceptInfoSnapshot]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchIntercepts not implemented")
 }
@@ -793,12 +689,6 @@ func (UnimplementedManagerServer) Lookup(context.Context, *LookupRequest) (*Look
 func (UnimplementedManagerServer) LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
 }
-func (UnimplementedManagerServer) AgentLookupDNSResponse(context.Context, *DNSAgentResponse) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AgentLookupDNSResponse not implemented")
-}
-func (UnimplementedManagerServer) WatchLookupDNS(*SessionInfo, grpc.ServerStreamingServer[DNSRequest]) error {
-	return status.Errorf(codes.Unimplemented, "method WatchLookupDNS not implemented")
-}
 func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, grpc.ServerStreamingServer[LogLevelRequest]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchLogLevel not implemented")
 }
@@ -807,9 +697,6 @@ func (UnimplementedManagerServer) Tunnel(grpc.BidiStreamingServer[TunnelMessage,
 }
 func (UnimplementedManagerServer) ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReportMetrics not implemented")
-}
-func (UnimplementedManagerServer) WatchDial(*SessionInfo, grpc.ServerStreamingServer[DialRequest]) error {
-	return status.Errorf(codes.Unimplemented, "method WatchDial not implemented")
 }
 func (UnimplementedManagerServer) UninstallAgents(context.Context, *UninstallAgentsRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UninstallAgents not implemented")
@@ -1055,17 +942,6 @@ func _Manager_WatchAgents_Handler(srv interface{}, stream grpc.ServerStream) err
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentsServer = grpc.ServerStreamingServer[AgentInfoSnapshot]
 
-func _Manager_WatchAgentsNS_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(AgentsRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ManagerServer).WatchAgentsNS(m, &grpc.GenericServerStream[AgentsRequest, AgentInfoSnapshot]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Manager_WatchAgentsNSServer = grpc.ServerStreamingServer[AgentInfoSnapshot]
-
 func _Manager_WatchIntercepts_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SessionInfo)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1261,35 +1137,6 @@ func _Manager_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Manager_AgentLookupDNSResponse_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DNSAgentResponse)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).AgentLookupDNSResponse(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Manager_AgentLookupDNSResponse_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).AgentLookupDNSResponse(ctx, req.(*DNSAgentResponse))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_WatchLookupDNS_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(SessionInfo)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ManagerServer).WatchLookupDNS(m, &grpc.GenericServerStream[SessionInfo, DNSRequest]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Manager_WatchLookupDNSServer = grpc.ServerStreamingServer[DNSRequest]
-
 func _Manager_WatchLogLevel_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1325,17 +1172,6 @@ func _Manager_ReportMetrics_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	return interceptor(ctx, in, info, handler)
 }
-
-func _Manager_WatchDial_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(SessionInfo)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ManagerServer).WatchDial(m, &grpc.GenericServerStream[SessionInfo, DialRequest]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Manager_WatchDialServer = grpc.ServerStreamingServer[DialRequest]
 
 func _Manager_UninstallAgents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UninstallAgentsRequest)
@@ -1443,10 +1279,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Manager_LookupDNS_Handler,
 		},
 		{
-			MethodName: "AgentLookupDNSResponse",
-			Handler:    _Manager_AgentLookupDNSResponse_Handler,
-		},
-		{
 			MethodName: "ReportMetrics",
 			Handler:    _Manager_ReportMetrics_Handler,
 		},
@@ -1467,11 +1299,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "WatchAgentsNS",
-			Handler:       _Manager_WatchAgentsNS_Handler,
-			ServerStreams: true,
-		},
-		{
 			StreamName:    "WatchIntercepts",
 			Handler:       _Manager_WatchIntercepts_Handler,
 			ServerStreams: true,
@@ -1487,11 +1314,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "WatchLookupDNS",
-			Handler:       _Manager_WatchLookupDNS_Handler,
-			ServerStreams: true,
-		},
-		{
 			StreamName:    "WatchLogLevel",
 			Handler:       _Manager_WatchLogLevel_Handler,
 			ServerStreams: true,
@@ -1501,11 +1323,6 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Manager_Tunnel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
-		},
-		{
-			StreamName:    "WatchDial",
-			Handler:       _Manager_WatchDial_Handler,
-			ServerStreams: true,
 		},
 	},
 	Metadata: "manager/manager.proto",

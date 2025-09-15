@@ -506,14 +506,6 @@ func (s *service) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	return s.watchAgents(ctx, func(_ tunnel.SessionID, a *state.AgentSession) bool { return a.Namespace == ns }, stream)
 }
 
-// WatchAgentsNS notifies a client of the set of known Agents in the namespaces given in the request.
-func (s *service) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_WatchAgentsNSServer) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), request.Session)
-	return s.watchAgents(ctx, func(_ tunnel.SessionID, a *state.AgentSession) bool {
-		return slices.Contains(request.Namespaces, a.Namespace)
-	}, stream)
-}
-
 func infosEqual(a, b *rpc.AgentInfo) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -864,33 +856,7 @@ func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {
 	if err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
 	}
-	if a := s.state.GetAgent(stream.SessionID()); a != nil {
-		// This is actually an AgentToManager tunnel.
-		stream.SetTag(tunnel.AgentToManager)
-	}
 	return s.state.Tunnel(ctx, stream)
-}
-
-func (s *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), session)
-	lrCh := s.state.WatchDial(tunnel.SessionID(session.SessionId))
-	for {
-		select {
-		// connection broken
-		case <-ctx.Done():
-			return nil
-		case lr := <-lrCh:
-			if lr == nil {
-				return nil
-			}
-			if err := stream.Send(lr); err != nil {
-				dlog.Errorf(ctx, "failed to send dial request: %v", err)
-				// We couldn't stream the dial request. This likely means
-				// that we lost connection.
-				return nil
-			}
-		}
-	}
 }
 
 // hasDomainSuffix checks if the given name is suffixed with the given suffix. The following
@@ -1102,32 +1068,6 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 		dlog.Tracef(ctx, "traffic-manager: %s %s -> %s", qName, qtn, rrs)
 	}
 	return rrs, rCode
-}
-
-func (s *service) AgentLookupDNSResponse(ctx context.Context, response *rpc.DNSAgentResponse) (*empty.Empty, error) {
-	ctx = managerutil.WithSessionInfo(ctx, response.GetSession())
-	dlog.Debugf(ctx, "name: %s", response.Request.Name)
-	s.state.PostLookupDNSResponse(ctx, response)
-	return &empty.Empty{}, nil
-}
-
-func (s *service) WatchLookupDNS(session *rpc.SessionInfo, stream rpc.Manager_WatchLookupDNSServer) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), session)
-	rqCh := s.state.WatchLookupDNS(tunnel.SessionID(session.SessionId))
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case rq := <-rqCh:
-			if rq == nil {
-				return nil
-			}
-			if err := stream.Send(rq); err != nil {
-				dlog.Errorf(ctx, "WatchLookupDNS.Send() failed: %v", err)
-				return nil
-			}
-		}
-	}
 }
 
 // GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the

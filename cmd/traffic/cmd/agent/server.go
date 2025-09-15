@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/netip"
 	"time"
@@ -127,8 +128,7 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 		stCh = aw.streamCh
 	}
 	if !ok {
-		dlog.Debugf(ctx, "Unable to create tunnel to client %s for id %s: no dial watcher", sessionID, id)
-		return nil, nil
+		return nil, fmt.Errorf("unable to create tunnel to client %s for id %s: no dial watcher", sessionID, id)
 	}
 	drCh <- &rpc.DialRequest{ConnId: []byte(id), DialTimeout: int64(dialTimeout), RoundtripLatency: int64(roundTripLatency)}
 
