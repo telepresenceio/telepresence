@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
@@ -395,28 +396,10 @@ func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIn
 	return ix
 }
 
-func (c *configWatcher) gcInactivated(now time.Time) {
-	c.inactivePods.Range(func(key types.UID, value inactivation) bool {
-		if now.Sub(value.Time) > time.Minute {
-			c.inactivePods.Delete(key)
-		}
-		return true
-	})
-}
-
 func (c *configWatcher) Start(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		for {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			case now := <-ticker.C:
-				c.gcInactivated(now)
-			}
-		}
-	}()
+	go maps.GC(c.inactivePods, 10*time.Second, ctx.Done(), func(key types.UID, value inactivation) bool {
+		return time.Since(value.Time) > time.Minute
+	})
 
 	for _, ns := range namespaces.GetOrGlobal(ctx) {
 		dlog.Debugf(ctx, "Adding watchers for namespace %s", ns)

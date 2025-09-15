@@ -50,6 +50,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -386,6 +387,7 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 	// requested complex lookups. The presence of the s.lookupSequencer will trigger simple lookups.
 	if !(cfg.DNS().UseComplexLookup || semver.MustParse(ver.FinalizeVersion()).LT(semver.MustParse("2.25.0"))) {
 		s.lookupSequencer = xsync.NewMap[string, clusterLookupResult]()
+		go s.lookupSequencerGC(c)
 	}
 
 	rt := cfg.Routing()
@@ -417,6 +419,18 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerPr
 		close(s.routesCh)
 	}()
 	return c, s, nil
+}
+
+// lookupSequencerTTL is the maximum time to keep a lookup result cached with the purpose of avoiding
+// both A and AAAA lookups for the same name.
+const lookupSequencerTTL = 500 * time.Millisecond
+
+func (s *Session) lookupSequencerGC(ctx context.Context) {
+	// Cleans the lookupSequencer from time to time to avoid that it grows too big if many different
+	// names are looked up.
+	maps.GC(s.lookupSequencer, lookupSequencerTTL, ctx.Done(), func(key string, value clusterLookupResult) bool {
+		return time.Since(value.created) > lookupSequencerTTL
+	})
 }
 
 func (s *Session) resolvePort(ctx context.Context, host, portStr string) (ap types.AddrPortProto, err error) {
@@ -479,7 +493,7 @@ func (s *Session) clusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy
 	// The lookupSequencer ensures that successive calls for the same name, whether they are A or AAAA, are not
 	// performed concurrently. The traffic manager will return all known IPs for the name regardless of the type.
 	result, _ := s.lookupSequencer.Compute(q.Name, func(oldValue clusterLookupResult, loaded bool) (newValue clusterLookupResult, op xsync.ComputeOp) {
-		if loaded && time.Since(oldValue.created) < 2*time.Second {
+		if loaded && time.Since(oldValue.created) < lookupSequencerTTL {
 			return oldValue, xsync.CancelOp
 		}
 		rrs, rCode, err := s.simpleLookup(ctx, q)
