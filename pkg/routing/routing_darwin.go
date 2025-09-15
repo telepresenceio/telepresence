@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	findInterfaceRegex = "(?:gateway:\\s+([0-9.]+)\\s+.*)?interface:\\s+([a-z0-9]+)"
+	findInterfaceRegex = "(?:gateway:\\s+([0-9a-f:.]+)\\s+.*)?interface:\\s+([a-z0-9]+)"
 	defaultRegex       = "destination:\\s+default"
-	maskRegex          = "mask:\\s+([0-9.]+)"
+	maskRegex          = "mask:\\s+([0-9a-f:.]+)"
 )
 
 var (
@@ -89,25 +89,19 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			if !ok {
 				continue
 			}
+			bits, _ := net.IPMask(mask.IP[:]).Size()
+			routedNet := netip.PrefixFrom(netip.AddrFrom16(a.IP), bits)
 			gwIP := netip.IPv6Unspecified()
 			if gwAddr, ok := gw.(*route.Inet6Addr); ok {
 				gwIP = netip.AddrFrom16(gwAddr.IP)
 			}
-			i := 0
-			for _, b := range mask.IP {
-				if b == 0 {
-					break
-				}
-				i++
-			}
-			routedNet := netip.PrefixFrom(netip.AddrFrom16(a.IP), i*8)
 			routes = append(routes, &Route{
 				InterfaceIndex: iface.Index,
 				InterfaceName:  iface.Name,
 				Gateway:        gwIP,
 				LocalIP:        localIP,
 				RoutedNet:      routedNet,
-				Default:        i == 0,
+				Default:        bits == 0,
 			})
 		}
 	}
@@ -116,15 +110,20 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 
 func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	ip := routedNet.Addr()
+	args := []string{"-n", "get"}
+	if ip.Is6() {
+		args = append(args, "-inet6")
+	}
+	args = append(args, ip.String())
+	cmd := exec.CommandContext(ctx, "route", args...)
 	errOut := bytes.Buffer{}
-	cmd := exec.CommandContext(ctx, "route", "-n", "get", ip.String())
 	cmd.Stderr = &errOut
 	out, err := cmd.Output()
 	if err == nil && len(out) == 0 {
 		err = errors.New(errOut.String())
 	}
 	if err != nil {
-		return nil, fmt.Errorf("unable to run 'route -n get %s': %w", ip, err)
+		return nil, fmt.Errorf("unable to run 'route %s': %w", args, err)
 	}
 	match := findInterfaceRe.FindStringSubmatch(string(out))
 	// This might fail because no "gateway" is listed. The problem is that without a gateway IP we can't
@@ -155,8 +154,10 @@ func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 	ones := routedNet.Bits()
 	if match := maskRe.FindStringSubmatch(string(out)); match != nil {
 		if addr, err := netip.ParseAddr(match[1]); err == nil {
-			ip := addr.As4()
-			mask := net.IPv4Mask(ip[0], ip[1], ip[2], ip[3])
+			if addr.Is4In6() {
+				addr = netip.AddrFrom4(addr.As4())
+			}
+			mask := net.IPMask(addr.AsSlice())
 			ones, _ = mask.Size()
 		}
 	}
@@ -195,7 +196,7 @@ func withRouteSocket(f func(routeSocket int) error) error {
 
 // toRouteAddr converts a net.IP to its corresponding addrMessage.Addr.
 func toRouteAddr(ip netip.Addr) (addr route.Addr) {
-	if ip.Is4() {
+	if ip.Is4() || ip.Is4In6() {
 		return &route.Inet4Addr{IP: ip.As4()}
 	}
 	return &route.Inet6Addr{IP: ip.As16()}
