@@ -104,38 +104,6 @@ func (s *service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 	return
 }
 
-// isMultiPortIntercept checks if the intercept is one of several active intercepts on the same workload.
-// If it is, then the first returned value will be true and the second will indicate if those intercepts are
-// on different services. Otherwise, this function returns false, false.
-func (s *service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
-	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
-
-	// The InterceptsForWorkload will not include failing or removed intercepts so the
-	// subject must be added unless it's already there.
-	active := false
-	for _, is := range wis {
-		if is.Name == spec.Name {
-			active = true
-			break
-		}
-	}
-	if !active {
-		wis = append(wis, spec)
-	}
-	if len(wis) < 2 {
-		return false, false
-	}
-	var suid string
-	for _, is := range wis {
-		if suid == "" {
-			suid = is.ServiceUid
-		} else if suid != is.ServiceUid {
-			return true, true
-		}
-	}
-	return true, false
-}
-
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
 		_, result = session.CanIntercept(c, ir)

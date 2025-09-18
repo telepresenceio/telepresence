@@ -375,25 +375,6 @@ func (s *state) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 	return nil
 }
 
-// getAgentsInterceptedByClient returns the session IDs for each agent that are currently
-// intercepted by the client with the given client session ID.
-func (s *state) getAgentsInterceptedByClient(clientSessionID tunnel.SessionID) map[tunnel.SessionID]*AgentSession {
-	intercepts := s.intercepts.LoadMatching(func(_ string, ii *Intercept) bool {
-		return ii.ClientSession.SessionId == string(clientSessionID)
-	})
-	if len(intercepts) == 0 {
-		return nil
-	}
-	return s.LoadMatchingAgents(func(_ tunnel.SessionID, ai *AgentSession) bool {
-		for _, ii := range intercepts {
-			if ai.Name == ii.Spec.Agent && ai.Namespace == ii.Spec.Namespace {
-				return true
-			}
-		}
-		return false
-	})
-}
-
 func (s *state) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSession, err error) {
 	var wl k8sapi.Workload
 	wl, err = agentmap.GetWorkload(ctx, n, ns, "")

@@ -397,7 +397,7 @@ func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIn
 }
 
 func (c *configWatcher) Start(ctx context.Context) {
-	go maps.GC(c.inactivePods, 10*time.Second, ctx.Done(), func(key types.UID, value inactivation) bool {
+	go maps.GC(c.inactivePods, 10*time.Second, ctx.Done(), func(_ types.UID, value inactivation) bool {
 		return time.Since(value.Time) > time.Minute
 	})
 

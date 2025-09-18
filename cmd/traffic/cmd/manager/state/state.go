@@ -554,15 +554,6 @@ func (s *state) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []work
 	return ww.Subscribe(ctx), nil
 }
 
-// Intercepts //////////////////////////////////////////////////////////////////////////////////////
-
-// getAgentsInNamespace returns the session IDs the agents in the given namespace.
-func (s *state) getAgentsInNamespace(namespace string) map[tunnel.SessionID]*AgentSession {
-	return s.LoadMatchingAgents(func(_ tunnel.SessionID, ai *AgentSession) bool {
-		return ai.Namespace == namespace
-	})
-}
-
 // UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
 // storing and returning the result.  If the given intercept does not exist, then the mutator
 // function is not run, and nil is returned.
