@@ -8,7 +8,6 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -171,23 +170,6 @@ func (ha *HelmCommand) run(cmd *cobra.Command, _ []string) (err error) {
 		return err
 	}
 	ctx := cmd.Context()
-	ctx = scout.NewReporter(ctx, "cli")
-	defer func() {
-		if err == nil {
-			if ha.Type() == helm.Uninstall {
-				scout.Report(ctx, "helm_uninstall_success")
-			} else {
-				scout.Report(ctx, "helm_install_success", scout.Entry{Key: "upgrade", Value: ha.Type() == helm.Upgrade})
-			}
-		} else {
-			if ha.Type() == helm.Uninstall {
-				scout.Report(ctx, "helm_uninstall_failure", scout.Entry{Key: "error", Value: err.Error()})
-			} else {
-				scout.Report(ctx, "helm_install_failure", scout.Entry{Key: "error", Value: err.Error()}, scout.Entry{Key: "upgrade", Value: ha.Type() == helm.Upgrade})
-			}
-		}
-	}()
-
 	if HelmInstallPrologFunc != nil {
 		if err = HelmInstallPrologFunc(ctx, cmd.Flags(), ha); err != nil {
 			return err

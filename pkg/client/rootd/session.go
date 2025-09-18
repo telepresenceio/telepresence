@@ -44,7 +44,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -354,8 +353,6 @@ func NewSession(c context.Context, mi *rpc.NetworkConfig) (context.Context, *Ses
 		return c, nil, err
 	}
 	s.clientConn = conn
-	// store session in ctx for reporting
-	c = scout.WithSession(c, s)
 	return c, s, nil
 }
 
@@ -1382,11 +1379,6 @@ func (s *Session) stop(c context.Context) {
 		return
 	}
 	dlog.Debug(c, "Bringing down TUN-device")
-
-	scout.Report(c, "incluster_dns_queries",
-		scout.Entry{Key: "total", Value: s.dnsLookups},
-		scout.Entry{Key: "failures", Value: s.dnsFailures})
-
 	cc, cancel := context.WithTimeout(context.WithoutCancel(c), time.Second)
 	go func() {
 		s.handlers.CloseAll(cc)

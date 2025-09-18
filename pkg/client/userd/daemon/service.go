@@ -28,7 +28,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
@@ -436,7 +435,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	c = scout.NewReporter(c, "connector")
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
@@ -499,11 +497,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	g.Go(sessionName, func(c context.Context) error {
 		return s.ManageSessions(c)
 	})
-
-	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
-	// metriton don't block the functional goroutines.
-	g.Go("background-metriton", scout.Run)
-
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)

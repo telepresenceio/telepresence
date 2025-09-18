@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/netip"
 	"os/exec"
@@ -25,7 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/bwcompat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -138,99 +136,29 @@ func (s *service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, 
 	return true, false
 }
 
-func (s *service) scoutInterceptEntries(ctx context.Context, spec *manager.InterceptSpec, result *rpc.InterceptResult) ([]scout.Entry, bool) {
-	// The scout belongs to the session and can only contain session specific meta-data,
-	// so we don't want to use scout.SetMetadatum() here.
-	entries := make([]scout.Entry, 0, 7)
-	if spec != nil {
-		entries = append(entries,
-			scout.Entry{Key: "service_name", Value: spec.ServiceName},
-			scout.Entry{Key: "service_namespace", Value: spec.Namespace},
-			scout.Entry{Key: "intercept_mechanism", Value: spec.Mechanism},
-			scout.Entry{Key: "intercept_mechanism_numargs", Value: len(spec.Mechanism)},
-		)
-		multiPort, multiService := s.isMultiPortIntercept(spec)
-		if multiPort {
-			entries = append(entries, scout.Entry{Key: "multi_port", Value: multiPort})
-			if multiService {
-				entries = append(entries, scout.Entry{Key: "multi_service", Value: multiService})
-			}
-		}
-	}
-	if result != nil {
-		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
-		if result.Error != common.InterceptError_UNSPECIFIED {
-			es := result.Error.String()
-			if result.ErrorText != "" {
-				es = fmt.Sprintf("%s: %s", es, result.ErrorText)
-			}
-			dlog.Debugf(ctx, "reporting error: %s", es)
-			entries = append(entries, scout.Entry{Key: "error", Value: es})
-			return entries, false
-		}
-	}
-	return entries, true
-}
-
 func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	var entries []scout.Entry
-	ok := false
-	defer func() {
-		var action string
-		if ok {
-			action = "connector_can_intercept_success"
-		} else {
-			action = "connector_can_intercept_fail"
-		}
-		scout.Report(c, action, entries...)
-	}()
 	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
 		_, result = session.CanIntercept(c, ir)
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
-		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
 		return nil
 	})
 	return
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	var entries []scout.Entry
-	ok := false
-	defer func() {
-		var action string
-		if ok {
-			action = "connector_create_intercept_success"
-		} else {
-			action = "connector_create_intercept_fail"
-		}
-		scout.Report(c, action, entries...)
-	}()
 	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
 		result = session.AddIntercept(c, ir)
-		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
 		return nil
 	})
 	return
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	var spec *manager.InterceptSpec
-	var entries []scout.Entry
-	ok := false
-	defer func() {
-		var action string
-		if ok {
-			action = "connector_remove_intercept_success"
-		} else {
-			action = "connector_remove_intercept_fail"
-		}
-		scout.Report(c, action, entries...)
-	}()
 	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
 		result = &rpc.InterceptResult{}
-		spec = session.GetInterceptSpec(rr.Name)
+		spec := session.GetInterceptSpec(rr.Name)
 		if spec != nil {
 			result.ServiceUid = spec.ServiceUid
 			result.WorkloadKind = spec.WorkloadKind
@@ -246,7 +174,6 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
-		entries, ok = s.scoutInterceptEntries(c, spec, result)
 		return nil
 	})
 	return result, err

@@ -45,7 +45,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
@@ -167,38 +166,6 @@ func NewSession(
 	dlog.Info(ctx, "-- Starting new session")
 
 	cr := cri.Request()
-	connectStart := time.Now()
-	defer func() {
-		if info.Error == rpc.ConnectInfo_UNSPECIFIED {
-			scout.Report(ctx, "connect",
-				scout.Entry{
-					Key:   "time_to_connect",
-					Value: time.Since(connectStart).Seconds(),
-				}, scout.Entry{
-					Key:   "mapped_namespaces",
-					Value: len(cr.MappedNamespaces),
-				})
-		} else {
-			scout.Report(ctx, "connect_error",
-				scout.Entry{
-					Key:   "error",
-					Value: info.ErrorText,
-				}, scout.Entry{
-					Key:   "error_type",
-					Value: info.Error.String(),
-				}, scout.Entry{
-					Key:   "error_category",
-					Value: info.ErrorCategory,
-				}, scout.Entry{
-					Key:   "time_to_fail",
-					Value: time.Since(connectStart).Seconds(),
-				}, scout.Entry{
-					Key:   "mapped_namespaces",
-					Value: len(cr.MappedNamespaces),
-				})
-		}
-	}()
-
 	dlog.Infof(ctx, "Connecting to k8s context %s (%s) ...", config.Context, config.Server)
 	ctx, cluster, err := k8s.ConnectCluster(ctx, cr, config)
 	if err != nil {
@@ -220,9 +187,6 @@ func NewSession(
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return ctx, nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
-
-	// store session in ctx for reporting
-	ctx = scout.WithSession(ctx, tmgr)
 
 	var tmCfg client.Config
 	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})

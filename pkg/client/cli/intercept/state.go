@@ -21,7 +21,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -148,9 +147,6 @@ func (s *state) RunAndLeave() bool {
 func (s *state) Run(ctx context.Context) (*Info, error) {
 	progress.Start(ctx, "Initializing")
 	defer progress.Stop(ctx)
-	ctx = scout.NewReporter(ctx, "cli")
-	scout.Start(ctx)
-	defer scout.Close(ctx)
 
 	var err error
 	if !s.RunAndLeave() {
@@ -211,27 +207,10 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	progress.Start(ctx, "Creating")
 	defer progress.Stop(ctx)
 
-	what := s.what()
-
-	// Add whatever metadata we already have to scout
-	scout.SetMetadatum(ctx, "service_name", s.AgentName)
-	scout.SetMetadatum(ctx, "manager_install_id", s.status.ManagerInstallId)
-	scout.SetMetadatum(ctx, what+"_mechanism", s.Mechanism)
-	scout.SetMetadatum(ctx, what+"_mechanism_numargs", len(s.MechanismArgs))
-
 	ir, err := s.self.CreateRequest(ctx)
 	if err != nil {
-		scout.Report(ctx, what+"_validation_fail", scout.Entry{Key: "error", Value: err.Error()})
 		return false, errcat.NoDaemonLogs.New(err)
 	}
-
-	defer func() {
-		if err != nil {
-			scout.Report(ctx, what+"_fail", scout.Entry{Key: "error", Value: err.Error()})
-		} else {
-			scout.Report(ctx, what+"_success")
-		}
-	}()
 
 	// Submit the request
 	egType := types.EngagementTypeFromSpec(ir.Spec)
@@ -242,19 +221,12 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	}
 	progress.Done(ctx, egType.WorkDone())
 	progress.Infof(ctx, "Using %s %s", r.WorkloadKind, s.AgentName)
-	var intercept *manager.InterceptInfo
-
-	// Add metadata to scout from InterceptResult
-	scout.SetMetadatum(ctx, "service_uid", r.GetServiceUid())
-	scout.SetMetadatum(ctx, "workload_kind", r.GetWorkloadKind())
 
 	// Since a user can create an intercept without specifying a namespace
 	// (thus using the default in their kubeconfig), we should be getting
 	// the namespace from the InterceptResult because that adds the namespace
 	// if it wasn't given on the cli by the user
-	scout.SetMetadatum(ctx, "service_namespace", r.GetInterceptInfo().GetSpec().GetNamespace())
-	intercept = r.InterceptInfo
-	scout.SetMetadatum(ctx, "intercept_id", intercept.Id)
+	intercept := r.InterceptInfo
 
 	s.env = intercept.Environment
 	if s.env == nil {

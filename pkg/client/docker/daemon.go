@@ -89,10 +89,6 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	if err != nil {
 		return nil, err
 	}
-	env := client.GetEnv(ctx)
-	if env.ScoutDisable {
-		opts = append(opts, "-e", "SCOUT_DISABLE=1")
-	}
 	cfg := client.GetConfig(ctx).Docker()
 	if cfg.EnableIPv6 {
 		opts = append(opts,
