@@ -151,7 +151,7 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 		func(snapshot *manager.InterceptInfoSnapshot) error {
 			s.handleInterceptSnapshot(pat, snapshot.Intercepts)
 			return nil
-		}, nil)
+		}, s.reconnectManager)
 	// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are cancelled correctly.
 	s.handleInterceptSnapshot(pat, nil)
 	return err

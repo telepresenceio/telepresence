@@ -418,6 +418,50 @@ func connectMgr(
 	return sess, nil
 }
 
+func (s *session) reconnectManager() (returnedErr error) {
+	cfg := client.GetConfig(s.context)
+	tos := cfg.Timeouts()
+	ctx := s.context
+	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	defer cancel()
+
+	conn, mc, vi, err := k8sclient.ConnectToManager(ctx, tc, k8s.GetManagerNamespace(ctx))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if returnedErr != nil {
+			conn.Close()
+		}
+	}()
+	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
+	if err != nil {
+		return fmt.Errorf("unable to parse manager.Version: %w", err)
+	}
+
+	_, err = mc.ReconnectClient(tc, &manager.ReconnectClientRequest{
+		Session: s.sessionInfo,
+		Client: &manager.ClientInfo{
+			Name:      s.clientID,
+			Namespace: s.Namespace,
+			InstallId: s.installID,
+			Product:   "telepresence",
+			Version:   client.Version(),
+		},
+		Intercepts: s.getCurrentInterceptInfos(),
+		Agents:     s.getCurrentAgents(),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to reconnect client: %w", err)
+	}
+
+	s.managerClient = mc
+	s.managerConn = conn
+	s.managerName = vi.Name
+	s.managerVersion = managerVersion
+	return nil
+}
+
 func (s *session) remain(ctx context.Context) error {
 	ctx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
 	defer cancel()

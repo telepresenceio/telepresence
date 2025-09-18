@@ -115,7 +115,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	})
 	snapshots := make(chan *rpc.InterceptInfoSnapshot)
 	wg.Go("interceptWatch", func(ctx context.Context) error {
-		return interceptWatchLoop(ctx, manager, session, snapshots)
+		return interceptWatchLoop(ctx, manager, session, info, snapshots)
 	})
 	wg.Go("handleIntercept", func(ctx context.Context) error {
 		return handleInterceptLoop(ctx, manager, session, snapshots, state)
@@ -150,7 +150,7 @@ func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient) error {
 	)
 }
 
-func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, snapshots chan<- *rpc.InterceptInfoSnapshot) error {
+func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, info *rpc.AgentInfo, snapshots chan<- *rpc.InterceptInfoSnapshot) error {
 	// Call WatchIntercepts and publish the snapshots on the channel
 	return watcher.WatchWithRetry(ctx, "WatchIntercepts", watchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoSnapshot], error) {
@@ -160,8 +160,13 @@ func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session 
 			snapshots <- snapshot
 			return nil
 		},
-		nil,
-	)
+		func() error {
+			_, err := manager.ReconnectAgent(ctx, &rpc.ReconnectAgentRequest{
+				Session: session,
+				Agent:   info,
+			})
+			return err
+		})
 }
 
 func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo) error {

@@ -30,6 +30,8 @@ const (
 	Manager_GetClientConfig_FullMethodName       = "/telepresence.manager.Manager/GetClientConfig"
 	Manager_GetTelepresenceAPI_FullMethodName    = "/telepresence.manager.Manager/GetTelepresenceAPI"
 	Manager_ArriveAsClient_FullMethodName        = "/telepresence.manager.Manager/ArriveAsClient"
+	Manager_ReconnectAgent_FullMethodName        = "/telepresence.manager.Manager/ReconnectAgent"
+	Manager_ReconnectClient_FullMethodName       = "/telepresence.manager.Manager/ReconnectClient"
 	Manager_ArriveAsAgent_FullMethodName         = "/telepresence.manager.Manager/ArriveAsAgent"
 	Manager_Remain_FullMethodName                = "/telepresence.manager.Manager/Remain"
 	Manager_Depart_FullMethodName                = "/telepresence.manager.Manager/Depart"
@@ -71,6 +73,10 @@ type ManagerClient interface {
 	GetTelepresenceAPI(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*TelepresenceAPIInfo, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
+	// ReconnectAgent re-establishes a session between an agent and the Manager.
+	ReconnectAgent(ctx context.Context, in *ReconnectAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// ReconnectClient re-establishes a session between a client and the Manager.
+	ReconnectClient(ctx context.Context, in *ReconnectClientRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(ctx context.Context, in *AgentInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	// Remain indicates that the session is still valid, and potentially
@@ -215,6 +221,26 @@ func (c *managerClient) ArriveAsClient(ctx context.Context, in *ClientInfo, opts
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SessionInfo)
 	err := c.cc.Invoke(ctx, Manager_ArriveAsClient_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) ReconnectAgent(ctx context.Context, in *ReconnectAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Manager_ReconnectAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerClient) ReconnectClient(ctx context.Context, in *ReconnectClientRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Manager_ReconnectClient_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -524,6 +550,10 @@ type ManagerServer interface {
 	GetTelepresenceAPI(context.Context, *emptypb.Empty) (*TelepresenceAPIInfo, error)
 	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
+	// ReconnectAgent re-establishes a session between an agent and the Manager.
+	ReconnectAgent(context.Context, *ReconnectAgentRequest) (*emptypb.Empty, error)
+	// ReconnectClient re-establishes a session between a client and the Manager.
+	ReconnectClient(context.Context, *ReconnectClientRequest) (*emptypb.Empty, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error)
 	// Remain indicates that the session is still valid, and potentially
@@ -631,6 +661,12 @@ func (UnimplementedManagerServer) GetTelepresenceAPI(context.Context, *emptypb.E
 }
 func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsClient not implemented")
+}
+func (UnimplementedManagerServer) ReconnectAgent(context.Context, *ReconnectAgentRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReconnectAgent not implemented")
+}
+func (UnimplementedManagerServer) ReconnectClient(context.Context, *ReconnectClientRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReconnectClient not implemented")
 }
 func (UnimplementedManagerServer) ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsAgent not implemented")
@@ -826,6 +862,42 @@ func _Manager_ArriveAsClient_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).ArriveAsClient(ctx, req.(*ClientInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_ReconnectAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconnectAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).ReconnectAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_ReconnectAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).ReconnectAgent(ctx, req.(*ReconnectAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Manager_ReconnectClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReconnectClientRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).ReconnectClient(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_ReconnectClient_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).ReconnectClient(ctx, req.(*ReconnectClientRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1221,6 +1293,14 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ArriveAsClient",
 			Handler:    _Manager_ArriveAsClient_Handler,
+		},
+		{
+			MethodName: "ReconnectAgent",
+			Handler:    _Manager_ReconnectAgent_Handler,
+		},
+		{
+			MethodName: "ReconnectClient",
+			Handler:    _Manager_ReconnectClient_Handler,
 		},
 		{
 			MethodName: "ArriveAsAgent",

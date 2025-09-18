@@ -292,6 +292,18 @@ message InterceptInfo {
   reserved 9;
 }
 
+message ReconnectAgentRequest {
+  SessionInfo session = 1;
+  AgentInfo agent = 2;
+}
+
+message ReconnectClientRequest {
+  SessionInfo session = 1;
+  ClientInfo client = 2;
+  repeated InterceptInfo intercepts = 3;
+  repeated AgentInfo agents = 4;
+}
+
 message SessionInfo {
   string session_id = 1;
   string manager_install_id = 2;
@@ -713,6 +725,12 @@ service Manager {
 
   // ArriveAsClient establishes a session between a client and the Manager.
   rpc ArriveAsClient(ClientInfo) returns (SessionInfo);
+
+  // ReconnectAgent re-establishes a session between an agent and the Manager.
+  rpc ReconnectAgent(ReconnectAgentRequest) returns (google.protobuf.Empty);
+
+  // ReconnectClient re-establishes a session between a client and the Manager.
+  rpc ReconnectClient(ReconnectClientRequest) returns (google.protobuf.Empty);
 
   // ArriveAsAgent establishes a session between an agent and the Manager.
   rpc ArriveAsAgent(AgentInfo) returns (SessionInfo);

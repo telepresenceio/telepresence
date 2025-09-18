@@ -28,6 +28,12 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Enhance Resilience of Engagements During Traffic-Manager Redeploys
+        body: >-
+          The telepresence client and traffic-agent now automatically reconnect to the traffic-manager after a restart.
+          Upon reconnection, they share their current state, ensuring ongoing engagements remain uninterrupted. This
+          improvement minimizes user impact during traffic-manager upgrades.
+      - type: feature
         title: Add support for IPv6 and dual-stack when using `telepresence connect --docker`
         body: |-
           Telepresence now supports using `telepresence connect --docker` together with Kubernetes single-stack IPv4

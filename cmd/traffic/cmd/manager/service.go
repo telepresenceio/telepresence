@@ -193,6 +193,29 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	}, nil
 }
 
+func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClientRequest) (*empty.Empty, error) {
+	ctx = managerutil.WithSessionInfo(ctx, info.Session)
+	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
+	if s.state.GetClient(sessionID) != nil {
+		// We already know this client, so we don't need to do anything.
+		return &empty.Empty{}, nil
+	}
+	client := info.Client
+	state := s.state
+	if !state.ManagesNamespace(ctx, client.Namespace) {
+		// Sorry, we no longer manage this namespace.
+		return nil, status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", client.Namespace))
+	}
+	if val := validateClient(client); val != "" {
+		return nil, status.Error(codes.InvalidArgument, val)
+	}
+	now := time.Now()
+	state.RestoreClient(sessionID, client, now)
+	state.RestoreAgents(info.Agents, now)
+	state.RestoreIntercepts(ctx, info.Intercepts, now)
+	return &empty.Empty{}, nil
+}
+
 // ArriveAsAgent establishes a session between an agent and the Manager.
 func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
 	dlog.Debugf(ctx, "Name %s, IP %s", agent.PodName, agent.PodIp)
@@ -213,6 +236,12 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		SessionId:        string(sessionID),
 		ManagerInstallId: s.clusterInfo.ID(),
 	}, nil
+}
+
+func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequest) (*empty.Empty, error) {
+	ctx = managerutil.WithSessionInfo(ctx, rq.Session)
+	_, err := s.state.RestoreAgent(ctx, tunnel.SessionID(rq.GetSession().SessionId), rq.Agent, time.Now())
+	return &empty.Empty{}, err
 }
 
 func (s *service) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) (*empty.Empty, error) {

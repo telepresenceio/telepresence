@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.25.0
 <Note>
+	<Title type="feature">Enhance Resilience of Engagements During Traffic-Manager Redeploys</Title>
+	<Body>
+The telepresence client and traffic-agent now automatically reconnect to the traffic-manager after a restart. Upon reconnection, they share their current state, ensuring ongoing engagements remain uninterrupted. This improvement minimizes user impact during traffic-manager upgrades.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Add support for IPv6 and dual-stack when using `telepresence connect --docker`</Title>
 	<Body>
 Telepresence now supports using `telepresence connect --docker` together with Kubernetes single-stack IPv4

@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -392,7 +393,52 @@ func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) tunnel.SessionI
 	return sessionID
 }
 
-// addClient is like AddClient, but takes a sessionID, for testing purposes.
+func (s *State) RestoreClient(sessionID tunnel.SessionID, client *rpc.ClientInfo, now time.Time) {
+	s.addClient(sessionID, client, now)
+}
+
+func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
+	for _, newAgent := range agents {
+		id := tunnel.SessionID(AgentSessionIDPrefix + newAgent.PodUid)
+		s.agents.LoadOrCompute(id, func() *AgentSession {
+			return newAgentSessionState(s.backgroundCtx, id, newAgent, now)
+		})
+	}
+}
+
+func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) {
+	var addedChildren []*Intercept
+	for _, intercept := range intercepts {
+		s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
+			spec := intercept.Spec
+			is := &Intercept{InterceptInfo: intercept}
+			if IsChildIntercept(spec) {
+				// Finalizer must be added to the parent intercept, but the parent might be added after
+				// the child intercept is added, so it'll have to wait.
+				addedChildren = append(addedChildren, is)
+			} else {
+				wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
+				if err == nil {
+					is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+						return s.restoreAppContainer(ctx, interceptInfo, wl)
+					})
+				}
+			}
+			return is
+		})
+	}
+	for _, intercept := range addedChildren {
+		parent, ok := s.GetParentIntercept(tunnel.SessionID(intercept.ClientSession.SessionId), intercept.Spec)
+		if ok {
+			parent.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+				s.intercepts.Delete(intercept.Id)
+				return nil
+			})
+		}
+	}
+}
+
+// addClient is like AddClient but takes a sessionID, for testing purposes.
 func (s *State) addClient(id tunnel.SessionID, client *rpc.ClientInfo, now time.Time) {
 	cs := newClientSessionState(s.backgroundCtx, id, client, now)
 	if oldClient, hasConflict := s.clients.LoadOrStore(id, cs); hasConflict {
@@ -443,10 +489,13 @@ func (s *State) AddAgent(ctx context.Context, agent *rpc.AgentInfo, now time.Tim
 	if mutator.GetMap(ctx).IsInactive(types.UID(agent.PodUid)) {
 		return "", status.Error(codes.Aborted, "inactivated pod")
 	}
-	id := tunnel.SessionID(AgentSessionIDPrefix + agent.PodUid)
+	return s.RestoreAgent(ctx, tunnel.SessionID(AgentSessionIDPrefix+agent.PodUid), agent, now)
+}
+
+func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rpc.AgentInfo, now time.Time) (tunnel.SessionID, error) {
 	as := newAgentSessionState(s.backgroundCtx, id, agent, now)
-	if oldAgent, hasConflict := s.agents.LoadOrStore(id, as); hasConflict {
-		return "", status.Error(codes.AlreadyExists, fmt.Sprintf("duplicate id %q, existing %+v, new %+v", id, oldAgent, agent))
+	if _, exists := s.agents.LoadOrStore(id, as); exists {
+		return "", nil
 	}
 
 	s.intercepts.Range(func(interceptID string, intercept *Intercept) bool {

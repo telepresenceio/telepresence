@@ -329,6 +329,14 @@ func IsChildIntercept(spec *rpc.InterceptSpec) bool {
 	return strings.HasPrefix(spec.Client, "child ")
 }
 
+func (s *State) GetParentIntercept(sessionID tunnel.SessionID, spec *rpc.InterceptSpec) (*Intercept, bool) {
+	childCols := strings.Split(spec.Client, " ")
+	if len(childCols) != 4 {
+		return nil, false
+	}
+	return s.intercepts.Load(fmt.Sprintf("%s:%s", sessionID, childCols[2]))
+}
+
 func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Intercept, error) {
 	is := s.NewInterceptInfo(id, cir)
 
