@@ -2135,15 +2135,7 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\bLookupIP\x12$.telepresence.daemon.LookupIPRequest\x1a%.telepresence.daemon.LookupIPResponse\x12`\n" +
 	"\vResolvePort\x12'.telepresence.daemon.ResolvePortRequest\x1a(.telepresence.daemon.ResolvePortResponse\x12S\n" +
 	"\x10RerouteLocalPort\x12'.telepresence.daemon.ReroutePortRequest\x1a\x16.google.protobuf.Empty\x12T\n" +
-	"\x11RerouteRemotePort\x12'.telepresence.daemon.ReroutePortRequest\x1a\x16.google.protobuf.Empty2\xde\x04\n" +
-	"\fManagerProxy\x12E\n" +
-	"\aVersion\x12\x16.google.protobuf.Empty\x1a\".telepresence.manager.VersionInfo2\x12J\n" +
-	"\x0fGetClientConfig\x12\x16.google.protobuf.Empty\x1a\x1f.telepresence.manager.CLIConfig\x12`\n" +
-	"\vEnsureAgent\x12(.telepresence.manager.EnsureAgentRequest\x1a'.telepresence.manager.AgentInfoSnapshot\x12Z\n" +
-	"\x10WatchClusterInfo\x12!.telepresence.manager.SessionInfo\x1a!.telepresence.manager.ClusterInfo0\x01\x12S\n" +
-	"\x06Lookup\x12#.telepresence.manager.LookupRequest\x1a$.telepresence.manager.LookupResponse\x12P\n" +
-	"\tLookupDNS\x12 .telepresence.manager.DNSRequest\x1a!.telepresence.manager.DNSResponse\x12V\n" +
-	"\x06Tunnel\x12#.telepresence.manager.TunnelMessage\x1a#.telepresence.manager.TunnelMessage(\x010\x01B9Z7github.com/telepresenceio/telepresence/rpc/v2/connectorb\x06proto3"
+	"\x11RerouteRemotePort\x12'.telepresence.daemon.ReroutePortRequest\x1a\x16.google.protobuf.EmptyB9Z7github.com/telepresenceio/telepresence/rpc/v2/connectorb\x06proto3"
 
 var (
 	file_connector_connector_proto_rawDescOnce sync.Once
@@ -2213,21 +2205,12 @@ var file_connector_connector_proto_goTypes = []any{
 	(*daemon.LookupIPRequest)(nil),          // 50: telepresence.daemon.LookupIPRequest
 	(*daemon.ResolvePortRequest)(nil),       // 51: telepresence.daemon.ResolvePortRequest
 	(*daemon.ReroutePortRequest)(nil),       // 52: telepresence.daemon.ReroutePortRequest
-	(*manager.EnsureAgentRequest)(nil),      // 53: telepresence.manager.EnsureAgentRequest
-	(*manager.LookupRequest)(nil),           // 54: telepresence.manager.LookupRequest
-	(*manager.DNSRequest)(nil),              // 55: telepresence.manager.DNSRequest
-	(*manager.TunnelMessage)(nil),           // 56: telepresence.manager.TunnelMessage
-	(*manager.AgentImageFQN)(nil),           // 57: telepresence.manager.AgentImageFQN
-	(*common.Result)(nil),                   // 58: telepresence.common.Result
-	(*manager.KnownWorkloadKinds)(nil),      // 59: telepresence.manager.KnownWorkloadKinds
-	(*manager.AgentConfigResponse)(nil),     // 60: telepresence.manager.AgentConfigResponse
-	(*daemon.LookupIPResponse)(nil),         // 61: telepresence.daemon.LookupIPResponse
-	(*daemon.ResolvePortResponse)(nil),      // 62: telepresence.daemon.ResolvePortResponse
-	(*manager.CLIConfig)(nil),               // 63: telepresence.manager.CLIConfig
-	(*manager.AgentInfoSnapshot)(nil),       // 64: telepresence.manager.AgentInfoSnapshot
-	(*manager.ClusterInfo)(nil),             // 65: telepresence.manager.ClusterInfo
-	(*manager.LookupResponse)(nil),          // 66: telepresence.manager.LookupResponse
-	(*manager.DNSResponse)(nil),             // 67: telepresence.manager.DNSResponse
+	(*manager.AgentImageFQN)(nil),           // 53: telepresence.manager.AgentImageFQN
+	(*common.Result)(nil),                   // 54: telepresence.common.Result
+	(*manager.KnownWorkloadKinds)(nil),      // 55: telepresence.manager.KnownWorkloadKinds
+	(*manager.AgentConfigResponse)(nil),     // 56: telepresence.manager.AgentConfigResponse
+	(*daemon.LookupIPResponse)(nil),         // 57: telepresence.daemon.LookupIPResponse
+	(*daemon.ResolvePortResponse)(nil),      // 58: telepresence.daemon.ResolvePortResponse
 }
 var file_connector_connector_proto_depIdxs = []int32{
 	26, // 0: telepresence.connector.ConnectRequest.kube_flags:type_name -> telepresence.connector.ConnectRequest.KubeFlagsEntry
@@ -2294,57 +2277,43 @@ var file_connector_connector_proto_depIdxs = []int32{
 	51, // 61: telepresence.connector.Connector.ResolvePort:input_type -> telepresence.daemon.ResolvePortRequest
 	52, // 62: telepresence.connector.Connector.RerouteLocalPort:input_type -> telepresence.daemon.ReroutePortRequest
 	52, // 63: telepresence.connector.Connector.RerouteRemotePort:input_type -> telepresence.daemon.ReroutePortRequest
-	44, // 64: telepresence.connector.ManagerProxy.Version:input_type -> google.protobuf.Empty
-	44, // 65: telepresence.connector.ManagerProxy.GetClientConfig:input_type -> google.protobuf.Empty
-	53, // 66: telepresence.connector.ManagerProxy.EnsureAgent:input_type -> telepresence.manager.EnsureAgentRequest
-	36, // 67: telepresence.connector.ManagerProxy.WatchClusterInfo:input_type -> telepresence.manager.SessionInfo
-	54, // 68: telepresence.connector.ManagerProxy.Lookup:input_type -> telepresence.manager.LookupRequest
-	55, // 69: telepresence.connector.ManagerProxy.LookupDNS:input_type -> telepresence.manager.DNSRequest
-	56, // 70: telepresence.connector.ManagerProxy.Tunnel:input_type -> telepresence.manager.TunnelMessage
-	34, // 71: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
-	34, // 72: telepresence.connector.Connector.RootDaemonVersion:output_type -> telepresence.common.VersionInfo
-	34, // 73: telepresence.connector.Connector.TrafficManagerVersion:output_type -> telepresence.common.VersionInfo
-	57, // 74: telepresence.connector.Connector.AgentImageFQN:output_type -> telepresence.manager.AgentImageFQN
-	40, // 75: telepresence.connector.Connector.GetIntercept:output_type -> telepresence.manager.InterceptInfo
-	6,  // 76: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
-	44, // 77: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
-	23, // 78: telepresence.connector.Connector.GetClusterSubnets:output_type -> telepresence.connector.ClusterSubnets
-	6,  // 79: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
-	16, // 80: telepresence.connector.Connector.CanIntercept:output_type -> telepresence.connector.InterceptResult
-	12, // 81: telepresence.connector.Connector.Ingest:output_type -> telepresence.connector.IngestInfo
-	12, // 82: telepresence.connector.Connector.GetIngest:output_type -> telepresence.connector.IngestInfo
-	12, // 83: telepresence.connector.Connector.LeaveIngest:output_type -> telepresence.connector.IngestInfo
-	16, // 84: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
-	16, // 85: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
-	58, // 86: telepresence.connector.Connector.Uninstall:output_type -> telepresence.common.Result
-	15, // 87: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	15, // 88: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	44, // 89: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
-	44, // 90: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
-	19, // 91: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
-	44, // 92: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
-	44, // 93: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
-	21, // 94: telepresence.connector.Connector.GetNamespaces:output_type -> telepresence.connector.GetNamespacesResponse
-	59, // 95: telepresence.connector.Connector.GetKnownWorkloadKinds:output_type -> telepresence.manager.KnownWorkloadKinds
-	58, // 96: telepresence.connector.Connector.RemoteMountAvailability:output_type -> telepresence.common.Result
-	22, // 97: telepresence.connector.Connector.GetConfig:output_type -> telepresence.connector.ClientConfig
-	44, // 98: telepresence.connector.Connector.SetDNSExcludes:output_type -> google.protobuf.Empty
-	44, // 99: telepresence.connector.Connector.SetDNSMappings:output_type -> google.protobuf.Empty
-	60, // 100: telepresence.connector.Connector.GetAgentConfig:output_type -> telepresence.manager.AgentConfigResponse
-	25, // 101: telepresence.connector.Connector.ResolveSyntheticIP:output_type -> telepresence.connector.ResolveSyntheticResponse
-	61, // 102: telepresence.connector.Connector.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
-	62, // 103: telepresence.connector.Connector.ResolvePort:output_type -> telepresence.daemon.ResolvePortResponse
-	44, // 104: telepresence.connector.Connector.RerouteLocalPort:output_type -> google.protobuf.Empty
-	44, // 105: telepresence.connector.Connector.RerouteRemotePort:output_type -> google.protobuf.Empty
-	37, // 106: telepresence.connector.ManagerProxy.Version:output_type -> telepresence.manager.VersionInfo2
-	63, // 107: telepresence.connector.ManagerProxy.GetClientConfig:output_type -> telepresence.manager.CLIConfig
-	64, // 108: telepresence.connector.ManagerProxy.EnsureAgent:output_type -> telepresence.manager.AgentInfoSnapshot
-	65, // 109: telepresence.connector.ManagerProxy.WatchClusterInfo:output_type -> telepresence.manager.ClusterInfo
-	66, // 110: telepresence.connector.ManagerProxy.Lookup:output_type -> telepresence.manager.LookupResponse
-	67, // 111: telepresence.connector.ManagerProxy.LookupDNS:output_type -> telepresence.manager.DNSResponse
-	56, // 112: telepresence.connector.ManagerProxy.Tunnel:output_type -> telepresence.manager.TunnelMessage
-	71, // [71:113] is the sub-list for method output_type
-	29, // [29:71] is the sub-list for method input_type
+	34, // 64: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
+	34, // 65: telepresence.connector.Connector.RootDaemonVersion:output_type -> telepresence.common.VersionInfo
+	34, // 66: telepresence.connector.Connector.TrafficManagerVersion:output_type -> telepresence.common.VersionInfo
+	53, // 67: telepresence.connector.Connector.AgentImageFQN:output_type -> telepresence.manager.AgentImageFQN
+	40, // 68: telepresence.connector.Connector.GetIntercept:output_type -> telepresence.manager.InterceptInfo
+	6,  // 69: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
+	44, // 70: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
+	23, // 71: telepresence.connector.Connector.GetClusterSubnets:output_type -> telepresence.connector.ClusterSubnets
+	6,  // 72: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
+	16, // 73: telepresence.connector.Connector.CanIntercept:output_type -> telepresence.connector.InterceptResult
+	12, // 74: telepresence.connector.Connector.Ingest:output_type -> telepresence.connector.IngestInfo
+	12, // 75: telepresence.connector.Connector.GetIngest:output_type -> telepresence.connector.IngestInfo
+	12, // 76: telepresence.connector.Connector.LeaveIngest:output_type -> telepresence.connector.IngestInfo
+	16, // 77: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
+	16, // 78: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
+	54, // 79: telepresence.connector.Connector.Uninstall:output_type -> telepresence.common.Result
+	15, // 80: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	15, // 81: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	44, // 82: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
+	44, // 83: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
+	19, // 84: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
+	44, // 85: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
+	44, // 86: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
+	21, // 87: telepresence.connector.Connector.GetNamespaces:output_type -> telepresence.connector.GetNamespacesResponse
+	55, // 88: telepresence.connector.Connector.GetKnownWorkloadKinds:output_type -> telepresence.manager.KnownWorkloadKinds
+	54, // 89: telepresence.connector.Connector.RemoteMountAvailability:output_type -> telepresence.common.Result
+	22, // 90: telepresence.connector.Connector.GetConfig:output_type -> telepresence.connector.ClientConfig
+	44, // 91: telepresence.connector.Connector.SetDNSExcludes:output_type -> google.protobuf.Empty
+	44, // 92: telepresence.connector.Connector.SetDNSMappings:output_type -> google.protobuf.Empty
+	56, // 93: telepresence.connector.Connector.GetAgentConfig:output_type -> telepresence.manager.AgentConfigResponse
+	25, // 94: telepresence.connector.Connector.ResolveSyntheticIP:output_type -> telepresence.connector.ResolveSyntheticResponse
+	57, // 95: telepresence.connector.Connector.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
+	58, // 96: telepresence.connector.Connector.ResolvePort:output_type -> telepresence.daemon.ResolvePortResponse
+	44, // 97: telepresence.connector.Connector.RerouteLocalPort:output_type -> google.protobuf.Empty
+	44, // 98: telepresence.connector.Connector.RerouteRemotePort:output_type -> google.protobuf.Empty
+	64, // [64:99] is the sub-list for method output_type
+	29, // [29:64] is the sub-list for method input_type
 	29, // [29:29] is the sub-list for extension type_name
 	29, // [29:29] is the sub-list for extension extendee
 	0,  // [0:29] is the sub-list for field type_name
@@ -2364,7 +2333,7 @@ func file_connector_connector_proto_init() {
 			NumEnums:      4,
 			NumMessages:   29,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   1,
 		},
 		GoTypes:           file_connector_connector_proto_goTypes,
 		DependencyIndexes: file_connector_connector_proto_depIdxs,

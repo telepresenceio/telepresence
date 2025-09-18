@@ -826,7 +826,6 @@ func (ic *Intercept) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 type Cluster struct {
 	DefaultManagerNamespace string   `json:"defaultManagerNamespace"`
 	MappedNamespaces        []string `json:"mappedNamespaces"`
-	ConnectFromRootDaemon   bool     `json:"connectFromRootDaemon"`
 	ForceSPDY               bool     `json:"forceSPDY"`
 	AgentPortForward        bool     `json:"agentPortForward"`
 
@@ -840,7 +839,6 @@ const defaultDefaultManagerNamespace = ""
 
 var defaultCluster = Cluster{ //nolint:gochecknoglobals // constant
 	DefaultManagerNamespace: defaultDefaultManagerNamespace,
-	ConnectFromRootDaemon:   true,
 	AgentPortForward:        true,
 }
 

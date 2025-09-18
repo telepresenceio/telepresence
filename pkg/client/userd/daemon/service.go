@@ -22,7 +22,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -57,7 +56,6 @@ to troubleshoot problems.
 type service struct {
 	rpc.UnsafeConnectorServer
 	srv           *grpc.Server
-	managerProxy  *mgrProxy
 	timedLogLevel log.TimedLevel
 	fuseFTPError  error
 
@@ -102,7 +100,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, _ *dgroup.Group,
 		srv:             srv,
 		connectRequest:  make(chan userd.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
-		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
 		fuseFtpMgr:      remotefs.NewFuseFTPManager(),
 		quit:            cancel,
@@ -112,7 +109,6 @@ func NewService(ctx context.Context, cancel context.CancelFunc, _ *dgroup.Group,
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
 		authGrpc.RegisterAuthenticatorServer(srv, s)
-		rpc.RegisterManagerProxyServer(srv, s.managerProxy)
 	} else {
 		s.rootSessionInProc = true
 	}
@@ -173,10 +169,6 @@ func (s *service) ReadConnectResponse(ctx context.Context) (result *rpc.ConnectI
 	case result = <-s.connectResponse:
 	}
 	return
-}
-
-func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
-	s.managerProxy.setClient(managerClient, callOptions...)
 }
 
 const (
@@ -299,7 +291,6 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 	go func(cr userd.ConnectRequest) {
 		defer func() {
 			s.sessionLock.Lock()
-			s.self.SetManagerClient(nil)
 			s.clientConfig = nil
 			s.session = nil
 			s.sessionCancel = nil

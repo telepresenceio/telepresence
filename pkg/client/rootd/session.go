@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"os"
 	"runtime"
 	"slices"
 	"strconv"
@@ -33,7 +32,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -44,7 +42,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -99,7 +96,7 @@ type Session struct {
 	agentClients agentpf.Clients
 
 	// managerClient provides the gRPC tunnel to the traffic-manager
-	managerClient connector.ManagerProxyClient
+	managerClient manager.ManagerClient
 
 	// managerVersion is the version of the connected traffic-manager
 	managerVersion semver.Version
@@ -244,7 +241,7 @@ func connectToManager(
 ) (
 	context.Context,
 	*grpc.ClientConn,
-	connector.ManagerProxyClient,
+	manager.ManagerClient,
 	semver.Version,
 	error,
 ) {
@@ -266,12 +263,6 @@ func connectToManager(
 	ctx = k8sapi.WithJoinedClientSetInterface(ctx, cs, acs)
 
 	clientConfig := client.GetConfig(ctx)
-	if !clientConfig.Cluster().ConnectFromRootDaemon {
-		dlog.Debug(ctx, "ConnectFromRootDaemon is disabled")
-		conn, mp, v, err := connectToUserDaemon(ctx)
-		return ctx, conn, mp, v, err
-	}
-
 	tos := clientConfig.Timeouts()
 	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
@@ -288,50 +279,7 @@ func connectToManager(
 		conn.Close()
 		return ctx, nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
-	return ctx, conn, &userdToManagerShortcut{mc}, mgrVer, nil
-}
-
-// connectToUserDaemon is like connectToManager but the port-forward will be established from the user-daemon
-// instead. This doesn't matter when the daemon is containerized, but it will introduce an extra hop for all
-// outgoing traffic when it isn't.
-func connectToUserDaemon(c context.Context) (*grpc.ClientConn, connector.ManagerProxyClient, semver.Version, error) {
-	// First check. Establish connection
-	tos := client.GetConfig(c).Timeouts()
-	tc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
-	defer cancel()
-
-	var conn *grpc.ClientConn
-	conn, err := socket.Dial(tc, socket.UserDaemonPath(c), true)
-	var mgrVer semver.Version
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			// The connector called us, and then it died which means we will die too. This is
-			// a race, but it's not an error.
-			return nil, nil, mgrVer, nil
-		}
-		return nil, nil, mgrVer, client.CheckTimeout(tc, err)
-	}
-
-	mc := connector.NewManagerProxyClient(conn)
-	ver, err := mc.Version(c, &empty.Empty{})
-	if err != nil {
-		conn.Close()
-		return nil, nil, mgrVer, fmt.Errorf("failed to retrieve manager version: %w", err)
-	}
-
-	verStr := strings.TrimPrefix(ver.Version, "v")
-	dlog.Infof(c, "Connected to Manager %s", verStr)
-	mgrVer, err = semver.Parse(verStr)
-	if err != nil {
-		conn.Close()
-		return nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
-	}
-
-	if mgrVer.LE(semver.MustParse("2.4.4")) {
-		conn.Close()
-		return nil, nil, mgrVer, errcat.User.Newf("unsupported traffic-manager version %s. Minimum supported version is 2.4.5", mgrVer)
-	}
-	return conn, mc, mgrVer, nil
+	return ctx, conn, mc, mgrVer, nil
 }
 
 // NewSession returns a new properly initialized session object.
@@ -358,7 +306,7 @@ func NewSession(c context.Context, mi *rpc.NetworkConfig) (context.Context, *Ses
 
 func nope() bool { return false }
 
-func newSession(c context.Context, mi *rpc.NetworkConfig, mc connector.ManagerProxyClient, ver semver.Version, isPodDaemon bool) (context.Context, *Session, error) {
+func newSession(c context.Context, mi *rpc.NetworkConfig, mc manager.ManagerClient, ver semver.Version, isPodDaemon bool) (context.Context, *Session, error) {
 	dlog.Debugf(c, "Creating session with id %v", mi.Session)
 	s := &Session{
 		handlers:              tunnel.NewPool(),

@@ -7,7 +7,6 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 )
@@ -25,10 +24,6 @@ type Service interface {
 	ListenerAddress(ctx context.Context) string
 
 	Server() *grpc.Server
-
-	// SetManagerClient will assign the manager client that this Service will use when acting as
-	// a ManagerServer proxy
-	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
 
 	// FuseFTPMgr returns the manager responsible for creating a client that can connect to the FuseFTP service.
 	FuseFTPMgr() remotefs.FuseFTPManager

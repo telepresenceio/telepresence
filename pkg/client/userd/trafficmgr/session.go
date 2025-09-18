@@ -358,7 +358,6 @@ func connectMgr(
 		return nil, err
 	}
 
-	svc := userd.GetService(ctx)
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
 		_, err = mClient.Remain(ctx, &manager.RemainRequest{Session: si})
@@ -392,12 +391,6 @@ func connectMgr(
 			return nil, err
 		}
 	}
-
-	var opts []grpc.CallOption
-	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
-		opts = append(opts, grpc.MaxCallRecvMsgSize(int(mz)))
-	}
-	svc.SetManagerClient(mClient, opts...)
 
 	managerName := vi.Name
 	if managerName == "" {

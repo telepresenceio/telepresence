@@ -10,37 +10,11 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
-
-// userdToManagerShortcut overcomes one minor problem, namely that even though a connector.ManagerProxyClient implements a subset
-// of the manager.ManagerClient interface, we cannot pass the real thing as the proxy. In the Go implementation, the interface returned
-// from a stream function is tightly coupled to the owner of that function and therefore has a different name in the proxy, even though
-// its methods are exactly the same. That's why the two affected functions are overridden here, seemingly doing nothing at all. They
-// make it possible to pass the manager.ManagerClient as a connector.ManagerProxyClient.
-type userdToManagerShortcut struct {
-	manager.ManagerClient
-}
-
-func (m *userdToManagerShortcut) EnsureAgent(ctx context.Context, in *manager.EnsureAgentRequest, opts ...grpc.CallOption) (*manager.AgentInfoSnapshot, error) {
-	return m.ManagerClient.EnsureAgent(ctx, in, opts...)
-}
-
-func (m *userdToManagerShortcut) WatchClusterInfo(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (connector.ManagerProxy_WatchClusterInfoClient, error) {
-	return m.ManagerClient.WatchClusterInfo(ctx, in, opts...)
-}
-
-func (m *userdToManagerShortcut) Tunnel(ctx context.Context, opts ...grpc.CallOption) (connector.ManagerProxy_TunnelClient, error) {
-	return m.ManagerClient.Tunnel(ctx, opts...)
-}
-
-func (m *userdToManagerShortcut) RealManagerClient() manager.ManagerClient {
-	return m.ManagerClient
-}
 
 // InProcSession is like Session, but also implements the daemon.DaemonClient interface. This makes it possible to use the session
 // in-process from the user daemon, without starting the root daemon gRPC service.
@@ -157,7 +131,7 @@ func NewInProcSession(
 	isPodDaemon bool,
 ) (context.Context, *InProcSession, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, session, err := newSession(ctx, mi, &userdToManagerShortcut{mc}, ver, isPodDaemon)
+	ctx, session, err := newSession(ctx, mi, mc, ver, isPodDaemon)
 	if err != nil {
 		cancel()
 		return ctx, nil, err
