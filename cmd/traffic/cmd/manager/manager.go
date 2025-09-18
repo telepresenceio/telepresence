@@ -39,9 +39,7 @@ import (
 )
 
 var (
-	DisplayName                 = "OSS Traffic Manager"               //nolint:gochecknoglobals // extension point
-	NewServiceFunc              = NewService                          //nolint:gochecknoglobals // extension point
-	WithAgentImageRetrieverFunc = managerutil.WithAgentImageRetriever //nolint:gochecknoglobals // extension point
+	DisplayName = "OSS Traffic Manager" //nolint:gochecknoglobals // extension point
 	//nolint:gochecknoglobals // extension point
 	IncrementInterceptCounterFunc = func(ctx context.Context, metric *prometheus.CounterVec, client, installId string, spec *rpc.InterceptSpec) {
 		if metric != nil {
@@ -144,7 +142,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 		f.WaitForCacheSync(ctx.Done())
 	}
 
-	mgr, g, err := NewServiceFunc(ctx, configWatcher)
+	mgr, g, err := NewService(ctx, configWatcher)
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
@@ -308,7 +306,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
 	svc := server.New(ctx, opts...)
-	s.self.RegisterServers(svc)
+	s.RegisterServers(svc)
 	dlog.Debugf(ctx, "Serving client connections using idle TTL %s", env.ClientConnectionTTL)
 	return server.Serve(ctx, svc, l)
 }

@@ -48,7 +48,7 @@ import (
 //
 // It's expected that the client that makes the call will update any unqualified port identifiers
 // with the ones in the returned PreparedIntercept.
-func (s *state) PrepareIntercept(
+func (s *State) PrepareIntercept(
 	ctx context.Context,
 	cr *rpc.CreateInterceptRequest,
 ) (pi *rpc.PreparedIntercept, err error) {
@@ -153,7 +153,7 @@ func prepareAllContainerPorts(cn *agentconfig.Container, pi *rpc.PreparedInterce
 	}
 }
 
-func (s *state) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container, cr *rpc.CreateInterceptRequest, pi *rpc.PreparedIntercept) (err error) {
+func (s *State) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container, cr *rpc.CreateInterceptRequest, pi *rpc.PreparedIntercept) (err error) {
 	spec := cr.InterceptSpec
 	portID := types2.PortIdentifier(spec.PortIdentifier)
 	containerOnly := cn != nil
@@ -243,7 +243,7 @@ func (s *state) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container,
 	return nil
 }
 
-func (s *state) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptRequest) (*ClientSession, *rpc.InterceptInfo, error) {
+func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptRequest) (*ClientSession, *rpc.InterceptInfo, error) {
 	clientSession := cir.Session
 	sessionID := tunnel.SessionID(clientSession.SessionId)
 	client := s.GetClient(sessionID)
@@ -329,8 +329,8 @@ func IsChildIntercept(spec *rpc.InterceptSpec) bool {
 	return strings.HasPrefix(spec.Client, "child ")
 }
 
-func (s *state) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Intercept, error) {
-	is := s.self.NewInterceptInfo(id, cir)
+func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Intercept, error) {
+	is := s.NewInterceptInfo(id, cir)
 
 	// Wrap each potential-state-change in an
 	//
@@ -353,7 +353,7 @@ func (s *state) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Inter
 	return is, nil
 }
 
-func (s *state) NewInterceptInfo(interceptID string, ciReq *rpc.CreateInterceptRequest) *Intercept {
+func (s *State) NewInterceptInfo(interceptID string, ciReq *rpc.CreateInterceptRequest) *Intercept {
 	return &Intercept{
 		InterceptInfo: &rpc.InterceptInfo{
 			Spec:          ciReq.InterceptSpec,
@@ -366,7 +366,7 @@ func (s *state) NewInterceptInfo(interceptID string, ciReq *rpc.CreateInterceptR
 	}
 }
 
-func (s *state) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
+func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
 	is, ok := s.intercepts.Load(interceptID)
 	if !ok {
 		return status.Errorf(codes.NotFound, "no such intercept %s", interceptID)
@@ -375,7 +375,7 @@ func (s *state) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 	return nil
 }
 
-func (s *state) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSession, err error) {
+func (s *State) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSession, err error) {
 	var wl k8sapi.Workload
 	wl, err = agentmap.GetWorkload(ctx, n, ns, "")
 	if err != nil {
@@ -388,7 +388,7 @@ func (s *state) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSessi
 	return as, err
 }
 
-func (s *state) ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error {
+func (s *State) ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error {
 	return nil
 }
 
@@ -399,7 +399,7 @@ func sortAgents(as []*AgentSession) {
 	})
 }
 
-func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, extended, dryRun bool, spec *rpc.InterceptSpec, rp agentconfig.ReplacePolicy) (
+func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, extended, dryRun bool, spec *rpc.InterceptSpec, rp agentconfig.ReplacePolicy) (
 	ac *agentconfig.Sidecar, as []*AgentSession, err error,
 ) {
 	if agentmap.TrafficManagerSelector.Matches(labels.Set(wl.GetLabels())) {
@@ -468,11 +468,11 @@ func (s *state) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	return ac, as, nil
 }
 
-func (s *state) isExtended(spec *rpc.InterceptSpec) bool {
+func (s *State) isExtended(spec *rpc.InterceptSpec) bool {
 	return spec.Mechanism != "tcp"
 }
 
-func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error) {
+func (s *State) ValidateAgentImage(agentImage string, extended bool) (err error) {
 	if agentImage == "" {
 		err = errcat.User.Newf(
 			"intercepts are disabled because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
@@ -482,14 +482,14 @@ func (s *state) ValidateAgentImage(agentImage string, extended bool) (err error)
 	return err
 }
 
-func (s *state) dropAgentConfig(
+func (s *State) dropAgentConfig(
 	ctx context.Context,
 	wl k8sapi.Workload,
 ) {
 	mutator.GetMap(ctx).Delete(wl.GetName(), wl.GetNamespace())
 }
 
-func (s *state) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, wl k8sapi.Workload) error {
+func (s *State) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, wl k8sapi.Workload) error {
 	dlog.Debugf(ctx, "Restoring app container for %s", ii.Id)
 	spec := ii.Spec
 	n := spec.Agent
@@ -523,7 +523,7 @@ func (s *state) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, 
 	return err
 }
 
-func (s *state) GetOrGenerateAgentConfig(ctx context.Context, name, namespace string) (agentconfig.SidecarExt, error) {
+func (s *State) GetOrGenerateAgentConfig(ctx context.Context, name, namespace string) (agentconfig.SidecarExt, error) {
 	wl, err := agentmap.GetWorkload(ctx, name, namespace, "")
 	if err != nil {
 		code := codes.Internal
@@ -535,7 +535,7 @@ func (s *state) GetOrGenerateAgentConfig(ctx context.Context, name, namespace st
 	return s.getOrCreateAgentConfig(ctx, wl, false, true, nil, agentconfig.ReplacePolicyInactive)
 }
 
-func (s *state) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agentImage string) (sce agentconfig.SidecarExt, err error) {
+func (s *State) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agentImage string) (sce agentconfig.SidecarExt, err error) {
 	var gc agentmap.GeneratorConfig
 	if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
 		return nil, err
@@ -544,13 +544,13 @@ func (s *state) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agent
 	if sce, err = gc.Generate(ctx, wl, nil); err != nil {
 		return nil, err
 	}
-	if err = s.self.ValidateCreateAgent(ctx, wl, sce); err != nil {
+	if err = s.ValidateCreateAgent(ctx, wl, sce); err != nil {
 		return nil, err
 	}
 	return sce, nil
 }
 
-func (s *state) getOrCreateAgentConfig(
+func (s *State) getOrCreateAgentConfig(
 	ctx context.Context,
 	wl k8sapi.Workload,
 	extended bool,
@@ -567,7 +567,7 @@ func (s *state) getOrCreateAgentConfig(
 	}
 
 	agentImage := managerutil.GetAgentImage(ctx)
-	if err = s.self.ValidateAgentImage(agentImage, extended); err != nil {
+	if err = s.ValidateAgentImage(agentImage, extended); err != nil {
 		return nil, err
 	}
 	mm := mutator.GetMap(ctx)
@@ -700,7 +700,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 	return ec, nil
 }
 
-func (s *state) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, failedCreateCh <-chan *events.Event) ([]*AgentSession, error) {
+func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, failedCreateCh <-chan *events.Event) ([]*AgentSession, error) {
 	name := ac.AgentName
 	namespace := ac.Namespace
 	dlog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)

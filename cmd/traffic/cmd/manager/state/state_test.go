@@ -25,12 +25,12 @@ type suiteState struct {
 	suite.Suite
 
 	ctx   context.Context
-	state *state
+	state *State
 }
 
 func (s *suiteState) SetupTest() {
 	s.ctx = dlog.NewTestContext(s.T(), false)
-	s.state = &state{
+	s.state = &State{
 		backgroundCtx:    s.ctx,
 		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
 		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
@@ -69,7 +69,7 @@ func (s *suiteState) TestStateInternal() {
 		clock := &FakeClock{}
 		m := mutator.NewWatcher()
 		ctx = mutator.WithMap(ctx, m)
-		st := NewState(ctx).(*state)
+		st := NewState(ctx)
 
 		h, err := st.AddAgent(ctx, helloAgent, clock.Now())
 		require.NoError(t, err)

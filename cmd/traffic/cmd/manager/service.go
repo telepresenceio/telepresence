@@ -41,18 +41,13 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
-// Clock is the mechanism used by the Manager state to get the current time.
-type Clock interface {
-	Now() time.Time
-}
-
 type Service interface {
 	rpc.ManagerServer
 	ID() string
 	InstallID() string
 	MakeInterceptID(context.Context, string, string) (string, error)
 	RegisterServers(*grpc.Server)
-	State() state.State
+	State() *state.State
 	ClusterInfo() cluster.Info
 
 	// unexported methods.
@@ -63,9 +58,8 @@ type Service interface {
 }
 
 type service struct {
-	clock              Clock
 	id                 string
-	state              state.State
+	state              *state.State
 	clusterInfo        cluster.Info
 	configWatcher      config.Watcher
 	activeHttpRequests int32
@@ -75,19 +69,10 @@ type service struct {
 	dotClusterDomain   string
 	tmConfigMapUpdated atomic.Bool
 
-	// Possibly extended version of the service. Use when calling interface methods.
-	self Service
-
 	rpc.UnsafeManagerServer
 }
 
 var _ rpc.ManagerServer = &service{}
-
-type wall struct{}
-
-func (wall) Now() time.Time {
-	return time.Now()
-}
 
 // checkCompat checks if a CompatibilityVersion has been set for this traffic-manager, and if so, errors with
 // an Unimplemented error mentioning the given name if it is less than the required version.
@@ -100,41 +85,34 @@ func checkCompat(ctx context.Context, name, requiredVersion string) error {
 
 func NewService(ctx context.Context, configWatcher config.Watcher) (Service, *dgroup.Group, error) {
 	ret := &service{
-		clock:         wall{},
 		id:            uuid.New().String(),
 		configWatcher: configWatcher,
 	}
 
 	var err error
 	if managerutil.AgentInjectorEnabled(ctx) {
-		ctx, err = WithAgentImageRetrieverFunc(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
+		ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 		if err != nil {
 			dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
 		}
 	}
-	// These are context dependent so build them once the pool is up
+	// These are context-dependent, so build them once the pool is up
 	ret.clusterInfo, err = cluster.NewInfo(ctx)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to initialize cluster info: %v", err)
 		return nil, nil, err
 	}
-	ret.state = state.NewStateFunc(ctx)
-
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
 
-	ret.self = ret
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 		SoftShutdownTimeout:  5 * time.Second,
 	})
+	ret.state = state.NewState(ctx)
 	return ret, g, nil
-}
-
-func (s *service) SetSelf(self Service) {
-	s.self = self
 }
 
 func (s *service) ClusterInfo() cluster.Info {
@@ -145,7 +123,7 @@ func (s *service) ID() string {
 	return s.id
 }
 
-func (s *service) State() state.State {
+func (s *service) State() *state.State {
 	return s.state
 }
 
@@ -210,7 +188,7 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	SetGauge(ctx, s.state.GetConnectActiveStatus(), client.Name, client.InstallId, nil, 1)
 
 	return &rpc.SessionInfo{
-		SessionId:        string(s.state.AddClient(client, s.clock.Now())),
+		SessionId:        string(s.state.AddClient(client, time.Now())),
 		ManagerInstallId: s.clusterInfo.ID(),
 		InstallId:        &installId,
 	}, nil
@@ -227,7 +205,7 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		s.removeExcludedEnvVars(cn.Environment)
 	}
 
-	sessionID, err := s.state.AddAgent(ctx, agent, s.clock.Now())
+	sessionID, err := s.state.AddAgent(ctx, agent, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +230,7 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 // Remain indicates that the session is still valid.
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	sessionID := tunnel.SessionID(req.GetSession().GetSessionId())
-	if ok := s.state.MarkSession(req, s.clock.Now()); !ok {
+	if ok := s.state.MarkSession(req, time.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
@@ -1139,7 +1117,7 @@ const agentSessionTTL = 70 * time.Second
 
 // expire removes stale sessions.
 func (s *service) expire(ctx context.Context) {
-	now := s.clock.Now()
+	now := time.Now()
 	s.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
 }
 

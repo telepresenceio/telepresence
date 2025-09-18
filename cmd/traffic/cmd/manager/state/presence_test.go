@@ -81,5 +81,5 @@ func TestPresence(t *testing.T) {
 	a.False(isPresent(sc))
 	a.False(isPresent("d"))
 
-	a.Panics(func() { p.(*state).addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, now) })
+	a.Panics(func() { p.addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, now) })
 }

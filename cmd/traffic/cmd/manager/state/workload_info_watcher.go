@@ -24,7 +24,7 @@ type WorkloadInfoWatcher interface {
 }
 
 type workloadInfoWatcher struct {
-	State
+	*State
 	clientSession  tunnel.SessionID
 	namespace      string
 	stream         rpc.Manager_WatchWorkloadsServer
@@ -36,7 +36,7 @@ type workloadInfoWatcher struct {
 	ticker         *time.Ticker
 }
 
-func (s *state) NewWorkloadInfoWatcher(clientSession tunnel.SessionID, namespace string) WorkloadInfoWatcher {
+func (s *State) NewWorkloadInfoWatcher(clientSession tunnel.SessionID, namespace string) WorkloadInfoWatcher {
 	return &workloadInfoWatcher{
 		State:         s,
 		clientSession: clientSession,

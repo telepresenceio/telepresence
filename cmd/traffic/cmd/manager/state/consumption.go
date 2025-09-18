@@ -60,14 +60,14 @@ func (m *SessionConsumptionMetrics) SetLastUpdate(t time.Time) {
 	m.lastUpdate.Store(t.UnixNano())
 }
 
-func (s *state) GetSessionConsumptionMetrics(id tunnel.SessionID) *SessionConsumptionMetrics {
+func (s *State) GetSessionConsumptionMetrics(id tunnel.SessionID) *SessionConsumptionMetrics {
 	if cs := s.GetClient(id); cs != nil {
 		return cs.ConsumptionMetrics()
 	}
 	return nil
 }
 
-func (s *state) GetAllSessionConsumptionMetrics() map[tunnel.SessionID]*SessionConsumptionMetrics {
+func (s *State) GetAllSessionConsumptionMetrics() map[tunnel.SessionID]*SessionConsumptionMetrics {
 	allSCM := make(map[tunnel.SessionID]*SessionConsumptionMetrics)
 	s.clients.Range(func(id tunnel.SessionID, cs *ClientSession) bool {
 		allSCM[id] = cs.ConsumptionMetrics()
@@ -76,7 +76,7 @@ func (s *state) GetAllSessionConsumptionMetrics() map[tunnel.SessionID]*SessionC
 	return allSCM
 }
 
-func (s *state) AddSessionConsumptionMetrics(metrics *manager.TunnelMetrics) {
+func (s *State) AddSessionConsumptionMetrics(metrics *manager.TunnelMetrics) {
 	cs := s.GetClient(tunnel.SessionID(metrics.ClientSessionId))
 	if cs != nil {
 		cm := cs.consumptionMetrics
@@ -86,7 +86,7 @@ func (s *state) AddSessionConsumptionMetrics(metrics *manager.TunnelMetrics) {
 }
 
 // RefreshSessionConsumptionMetrics refreshes the metrics associated to a specific session.
-func (s *state) RefreshSessionConsumptionMetrics(sessionID tunnel.SessionID) {
+func (s *State) RefreshSessionConsumptionMetrics(sessionID tunnel.SessionID) {
 	cs := s.GetClient(sessionID)
 	if cs != nil {
 		cs.ConsumptionMetrics().AddTimeSpent()
