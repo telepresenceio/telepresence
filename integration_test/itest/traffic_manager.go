@@ -25,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -183,7 +184,7 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 		ShutdownOnNonError:   true,
 	})
 
-	srv, err := userd.GetNewServiceFunc(ctx)(ctx, cancel, g, client.GetConfig(ctx), grpc.NewServer())
+	srv, err := daemon.NewService(cancel, g, client.GetConfig(ctx), grpc.NewServer())
 	if err != nil {
 		return err
 	}

@@ -161,9 +161,11 @@ func NewCluster(c context.Context, kubeFlags *client.Kubeconfig, namespaces []st
 	}
 	if len(namespaces) == 0 {
 		if k8sapi.CanWatchNamespaces(c) {
+			dlog.Infof(c, "Will watch all namespaces")
 			ret.StartNamespaceWatcher(c)
 		}
 	} else {
+		dlog.Infof(c, "Will use mapped namespaces %s", namespaces)
 		ret.SetMappedNamespaces(c, namespaces)
 	}
 	if GetManagerNamespace(c) == "" {

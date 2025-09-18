@@ -112,7 +112,7 @@ func (s *session) getCurrentAgent(name string) *manager.AgentInfo {
 	return nil
 }
 
-func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) {
+func (s *session) Ingest(rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) {
 	id := rq.Identifier
 	ik := ingestKey{
 		workload:  id.WorkloadName,
@@ -139,7 +139,7 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 
 	if ai == nil {
 		var as *manager.AgentInfoSnapshot
-		as, err = s.managerClient.EnsureAgent(ctx, &manager.EnsureAgentRequest{Session: s.sessionInfo, Name: ik.workload})
+		as, err = s.managerClient.EnsureAgent(s.context, &manager.EnsureAgentRequest{Session: s.sessionInfo, Name: ik.workload})
 		if err != nil {
 			return nil, err
 		}
@@ -158,13 +158,13 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		return nil, fmt.Errorf("workload %s has no container named %s", ik.workload, ik.container)
 	}
 
-	err = s.translateContainerEnv(ctx, ai, ik.container)
+	err = s.translateContainerEnv(ai, ik.container)
 	if err != nil {
 		return nil, err
 	}
 
 	ig, loaded := s.currentIngests.LoadOrCompute(ik, func() (*ingest, bool) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(s.context)
 		cancelIngest := func() {
 			s.currentIngests.Delete(ik)
 			dlog.Debugf(ctx, "Cancelling ingest %s", ik)
@@ -187,12 +187,12 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 	return ig.response(), nil
 }
 
-func (s *session) translateContainerEnv(ctx context.Context, ai *manager.AgentInfo, container string) error {
+func (s *session) translateContainerEnv(ai *manager.AgentInfo, container string) error {
 	cn, ok := ai.Containers[container]
 	if !ok {
 		return fmt.Errorf("workload %s has no container named %s", ai.Name, container)
 	}
-	env, err := s.rootDaemon.TranslateEnvIPs(ctx, &daemon.Environment{Env: cn.Environment})
+	env, err := s.rootDaemon.TranslateEnvIPs(s.context, &daemon.Environment{Env: cn.Environment})
 	if err != nil {
 		return err
 	}
@@ -247,12 +247,12 @@ func (s *session) GetIngest(rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err e
 	return ig.response(), nil
 }
 
-func (s *session) LeaveIngest(c context.Context, rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err error) {
+func (s *session) LeaveIngest(rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err error) {
 	ig, err := s.getIngest(rq)
 	if err != nil {
 		return nil, err
 	}
-	s.stopHandler(c, fmt.Sprintf("%s/%s", ig.workload, ig.container), ig.handlerContainer, ig.pid)
+	s.stopHandler(fmt.Sprintf("%s/%s", ig.workload, ig.container), ig.handlerContainer, ig.pid)
 	ig.cancel()
 	ig.wg.Wait()
 	return ig.response(), nil

@@ -62,7 +62,7 @@ func (pa *podAccess) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 	if m == nil {
 		switch {
 		case pa.localMountPort != 0:
-			session := userd.GetSession(ctx)
+			session := getSession(ctx)
 			m = remotefs.NewBridgeMounter(tunnel.SessionID(session.SessionInfo().SessionId), session.ManagerClient(), uint16(pa.localMountPort))
 		case useFtp:
 			m = remotefs.NewFTPMounter(fuseftp, iceptWG)

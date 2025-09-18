@@ -15,6 +15,7 @@ import (
 )
 
 func runDockerRun(ctx context.Context, name, svc, port, appDir, tag string, rq *itest.Requirements, wch chan<- struct{}) *os.Process {
+	_ = itest.Run(ctx, "docker", "container", "stop", name)
 	args := []string{"intercept", "--mount", "false", svc, "--docker-run"}
 	if port != "" {
 		args = append(args, "--port", port)

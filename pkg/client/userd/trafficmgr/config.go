@@ -1,7 +1,6 @@
 package trafficmgr
 
 import (
-	"context"
 	"path/filepath"
 
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -10,7 +9,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func (s *session) GetConfig(ctx context.Context) (*client.SessionConfig, error) {
+func (s *session) GetConfig() (*client.SessionConfig, error) {
+	ctx := s.context
 	nc, err := s.rootDaemon.GetNetworkConfig(ctx, &empty.Empty{})
 	if err != nil {
 		return nil, err
