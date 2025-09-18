@@ -52,6 +52,12 @@ items:
           can be restored by setting the `client.dns.useComplexLookup` parameter in the Helm chart or the
           `dns.useComplexLookup` parameter in the client configuration file.
       - type: change
+        title: Telepresence client now requires a traffic manager version of at least 2.21.0.
+        body: >-
+          The traffic manager is now required to be at least version 2.21.0. Versions earlier than 2.21.0 will no
+          longer work. The reason for this is that implementing the new reconnect behavior would require too much
+          conditional code with older traffic-managers, and a lot of functionality wouldn't work anyway.
+      - type: change
         title: Build binaries and docker images that are stripped from dwarf and debug info.
         body: >-
           The Telepresence binaries and docker images are now built with the `-w -s` flags, which strip the debug

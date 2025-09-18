@@ -23,7 +23,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
@@ -50,7 +49,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -641,8 +639,6 @@ func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.Wat
 }
 
 func (s *session) ensureWatchers(namespaces []string) {
-	managerHasWatcherSupport := s.compareFinalizedManagerVersion(2, 20, 0) > 0
-
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
 	ctx := s.context
@@ -654,12 +650,7 @@ func (s *session) ensureWatchers(namespaces []string) {
 			wg.Done()
 		} else {
 			go func() {
-				var err error
-				if managerHasWatcherSupport {
-					err = s.workloadsWatcher(ctx, ns, &wg)
-				} else {
-					err = s.localWorkloadsWatcher(ctx, ns, &wg)
-				}
+				err := s.workloadsWatcher(ctx, ns, &wg)
 				if err != nil {
 					dlog.Errorf(ctx, "error ensuring watcher for namespace %s: %v", ns, err)
 					return
@@ -851,112 +842,7 @@ func (s *session) Uninstall(ur *rpc.UninstallRequest) (*common.Result, error) {
 		SessionInfo: s.sessionInfo,
 		Agents:      ur.Agents,
 	})
-	if err != nil {
-		if status.Code(err) == codes.Unimplemented {
-			return s.legacyUninstall(ur)
-		}
-		dlog.Errorf(s.context, "uninstall agents failed: %v", err)
-	}
 	return errcat.ToResult(err), nil
-}
-
-func (s *session) legacyUninstall(ur *rpc.UninstallRequest) (*common.Result, error) {
-	ctx := s.context
-	api := k8sapi.GetK8sInterface(ctx).CoreV1()
-	loadAgentConfigMap := func(ns string) (*core.ConfigMap, error) {
-		cm, err := api.ConfigMaps(ns).Get(ctx, agentconfig.ConfigMap, meta.GetOptions{})
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				// there are no agents to remove
-				return nil, nil
-			}
-			// TODO: find out if this is due to lack of access credentials and if so, report using errcat.User with more meaningful message
-			return nil, err
-		}
-		return cm, nil
-	}
-
-	updateAgentConfigMap := func(ns string, cm *core.ConfigMap) error {
-		_, err := api.ConfigMaps(ns).Update(ctx, cm, meta.UpdateOptions{})
-		return err
-	}
-
-	// Removal of agents requested. We need the agents ConfigMap in order to do that.
-	// This removal is deliberately done in the client instead of the traffic-manager so that RBAC can be configured
-	// to prevent the clients from doing it.
-	if ur.UninstallType == rpc.UninstallRequest_NAMED_AGENTS {
-		// must have a valid namespace in order to uninstall named agents
-		if ur.Namespace == "" {
-			ur.Namespace = s.Namespace
-		}
-		namespace := s.ActualNamespace(ur.Namespace)
-		if namespace == "" {
-			// namespace is not mapped
-			return errcat.ToResult(errcat.User.Newf("namespace %s is not mapped", ur.Namespace)), nil
-		}
-		cm, err := loadAgentConfigMap(namespace)
-		if err != nil || cm == nil {
-			return errcat.ToResult(err), nil
-		}
-		changed := false
-		ics := s.getCurrentIntercepts()
-		for _, an := range ur.Agents {
-			for _, ic := range ics {
-				if ic.Spec.Namespace == namespace && ic.Spec.Agent == an {
-					_ = s.removeIntercept(ic)
-					break
-				}
-			}
-			if _, ok := cm.Data[an]; ok {
-				delete(cm.Data, an)
-				changed = true
-			}
-		}
-		if changed {
-			return errcat.ToResult(updateAgentConfigMap(namespace, cm)), nil
-		}
-		return errcat.ToResult(nil), nil
-	}
-	if ur.UninstallType != rpc.UninstallRequest_ALL_AGENTS {
-		return nil, status.Error(codes.InvalidArgument, "invalid uninstall request")
-	}
-
-	_ = s.ClearIngestsAndIntercepts()
-	clearAgentsConfigMap := func(ns string) error {
-		cm, err := loadAgentConfigMap(ns)
-		if err != nil {
-			return err
-		}
-		if cm == nil {
-			return nil
-		}
-		if len(cm.Data) > 0 {
-			cm.Data = nil
-			return updateAgentConfigMap(ns, cm)
-		}
-		return nil
-	}
-
-	if ur.Namespace != "" {
-		if ur.Namespace == "" {
-			ur.Namespace = s.Namespace
-		}
-		namespace := s.ActualNamespace(ur.Namespace)
-		if namespace == "" {
-			// namespace is not mapped
-			return errcat.ToResult(errcat.User.Newf("namespace %s is not mapped", ur.Namespace)), nil
-		}
-		return errcat.ToResult(clearAgentsConfigMap(namespace)), nil
-	} else {
-		// Load all effected configmaps
-		for _, ns := range s.GetCurrentNamespaces(true) {
-			err := clearAgentsConfigMap(ns)
-			if err != nil {
-				return errcat.ToResult(err), nil
-			}
-		}
-	}
-	return errcat.ToResult(nil), nil
 }
 
 func (s *session) getNetworkInfo(ctx context.Context, cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig {
@@ -1081,105 +967,6 @@ func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
 			dlog.Errorf(ctx, "port-forwarder failed with %v", err)
 		}
 	}()
-}
-
-func (s *session) localWorkloadsWatcher(ctx context.Context, namespace string, synced *sync.WaitGroup) error {
-	defer func() {
-		if synced != nil {
-			synced.Done()
-		}
-		dlog.Debug(ctx, "client workload watcher ended")
-	}()
-
-	knownWorkloadKinds, err := s.managerClient.GetKnownWorkloadKinds(ctx, s.sessionInfo)
-	if err != nil {
-		if status.Code(err) != codes.Unimplemented {
-			return fmt.Errorf("failed to get known workload kinds: %w", err)
-		}
-		// Talking to an older traffic-manager, use legacy default types
-		knownWorkloadKinds = &manager.KnownWorkloadKinds{Kinds: []manager.WorkloadInfo_Kind{
-			manager.WorkloadInfo_DEPLOYMENT,
-			manager.WorkloadInfo_REPLICASET,
-			manager.WorkloadInfo_STATEFULSET,
-		}}
-	}
-
-	dlog.Debugf(ctx, "Watching workloads from client due to lack of workload watcher support in traffic-manager %s", s.managerVersion)
-	fc := informer.GetFactory(ctx, namespace)
-	if fc == nil {
-		ctx = informer.WithFactory(ctx, namespace)
-		fc = informer.GetFactory(ctx, namespace)
-	}
-
-	enabledWorkloadKinds := make(k8sapi.Kinds, len(knownWorkloadKinds.Kinds))
-	for i, kind := range knownWorkloadKinds.Kinds {
-		switch kind {
-		case manager.WorkloadInfo_DEPLOYMENT:
-			enabledWorkloadKinds[i] = k8sapi.DeploymentKind
-			workload.StartDeployments(ctx, namespace)
-		case manager.WorkloadInfo_REPLICASET:
-			enabledWorkloadKinds[i] = k8sapi.ReplicaSetKind
-			workload.StartReplicaSets(ctx, namespace)
-		case manager.WorkloadInfo_STATEFULSET:
-			enabledWorkloadKinds[i] = k8sapi.StatefulSetKind
-			workload.StartStatefulSets(ctx, namespace)
-		case manager.WorkloadInfo_ROLLOUT:
-			enabledWorkloadKinds[i] = k8sapi.RolloutKind
-			workload.StartRollouts(ctx, namespace)
-			af := fc.GetArgoRolloutsInformerFactory()
-			af.Start(ctx.Done())
-		}
-	}
-
-	kf := fc.GetK8sInformerFactory()
-	kf.Start(ctx.Done())
-
-	ww, err := workload.NewWatcher(ctx, namespace, enabledWorkloadKinds)
-	if err != nil {
-		return err
-	}
-	kf.WaitForCacheSync(ctx.Done())
-
-	wlCh := ww.Subscribe(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case wls := <-wlCh:
-			if wls == nil {
-				return nil
-			}
-			s.workloadsLock.Lock()
-			workloads, ok := s.workloads[namespace]
-			if !ok {
-				workloads = make(map[workloadInfoKey]workloadInfo)
-				s.workloads[namespace] = workloads
-			}
-			for _, we := range wls {
-				w := we.Workload
-				key := workloadInfoKey{kind: workload.RpcKind(w.GetKind()), name: w.GetName()}
-				if we.Type == workload.EventTypeDelete {
-					delete(workloads, key)
-				} else {
-					workloads[key] = workloadInfo{
-						state: workload.GetWorkloadState(w),
-						uid:   w.GetUID(),
-					}
-				}
-			}
-			for _, subscriber := range s.workloadSubscribers {
-				select {
-				case subscriber <- struct{}{}:
-				default:
-				}
-			}
-			s.workloadsLock.Unlock()
-			if synced != nil {
-				synced.Done()
-				synced = nil
-			}
-		}
-	}
 }
 
 func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced *sync.WaitGroup) error {

@@ -37,6 +37,12 @@ can be restored by setting the `client.dns.useComplexLookup` parameter in the He
   </Body>
 </Note>
 <Note>
+	<Title type="change">Telepresence client now requires a traffic manager version of at least 2.21.0.</Title>
+	<Body>
+The traffic manager is now required to be at least version 2.21.0. Versions earlier than 2.21.0 will no longer work. The reason for this is that implementing the new reconnect behavior would require too much conditional code with older traffic-managers, and a lot of functionality wouldn't work anyway.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">Build binaries and docker images that are stripped from dwarf and debug info.</Title>
 	<Body>
 The Telepresence binaries and docker images are now built with the `-w -s` flags, which strip the debug symbols and the DWARF information. This reduces the size of the binaries and docker images by about 50MB. Debug binaries can be built using `DEBUG=1 make build`.

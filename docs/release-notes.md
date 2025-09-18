@@ -30,6 +30,12 @@ can be restored by setting the `client.dns.useComplexLookup` parameter in the He
 `dns.useComplexLookup` parameter in the client configuration file.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Telepresence client now requires a traffic manager version of at least 2.21.0.</div></div>
+<div style="margin-left: 15px">
+
+The traffic manager is now required to be at least version 2.21.0. Versions earlier than 2.21.0 will no longer work. The reason for this is that implementing the new reconnect behavior would require too much conditional code with older traffic-managers, and a lot of functionality wouldn't work anyway.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Build binaries and docker images that are stripped from dwarf and debug info.</div></div>
 <div style="margin-left: 15px">
 
