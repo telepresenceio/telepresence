@@ -51,7 +51,6 @@ type Service interface {
 	ClusterInfo() cluster.Info
 
 	// unexported methods.
-	runSessionGCLoop(context.Context) error
 	runUpdateTrafficManagerConfigMapLoop(context.Context) error
 	serveHTTP(context.Context) error
 	servePrometheus(context.Context) error
@@ -111,7 +110,7 @@ func NewService(ctx context.Context, configWatcher config.Watcher) (Service, *dg
 		EnableSignalHandling: true,
 		SoftShutdownTimeout:  5 * time.Second,
 	})
-	ret.state = state.NewState(ctx)
+	ret.state = state.NewState(ctx, g)
 	return ret, g, nil
 }
 
@@ -1111,14 +1110,6 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 	}
 	ww := s.state.NewWorkloadInfoWatcher(clientSession, namespace)
 	return ww.Watch(ctx, stream)
-}
-
-const agentSessionTTL = 70 * time.Second
-
-// expire removes stale sessions.
-func (s *service) expire(ctx context.Context) {
-	now := time.Now()
-	s.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
 }
 
 func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {

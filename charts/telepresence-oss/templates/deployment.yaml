@@ -12,6 +12,11 @@ spec:
   selector:
     matchLabels:
       {{- include "telepresence.selectorLabels" $ | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # Allows creating one extra pod during the update
+      maxUnavailable: 0  # Ensures no pods are terminated until new ones are ready
   template:
     metadata:
     {{- with .podAnnotations }}

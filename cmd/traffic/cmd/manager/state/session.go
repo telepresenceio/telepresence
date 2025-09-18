@@ -12,39 +12,40 @@ import (
 const AgentSessionIDPrefix = "agent:"
 
 type sessionState struct {
-	id         tunnel.SessionID
-	doneCh     <-chan struct{}
-	cancel     context.CancelFunc
-	lastMarked int64
+	id        tunnel.SessionID
+	doneCh    <-chan struct{}
+	cancel    context.CancelFunc
+	timestamp int64
 }
 
-func (s *sessionState) ID() tunnel.SessionID {
+func (s *sessionState) sessionID() tunnel.SessionID {
 	return s.id
 }
 
-func (s *sessionState) Cancel() {
-	s.cancel()
-}
-
-func (s *sessionState) Done() <-chan struct{} {
+func (s *sessionState) done() <-chan struct{} {
 	return s.doneCh
 }
 
-func (s *sessionState) LastMarked() time.Time {
-	return time.Unix(0, atomic.LoadInt64(&s.lastMarked))
+func (s *sessionState) lastMarked() time.Time {
+	return time.Unix(0, atomic.LoadInt64(&s.timestamp))
 }
 
-func (s *sessionState) SetLastMarked(lastMarked time.Time) {
-	atomic.StoreInt64(&s.lastMarked, lastMarked.UnixNano())
+func (s *sessionState) mark(lastMarked time.Time) {
+	atomic.StoreInt64(&s.timestamp, lastMarked.UnixNano())
+}
+
+func (s *sessionState) adjustMark(diff time.Duration) {
+	mark := atomic.LoadInt64(&s.timestamp)
+	atomic.CompareAndSwapInt64(&s.timestamp, mark, mark+int64(diff))
 }
 
 func newSessionState(ctx context.Context, id tunnel.SessionID, now time.Time) sessionState {
 	ctx, cancel := context.WithCancel(ctx)
 	return sessionState{
-		id:         id,
-		doneCh:     ctx.Done(),
-		cancel:     cancel,
-		lastMarked: now.UnixNano(),
+		id:        id,
+		doneCh:    ctx.Done(),
+		cancel:    cancel,
+		timestamp: now.UnixNano(),
 	}
 }
 

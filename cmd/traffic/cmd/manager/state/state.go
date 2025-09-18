@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -98,7 +99,7 @@ func agentsEqual(a, b *AgentSession) bool {
 	return proto.Equal(a.AgentInfo, b.AgentInfo)
 }
 
-func NewState(ctx context.Context) *State {
+func NewState(ctx context.Context, g *dgroup.Group) *State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	s := &State{
 		backgroundCtx:    ctx,
@@ -109,22 +110,62 @@ func NewState(ctx context.Context) *State {
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
-	go func() {
-		sid, nsChanges := namespaces.Subscribe(ctx)
-		defer namespaces.Unsubscribe(ctx, sid)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case _, ok := <-nsChanges:
-				if !ok {
-					return
-				}
-				s.pruneSessions(ctx)
-			}
-		}
-	}()
+	g.Go("namespace-GC", s.pruneSessionGCLoop)
+	g.Go("expired-GC", s.runSessionGCLoop)
 	return s
+}
+
+const agentSessionTTL = 70 * time.Second
+
+func (s *State) runSessionGCLoop(ctx context.Context) error {
+	// Loop calling Expire
+	const tickInterval = 5 * time.Second
+	ticker := time.NewTicker(tickInterval)
+	defer ticker.Stop()
+
+	lastTick := time.Now().UnixNano()
+	clientTTL := managerutil.GetEnv(ctx).ClientConnectionTTL
+	for {
+		select {
+		case now := <-ticker.C:
+			// We cannot use time.Sub() because it uses the monotonic clock. We need the wall clock difference.
+			diff := time.Duration(now.UnixNano() - lastTick - int64(tickInterval)) // Should normally be close to zero.
+			lastTick = now.UnixNano()
+			if diff > tickInterval {
+				// It's been more than tickInterval*2 since the last tick, co the computer must have been sleeping. Let's adjust
+				// all marks with the delay.
+				dlog.Debugf(ctx, "Computer slept %s, adjusting session marks", diff)
+				s.clients.Range(func(id tunnel.SessionID, cs *ClientSession) bool {
+					cs.adjustMark(diff)
+					return true
+				})
+				s.agents.Range(func(id tunnel.SessionID, as *AgentSession) bool {
+					as.adjustMark(diff)
+					return true
+				})
+			}
+			s.expireSessions(ctx, now.Add(-clientTTL), now.Add(-agentSessionTTL))
+
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (s *State) pruneSessionGCLoop(ctx context.Context) error {
+	sid, nsChanges := namespaces.Subscribe(ctx)
+	defer namespaces.Unsubscribe(ctx, sid)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case _, ok := <-nsChanges:
+			if !ok {
+				return nil
+			}
+			s.pruneSessions(ctx)
+		}
+	}
 }
 
 // pruneSessions will remove all sessions that belong to namespaces that are no longer managed.
@@ -145,7 +186,7 @@ func (s *State) pruneSessions(ctx context.Context) {
 		return true
 	})
 	for _, sid := range sids {
-		s.RemoveAgentSession(ctx, sid)
+		s.removeAgentSession(ctx, sid)
 	}
 }
 
@@ -220,10 +261,10 @@ func (s *State) checkAgentsForIntercept(intercept *Intercept) (errCode rpc.Inter
 func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	id := tunnel.SessionID(req.Session.SessionId)
 	if cs, ok := s.clients.Load(id); ok {
-		cs.SetLastMarked(now)
+		cs.mark(now)
 		return true
 	} else if as, ok := s.agents.Load(id); ok {
-		as.SetLastMarked(now)
+		as.mark(now)
 		return true
 	}
 	return false
@@ -234,12 +275,12 @@ func (s *State) RemoveSession(ctx context.Context, id tunnel.SessionID) {
 	if cs, ok := s.clients.LoadAndDelete(id); ok {
 		s.removeClientSession(ctx, cs)
 	} else {
-		s.RemoveAgentSession(ctx, id)
+		s.removeAgentSession(ctx, id)
 	}
 }
 
-// RemoveAgentSession removes an AgentSession from the set of present session IDs.
-func (s *State) RemoveAgentSession(ctx context.Context, id tunnel.SessionID) {
+// removeAgentSession removes an AgentSession from the set of present session IDs.
+func (s *State) removeAgentSession(ctx context.Context, id tunnel.SessionID) {
 	if as, loaded := s.agents.LoadAndDelete(id); loaded {
 		dlog.Debugf(ctx, "AgentSession %s removed. Explicit removal", id)
 		mutator.GetMap(s.backgroundCtx).Inactivate(types.UID(as.PodUid))
@@ -249,10 +290,10 @@ func (s *State) RemoveAgentSession(ctx context.Context, id tunnel.SessionID) {
 
 // removeClientSession removes an AgentSession from the set of present session IDs.
 func (s *State) removeClientSession(ctx context.Context, cs *ClientSession) {
-	dlog.Debugf(ctx, "ClientSession %s removed. Explicit removal", cs.ID())
+	dlog.Debugf(ctx, "ClientSession %s removed. Explicit removal", cs.sessionID())
 
 	// kill the session
-	cs.Cancel()
+	cs.cancel()
 	s.gcClientSessionIntercepts(ctx, cs)
 	scm := cs.consumptionMetrics
 	atomic.AddUint64(&s.tunnelIngressCounter, scm.FromClientBytes.GetValue())
@@ -296,7 +337,7 @@ func (s *State) gcClientSessionIntercepts(ctx context.Context, client *ClientSes
 		if intercept.Disposition == rpc.InterceptDispositionType_REMOVED {
 			return true
 		}
-		if tunnel.SessionID(intercept.ClientSession.SessionId) == client.ID() {
+		if tunnel.SessionID(intercept.ClientSession.SessionId) == client.sessionID() {
 			// Client went away:
 			// Delete it.
 			wl := strings.SplitN(interceptID, ":", 2)[1]
@@ -307,12 +348,12 @@ func (s *State) gcClientSessionIntercepts(ctx context.Context, client *ClientSes
 	})
 }
 
-// ExpireSessions prunes any sessions that haven't had a MarkSession heartbeat since
+// expireSessions prunes any sessions that haven't had a MarkSession heartbeat since
 // respective given 'moment'.
-func (s *State) ExpireSessions(ctx context.Context, clientMoment, agentMoment time.Time) {
+func (s *State) expireSessions(ctx context.Context, clientMoment, agentMoment time.Time) {
 	s.clients.Range(func(id tunnel.SessionID, client *ClientSession) bool {
 		moment := clientMoment
-		if client.LastMarked().Before(moment) {
+		if client.lastMarked().Before(moment) {
 			s.clients.Delete(id)
 			s.removeClientSession(ctx, client)
 		}
@@ -320,8 +361,8 @@ func (s *State) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 	})
 	s.agents.Range(func(id tunnel.SessionID, agent *AgentSession) bool {
 		moment := agentMoment
-		if agent.LastMarked().Before(moment) {
-			s.RemoveAgentSession(ctx, id)
+		if agent.lastMarked().Before(moment) {
+			s.removeAgentSession(ctx, id)
 		}
 		return true
 	})
@@ -331,10 +372,10 @@ func (s *State) ExpireSessions(ctx context.Context, clientMoment, agentMoment ti
 // there is no such currently-live session, then an already-closed channel is returned.
 func (s *State) SessionDone(id tunnel.SessionID) (<-chan struct{}, error) {
 	if cs, ok := s.clients.Load(id); ok {
-		return cs.Done(), nil
+		return cs.done(), nil
 	}
 	if as, ok := s.agents.Load(id); ok {
-		return as.Done(), nil
+		return as.done(), nil
 	}
 	return nil, status.Errorf(codes.NotFound, "session %q not found", id)
 }

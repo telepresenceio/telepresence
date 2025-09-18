@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -69,7 +70,8 @@ func (s *suiteState) TestStateInternal() {
 		clock := &FakeClock{}
 		m := mutator.NewWatcher()
 		ctx = mutator.WithMap(ctx, m)
-		st := NewState(ctx)
+		g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+		st := NewState(ctx, g)
 
 		h, err := st.AddAgent(ctx, helloAgent, clock.Now())
 		require.NoError(t, err)
@@ -91,7 +93,8 @@ func (s *suiteState) TestStateInternal() {
 
 		clock := &FakeClock{}
 		epoch := clock.Now()
-		s := NewState(ctx)
+		g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+		s := NewState(ctx, g)
 
 		c1 := s.AddClient(testClients["alice"], clock.Now())
 		c2 := s.AddClient(testClients["bob"], clock.Now())
@@ -111,7 +114,7 @@ func (s *suiteState) TestStateInternal() {
 		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: "asdf"}}, clock.Now()))
 
 		moment := epoch.Add(5 * time.Second)
-		s.ExpireSessions(ctx, moment, moment)
+		s.expireSessions(ctx, moment, moment)
 
 		a.NotNil(s.GetClient(c1))
 		a.NotNil(s.GetClient(c2))
@@ -124,7 +127,7 @@ func (s *suiteState) TestStateInternal() {
 		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c3)}}, clock.Now()))
 
 		moment = epoch.Add(5 * time.Second)
-		s.ExpireSessions(ctx, moment, moment)
+		s.expireSessions(ctx, moment, moment)
 
 		a.NotNil(s.GetClient(c1))
 		a.NotNil(s.GetClient(c2))

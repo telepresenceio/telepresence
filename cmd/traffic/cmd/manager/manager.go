@@ -134,7 +134,8 @@ func MainWithEnv(ctx context.Context) (err error) {
 
 	// We load the Map regardless of if the agent-injector is enabled or not. Intercepts can still
 	// be added manually.
-	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
+	watcher := mutator.Load(ctx)
+	ctx = mutator.WithMap(ctx, watcher)
 
 	if mgrFactory {
 		f := informer.GetK8sFactory(ctx, env.ManagerNamespace)
@@ -146,6 +147,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("unable to initialize traffic manager: %w", err)
 	}
+	watcher.SetConfigured()
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", mgr.serveHTTP)
@@ -160,8 +162,6 @@ func MainWithEnv(ctx context.Context) (err error) {
 			return mutator.ServeMutator(ctx, injectorCertGetter)
 		})
 	}
-
-	g.Go("session-gc", mgr.runSessionGCLoop)
 
 	if managerutil.GetEnv(ctx).AgentMaxIdleTime != 0 {
 		// only start the configmap updater if we set the agent max idle time, as we need to persist the latest agent state to the config map
@@ -314,21 +314,6 @@ func (s *service) serveHTTP(ctx context.Context) error {
 func (s *service) RegisterServers(grpcHandler *grpc.Server) {
 	rpc.RegisterManagerServer(grpcHandler, s)
 	grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
-}
-
-func (s *service) runSessionGCLoop(ctx context.Context) error {
-	// Loop calling Expire
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			s.expire(ctx)
-		case <-ctx.Done():
-			return nil
-		}
-	}
 }
 
 func (s *service) runUpdateTrafficManagerConfigMapLoop(ctx context.Context) error {

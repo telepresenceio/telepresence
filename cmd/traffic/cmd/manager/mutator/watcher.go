@@ -46,6 +46,7 @@ type Map interface {
 
 	Delete(name, namespace string)
 	Update(name, namespace string, updater func(cm agentconfig.SidecarExt) (agentconfig.SidecarExt, error)) (agentconfig.SidecarExt, error)
+	SetConfigured()
 }
 
 type configWatcher struct {
@@ -54,6 +55,7 @@ type configWatcher struct {
 	informers    *xsync.Map[string, *informersWithCancel]
 	inactivePods *xsync.Map[types.UID, inactivation]
 	startedAt    time.Time
+	configured   atomic.Bool
 	running      atomic.Bool
 }
 
@@ -74,6 +76,10 @@ func Load(ctx context.Context) Map {
 	cw := NewWatcher()
 	cw.Start(ctx)
 	return cw
+}
+
+func (c *configWatcher) SetConfigured() {
+	c.configured.Store(true)
 }
 
 // RegenerateAgentMaps regenerates all agent configurations and triggers pod evictions for all pods with
@@ -103,6 +109,7 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 		return a.AsDuration() == b.AsDuration()
 	})
 
+	configured := c.configured.Load()
 	for _, wp := range evictMap {
 		wl := wp.wl
 		wls := make(map[WorkloadKey]agentconfig.SidecarExt, len(wp.pods))
@@ -117,24 +124,28 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 				dlog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
 				continue
 			}
-			ac := sce.AgentConfig()
-			key := WorkloadKey{
-				Name:      ac.WorkloadName,
-				Namespace: ac.Namespace,
-				Kind:      ac.WorkloadKind,
-			}
-			newSce, ok := wls[key]
-			if !ok && managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(ac.WorkloadKind) {
-				newSce, err = gc.Generate(ctx, wl, sce)
-				if err != nil {
-					dlog.Errorf(ctx, "unable to update config for %s", wl)
-					continue
+			if configured {
+				ac := sce.AgentConfig()
+				key := WorkloadKey{
+					Name:      ac.WorkloadName,
+					Namespace: ac.Namespace,
+					Kind:      ac.WorkloadKind,
 				}
-				wls[key] = newSce
-				c.Store(newSce)
-			}
-			if newSce == nil || !cmp.Equal(newSce, sce, dbpCmp) {
-				podsOfInterest = append(podsOfInterest, pod)
+				newSce, ok := wls[key]
+				if !ok && managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(ac.WorkloadKind) {
+					newSce, err = gc.Generate(ctx, wl, sce)
+					if err != nil {
+						dlog.Errorf(ctx, "unable to update config for %s", wl)
+						continue
+					}
+					wls[key] = newSce
+					c.Store(newSce)
+				}
+				if newSce == nil || !cmp.Equal(newSce, sce, dbpCmp) {
+					podsOfInterest = append(podsOfInterest, pod)
+				}
+			} else {
+				c.Store(sce)
 			}
 		}
 		if len(podsOfInterest) > 0 {
