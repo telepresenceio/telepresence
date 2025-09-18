@@ -2,9 +2,7 @@ package agentpf
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"sync"
@@ -18,10 +16,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	tpClient "github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -396,59 +395,13 @@ func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient)
 		dlog.Debugf(ctx, "WatchAgentPods ending with %d clients still active", activeCount)
 		s.disabled.Store(true)
 	}()
-	backoff := 100 * time.Millisecond
-
-outer:
-	for ctx.Err() == nil {
-		as, err := rmc.WatchAgentPods(ctx, s.session)
-		switch status.Code(err) {
-		case codes.OK:
-		case codes.Unavailable:
-			dtime.SleepWithContext(ctx, backoff)
-			backoff *= 2
-			if backoff > 15*time.Second {
-				backoff = 15 * time.Second
-			}
-			continue outer
-		case codes.Unimplemented:
-			dlog.Debug(ctx, "traffic-manager does not implement WatchAgentPods")
-			return nil
-		default:
-			err = fmt.Errorf("error when calling WatchAgents: %w", err)
-			dlog.Warn(ctx, err)
-			return err
-		}
-
-		for ctx.Err() == nil {
-			ais, err := as.Recv()
-			if errors.Is(err, io.EOF) {
-				// User daemon departed from the session.
-				return nil
-			}
-			switch status.Code(err) {
-			case codes.OK:
-				err = s.updateClients(ctx, ais.Agents)
-				if err != nil {
-					return err
-				}
-			case codes.Unavailable:
-				dtime.SleepWithContext(ctx, backoff)
-				backoff *= 2
-				if backoff > 15*time.Second {
-					backoff = 15 * time.Second
-				}
-				continue outer
-			case codes.Unimplemented:
-				dlog.Debug(ctx, "traffic-manager does not implement WatchAgentPods")
-				return nil
-			case codes.Canceled:
-				return nil
-			default:
-				return err
-			}
-		}
-	}
-	return nil
+	return watcher.WatchWithRetry(ctx, "WatchAgentPods", tpClient.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
+			return rmc.WatchAgentPods(ctx, s.session)
+		},
+		func(snapshot *manager.AgentPodInfoSnapshot) error {
+			return s.updateClients(ctx, snapshot.Agents)
+		}, nil)
 }
 
 func (s *clients) notifyWaiters() {

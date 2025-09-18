@@ -31,7 +31,6 @@ import (
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -44,6 +43,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -744,35 +744,12 @@ func (s *Session) networkReady(ctx context.Context) <-chan error {
 }
 
 func (s *Session) watchClusterInfo(ctx context.Context, teleroutePort uint16) error {
-	backoff := 100 * time.Millisecond
-
-	for ctx.Err() == nil {
-		infoStream, err := s.managerClient.WatchClusterInfo(ctx, s.session)
-		if err != nil {
-			err = fmt.Errorf("error when calling WatchClusterInfo: %w", err)
-			dlog.Warn(ctx, err)
-			return err
-		}
-
-		for ctx.Err() == nil {
-			mgrInfo, err := infoStream.Recv()
-			if err != nil {
-				if gErr, ok := status.FromError(err); ok {
-					switch gErr.Code() {
-					case codes.Canceled:
-						// The connector, which is routing this connection, cancelled it, which means that the client
-						// session is dead.
-						return nil
-					case codes.Unavailable:
-						// Abrupt shutdown. This is nothing that the session should survive
-						dlog.Errorf(ctx, "WatchClusterInfo recv: Unavailable: %v", gErr.Message())
-					}
-				} else {
-					dlog.Errorf(ctx, "WatchClusterInfo recv: %v", err)
-				}
-				break
-			}
-			if err = s.readAdditionalRouting(ctx, mgrInfo); err != nil {
+	return watcher.WatchWithRetry(ctx, "WatchClusterInfo", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.ClusterInfo], error) {
+			return s.managerClient.WatchClusterInfo(ctx, s.session)
+		},
+		func(mgrInfo *manager.ClusterInfo) error {
+			if err := s.readAdditionalRouting(ctx, mgrInfo); err != nil {
 				return err
 			}
 			select {
@@ -784,21 +761,15 @@ func (s *Session) watchClusterInfo(ctx context.Context, teleroutePort uint16) er
 					return err
 				}
 			default:
-				if err = s.onFirstClusterInfo(ctx, teleroutePort, mgrInfo); err != nil {
+				if err := s.onFirstClusterInfo(ctx, teleroutePort, mgrInfo); err != nil {
 					if !errors.Is(err, context.Canceled) {
 						dlog.Error(ctx, err)
 					}
 					return err
 				}
 			}
-		}
-		dtime.SleepWithContext(ctx, backoff)
-		backoff *= 2
-		if backoff > 15*time.Second {
-			backoff = 15 * time.Second
-		}
-	}
-	return nil
+			return nil
+		}, nil)
 }
 
 // createSubnetForDNSOnly will find a random IPv4 subnet that isn't currently routed and
@@ -1233,17 +1204,15 @@ func (s *Session) run(c context.Context, initErrs chan error) error {
 }
 
 func (s *Session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16) error {
-	if rmc, ok := s.managerClient.(interface{ RealManagerClient() manager.ManagerClient }); ok {
-		clusterCfg := client.GetConfig(c).Cluster()
-		if clusterCfg.AgentPortForward && clusterCfg.ConnectFromRootDaemon {
-			if k8sclient.CanPortForward(c, s.namespace) {
-				s.agentClients = agentpf.NewClients(s.session)
-				g.Go("agentPods", func(ctx context.Context) error {
-					return s.agentClients.WatchAgentPods(tunnel.WithDialer(ctx, s), rmc.RealManagerClient())
-				})
-			} else {
-				dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
-			}
+	clusterCfg := client.GetConfig(c).Cluster()
+	if clusterCfg.AgentPortForward {
+		if k8sclient.CanPortForward(c, s.namespace) {
+			s.agentClients = agentpf.NewClients(s.session)
+			g.Go("agentPods", func(ctx context.Context) error {
+				return s.agentClients.WatchAgentPods(tunnel.WithDialer(ctx, s), s.managerClient)
+			})
+		} else {
+			dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
 		}
 	}
 	if err := s.activateProxyViaWorkloads(c); err != nil {

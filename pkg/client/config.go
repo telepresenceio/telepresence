@@ -722,11 +722,15 @@ type Grpc struct {
 	// SimulateDisconnect can be set to a duration to simulate a disconnect some time after connecting.
 	// Intended for debugging purposes only.
 	SimulateDisconnect time.Duration `json:"simulateDisconnect,format:units"`
+
+	// WatchRetryInterval is the interval between retries that a watcher uses when the gRPC connection is lost.
+	WatchRetryInterval time.Duration `json:"watchRetryInterval,format:units"`
 }
 
 var defaultGrpc = Grpc{ //nolint:gochecknoglobals // constant
-	DaemonPort:    4038,
-	TeleroutePort: 4039,
+	DaemonPort:         4038,
+	TeleroutePort:      4039,
+	WatchRetryInterval: 2 * time.Second,
 }
 
 func (g *Grpc) defaults() DefaultsAware {

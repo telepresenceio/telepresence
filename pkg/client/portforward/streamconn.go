@@ -52,6 +52,7 @@ func Dialer(ctx context.Context) func(ctx context.Context, address string) (net.
 		if !ok {
 			return nil, errors.New("grpc dialer is not configured")
 		}
+		dlog.Debugf(ctx, "portforward.Dialer dialing %s", address)
 		return dialContext(grpcCtx, ctx, address, cfg)
 	}
 }

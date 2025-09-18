@@ -2,9 +2,7 @@ package trafficmgr
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -15,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
@@ -30,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -143,25 +143,18 @@ func (s *session) watchInterceptsHandler(context.Context) error {
 }
 
 func (s *session) watchInterceptsLoop(ctx context.Context) error {
-	stream, err := s.managerClient.WatchIntercepts(ctx, s.SessionInfo())
-	if err != nil {
-		return fmt.Errorf("manager.WatchIntercepts dial: %w", err)
-	}
 	pat := newPodAccessTracker()
-	for ctx.Err() == nil {
-		snapshot, err := stream.Recv()
-		if err != nil {
-			// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are cancelled correctly.
-			s.handleInterceptSnapshot(pat, nil)
-			if ctx.Err() != nil || errors.Is(err, io.EOF) || grpcStatus.Code(err) == grpcCodes.NotFound {
-				// Normal termination
-				return nil
-			}
-			return fmt.Errorf("manager.WatchIntercepts recv: %w", err)
-		}
-		s.handleInterceptSnapshot(pat, snapshot.Intercepts)
-	}
-	return nil
+	err := watcher.WatchWithRetry(ctx, "WatchIntercepts", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoSnapshot], error) {
+			return s.managerClient.WatchIntercepts(s.context, s.SessionInfo())
+		},
+		func(snapshot *manager.InterceptInfoSnapshot) error {
+			s.handleInterceptSnapshot(pat, snapshot.Intercepts)
+			return nil
+		}, nil)
+	// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are cancelled correctly.
+	s.handleInterceptSnapshot(pat, nil)
+	return err
 }
 
 func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*manager.InterceptInfo) {

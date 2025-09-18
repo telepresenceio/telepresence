@@ -108,6 +108,7 @@ func (d *svcResolver) watcher() {
 			case <-d.ctx.Done():
 				return
 			case <-d.rn:
+				continue
 			}
 		}
 		select {

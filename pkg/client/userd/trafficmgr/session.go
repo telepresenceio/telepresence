@@ -49,6 +49,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -975,62 +976,53 @@ func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced
 			synced.Done()
 		}
 	}()
-	wlc, err := s.managerClient.WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
-	if err != nil {
-		if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
-			return errcat.User.New(st.Message())
-		}
-		return err
-	}
+	return watcher.WatchWithRetry(ctx, "WatchAgentPods", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.WorkloadEventsDelta], error) {
+			return s.managerClient.WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
+		},
+		func(wls *manager.WorkloadEventsDelta) error {
+			s.workloadsLock.Lock()
+			workloads, ok := s.workloads[namespace]
+			if !ok {
+				workloads = make(map[workloadInfoKey]workloadInfo)
+				s.workloads[namespace] = workloads
+			}
 
-	for ctx.Err() == nil {
-		wls, err := wlc.Recv()
-		if err != nil {
-			return err
-		}
-
-		s.workloadsLock.Lock()
-		workloads, ok := s.workloads[namespace]
-		if !ok {
-			workloads = make(map[workloadInfoKey]workloadInfo)
-			s.workloads[namespace] = workloads
-		}
-
-		for _, we := range wls.GetEvents() {
-			w := we.Workload
-			key := workloadInfoKey{kind: w.Kind, name: w.Name}
-			if we.Type == manager.WorkloadEvent_DELETED {
-				dlog.Debugf(ctx, "Deleting workload %s/%s.%s", key.kind, key.name, namespace)
-				delete(workloads, key)
-			} else {
-				var clients []string
-				if lc := len(w.InterceptClients); lc > 0 {
-					clients = make([]string, lc)
-					for i, ic := range w.InterceptClients {
-						clients[i] = ic.Client
+			for _, we := range wls.GetEvents() {
+				w := we.Workload
+				key := workloadInfoKey{kind: w.Kind, name: w.Name}
+				if we.Type == manager.WorkloadEvent_DELETED {
+					dlog.Debugf(ctx, "Deleting workload %s/%s.%s", key.kind, key.name, namespace)
+					delete(workloads, key)
+				} else {
+					var clients []string
+					if lc := len(w.InterceptClients); lc > 0 {
+						clients = make([]string, lc)
+						for i, ic := range w.InterceptClients {
+							clients[i] = ic.Client
+						}
+					}
+					state := workload.StateFromRPC(w.State)
+					dlog.Debugf(ctx, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
+					workloads[key] = workloadInfo{
+						uid:              k8sTypes.UID(w.Uid),
+						state:            state,
+						agentState:       w.AgentState,
+						interceptClients: clients,
 					}
 				}
-				state := workload.StateFromRPC(w.State)
-				dlog.Debugf(ctx, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
-				workloads[key] = workloadInfo{
-					uid:              k8sTypes.UID(w.Uid),
-					state:            state,
-					agentState:       w.AgentState,
-					interceptClients: clients,
+			}
+			for _, subscriber := range s.workloadSubscribers {
+				select {
+				case subscriber <- struct{}{}:
+				default:
 				}
 			}
-		}
-		for _, subscriber := range s.workloadSubscribers {
-			select {
-			case subscriber <- struct{}{}:
-			default:
+			s.workloadsLock.Unlock()
+			if synced != nil {
+				synced.Done()
+				synced = nil
 			}
-		}
-		s.workloadsLock.Unlock()
-		if synced != nil {
-			synced.Done()
-			synced = nil
-		}
-	}
-	return nil
+			return nil
+		}, nil)
 }

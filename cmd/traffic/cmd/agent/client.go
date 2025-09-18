@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
@@ -40,6 +40,8 @@ func (is interceptsStringer) String() string {
 	sb.WriteByte(']')
 	return sb.String()
 }
+
+const watchRetryInterval = 2 * time.Second
 
 var NewExtendedManagerClient func(conn *grpc.ClientConn, ossManager rpc.ManagerClient) rpc.ManagerClient //nolint:gochecknoglobals // extension point
 
@@ -108,27 +110,15 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		HardShutdownTimeout: time.Second * 10,
 	})
 
-	// Deal with log-level changes
-	logLevelStream, err := manager.WatchLogLevel(ctx, &empty.Empty{})
-	if err != nil {
-		return err
-	}
-	wg.Go("logLevelWait", func(ctx context.Context) error {
-		return logLevelWaitLoop(ctx, logLevelStream)
+	wg.Go("logLevelWatch", func(ctx context.Context) error {
+		return logLevelWatchLoop(ctx, manager)
 	})
-
 	snapshots := make(chan *rpc.InterceptInfoSnapshot)
-
-	// Call WatchIntercepts
-	stream, err := manager.WatchIntercepts(ctx, session)
-	if err != nil {
-		return err
-	}
-	wg.Go("interceptWait", func(ctx context.Context) error {
-		return interceptWaitLoop(ctx, cancel, snapshots, stream)
+	wg.Go("interceptWatch", func(ctx context.Context) error {
+		return interceptWatchLoop(ctx, manager, session, info, snapshots)
 	})
 	wg.Go("handleIntercept", func(ctx context.Context) error {
-		return handleInterceptLoop(ctx, snapshots, state, manager, session)
+		return handleInterceptLoop(ctx, manager, session, snapshots, state)
 	})
 	wg.Go("remain", func(ctx context.Context) error {
 		return remainLoop(ctx, manager, session)
@@ -140,6 +130,38 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	}
 	_ = file.Close()
 	return wg.Wait()
+}
+
+func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient) error {
+	timedLevel := log.NewTimedLevel(log.DlogLevelNames[dlog.MaxLogLevel(ctx)], log.SetLevel)
+	return watcher.WatchWithRetry(ctx, "WatchLogLevel", watchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.LogLevelRequest], error) {
+			return manager.WatchLogLevel(ctx, &empty.Empty{})
+		},
+		func(ll *rpc.LogLevelRequest) error {
+			duration := time.Duration(0)
+			if ll.Duration != nil {
+				duration = ll.Duration.AsDuration()
+			}
+			timedLevel.Set(ctx, ll.LogLevel, duration)
+			return nil
+		},
+		nil,
+	)
+}
+
+func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, info *rpc.AgentInfo, snapshots chan<- *rpc.InterceptInfoSnapshot) error {
+	// Call WatchIntercepts and publish the snapshots on the channel
+	return watcher.WatchWithRetry(ctx, "WatchIntercepts", watchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoSnapshot], error) {
+			return manager.WatchIntercepts(ctx, session)
+		},
+		func(snapshot *rpc.InterceptInfoSnapshot) error {
+			snapshots <- snapshot
+			return nil
+		},
+		nil,
+	)
 }
 
 func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo) error {
@@ -154,12 +176,12 @@ func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.Ses
 		}
 
 		if _, err := manager.Remain(ctx, &rpc.RemainRequest{Session: session}); err != nil {
-			return err
+			dlog.Warnf(ctx, "remain: %v", err)
 		}
 	}
 }
 
-func handleInterceptLoop(ctx context.Context, snapshots <-chan *rpc.InterceptInfoSnapshot, state State, manager rpc.ManagerClient, session *rpc.SessionInfo) error {
+func handleInterceptLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, snapshots <-chan *rpc.InterceptInfoSnapshot, state State) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -181,37 +203,4 @@ func handleInterceptLoop(ctx context.Context, snapshots <-chan *rpc.InterceptInf
 			}
 		}
 	}
-}
-
-func interceptWaitLoop(ctx context.Context, cancel context.CancelFunc, snapshots chan<- *rpc.InterceptInfoSnapshot, stream rpc.Manager_WatchInterceptsClient) error {
-	defer cancel() // Drop the gRPC connection if we leave this function
-	for {
-		snapshot, err := stream.Recv()
-		if err != nil {
-			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
-				return fmt.Errorf("stream Recv: %w", err)
-			}
-			return nil
-		}
-		snapshots <- snapshot
-	}
-}
-
-func logLevelWaitLoop(ctx context.Context, logLevelStream rpc.Manager_WatchLogLevelClient) error {
-	timedLevel := log.NewTimedLevel(log.DlogLevelNames[dlog.MaxLogLevel(ctx)], log.SetLevel)
-	for ctx.Err() == nil {
-		ll, err := logLevelStream.Recv()
-		if err != nil {
-			if ctx.Err() == nil && !errors.Is(err, io.EOF) {
-				return fmt.Errorf("log-level stream recv: %w", err)
-			}
-			return nil
-		}
-		duration := time.Duration(0)
-		if ll.Duration != nil {
-			duration = ll.Duration.AsDuration()
-		}
-		timedLevel.Set(ctx, ll.LogLevel, duration)
-	}
-	return nil
 }
