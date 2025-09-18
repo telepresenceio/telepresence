@@ -48,7 +48,14 @@ type Map interface {
 	Update(name, namespace string, updater func(cm agentconfig.SidecarExt) (agentconfig.SidecarExt, error)) (agentconfig.SidecarExt, error)
 }
 
-var NewWatcherFunc = NewWatcher //nolint:gochecknoglobals // extension point
+type configWatcher struct {
+	cancel       context.CancelFunc
+	agentConfigs *xsync.Map[string, map[string]agentconfig.SidecarExt]
+	informers    *xsync.Map[string, *informersWithCancel]
+	inactivePods *xsync.Map[types.UID, inactivation]
+	startedAt    time.Time
+	running      atomic.Bool
+}
 
 type mapKey struct{}
 
@@ -64,7 +71,7 @@ func GetMap(ctx context.Context) Map {
 }
 
 func Load(ctx context.Context) Map {
-	cw := NewWatcherFunc()
+	cw := NewWatcher()
 	cw.Start(ctx)
 	return cw
 }
@@ -169,17 +176,6 @@ type inactivation struct {
 	deleted bool
 }
 
-type configWatcher struct {
-	cancel       context.CancelFunc
-	agentConfigs *xsync.Map[string, map[string]agentconfig.SidecarExt]
-	informers    *xsync.Map[string, *informersWithCancel]
-	inactivePods *xsync.Map[types.UID, inactivation]
-	startedAt    time.Time
-	running      atomic.Bool
-
-	self Map // For extension
-}
-
 func (c *configWatcher) Delete(name, namespace string) {
 	c.agentConfigs.Compute(namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, xsync.ComputeOp) {
 		if loaded {
@@ -242,12 +238,7 @@ func NewWatcher() Map {
 		inactivePods: xsync.NewMap[types.UID, inactivation](),
 		agentConfigs: xsync.NewMap[string, map[string]agentconfig.SidecarExt](),
 	}
-	w.self = w
 	return w
-}
-
-func (c *configWatcher) SetSelf(self Map) {
-	c.self = self
 }
 
 func (c *configWatcher) startInformers(ctx context.Context, ns string) (iwc *informersWithCancel, err error) {

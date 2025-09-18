@@ -9,7 +9,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
@@ -26,12 +26,12 @@ type State interface {
 	AgentState() restapi.AgentState
 	ContainerStates() map[string]ContainerState
 	InterceptStates() []InterceptState
-	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
-	ManagerClient() manager.ManagerClient
+	HandleIntercepts(ctx context.Context, cepts []*rpc.InterceptInfo) []*rpc.ReviewInterceptRequest
+	ManagerClient() rpc.ManagerClient
 	ManagerVersion() semver.Version
-	SessionInfo() *manager.SessionInfo
+	SessionInfo() *rpc.SessionInfo
 	SetFileSharingPorts(ftp uint16, sftp uint16)
-	SetManager(ctx context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version)
+	SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
 	NewInterceptState(forwarder forwarder.Interceptor, target InterceptTarget, container string) InterceptState
@@ -63,13 +63,13 @@ type state struct {
 	Config
 	ftpPort          uint16
 	sftpPort         uint16
-	dialWatchers     *xsync.Map[tunnel.SessionID, chan *manager.DialRequest]
+	dialWatchers     *xsync.Map[tunnel.SessionID, chan *rpc.DialRequest]
 	awaitingForwards *xsync.Map[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]]
 
 	// The sessionInfo and manager client are needed when forwarders establish their
 	// tunnel to the traffic-manager.
-	sessionInfo *manager.SessionInfo
-	manager     manager.ManagerClient
+	sessionInfo *rpc.SessionInfo
+	manager     rpc.ManagerClient
 	mgrVer      semver.Version
 
 	interceptStates []InterceptState
@@ -77,7 +77,7 @@ type state struct {
 	agent.UnimplementedAgentServer
 }
 
-func (s *state) ManagerClient() manager.ManagerClient {
+func (s *state) ManagerClient() rpc.ManagerClient {
 	return s.manager
 }
 
@@ -90,7 +90,7 @@ func (s *state) SetFileSharingPorts(ftp uint16, sftp uint16) {
 	s.sftpPort = sftp
 }
 
-func (s *state) SessionInfo() *manager.SessionInfo {
+func (s *state) SessionInfo() *rpc.SessionInfo {
 	return s.sessionInfo
 }
 
@@ -98,7 +98,7 @@ func NewState(config Config) State {
 	return &state{
 		Config:           config,
 		containerStates:  make(map[string]ContainerState),
-		dialWatchers:     xsync.NewMap[tunnel.SessionID, chan *manager.DialRequest](),
+		dialWatchers:     xsync.NewMap[tunnel.SessionID, chan *rpc.DialRequest](),
 		awaitingForwards: xsync.NewMap[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]](),
 	}
 }
@@ -123,13 +123,13 @@ func (s *state) InterceptStates() []InterceptState {
 	return s.interceptStates
 }
 
-func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
-	var rs []*manager.ReviewInterceptRequest
+func (s *state) HandleIntercepts(ctx context.Context, iis []*rpc.InterceptInfo) []*rpc.ReviewInterceptRequest {
+	var rs []*rpc.ReviewInterceptRequest
 
 	// Keep track of all InterceptInfos handled by interceptStates
 	handled := make([]bool, len(iis))
 	for _, ist := range s.interceptStates {
-		ms := make([]*manager.InterceptInfo, 0, len(iis))
+		ms := make([]*rpc.InterceptInfo, 0, len(iis))
 		for i, ii := range iis {
 			if !handled[i] {
 				ic := ist.Target()
@@ -145,7 +145,7 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*manager.InterceptIn
 	}
 
 	// Collect InterceptInfos weren't handled by interceptStates
-	var unhandled []*manager.InterceptInfo
+	var unhandled []*rpc.InterceptInfo
 	for i, ok := range handled {
 		if !ok {
 			unhandled = append(unhandled, iis[i])
@@ -174,7 +174,7 @@ func (s *state) InterceptInfo(ctx context.Context, callerID, path string, contai
 	return &restapi.InterceptInfo{}, nil
 }
 
-func (s *state) SetManager(_ context.Context, sessionInfo *manager.SessionInfo, manager manager.ManagerClient, version semver.Version) {
+func (s *state) SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version) {
 	s.manager = manager
 	s.sessionInfo = sessionInfo
 	s.mgrVer = version

@@ -77,7 +77,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return err
 	}
 
-	state.SetManager(ctx, session, manager, mgrVer)
+	state.SetManager(session, manager, mgrVer)
 
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'
@@ -115,7 +115,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	})
 	snapshots := make(chan *rpc.InterceptInfoSnapshot)
 	wg.Go("interceptWatch", func(ctx context.Context) error {
-		return interceptWatchLoop(ctx, manager, session, info, snapshots)
+		return interceptWatchLoop(ctx, manager, session, snapshots)
 	})
 	wg.Go("handleIntercept", func(ctx context.Context) error {
 		return handleInterceptLoop(ctx, manager, session, snapshots, state)
@@ -150,7 +150,7 @@ func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient) error {
 	)
 }
 
-func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, info *rpc.AgentInfo, snapshots chan<- *rpc.InterceptInfoSnapshot) error {
+func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, snapshots chan<- *rpc.InterceptInfoSnapshot) error {
 	// Call WatchIntercepts and publish the snapshots on the channel
 	return watcher.WatchWithRetry(ctx, "WatchIntercepts", watchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoSnapshot], error) {
