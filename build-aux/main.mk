@@ -37,7 +37,7 @@ GOLANGCI_VERSION:=v2.4.0
 FORCE:
 
 EXTERNAL_FUSEFTP=0
-LINKED_FUSEFTP=0
+LINKED_FUSEFTP=1
 
 # Build with CGO_ENABLED=0 on all platforms to ensure that the binary is as
 # portable as possible, but we must make an exception for darwin, because
@@ -241,6 +241,12 @@ sshfs-win.msi:
 endif
 
 HELM_VERSION = $(shell go mod edit -json | jq -r '.Require[] | select(.Path == "helm.sh/helm/v3") | .Version')
+LDFLAGS := -X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -X=$(PKG_VERSION).HelmVersion=$(HELM_VERSION)
+ifneq ($(DEBUG),1)
+  # strip debug information and dwarf
+  LDFLAGS := -s -w $(LDFLAGS)
+endif
+$(info LDFLAGS=$(LDFLAGS))
 
 $(TELEPRESENCE): build-deps FORCE
 ifeq ($(GOHOSTOS),windows)
@@ -248,10 +254,10 @@ $(TELEPRESENCE): build-deps $(BINDIR)/wintun.dll FORCE
 endif
 	mkdir -p $(@D)
 ifeq ($(DOCKER_BUILD),1)
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -trimpath -ldflags="-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -X=$(PKG_VERSION).HelmVersion=$(HELM_VERSION)" -o $@ ./cmd/telepresence
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
 else
 # -buildmode=pie enables PIE compilation for binary harderning. Default on darwin and windows (since 1.23) but not in linux.
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -buildmode=pie -trimpath -ldflags="-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -X=$(PKG_VERSION).HelmVersion=$(HELM_VERSION)" -o $@ ./cmd/telepresence
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -buildmode=pie -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
 endif
 
 ifeq ($(GOOS),windows)

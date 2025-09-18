@@ -51,6 +51,12 @@ items:
           that traffic-agents with special DNS configurations might stop working. If this is a problem, the old behavior
           can be restored by setting the `client.dns.useComplexLookup` parameter in the Helm chart or the
           `dns.useComplexLookup` parameter in the client configuration file.
+      - type: change
+        title: Build binaries and docker images that are stripped from dwarf and debug info.
+        body: >-
+          The Telepresence binaries and docker images are now built with the `-w -s` flags, which strip the debug
+          symbols and the DWARF information. This reduces the size of the binaries and docker images by about 50MB.
+          Debug binaries can be built using `DEBUG=1 make build`.
   - version: 2.24.1
     date: 2025-09-05
     notes:

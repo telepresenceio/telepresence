@@ -60,7 +60,7 @@ func (m *ftpMounter) Start(ctx context.Context, workload, container, clientMount
 		dlog.Infof(ctx, "Mounting FTP file system for container %s[%s] (address %s)%s at %q", workload, container, podAddrPort, roTxt, clientMountPoint)
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
 		rmp := strings.TrimPrefix(mountPoint, agentconfig.ExportsMountPoint)
-		ftpClient, err := fs.NewFTPClient(ctx, podAddrPort, rmp, ro, cfg.Timeouts().Get(client.TimeoutFtpReadWrite))
+		ftpClient, err := fs.NewFTPClient(ctx.Done(), podAddrPort, rmp, ro, cfg.Timeouts().Get(client.TimeoutFtpReadWrite))
 		if err != nil {
 			return err
 		}
