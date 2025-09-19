@@ -798,7 +798,7 @@ func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 	}
 	s.currentInterceptsLock.Unlock()
 	if !added {
-		dlog.Warnf(s.context, "Found no ingest or intercept handler for id %s, %v", id, ih)
+		return grpcStatus.Error(grpcCodes.NotFound, fmt.Sprintf("no intercept or ingest with id %s", id))
 	}
 	return nil
 }
