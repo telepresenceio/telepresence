@@ -133,7 +133,7 @@ func (s *State) runSessionGCLoop(ctx context.Context) error {
 			diff := time.Duration(now.UnixNano() - lastTick - int64(tickInterval)) // Should normally be close to zero.
 			lastTick = now.UnixNano()
 			if diff > tickInterval {
-				// It's been more than tickInterval*2 since the last tick, co the computer must have been sleeping. Let's adjust
+				// It's been more than tickInterval*2 since the last tick, so the computer must have been sleeping. Let's adjust
 				// all marks with the delay.
 				dlog.Debugf(ctx, "Computer slept %s, adjusting session marks", diff)
 				s.clients.Range(func(id tunnel.SessionID, cs *ClientSession) bool {

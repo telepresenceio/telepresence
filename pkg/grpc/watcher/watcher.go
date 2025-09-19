@@ -36,20 +36,16 @@ func WatchWithRetry[T any](
 		}
 		retryCount++
 		stream, err := streamProvider(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() {
-			_ = stream.CloseSend()
-		}()
 		switch status.Code(err) {
 		case codes.OK:
 		case codes.Unimplemented:
 			return backoff.Permanent(fmt.Errorf("%s is not implemented by the server", name))
 		default:
-			err = fmt.Errorf("error when calling stream provider for %s: %w", name, err)
-			return err
+			return fmt.Errorf("error when calling stream provider for %s: %w", name, err)
 		}
+		defer func() {
+			_ = stream.CloseSend()
+		}()
 		for {
 			select {
 			case <-ctx.Done():

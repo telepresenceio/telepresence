@@ -289,7 +289,7 @@ message InterceptInfo {
   // Timestamp for last modification made by traffic-manager
   google.protobuf.Timestamp modified_at = 21;
 
-  reserved 9;
+  reserved 9; // was PreviewSpec preview_spec
 }
 
 message ReconnectAgentRequest {
