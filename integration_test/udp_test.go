@@ -1,7 +1,9 @@
 package integration_test
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"runtime"
 	"strings"
@@ -54,6 +56,10 @@ func (s *connectedSuite) TestUDPEcho() {
 		require.NoError(err)
 		require.NoError(conn.SetReadDeadline(time.Now().Add(5 * time.Second)))
 		n, err := conn.Read(buf[:])
+		require.Greater(n, 0)
+		if errors.Is(err, io.EOF) {
+			err = nil
+		}
 		require.NoError(err)
 		rp := "Reply from UDP-echo: "
 		pl := len(rp)
@@ -61,6 +67,10 @@ func (s *connectedSuite) TestUDPEcho() {
 		require.Equal(len(msg)+pl, n)
 		require.Equal(msg, string(buf[pl:n]))
 	}
+
+	// A UDP Dial will succeed immediately because it doesn't really connect, and even though the deployment is ready, the service
+	// might not be listening just yet (there's no readiness probe). So we sleep a bit to give the service time to start.
+	time.Sleep(500 * time.Millisecond)
 	echoTest("Hello")
 	echoTest(mb.String())
 }
