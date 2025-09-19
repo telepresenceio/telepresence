@@ -194,10 +194,13 @@ BUILD_TAGS=-tags docker
 else
 ifeq ($(EXTERNAL_FUSEFTP),1)
 BUILD_TAGS=-tags external_fuseftp
-build-deps:
+pkg/client/remotefs/fuseftp.bits:
+	touch $@
 else
 ifeq ($(LINKED_FUSEFTP),1)
 BUILD_TAGS=-tags linked_fuseftp
+pkg/client/remotefs/fuseftp.bits:
+	touch $@
 else
 FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/telepresenceio/go-fuseftp/rpc)
 
@@ -207,11 +210,10 @@ $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
 
 pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
 	cp $< $@
-
+endif
+endif
+endif
 build-deps: pkg/client/remotefs/fuseftp.bits
-endif
-endif
-endif
 
 pkg/client/cli/docker/compose/dc-cli.json: go.mod
 	go run cmd/cobraparser/main.go docker compose > $@
